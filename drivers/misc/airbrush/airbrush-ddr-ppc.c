@@ -78,22 +78,23 @@ static int ddr_ppc_irq_callback(uint32_t irq, void *data)
 	}
 
 	ppcinfo = &ddr_ctx->ddr_ppc_info;
-	ppc_overflow_data = ddr_reg_rd(DREX_FLAG_PCC);
+	ppc_overflow_data = ddr_reg_rd(ddr_ctx, DREX_FLAG_PCC);
 
 	while (ppc_overflow_data) {
 		if (ppc_overflow_data & PPC_CCNT_FLAG) {
-			ddr_reg_set(DREX_FLAG_PCC, PPC_CCNT_FLAG);
+			ddr_reg_set(ddr_ctx, DREX_FLAG_PCC, PPC_CCNT_FLAG);
 			ppcinfo->overflow_count_cycle_cnt++;
 		}
 
 		for (i = 0; i < PPC_COUNTER_MAX; i++) {
 			if (ppc_overflow_data & PPC_PMCNT_FLAG(i)) {
-				ddr_reg_set(DREX_FLAG_PCC, PPC_PMCNT_FLAG(i));
+				ddr_reg_set(ddr_ctx,
+					DREX_FLAG_PCC, PPC_PMCNT_FLAG(i));
 				ppcinfo->overflow_count_cnt[i]++;
 			}
 		}
 
-		ppc_overflow_data = ddr_reg_rd(DREX_FLAG_PCC);
+		ppc_overflow_data = ddr_reg_rd(ddr_ctx, DREX_FLAG_PCC);
 	}
 
 	return 0;
@@ -106,17 +107,19 @@ static void ddr_ppc_irq_register(struct ab_ddr_context *ddr_ctx)
 			     ABC_MSI_6_PPC_MIF, ddr_ctx);
 
 	/* Enable the overflow interrupts */
-	ddr_reg_wr(DREX_INTENS_PCC, PPC_PMCNT_INTSET(0) | PPC_PMCNT_INTSET(1) |
-				    PPC_PMCNT_INTSET(2) | PPC_PMCNT_INTSET(3) |
-				    PPC_CCNT_INTSET);
+	ddr_reg_wr(ddr_ctx, DREX_INTENS_PCC,
+			PPC_PMCNT_INTSET(0) | PPC_PMCNT_INTSET(1) |
+			PPC_PMCNT_INTSET(2) | PPC_PMCNT_INTSET(3) |
+			PPC_CCNT_INTSET);
 }
 
-static void ddr_ppc_irq_deregister(void)
+static void ddr_ppc_irq_deregister(struct ab_ddr_context *ddr_ctx)
 {
 	/* Disable the overflow interrupts */
-	ddr_reg_wr(DREX_INTENC_PCC, PPC_PMCNT_INTCLR(0) | PPC_PMCNT_INTCLR(1) |
-				    PPC_PMCNT_INTCLR(2) | PPC_PMCNT_INTCLR(3) |
-				    PPC_CCNT_INTCLR);
+	ddr_reg_wr(ddr_ctx, DREX_INTENC_PCC,
+			PPC_PMCNT_INTCLR(0) | PPC_PMCNT_INTCLR(1) |
+			PPC_PMCNT_INTCLR(2) | PPC_PMCNT_INTCLR(3) |
+			PPC_CCNT_INTCLR);
 
 	/* De-Register callback for ABC_MSI_6_PPC_MIF MSI interrupt */
 	abc_reg_irq_callback(NULL, ABC_MSI_6_PPC_MIF, NULL);
@@ -131,23 +134,24 @@ static void ab_ddr_ppc_start(struct ab_ddr_context *ddr_ctx)
 	memset(ppcinfo, 0, sizeof(*ppcinfo));
 
 	/* Performance Event Clock Enable */
-	ddr_reg_set(DREX_PPCCLKCON, PEREV_CLK_EN);
+	ddr_reg_set(ddr_ctx, DREX_PPCCLKCON, PEREV_CLK_EN);
 
-	ddr_reg_wr(DREX_CNTENS_PCC, 0);
-	ddr_reg_set(DREX_CNTENS_PCC, PPC_CCNT_ENABLE);
+	ddr_reg_wr(ddr_ctx, DREX_CNTENS_PCC, 0);
+	ddr_reg_set(ddr_ctx, DREX_CNTENS_PCC, PPC_CCNT_ENABLE);
 
 	for (i = 0; i < PPC_COUNTER_MAX; i++) {
 		if (ddr_ppc_is_event_valid(ddr_ctx->ddr_ppc_events[i])) {
-			ddr_reg_wr(DREX_PEREVCONFIG(i),
+			ddr_reg_wr(ddr_ctx, DREX_PEREVCONFIG(i),
 				   PEREVx_SEL(ddr_ctx->ddr_ppc_events[i]));
-			ddr_reg_set(DREX_CNTENS_PCC, PPC_PMCNT_ENABLE(i));
+			ddr_reg_set(ddr_ctx, DREX_CNTENS_PCC,
+					PPC_PMCNT_ENABLE(i));
 		}
 	}
 
 	ddr_ppc_irq_register(ddr_ctx);
 
-	ddr_reg_wr(DREX_PMNC_PCC, CYCLECNT_RESET | PPC_COUNTER_RESET);
-	ddr_reg_set(DREX_PMNC_PCC, PPC_ENABLE);
+	ddr_reg_wr(ddr_ctx, DREX_PMNC_PCC, CYCLECNT_RESET | PPC_COUNTER_RESET);
+	ddr_reg_set(ddr_ctx, DREX_PMNC_PCC, PPC_ENABLE);
 }
 
 /* Caller must hold ddr_ctx->ddr_lock */
@@ -156,32 +160,32 @@ static void ab_ddr_ppc_stop(struct ab_ddr_context *ddr_ctx)
 	int i;
 	struct ddr_ppc_overflow_info *ppcinfo = &ddr_ctx->ddr_ppc_info;
 
-	ddr_reg_clr(DREX_PMNC_PCC, PPC_ENABLE);
+	ddr_reg_clr(ddr_ctx, DREX_PMNC_PCC, PPC_ENABLE);
 
 	/* Print the overflow and event count information */
 	pr_info("CCNT: overflow_cnt: %d, event_cnt: %u\n",
 			ppcinfo->overflow_count_cycle_cnt,
-			ddr_reg_rd(DREX_CCCNT_PPC));
+			ddr_reg_rd(ddr_ctx, DREX_CCCNT_PPC));
 
 	for (i = 0; i < PPC_COUNTER_MAX; i++) {
 		pr_info("PMCNT[%d]: overflow_cnt: %d, event_cnt: %u\n",
 			i, ppcinfo->overflow_count_cnt[i],
-			ddr_reg_rd(DREX_PMCNT_PPC(i)));
+			ddr_reg_rd(ddr_ctx, DREX_PMCNT_PPC(i)));
 	}
 
 	/* Disable the count registers */
-	ddr_reg_wr(DREX_CNTENC_PCC, PPC_PMCNT_DISABLE(0) |
+	ddr_reg_wr(ddr_ctx, DREX_CNTENC_PCC, PPC_PMCNT_DISABLE(0) |
 				    PPC_PMCNT_DISABLE(1) |
 				    PPC_PMCNT_DISABLE(2) |
 				    PPC_PMCNT_DISABLE(3) |
 				    PPC_CCNT_DISABLE);
 
-	ddr_ppc_irq_deregister();
+	ddr_ppc_irq_deregister(ddr_ctx);
 
-	ddr_reg_wr(DREX_PMNC_PCC, CYCLECNT_RESET | PPC_COUNTER_RESET);
+	ddr_reg_wr(ddr_ctx, DREX_PMNC_PCC, CYCLECNT_RESET | PPC_COUNTER_RESET);
 
 	/* Performance Event Clock Disable */
-	ddr_reg_clr(DREX_PPCCLKCON, PEREV_CLK_EN);
+	ddr_reg_clr(ddr_ctx, DREX_PPCCLKCON, PEREV_CLK_EN);
 }
 
 int ab_ddr_ppc_set_event(void *ctx, unsigned int counter_idx,

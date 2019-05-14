@@ -56,12 +56,13 @@ uint32_t ddr_get_dram_vref(uint32_t idx)
 	return dram_vref[idx];
 }
 
-void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
+void ddrphy_set_read_vref(struct ab_ddr_context *ddr_ctx,
+		uint32_t vref_phy0, uint32_t vref_phy1,
 				enum vref_byte_t byte)
 {
 	union dphy_zq_con9_t zq_con9;
 
-	zq_con9.n = ddr_reg_rd(DPHY_ZQ_CON9);
+	zq_con9.n = ddr_reg_rd(ddr_ctx, DPHY_ZQ_CON9);
 
 	if (byte == VREF_BYTE0) {
 		zq_con9.bits.zq_ds0_vref = vref_phy0;
@@ -72,9 +73,9 @@ void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
 		zq_con9.bits.zq_ds1_vref = vref_phy0;
 	}
 
-	ddr_reg_wr(DPHY_ZQ_CON9, zq_con9.n);
+	ddr_reg_wr(ddr_ctx, DPHY_ZQ_CON9, zq_con9.n);
 
-	zq_con9.n = ddr_reg_rd(DPHY2_ZQ_CON9);
+	zq_con9.n = ddr_reg_rd(ddr_ctx, DPHY2_ZQ_CON9);
 
 	if (byte == VREF_BYTE0) {
 		zq_con9.bits.zq_ds0_vref = vref_phy1;
@@ -85,22 +86,23 @@ void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
 		zq_con9.bits.zq_ds1_vref = vref_phy1;
 	}
 
-	ddr_reg_wr(DPHY2_ZQ_CON9, zq_con9.n);
+	ddr_reg_wr(ddr_ctx, DPHY2_ZQ_CON9, zq_con9.n);
 }
 
-void ddrphy_set_write_vref(uint32_t vref, enum vref_byte_t byte)
+void ddrphy_set_write_vref(struct ab_ddr_context *ddr_ctx,
+		uint32_t vref, enum vref_byte_t byte)
 {
 	/* issue MRW command for DRAM vref */
-	ddr_reg_wr(DREX_DIRECTCMD, (0x8c << 9) | (vref << 2));
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, (0x8c << 9) | (vref << 2));
 }
 
-static uint32_t ddrphy_get_byte_svref(enum vref_byte_t byte,
-				      enum phy_type_t phy)
+static uint32_t ddrphy_get_byte_svref(struct ab_ddr_context *ddr_ctx,
+		enum vref_byte_t byte, enum phy_type_t phy)
 {
 	union dphy_zq_con9_t zq_con9;
 	int addr_zq_con9 = phy ? DPHY2_ZQ_CON9 : DPHY_ZQ_CON9;
 
-	zq_con9.n = ddr_reg_rd(addr_zq_con9);
+	zq_con9.n = ddr_reg_rd(ddr_ctx, addr_zq_con9);
 
 	if (byte == VREF_BYTE1)
 		return zq_con9.bits.zq_ds1_vref;
@@ -108,91 +110,93 @@ static uint32_t ddrphy_get_byte_svref(enum vref_byte_t byte,
 		return zq_con9.bits.zq_ds0_vref;
 }
 
-static int ddrphy_is_prbs_done(void)
+static int ddrphy_is_prbs_done(struct ab_ddr_context *ddr_ctx)
 {
-	return ((ddr_reg_rd(DPHY_PRBS_CON0) & 0x1) &&
-		(ddr_reg_rd(DPHY2_PRBS_CON0) & 0x1));
+	return ((ddr_reg_rd(ddr_ctx, DPHY_PRBS_CON0) & 0x1) &&
+		(ddr_reg_rd(ddr_ctx, DPHY2_PRBS_CON0) & 0x1));
 }
 
-static int32_t ddrphy_run_prbs_training(enum vref_operation_t rw)
+static int32_t ddrphy_run_prbs_training(struct ab_ddr_context *ddr_ctx,
+		enum vref_operation_t rw)
 {
 	union dphy_prbs_con0_t prbs_con0;
 	union dphy_cal_con0_t cal_con0;
 	unsigned long timeout;
 
-	prbs_con0.n = ddr_reg_rd(DPHY_PRBS_CON0);
+	prbs_con0.n = ddr_reg_rd(ddr_ctx, DPHY_PRBS_CON0);
 	if (rw == VREF_WRITE)
 		prbs_con0.bits.prbs_write_start = 0x1;
 	else /* VREF_READ or default */
 		prbs_con0.bits.prbs_read_start = 0x1;
 
-	ddr_reg_wr(DPHY_PRBS_CON0, prbs_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON0, prbs_con0.n);
 
-	prbs_con0.n = ddr_reg_rd(DPHY2_PRBS_CON0);
+	prbs_con0.n = ddr_reg_rd(ddr_ctx, DPHY2_PRBS_CON0);
 	if (rw == VREF_WRITE)
 		prbs_con0.bits.prbs_write_start = 0x1;
 	else /* VREF_READ or default */
 		prbs_con0.bits.prbs_read_start = 0x1;
 
-	ddr_reg_wr(DPHY2_PRBS_CON0, prbs_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON0, prbs_con0.n);
 
 	/* wait for PRBS_DONE from both PHYs */
 	timeout = jiffies + usecs_to_jiffies(VREF_PRBS_TIMEOUT_USEC);
-	while (!ddrphy_is_prbs_done() && time_before(jiffies, timeout))
+	while (!ddrphy_is_prbs_done(ddr_ctx) && time_before(jiffies, timeout))
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 
-	if (!ddrphy_is_prbs_done())
+	if (!ddrphy_is_prbs_done(ddr_ctx))
 		return VREF_PRBS_TIMEOUT;
 
-	prbs_con0.n = ddr_reg_rd(DPHY_PRBS_CON0);
+	prbs_con0.n = ddr_reg_rd(ddr_ctx, DPHY_PRBS_CON0);
 	if (rw == VREF_WRITE)
 		prbs_con0.bits.prbs_write_start = 0x0;
 	else /* VREF_READ or default */
 		prbs_con0.bits.prbs_read_start = 0x0;
 
-	ddr_reg_wr(DPHY_PRBS_CON0, prbs_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON0, prbs_con0.n);
 
-	prbs_con0.n = ddr_reg_rd(DPHY2_PRBS_CON0);
+	prbs_con0.n = ddr_reg_rd(ddr_ctx, DPHY2_PRBS_CON0);
 	if (rw == VREF_WRITE)
 		prbs_con0.bits.prbs_write_start = 0x0;
 	else /* VREF_READ or default */
 		prbs_con0.bits.prbs_read_start = 0x0;
 
-	ddr_reg_wr(DPHY2_PRBS_CON0, prbs_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON0, prbs_con0.n);
 
 	/* wait for PRBS_DONE from both PHYs */
 	timeout = jiffies + usecs_to_jiffies(VREF_PRBS_TIMEOUT_USEC);
-	while (!ddrphy_is_prbs_done() && time_before(jiffies, timeout))
+	while (!ddrphy_is_prbs_done(ddr_ctx) && time_before(jiffies, timeout))
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 
-	if (!ddrphy_is_prbs_done())
+	if (!ddrphy_is_prbs_done(ddr_ctx))
 		return VREF_PRBS_TIMEOUT;
 
-	cal_con0.n = ddr_reg_rd(DPHY_CAL_CON0);
+	cal_con0.n = ddr_reg_rd(ddr_ctx, DPHY_CAL_CON0);
 	cal_con0.bits.wrlvl_mode = 0x1;
 	cal_con0.bits.ca_cal_mode = 0x1;
-	ddr_reg_wr(DPHY_CAL_CON0, cal_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_CON0, cal_con0.n);
 
-	cal_con0.n = ddr_reg_rd(DPHY_CAL_CON0);
+	cal_con0.n = ddr_reg_rd(ddr_ctx, DPHY_CAL_CON0);
 	cal_con0.bits.wrlvl_mode = 0x0;
 	cal_con0.bits.ca_cal_mode = 0x0;
-	ddr_reg_wr(DPHY_CAL_CON0, cal_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_CON0, cal_con0.n);
 
-	cal_con0.n = ddr_reg_rd(DPHY2_CAL_CON0);
+	cal_con0.n = ddr_reg_rd(ddr_ctx, DPHY2_CAL_CON0);
 	cal_con0.bits.wrlvl_mode = 0x1;
 	cal_con0.bits.ca_cal_mode = 0x1;
-	ddr_reg_wr(DPHY2_CAL_CON0, cal_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_CON0, cal_con0.n);
 
-	cal_con0.n = ddr_reg_rd(DPHY2_CAL_CON0);
+	cal_con0.n = ddr_reg_rd(ddr_ctx, DPHY2_CAL_CON0);
 	cal_con0.bits.wrlvl_mode = 0x0;
 	cal_con0.bits.ca_cal_mode = 0x0;
-	ddr_reg_wr(DPHY2_CAL_CON0, cal_con0.n);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_CON0, cal_con0.n);
 
 	return VREF_PRBS_SUCCESS;
 }
 
-static uint32_t ddrphy_get_prbs_training_result(enum vref_byte_t byte,
-						enum phy_type_t phy)
+static uint32_t ddrphy_get_prbs_training_result(struct ab_ddr_context *ddr_ctx,
+		enum vref_byte_t byte,
+		enum phy_type_t phy)
 {
 	uint32_t byte0 = 0, byte1 = 0;
 	union dphy_prbs_con6_t prbs_con6;
@@ -200,8 +204,10 @@ static uint32_t ddrphy_get_prbs_training_result(enum vref_byte_t byte,
 	int phy_base = phy ? DPHY2_BASE_ADDR : DPHY_BASE_ADDR;
 
 	if (byte == VREF_BYTE0) {
-		prbs_con6.n = ddr_reg_rd(phy_base + DPHY_OFFSET_PRBS_CON6);
-		prbs_con7.n = ddr_reg_rd(phy_base + DPHY_OFFSET_PRBS_CON7);
+		prbs_con6.n = ddr_reg_rd(ddr_ctx,
+				phy_base + DPHY_OFFSET_PRBS_CON6);
+		prbs_con7.n = ddr_reg_rd(ddr_ctx,
+				phy_base + DPHY_OFFSET_PRBS_CON7);
 
 		if (prbs_con6.bits.prbs_offset_left0 == 0x1ff)
 			byte0 = 0;
@@ -216,8 +222,10 @@ static uint32_t ddrphy_get_prbs_training_result(enum vref_byte_t byte,
 		return byte0;
 
 	} else if (byte == VREF_BYTE1) {
-		prbs_con6.n = ddr_reg_rd(phy_base + DPHY_OFFSET_PRBS_CON6);
-		prbs_con7.n = ddr_reg_rd(phy_base + DPHY_OFFSET_PRBS_CON7);
+		prbs_con6.n = ddr_reg_rd(ddr_ctx,
+				phy_base + DPHY_OFFSET_PRBS_CON6);
+		prbs_con7.n = ddr_reg_rd(ddr_ctx,
+				phy_base + DPHY_OFFSET_PRBS_CON7);
 
 		if (prbs_con6.bits.prbs_offset_left1 == 0x1ff)
 			byte1 = 0;
@@ -232,8 +240,10 @@ static uint32_t ddrphy_get_prbs_training_result(enum vref_byte_t byte,
 		return byte1;
 
 	} else {
-		prbs_con6.n = ddr_reg_rd(phy_base + DPHY_OFFSET_PRBS_CON6);
-		prbs_con7.n = ddr_reg_rd(phy_base + DPHY_OFFSET_PRBS_CON7);
+		prbs_con6.n = ddr_reg_rd(ddr_ctx,
+				phy_base + DPHY_OFFSET_PRBS_CON6);
+		prbs_con7.n = ddr_reg_rd(ddr_ctx,
+				phy_base + DPHY_OFFSET_PRBS_CON7);
 
 		if (prbs_con6.bits.prbs_offset_left0 == 0x1ff)
 			byte0 = 0;
@@ -263,17 +273,17 @@ static uint32_t ddrphy_get_prbs_training_result(enum vref_byte_t byte,
 }
 
 /* Set and Clear PRBS offset value */
-static void ddrphy_reset_prbs_training_result(void)
+static void ddrphy_reset_prbs_training_result(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr(DPHY_CAL_CON3, 0xfc7f9840);
-	ddr_reg_wr(DPHY_PRBS_CON4, 0x0);
-	ddr_reg_wr(DPHY_PRBS_CON5, 0x0);
-	ddr_reg_wr(DPHY_CAL_CON3, 0xfc7f9800);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_CON3, 0xfc7f9840);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON4, 0x0);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON5, 0x0);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_CON3, 0xfc7f9800);
 
-	ddr_reg_wr(DPHY2_CAL_CON3, 0xfc7f9840);
-	ddr_reg_wr(DPHY2_PRBS_CON4, 0x0);
-	ddr_reg_wr(DPHY2_PRBS_CON5, 0x0);
-	ddr_reg_wr(DPHY2_CAL_CON3, 0xfc7f9800);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_CON3, 0xfc7f9840);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON4, 0x0);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON5, 0x0);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_CON3, 0xfc7f9800);
 }
 
 static uint32_t ddrphy_sum_vref_training_prbs_result(uint32_t *vwm)
@@ -295,8 +305,9 @@ static void ddrphy_shift_prbs_result(uint32_t *vwm)
 		vwm[vwm_idx - 1] = vwm[vwm_idx];
 }
 
-static int32_t ddrphy_get_optimal_vref(enum vref_operation_t rw,
-				       enum vref_byte_t byte)
+static int32_t ddrphy_get_optimal_vref(struct ab_ddr_context *ddr_ctx,
+		enum vref_operation_t rw,
+		enum vref_byte_t byte)
 {
 	uint32_t vwm_phy0_vref[VREF_REF_NUM];
 	uint32_t vwm_phy1_vref[VREF_REF_NUM];
@@ -322,36 +333,40 @@ static int32_t ddrphy_get_optimal_vref(enum vref_operation_t rw,
 	else
 		max_vref = PHY_VREF_LEVELS;
 
-	ddr_prbs_training_init();
+	ddr_prbs_training_init(ddr_ctx);
 
 	for (vref_idx = VREF_FROM; vref_idx < max_vref;
 					vref_idx += VREF_STEP) {
 		vref  = (rw == VREF_WRITE) ? ddr_get_dram_vref(vref_idx) :
 					     ddr_get_phy_vref(vref_idx);
 		if (rw == VREF_READ)
-			ddrphy_set_read_vref(vref, vref, byte);
+			ddrphy_set_read_vref(ddr_ctx, vref, vref, byte);
 		else
-			ddrphy_set_write_vref(vref, byte);
+			ddrphy_set_write_vref(ddr_ctx, vref, byte);
 
 		/* Set and Clear PRBS offset value */
-		ddrphy_reset_prbs_training_result();
+		ddrphy_reset_prbs_training_result(ddr_ctx);
 
-		if (ddrphy_run_prbs_training(rw) != VREF_PRBS_SUCCESS)
+		if (ddrphy_run_prbs_training(ddr_ctx, rw) != VREF_PRBS_SUCCESS)
 			return VREF_ERROR;
 
 		if (vref_idx < (VREF_FROM + VREF_REF_NUM - 1)) {
 			vwm_phy0_vref[vwm_vref_idx] =
-				ddrphy_get_prbs_training_result(byte, PHY0);
+				ddrphy_get_prbs_training_result(ddr_ctx,
+					byte, PHY0);
 			vwm_phy1_vref[vwm_vref_idx] =
-				ddrphy_get_prbs_training_result(byte, PHY1);
+				ddrphy_get_prbs_training_result(ddr_ctx,
+					byte, PHY1);
 			vwm_vref_idx += 1;
 		} else {
 			vwm_phy0_vref[vwm_vref_idx] =
-				ddrphy_get_prbs_training_result(byte, PHY0);
+				ddrphy_get_prbs_training_result(ddr_ctx,
+					byte, PHY0);
 			vwm_phy1_vref[vwm_vref_idx] =
-				ddrphy_get_prbs_training_result(byte, PHY1);
+				ddrphy_get_prbs_training_result(ddr_ctx,
+					byte, PHY1);
 			vwm_sum_vref = ddrphy_sum_vref_training_prbs_result(
-						&vwm_phy0_vref[0]);
+					&vwm_phy0_vref[0]);
 
 			if (max_vwm_sum_phy0_vref < vwm_sum_vref) {
 				max_vwm_sum_phy0_vref = vwm_sum_vref;
@@ -387,39 +402,46 @@ static int32_t ddrphy_get_optimal_vref(enum vref_operation_t rw,
 	return optimal_vref;
 }
 
-int32_t ddrphy_run_vref_training(struct ab_ddr_context *ctx)
+int32_t ddrphy_run_vref_training(struct ab_ddr_context *ddr_ctx)
 {
 	int32_t optimal_vref;
 	uint32_t sVref_byte0_phy0_init, sVref_byte1_phy0_init;
 	uint32_t sVref_byte0_phy1_init, sVref_byte1_phy1_init;
 
 	/* The below section of code is for Read Training of both Phy's */
-	sVref_byte0_phy0_init = ddrphy_get_byte_svref(VREF_BYTE0, PHY0);
-	sVref_byte1_phy0_init = ddrphy_get_byte_svref(VREF_BYTE1, PHY0);
-	sVref_byte0_phy1_init = ddrphy_get_byte_svref(VREF_BYTE0, PHY1);
-	sVref_byte1_phy1_init = ddrphy_get_byte_svref(VREF_BYTE1, PHY1);
+	sVref_byte0_phy0_init =
+		ddrphy_get_byte_svref(ddr_ctx, VREF_BYTE0, PHY0);
+	sVref_byte1_phy0_init =
+		ddrphy_get_byte_svref(ddr_ctx, VREF_BYTE1, PHY0);
+	sVref_byte0_phy1_init =
+		ddrphy_get_byte_svref(ddr_ctx, VREF_BYTE0, PHY1);
+	sVref_byte1_phy1_init =
+		ddrphy_get_byte_svref(ddr_ctx, VREF_BYTE1, PHY1);
 
 	/* read vref training byte all */
-	optimal_vref = ddrphy_get_optimal_vref(VREF_READ, VREF_BYTE_ALL);
+	optimal_vref = ddrphy_get_optimal_vref(ddr_ctx, VREF_READ,
+			VREF_BYTE_ALL);
 	if (optimal_vref < 0 || ((optimal_vref >> 8) < 0)) {
-		ddrphy_set_read_vref(sVref_byte0_phy0_init,
+		ddrphy_set_read_vref(ddr_ctx, sVref_byte0_phy0_init,
 				sVref_byte0_phy1_init, VREF_BYTE0);
-		ddrphy_set_read_vref(sVref_byte1_phy0_init,
+		ddrphy_set_read_vref(ddr_ctx, sVref_byte1_phy0_init,
 				sVref_byte1_phy1_init, VREF_BYTE1);
 		return VREF_ERROR;
 	}
-	ddrphy_set_read_vref((optimal_vref & 0xff),
+	ddrphy_set_read_vref(ddr_ctx, (optimal_vref & 0xff),
 			((optimal_vref >> 8) & 0xff), VREF_BYTE_ALL);
 
-	optimal_vref = ddrphy_get_optimal_vref(VREF_WRITE, VREF_BYTE_ALL);
+	optimal_vref = ddrphy_get_optimal_vref(ddr_ctx, VREF_WRITE,
+			VREF_BYTE_ALL);
 	if (optimal_vref < 0) {
-		ddrphy_set_write_vref(DDR_DEFAULT_WRITE_VREF, VREF_BYTE_ALL);
+		ddrphy_set_write_vref(ddr_ctx, DDR_DEFAULT_WRITE_VREF,
+				VREF_BYTE_ALL);
 		return VREF_ERROR;
 	}
 
-	ddrphy_set_write_vref((optimal_vref & 0xff), VREF_BYTE_ALL);
+	ddrphy_set_write_vref(ddr_ctx, (optimal_vref & 0xff), VREF_BYTE_ALL);
 
-	ddrphy_reset_prbs_training_result();
+	ddrphy_reset_prbs_training_result(ddr_ctx);
 
 	return VREF_SUCCESS;
 }

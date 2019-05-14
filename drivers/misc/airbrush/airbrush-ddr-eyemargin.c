@@ -19,7 +19,8 @@
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-regs.h"
 
-static void ddrphy_set_read_offset(int offset_phy)
+static void ddrphy_set_read_offset(struct ab_ddr_context *ddr_ctx,
+		int offset_phy)
 {
 	uint32_t ctrl_offsetr;
 
@@ -28,12 +29,12 @@ static void ddrphy_set_read_offset(int offset_phy)
 	else
 		ctrl_offsetr = offset_phy;
 
-	ddr_reg_clr_set(DPHY_OFFSETR_CON0,
+	ddr_reg_clr_set(ddr_ctx, DPHY_OFFSETR_CON0,
 			CTRL_OFFSETR0_MSK | CTRL_OFFSETR1_MSK,
 			CTRL_OFFSETR0(ctrl_offsetr) |
 			CTRL_OFFSETR1(ctrl_offsetr));
 
-	ddr_reg_clr_set(DPHY2_OFFSETR_CON0,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_OFFSETR_CON0,
 			CTRL_OFFSETR0_MSK | CTRL_OFFSETR1_MSK,
 			CTRL_OFFSETR0(ctrl_offsetr) |
 			CTRL_OFFSETR1(ctrl_offsetr));
@@ -42,16 +43,17 @@ static void ddrphy_set_read_offset(int offset_phy)
 	 * within PHY and all of the DLL information (Read/Write/CA/CS DLL)
 	 * is updated.
 	 */
-	ddr_reg_clr(DPHY_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_set(DPHY_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_clr(DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_set(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
 
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_set(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_set(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
 }
 
-static void ddrphy_set_write_offset(int offset_phy)
+static void ddrphy_set_write_offset(struct ab_ddr_context *ddr_ctx,
+		int offset_phy)
 {
 	uint32_t ctrl_offsetw;
 
@@ -60,12 +62,12 @@ static void ddrphy_set_write_offset(int offset_phy)
 	else
 		ctrl_offsetw = offset_phy;
 
-	ddr_reg_clr_set(DPHY_OFFSETW_CON0,
+	ddr_reg_clr_set(ddr_ctx, DPHY_OFFSETW_CON0,
 			CTRL_OFFSETW0_MSK | CTRL_OFFSETW1_MSK,
 			CTRL_OFFSETW0(ctrl_offsetw) |
 			CTRL_OFFSETW1(ctrl_offsetw));
 
-	ddr_reg_clr_set(DPHY2_OFFSETW_CON0,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_OFFSETW_CON0,
 			CTRL_OFFSETW0_MSK | CTRL_OFFSETW1_MSK,
 			CTRL_OFFSETW0(ctrl_offsetw) |
 			CTRL_OFFSETW1(ctrl_offsetw));
@@ -74,24 +76,24 @@ static void ddrphy_set_write_offset(int offset_phy)
 	 * within PHY and all of the DLL information (Read/Write/CA/CS DLL)
 	 * is updated.
 	 */
-	ddr_reg_clr(DPHY_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_set(DPHY_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_clr(DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_set(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
 
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_set(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_set(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
 }
 
-void ddr_eye_print_termination_info(void)
+void ddr_eye_print_termination_info(struct ab_ddr_context *ddr_ctx)
 {
 	unsigned int zq_con0, zq_con3, zq_con6;
 	unsigned int dphy_mdll_con0, dphy_mdll_con1;
 	unsigned int dphy2_mdll_con0, dphy2_mdll_con1;
 
-	zq_con0 = ddr_reg_rd(DPHY_ZQ_CON0);
-	zq_con3 = ddr_reg_rd(DPHY_ZQ_CON3);
-	zq_con6 = ddr_reg_rd(DPHY_ZQ_CON6);
+	zq_con0 = ddr_reg_rd(ddr_ctx, DPHY_ZQ_CON0);
+	zq_con3 = ddr_reg_rd(ddr_ctx, DPHY_ZQ_CON3);
+	zq_con6 = ddr_reg_rd(ddr_ctx, DPHY_ZQ_CON6);
 	pr_info("----------------------------------------------------------\n");
 	pr_info("DataSlice_0 = DQ[7:0], DataSlice_1 = DQ[15:8]\n");
 	pr_info("ControlSlice = CA[5:0]\n");
@@ -125,9 +127,9 @@ void ddr_eye_print_termination_info(void)
 		(zq_con0 >> 24) & 0x7);
 	pr_info("----------------------------------------------------------\n");
 
-	zq_con0 = ddr_reg_rd(DPHY2_ZQ_CON0);
-	zq_con3 = ddr_reg_rd(DPHY2_ZQ_CON3);
-	zq_con6 = ddr_reg_rd(DPHY2_ZQ_CON6);
+	zq_con0 = ddr_reg_rd(ddr_ctx, DPHY2_ZQ_CON0);
+	zq_con3 = ddr_reg_rd(ddr_ctx, DPHY2_ZQ_CON3);
+	zq_con6 = ddr_reg_rd(ddr_ctx, DPHY2_ZQ_CON6);
 	pr_info("----------------------------------------------------------\n");
 	pr_info("ODT Information for DPHY2\n");
 	pr_info("	3'b100 : 60 Ohm Far end VSSQ termination\n");
@@ -164,10 +166,10 @@ void ddr_eye_print_termination_info(void)
 	pr_info("MR11: 0x%x, MR3: 0x%x\n", 0x24, 0xf1);
 	pr_info("----------------------------------------------------------\n");
 
-	dphy_mdll_con0  = ddr_reg_rd(DPHY_MDLL_CON0);
-	dphy_mdll_con1  = ddr_reg_rd(DPHY_MDLL_CON1);
-	dphy2_mdll_con0 = ddr_reg_rd(DPHY2_MDLL_CON0);
-	dphy2_mdll_con1 = ddr_reg_rd(DPHY2_MDLL_CON1);
+	dphy_mdll_con0  = ddr_reg_rd(ddr_ctx, DPHY_MDLL_CON0);
+	dphy_mdll_con1  = ddr_reg_rd(ddr_ctx, DPHY_MDLL_CON1);
+	dphy2_mdll_con0 = ddr_reg_rd(ddr_ctx, DPHY2_MDLL_CON0);
+	dphy2_mdll_con1 = ddr_reg_rd(ddr_ctx, DPHY2_MDLL_CON1);
 
 	pr_info("----------------------------------------------------------\n");
 	pr_info("DPHY_MDLL_CONx: [0x%x, 0x%x]\n",
@@ -256,14 +258,14 @@ static void ddrphy_margin_eye_read(struct ab_ddr_context *ddr_ctx,
 
 	for (vrefIdx = VREF_FROM; vrefIdx < PHY_VREF_LEVELS;
 						vrefIdx += VREF_STEP) {
-		ddrphy_set_read_vref(ddr_get_phy_vref(vrefIdx),
+		ddrphy_set_read_vref(ddr_ctx, ddr_get_phy_vref(vrefIdx),
 				     ddr_get_phy_vref(vrefIdx), VREF_BYTE_ALL);
 		pr_info("SET READ_VREF: 0x%02x\n", ddr_get_phy_vref(vrefIdx));
 
 		result_idx = 0;
 		for (offsetIdx = (maxOffset * -1); offsetIdx <= maxOffset;
 							offsetIdx++) {
-			ddrphy_set_read_offset(offsetIdx);
+			ddrphy_set_read_offset(ddr_ctx, offsetIdx);
 
 			if (!__ab_ddr_read_write_test(ddr_ctx, eye_data))
 				read_eye[vrefIdx][result_idx] = 'o';
@@ -300,14 +302,14 @@ static void ddrphy_margin_eye_write(struct ab_ddr_context *ddr_ctx,
 
 	for (vrefIdx = VREF_FROM; vrefIdx < DRAM_VREF_LEVELS;
 				  vrefIdx += VREF_STEP) {
-		ddrphy_set_write_vref(ddr_get_dram_vref(vrefIdx),
+		ddrphy_set_write_vref(ddr_ctx, ddr_get_dram_vref(vrefIdx),
 				      VREF_BYTE_ALL);
 		pr_info("SET WRITE_VREF: 0x%02x\n", ddr_get_dram_vref(vrefIdx));
 
 		result_idx = 0;
 		for (offsetIdx = (maxOffset * -1); offsetIdx <= maxOffset;
 							offsetIdx++) {
-			ddrphy_set_write_offset(offsetIdx);
+			ddrphy_set_write_offset(ddr_ctx, offsetIdx);
 
 			if (!__ab_ddr_read_write_test(ddr_ctx, eye_data))
 				write_eye[vrefIdx][result_idx] = 'o';
@@ -350,7 +352,7 @@ int ab_ddr_eye_margin_plot(void *ctx)
 		return DDR_FAIL;
 	}
 
-	ddr_eye_print_termination_info();
+	ddr_eye_print_termination_info(ddr_ctx);
 	ab_ddr_eye_margin_plot_read(ddr_ctx);
 	ab_ddr_eye_margin_plot_write(ddr_ctx);
 
@@ -387,18 +389,18 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 	/* Read the MR14 register to get the VREF(DQ) information.
 	 * Read the information while DDR is in self-refresh mode.
 	 */
-	write_vref = ddr_read_mr_reg(14) & 0x3f;
+	write_vref = ddr_read_mr_reg(ddr_ctx, 14) & 0x3f;
 
-	ddr_eye_print_termination_info();
+	ddr_eye_print_termination_info(ddr_ctx);
 
 	/* Disable the PHY control logic clock gating for s/w margin
 	 * offset settings to work
 	 */
-	ddr_reg_clr(DPHY_LP_CON0, PCL_PD);
-	ddr_reg_clr(DPHY2_LP_CON0, PCL_PD);
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, PCL_PD);
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, PCL_PD);
 
-	read_vref_phy0 = ddr_reg_rd(DPHY_ZQ_CON9) & 0x3f;
-	read_vref_phy1 = ddr_reg_rd(DPHY2_ZQ_CON9) & 0x3f;
+	read_vref_phy0 = ddr_reg_rd(ddr_ctx, DPHY_ZQ_CON9) & 0x3f;
+	read_vref_phy1 = ddr_reg_rd(ddr_ctx, DPHY2_ZQ_CON9) & 0x3f;
 
 	/* "data" provides the information about the type of test to be run
 	 * (memtester/pcie_dma) for checking ddr data integrity
@@ -418,8 +420,9 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 	ddrphy_margin_eye_read(ddr_ctx, num_samples, eye_data);
 
 	/* Restore the working Read Vref & Offset */
-	ddrphy_set_read_vref(read_vref_phy0, read_vref_phy1, VREF_BYTE_ALL);
-	ddrphy_set_read_offset(0);
+	ddrphy_set_read_vref(ddr_ctx, read_vref_phy0,
+			read_vref_phy1, VREF_BYTE_ALL);
+	ddrphy_set_read_offset(ddr_ctx, 0);
 
 	pr_info("WR_EYE: sweeping vref 0x%02x -> 0x%02x\n",
 		ddr_get_dram_vref(VREF_FROM),
@@ -429,12 +432,12 @@ int ab_ddr_eye_margin(void *ctx, unsigned int data)
 	ddrphy_margin_eye_write(ddr_ctx, num_samples, eye_data);
 
 	/* Restore the working write Vref & Offset */
-	ddrphy_set_write_vref(write_vref, VREF_BYTE_ALL);
-	ddrphy_set_write_offset(0);
+	ddrphy_set_write_vref(ddr_ctx, write_vref, VREF_BYTE_ALL);
+	ddrphy_set_write_offset(ddr_ctx, 0);
 
 	/* Enable the PHY control logic clock gating after eyemargin test */
-	ddr_reg_set(DPHY_LP_CON0, PCL_PD);
-	ddr_reg_set(DPHY2_LP_CON0, PCL_PD);
+	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, PCL_PD);
+	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, PCL_PD);
 
 	mutex_unlock(&ddr_ctx->ddr_lock);
 	return DDR_SUCCESS;

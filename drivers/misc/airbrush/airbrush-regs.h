@@ -17,7 +17,6 @@ static inline uint32_t RD_REG(uint32_t addr)
 {
 	uint32_t data = 0xffffffff;
 
-	/* TODO(b/121225073): Add synchronization and fail check */
 	WARN_ON(abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data));
 
 	return data;
@@ -25,7 +24,6 @@ static inline uint32_t RD_REG(uint32_t addr)
 
 static inline void WR_REG(uint32_t addr, uint32_t data)
 {
-	/* TODO(b/121225073): Add synchronization and fail check */
 	WARN_ON(abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data));
 }
 

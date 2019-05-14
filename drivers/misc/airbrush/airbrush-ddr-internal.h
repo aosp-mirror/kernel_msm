@@ -17,6 +17,7 @@
 #include "airbrush-otp.h"
 #include "airbrush-ddr.h"
 
+#define AB_DDR_CACHE_UNKNOWN	0xFFFFFFFF
 #define PLL_LOCKTIME_PLL_PHY_MIF	0x10510008
 #define PLL_CON0_PLL_PHY_MIF		0x10510140
 #define PLL_MUX_SEL_MSK			(0x1 << 4)
@@ -1240,6 +1241,22 @@ struct ab_ddr_context {
 	 */
 	unsigned int ddr_train_sram_location;
 
+	uint32_t drex_memcontrol_cache;
+	uint32_t drex_cgcontrol_cache;
+	uint32_t drex_dfirstcontrol_cache;
+	uint32_t drex_concontrol_cache;
+	uint32_t mif_pll_wrap_ctrl_reg_cache;
+	uint32_t pll_con0_pll_phy_mif_cache;
+	uint32_t dphy_lp_con0_cache;
+	uint32_t dphy2_lp_con0_cache;
+	uint32_t dphy_gate_con0_cache;
+	uint32_t dphy2_gate_con0_cache;
+	uint32_t dphy_mdll_con0_cache;
+	uint32_t dphy2_mdll_con0_cache;
+	uint32_t drex_activate_axi_ready_cache;
+
+	int32_t poll_multiplier;
+
 #ifdef CONFIG_AB_DDR_RW_TEST
 	/* read/write test data */
 	ktime_t st_read, et_read;
@@ -1256,43 +1273,218 @@ struct ab_ddr_context {
 #endif
 };
 
-static inline uint32_t ddr_reg_rd(uint32_t addr)
+static inline uint32_t ddr_reg_rd(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr)
 {
 	uint32_t data = 0xffffffff;
+	int ret;
 
-	/* TODO(b/121225073): Add synchronization and fail check */
-	WARN_ON(abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data));
+	ret = abc_pcie_config_read(addr & 0xFFFFFF, 0x4, &data);
+	WARN_ON(ret);
+
+	if (ret)
+		return data;
+
+	switch (addr) {
+	case DREX_MEMCONTROL:
+		ddr_ctx->drex_memcontrol_cache = data;
+		break;
+	case DREX_CGCONTROL:
+		ddr_ctx->drex_cgcontrol_cache = data;
+		break;
+	case DREX_DFIRSTCONTROL:
+		ddr_ctx->drex_dfirstcontrol_cache = data;
+		break;
+	case DREX_CONCONTROL:
+		ddr_ctx->drex_concontrol_cache = data;
+		break;
+	case MIF_PLL_WRAP_CTRL_REG:
+		ddr_ctx->mif_pll_wrap_ctrl_reg_cache = data;
+		break;
+	case PLL_CON0_PLL_PHY_MIF:
+		ddr_ctx->pll_con0_pll_phy_mif_cache = data;
+		break;
+	case DPHY_LP_CON0:
+		ddr_ctx->dphy_lp_con0_cache = data;
+		break;
+	case DPHY2_LP_CON0:
+		ddr_ctx->dphy2_lp_con0_cache = data;
+		break;
+	case DPHY_GATE_CON0:
+		ddr_ctx->dphy_gate_con0_cache = data;
+		break;
+	case DPHY2_GATE_CON0:
+		ddr_ctx->dphy2_gate_con0_cache = data;
+		break;
+	case DPHY_MDLL_CON0:
+		ddr_ctx->dphy_mdll_con0_cache = data;
+		break;
+	case DPHY2_MDLL_CON0:
+		ddr_ctx->dphy2_mdll_con0_cache = data;
+		break;
+	case DREX_ACTIVATE_AXI_READY:
+		ddr_ctx->drex_activate_axi_ready_cache = data;
+		break;
+	default:
+		break;
+	}
 
 	return data;
 }
 
-static inline void ddr_reg_wr(uint32_t addr, uint32_t data)
+static inline void ab_ddr_clear_cache(struct ab_ddr_context *ddr_ctx)
 {
-	/* TODO(b/121225073): Add synchronization and fail check */
-	WARN_ON(abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data));
+	ddr_ctx->drex_memcontrol_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->drex_cgcontrol_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->drex_dfirstcontrol_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->drex_concontrol_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->mif_pll_wrap_ctrl_reg_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->pll_con0_pll_phy_mif_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->dphy_lp_con0_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->dphy2_lp_con0_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->dphy_gate_con0_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->dphy2_gate_con0_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->dphy_mdll_con0_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->dphy2_mdll_con0_cache = AB_DDR_CACHE_UNKNOWN;
+	ddr_ctx->drex_activate_axi_ready_cache = AB_DDR_CACHE_UNKNOWN;
 }
 
-static inline void ddr_reg_set(uint32_t addr, uint32_t mask)
+static inline uint32_t ddr_reg_rd_cache(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr)
 {
-	ddr_reg_wr(addr, ddr_reg_rd(addr) | mask);
+	uint32_t *cache = 0;
+	uint32_t def_val = AB_DDR_CACHE_UNKNOWN;
+
+	switch (addr) {
+	case DREX_MEMCONTROL:
+		cache = &ddr_ctx->drex_memcontrol_cache;
+		break;
+	case DREX_CGCONTROL:
+		cache = &ddr_ctx->drex_cgcontrol_cache;
+		break;
+	case DREX_DFIRSTCONTROL:
+		cache = &ddr_ctx->drex_dfirstcontrol_cache;
+		break;
+	case DREX_CONCONTROL:
+		cache = &ddr_ctx->drex_concontrol_cache;
+		break;
+	case MIF_PLL_WRAP_CTRL_REG:
+		cache = &ddr_ctx->mif_pll_wrap_ctrl_reg_cache;
+		break;
+	case PLL_CON0_PLL_PHY_MIF:
+		cache = &ddr_ctx->pll_con0_pll_phy_mif_cache;
+		break;
+	case DPHY_LP_CON0:
+		cache = &ddr_ctx->dphy_lp_con0_cache;
+		break;
+	case DPHY2_LP_CON0:
+		cache = &ddr_ctx->dphy2_lp_con0_cache;
+		break;
+	case DPHY_GATE_CON0:
+		cache = &ddr_ctx->dphy_gate_con0_cache;
+		break;
+	case DPHY2_GATE_CON0:
+		cache = &ddr_ctx->dphy2_gate_con0_cache;
+		break;
+	case DPHY_MDLL_CON0:
+		cache = &ddr_ctx->dphy_mdll_con0_cache;
+		break;
+	case DPHY2_MDLL_CON0:
+		cache = &ddr_ctx->dphy2_mdll_con0_cache;
+		break;
+	case DREX_ACTIVATE_AXI_READY:
+		cache = &ddr_ctx->drex_activate_axi_ready_cache;
+		break;
+	default:
+		cache = &def_val;
+		break;
+	}
+
+	if (*cache == AB_DDR_CACHE_UNKNOWN)
+		WARN_ON(abc_pcie_config_read(addr & 0xFFFFFF, 0x4, cache));
+
+	return *cache;
 }
 
-static inline void ddr_reg_clr(uint32_t addr, uint32_t mask)
+static inline void ddr_reg_wr(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr, uint32_t data)
 {
-	ddr_reg_wr(addr, ddr_reg_rd(addr) & (~mask));
+	int ret;
+
+	ret = abc_pcie_config_write(addr & 0xFFFFFF, 0x4, data);
+	WARN_ON(ret);
+
+	if (ret)
+		return;
+
+	switch (addr) {
+	case DREX_MEMCONTROL:
+		ddr_ctx->drex_memcontrol_cache = data;
+		break;
+	case DREX_CGCONTROL:
+		ddr_ctx->drex_cgcontrol_cache = data;
+		break;
+	case DREX_DFIRSTCONTROL:
+		ddr_ctx->drex_dfirstcontrol_cache = data;
+		break;
+	case DREX_CONCONTROL:
+		ddr_ctx->drex_concontrol_cache = data;
+		break;
+	case MIF_PLL_WRAP_CTRL_REG:
+		ddr_ctx->mif_pll_wrap_ctrl_reg_cache = data;
+		break;
+	case PLL_CON0_PLL_PHY_MIF:
+		ddr_ctx->pll_con0_pll_phy_mif_cache = data;
+		break;
+	case DPHY_LP_CON0:
+		ddr_ctx->dphy_lp_con0_cache = data;
+		break;
+	case DPHY2_LP_CON0:
+		ddr_ctx->dphy2_lp_con0_cache = data;
+		break;
+	case DPHY_GATE_CON0:
+		ddr_ctx->dphy_gate_con0_cache = data;
+		break;
+	case DPHY2_GATE_CON0:
+		ddr_ctx->dphy2_gate_con0_cache = data;
+		break;
+	case DPHY_MDLL_CON0:
+		ddr_ctx->dphy_mdll_con0_cache = data;
+		break;
+	case DPHY2_MDLL_CON0:
+		ddr_ctx->dphy2_mdll_con0_cache = data;
+		break;
+	case DREX_ACTIVATE_AXI_READY:
+		ddr_ctx->drex_activate_axi_ready_cache = data;
+		break;
+	default:
+		break;
+	}
 }
 
-static inline void ddr_reg_clr_set(uint32_t addr,
-			uint32_t clr_mask, uint32_t set_mask)
+static inline void ddr_reg_set(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr, uint32_t mask)
 {
-	ddr_reg_wr(addr, (ddr_reg_rd(addr) & (~clr_mask)) | set_mask);
+	ddr_reg_wr(ddr_ctx, addr, ddr_reg_rd_cache(ddr_ctx, addr) | mask);
+}
+
+static inline void ddr_reg_clr(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr, uint32_t mask)
+{
+	ddr_reg_wr(ddr_ctx, addr, ddr_reg_rd_cache(ddr_ctx, addr) & (~mask));
+}
+
+static inline void ddr_reg_clr_set(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr, uint32_t clr_mask, uint32_t set_mask)
+{
+	ddr_reg_wr(ddr_ctx, addr,
+		(ddr_reg_rd_cache(ddr_ctx, addr) & (~clr_mask)) | set_mask);
 }
 
 static inline uint32_t ddr_mem_rd(uint32_t addr)
 {
 	uint32_t data = 0xffffffff;
 
-	/* TODO(b/121225073): Add synchronization and fail check */
 	WARN_ON(memory_config_read(addr, 0x4, &data));
 
 	return data;
@@ -1300,18 +1492,18 @@ static inline uint32_t ddr_mem_rd(uint32_t addr)
 
 static inline void ddr_mem_wr(uint32_t addr, uint32_t data)
 {
-	/* TODO(b/121225073): Add synchronization and fail check */
 	WARN_ON(memory_config_write(addr, 0x4, data));
 }
 
-static inline int ddr_read_mr_reg(uint32_t mr_num)
+static inline int ddr_read_mr_reg(struct ab_ddr_context *ddr_ctx,
+		int32_t mr_num)
 {
-	ddr_reg_wr(DREX_DIRECTCMD, MRR(mr_num));
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, MRR(mr_num));
 
 	/* Read the DREX_DIRECTCMD back to make sure the previous write is
 	 * reflected before continuing.
 	 */
-	ddr_reg_rd(DREX_DIRECTCMD);
+	ddr_reg_rd(ddr_ctx, DREX_DIRECTCMD);
 
 	/* This function is called after the MR read command is sent to the
 	 * DRAM device. As the response from DRAM device may take some time,
@@ -1320,18 +1512,19 @@ static inline int ddr_read_mr_reg(uint32_t mr_num)
 	 */
 	ddr_usleep(MR_READ_DELAY_USEC);
 
-	return ddr_reg_rd(DREX_MRSTATUS);
+	return ddr_reg_rd(ddr_ctx, DREX_MRSTATUS);
 }
 
-void ddr_prbs_training_init(void);
+void ddr_prbs_training_init(struct ab_ddr_context *ddr_ctx);
 int32_t ddrphy_run_vref_training(struct ab_ddr_context *ctx);
-void ddrphy_set_write_vref(uint32_t vref, enum vref_byte_t byte);
-void ddrphy_set_read_vref(uint32_t vref_phy0, uint32_t vref_phy1,
-			  enum vref_byte_t byte);
+void ddrphy_set_write_vref(struct ab_ddr_context *ddr_ctx,
+		uint32_t vref, enum vref_byte_t byte);
+void ddrphy_set_read_vref(struct ab_ddr_context *ddr_ctx,
+		uint32_t vref_phy0, uint32_t vref_phy1, enum vref_byte_t byte);
 uint32_t ddr_get_phy_vref(uint32_t idx);
 uint32_t ddr_get_dram_vref(uint32_t idx);
-int ddr_enter_self_refresh_mode(void);
-int ddr_exit_self_refresh_mode(void);
+int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx);
+int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx);
 
 #ifdef CONFIG_AB_DDR_RW_TEST
 int __ab_ddr_read_write_test(void *ctx, unsigned int read_write);

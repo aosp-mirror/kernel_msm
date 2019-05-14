@@ -48,7 +48,7 @@
 static uint32_t (*ddr_otp_rd)(uint32_t);
 
 /* forward declarations */
-static int ddr_enable_power_features(void);
+static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx);
 
 static const struct ddr_train_save_restore_t *
 			get_train_save_restore_regs(unsigned int idx)
@@ -584,12 +584,14 @@ static unsigned int ddr_freq_param(enum ddr_freq_t freq, unsigned int index)
 	return ddr_reg_freq[index][freq];
 };
 
-static inline void ddr_reg_wr_otp(uint32_t addr, uint32_t otp_idx)
+static inline void ddr_reg_wr_otp(struct ab_ddr_context *ddr_ctx,
+		uint32_t addr, uint32_t otp_idx)
 {
-	ddr_reg_wr(addr, ddr_otp_rd(otp_idx));
+	ddr_reg_wr(ddr_ctx, addr, ddr_otp_rd(otp_idx));
 }
 
-static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
+static int ddr_reg_poll(struct ab_ddr_context *ddr_ctx,
+		uint32_t reg, uint32_t poll_idx)
 {
 	static const struct ddr_reg_poll_t ddr_reg_poll_array[] = {
 		[p_pll_con0_pll_phy_mif]	= { PLL_STABLE,
@@ -630,7 +632,6 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 	};
 
 	const struct ddr_reg_poll_t *poll = &ddr_reg_poll_array[poll_idx];
-	uint32_t poll_multiplier;
 	uint32_t reg_val;
 	unsigned long timeout;
 
@@ -642,16 +643,17 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 	 * to be completed (which is posted pcie transaction) before completing
 	 * the current read request.
 	 */
-	reg_val = ddr_reg_rd(reg);
+	reg_val = ddr_reg_rd(ddr_ctx, reg);
 
-	poll_multiplier = ddr_otp_rd(o_SECURE_JTAG2) + 1;
+	if (ddr_ctx->poll_multiplier == -1)
+		ddr_ctx->poll_multiplier = ddr_otp_rd(o_SECURE_JTAG2) + 1;
 	timeout = jiffies +
-		  usecs_to_jiffies(poll->usec_timeout * poll_multiplier);
+		usecs_to_jiffies(poll->usec_timeout * ddr_ctx->poll_multiplier);
 
 	while (((reg_val & poll->mask) != poll->val) &&
 			time_before(jiffies, timeout)) {
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
-		reg_val = ddr_reg_rd(reg);
+		reg_val = ddr_reg_rd(ddr_ctx, reg);
 	}
 
 	/* There is a chance that the above loop can exit because of the current
@@ -662,7 +664,7 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 	 * time which will handle the above scenario.
 	 */
 	if ((reg_val & poll->mask) != poll->val)
-		reg_val = ddr_reg_rd(reg);
+		reg_val = ddr_reg_rd(ddr_ctx, reg);
 
 	if ((reg_val & poll->mask) != poll->val) {
 		pr_err("ddr status poll failed for idx: 0x%x\n", poll_idx);
@@ -674,40 +676,46 @@ static int ddr_reg_poll(uint32_t reg, uint32_t poll_idx)
 	return DDR_SUCCESS;
 }
 
-static int ddr_config_cmu_mif_lowfreq(void)
+static int ddr_config_cmu_mif_lowfreq(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr_otp(PLL_LOCKTIME_PLL_PHY_MIF, o_Reserved_DDR_INIT_0);
-	ddr_reg_wr_otp(PLL_CON0_PLL_PHY_MIF, o_SECURE_JTAG0);
+	ddr_reg_wr_otp(ddr_ctx, PLL_LOCKTIME_PLL_PHY_MIF,
+			o_Reserved_DDR_INIT_0);
+	ddr_reg_wr_otp(ddr_ctx, PLL_CON0_PLL_PHY_MIF, o_SECURE_JTAG0);
 
-	if (ddr_reg_poll(PLL_CON0_PLL_PHY_MIF, p_pll_con0_pll_phy_mif)) {
+	if (ddr_reg_poll(ddr_ctx, PLL_CON0_PLL_PHY_MIF,
+				p_pll_con0_pll_phy_mif)) {
 		pr_err("%s, mif pll lock failed\n", __func__);
 		return DDR_FAIL;
 	}
 
-	ddr_reg_wr_otp(PLL_CON0_PLL_PHY_MIF, o_SECURE_JTAG1);
-	ddr_reg_wr_otp(CLK_CON_DIV_DIV4_PLLCLK_MIF, o_Reserved_DDR_INIT_3);
-	ddr_reg_wr_otp(CLK_CON_DIV_DIV2_PLLCLK_MIF, o_Reserved_DDR_INIT_4);
-	ddr_reg_wr_otp(CLK_CON_DIV_DFI_DIV2, o_Reserved_DDR_INIT_3);
+	ddr_reg_wr_otp(ddr_ctx, PLL_CON0_PLL_PHY_MIF, o_SECURE_JTAG1);
+	ddr_reg_wr_otp(ddr_ctx, CLK_CON_DIV_DIV4_PLLCLK_MIF,
+			o_Reserved_DDR_INIT_3);
+	ddr_reg_wr_otp(ddr_ctx, CLK_CON_DIV_DIV2_PLLCLK_MIF,
+			o_Reserved_DDR_INIT_4);
+	ddr_reg_wr_otp(ddr_ctx, CLK_CON_DIV_DFI_DIV2, o_Reserved_DDR_INIT_3);
 
 	return DDR_SUCCESS;
 }
 
-static void ddr_set_pll_to_oscillator(void)
+static void ddr_set_pll_to_oscillator(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
-	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_clr(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 
 	/* Select the oscillator clock from SYSREG_MIF */
-	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+	ddr_reg_clr(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
 
 	/* Disable PLL and move PLL to oscillator clock */
-	ddr_reg_wr(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_OSCCLK));
+	ddr_reg_wr(ddr_ctx, PLL_CON0_PLL_PHY_MIF,
+			PLL_MUX_SEL(PLL_MUX_SEL_OSCCLK));
 
-	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
-	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_set(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
 }
 
-static int ddr_set_pll_freq(enum ddr_freq_t freq)
+static int ddr_set_pll_freq(struct ab_ddr_context *ddr_ctx,
+		enum ddr_freq_t freq)
 {
 	static const struct airbrush_ddr_pll_t
 				ab_ddr_pll_pms_table[AB_DRAM_FREQ_MAX] = {
@@ -728,65 +736,69 @@ static int ddr_set_pll_freq(enum ddr_freq_t freq)
 	 */
 	pms = &ab_ddr_pll_pms_table[freq];
 
-	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
-	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_clr(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 
 	/* Select the oscillator clock from SYSREG_MIF */
-	ddr_reg_clr(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+	ddr_reg_clr(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
 
-	ddr_reg_wr(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_OSCCLK));
-	ddr_reg_clr_set(PLL_CON0_PLL_PHY_MIF, PLL_PMS_MSK,
+	ddr_reg_wr(ddr_ctx, PLL_CON0_PLL_PHY_MIF,
+			PLL_MUX_SEL(PLL_MUX_SEL_OSCCLK));
+	ddr_reg_clr_set(ddr_ctx, PLL_CON0_PLL_PHY_MIF, PLL_PMS_MSK,
 			PLL_PMS(pms->p, pms->m, pms->s) | PLL_ENABLE);
 
 	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL);
 	ab_sm_start_ts(AB_SM_TS_DDR_SET_PLL_POLL);
-	if (ddr_reg_poll(PLL_CON0_PLL_PHY_MIF, p_pll_con0_pll_phy_mif)) {
+	if (ddr_reg_poll(ddr_ctx, PLL_CON0_PLL_PHY_MIF,
+				p_pll_con0_pll_phy_mif)) {
 		pr_err("%s, mif pll lock failed\n", __func__);
 		return DDR_FAIL;
 	}
 	ab_sm_record_ts(AB_SM_TS_DDR_SET_PLL_POLL);
 
 	ab_sm_start_ts(AB_SM_TS_DDR_FINISH_PLL);
-	ddr_reg_set(PLL_CON0_PLL_PHY_MIF, PLL_MUX_SEL(PLL_MUX_SEL_PLLOUT));
+	ddr_reg_set(ddr_ctx, PLL_CON0_PLL_PHY_MIF,
+			PLL_MUX_SEL(PLL_MUX_SEL_PLLOUT));
 
 	/* Select the mif pll fout from SYSREG_MIF */
-	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+	ddr_reg_set(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
 
-	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
-	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_set(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
 
 	ab_sm_record_ts(AB_SM_TS_DDR_FINISH_PLL);
 	return DDR_SUCCESS;
 }
 
-static void ddr_ungate_phy_clock(void)
+static void ddr_ungate_phy_clock(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, WRAP_PLL_IS_STABLE);
-	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
-	ddr_reg_set(MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
+	ddr_reg_set(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, WRAP_PLL_IS_STABLE);
+	ddr_reg_set(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, SEL_CLKMUX_PLL);
+	ddr_reg_set(ddr_ctx, MIF_PLL_WRAP_CTRL_REG, DDRPHY2XCLKGATE_ENABLE);
 }
 
-static void ddr_deassert_phy_reset_while_phy_is_gated(void)
+static void ddr_deassert_phy_reset_while_phy_is_gated(
+		struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_set(PHY0_INIT_CTRL_REG, INIT_PLL_IS_STABLE);
-	ddr_reg_set(PHY1_INIT_CTRL_REG, INIT_PLL_IS_STABLE);
-	ddr_reg_set(PHY0_RST_CTRL_REG, RST_N | DIV_RST_N);
-	ddr_reg_set(PHY1_RST_CTRL_REG, RST_N | DIV_RST_N);
+	ddr_reg_set(ddr_ctx, PHY0_INIT_CTRL_REG, INIT_PLL_IS_STABLE);
+	ddr_reg_set(ddr_ctx, PHY1_INIT_CTRL_REG, INIT_PLL_IS_STABLE);
+	ddr_reg_set(ddr_ctx, PHY0_RST_CTRL_REG, RST_N | DIV_RST_N);
+	ddr_reg_set(ddr_ctx, PHY1_RST_CTRL_REG, RST_N | DIV_RST_N);
 }
 
-static int ddr_block_axi_transactions(void)
+static int ddr_block_axi_transactions(struct ab_ddr_context *ddr_ctx)
 {
 	unsigned long timeout;
 
 	timeout = jiffies + usecs_to_jiffies(DDR_AXI_BLOCK_TIMEOUT);
-	ddr_reg_clr(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+	ddr_reg_clr(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 
-	while (((ddr_reg_rd(DREX_EMPTY_STATE) & IDLE_STATE_MASK) !=
+	while (((ddr_reg_rd(ddr_ctx, DREX_EMPTY_STATE) & IDLE_STATE_MASK) !=
 	       IDLE_STATE_MASK) && time_before(jiffies, timeout))
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 
 	/* check for the ddr empty state */
-	if ((ddr_reg_rd(DREX_EMPTY_STATE) & IDLE_STATE_MASK) !=
+	if ((ddr_reg_rd(ddr_ctx, DREX_EMPTY_STATE) & IDLE_STATE_MASK) !=
 	    IDLE_STATE_MASK) {
 		pr_err("Block AXI: Error!! DDR AXI Block timeout\n");
 		return -ETIMEDOUT;
@@ -795,88 +807,95 @@ static int ddr_block_axi_transactions(void)
 	return 0;
 }
 
-static void ddr_initialize_phy_pre(void)
+static void ddr_initialize_phy_pre(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_clr(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
-	ddr_reg_wr(DREX_PHYCONTROL0, PAUSE_NO_RELOCK);
+	ddr_reg_clr(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+	ddr_reg_wr(ddr_ctx, DREX_PHYCONTROL0, PAUSE_NO_RELOCK);
 
 	/* set ignore_dic[31] (ignore dfi_init_complete) &
 	 * pclk_async PCLK Async
 	 */
-	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_wr_otp(DREX_CONCONTROL, o_DREX_CONCONTROL_0);
+	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_wr_otp(ddr_ctx, DREX_CONCONTROL, o_DREX_CONCONTROL_0);
 }
 
-static void ddr_initialize_phy(enum ddr_freq_t freq)
+static void ddr_initialize_phy(struct ab_ddr_context *ddr_ctx,
+		enum ddr_freq_t freq)
 {
-	ddr_reg_set(DPHY_MON_CON0, MDLL_MONITOR_EN);
-	ddr_reg_set(DPHY2_MON_CON0, MDLL_MONITOR_EN);
-	ddr_reg_clr(DREX_CONCONTROL, DFI_INIT_START | DFI_INIT_START_PHY2);
+	ddr_reg_set(ddr_ctx, DPHY_MON_CON0, MDLL_MONITOR_EN);
+	ddr_reg_set(ddr_ctx, DPHY2_MON_CON0, MDLL_MONITOR_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL,
+			DFI_INIT_START | DFI_INIT_START_PHY2);
 
-	ddr_reg_clr_set(DPHY_DVFS_CON, DVFS_CON_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY_DVFS_CON, DVFS_CON_MSK,
 			ddr_freq_param(freq, f_DPHY_DVFS_CON));
-	ddr_reg_wr(DPHY_GNR_CON0, ddr_freq_param(freq, f_DPHY_GNR_CON0_NODBI));
-	ddr_reg_wr_otp(DPHY_CAL_CON0, o_DPHY_CAL_CON0_0);
-	ddr_reg_wr(DPHY_CAL_CON2, ddr_freq_param(freq, f_DPHY_CAL_CON2));
-	ddr_reg_wr_otp(DPHY_LP_CON0, o_DPHY_LP_CON0_2);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_2);
+	ddr_reg_wr(ddr_ctx, DPHY_GNR_CON0,
+			ddr_freq_param(freq, f_DPHY_GNR_CON0_NODBI));
+	ddr_reg_wr_otp(ddr_ctx, DPHY_CAL_CON0, o_DPHY_CAL_CON0_0);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_CON2,
+			ddr_freq_param(freq, f_DPHY_CAL_CON2));
+	ddr_reg_wr_otp(ddr_ctx, DPHY_LP_CON0, o_DPHY_LP_CON0_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_2);
 
-	ddr_reg_clr_set(DPHY2_DVFS_CON, DVFS_CON_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_DVFS_CON, DVFS_CON_MSK,
 			ddr_freq_param(freq, f_DPHY_DVFS_CON));
-	ddr_reg_wr(DPHY2_GNR_CON0, ddr_freq_param(freq, f_DPHY_GNR_CON0_NODBI));
-	ddr_reg_wr_otp(DPHY2_CAL_CON0, o_DPHY_CAL_CON0_0);
-	ddr_reg_wr(DPHY2_CAL_CON2, ddr_freq_param(freq, f_DPHY_CAL_CON2));
-	ddr_reg_wr_otp(DPHY2_LP_CON0, o_DPHY_LP_CON0_2);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_2);
+	ddr_reg_wr(ddr_ctx, DPHY2_GNR_CON0,
+			ddr_freq_param(freq, f_DPHY_GNR_CON0_NODBI));
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_CAL_CON0, o_DPHY_CAL_CON0_0);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_CON2,
+			ddr_freq_param(freq, f_DPHY_CAL_CON2));
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_LP_CON0, o_DPHY_LP_CON0_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_2);
 
 	/* Disable power features till ddr training completes */
-	ddr_reg_clr(DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_clr(DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr(DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr(DREX_MEMCONTROL, DPWRDN_EN);
-	ddr_reg_clr(DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, DPWRDN_EN);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
 }
 
-static int ddr_initialize_dfi(int is_init)
+static int ddr_initialize_dfi(struct ab_ddr_context *ddr_ctx, int is_init)
 {
-	ddr_reg_wr_otp(DPHY_MDLL_CON0, o_DPHY_MDLL_CON0_1);
-	ddr_reg_wr_otp(DPHY2_MDLL_CON0, o_DPHY_MDLL_CON0_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_MDLL_CON0, o_DPHY_MDLL_CON0_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_MDLL_CON0, o_DPHY_MDLL_CON0_1);
 
 	if (is_init) {
-		ddr_reg_set(DREX_CONCONTROL,
+		ddr_reg_set(ddr_ctx, DREX_CONCONTROL,
 			    DFI_INIT_START_PHY2 | DFI_INIT_START);
-		if (ddr_reg_poll(DREX_PHYSTATUS, p_DREX_PHYSTATUS_dfi))
+		if (ddr_reg_poll(ddr_ctx, DREX_PHYSTATUS, p_DREX_PHYSTATUS_dfi))
 			return DDR_FAIL;
 
-		ddr_reg_clr(DREX_CONCONTROL,
+		ddr_reg_clr(ddr_ctx, DREX_CONCONTROL,
 			    DFI_INIT_START_PHY2 | DFI_INIT_START);
 	}
 
-	ddr_reg_clr(DPHY_MDLL_CON0, CTRL_DLL_ON);
-	ddr_reg_clr(DPHY2_MDLL_CON0, CTRL_DLL_ON);
+	ddr_reg_clr(ddr_ctx, DPHY_MDLL_CON0, CTRL_DLL_ON);
+	ddr_reg_clr(ddr_ctx, DPHY2_MDLL_CON0, CTRL_DLL_ON);
 
 	return DDR_SUCCESS;
 }
 
-static void ddr_dram_reset_sequence(void)
+static void ddr_dram_reset_sequence(struct ab_ddr_context *ddr_ctx)
 {
 	/* RESET_DRAM */
-	ddr_reg_set(DREX_DFIRSTCONTROL, DFI_RESET_CONTROL);
+	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, DFI_RESET_CONTROL);
 	ddr_usleep(DDR_INIT_TIMING_tINIT1_USEC);
-	ddr_reg_clr(DREX_DFIRSTCONTROL, DFI_RESET_CONTROL);
+	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, DFI_RESET_CONTROL);
 	ddr_usleep(DDR_INIT_TIMING_tINIT3_USEC);
 }
 
-static void ddr_power_down_exit_sequence(void)
+static void ddr_power_down_exit_sequence(struct ab_ddr_context *ddr_ctx)
 {
 	/* ExitPD start */
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
 }
 
-static void ddr_mrw_set_vref_odt_etc(int freq)
+static void ddr_mrw_set_vref_odt_etc(struct ab_ddr_context *ddr_ctx,
+		int freq)
 {
 	/* MRW Settings for each frequency supported */
 	static const struct airbrush_ddr_mrw_set_t
@@ -894,234 +913,237 @@ static void ddr_mrw_set_vref_odt_etc(int freq)
 	};
 
 	/* LPDDR4_chip_Init */
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr1);
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr2);
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr3);
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr11);
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr13);
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr22);
-	ddr_reg_wr(DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr8);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr1);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr2);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr3);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr11);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr13);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr22);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, ab_ddr_mrw_set_table[freq].mr8);
 }
 
-static void ddr_dphy_ctrl_resync(void)
+static void ddr_dphy_ctrl_resync(struct ab_ddr_context *ddr_ctx)
 {
 	/* When CTRL_RESYNC bit transits from LOW to HIGH, pointers of FIFO
 	 * within PHY and all of the DLL information (Read/Write/CA/CS DLL)
 	 * is updated.
 	 */
-	ddr_reg_set(DPHY_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_clr(DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_set(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, CTRL_RESYNC);
 
-	ddr_reg_set(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_set(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, CTRL_RESYNC);
 }
 
-static void ddr_dram_dctrl_resync(void)
+static void ddr_dram_dctrl_resync(struct ab_ddr_context *ddr_ctx)
 {
 	/* force DLL resync enable/disable */
-	ddr_reg_set(DREX_PHYCONTROL0, FP_RESYNC);
-	ddr_reg_clr(DREX_PHYCONTROL0, FP_RESYNC);
+	ddr_reg_set(ddr_ctx, DREX_PHYCONTROL0, FP_RESYNC);
+	ddr_reg_clr(ddr_ctx, DREX_PHYCONTROL0, FP_RESYNC);
 
-	ddr_dphy_ctrl_resync();
+	ddr_dphy_ctrl_resync(ddr_ctx);
 }
 
-static void ddr_dram_zq_calibration(void)
+static void ddr_dram_zq_calibration(struct ab_ddr_context *ddr_ctx)
 {
 	/* lpddr4 zq calibration */
-	ddr_reg_wr_otp(DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_2);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_11);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_12);
-	ddr_reg_wr_otp(DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_0);
-	ddr_reg_wr_otp(DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_1);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_11);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_12);
-	ddr_reg_wr_otp(DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_0);
+	ddr_reg_wr_otp(ddr_ctx, DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_2);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_11);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_12);
+	ddr_reg_wr_otp(ddr_ctx, DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_0);
+	ddr_reg_wr_otp(ddr_ctx, DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_1);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_11);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_12);
+	ddr_reg_wr_otp(ddr_ctx, DREX_1CHIP_MASKING, o_DREX_1CHIP_MASKING_0);
 
-	ddr_dram_dctrl_resync();
+	ddr_dram_dctrl_resync(ddr_ctx);
 }
 
-static int ddr_zq_calibration(void)
+static int ddr_zq_calibration(struct ab_ddr_context *ddr_ctx)
 {
 	/* zq calibration is implemented as one-time long calibration */
-	ddr_reg_clr_set(DPHY_ZQ_CON2, CTRL_ZQ_CLK_DIV_MSK, CTRL_ZQ_CLK_DIV(7));
-	ddr_reg_set(DPHY_ZQ_CON0, ZQ_CLK_EN);
-	ddr_reg_clr_set(DPHY_ZQ_CON0, ZQ_MANUAL_MODE_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY_ZQ_CON2,
+			CTRL_ZQ_CLK_DIV_MSK, CTRL_ZQ_CLK_DIV(7));
+	ddr_reg_set(ddr_ctx, DPHY_ZQ_CON0, ZQ_CLK_EN);
+	ddr_reg_clr_set(ddr_ctx, DPHY_ZQ_CON0, ZQ_MANUAL_MODE_MSK,
 			ZQ_MANUAL_MODE(ZQ_MANUAL_MODE_LONG));
-	ddr_reg_set(DPHY_ZQ_CON0, ZQ_CLK_DIV_EN);
-	ddr_reg_set(DPHY_ZQ_CON0, ZQ_MANUAL_STR);
+	ddr_reg_set(ddr_ctx, DPHY_ZQ_CON0, ZQ_CLK_DIV_EN);
+	ddr_reg_set(ddr_ctx, DPHY_ZQ_CON0, ZQ_MANUAL_STR);
 
-	ddr_reg_clr_set(DPHY2_ZQ_CON2, CTRL_ZQ_CLK_DIV_MSK, CTRL_ZQ_CLK_DIV(7));
-	ddr_reg_set(DPHY2_ZQ_CON0, ZQ_CLK_EN);
-	ddr_reg_clr_set(DPHY2_ZQ_CON0, ZQ_MANUAL_MODE_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_ZQ_CON2,
+			CTRL_ZQ_CLK_DIV_MSK, CTRL_ZQ_CLK_DIV(7));
+	ddr_reg_set(ddr_ctx, DPHY2_ZQ_CON0, ZQ_CLK_EN);
+	ddr_reg_clr_set(ddr_ctx, DPHY2_ZQ_CON0, ZQ_MANUAL_MODE_MSK,
 			ZQ_MANUAL_MODE(ZQ_MANUAL_MODE_LONG));
-	ddr_reg_set(DPHY2_ZQ_CON0, ZQ_CLK_DIV_EN);
-	ddr_reg_set(DPHY2_ZQ_CON0, ZQ_MANUAL_STR);
+	ddr_reg_set(ddr_ctx, DPHY2_ZQ_CON0, ZQ_CLK_DIV_EN);
+	ddr_reg_set(ddr_ctx, DPHY2_ZQ_CON0, ZQ_MANUAL_STR);
 
 	/* wait zq calibration */
-	if (ddr_reg_poll(DPHY_ZQ_CON1, p_DPHY_ZQ_CON1))
+	if (ddr_reg_poll(ddr_ctx, DPHY_ZQ_CON1, p_DPHY_ZQ_CON1))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_ZQ_CON1, p_DPHY_ZQ_CON1))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_ZQ_CON1, p_DPHY_ZQ_CON1))
 		return DDR_FAIL;
 
-	ddr_reg_clr(DPHY_ZQ_CON0, ZQ_MANUAL_STR);
-	ddr_reg_clr(DPHY_ZQ_CON0, ZQ_CLK_DIV_EN);
-	ddr_reg_clr(DPHY2_ZQ_CON0, ZQ_MANUAL_STR);
-	ddr_reg_clr(DPHY2_ZQ_CON0, ZQ_CLK_DIV_EN);
+	ddr_reg_clr(ddr_ctx, DPHY_ZQ_CON0, ZQ_MANUAL_STR);
+	ddr_reg_clr(ddr_ctx, DPHY_ZQ_CON0, ZQ_CLK_DIV_EN);
+	ddr_reg_clr(ddr_ctx, DPHY2_ZQ_CON0, ZQ_MANUAL_STR);
+	ddr_reg_clr(ddr_ctx, DPHY2_ZQ_CON0, ZQ_CLK_DIV_EN);
 
-	ddr_reg_clr(DPHY_OFFSETD_CON0, UPD_MODE);
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, UPD_MODE);
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, UPD_MODE);
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, UPD_MODE);
 
-	ddr_reg_clr(DREX_CONCONTROL, UPDATE_MODE);
+	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, UPDATE_MODE);
 
 	return DDR_SUCCESS;
 }
 
-static int ddr_io_initialization(int from_suspend)
+static int ddr_io_initialization(struct ab_ddr_context *ddr_ctx,
+		int from_suspend)
 {
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_3);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_1);
-	ddr_reg_wr_otp(DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_2);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_2);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_15);
-	ddr_reg_wr_otp(DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_0);
-	ddr_reg_wr_otp(DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_3);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_15);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON6, o_DPHY_ZQ_CON6_2);
 
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_3);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_1);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_2);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_2);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_15);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_3);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_12);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_15);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON6, o_DPHY_ZQ_CON6_2);
 
 	/* perform ZQ calibration */
-	if (ddr_zq_calibration()) {
+	if (ddr_zq_calibration(ddr_ctx)) {
 		pr_err("%s: ddr zq calibration failed\n", __func__);
 		return DDR_FAIL;
 	}
 
 	if (!from_suspend) {
 		/* set dram odt settings */
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_0);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_0);
 		/* set dram drive-strength */
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_30);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_30);
 	}
 
 	/* set host drive strength */
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_0);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_2);
-	ddr_reg_wr_otp(DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_0);
-	ddr_reg_wr_otp(DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_3);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_0);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_1);
-	ddr_reg_wr_otp(DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_0);
-	ddr_reg_wr_otp(DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_1);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_10);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_11);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_3);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON3, o_DPHY_ZQ_CON3_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_10);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_11);
 
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_2);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_3);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_1);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_1);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_10);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_11);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_3);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON3, o_DPHY_ZQ_CON3_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_10);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_11);
 
 	/* wait zq calibration */
-	if (ddr_reg_poll(DPHY_ZQ_CON1, p_DPHY_ZQ_CON1))
+	if (ddr_reg_poll(ddr_ctx, DPHY_ZQ_CON1, p_DPHY_ZQ_CON1))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_ZQ_CON1, p_DPHY_ZQ_CON1))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_ZQ_CON1, p_DPHY_ZQ_CON1))
 		return DDR_FAIL;
 
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_9);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_9);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY2_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
-	ddr_reg_wr_otp(DREX_CONCONTROL, o_DREX_CONCONTROL_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_9);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_9);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DREX_CONCONTROL, o_DREX_CONCONTROL_0);
 
-	ddr_reg_wr_otp(DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_1);
-	ddr_reg_wr_otp(DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_0);
-	ddr_reg_wr_otp(DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_2);
 
-	ddr_reg_wr_otp(DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_1);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_1);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_2);
 
 	if (!from_suspend) {
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_1);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_2);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_7);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_13);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_5);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_3);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_8);
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_14);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_1);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_2);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_7);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_13);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_5);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_3);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_8);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_14);
 	}
 
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_10);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_11);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_10);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_11);
 
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_10);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_11);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_10);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_11);
 
 	/* wait zq calibration */
-	if (ddr_reg_poll(DPHY_ZQ_CON1, p_DPHY_ZQ_CON1))
+	if (ddr_reg_poll(ddr_ctx, DPHY_ZQ_CON1, p_DPHY_ZQ_CON1))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_ZQ_CON1, p_DPHY_ZQ_CON1))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_ZQ_CON1, p_DPHY_ZQ_CON1))
 		return DDR_FAIL;
 
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_9);
-	ddr_reg_wr_otp(DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_9);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
-	ddr_reg_wr_otp(DPHY2_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
-	ddr_reg_wr_otp(DREX_CONCONTROL, o_DREX_CONCONTROL_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_9);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_9);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON0, o_DPHY_ZQ_CON0_8);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DREX_CONCONTROL, o_DREX_CONCONTROL_0);
 
-	ddr_reg_wr_otp(DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_2);
-	ddr_reg_wr_otp(DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_ZQ_CON9, o_DPHY_ZQ_CON9_2);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_ZQ_CON9, o_DPHY_ZQ_CON9_2);
 
 	return DDR_SUCCESS;
 }
 
-static int ddr_enable_dll(void)
+static int ddr_enable_dll(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr(DPHY_GATE_CON0, 0xf00ffff);
-	ddr_reg_wr(DPHY2_GATE_CON0, 0xf00ffff);
+	ddr_reg_wr(ddr_ctx, DPHY_GATE_CON0, 0xf00ffff);
+	ddr_reg_wr(ddr_ctx, DPHY2_GATE_CON0, 0xf00ffff);
 
-	ddr_reg_set(DPHY_MDLL_CON0, CTRL_DLL_ON);
-	ddr_reg_set(DPHY2_MDLL_CON0, CTRL_DLL_ON);
+	ddr_reg_set(ddr_ctx, DPHY_MDLL_CON0, CTRL_DLL_ON);
+	ddr_reg_set(ddr_ctx, DPHY2_MDLL_CON0, CTRL_DLL_ON);
 
-	ddr_reg_clr(DPHY_MDLL_CON0, CTRL_START);
-	ddr_reg_clr(DPHY2_MDLL_CON0, CTRL_START);
+	ddr_reg_clr(ddr_ctx, DPHY_MDLL_CON0, CTRL_START);
+	ddr_reg_clr(ddr_ctx, DPHY2_MDLL_CON0, CTRL_START);
 
 	udelay(DDR_DLL_CTRL_OFF_ON_UDELAY);
 
-	ddr_reg_set(DPHY_MDLL_CON0, CTRL_START);
-	ddr_reg_set(DPHY2_MDLL_CON0, CTRL_START);
+	ddr_reg_set(ddr_ctx, DPHY_MDLL_CON0, CTRL_START);
+	ddr_reg_set(ddr_ctx, DPHY2_MDLL_CON0, CTRL_START);
 
 	/* Poll for ctrl_lock */
-	if (ddr_reg_poll(DPHY_MDLL_CON1, p_DPHY_MDLL_CON1)) {
+	if (ddr_reg_poll(ddr_ctx, DPHY_MDLL_CON1, p_DPHY_MDLL_CON1)) {
 		pr_err("%s: phy dll stable lock fail\n", __func__);
 		return DDR_FAIL;
 	}
 
-	if (ddr_reg_poll(DPHY2_MDLL_CON1, p_DPHY_MDLL_CON1)) {
+	if (ddr_reg_poll(ddr_ctx, DPHY2_MDLL_CON1, p_DPHY_MDLL_CON1)) {
 		pr_err("%s: phy2 dll stable lock fail\n", __func__);
 		return DDR_FAIL;
 	}
@@ -1129,155 +1151,175 @@ static int ddr_enable_dll(void)
 	return DDR_SUCCESS;
 }
 
-static void ddr_set_drex_timing_parameters(enum ddr_freq_t freq)
+static void ddr_set_drex_timing_parameters(struct ab_ddr_context *ddr_ctx,
+		enum ddr_freq_t freq)
 {
-	ddr_reg_clr_set(DREX_PRECHCONFIG0,
+	ddr_reg_clr_set(ddr_ctx, DREX_PRECHCONFIG0,
 			TP_EN_MSK | PORT_POLICY_MSK,
 			PORT_POLICY(PORT_POLICY_OPEN_PAGE));
 
-	ddr_reg_wr(DREX_PWRDNCONFIG, 0xffff00ff);
-	ddr_reg_wr(DREX_TIMINGSETSW, 0x1);
-	ddr_reg_wr(DREX_TIMINGRFCPB, ddr_freq_param(freq, f_DREX_TIMINGRFCPB));
-	ddr_reg_wr(DREX_TIMINGROW0, ddr_freq_param(freq, f_DREX_TIMINGROW));
-	ddr_reg_wr(DREX_TIMINGROW1, ddr_freq_param(freq, f_DREX_TIMINGROW));
-	ddr_reg_wr(DREX_TIMINGDATA0, ddr_freq_param(freq, f_DREX_TIMINGDATA));
-	ddr_reg_wr(DREX_TIMINGDATA1, ddr_freq_param(freq, f_DREX_TIMINGDATA));
-	ddr_reg_wr(DREX_TIMINGPOWER0, ddr_freq_param(freq, f_DREX_TIMINGPOWER));
-	ddr_reg_wr(DREX_TIMINGPOWER1, ddr_freq_param(freq, f_DREX_TIMINGPOWER));
+	ddr_reg_wr(ddr_ctx, DREX_PWRDNCONFIG, 0xffff00ff);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGSETSW, 0x1);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGRFCPB,
+			ddr_freq_param(freq, f_DREX_TIMINGRFCPB));
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGROW0,
+			ddr_freq_param(freq, f_DREX_TIMINGROW));
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGROW1,
+			ddr_freq_param(freq, f_DREX_TIMINGROW));
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGDATA0,
+			ddr_freq_param(freq, f_DREX_TIMINGDATA));
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGDATA1,
+			ddr_freq_param(freq, f_DREX_TIMINGDATA));
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGPOWER0,
+			ddr_freq_param(freq, f_DREX_TIMINGPOWER));
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGPOWER1,
+			ddr_freq_param(freq, f_DREX_TIMINGPOWER));
 
 	/* Set the all-bank and per-bank auto refresh timings */
-	ddr_reg_wr(DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
 
-	ddr_reg_wr_otp(DREX_ETCTIMING, o_Reserved_DDR_INIT_7);
-	ddr_reg_wr_otp(DREX_RDFETCH0, o_Reserved_DDR_INIT_8);
-	ddr_reg_wr_otp(DREX_RDFETCH1, o_Reserved_DDR_INIT_9);
-
-	/* DRAM DCTL Resync */
-	ddr_reg_wr_otp(DPHY_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
-	ddr_reg_wr_otp(DPHY2_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
-	ddr_reg_wr_otp(DREX_CONCONTROL, o_DREX_CONCONTROL_0);
+	ddr_reg_wr_otp(ddr_ctx, DREX_ETCTIMING, o_Reserved_DDR_INIT_7);
+	ddr_reg_wr_otp(ddr_ctx, DREX_RDFETCH0, o_Reserved_DDR_INIT_8);
+	ddr_reg_wr_otp(ddr_ctx, DREX_RDFETCH1, o_Reserved_DDR_INIT_9);
 
 	/* DRAM DCTL Resync */
-	ddr_dram_dctrl_resync();
+	ddr_reg_wr_otp(ddr_ctx, DPHY_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_OFFSETD_CON0, o_DPHY_OFFSETD_CON0_0);
+	ddr_reg_wr_otp(ddr_ctx, DREX_CONCONTROL, o_DREX_CONCONTROL_0);
+
+	/* DRAM DCTL Resync */
+	ddr_dram_dctrl_resync(ddr_ctx);
 }
 
-static int ddr_set_drex_address_parameters(enum ddr_freq_t freq)
+static int ddr_set_drex_address_parameters(struct ab_ddr_context *ddr_ctx,
+		enum ddr_freq_t freq)
 {
 	/* DRAM Density Check */
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_25);
-	ddr_reg_rd(DREX_MRSTATUS);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_25);
+	ddr_reg_rd(ddr_ctx, DREX_MRSTATUS);
 
-	ddr_dram_dctrl_resync();
+	ddr_dram_dctrl_resync(ddr_ctx);
 
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_26);
-	ddr_reg_rd(DREX_MRSTATUS);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_26);
+	ddr_reg_rd(ddr_ctx, DREX_MRSTATUS);
 
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_29);
-	ddr_reg_rd(DREX_MRSTATUS);
-	ddr_dram_dctrl_resync();
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_29);
+	ddr_reg_rd(ddr_ctx, DREX_MRSTATUS);
+	ddr_dram_dctrl_resync(ddr_ctx);
 
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_28);
-	ddr_reg_rd(DREX_MRSTATUS);
-	ddr_dram_dctrl_resync();
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_28);
+	ddr_reg_rd(ddr_ctx, DREX_MRSTATUS);
+	ddr_dram_dctrl_resync(ddr_ctx);
 
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_27);
-	ddr_reg_rd(DREX_MRSTATUS);
-	ddr_dram_dctrl_resync();
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_27);
+	ddr_reg_rd(ddr_ctx, DREX_MRSTATUS);
+	ddr_dram_dctrl_resync(ddr_ctx);
 
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_27);
-	ddr_reg_wr(DPHY_GNR_CON0, ddr_freq_param(freq, f_DPHY_GNR_CON0_DBI));
-	ddr_reg_wr(DPHY2_GNR_CON0, ddr_freq_param(freq, f_DPHY_GNR_CON0_DBI));
-	ddr_dram_dctrl_resync();
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_27);
+	ddr_reg_wr(ddr_ctx, DPHY_GNR_CON0,
+			ddr_freq_param(freq, f_DPHY_GNR_CON0_DBI));
+	ddr_reg_wr(ddr_ctx, DPHY2_GNR_CON0,
+			ddr_freq_param(freq, f_DPHY_GNR_CON0_DBI));
+	ddr_dram_dctrl_resync(ddr_ctx);
 
 	/* DRAM Density Setting */
-	ddr_reg_wr_otp(DREX_MEMCONTROL, o_Reserved_DDR_INIT_10);
-	ddr_reg_wr(DREX_ASP_MEMBASECONFIG0, CHUNK_START_END);
-	ddr_reg_wr_otp(DREX_ASP_MEMCONFIG0, o_Reserved_DDR_INIT_11);
-	ddr_reg_wr(DREX_ASP_CHIP0SIZECONFIG, CHIP_SIZE_512MB);
+	ddr_reg_wr_otp(ddr_ctx, DREX_MEMCONTROL, o_Reserved_DDR_INIT_10);
+	ddr_reg_wr(ddr_ctx, DREX_ASP_MEMBASECONFIG0, CHUNK_START_END);
+	ddr_reg_wr_otp(ddr_ctx, DREX_ASP_MEMCONFIG0, o_Reserved_DDR_INIT_11);
+	ddr_reg_wr(ddr_ctx, DREX_ASP_CHIP0SIZECONFIG, CHIP_SIZE_512MB);
 
 	/* Enable dbi_en at controller side. MR3 is already updated with
 	 * read and write DBI enable
 	 */
-	ddr_reg_set(DREX_MEMCONTROL, DBI_EN);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, DBI_EN);
 
 	return DDR_SUCCESS;
 }
 
-static void ddr_prepare_training(enum ddr_freq_t freq)
+static void ddr_prepare_training(struct ab_ddr_context *ddr_ctx,
+		enum ddr_freq_t freq)
 {
-	ddr_reg_clr(DPHY_OFFSETD_CON0, UPD_MODE);
-	ddr_reg_clr_set(DPHY_DVFS_CON, DVFS_CON_MSK,
+	ddr_reg_clr(ddr_ctx, DPHY_OFFSETD_CON0, UPD_MODE);
+	ddr_reg_clr_set(ddr_ctx, DPHY_DVFS_CON, DVFS_CON_MSK,
 			ddr_freq_param(freq, f_DPHY_DVFS_CON));
-	ddr_reg_set(DPHY_MDLL_CON0, CLKM_CG_EN_SW);
+	ddr_reg_set(ddr_ctx, DPHY_MDLL_CON0, CLKM_CG_EN_SW);
 
-	ddr_reg_clr(DPHY2_OFFSETD_CON0, UPD_MODE);
-	ddr_reg_clr_set(DPHY2_DVFS_CON, DVFS_CON_MSK,
+	ddr_reg_clr(ddr_ctx, DPHY2_OFFSETD_CON0, UPD_MODE);
+	ddr_reg_clr_set(ddr_ctx, DPHY2_DVFS_CON, DVFS_CON_MSK,
 			ddr_freq_param(freq, f_DPHY_DVFS_CON));
-	ddr_reg_set(DPHY2_MDLL_CON0, CLKM_CG_EN_SW);
+	ddr_reg_set(ddr_ctx, DPHY2_MDLL_CON0, CLKM_CG_EN_SW);
 }
 
-static void ddr_ca_training(void)
+static void ddr_ca_training(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_clr(DPHY_LP_CON0, DS_IO_PD);
-	ddr_reg_clr(DPHY2_LP_CON0, DS_IO_PD);
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, DS_IO_PD);
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, DS_IO_PD);
 
-	ddr_reg_clr_set(DPHY_CBT_CON0, CBT_CS_MSK, CBT_CS(CBT_CS_RANK0));
-	ddr_reg_set(DPHY_CAL_CON0, WRLVL_MODE);
-	ddr_reg_set(DPHY_CAL_CON0, CA_CAL_MODE);
+	ddr_reg_clr_set(ddr_ctx, DPHY_CBT_CON0,
+			CBT_CS_MSK, CBT_CS(CBT_CS_RANK0));
+	ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, WRLVL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, CA_CAL_MODE);
 
-	ddr_reg_clr_set(DPHY2_CBT_CON0, CBT_CS_MSK, CBT_CS(CBT_CS_RANK0));
-	ddr_reg_set(DPHY2_CAL_CON0, WRLVL_MODE);
-	ddr_reg_set(DPHY2_CAL_CON0, CA_CAL_MODE);
+	ddr_reg_clr_set(ddr_ctx, DPHY2_CBT_CON0,
+			CBT_CS_MSK, CBT_CS(CBT_CS_RANK0));
+	ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, WRLVL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, CA_CAL_MODE);
 
-	ddr_dram_dctrl_resync();
+	ddr_dram_dctrl_resync(ddr_ctx);
 
-	ddr_reg_clr(DPHY_CAL_CON0, WRLVL_MODE | CA_CAL_MODE);
-	ddr_reg_clr(DPHY_CBT_CON0, CBT_CA_VREF_MODE_DS0 | CBT_CA_VREF_MODE_DS1);
-	ddr_reg_clr(DPHY2_CAL_CON0, WRLVL_MODE | CA_CAL_MODE);
-	ddr_reg_clr(DPHY2_CBT_CON0, CBT_CA_VREF_MODE_DS0 |
+	ddr_reg_clr(ddr_ctx, DPHY_CAL_CON0, WRLVL_MODE | CA_CAL_MODE);
+	ddr_reg_clr(ddr_ctx, DPHY_CBT_CON0,
+			CBT_CA_VREF_MODE_DS0 | CBT_CA_VREF_MODE_DS1);
+	ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON0, WRLVL_MODE | CA_CAL_MODE);
+	ddr_reg_clr(ddr_ctx, DPHY2_CBT_CON0, CBT_CA_VREF_MODE_DS0 |
 				    CBT_CA_VREF_MODE_DS1);
 
-	ddr_reg_set(DPHY_LP_CON0, DS_IO_PD);
-	ddr_reg_set(DPHY2_LP_CON0, DS_IO_PD);
+	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, DS_IO_PD);
+	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, DS_IO_PD);
 }
 
-static int ddr_odt_training(void)
+static int ddr_odt_training(struct ab_ddr_context *ddr_ctx)
 {
 	/* On_Die_Termination */
-	ddr_reg_clr(DPHY_LP_CON0, CTRL_PULLD_DQS);
-	ddr_reg_clr_set(DPHY_ZQ_CON0, ZQ_MODE_NOTERM | ZQ_RGDDR3, ZQ_MODE_LP4);
-	ddr_reg_clr(DPHY_ZQ_CON6, ZQ_DS0_NOTERM | ZQ_DS1_NOTERM);
-	ddr_reg_clr(DPHY_CAL_CON2, CTRL_RODT_DISABLE);
-	ddr_reg_clr_set(DPHY_CAL_CON2, CTRL_READADJ_MSK | CTRL_READDURADJ_MSK,
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, CTRL_PULLD_DQS);
+	ddr_reg_clr_set(ddr_ctx, DPHY_ZQ_CON0,
+			ZQ_MODE_NOTERM | ZQ_RGDDR3, ZQ_MODE_LP4);
+	ddr_reg_clr(ddr_ctx, DPHY_ZQ_CON6, ZQ_DS0_NOTERM | ZQ_DS1_NOTERM);
+	ddr_reg_clr(ddr_ctx, DPHY_CAL_CON2, CTRL_RODT_DISABLE);
+	ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON2,
+			CTRL_READADJ_MSK | CTRL_READDURADJ_MSK,
 			CTRL_READADJ(1) | CTRL_READDURADJ(5));
-	ddr_reg_clr(DPHY_GNR_CON0, CTRL_DFDQS);
+	ddr_reg_clr(ddr_ctx, DPHY_GNR_CON0, CTRL_DFDQS);
 
-	ddr_reg_clr(DPHY2_LP_CON0, CTRL_PULLD_DQS);
-	ddr_reg_clr_set(DPHY2_ZQ_CON0, ZQ_MODE_NOTERM | ZQ_RGDDR3, ZQ_MODE_LP4);
-	ddr_reg_clr(DPHY2_ZQ_CON6, ZQ_DS0_NOTERM | ZQ_DS1_NOTERM);
-	ddr_reg_clr(DPHY2_CAL_CON2, CTRL_RODT_DISABLE);
-	ddr_reg_clr_set(DPHY2_CAL_CON2, CTRL_READADJ_MSK | CTRL_READDURADJ_MSK,
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, CTRL_PULLD_DQS);
+	ddr_reg_clr_set(ddr_ctx, DPHY2_ZQ_CON0,
+			ZQ_MODE_NOTERM | ZQ_RGDDR3, ZQ_MODE_LP4);
+	ddr_reg_clr(ddr_ctx, DPHY2_ZQ_CON6, ZQ_DS0_NOTERM | ZQ_DS1_NOTERM);
+	ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON2, CTRL_RODT_DISABLE);
+	ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON2,
+			CTRL_READADJ_MSK | CTRL_READDURADJ_MSK,
 			CTRL_READADJ(1) | CTRL_READDURADJ(5));
-	ddr_reg_clr(DPHY2_GNR_CON0, CTRL_DFDQS);
+	ddr_reg_clr(ddr_ctx, DPHY2_GNR_CON0, CTRL_DFDQS);
 
 	/* ZQ One-time forced calibration */
-	if (ddr_zq_calibration()) {
+	if (ddr_zq_calibration(ddr_ctx)) {
 		pr_err("%s: one time forced zq calibration failed\n", __func__);
 		return DDR_FAIL;
 	}
 
-	ddr_dphy_ctrl_resync();
-	ddr_reg_wr_otp(DREX_CONCONTROL, o_DREX_CONCONTROL_0);
+	ddr_dphy_ctrl_resync(ddr_ctx);
+	ddr_reg_wr_otp(ddr_ctx, DREX_CONCONTROL, o_DREX_CONCONTROL_0);
 
 	return DDR_SUCCESS;
 }
 
-static void ddr_autodqs_clean_gate_training(enum ddr_freq_t freq)
+static void ddr_autodqs_clean_gate_training(struct ab_ddr_context *ddr_ctx,
+		enum ddr_freq_t freq)
 {
 	if (is_low_freq(freq)) {
-		ddr_reg_clr(DPHY_CAL_CON4, GLITCH_REMOVAL_EN);
-		ddr_reg_clr(DPHY_CAL_CON3, AUTO_DQS_CLEAN);
-		ddr_reg_clr_set(DPHY_CAL_CON2,
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON4, GLITCH_REMOVAL_EN);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON3, AUTO_DQS_CLEAN);
+		ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON2,
 				CTRL_READADJ_MSK |
 				CTRL_READDURADJ_MSK |
 				CTRL_GATEADJ_MSK |
@@ -1287,16 +1329,16 @@ static void ddr_autodqs_clean_gate_training(enum ddr_freq_t freq)
 				CTRL_READDURADJ(5) |
 				CTRL_GATEADJ(0) |
 				CTRL_GATEDURADJ(4));
-		ddr_reg_clr(DPHY_GNR_CON0, CTRL_DFDQS);
-		ddr_reg_clr_set(DPHY_TESTIRCV_CON0,
+		ddr_reg_clr(ddr_ctx, DPHY_GNR_CON0, CTRL_DFDQS);
+		ddr_reg_clr_set(ddr_ctx, DPHY_TESTIRCV_CON0,
 				DQS0_TESTIRCV_MSK | DQS1_TESTIRCV_MSK,
 				DQS0_TESTIRCV(0x0) | DQS1_TESTIRCV(0x0));
-		ddr_reg_clr(DPHY_CAL_CON0, GATE_CAL_MODE);
-		ddr_reg_clr(DPHY_CAL_CON2, CTRL_RODT_DISABLE);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON0, GATE_CAL_MODE);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON2, CTRL_RODT_DISABLE);
 
-		ddr_reg_clr(DPHY2_CAL_CON4, GLITCH_REMOVAL_EN);
-		ddr_reg_clr(DPHY2_CAL_CON3, AUTO_DQS_CLEAN);
-		ddr_reg_clr_set(DPHY2_CAL_CON2,
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON4, GLITCH_REMOVAL_EN);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON3, AUTO_DQS_CLEAN);
+		ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON2,
 				CTRL_READADJ_MSK |
 				CTRL_READDURADJ_MSK |
 				CTRL_GATEADJ_MSK |
@@ -1306,182 +1348,188 @@ static void ddr_autodqs_clean_gate_training(enum ddr_freq_t freq)
 				CTRL_READDURADJ(5) |
 				CTRL_GATEADJ(0) |
 				CTRL_GATEDURADJ(4));
-		ddr_reg_clr(DPHY2_GNR_CON0, CTRL_DFDQS);
-		ddr_reg_clr_set(DPHY2_TESTIRCV_CON0,
+		ddr_reg_clr(ddr_ctx, DPHY2_GNR_CON0, CTRL_DFDQS);
+		ddr_reg_clr_set(ddr_ctx, DPHY2_TESTIRCV_CON0,
 				DQS0_TESTIRCV_MSK | DQS1_TESTIRCV_MSK,
 				DQS0_TESTIRCV(0x0) | DQS1_TESTIRCV(0x0));
-		ddr_reg_clr(DPHY2_CAL_CON0, GATE_CAL_MODE);
-		ddr_reg_clr(DPHY2_CAL_CON2, CTRL_RODT_DISABLE);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON0, GATE_CAL_MODE);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON2, CTRL_RODT_DISABLE);
 	} else {
-		ddr_reg_set(DPHY_CAL_CON4, GLITCH_REMOVAL_EN);
-		ddr_reg_set(DPHY_GNR_CON0, CTRL_DFDQS);
-		ddr_reg_clr_set(DPHY_CAL_CON2,
+		ddr_reg_set(ddr_ctx, DPHY_CAL_CON4, GLITCH_REMOVAL_EN);
+		ddr_reg_set(ddr_ctx, DPHY_GNR_CON0, CTRL_DFDQS);
+		ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON2,
 				CTRL_READADJ_MSK |
 				CTRL_READDURADJ_MSK,
 				CTRL_READADJ(0) |
 				CTRL_READDURADJ(7));
-		ddr_reg_clr_set(DPHY_TESTIRCV_CON0,
+		ddr_reg_clr_set(ddr_ctx, DPHY_TESTIRCV_CON0,
 				DQS0_TESTIRCV_MSK | DQS1_TESTIRCV_MSK,
 				DQS0_TESTIRCV(0x3) | DQS1_TESTIRCV(0x3));
-		ddr_reg_clr(DPHY_CAL_CON0, GATE_CAL_MODE);
-		ddr_reg_set(DPHY_CAL_CON3, AUTO_DQS_CLEAN);
-		ddr_reg_clr(DPHY_CAL_CON2, CTRL_RODT_DISABLE);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON0, GATE_CAL_MODE);
+		ddr_reg_set(ddr_ctx, DPHY_CAL_CON3, AUTO_DQS_CLEAN);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON2, CTRL_RODT_DISABLE);
 
-		ddr_reg_set(DPHY2_CAL_CON4, GLITCH_REMOVAL_EN);
-		ddr_reg_set(DPHY2_GNR_CON0, CTRL_DFDQS);
-		ddr_reg_clr_set(DPHY2_CAL_CON2,
+		ddr_reg_set(ddr_ctx, DPHY2_CAL_CON4, GLITCH_REMOVAL_EN);
+		ddr_reg_set(ddr_ctx, DPHY2_GNR_CON0, CTRL_DFDQS);
+		ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON2,
 				CTRL_READADJ_MSK |
 				CTRL_READDURADJ_MSK,
 				CTRL_READADJ(0) |
 				CTRL_READDURADJ(7));
-		ddr_reg_clr_set(DPHY2_TESTIRCV_CON0,
+		ddr_reg_clr_set(ddr_ctx, DPHY2_TESTIRCV_CON0,
 				DQS0_TESTIRCV_MSK | DQS1_TESTIRCV_MSK,
 				DQS0_TESTIRCV(0x3) | DQS1_TESTIRCV(0x3));
-		ddr_reg_clr(DPHY2_CAL_CON0, GATE_CAL_MODE);
-		ddr_reg_set(DPHY2_CAL_CON3, AUTO_DQS_CLEAN);
-		ddr_reg_clr(DPHY2_CAL_CON2, CTRL_RODT_DISABLE);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON0, GATE_CAL_MODE);
+		ddr_reg_set(ddr_ctx, DPHY2_CAL_CON3, AUTO_DQS_CLEAN);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON2, CTRL_RODT_DISABLE);
 	}
 }
 
-static int ddr_read_dq_calibration(void)
+static int ddr_read_dq_calibration(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr(DPHY_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY2_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_16);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_19);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_9);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_6);
-	ddr_reg_set(DPHY_CAL_CON0, RD_CAL_MODE);
-	ddr_reg_set(DPHY2_CAL_CON0, RD_CAL_MODE);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_16);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_19);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_9);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_6);
+	ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, RD_CAL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, RD_CAL_MODE);
 
-	ddr_reg_wr(DREX_INIT_TRAIN_CONFIG, 0x0);
-	ddr_reg_set(DREX_INIT_TRAIN_CONFIG, INIT_READ_TRAIN_CHIP0);
-	ddr_reg_set(DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
+	ddr_reg_wr(ddr_ctx, DREX_INIT_TRAIN_CONFIG, 0x0);
+	ddr_reg_set(ddr_ctx, DREX_INIT_TRAIN_CONFIG, INIT_READ_TRAIN_CHIP0);
+	ddr_reg_set(ddr_ctx, DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
 
 	/* poll for train complete	*/
-	if (ddr_reg_poll(DREX_PHYSTATUS, p_DREX_PHYSTATUS_train))
+	if (ddr_reg_poll(ddr_ctx, DREX_PHYSTATUS, p_DREX_PHYSTATUS_train))
 		return DDR_FAIL;
 
-	ddr_reg_clr(DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
+	ddr_reg_clr(ddr_ctx, DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
 
 	return DDR_SUCCESS;
 }
 
-static int ddr_write_dq_calibration(void)
+static int ddr_write_dq_calibration(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON4, PATTERN_5555);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON4, PATTERN_5555);
 
-	ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
-	ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON4, PATTERN_5555);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
+	ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON4, PATTERN_5555);
 
-	ddr_reg_wr(DREX_WRTRA_PATTERN0, PATTERN_AA55AA55);
-	ddr_reg_wr(DREX_WRTRA_PATTERN1, PATTERN_AA55AA55);
-	ddr_reg_wr(DREX_WRTRA_PATTERN2, PATTERN_5555);
+	ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN0, PATTERN_AA55AA55);
+	ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN1, PATTERN_AA55AA55);
+	ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN2, PATTERN_5555);
 
-	ddr_reg_set(DPHY_CAL_CON0, WR_CAL_MODE);
-	ddr_reg_set(DPHY2_CAL_CON0, WR_CAL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, WR_CAL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, WR_CAL_MODE);
 
-	ddr_reg_wr(DREX_INIT_TRAIN_CONFIG, 0x0);
-	ddr_reg_set(DREX_INIT_TRAIN_CONFIG, INIT_WRITE_TRAIN_CHIP0);
-	ddr_reg_set(DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
+	ddr_reg_wr(ddr_ctx, DREX_INIT_TRAIN_CONFIG, 0x0);
+	ddr_reg_set(ddr_ctx, DREX_INIT_TRAIN_CONFIG, INIT_WRITE_TRAIN_CHIP0);
+	ddr_reg_set(ddr_ctx, DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
 
 	/* poll for train complete	*/
-	if (ddr_reg_poll(DREX_PHYSTATUS, p_DREX_PHYSTATUS_train))
+	if (ddr_reg_poll(ddr_ctx, DREX_PHYSTATUS, p_DREX_PHYSTATUS_train))
 		return DDR_FAIL;
 
-	ddr_reg_clr(DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
+	ddr_reg_clr(ddr_ctx, DREX_INIT_TRAIN_CONTROL, INIT_TRAIN_START);
 
 	return DDR_SUCCESS;
 }
 
-void ddr_prbs_training_init(void)
+void ddr_prbs_training_init(struct ab_ddr_context *ddr_ctx)
 {
 	/* DDRPHY_SET_PRBS_TRAINING_INIT */
-	ddr_reg_wr(DPHY_PRBS_CON0, 0x50000);
-	ddr_reg_wr(DPHY2_PRBS_CON0, 0x50000);
-	ddr_reg_wr_otp(DPHY_PRBS_CON1, o_PCIe_reg_address_79);
-	ddr_reg_wr_otp(DPHY2_PRBS_CON1, o_PCIe_reg_address_79);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON0, 0x50000);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON0, 0x50000);
+	ddr_reg_wr_otp(ddr_ctx, DPHY_PRBS_CON1, o_PCIe_reg_address_79);
+	ddr_reg_wr_otp(ddr_ctx, DPHY2_PRBS_CON1, o_PCIe_reg_address_79);
 }
 
-static int ddr_prbs_training_read(void)
+static int ddr_prbs_training_read(struct ab_ddr_context *ddr_ctx)
 {
 	/* DDRPHY_RUN_PRBS_TRAINING - READ */
-	ddr_reg_set(DPHY_PRBS_CON0, PRBS_READ_START);
-	ddr_reg_set(DPHY2_PRBS_CON0, PRBS_READ_START);
-	if (ddr_reg_poll(DPHY_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
+	ddr_reg_set(ddr_ctx, DPHY_PRBS_CON0, PRBS_READ_START);
+	ddr_reg_set(ddr_ctx, DPHY2_PRBS_CON0, PRBS_READ_START);
+	if (ddr_reg_poll(ddr_ctx, DPHY_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
 		return DDR_FAIL;
 
-	ddr_reg_clr(DPHY_PRBS_CON0, PRBS_READ_START);
-	ddr_reg_clr(DPHY2_PRBS_CON0, PRBS_READ_START);
-	if (ddr_reg_poll(DPHY_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_disable))
+	ddr_reg_clr(ddr_ctx, DPHY_PRBS_CON0, PRBS_READ_START);
+	ddr_reg_clr(ddr_ctx, DPHY2_PRBS_CON0, PRBS_READ_START);
+	if (ddr_reg_poll(ddr_ctx, DPHY_PRBS_CON0,
+				p_DPHY_PRBS_CON0_prbs_disable))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_disable))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_PRBS_CON0,
+				p_DPHY_PRBS_CON0_prbs_disable))
 		return DDR_FAIL;
 
 	/* DRAMDCTLResync:  start */
-	ddr_dram_dctrl_resync();
+	ddr_dram_dctrl_resync(ddr_ctx);
 
 	return DDR_SUCCESS;
 }
 
-static int ddr_prbs_training_write(void)
+static int ddr_prbs_training_write(struct ab_ddr_context *ddr_ctx)
 {
 	/* DDRPHY_RUN_PRBS_TRAINING - WRITE */
-	ddr_reg_set(DPHY_PRBS_CON0, PRBS_WRITE_START);
-	ddr_reg_set(DPHY2_PRBS_CON0, PRBS_WRITE_START);
+	ddr_reg_set(ddr_ctx, DPHY_PRBS_CON0, PRBS_WRITE_START);
+	ddr_reg_set(ddr_ctx, DPHY2_PRBS_CON0, PRBS_WRITE_START);
 
-	if (ddr_reg_poll(DPHY_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
+	if (ddr_reg_poll(ddr_ctx, DPHY_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_done))
 		return DDR_FAIL;
 
-	ddr_reg_clr(DPHY_PRBS_CON0, PRBS_WRITE_START);
-	ddr_reg_clr(DPHY2_PRBS_CON0, PRBS_WRITE_START);
+	ddr_reg_clr(ddr_ctx, DPHY_PRBS_CON0, PRBS_WRITE_START);
+	ddr_reg_clr(ddr_ctx, DPHY2_PRBS_CON0, PRBS_WRITE_START);
 
-	if (ddr_reg_poll(DPHY_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_disable))
+	if (ddr_reg_poll(ddr_ctx, DPHY_PRBS_CON0,
+				p_DPHY_PRBS_CON0_prbs_disable))
 		return DDR_FAIL;
-	if (ddr_reg_poll(DPHY2_PRBS_CON0, p_DPHY_PRBS_CON0_prbs_disable))
+	if (ddr_reg_poll(ddr_ctx, DPHY2_PRBS_CON0,
+				p_DPHY_PRBS_CON0_prbs_disable))
 		return DDR_FAIL;
 
 	/* DRAMDCTLResync start */
-	ddr_dram_dctrl_resync();
+	ddr_dram_dctrl_resync(ddr_ctx);
 
 	return DDR_SUCCESS;
 }
 
-static void ddr_axi_enable_after_all_training(void)
+static void ddr_axi_enable_after_all_training(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_clr(DPHY_MDLL_CON0, CLKM_CG_EN_SW);
-	ddr_reg_clr(DPHY2_MDLL_CON0, CLKM_CG_EN_SW);
+	ddr_reg_clr(ddr_ctx, DPHY_MDLL_CON0, CLKM_CG_EN_SW);
+	ddr_reg_clr(ddr_ctx, DPHY2_MDLL_CON0, CLKM_CG_EN_SW);
 
 	/* Enable all power saving features */
-	ddr_enable_power_features();
+	ddr_enable_power_features(ddr_ctx);
 
 	/* enable refresh and axi access controls */
-	ddr_reg_set(DREX_MEMCONTROL, PB_REF_EN | DBI_EN);
-	ddr_reg_set(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(DREX_CONCONTROL, DFI_INIT_START_PHY2 | DFI_INIT_START);
-	ddr_reg_set(DREX_CONCONTROL, AREF_EN);
-	ddr_reg_set(DREX_ALL_INIT_INDI, ALL_INIT_DONE);
-	ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN | DBI_EN);
+	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL,
+			DFI_INIT_START_PHY2 | DFI_INIT_START);
+	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
+	ddr_reg_set(ddr_ctx, DREX_ALL_INIT_INDI, ALL_INIT_DONE);
+	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 }
 
-int ddr_enter_self_refresh_mode(void)
+int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_15);
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_15);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
 
 	/* poll for self refresh entry */
-	if (ddr_reg_poll(DREX_CHIPSTATUS, p_DREX_CHIPSTATUS_sr_enter)) {
+	if (ddr_reg_poll(ddr_ctx, DREX_CHIPSTATUS,
+				p_DREX_CHIPSTATUS_sr_enter)) {
 		pr_err("%s: self-refresh entry failed.\n", __func__);
 		return DDR_FAIL;
 	}
@@ -1489,12 +1537,12 @@ int ddr_enter_self_refresh_mode(void)
 	return DDR_SUCCESS;
 }
 
-int ddr_exit_self_refresh_mode(void)
+int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_22);
+	ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_22);
 
 	/* poll for self refresh exit */
-	if (ddr_reg_poll(DREX_CHIPSTATUS, p_DREX_CHIPSTATUS_sr_exit)) {
+	if (ddr_reg_poll(ddr_ctx, DREX_CHIPSTATUS, p_DREX_CHIPSTATUS_sr_exit)) {
 		pr_err("%s: self-refresh exit failed.\n", __func__);
 		return DDR_FAIL;
 	}
@@ -1525,7 +1573,7 @@ static void ddr_train_save_configuration(struct ab_ddr_context *ddr_ctx)
 	for (i = 0; i < s_train_max_index; i++) {
 		train_reg = get_train_save_restore_regs(i);
 		ddr_ctx->ddr_train_save_value[freq][i] =
-				ddr_reg_rd(train_reg->reg_save);
+				ddr_reg_rd(ddr_ctx, train_reg->reg_save);
 	}
 }
 
@@ -1538,162 +1586,174 @@ static void ddr_train_restore_configuration(struct ab_ddr_context *ddr_ctx,
 		ddr_ctx->ddr_train_save_value[freq];
 
 	/* Training related setting to be applied before Restore */
-	ddr_reg_clr_set(DPHY_CAL_CON1, RDLVL_PASS_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON1, RDLVL_PASS_ADJ_MSK,
 			RDLVL_PASS_ADJ(0x4));
-	ddr_reg_clr_set(DPHY_CAL_CON1, GLVL_PERIODIC_INCR_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON1, GLVL_PERIODIC_INCR_ADJ_MSK,
 			GLVL_PERIODIC_INCR_ADJ(0x40));
-	ddr_reg_clr_set(DPHY_CAL_CON4, GLVL_PERIODIC_FINE_INCR_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON4, GLVL_PERIODIC_FINE_INCR_ADJ_MSK,
 			GLVL_PERIODIC_FINE_INCR_ADJ(0x0));
-	ddr_reg_clr_set(DPHY_CAL_CON1, RDLVL_PERIODIC_INCR_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY_CAL_CON1, RDLVL_PERIODIC_INCR_ADJ_MSK,
 			RDLVL_PERIODIC_INCR_ADJ(0x1));
 
-	ddr_reg_clr_set(DPHY2_CAL_CON1, RDLVL_PASS_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON1, RDLVL_PASS_ADJ_MSK,
 			RDLVL_PASS_ADJ(0x4));
-	ddr_reg_clr_set(DPHY2_CAL_CON1, GLVL_PERIODIC_INCR_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON1, GLVL_PERIODIC_INCR_ADJ_MSK,
 			GLVL_PERIODIC_INCR_ADJ(0x40));
-	ddr_reg_clr_set(DPHY2_CAL_CON4, GLVL_PERIODIC_FINE_INCR_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON4,
+			GLVL_PERIODIC_FINE_INCR_ADJ_MSK,
 			GLVL_PERIODIC_FINE_INCR_ADJ(0x0));
-	ddr_reg_clr_set(DPHY2_CAL_CON1, RDLVL_PERIODIC_INCR_ADJ_MSK,
+	ddr_reg_clr_set(ddr_ctx, DPHY2_CAL_CON1, RDLVL_PERIODIC_INCR_ADJ_MSK,
 			RDLVL_PERIODIC_INCR_ADJ(0x1));
 
 	/* Restore command bus training result */
-	ddr_reg_set(DPHY_CAL_CON0, CA_CAL_MODE);
-	ddr_reg_set(DPHY2_CAL_CON0, CA_CAL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, CA_CAL_MODE);
+	ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, CA_CAL_MODE);
 
-	ddr_reg_wr(DPHY_CA_DESKEW_CON0,
+	ddr_reg_wr(ddr_ctx, DPHY_CA_DESKEW_CON0,
 		   ddr_train_save_value[s_DPHY_CA_DESKEW_CON0]);
-	ddr_reg_wr(DPHY_CA_DESKEW_CON1,
+	ddr_reg_wr(ddr_ctx, DPHY_CA_DESKEW_CON1,
 		   ddr_train_save_value[s_DPHY_CA_DESKEW_CON1]);
-	ddr_reg_wr(DPHY_CA_DESKEW_CON2,
+	ddr_reg_wr(ddr_ctx, DPHY_CA_DESKEW_CON2,
 		   ddr_train_save_value[s_DPHY_CA_DESKEW_CON2]);
 
-	ddr_reg_wr(DPHY2_CA_DESKEW_CON0,
+	ddr_reg_wr(ddr_ctx, DPHY2_CA_DESKEW_CON0,
 		   ddr_train_save_value[s_DPHY2_CA_DESKEW_CON0]);
-	ddr_reg_wr(DPHY2_CA_DESKEW_CON1,
+	ddr_reg_wr(ddr_ctx, DPHY2_CA_DESKEW_CON1,
 		   ddr_train_save_value[s_DPHY2_CA_DESKEW_CON1]);
-	ddr_reg_wr(DPHY2_CA_DESKEW_CON2,
+	ddr_reg_wr(ddr_ctx, DPHY2_CA_DESKEW_CON2,
 		   ddr_train_save_value[s_DPHY2_CA_DESKEW_CON2]);
 
-	ddr_reg_clr(DPHY_CAL_CON0, CA_CAL_MODE);
-	ddr_reg_clr(DPHY2_CAL_CON0, CA_CAL_MODE);
+	ddr_reg_clr(ddr_ctx, DPHY_CAL_CON0, CA_CAL_MODE);
+	ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON0, CA_CAL_MODE);
 
 	if (restore_mode == AB_RESTORE_FULL) {
 
 		/* Auto DQS clean / Gate training */
-		ddr_autodqs_clean_gate_training(freq);
+		ddr_autodqs_clean_gate_training(ddr_ctx, freq);
 
-		ddr_reg_wr(DPHY_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY2_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY_CAL_RD_PATTERN_CON0, PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY2_CAL_RD_PATTERN_CON0,
+				PATTERN_55AA55AA);
 
-		ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY_CAL_WR_PATTERN_CON4, PATTERN_5555);
-		ddr_reg_wr(DREX_WRTRA_PATTERN0, PATTERN_AA55AA55);
-		ddr_reg_wr(DREX_WRTRA_PATTERN1, PATTERN_AA55AA55);
-		ddr_reg_wr(DREX_WRTRA_PATTERN2, PATTERN_5555);
+		ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY_CAL_WR_PATTERN_CON4, PATTERN_5555);
+		ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN0, PATTERN_AA55AA55);
+		ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN1, PATTERN_AA55AA55);
+		ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN2, PATTERN_5555);
 
-		ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON0, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON1, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON2, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON3, PATTERN_55AA55AA);
-		ddr_reg_wr(DPHY2_CAL_WR_PATTERN_CON4, PATTERN_5555);
-		ddr_reg_wr(DREX_WRTRA_PATTERN0, PATTERN_AA55AA55);
-		ddr_reg_wr(DREX_WRTRA_PATTERN1, PATTERN_AA55AA55);
-		ddr_reg_wr(DREX_WRTRA_PATTERN2, PATTERN_5555);
+		ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON0,
+				PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON1,
+				PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON2,
+				PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON3,
+				PATTERN_55AA55AA);
+		ddr_reg_wr(ddr_ctx, DPHY2_CAL_WR_PATTERN_CON4, PATTERN_5555);
+		ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN0, PATTERN_AA55AA55);
+		ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN1, PATTERN_AA55AA55);
+		ddr_reg_wr(ddr_ctx, DREX_WRTRA_PATTERN2, PATTERN_5555);
 
 		/* Restore Read Training Results */
-		ddr_reg_set(DPHY_CAL_CON0, RD_CAL_MODE);
-		ddr_reg_set(DPHY_CAL_CON3, RD_SW_MODE);
-		ddr_reg_set(DPHY2_CAL_CON0, RD_CAL_MODE);
-		ddr_reg_set(DPHY2_CAL_CON3, RD_SW_MODE);
+		ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, RD_CAL_MODE);
+		ddr_reg_set(ddr_ctx, DPHY_CAL_CON3, RD_SW_MODE);
+		ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, RD_CAL_MODE);
+		ddr_reg_set(ddr_ctx, DPHY2_CAL_CON3, RD_SW_MODE);
 
 		for (idx = s_DPHY_RD_DESKEW_CENTER_CS0_CON_DM;
 			idx <= s_DPHY2_RD_DQS_VWML_CS1_CON0; idx++) {
 			train_reg = get_train_save_restore_regs(idx);
-			ddr_reg_wr(train_reg->reg_restore,
+			ddr_reg_wr(ddr_ctx, train_reg->reg_restore,
 				   ddr_train_save_value[idx]);
 		}
 
-		ddr_reg_clr(DPHY_CAL_CON3, RD_SW_MODE);
-		ddr_reg_clr(DPHY2_CAL_CON3, RD_SW_MODE);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON3, RD_SW_MODE);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON3, RD_SW_MODE);
 
 		/* Restore Write Training Results */
-		ddr_reg_set(DPHY_CAL_CON0, WR_CAL_MODE);
-		ddr_reg_set(DPHY_CAL_CON3, WR_SW_MODE);
-		ddr_reg_set(DPHY2_CAL_CON0, WR_CAL_MODE);
-		ddr_reg_set(DPHY2_CAL_CON3, WR_SW_MODE);
+		ddr_reg_set(ddr_ctx, DPHY_CAL_CON0, WR_CAL_MODE);
+		ddr_reg_set(ddr_ctx, DPHY_CAL_CON3, WR_SW_MODE);
+		ddr_reg_set(ddr_ctx, DPHY2_CAL_CON0, WR_CAL_MODE);
+		ddr_reg_set(ddr_ctx, DPHY2_CAL_CON3, WR_SW_MODE);
 
 		for (idx = s_DPHY_WR_DESKEWC_CS0_CON0;
 			idx <= s_DPHY2_DM_DESKEWL_CS1_CON0; idx++) {
 			train_reg = get_train_save_restore_regs(idx);
-			ddr_reg_wr(train_reg->reg_restore,
+			ddr_reg_wr(ddr_ctx, train_reg->reg_restore,
 				   ddr_train_save_value[idx]);
 		}
 
-		ddr_reg_clr(DPHY_CAL_CON3, WR_SW_MODE);
-		ddr_reg_clr(DPHY2_CAL_CON3, WR_SW_MODE);
+		ddr_reg_clr(ddr_ctx, DPHY_CAL_CON3, WR_SW_MODE);
+		ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON3, WR_SW_MODE);
 	}
 
 	/* Restore PRBS training result */
-	ddr_reg_set(DPHY_CAL_CON3, PRBS_SW_MODE);
-	ddr_reg_wr(DPHY_PRBS_CON4, ddr_train_save_value[s_DPHY_PRBS_CON2]);
-	ddr_reg_wr(DPHY_PRBS_CON5, ddr_train_save_value[s_DPHY_PRBS_CON3]);
-	ddr_reg_clr(DPHY_CAL_CON3, PRBS_SW_MODE);
+	ddr_reg_set(ddr_ctx, DPHY_CAL_CON3, PRBS_SW_MODE);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON4,
+			ddr_train_save_value[s_DPHY_PRBS_CON2]);
+	ddr_reg_wr(ddr_ctx, DPHY_PRBS_CON5,
+			ddr_train_save_value[s_DPHY_PRBS_CON3]);
+	ddr_reg_clr(ddr_ctx, DPHY_CAL_CON3, PRBS_SW_MODE);
 
-	ddr_reg_set(DPHY2_CAL_CON3, PRBS_SW_MODE);
-	ddr_reg_wr(DPHY2_PRBS_CON4, ddr_train_save_value[s_DPHY2_PRBS_CON2]);
-	ddr_reg_wr(DPHY2_PRBS_CON5, ddr_train_save_value[s_DPHY2_PRBS_CON3]);
-	ddr_reg_clr(DPHY2_CAL_CON3, PRBS_SW_MODE);
+	ddr_reg_set(ddr_ctx, DPHY2_CAL_CON3, PRBS_SW_MODE);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON4,
+			ddr_train_save_value[s_DPHY2_PRBS_CON2]);
+	ddr_reg_wr(ddr_ctx, DPHY2_PRBS_CON5,
+			ddr_train_save_value[s_DPHY2_PRBS_CON3]);
+	ddr_reg_clr(ddr_ctx, DPHY2_CAL_CON3, PRBS_SW_MODE);
 
-	ddr_reg_wr(DPHY_ZQ_CON9, ddr_train_save_value[s_DPHY_ZQ_CON9]);
-	ddr_reg_wr(DPHY2_ZQ_CON9, ddr_train_save_value[s_DPHY2_ZQ_CON9]);
+	ddr_reg_wr(ddr_ctx, DPHY_ZQ_CON9,
+			ddr_train_save_value[s_DPHY_ZQ_CON9]);
+	ddr_reg_wr(ddr_ctx, DPHY2_ZQ_CON9,
+			ddr_train_save_value[s_DPHY2_ZQ_CON9]);
 }
 
 static int ab_ddr_initial_trainings(struct ab_ddr_context *ddr_ctx)
 {
-	ddr_prepare_training(ddr_ctx->cur_freq);
+	ddr_prepare_training(ddr_ctx, ddr_ctx->cur_freq);
 
-	ddr_ca_training();
+	ddr_ca_training(ddr_ctx);
 
-	if (ddr_odt_training()) {
+	if (ddr_odt_training(ddr_ctx)) {
 		pr_err("%s: ddr on-die-termination training failed.\n",
 			__func__);
 		goto ddr_init_train_fail;
 	}
 
-	ddr_autodqs_clean_gate_training(ddr_ctx->cur_freq);
+	ddr_autodqs_clean_gate_training(ddr_ctx, ddr_ctx->cur_freq);
 
-	if (ddr_read_dq_calibration()) {
+	if (ddr_read_dq_calibration(ddr_ctx)) {
 		pr_err("%s: ddr read dq calibration failed.\n", __func__);
 		goto ddr_init_train_fail;
 	}
 
-	if (ddr_write_dq_calibration()) {
+	if (ddr_write_dq_calibration(ddr_ctx)) {
 		pr_err("%s: ddr write dq calibration failed.\n", __func__);
 		goto ddr_init_train_fail;
 	}
 
 	/* reset the prbs_dram_act_enable */
-	ddr_reg_clr(DPHY_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
-	ddr_reg_clr(DPHY2_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
+	ddr_reg_clr(ddr_ctx, DPHY_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
+	ddr_reg_clr(ddr_ctx, DPHY2_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
 
-	ddr_prbs_training_init();
+	ddr_prbs_training_init(ddr_ctx);
 
-	if (ddr_prbs_training_read()) {
+	if (ddr_prbs_training_read(ddr_ctx)) {
 		pr_err("%s: ddr prbs read training failed.\n", __func__);
 		goto ddr_init_train_fail;
 	}
 
-	if (ddr_prbs_training_write()) {
+	if (ddr_prbs_training_write(ddr_ctx)) {
 		pr_err("%s: ddr prbs write training failed.\n", __func__);
 		goto ddr_init_train_fail;
 	}
 
 	/* Set the prbs_dram_act_enable */
-	ddr_reg_set(DPHY_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
-	ddr_reg_set(DPHY2_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
+	ddr_reg_set(ddr_ctx, DPHY_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
+	ddr_reg_set(ddr_ctx, DPHY2_PRBS_CON8, PRBS_DRAM_ACT_ENABLE);
 
 	return DDR_SUCCESS;
 
@@ -1704,12 +1764,13 @@ ddr_init_train_fail:
 
 static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 {
-	/* Check ddr_reg_rd(TRN_ADDR) value and if non zero, the previous
-	 * training results are stored in here. Restore the Training parameters.
+	/* Check ddr_reg_rd(ddr_ctx, TRN_ADDR) value and if non zero,
+	 * the previous training results are stored in here.
+	 * Restore the Training parameters.
 	 */
 	if (GET_REG_TRN_ADDR()) {
 
-		if (ddr_enter_self_refresh_mode())
+		if (ddr_enter_self_refresh_mode(ddr_ctx))
 			goto ddr_train_fail;
 
 		/* Copy training results from TRN_ADDR to PHY/DRAM */
@@ -1717,19 +1778,19 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 						AB_DRAM_FREQ_MHZ_1866,
 						AB_RESTORE_FULL);
 
-		if (ddr_exit_self_refresh_mode())
+		if (ddr_exit_self_refresh_mode(ddr_ctx))
 			goto ddr_train_fail;
 
-		ddr_axi_enable_after_all_training();
+		ddr_axi_enable_after_all_training(ddr_ctx);
 
 	} else {
 
 		if (!ddr_sr) {
-			if (ddr_enter_self_refresh_mode())
+			if (ddr_enter_self_refresh_mode(ddr_ctx))
 				goto ddr_train_fail;
 		}
 
-		if (ddr_set_pll_freq(AB_DRAM_FREQ_MHZ_1866)) {
+		if (ddr_set_pll_freq(ddr_ctx, AB_DRAM_FREQ_MHZ_1866)) {
 			pr_err("%s: setting pll freq [1866MHz] failed.\n",
 				__func__);
 			goto ddr_train_fail;
@@ -1738,16 +1799,17 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 		/* for CKE High to CS delay */
 		udelay(DDR_INIT_CKE2CS_DELAY_USEC);
 
-		if (ddr_enable_dll()) {
+		if (ddr_enable_dll(ddr_ctx)) {
 			pr_err("%s: enable dll failed.\n", __func__);
 			goto ddr_train_fail;
 		}
 
-		ddr_power_down_exit_sequence();
+		ddr_power_down_exit_sequence(ddr_ctx);
 
-		ddr_set_drex_timing_parameters(ddr_ctx->cur_freq);
+		ddr_set_drex_timing_parameters(ddr_ctx, ddr_ctx->cur_freq);
 
-		if (ddr_set_drex_address_parameters(ddr_ctx->cur_freq)) {
+		if (ddr_set_drex_address_parameters(ddr_ctx,
+					ddr_ctx->cur_freq)) {
 			pr_err("%s: drex address parameter settings failed.\n",
 				__func__);
 			goto ddr_train_fail;
@@ -1771,10 +1833,10 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 			}
 		}
 
-		if (ddr_exit_self_refresh_mode())
+		if (ddr_exit_self_refresh_mode(ddr_ctx))
 			goto ddr_train_fail;
 
-		ddr_axi_enable_after_all_training();
+		ddr_axi_enable_after_all_training(ddr_ctx);
 
 		/* Save training results to local array */
 		ddr_train_save_configuration(ddr_ctx);
@@ -1795,14 +1857,14 @@ static int32_t ab_ddr_init_internal_isolation(struct ab_ddr_context *ddr_ctx)
 	ddr_sr = GPIO_DDR_SR();
 
 	/* deassert PHY reset while PHY clock is gated */
-	ddr_deassert_phy_reset_while_phy_is_gated();
+	ddr_deassert_phy_reset_while_phy_is_gated(ddr_ctx);
 
 	/* configure PLL_MIF via CMU_MIF_for_Lowfreq and wait for pll lock */
-	if (ddr_config_cmu_mif_lowfreq())
+	if (ddr_config_cmu_mif_lowfreq(ddr_ctx))
 		goto ddr_init_fail;
 
 	/* Ungate PHY Clock */
-	ddr_ungate_phy_clock();
+	ddr_ungate_phy_clock(ddr_ctx);
 
 	/* Deassert Internal Isolation
 	 * SYSREG_Central_PMU ::
@@ -1811,12 +1873,12 @@ static int32_t ab_ddr_init_internal_isolation(struct ab_ddr_context *ddr_ctx)
 	PMU_CONTROL_PHY_RET_OFF();
 
 	/* Initialize PHY */
-	ddr_initialize_phy_pre();
+	ddr_initialize_phy_pre(ddr_ctx);
 
-	ddr_initialize_phy(ddr_ctx->cur_freq);
+	ddr_initialize_phy(ddr_ctx, ddr_ctx->cur_freq);
 
 	/* Initialize DFI Interface */
-	if (ddr_initialize_dfi(1)) {
+	if (ddr_initialize_dfi(ddr_ctx, 1)) {
 		pr_err("%s: DFI initialization failed\n", __func__);
 		goto ddr_init_fail;
 	}
@@ -1824,7 +1886,7 @@ static int32_t ab_ddr_init_internal_isolation(struct ab_ddr_context *ddr_ctx)
 	if (ddr_sr) { /* SUSPEND to ACTIVE sequence */
 
 		/* IO Initialization for suspend */
-		if (ddr_io_initialization(1)) {
+		if (ddr_io_initialization(ddr_ctx, 1)) {
 			pr_err("%s: ddr IO init from suspend failed\n",
 				__func__);
 			goto ddr_init_fail;
@@ -1832,22 +1894,22 @@ static int32_t ab_ddr_init_internal_isolation(struct ab_ddr_context *ddr_ctx)
 	} else { /* OFF to ACTIVE sequence */
 
 		/* DRAM reset sequence */
-		ddr_dram_reset_sequence();
+		ddr_dram_reset_sequence(ddr_ctx);
 
 		/* Power-down exit sequence */
-		ddr_power_down_exit_sequence();
+		ddr_power_down_exit_sequence(ddr_ctx);
 
 		/* IO Initialization */
-		if (ddr_io_initialization(0)) {
+		if (ddr_io_initialization(ddr_ctx, 0)) {
 			pr_err("%s: ddr IO initialization failed\n", __func__);
 			goto ddr_init_fail;
 		}
 
 		/* MRWs (Set VREF, ODT, etc) */
-		ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
+		ddr_mrw_set_vref_odt_etc(ddr_ctx, AB_DRAM_FREQ_MHZ_1866);
 
 		/* DRAM ZQ Calibration */
-		ddr_dram_zq_calibration();
+		ddr_dram_zq_calibration(ddr_ctx);
 	}
 
 	/* DDR training */
@@ -1865,29 +1927,29 @@ ddr_init_fail:
 static int32_t ab_ddr_init_freq_change(struct ab_ddr_context *ddr_ctx)
 {
 	/* Initialize PHY */
-	ddr_initialize_phy_pre();
+	ddr_initialize_phy_pre(ddr_ctx);
 
-	ddr_initialize_phy(ddr_ctx->cur_freq);
+	ddr_initialize_phy(ddr_ctx, ddr_ctx->cur_freq);
 
 	/* Initialize DFI Interface */
-	if (ddr_initialize_dfi(0))
+	if (ddr_initialize_dfi(ddr_ctx, 0))
 		goto ddr_init_fail;
 
 	/* Power-down exit sequence */
-	ddr_power_down_exit_sequence();
+	ddr_power_down_exit_sequence(ddr_ctx);
 
 	/* configure MRWs (Set VREF, ODT, etc) as per the frequency */
-	ddr_mrw_set_vref_odt_etc(ddr_ctx->cur_freq);
+	ddr_mrw_set_vref_odt_etc(ddr_ctx, ddr_ctx->cur_freq);
 
 	/* Enable DLL */
-	if (ddr_enable_dll()) {
+	if (ddr_enable_dll(ddr_ctx)) {
 		pr_err("%s: enable dll failed.\n", __func__);
 		goto ddr_init_fail;
 	}
 
-	ddr_set_drex_timing_parameters(ddr_ctx->cur_freq);
+	ddr_set_drex_timing_parameters(ddr_ctx, ddr_ctx->cur_freq);
 
-	if (ddr_set_drex_address_parameters(ddr_ctx->cur_freq))
+	if (ddr_set_drex_address_parameters(ddr_ctx, ddr_ctx->cur_freq))
 		goto ddr_init_fail;
 
 	return DDR_SUCCESS;
@@ -1928,25 +1990,25 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
 
 	/* Block AXI Before entering self-refresh */
-	if (ddr_block_axi_transactions())
+	if (ddr_block_axi_transactions(ddr_ctx))
 		return -ETIMEDOUT;
 
 	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
 
 	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode()) {
+	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
 		pr_err("%s: self-refresh entry failed\n", __func__);
 		return DDR_FAIL;
 	}
 
 	/* Configure the PLL for the required frequency */
-	if (ddr_set_pll_freq(freq)) {
+	if (ddr_set_pll_freq(ddr_ctx, freq)) {
 		pr_err("%s: pll setting failed\n", __func__);
 		return DDR_FAIL;
 	}
@@ -1963,14 +2025,14 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 	 * not executing above sequences. So, the below settings are required
 	 * for normal ddr operation.
 	 */
-	ddr_reg_clr(DPHY_LP_CON0, CTRL_PULLD_DQ | CTRL_PULLD_DQS);
-	ddr_reg_clr(DPHY_ZQ_CON0, ZQ_CLK_DIV_EN);
-	ddr_reg_clr_set(DPHY_ZQ_CON0, ZQ_MODE_TERM_MSK,
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, CTRL_PULLD_DQ | CTRL_PULLD_DQS);
+	ddr_reg_clr(ddr_ctx, DPHY_ZQ_CON0, ZQ_CLK_DIV_EN);
+	ddr_reg_clr_set(ddr_ctx, DPHY_ZQ_CON0, ZQ_MODE_TERM_MSK,
 			ZQ_MODE_TERM(ZQ_MODE_TERM_60_OHM));
 
-	ddr_reg_clr(DPHY2_LP_CON0, CTRL_PULLD_DQ | CTRL_PULLD_DQS);
-	ddr_reg_clr(DPHY2_ZQ_CON0, ZQ_CLK_DIV_EN);
-	ddr_reg_clr_set(DPHY2_ZQ_CON0, ZQ_MODE_TERM_MSK,
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, CTRL_PULLD_DQ | CTRL_PULLD_DQS);
+	ddr_reg_clr(ddr_ctx, DPHY2_ZQ_CON0, ZQ_CLK_DIV_EN);
+	ddr_reg_clr_set(ddr_ctx, DPHY2_ZQ_CON0, ZQ_MODE_TERM_MSK,
 			ZQ_MODE_TERM(ZQ_MODE_TERM_60_OHM));
 
 	if (ddr_ctx->ddr_train_completed[freq]) {
@@ -1983,30 +2045,30 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 						AB_RESTORE_DVFS);
 
 		/* Prepare Training */
-		ddr_prepare_training(freq);
+		ddr_prepare_training(ddr_ctx, freq);
 
 		/* autodqs clean gate training for low freq */
-		ddr_autodqs_clean_gate_training(freq);
+		ddr_autodqs_clean_gate_training(ddr_ctx, freq);
 
 		/* Read & Write dq calibration for modified frequency */
-		if (ddr_read_dq_calibration()) {
+		if (ddr_read_dq_calibration(ddr_ctx)) {
 			pr_err("Error!! read dq calibration failed\n");
 			goto freq_change_fail;
 		}
 
-		if (ddr_write_dq_calibration()) {
+		if (ddr_write_dq_calibration(ddr_ctx)) {
 			pr_err("Error!! write dq calibration failed\n");
 			goto freq_change_fail;
 		}
 	}
 
 	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode()) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
 		goto freq_change_fail;
 	}
 
-	ddr_axi_enable_after_all_training();
+	ddr_axi_enable_after_all_training(ddr_ctx);
 
 	/* save the training results to local array */
 	if (!ddr_ctx->ddr_train_completed[freq])
@@ -2047,7 +2109,7 @@ int32_t ab_ddr_train_gpio(void *ctx)
 	}
 
 	/* self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode()) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
 		return DDR_FAIL;
 	}
@@ -2148,24 +2210,25 @@ int32_t ab_ddr_train_sysreg(void *ctx)
 	return DDR_SUCCESS;
 }
 
-static int ddr_enable_power_features(void)
+static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 {
 	/* Block AXI Before entering self-refresh */
-	if (ddr_block_axi_transactions())
+	if (ddr_block_axi_transactions(ddr_ctx))
 		return -ETIMEDOUT;
 
 	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
 
 	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode()) {
+	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
 		pr_err("self-refresh entry fail during pwr features enable\n");
-		ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+		ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY,
+				ACTIVATE_AXI_READY);
 		return -ETIMEDOUT;
 	}
 
@@ -2177,35 +2240,36 @@ static int ddr_enable_power_features(void)
 	 *       0B: Disable codes 001 and 010 in MR4 OP[2:0]
 	 *       1B: Enable all codes in MR4 OP[2:0]
 	 */
-	ddr_reg_wr(DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
 
 	/* Set the all-bank and per-bank auto refresh timings */
-	ddr_reg_wr(DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
+	ddr_reg_wr(ddr_ctx, DREX_TIMINGARE, T_REFI_DEFAULT | T_REFIPB_DEFAULT);
 
 	/* Enabling DDR Power features */
-	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_set(DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_set(DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr_set(DREX_MEMCONTROL, DPWRDN_TYPE_MSK,
+	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr_set(ddr_ctx, DREX_MEMCONTROL, DPWRDN_TYPE_MSK,
 			DPWRDN_TYPE(FORCED_PRECHARGE_PD) | DPWRDN_EN);
-	ddr_reg_set(DREX_MEMCONTROL, CLK_STOP_EN);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
 
 	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode()) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
 		pr_err("self-refresh exit fail during power features enable\n");
-		ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+		ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY,
+				ACTIVATE_AXI_READY);
 		return -ETIMEDOUT;
 	}
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
 
 	/* Enable PB Refresh & Auto Refresh */
-	ddr_reg_set(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_set(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
-	ddr_reg_set(DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
+	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 
 	return 0;
 }
@@ -2216,12 +2280,13 @@ static int __ab_ddr_wait_for_m0_ddr_init(struct ab_ddr_context *ddr_ctx)
 	unsigned long timeout;
 
 	timeout = jiffies + AB_DDR_INIT_TIMEOUT;
-	while ((!(ddr_reg_rd(REG_DDR_TRAIN_STATUS) & DDR_TRAIN_COMPLETE)) &&
-			time_before(jiffies, timeout))
+	while ((!(ddr_reg_rd(ddr_ctx, REG_DDR_TRAIN_STATUS) &
+					DDR_TRAIN_COMPLETE))
+			&& time_before(jiffies, timeout))
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 
 	/* check for the ddr training failure condition */
-	if (ddr_reg_rd(REG_DDR_TRAIN_STATUS) & DDR_TRAIN_FAIL) {
+	if (ddr_reg_rd(ddr_ctx, REG_DDR_TRAIN_STATUS) & DDR_TRAIN_FAIL) {
 		pr_err("%s: DDR Training failed during M0 boot\n",
 		       __func__);
 		return -EIO;
@@ -2271,7 +2336,7 @@ static int32_t __ab_ddr_resume(void *ctx)
 		 * Issue[1] can't be hadled. To fix Issue[2] call
 		 * "AXI_Enable_After_All_training" sequence here.
 		 */
-		ddr_axi_enable_after_all_training();
+		ddr_axi_enable_after_all_training(ddr_ctx);
 
 		pr_err("%s: Error!! This path should not be used\n", __func__);
 		WARN_ON(1);
@@ -2320,19 +2385,19 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
 
 		/* Block AXI Before entering self-refresh */
-		if (ddr_block_axi_transactions())
+		if (ddr_block_axi_transactions(ddr_ctx))
 			return -ETIMEDOUT;
 
 		/* Disable PB Refresh & Auto Refresh */
-		ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
-		ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
-		ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+		ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+		ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+		ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 		/* safe to send a manual all bank refresh command */
-		ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
 
 		/* Self-refresh entry sequence */
-		if (ddr_enter_self_refresh_mode())
+		if (ddr_enter_self_refresh_mode(ddr_ctx))
 			goto ddr_suspend_fail;
 
 	} else if ((ddr_ctx->ddr_state == DDR_SLEEP) &&
@@ -2346,7 +2411,7 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 */
 
 		/* Move MIF clock to PLL to configure MR registers @1866MHz */
-		if (ddr_set_pll_freq(ddr_ctx->cur_freq)) {
+		if (ddr_set_pll_freq(ddr_ctx, ddr_ctx->cur_freq)) {
 			pr_err("ddr suspend: mif pll config failed.\n");
 			goto ddr_suspend_fail;
 		}
@@ -2379,7 +2444,7 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 * For the above reason, we need to bring the DRAM out of Power
 		 * Down Entry mode.
 		 */
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_21);
 
 		/* During suspend -> resume (DDR_SR = 1), M0 bootrom will not
 		 * update the MR registers specific to 1866MHz. As the ddr
@@ -2388,19 +2453,19 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		 * Otherwise the read/write trainings will fail during ddr
 		 * initialization (during suspend -> resume) in BootROM
 		 */
-		ddr_mrw_set_vref_odt_etc(AB_DRAM_FREQ_MHZ_1866);
+		ddr_mrw_set_vref_odt_etc(ddr_ctx, AB_DRAM_FREQ_MHZ_1866);
 
 		/* Set MR13 VRCG to default (Normal operation) for power saving
 		 * VRCG (VREF Current Generator) OP[3]
 		 *       0B: Normal Operation (default)
 		 *       1B: VREF Fast Response (high current) mode 3
 		 */
-		ddr_reg_wr(DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, MRW13_FAST_RESP_DIS);
 
 		/* As we are going to suspend state, keep the DRAM in
 		 * Power Down Entry Mode.
 		 */
-		ddr_reg_wr_otp(DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
+		ddr_reg_wr_otp(ddr_ctx, DREX_DIRECTCMD, o_DREX_DIRECTCMD_20);
 
 		/* Disable LDO2 if the previous LDO2 state was disabled */
 		if (!prev_ldo2_state) {
@@ -2416,7 +2481,7 @@ static int32_t __ab_ddr_suspend(void *ctx)
 	/* Move the MIF clock to oscillator and switch off the PLL for
 	 * better power savings.
 	 */
-	ddr_set_pll_to_oscillator();
+	ddr_set_pll_to_oscillator(ddr_ctx);
 
 	/* Enable the PMU Retention */
 	PMU_CONTROL_PHY_RET_ON();
@@ -2457,45 +2522,55 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
 
 	/* Config MIF_PLL and move the MIF clock to PLL output */
-	if (ddr_set_pll_freq(ddr_ctx->cur_freq)) {
+	if (ddr_set_pll_freq(ddr_ctx, ddr_ctx->cur_freq)) {
 		pr_err("%s: mif pll config failed.\n", __func__);
 		return DDR_FAIL;
 	}
 
+	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_POWER_DIS);
 	/* Disable power features for DLL locking */
-	ddr_reg_clr(DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_clr(DPHY_LP_CON0, MDLL_CG_EN);
-	ddr_reg_clr(DPHY2_LP_CON0, MDLL_CG_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, MDLL_CG_EN);
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, MDLL_CG_EN);
+	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_POWER_DIS);
 
-	if (ddr_enable_dll()) {
+	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
+	if (ddr_enable_dll(ddr_ctx)) {
 		pr_err("%s: enable dll failed.\n", __func__);
 		return DDR_FAIL;
 	}
+	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
 
+	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_POWER_EN);
 	/* Enable power features after DLL locking */
-	ddr_reg_set(DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_set(DPHY_LP_CON0, MDLL_CG_EN);
-	ddr_reg_set(DPHY2_LP_CON0, MDLL_CG_EN);
+	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, MDLL_CG_EN);
+	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, MDLL_CG_EN);
+	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_POWER_EN);
 
+	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_MODE);
 	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode()) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
 		return DDR_FAIL;
 	}
+	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_MODE);
 
+	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_FINISH);
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
 
 	/* Enable PB Refresh & Auto Refresh */
-	ddr_reg_set(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_set(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* Allow AXI after exiting from self-refresh */
-	ddr_reg_wr(DREX_ACTIVATE_AXI_READY, 0x1);
+	ddr_reg_wr(ddr_ctx, DREX_ACTIVATE_AXI_READY, 0x1);
 
 	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
 
+	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_FINISH);
 	return DDR_SUCCESS;
 }
 
@@ -2519,28 +2594,30 @@ static int32_t ab_ddr_selfrefresh_exit(void *ctx)
 /* Caller must hold ddr_ctx->ddr_lock */
 static int32_t __ab_ddr_selfrefresh_enter(void *ctx)
 {
-	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+
+	ddr_sanity_test(ddr_ctx, DDR_BOOT_TEST_WRITE);
 
 	/* Block AXI Before entering self-refresh */
-	if (ddr_block_axi_transactions())
+	if (ddr_block_axi_transactions(ddr_ctx))
 		return -ETIMEDOUT;
 
 	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(DREX_CONCONTROL, AREF_EN);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(DREX_DIRECTCMD, 0x5000000);
+	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, 0x5000000);
 
 	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode()) {
+	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
 		pr_err("%s: self-refresh entry failed\n", __func__);
 		return DDR_FAIL;
 	}
 
 	/* Move the MIF clock to oscillator */
-	ddr_set_pll_to_oscillator();
+	ddr_set_pll_to_oscillator(ddr_ctx);
 
 	return DDR_SUCCESS;
 }
@@ -2728,6 +2805,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 		ret |= __ab_ddr_suspend(ddr_ctx);
 
+		ab_ddr_clear_cache(ddr_ctx);
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_SUSPEND;
 		break;
@@ -2737,7 +2815,7 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 			ab_gpio_disable_ddr_sr(ddr_ctx->ab_state_ctx);
 			ab_gpio_disable_ddr_iso(ddr_ctx->ab_state_ctx);
 		}
-
+		ab_ddr_clear_cache(ddr_ctx);
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_OFF;
 		break;
@@ -2848,7 +2926,7 @@ static int32_t ab_ddr_init(void *ctx)
 		 * when ddr init is done by M0 bootrom.
 		 */
 		/* enable the ddr power features */
-		ret = ddr_enable_power_features();
+		ret = ddr_enable_power_features(ddr_ctx);
 		if (ret) {
 			pr_err("ddr_init: error!! enabling power features failed\n");
 			goto ddr_init_done;
@@ -2858,13 +2936,13 @@ static int32_t ab_ddr_init(void *ctx)
 		 * immediately after M0 DDR init.
 		 */
 		if (ab_get_chip_id(ddr_ctx->ab_state_ctx) == CHIP_ID_A0)
-			ddr_reg_set(DREX_CONCONTROL, AREF_EN);
+			ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 		/* DDR training is completed as part of bootrom code execution.
 		 * Copy the training results to the local array for future use.
 		 */
 		ddr_ctx->ddr_train_sram_location =
-				ddr_reg_rd(SYSREG_REG_TRN_ADDR);
+				ddr_reg_rd(ddr_ctx, SYSREG_REG_TRN_ADDR);
 		ddr_copy_train_results_from_sram(ddr_ctx);
 		ab_sm_record_ts(AB_SM_TS_DDR_M0_INIT_INTERNAL);
 	} else {
@@ -2981,6 +3059,8 @@ static int ab_ddr_probe(struct platform_device *pdev)
 	ddr_ctx->ddr_state = DDR_OFF;
 
 	ddr_ctx->dev = dev;
+	ab_ddr_clear_cache(ddr_ctx);
+	ddr_ctx->poll_multiplier = -1;
 
 	mutex_init(&ddr_ctx->ddr_lock);
 
