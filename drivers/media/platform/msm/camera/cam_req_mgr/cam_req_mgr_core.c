@@ -3009,6 +3009,7 @@ static void __cam_req_mgr_set_master_link(
 	struct cam_req_mgr_core_link *sync_link = NULL;
 	int min_pd_idx = 0, max_pd_idx = 0;
 	int i, j;
+	uint32_t cam_id = 0;
 
 	if (sync_info->num_links < 2)
 		return;
@@ -3038,6 +3039,9 @@ static void __cam_req_mgr_set_master_link(
 			CAM_DBG(CAM_CRM,
 				"Set link 0x%x as master", links[i]->link_hdl);
 			links[i]->is_master = true;
+			cam_id = __cam_req_mgr_get_cam_id(links[i]);
+			if (cam_id == IR_MASTER || cam_id == IR_SLAVE)
+				continue;
 			for (j = 0; j < links[i]->sync_links_num; j++) {
 				sync_link = links[max_pd_idx]->sync_links[i];
 				if (sync_link)
