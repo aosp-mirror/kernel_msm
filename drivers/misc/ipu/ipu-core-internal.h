@@ -29,6 +29,7 @@
 #include "ipu-core-jqs-structs.h"
 
 #define IPU_STATE_JQS_READY  (1 << 0)
+#define IPU_RECOVERY_BIT 0
 
 /* Host-side only data associated with a jqs_circular_buffer */
 struct host_jqs_cbuf {
@@ -155,6 +156,7 @@ struct paintbox_bus {
 	spinlock_t irq_lock;
 	struct work_struct recovery_work;
 	atomic_t state;
+	unsigned long recovery_active;
 
 	/* Protects jqs msg transport structure. */
 	struct mutex transport_lock;

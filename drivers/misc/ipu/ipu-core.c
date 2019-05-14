@@ -458,6 +458,7 @@ static void ipu_bus_recovery_work(struct work_struct *work)
 			recovery_work);
 
 	ipu_bus_notify_shutdown(bus);
+	clear_bit(IPU_RECOVERY_BIT, &bus->recovery_active);
 }
 
 void ipu_request_reset(struct device *dev)
@@ -537,8 +538,10 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 
 void ipu_bus_notify_fatal_error(struct paintbox_bus *bus)
 {
-	atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
-	queue_work(system_wq, &bus->recovery_work);
+	if (!test_and_set_bit(IPU_RECOVERY_BIT, &bus->recovery_active)) {
+		atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
+		queue_work(system_wq, &bus->recovery_work);
+	}
 }
 
 void ipu_bus_notify_ready(struct paintbox_bus *bus, uint64_t ipu_clock_rate_hz)

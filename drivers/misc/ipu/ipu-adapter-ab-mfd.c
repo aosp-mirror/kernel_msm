@@ -857,6 +857,9 @@ static int ipu_adapter_pcie_blocking_listener(struct notifier_block *nb,
 		ipu_bus_notify_suspend_dram(bus);
 		atomic_andnot(IPU_ADAPTER_STATE_PCIE_READY, &dev_data->state);
 		ipu_adapter_ab_mfd_disable_interrupts(dev_data);
+		/* flush any active recovery work */
+		if (test_bit(IPU_RECOVERY_BIT, &bus->recovery_active))
+			flush_work(&bus->recovery_work);
 		ipu_adapter_ab_mfd_suspend_shared_memory(dev_data);
 		return NOTIFY_OK;
 	}
