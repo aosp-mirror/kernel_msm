@@ -456,12 +456,14 @@ void ipu_adapter_ab_mfd_sync_shared_memory(struct device *dev,
 	shared_buffer = container_of(shared_buffer_base,
 		struct ipu_adapter_shared_buffer, base);
 
+	mutex_lock(&dev_data->sync_lock);
+
 	if (!ipu_adapter_dram_is_ready(dev_data)) {
 		dev_err(dev, "Sync failed because DRAM is not ready.\n");
+		mutex_unlock(&dev_data->sync_lock);
 		return;
 	}
 
-	mutex_lock(&dev_data->sync_lock);
 
 	if (size <= dev_data->pio_threshold &&
 			shared_buffer->mapped_to_bar)
@@ -574,15 +576,19 @@ static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
 	buffer_vaddr = sbuf->base.host_vaddr + offset;
 	dev_data = dev_get_drvdata(dev);
 
-	if (!ipu_adapter_dram_is_ready(dev_data))
+	mutex_lock(&dev_data->sync_lock);
+
+	if (!ipu_adapter_dram_is_ready(dev_data)) {
+		mutex_unlock(&dev_data->sync_lock);
 		return -ENOLINK;
+	}
 
 	if ((uint32_t)buffer_vaddr % sizeof(uint32_t) != 0) {
 		dev_err(dev, "%s: error: unaligned access\n", __func__);
+		mutex_unlock(&dev_data->sync_lock);
 		return -EINVAL;
 	}
 
-	mutex_lock(&dev_data->sync_lock);
 
 	if (sbuf->mapped_to_bar) {
 		if (direction == DMA_TO_DEVICE) {
@@ -684,7 +690,6 @@ void ipu_adapter_dram_pre_rate_change(
 	if (pre_data_loss) {
 		dev_dbg(dev_data->dev, "%s: DRAM down, no retention", __func__);
 		ipu_bus_notify_shutdown(bus);
-		atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
 	} else if (clk_data->new_rate != clk_data->old_rate) {
 		if (!clk_data->new_rate) {
 			dev_dbg(dev_data->dev, "%s: DRAM down, self refresh",
@@ -693,8 +698,11 @@ void ipu_adapter_dram_pre_rate_change(
 		}
 
 		ipu_bus_notify_suspend_dram(bus);
-		atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
 	}
+
+	mutex_lock(&dev_data->sync_lock);
+	atomic_andnot(IPU_ADAPTER_STATE_DRAM_READY, &dev_data->state);
+	mutex_unlock(&dev_data->sync_lock);
 }
 
 void ipu_adapter_dram_post_rate_change(
