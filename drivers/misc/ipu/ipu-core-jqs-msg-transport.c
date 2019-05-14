@@ -462,9 +462,16 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt(struct paintbox_bus *bus)
 		if (q_id == JQS_TRANSPORT_KERNEL_QUEUE_ID)
 			ipu_core_jqs_msg_transport_process_kernel_queue(bus,
 					trans);
-		else
+		else if (!(trans->free_queue_ids & (1 << q_id)))
 			ipu_core_jqs_msg_transport_process_app_queue(bus,
 					trans, q_id);
+		else {
+			dev_err(bus->parent_dev,
+				"%s: JQS received an interrupt for a free queue\n",
+				__func__);
+			ipu_bus_notify_fatal_error(bus);
+			break;
+		}
 	}
 
 	mutex_unlock(&bus->transport_lock);
