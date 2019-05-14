@@ -502,6 +502,8 @@ int stmvl53l0_read_calibration(struct stmvl53l0_data *data) {
     if (!rc) {
         vl53l0_errmsg("Failed to read calibration from %s\n",
                 data->calib_file);
+        set_fs(fs);
+        filp_close(f, NULL);
         return -1;
     }
 
