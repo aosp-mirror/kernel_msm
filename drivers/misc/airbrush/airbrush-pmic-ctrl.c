@@ -122,6 +122,13 @@ int ab_pmic_off(struct ab_state_context *sc)
 			dev_err(sc->dev,
 				"failed to disable SMPS3, ret %d\n", ret1);
 		ret2 = ret2 ? ret2 : ret1;
+
+		/*
+		 * Delay added between SMPS3 and LDO1 for correctness per
+		 * characerization results and sequecing requirements.
+		 * See b/131924947.
+		 */
+		usleep_range(4000, 4100);
 	}
 
 	if (!sc->ldo1_state && regulator_is_enabled(sc->ldo1)) {
