@@ -147,6 +147,7 @@ enum dwc3_drd_state {
 };
 
 static const char *const state_names[] = {
+	[DRD_STATE_UNDEFINED] = "undefined",
 	[DRD_STATE_IDLE] = "idle",
 	[DRD_STATE_PERIPHERAL] = "peripheral",
 	[DRD_STATE_PERIPHERAL_SUSPEND] = "peripheral_suspend",
@@ -157,7 +158,7 @@ static const char *const state_names[] = {
 static const char *dwc3_drd_state_string(enum dwc3_drd_state state)
 {
 	if (state < 0 || state >= ARRAY_SIZE(state_names))
-		return "UNDEFINED";
+		return "UNKNOWN";
 
 	return state_names[state];
 }
@@ -202,6 +203,7 @@ static const struct usb_irq usb_irq_info[USB_MAX_IRQ] = {
 #define ID			0
 #define B_SESS_VLD		1
 #define B_SUSPEND		2
+#define WAIT_FOR_LPM		3
 
 #define PM_QOS_SAMPLE_SEC	2
 #define PM_QOS_THRESHOLD	400
@@ -2468,7 +2470,13 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool hibernation)
 
 	dev_info(mdwc->dev, "DWC3 in low power mode\n");
 	dbg_event(0xFF, "Ctl Sus", atomic_read(&dwc->in_lpm));
+
+	/* kick_sm if it is waiting for lpm sequence to finish */
+	if (test_and_clear_bit(WAIT_FOR_LPM, &mdwc->inputs))
+		schedule_delayed_work(&mdwc->sm_work, 0);
+
 	mutex_unlock(&mdwc->suspend_resume_mutex);
+
 	return 0;
 }
 
@@ -4097,6 +4105,9 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		dwc3_usb3_phy_suspend(dwc, false);
 		mdwc->in_host_mode = false;
 
+		/* wait for LPM, to ensure h/w is reset after stop_host */
+		set_bit(WAIT_FOR_LPM, &mdwc->inputs);
+
 		pm_runtime_put_sync_suspend(mdwc->dev);
 		dbg_event(0xFF, "StopHost psync",
 			atomic_read(&mdwc->dev->power.usage_count));
@@ -4180,6 +4191,9 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		usb_phy_notify_disconnect(mdwc->ss_phy, USB_SPEED_SUPER);
 		dwc3_override_vbus_status(mdwc, false);
 		dwc3_usb3_phy_suspend(dwc, false);
+
+		/* wait for LPM, to ensure h/w is reset after stop_peripheral */
+		set_bit(WAIT_FOR_LPM, &mdwc->inputs);
 	}
 
 	pm_runtime_put_sync(mdwc->dev);
@@ -4346,6 +4360,11 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		pm_runtime_enable(mdwc->dev);
 		/* fall-through */
 	case DRD_STATE_IDLE:
+		if (test_bit(WAIT_FOR_LPM, &mdwc->inputs)) {
+			dev_dbg(mdwc->dev, "still not in lpm, wait.\n");
+			break;
+		}
+
 		if (!test_bit(ID, &mdwc->inputs)) {
 			dev_dbg(mdwc->dev, "!id\n");
 			mdwc->drd_state = DRD_STATE_HOST_IDLE;
