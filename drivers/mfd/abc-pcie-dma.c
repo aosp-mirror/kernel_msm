@@ -2018,7 +2018,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 
 	/* Prepare DRAM and PCIE notifiers */
 	abc_dma.dram_nb.notifier_call = dma_dram_blocking_listener;
-	err = ab_sm_register_clk_event(&abc_dma.dram_nb);
+	err = ab_sm_register_clk_event_for_dma(&abc_dma.dram_nb);
 	if (err)
 		goto close_dma_session;
 
@@ -2065,7 +2065,7 @@ int abc_pcie_dma_drv_remove(struct platform_device *pdev)
 	list_del(&pending_from_dev_q);
 
 	ab_pcie_unregister_dma_device_ops();
-	ab_sm_unregister_clk_event(&abc_dma.dram_nb);
+	ab_sm_unregister_clk_event_for_dma(&abc_dma.dram_nb);
 
 	return 0;
 }

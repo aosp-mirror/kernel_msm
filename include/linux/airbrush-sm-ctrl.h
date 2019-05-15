@@ -530,7 +530,14 @@ struct ab_state_context {
 	struct mutex async_fifo_lock;
 	struct kfifo *async_entries;
 
+	/* List of listeners that subscribes to clk rate change events. */
 	struct blocking_notifier_head clk_subscribers;
+
+	/*
+	 * Similar to clk_subscribers, but is ordered in a specific way
+	 * that is preferrable to dma driver.
+	 */
+	struct blocking_notifier_head clk_subscribers_dma;
 
 	/* power state stats */
 	struct ab_sm_state_stat state_stats[STAT_STATE_SIZE];

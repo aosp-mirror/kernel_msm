@@ -48,6 +48,9 @@ struct ab_clk_notifier_data {
 int ab_sm_register_clk_event(struct notifier_block *nb);
 int ab_sm_unregister_clk_event(struct notifier_block *nb);
 
+int ab_sm_register_clk_event_for_dma(struct notifier_block *nb);
+int ab_sm_unregister_clk_event_for_dma(struct notifier_block *nb);
+
 /* Provider functions */
 int ab_sm_clk_notify(unsigned long event,
 		     unsigned long old_rate,

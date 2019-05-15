@@ -1649,6 +1649,14 @@ u32 ab_sm_get_state(struct ab_state_context *sc, bool mapped)
 }
 EXPORT_SYMBOL(ab_sm_get_state);
 
+static inline bool ab_sm_clk_event_is_a_pre_rate_change(unsigned long event)
+{
+	return event & (AB_IPU_PRE_RATE_CHANGE |
+			AB_TPU_PRE_RATE_CHANGE |
+			AB_DRAM_PRE_RATE_CHANGE |
+			AB_DRAM_DATA_PRE_OFF);
+}
+
 /**
  * ab_sm_clk_notify - call Airbrush clk notifier chain
  * @event: clk notifier type (see include/linux/airbrush-sm-notifier.h)
@@ -1665,6 +1673,11 @@ int ab_sm_clk_notify(unsigned long event,
 		     unsigned long new_rate)
 {
 	struct ab_clk_notifier_data clk_data;
+	int ret1, ret2;
+	bool is_dma_notified_last = false;
+
+	if (ab_sm_clk_event_is_a_pre_rate_change(event))
+		is_dma_notified_last = true;
 
 	if (!ab_sm_ctx)
 		return -EAGAIN;
@@ -1672,9 +1685,28 @@ int ab_sm_clk_notify(unsigned long event,
 	clk_data.old_rate = old_rate;
 	clk_data.new_rate = new_rate;
 
-	return blocking_notifier_call_chain(&ab_sm_ctx->clk_subscribers,
-					    event,
-					    &clk_data);
+	if (is_dma_notified_last) {
+		ret1 = blocking_notifier_call_chain(
+					&ab_sm_ctx->clk_subscribers,
+					event,
+					&clk_data);
+		ret2 = blocking_notifier_call_chain(
+					&ab_sm_ctx->clk_subscribers_dma,
+					event,
+					&clk_data);
+	} else {
+		ret2 = blocking_notifier_call_chain(
+					&ab_sm_ctx->clk_subscribers_dma,
+					event,
+					&clk_data);
+		ret1 = blocking_notifier_call_chain(
+					&ab_sm_ctx->clk_subscribers,
+					event,
+					&clk_data);
+	}
+
+	/* notifier_call_chain() return code is bit-wised. */
+	return ret1 | ret2;
 }
 EXPORT_SYMBOL(ab_sm_clk_notify);
 
@@ -1697,6 +1729,26 @@ int ab_sm_unregister_clk_event(struct notifier_block *nb)
 				&ab_sm_ctx->clk_subscribers, nb);
 }
 EXPORT_SYMBOL(ab_sm_unregister_clk_event);
+
+int ab_sm_register_clk_event_for_dma(struct notifier_block *nb)
+{
+	if (!ab_sm_ctx)
+		return -EAGAIN;
+
+	return blocking_notifier_chain_register(
+				&ab_sm_ctx->clk_subscribers_dma, nb);
+}
+EXPORT_SYMBOL(ab_sm_register_clk_event_for_dma);
+
+int ab_sm_unregister_clk_event_for_dma(struct notifier_block *nb)
+{
+	if (!ab_sm_ctx)
+		return -EAGAIN;
+
+	return blocking_notifier_chain_unregister(
+				&ab_sm_ctx->clk_subscribers_dma, nb);
+}
+EXPORT_SYMBOL(ab_sm_unregister_clk_event_for_dma);
 
 /* Returns saved chip id. May be called anytime. */
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
