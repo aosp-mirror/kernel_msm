@@ -34,16 +34,16 @@ static bool iaxxx_sect_valid_proc_mask(
 {
 	if (((sect_addr >= GLOBAL_DRAM_START) &&
 		(sect_addr <= GLOBAL_DRAM_END) &&
-		(proc_mask & IAXXX_NO_PROC)) ||
+		(proc_mask & GLBL_MEM_ID_MASK)) ||
 		((sect_addr >= SSP_DMEM0_SYS_START) &&
 		(sect_addr <= SSP_DMEM1_SYS_END) &&
-		(proc_mask & IAXXX_SSP_ID)) ||
+		(proc_mask & SSP_ID_MASK)) ||
 		((sect_addr >= HMD_DMEM_SYS_START) &&
 		(sect_addr <= HMD_IMEM_SYS_END) &&
-		(proc_mask & IAXXX_HMD_ID)) ||
+		(proc_mask & HMD_ID_MASK)) ||
 		((sect_addr >= DMX_DMEM_SYS_START) &&
 		(sect_addr <= DMX_IMEM_SYS_END) &&
-		(proc_mask & IAXXX_DMX_ID)))
+		(proc_mask & DMX_ID_MASK)))
 		return true;
 	else
 		return false;
@@ -318,13 +318,14 @@ out:
 }
 
 static int iaxxx_download_per_core_fw(struct iaxxx_priv *priv,
-		const struct firmware *fw, u32 proc_id_mask)
+		const struct firmware *fw, u32 proc_id)
 {
 	int i, rc = 0;
 	int retries = 0;
 	const int max_retries = 5;
 	const uint8_t *data;
 	struct device *dev = priv->dev;
+	u32 proc_id_mask = 1 << proc_id;
 
 	/* Checksum variable */
 	uint32_t devicesum1 = 0xffff;
@@ -396,12 +397,12 @@ static int iaxxx_download_per_core_fw(struct iaxxx_priv *priv,
 		WARN_ON((data - fw->data) > fw->size);
 	}
 
-	dev_info(dev, "Proc (%d) download success\n", proc_id_mask);
+	dev_info(dev, "Proc (%d) download success\n", proc_id);
 out:
 	return rc;
 }
 
-int iaxxx_boot_core(struct iaxxx_priv *priv, u32 proc_id_mask)
+int iaxxx_boot_core(struct iaxxx_priv *priv, u32 proc_id)
 {
 	const struct firmware *fw;
 	struct device *dev = priv->dev;
@@ -415,16 +416,16 @@ int iaxxx_boot_core(struct iaxxx_priv *priv, u32 proc_id_mask)
 		return rc;
 	}
 	/* Download the firmware to device memory */
-	rc = iaxxx_download_per_core_fw(priv, fw, proc_id_mask);
+	rc = iaxxx_download_per_core_fw(priv, fw, proc_id);
 	if (rc) {
 		dev_err(dev,
 			"core(%d) firmware download failed, rc = %d\n",
-			proc_id_mask, rc);
+			proc_id, rc);
 		goto out;
 	}
 	/* core is up and running */
 	dev_dbg(dev,
-		"Processor core(%d) Firmware is loaded\n", proc_id_mask);
+		"Processor core(%d) Firmware is loaded\n", proc_id);
 
 out:
 	release_firmware(fw);
