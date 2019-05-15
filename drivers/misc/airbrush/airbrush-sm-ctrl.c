@@ -2859,6 +2859,9 @@ int ab_sm_init(struct platform_device *pdev)
 		goto fail_ab_ready;
 	}
 
+	if (of_property_read_u32(np, "chip-id", &ab_sm_ctx->chip_id))
+		ab_sm_ctx->chip_id = CHIP_ID_B0; /* Assume B0 if unspecified */
+
 	if (of_property_read_u32(np, "ddrcke-iso-clamp-wr",
 				 &ab_sm_ctx->ddrcke_iso_clamp_wr))
 		ab_sm_ctx->ddrcke_iso_clamp_wr = 0;
@@ -2927,11 +2930,6 @@ int ab_sm_init(struct platform_device *pdev)
 	init_completion(&ab_sm_ctx->notify_comp);
 	kfifo_alloc(&ab_sm_ctx->state_change_reqs,
 		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
-
-	/* Assume chip_id to be B0 by default.
-	 * TODO: b/132071956
-	 */
-	ab_sm_ctx->chip_id = CHIP_ID_B0;
 
 	ab_sm_ctx->cold_boot = true;
 	ab_sm_ctx->el2_mode = false;
