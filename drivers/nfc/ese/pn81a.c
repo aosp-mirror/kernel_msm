@@ -37,6 +37,7 @@ struct ese_dev {
 	struct	miscdevice	device;
 	int			gpio_clear_n;
 	const char		*nfcc_name;
+	char *kbuf;
 };
 
 static long ese_clear_gpio(struct ese_dev *ese_dev, unsigned long arg)
@@ -189,30 +190,34 @@ static ssize_t ese_write(struct file *filp, const char __user *ubuf,
 	struct ese_dev *ese_dev = filp->private_data;
 	ssize_t ret = -EFAULT;
 	size_t bytes = len;
-	char tx_buf[PN81A_MAX_BUF];
+	char *tx_buf = NULL;
 
 	if (len > INT_MAX)
 		return -EINVAL;
 
 	mutex_lock(&ese_dev->mutex);
 	while (bytes > 0) {
-		size_t block = bytes < sizeof(tx_buf) ? bytes : sizeof(tx_buf);
+		size_t block = bytes < PN81A_MAX_BUF ? bytes : PN81A_MAX_BUF;
 
-		memset(tx_buf, 0, sizeof(tx_buf));
-		if (copy_from_user(tx_buf, ubuf, block)) {
-			dev_dbg(&ese_dev->spi->dev, "failed to copy from user\n");
+		tx_buf = memdup_user(ubuf, block);
+		if (IS_ERR(tx_buf)) {
+			dev_dbg(&ese_dev->spi->dev, "memdup_user failed\n");
+			ret = PTR_ERR(tx_buf);
 			goto err;
 		}
+
 		ret = spi_write(ese_dev->spi, tx_buf, block);
 		if (ret < 0) {
 			dev_dbg(&ese_dev->spi->dev, "failed to write to SPI\n");
 			goto err;
 		}
+		kfree(tx_buf);
 		ubuf += block;
 		bytes -= block;
 	}
 	ret = len;
 err:
+	kfree(tx_buf);
 	mutex_unlock(&ese_dev->mutex);
 	return ret;
 }
@@ -223,15 +228,23 @@ static ssize_t ese_read(struct file *filp, char __user *ubuf,
 	struct ese_dev *ese_dev = filp->private_data;
 	ssize_t ret = -EFAULT;
 	size_t bytes = len;
-	char rx_buf[PN81A_MAX_BUF];
+	char *rx_buf = NULL;
 
 	if (len > INT_MAX)
 		return -EINVAL;
+
 	mutex_lock(&ese_dev->mutex);
 	while (bytes > 0) {
-		size_t block = bytes < sizeof(rx_buf) ? bytes : sizeof(rx_buf);
+		size_t block = bytes < PN81A_MAX_BUF ? bytes : PN81A_MAX_BUF;
 
-		memset(rx_buf, 0, sizeof(rx_buf));
+		rx_buf = ese_dev->kbuf;
+		if (!rx_buf) {
+			dev_dbg(&ese_dev->spi->dev, "rx_buf does not exist anymore\n");
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		memset(rx_buf, 0, PN81A_MAX_BUF);
 		ret = spi_read(ese_dev->spi, rx_buf, block);
 		if (ret < 0) {
 			dev_dbg(&ese_dev->spi->dev, "failed to read from SPI\n");
@@ -279,6 +292,10 @@ static int pn81a_probe(struct spi_device *spi)
 
 	ese_dev = kzalloc(sizeof(*ese_dev), GFP_KERNEL);
 	if (ese_dev == NULL)
+		return -ENOMEM;
+
+	ese_dev->kbuf = kzalloc(PN81A_MAX_BUF, GFP_KERNEL);
+	if (ese_dev->kbuf == NULL)
 		return -ENOMEM;
 
 	ese_dev->spi = spi;
@@ -338,6 +355,7 @@ skip_gpio:
 	return 0;
 err:
 	mutex_destroy(&ese_dev->mutex);
+	kfree(ese_dev->kbuf);
 	kfree(ese_dev);
 	return ret;
 }
@@ -363,6 +381,7 @@ static int pn81a_remove(struct spi_device *spi)
 	mutex_destroy(&ese_dev->mutex);
 	if (ese_dev->gpio_clear_n != -EINVAL)
 		gpio_free(ese_dev->gpio_clear_n);
+	kfree(ese_dev->kbuf);
 	kfree(ese_dev);
 err:
 	return ret;
