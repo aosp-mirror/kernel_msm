@@ -632,15 +632,17 @@ config TEST_IRQ_REQUESTER
 	  If in doubt, say N.
 
 config SYSTRACE
-  def_bool y if TRACING
-  help
-    This module exports ATRACE_XXX APIs at kernel.
-    All tracepoints can be identified and plotted at Chrome tracing UI.
+	bool "Android Systrace"
+	depends on TRACING
+        default n
+	help
+	  This module exports ATRACE_XXX APIs at kernel.
+	  All tracepoints can be identified and plotted at Chrome tracing UI.
 
-    Use APIs exported by this module to correlate kernel activities
-    to userspace and system events in the timeline.
+	  Use APIs exported by this module to correlate kernel activities
+	  to userspace and system events in the timeline.
 
-    If in doubt, say N.
+	  If in doubt, say N.
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
