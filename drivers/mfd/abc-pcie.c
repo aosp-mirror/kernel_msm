@@ -1029,8 +1029,17 @@ static int abc_pcie_smmu_attach(struct device *dev)
 		return ret;
 	}
 
-	/* mahdih: investigate why this was not needed in binder */
-	dma_set_mask(dev, DMA_BIT_MASK(64));
+	/*
+	 * Sets both dma_mask and coherent_dma_mask to 64 bits.
+	 * If coherent_dma_mask is left 32 bits, of_dma_configure() will
+	 * override dma_mask to 32 bits during the probe of some mfd children
+	 * devices if they have OF bindings.
+	 */
+	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+	if (ret) {
+		dev_err(dev, "unable to set 64-bit DMA mask (%d)\n", ret);
+		return ret;
+	}
 
 	atomic_fetch_or(ABC_PCIE_SMMU_ATTACHED,
 			&abc_dev->link_state);
@@ -2443,6 +2452,12 @@ static int abc_pcie_probe(struct pci_dev *pdev,
 	/* Assigning abc_pcie_devdata as driver data to abc_pcie driver */
 	dev_set_drvdata(&pdev->dev, abc);
 
+	err = abc_pcie_smmu_setup(dev, abc);
+	if (err) {
+		dev_err(dev, "Failed to set up SMMU (%d)\n", err);
+		goto err_smmu_setup;
+	}
+
 	err = pci_enable_device(pdev);
 	if (err) {
 		dev_err(dev, "Cannot enable PCI device\n");
@@ -2577,24 +2592,20 @@ exit_loop:
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&abc_dev->pcie_link_subscribers);
 
-	/*
-	 * It is necessary to add children device binded to OF node before
-	 * setup_smmu. The dma_mask is shared between mfd parent and
-	 * children, and it would be overwritten to DMA_BIT_MASK(32) in
-	 * children's of_dma_configure() if children binded to OF node.
-	 */
 	err = mfd_add_devices(dev, PLATFORM_DEVID_NONE, abc_mfd_of_nommu_devs,
 			ARRAY_SIZE(abc_mfd_of_nommu_devs), NULL, 0, NULL);
 	if (err < 0)
 		goto err_add_mfd_child;
 
-	err = abc_pcie_smmu_setup(dev, abc);
-	if (err < 0)
-		goto err_smmu_setup;
-
 	err = abc_pcie_init_child_devices(pdev);
 	if (err < 0)
 		goto err_ipu_tpu_init;
+
+	/*
+	 * Double check that dma_mask does not happen to be overridden by mfd
+	 * children devices.
+	 */
+	WARN_ON(dma_get_mask(dev) != DMA_BIT_MASK(64));
 
 	/* Register state manager operations */
 	mfd_ops.ctx = dev;
@@ -2610,14 +2621,14 @@ exit_loop:
 err_ipu_tpu_init:
 	mfd_remove_devices(dev);
 err_add_mfd_child:
-	abc_pcie_smmu_remove(dev, abc);
-err_smmu_setup:
 	abc_pcie_irq_free(pdev);
 err_pcie_init:
 	pci_release_regions(pdev);
 err_pci_request_regions:
 	pci_disable_device(pdev);
 err_pci_enable_dev:
+	abc_pcie_smmu_remove(dev, abc);
+err_smmu_setup:
 	kfree(abc_dev);
 err_alloc_abc_dev:
 	kfree(abc);
