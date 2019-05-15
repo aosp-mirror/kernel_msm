@@ -16,6 +16,7 @@ Required properties:
 - pinctrl-0		: List of phandles to pinctrl; they can be on AP,
 			  or AP PMIC.
 
+- chip-id		: Shall be "0" for A0 or "1" for B0.
 
 Optional properties:
 - ddrcke-iso-clamp-wr	: If present, WR will be applied so that DDRCKE_ISO
