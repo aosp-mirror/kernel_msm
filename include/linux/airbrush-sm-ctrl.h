@@ -650,6 +650,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx,
 		enum chip_state prev_state);
 
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc);
+enum ab_chip_id ab_get_raw_chip_id(struct ab_state_context *sc);
 
 const enum stat_state ab_chip_state_to_stat_state(enum chip_state id);
 

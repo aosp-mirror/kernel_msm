@@ -1698,24 +1698,28 @@ int ab_sm_unregister_clk_event(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(ab_sm_unregister_clk_event);
 
+/* Returns saved chip id. May be called anytime. */
 enum ab_chip_id ab_get_chip_id(struct ab_state_context *sc)
+{
+	return sc->chip_id;
+}
+
+/* Only supposed to be called when PCIe link is up. */
+enum ab_chip_id ab_get_raw_chip_id(struct ab_state_context *sc)
 {
 	enum ab_chip_id val;
 	int ret;
 
-	if (sc->chip_id == CHIP_ID_UNKNOWN) {
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->get_chip_id(sc->mfd_ops->ctx, &val);
-		mutex_unlock(&sc->mfd_lock);
+	mutex_lock(&sc->mfd_lock);
+	ret = sc->mfd_ops->get_chip_id(sc->mfd_ops->ctx, &val);
+	mutex_unlock(&sc->mfd_lock);
 
-		if (ret < 0) {
-			return CHIP_ID_UNKNOWN;
-		}
-
-		sc->chip_id = val;
+	if (ret) {
+		dev_err(sc->dev, "failed to read raw chip id (%d)\n", ret);
+		return CHIP_ID_UNKNOWN;
 	}
 
-	return sc->chip_id;
+	return val;
 }
 
 void ab_sm_register_pmu_ops(struct ab_sm_pmu_ops *ops)

@@ -93,6 +93,7 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
 	uint32_t dummy[3] = { 0 };
+	enum ab_chip_id saved_chip_id, raw_chip_id;
 
 	if (!ab_ctx)
 		return -EINVAL;
@@ -105,9 +106,12 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		 *   A0 => PCIe EQ disable
 		 *   B0 => PCIe EQ enable
 		 */
-		if (ab_get_chip_id(ab_ctx) == CHIP_ID_B0) {
+		saved_chip_id = ab_get_chip_id(ab_ctx);
+		if (saved_chip_id == CHIP_ID_B0) {
+			dev_info(ab_ctx->dev,
+				 "AB version is B0\n");
 			msm_pcie_eq_ctrl(1, /*enable=*/true);
-		} else if (ab_get_chip_id(ab_ctx) == CHIP_ID_A0) {
+		} else if (saved_chip_id == CHIP_ID_A0) {
 			dev_err(ab_ctx->dev,
 				"AB version is A0, which is not fully supported\n");
 			msm_pcie_eq_ctrl(1, /*enable=*/false);
@@ -274,6 +278,25 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 			return ret;
 
 		ab_ctx->cold_boot = false;
+
+		/* Cross-check chip id after cold boot. */
+		raw_chip_id = ab_get_raw_chip_id(ab_ctx);
+		if (saved_chip_id != raw_chip_id) {
+			dev_warn(ab_ctx->dev,
+				 "saved_chip_id %d does not match raw_chip_id %d\n",
+				 saved_chip_id, raw_chip_id);
+
+			if (raw_chip_id == CHIP_ID_UNKNOWN) {
+				dev_warn(ab_ctx->dev,
+					 "Keep %d as chip_id\n",
+					 ab_ctx->chip_id);
+			} else {
+				dev_warn(ab_ctx->dev,
+					 "Use %d as chip_id\n",
+					 raw_chip_id);
+				ab_ctx->chip_id = raw_chip_id;
+			}
+		}
 
 		ab_sm_start_ts(AB_SM_TS_LVCC_INIT);
 		ab_lvcc_init(&ab_ctx->asv_info);
