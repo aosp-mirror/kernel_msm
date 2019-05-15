@@ -786,6 +786,8 @@ static int ipu_iommu_probe(struct device *dev)
 	ipu_set_device_ops(dev, &ipu_iommu_dev_ops);
 
 	iommu_data->iommu_up = false;
+	iommu_internal_data.iommu_active = true;
+
 	return 0;
 
 remove_sysfs:
