@@ -22,6 +22,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-script-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-sensor-registers.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
+#include <linux/mfd/adnc/iaxxx-module.h>
 #include "iaxxx.h"
 #include "iaxxx-btp.h"
 
@@ -421,6 +422,61 @@ sensor_write_param_blk_err:
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_write_param_blk_by_inst);
+
+/*****************************************************************************
+ * iaxxx_core_get_sensor_mode_stats()
+ * Get mode transition stats for each sensor mdoe.
+ *
+ * @sensor_stats sensor mode transition stats
+ *
+ * @ret n number of words read, ret in case of error
+ ****************************************************************************/
+int iaxxx_core_get_sensor_mode_stats(struct device *dev,
+			struct iaxxx_sensor_mode_stats *sensor_stats)
+{
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	uint32_t sensor_stats_addr, sensor_stats_size;
+	int ret = 0;
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_SENSOR_GRP_SENSOR_MODE_STATS_ADDR_ADDR,
+			&sensor_stats_addr);
+	if (ret) {
+		dev_err(dev, "Read addr failed %d\n", ret);
+		return ret;
+	}
+
+	ret = regmap_read(priv->regmap,
+			IAXXX_SENSOR_GRP_SENSOR_MODE_STATS_SIZE_ADDR,
+			&sensor_stats_size);
+	if (ret) {
+		dev_err(dev, "Read size failed %d\n", ret);
+		return ret;
+	}
+
+	if (sensor_stats_size != ((sizeof(struct iaxxx_sensor_mode_stats) *
+					SENSOR_NUM_MODE) >> 2)) {
+		dev_err(dev,
+			"sensor_stats_size %d != struct size %lu\n",
+			sensor_stats_size,
+			sizeof(struct iaxxx_sensor_mode_stats) *
+			SENSOR_NUM_MODE);
+		return -EINVAL;
+	}
+
+	ret = priv->bulk_read(priv->dev, sensor_stats_addr, sensor_stats,
+				sensor_stats_size);
+	if (ret < 0) {
+		dev_err(priv->dev, "Not able to read sensor stats %d\n", ret);
+		return ret;
+	}
+
+	dev_dbg(priv->dev, "read sensor stats successfully in words %u\n",
+		sensor_stats_size);
+
+	return ret;
+}
+EXPORT_SYMBOL(iaxxx_core_get_sensor_mode_stats);
 
 static int iaxxx_download_script(struct iaxxx_priv *priv,
 				const struct firmware *fw, uint16_t script_id)

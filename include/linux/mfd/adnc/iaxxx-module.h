@@ -54,7 +54,23 @@ struct iaxxx_pwr_stats {
 	uint64_t mpllTimeStamp[NUM_MPLL_CLK_FREQ];
 	uint64_t sleepModeTimeStamp;
 	uint64_t sleepModeCumulativeDur;
-} __attribute__((__packed__));
+};
+
+enum {
+	SENSOR_MODE_OFF,
+	SENSOR_MODE_ENTRANCE,
+	SENSOR_MODE_INTERACTIVE,
+	SENSOR_NUM_MODE,
+
+};
+
+struct  iaxxx_sensor_mode_stats {
+	uint64_t totalNumEntries;
+	uint64_t totalTimeSpentMs;
+	uint64_t lastEntryTimeStampMs;
+	uint64_t lastExitTimeStampMs;
+};
+
 
 struct iaxxx_osc_trim_period {
 	int period;
@@ -101,4 +117,5 @@ struct iaxxx_script_info {
 
 #define IAXXX_POWER_STATS_COUNT _IO(IAXXX_IOCTL_MAGIC, 0x71)
 #define IAXXX_SET_OSC_TRIM_PERIOD _IO(IAXXX_IOCTL_MAGIC, 0x72)
+#define IAXXX_SENSOR_MODE_STATS _IO(IAXXX_IOCTL_MAGIC, 0x73)
 #endif /* __IAXXX_MODULE_H__ */

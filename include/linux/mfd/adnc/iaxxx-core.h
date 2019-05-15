@@ -26,6 +26,7 @@
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
+#include <linux/mfd/adnc/iaxxx-module.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
@@ -362,8 +363,6 @@ struct iaxxx_priv {
 	struct mutex debug_mutex;
 	/* Max plugin instances supported */
 	uint32_t plugin_inst_count;
-	/* Power transition Statistcis */
-	struct iaxxx_pwr_stats *pwr_stats;
 	int int_osc_trim_period;
 
 	struct mutex btp_lock;
@@ -416,6 +415,8 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 			uint32_t inst_id, uint32_t param_blk_id,
 			const void *ptr_blk, uint32_t blk_size,
 			uint32_t block_id);
+int iaxxx_core_get_sensor_mode_stats(struct device *dev,
+			struct iaxxx_sensor_mode_stats *sensor_stats);
 int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
 int iaxxx_send_update_block_hostid(struct device *dev,

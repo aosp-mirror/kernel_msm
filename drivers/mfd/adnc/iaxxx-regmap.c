@@ -329,7 +329,7 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	/* Sensor group registers */
 	for (i = 0; i < IAXXX_SENSOR_MAX; i++) {
 		if (reg >= IAXXX_SENSOR_GRP_PARAM_ID_REG(i) &&
-			reg <= IAXXX_SENSOR_GRP_SENSOR_DROP_CNT_REG(i))
+			reg <= IAXXX_SENSOR_GRP_SENSOR_MODE_STATS_SIZE_REG(i))
 			return true;
 	}
 

@@ -42,6 +42,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_sensor_param_blk param_blk_info;
 	struct iaxxx_pwr_stats pwr_stats_count;
 	struct iaxxx_osc_trim_period osc_trim_period;
+	struct iaxxx_sensor_mode_stats sensor_stats[SENSOR_NUM_MODE];
 	uint16_t script_id;
 	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
@@ -284,6 +285,22 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		}
 
 		break;
+
+	case IAXXX_SENSOR_MODE_STATS:
+		mutex_lock(&priv->module_lock);
+		/* Get Power Statistics */
+		if (iaxxx_core_get_sensor_mode_stats(module_dev_priv->parent,
+							sensor_stats) < 0) {
+			pr_err("Error in reading sensor mode stats\n");
+			mutex_unlock(&priv->module_lock);
+			return -EINVAL;
+		}
+		mutex_unlock(&priv->module_lock);
+
+		if (copy_to_user((void __user *)arg, sensor_stats,
+				sizeof(sensor_stats)))
+			return -EFAULT;
+		return 0;
 
 	default:
 		break;
