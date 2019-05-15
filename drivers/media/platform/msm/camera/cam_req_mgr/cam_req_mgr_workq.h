@@ -130,6 +130,14 @@ int cam_req_mgr_workq_create(char *name, int32_t num_tasks,
 void cam_req_mgr_workq_destroy(struct cam_req_mgr_core_workq **workq);
 
 /**
+ * cam_req_mgr_workq_flush()
+ * @brief: flush workqueue
+ * @workq: pointer to worker data struct
+ * this function will flush workqueue.
+ */
+void cam_req_mgr_workq_flush(struct cam_req_mgr_core_workq **crm_workq);
+
+/**
  * cam_req_mgr_workq_enqueue_task()
  * @brief: Enqueue task in worker queue
  * @task : task to be processed by worker

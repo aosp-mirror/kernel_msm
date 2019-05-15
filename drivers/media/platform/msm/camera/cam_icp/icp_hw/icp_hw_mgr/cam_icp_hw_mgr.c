@@ -2719,6 +2719,8 @@ static int cam_icp_mgr_hw_close(void *hw_priv, void *hw_close_args)
 		CAM_DBG(CAM_ICP, "a5_dev_intf is NULL");
 		return -EINVAL;
 	}
+	cam_req_mgr_workq_flush(&icp_hw_mgr.cmd_work);
+
 	a5_dev = (struct cam_hw_info *)a5_dev_intf->hw_priv;
 	fw_buf_info.kva = 0;
 	fw_buf_info.iova = 0;
