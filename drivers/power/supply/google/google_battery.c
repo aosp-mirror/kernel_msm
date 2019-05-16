@@ -149,6 +149,8 @@ struct batt_drv {
 	/* bin count */
 	struct gbatt_ccbin_data cc_data;
 	struct power_supply *ccbin_psy;
+	/* fg cycle count */
+	int cycle_count;
 
 	/* props */
 	int soh;
@@ -195,20 +197,26 @@ struct batt_drv {
 	struct batt_res res_state;
 };
 
+static inline void batt_update_cycle_count(struct batt_drv *batt_drv)
+{
+	batt_drv->cycle_count = GPSY_GET_PROP(batt_drv->fg_psy,
+					      POWER_SUPPLY_PROP_CYCLE_COUNT);
+}
+
 static int google_battery_tz_get_cycle_count(void *data, int *cycle_count)
 {
 	struct batt_drv *batt_drv = (struct batt_drv *)data;
-	struct power_supply *fg_psy = batt_drv->fg_psy;
 
 	if (!cycle_count) {
 		pr_err("Cycle Count NULL");
 		return -EINVAL;
 	}
-	if (!fg_psy)
-		*cycle_count = 0;
-	else
-		*cycle_count = GPSY_GET_PROP(fg_psy,
-					     POWER_SUPPLY_PROP_CYCLE_COUNT);
+
+	if (batt_drv->cycle_count < 0)
+		return batt_drv->cycle_count;
+
+	*cycle_count = batt_drv->cycle_count;
+
 	return 0;
 }
 
@@ -1423,6 +1431,8 @@ static int msc_logic(struct batt_drv *batt_drv)
 		batt_drv->buck_enabled = 0;
 		changed = true;
 
+		batt_update_cycle_count(batt_drv);
+
 		goto msc_logic_done;
 	}
 
@@ -2163,7 +2173,14 @@ static int gbatt_get_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
 		val->intval = batt_drv->ce_data.adapter_details.v;
-	break;
+		break;
+
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		if (batt_drv->cycle_count < 0)
+			err = batt_drv->cycle_count;
+		else
+			val->intval = batt_drv->cycle_count;
+		break;
 
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 		mutex_lock(&batt_drv->cc_data.lock);
@@ -2444,6 +2461,9 @@ static void google_battery_init_work(struct work_struct *work)
 	if (of_property_read_bool(batt_drv->device->of_node,
 				  "google,cycle-counts"))
 		batt_drv->ccbin_psy = batt_drv->fg_psy;
+
+	batt_drv->cycle_count = 0;
+	batt_update_cycle_count(batt_drv);
 
 	if (!batt_drv->batt_present) {
 		ret = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
