@@ -18,6 +18,9 @@
 		qcom,mdss-dsi-panel-physical-type = "oled";
 		google,mdss-dsi-panel-vendor = "SAMSUNG";
 		google,mdss-dsi-panel-sn-location = <0xA1 6 7>;
+		google,mdss-dsi-panel-vendor-extinfo-loc = <0xDA 0 1>,
+							   <0xDB 0 1>,
+							   <0xDC 0 1>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
 		qcom,mdss-dsi-bpp = <24>;
