@@ -140,6 +140,7 @@ enum chip_state {
 	CHIP_STATE_803,
 	CHIP_STATE_804,
 	CHIP_STATE_805,
+	CHIP_STATE_SECURE_APP = 900,
 };
 
 enum block_state {
@@ -593,6 +594,8 @@ struct ab_state_context {
 	bool going_to_comp_ready;
 
 	bool el2_mode; /* Guarded by state_transitioning_lock */
+	/* State we return to upon exit of el2 mode */
+	enum chip_state return_chip_substate_id;
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
 	/* time stamps */

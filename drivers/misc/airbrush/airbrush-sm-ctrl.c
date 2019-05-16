@@ -331,6 +331,8 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(804, 304, 200, 305, 303, 300, 301),
 	CHIP_TO_BLOCK_MAP_INIT(805, 305, 200, 305, 303, 300, 301),
 
+	/* Secure app only state */
+	CHIP_TO_BLOCK_MAP_INIT(SECURE_APP, 305, 305, 305, 305, 300, 303),
 };
 
 static int ab_update_block_prop_table(struct new_block_props *props,
@@ -896,7 +898,8 @@ static u32 ab_sm_throttled_chip_substate_id(
 	u32 substate_category;
 	u32 throttler_substate_id;
 
-	if (chip_substate_id <= CHIP_STATE_300)
+	if (chip_substate_id <= CHIP_STATE_300 ||
+			chip_substate_id == CHIP_STATE_SECURE_APP)
 		return chip_substate_id;
 
 	substate_category = to_chip_substate_category(chip_substate_id);
@@ -1221,7 +1224,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		 * ab_bootsequence, since ab_bootsequence will call
 		 * ab_pmic_on
 		 */
-		if (to_chip_substate_id >= CHIP_STATE_500) {
+		if (to_chip_substate_id >= CHIP_STATE_500 &&
+				to_chip_substate_id != CHIP_STATE_SECURE_APP) {
 			active_map = ab_sm_get_block_map(sc, CHIP_STATE_400);
 			ab_prep_pmic_settings(sc, active_map);
 		} else {
@@ -1242,7 +1246,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		/* If we are going to a partially active state, first place
 		 * IPU, TPU, and DRAM into fully active states
 		 */
-		if (to_chip_substate_id >= CHIP_STATE_500) {
+		if (to_chip_substate_id >= CHIP_STATE_500 &&
+				to_chip_substate_id != CHIP_STATE_SECURE_APP) {
 			if (blk_set_ipu_tpu_states(sc,
 					&(sc->blocks[BLK_IPU]),
 					active_map->ipu_block_state_id,
@@ -2254,12 +2259,16 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	if (sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
 		ret = -EBUSY;
 	} else {
+		sc->return_chip_substate_id = sc->dest_chip_substate_id;
+		sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+
 		/*
-		 * Disable thermal in state transitioning lock to make sure the
-		 * state change to be applied is what we are waiting for.
+		 * Disable thermal in state transitioning lock to make sure we
+		 * exit throttling into our desired CHIP_STATE_SECURE_APP state
 		 */
 		ab_thermal_disable(sc->thermal);
 		thermal_disabled = true;
+		reinit_completion(&sc->transition_comp);
 	}
 	mutex_unlock(&sc->state_transitioning_lock);
 	if (ret < 0)
@@ -2269,7 +2278,6 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	 * Disable thermal may cause a state change. Wait for state change
 	 * to be applied if needed.
 	 */
-	reinit_completion(&sc->transition_comp);
 	complete_all(&sc->request_state_change_comp);
 	ret = wait_for_completion_timeout(&sc->transition_comp,
 			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
@@ -2329,19 +2337,36 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 		mutex_unlock(&sc->mfd_lock);
 
 		if (!ret) {
+			/* Restore destination substate to pre-el2-mode value */
+			sc->dest_chip_substate_id = sc->return_chip_substate_id;
 			sc->el2_mode = false;
 			/*
 			 * Enable thermal after all pcie subscribers getting
 			 * enabled.
 			 */
 			ab_thermal_enable(sc->thermal);
+			reinit_completion(&sc->transition_comp);
+			complete_all(&sc->request_state_change_comp);
+		} else {
+			dev_warn(sc->dev, "exit_el2 failed (%d)\n", ret);
+			mutex_unlock(&sc->state_transitioning_lock);
+			return -EAGAIN;
 		}
 	} else {
-		ret = -EINVAL;
 		dev_warn(sc->dev, "Not in el2 mode\n");
+		mutex_unlock(&sc->state_transitioning_lock);
+		return -EINVAL;
 	}
 	mutex_unlock(&sc->state_transitioning_lock);
 
+	ret = wait_for_completion_timeout(&sc->transition_comp,
+			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
+	if (ret == 0) {
+		dev_warn(sc->dev, "State change timed out\n");
+		ret = -ETIMEDOUT;
+	} else {
+		ret = 0;
+	}
 	return ret;
 }
 
