@@ -205,6 +205,7 @@ const char *gbms_chg_ev_adapter_s(int adapter);
 
 /* Votables */
 #define VOTABLE_MSC_CHG_DISABLE	"MSC_CHG_DISABLE"
+#define VOTABLE_MSC_PWR_DISABLE	"MSC_PWR_DISABLE"
 #define VOTABLE_MSC_INTERVAL	"MSC_INTERVAL"
 #define VOTABLE_MSC_FCC		"MSC_FCC"
 #define VOTABLE_MSC_FV		"MSC_FV"

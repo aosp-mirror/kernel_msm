@@ -1364,13 +1364,12 @@ static int msc_logic(struct batt_drv *batt_drv)
 		chg_state->f.icl);
 
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
-	/* here on: disconnect */
 
 		if (batt_drv->buck_enabled == 0)
 			goto msc_logic_exit;
 
+		/* here on: disconnect */
 		batt_chg_stats_pub(batt_drv, "disconnect", false);
-
 		batt_res_state_set(&batt_drv->res_state, false);
 
 		/* change curve before changing the state */
@@ -1742,6 +1741,21 @@ static int debug_set_ssoc_rls(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(debug_ssoc_rls_fops,
 				debug_get_ssoc_rls, debug_set_ssoc_rls, "%u\n");
 
+static int debug_force_psy_update(void *data, u64 val)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)data;
+
+	if (!batt_drv->psy)
+		return -EINVAL;
+
+	power_supply_changed(batt_drv->psy);
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_force_psy_update_fops,
+				NULL, debug_force_psy_update, "%u\n");
+
+
 static ssize_t debug_get_ssoc_uicurve(struct file *filp,
 					   char __user *buf,
 					   size_t count, loff_t *ppos)
@@ -1938,7 +1952,11 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &debug_ssoc_rls_fops);
 		debugfs_create_file("ssoc_uicurve", 0600, de,
 				    batt_drv, &debug_ssoc_uicurve_cstr_fops);
+		debugfs_create_file("force_psy_update", 0400, de,
+				    batt_drv, &debug_force_psy_update_fops);
 	}
+
+
 #endif
 
 	return ret;

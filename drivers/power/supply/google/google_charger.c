@@ -151,6 +151,7 @@ struct chg_drv {
 	struct votable	*msc_fv_votable;
 	struct votable	*msc_fcc_votable;
 	struct votable	*msc_chg_disable_votable;
+	struct votable	*msc_pwr_disable_votable;
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
@@ -390,6 +391,31 @@ static int chg_set_charger(struct power_supply *chg_psy, int fv_uv, int cc_max)
 	return rc;
 }
 
+static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
+{
+	int rc = 0;
+	struct power_supply *chg_psy = chg_drv->chg_psy;
+
+	/* when set cc_tolerance needs to be applied to everything */
+	if (chg_drv->chg_cc_tolerance && cc_max > 0)
+		cc_max = (cc_max / 1000) * (1000 - chg_drv->chg_cc_tolerance);
+
+	if (chg_drv->fv_uv != fv_uv || chg_drv->cc_max != cc_max) {
+
+		rc = chg_set_charger(chg_psy, fv_uv, cc_max);
+		if (rc == 0) {
+			pr_info("MSC_CHG fv_uv=%d->%d cc_max=%d->%d rc=%d\n",
+				chg_drv->fv_uv, fv_uv,
+				chg_drv->cc_max, cc_max,
+				rc);
+			chg_drv->cc_max = cc_max;
+			chg_drv->fv_uv = fv_uv;
+		}
+	}
+
+	return rc;
+}
+
 /* b/117985113 */
 static int chg_usb_online(struct power_supply *usb_psy)
 {
@@ -421,30 +447,33 @@ static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 	int upperbd = chg_drv->charge_stop_level;
 	int lowerbd = chg_drv->charge_start_level;
 
+	/* disabled */
 	if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
 	    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
 		return 0;
 
-	if ((upperbd > lowerbd) &&
-	    (upperbd <= DEFAULT_CHARGE_STOP_LEVEL) &&
-	    (lowerbd >= DEFAULT_CHARGE_START_LEVEL)) {
-		if (chg_drv->lowerdb_reached && upperbd <= capacity) {
-			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=1->0, charging off\n",
-				__func__, lowerbd, upperbd, capacity);
-			disable_charging = 1;
-			chg_drv->lowerdb_reached = false;
-		} else if (!chg_drv->lowerdb_reached && lowerbd < capacity) {
-			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging off\n",
-				__func__, lowerbd, upperbd, capacity);
-			disable_charging = 1;
-		} else if (!chg_drv->lowerdb_reached && capacity <= lowerbd) {
-			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=0->1, charging on\n",
-				__func__, lowerbd, upperbd, capacity);
-			chg_drv->lowerdb_reached = true;
-		} else {
-			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging on\n",
-				__func__, lowerbd, upperbd, capacity);
-		}
+	/* invalid */
+	if ((upperbd < lowerbd) ||
+	    (upperbd > DEFAULT_CHARGE_STOP_LEVEL) ||
+	    (lowerbd < DEFAULT_CHARGE_START_LEVEL))
+		return 0;
+
+	if (chg_drv->lowerdb_reached && upperbd <= capacity) {
+		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=1->0, charging off\n",
+			__func__, lowerbd, upperbd, capacity);
+		disable_charging = 1;
+		chg_drv->lowerdb_reached = false;
+	} else if (!chg_drv->lowerdb_reached && lowerbd < capacity) {
+		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging off\n",
+			__func__, lowerbd, upperbd, capacity);
+		disable_charging = 1;
+	} else if (!chg_drv->lowerdb_reached && capacity <= lowerbd) {
+		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=0->1, charging on\n",
+			__func__, lowerbd, upperbd, capacity);
+		chg_drv->lowerdb_reached = true;
+	} else {
+		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging on\n",
+			__func__, lowerbd, upperbd, capacity);
 	}
 
 	return disable_charging;
@@ -905,11 +934,10 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *usb_psy = chg_drv->usb_psy;
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
-	struct power_supply *chg_psy = chg_drv->chg_psy;
 	union gbms_ce_adapter_details ad = { .v = 0 };
 	int soc, disable_charging, disable_pwrsrc;
 	int usb_online, wlc_online = 0;
-	int update_interval = 0;
+	int update_interval;
 	int success, rc = 0;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
@@ -941,12 +969,10 @@ static void chg_work(struct work_struct *work)
 						usb_online, wlc_online);
 		goto rerun_error;
 	} else if (!usb_online && !wlc_online) {
-		/* If no power source, stop charging */
 		if (!chg_drv->stop_charging) {
 			pr_info("MSC_CHG no power source, disabling charging\n");
 			chg_reset_state(chg_drv);
 		}
-
 		goto exit_chg_work;
 	} else if (chg_drv->stop_charging) {
 		/* If power source, enable charging and set ILIM,ICHG later
@@ -963,67 +989,59 @@ static void chg_work(struct work_struct *work)
 		chg_drv->stop_charging = false;
 	}
 
-	/* determine adapter, next float voltage, cc_max and update_interval
-	 * so that adapter, ->fv_uv and ->cc_max are always correct
-	 */
-	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
-	update_interval = chg_work_roundtrip(chg_drv);
-	if (update_interval < 0)
-		goto rerun_error;
-	if (update_interval == 0)
-		goto exit_chg_work;
-
 	soc = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY, &rc);
 	if (rc < 0) {
 		pr_err("MSC_CHG cannot get capacity\n");
 		goto rerun_error;
 	}
 
-	/* this force drain: we might decide to run from power instead.
-	 * Enable/disable charging comes only from is_charging_disabled
-	 */
+	/* fast drain to the stop level */
 	disable_charging = chg_work_is_charging_disabled(chg_drv, soc);
 	if (disable_charging && soc > chg_drv->charge_stop_level)
 		disable_pwrsrc = 1;
 	else
 		disable_pwrsrc = 0;
 
-	/* TODO: re-enable charging only after setting the charger */
 	if (disable_charging != chg_drv->disable_charging) {
-		pr_info("MSC_CHG disable_charging %d->%d\n",
+		pr_info("MSC_CHG disable_charging %d -> %d",
 			chg_drv->disable_charging, disable_charging);
 
-		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER,
-				disable_charging != 0, 0);
+		/* NOTE: I have a 0 vote on msc_interval_votable */
 		vote(chg_drv->msc_fcc_votable,
-			MSC_USER_CHG_LEVEL_VOTER, disable_charging, 0);
+			MSC_USER_CHG_LEVEL_VOTER,
+			disable_charging != 0, 0);
 	}
 	chg_drv->disable_charging = disable_charging;
 
-	/* TODO: re-enable input only after setting the charger */
+	/* when disable_pwrsrc is set, disable_charging is set also */
 	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
-		pr_info("MSC_CHG disable_pwrsrc %d->%d\n",
+		pr_info("MSC_CHG disable_pwrsrc %d -> %d",
 			chg_drv->disable_pwrsrc, disable_pwrsrc);
 
-		GPSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND,
-			     disable_pwrsrc);
+		/* still have the 0 vote on FCC when enabling */
+		vote(chg_drv->msc_pwr_disable_votable,
+		     MSC_USER_CHG_LEVEL_VOTER,
+		     disable_pwrsrc != 0, 0);
 	}
 	chg_drv->disable_pwrsrc = disable_pwrsrc;
 
-	if (chg_drv->disable_charging || chg_drv->disable_pwrsrc)
-		update_interval = 0;
+	/* make sure adapter, ->fv_uv and ->cc_max are always correct */
+	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
+	update_interval = chg_work_roundtrip(chg_drv);
 
-	if (update_interval != 0) {
+	/* keeps 0 vote on msc_interval_votable and write 0 to cc_max */
+	if (!disable_charging && update_interval > 0) {
+
 		/* voter callback will reschedule at correct interval */
 		vote(chg_drv->msc_interval_votable,
-		     MSC_CHG_VOTER, true,
-		     update_interval);
+			MSC_CHG_VOTER, true,
+			update_interval);
 
 		goto exit_chg_work;
 	}
 
-	/* here on disable_charging or disable_pwrsrc */
-	rc = chg_set_charger(chg_psy, chg_drv->fv_uv, 0);
+	/* here on disable_charging */
+	rc = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
 	if (rc == 0)
 		goto exit_chg_work;
 
@@ -1169,8 +1187,8 @@ show_charge_start_level(struct device *dev,
 }
 
 static ssize_t set_charge_start_level(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
 {
 	struct chg_drv *chg_drv = dev_get_drvdata(dev);
 	int ret = 0, val;
@@ -1199,27 +1217,6 @@ static ssize_t set_charge_start_level(struct device *dev,
 static DEVICE_ATTR(charge_start_level, 0660,
 		   show_charge_start_level, set_charge_start_level);
 
-#ifdef CONFIG_DEBUG_FS
-
-/* use qcom VS maxim fg and more... */
-static int get_chg_mode(void *data, u64 *val)
-{
-	struct chg_drv *chg_drv = (struct chg_drv *)data;
-
-	*val = chg_drv->chg_mode;
-	return 0;
-}
-
-static int set_chg_mode(void *data, u64 val)
-{
-	struct chg_drv *chg_drv = (struct chg_drv *)data;
-
-	chg_drv->chg_mode = val;
-	return 0;
-}
-
-DEFINE_SIMPLE_ATTRIBUTE(chg_mode_fops, get_chg_mode, set_chg_mode, "%llu\n");
-
 /* TODO: now created in qcom code, create in chg_create_votables() */
 static int chg_find_votables(struct chg_drv *chg_drv)
 {
@@ -1231,6 +1228,33 @@ static int chg_find_votables(struct chg_drv *chg_drv)
 	return (!chg_drv->usb_icl_votable || !chg_drv->dc_suspend_votable)
 		? -EINVAL : 0;
 }
+
+static int chg_vote_input_suspend(struct chg_drv *chg_drv,
+				  char *voter, bool suspend)
+{
+	int rc;
+
+	if (chg_find_votables(chg_drv) < 0)
+		return -EINVAL;
+
+	rc = vote(chg_drv->usb_icl_votable, USER_VOTER, suspend, 0);
+	if (rc < 0) {
+		dev_err(chg_drv->device, "Couldn't vote to %s USB rc=%d\n",
+			suspend ? "suspend" : "resume", rc);
+		return rc;
+	}
+
+	rc = vote(chg_drv->dc_suspend_votable, USER_VOTER, suspend, 0);
+	if (rc < 0) {
+		dev_err(chg_drv->device, "Couldn't vote to %s DC rc=%d\n",
+			suspend ? "suspend" : "resume", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+#ifdef CONFIG_DEBUG_FS
 
 static int chg_get_input_suspend(void *data, u64 *val)
 {
@@ -1253,24 +1277,12 @@ static int chg_set_input_suspend(void *data, u64 val)
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	rc = vote(chg_drv->usb_icl_votable, USER_VOTER, val != 0, 0);
-	if (rc < 0) {
-		dev_err(chg_drv->device, "Couldn't vote to %s USB rc=%d\n",
-			val ? "suspend" : "resume", rc);
-		return rc;
-	}
-
-	rc = vote(chg_drv->dc_suspend_votable, USER_VOTER, val != 0, 0);
-	if (rc < 0) {
-		dev_err(chg_drv->device, "Couldn't vote to %s DC rc=%d\n",
-			val ? "suspend" : "resume", rc);
-		return rc;
-	}
+	rc = chg_vote_input_suspend(chg_drv, USER_VOTER, val != 0);
 
 	if (chg_drv->chg_psy)
 		power_supply_changed(chg_drv->chg_psy);
 
-	return 0;
+	return rc;
 }
 DEFINE_SIMPLE_ATTRIBUTE(chg_is_fops, chg_get_input_suspend,
 				     chg_set_input_suspend, "%llu\n");
@@ -1348,9 +1360,30 @@ DEFINE_SIMPLE_ATTRIBUTE(chg_ui_fops, chg_get_update_interval,
 				     chg_set_update_interval, "%llu\n");
 
 
+/* use qcom VS maxim fg and more... */
+static int get_chg_mode(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	*val = chg_drv->chg_mode;
+	return 0;
+}
+
+static int set_chg_mode(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	chg_drv->chg_mode = val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(chg_mode_fops, get_chg_mode, set_chg_mode, "%llu\n");
+
+
 static int debug_get_pps_out_uv(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
 	*val = chg_drv->pps_data.out_uv;
 	return 0;
 }
@@ -1358,6 +1391,7 @@ static int debug_get_pps_out_uv(void *data, u64 *val)
 static int debug_set_pps_out_uv(void *data, u64 val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
 	/* TODO: use votable */
 	chg_drv->pps_data.out_uv = val;
 	return 0;
@@ -1371,6 +1405,7 @@ DEFINE_SIMPLE_ATTRIBUTE(debug_pps_out_uv_fops,
 static int debug_get_pps_op_ua(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
 	*val = chg_drv->pps_data.op_ua;
 	return 0;
 }
@@ -1378,6 +1413,7 @@ static int debug_get_pps_op_ua(void *data, u64 *val)
 static int debug_set_pps_op_ua(void *data, u64 val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
 	/* TODO: use votable */
 	chg_drv->pps_data.op_ua = val;
 	return 0;
@@ -1390,6 +1426,7 @@ DEFINE_SIMPLE_ATTRIBUTE(debug_pps_op_ua_fops,
 static int debug_get_pps_cc_tolerance(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
 	*val = chg_drv->pps_cc_tolerance_pct;
 	return 0;
 }
@@ -1397,6 +1434,7 @@ static int debug_get_pps_cc_tolerance(void *data, u64 *val)
 static int debug_set_pps_cc_tolerance(void *data, u64 val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
 	chg_drv->pps_cc_tolerance_pct = val;
 	return 0;
 }
@@ -1404,6 +1442,8 @@ static int debug_set_pps_cc_tolerance(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(debug_pps_cc_tolerance_fops,
 					debug_get_pps_cc_tolerance,
 					debug_set_pps_cc_tolerance, "%u\n");
+
+
 
 #endif
 
@@ -1448,31 +1488,6 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 #endif
 
 	return 0;
-}
-
-static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
-{
-	int rc = 0;
-	struct power_supply *chg_psy = chg_drv->chg_psy;
-
-	/* when set cc_tolerance needs to be applied to everything */
-	if (chg_drv->chg_cc_tolerance)
-		cc_max = (cc_max / 1000) * (1000 - chg_drv->chg_cc_tolerance);
-
-	if (chg_drv->fv_uv != fv_uv || chg_drv->cc_max != cc_max) {
-
-		rc = chg_set_charger(chg_psy, fv_uv, cc_max);
-		if (rc == 0) {
-			pr_info("MSC_CHG fv_uv=%d->%d cc_max=%d->%d rc=%d\n",
-				chg_drv->fv_uv, fv_uv,
-				chg_drv->cc_max, cc_max,
-				rc);
-			chg_drv->cc_max = cc_max;
-			chg_drv->fv_uv = fv_uv;
-		}
-	}
-
-	return rc;
 }
 
 static inline void pps_adjust_volt(struct pd_pps_data *pps, int mod)
@@ -1708,6 +1723,17 @@ static int msc_chg_disable_cb(struct votable *votable, void *data,
 	return 0;
 }
 
+static int msc_pwr_disable_cb(struct votable *votable, void *data,
+			int pwr_disable, const char *client)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	if (!chg_drv->chg_psy)
+		return 0;
+
+	return chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, pwr_disable);
+}
+
 static int chg_disable_std_votables(struct chg_drv *chg_drv)
 {
 	struct votable *qc_votable;
@@ -1783,16 +1809,31 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 		goto error_exit;
 	}
 
+	chg_drv->msc_pwr_disable_votable =
+		create_votable(VOTABLE_MSC_PWR_DISABLE,
+			VOTE_SET_ANY,
+			msc_pwr_disable_cb,
+			chg_drv);
+	if (IS_ERR(chg_drv->msc_pwr_disable_votable)) {
+		ret = PTR_ERR(chg_drv->msc_pwr_disable_votable);
+		chg_drv->msc_pwr_disable_votable = NULL;
+		goto error_exit;
+	}
+
 	return 0;
 
 error_exit:
-	destroy_votable(chg_drv->msc_interval_votable);
 	destroy_votable(chg_drv->msc_fv_votable);
 	destroy_votable(chg_drv->msc_fcc_votable);
+	destroy_votable(chg_drv->msc_interval_votable);
+	destroy_votable(chg_drv->msc_chg_disable_votable);
+	destroy_votable(chg_drv->msc_pwr_disable_votable);
 
 	chg_drv->msc_fv_votable = NULL;
 	chg_drv->msc_fcc_votable = NULL;
 	chg_drv->msc_interval_votable = NULL;
+	chg_drv->msc_chg_disable_votable = NULL;
+	chg_drv->msc_pwr_disable_votable = NULL;
 
 	return ret;
 }
@@ -2256,6 +2297,7 @@ static void chg_destroy_votables(struct chg_drv *chg_drv)
 	destroy_votable(chg_drv->msc_fv_votable);
 	destroy_votable(chg_drv->msc_fcc_votable);
 	destroy_votable(chg_drv->msc_chg_disable_votable);
+	destroy_votable(chg_drv->msc_pwr_disable_votable);
 }
 
 static int google_charger_remove(struct platform_device *pdev)
