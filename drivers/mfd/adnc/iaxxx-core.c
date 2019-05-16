@@ -51,6 +51,7 @@
 #include "iaxxx-build-info.h"
 #include "iaxxx-btp.h"
 
+#include "iaxxx-misc.h"
 
 #define IAXXX_RESET_RETRIES		5		/* retry attempts */
 #define IAXXX_RESET_HOLD_TIME		(20*1000)	/* 20 ms */
@@ -1925,6 +1926,12 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	}
 
 	iaxxx_work(priv, fw_update_work);
+
+	/* add misc device for hardware statistics */
+	rc = iaxxx_misc_init(priv);
+	if (rc)
+		dev_err(priv->dev, "Failed to initialize iaxxx_misc device\n");
+
 	return 0;
 
 err_event_init:
@@ -1962,6 +1969,8 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 		regulator_disable(priv->vdd_core);
 		devm_regulator_put(priv->vdd_core);
 	}
+
+	iaxxx_misc_exit(priv);
 
 	/* Delete the work queue */
 	flush_work(&priv->event_work_struct);

@@ -12,3 +12,4 @@ obj-$(CONFIG_MFD_IAXXX_I2C)	+= iaxxx-i2c.o
 obj-$(CONFIG_MFD_IAXXX_SPI)	+= iaxxx-spi.o
 obj-$(CONFIG_MFD_IAXXX_SOUNDWIRE)	+= iaxxx-swr.o
 obj-$(CONFIG_MFD_IAXXX_CUSTOM_CONFIG_ALGO)	+= iaxxx-plg-custom-cfg.o
+obj-$(CONFIG_MFD_IAXXX)		+= iaxxx-misc.o

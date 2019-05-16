@@ -40,6 +40,8 @@ static char *iaxxx_cdev_get_name(enum iaxxx_cdev_types type)
 		return "crashdump";
 	case IAXXX_CDEV_SENSOR_TUNNEL_DEV:
 		return "sensor_tunnel";
+	case IAXXX_CDEV_MISC:
+		return "iaxxx_misc";
 	default:
 		break;
 	}

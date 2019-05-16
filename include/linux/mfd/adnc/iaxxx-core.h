@@ -366,6 +366,9 @@ struct iaxxx_priv {
 	int int_osc_trim_period;
 
 	struct mutex btp_lock;
+
+	/* Misc statistics data */
+	void *misc_priv;
 };
 
 enum update_block_options_t	{
