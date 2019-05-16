@@ -209,6 +209,7 @@ static ssize_t ese_write(struct file *filp, const char __user *ubuf,
 		ret = spi_write(ese_dev->spi, tx_buf, block);
 		if (ret < 0) {
 			dev_dbg(&ese_dev->spi->dev, "failed to write to SPI\n");
+			kfree(tx_buf);
 			goto err;
 		}
 		kfree(tx_buf);
@@ -217,7 +218,6 @@ static ssize_t ese_write(struct file *filp, const char __user *ubuf,
 	}
 	ret = len;
 err:
-	kfree(tx_buf);
 	mutex_unlock(&ese_dev->mutex);
 	return ret;
 }
