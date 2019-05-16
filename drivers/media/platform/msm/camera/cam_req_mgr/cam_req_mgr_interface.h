@@ -217,6 +217,7 @@ struct cam_req_mgr_trigger_notify {
 	int32_t  dev_hdl;
 	int64_t  frame_id;
 	uint32_t trigger;
+	uint64_t sof_timestamp_val;
 };
 
 /**

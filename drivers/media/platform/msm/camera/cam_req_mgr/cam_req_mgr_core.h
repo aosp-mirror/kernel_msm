@@ -32,6 +32,7 @@
 
 #define MAX_SYNC_COUNT 65535
 
+#define SYNC_LINK_TIME_DIFF_MAX   8000000
 #define SYNC_LINK_SOF_CNT_MAX_LMT 1
 
 #define MAXIMUM_LINKS_PER_SESSION  4
@@ -222,6 +223,7 @@ struct cam_req_mgr_slot {
 	int32_t               idx;
 	int32_t               skip_idx;
 	enum crm_slot_status  status;
+	uint64_t              apply_timestamp;
 	int32_t               recover;
 	int64_t               req_id;
 	int32_t               sync_mode;
