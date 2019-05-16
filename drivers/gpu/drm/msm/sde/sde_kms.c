@@ -1468,14 +1468,53 @@ static ssize_t serial_number_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%s\n", panel->vendor_info.sn);
 }
 
+static ssize_t panel_extinfo_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+	const struct dsi_panel_vendor_info *vendor_info;
+	int i, written;
+
+	display = dev_get_drvdata(dev);
+	if (unlikely(!display || !display->panel || !buf))
+		return -EINVAL;
+
+	panel = display->panel;
+	vendor_info = &panel->vendor_info;
+	if (!vendor_info->extinfo_read) {
+		pr_err("Failed to show Ext info\n");
+		return 0;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	written = 0;
+	for (i = 0; i < vendor_info->extinfo_read && written < PAGE_SIZE; i++) {
+		written += scnprintf(buf + written, PAGE_SIZE - written,
+				     "0x%02X ", vendor_info->extinfo[i]);
+	}
+	mutex_unlock(&panel->panel_lock);
+	if (!written)
+		return -EFAULT;
+	/* replace last space with a line return */
+	buf[written - 1] = '\n';
+	buf[written] = '\0';
+
+	return written;
+}
+
 struct device_attribute dev_attr_panel_vendor_name =
 			__ATTR_RO_MODE(panel_vendor_name, 0400);
 struct device_attribute dev_attr_serial_number =
 			__ATTR_RO_MODE(serial_number, 0400);
+struct device_attribute dev_attr_panel_ext_info =
+			__ATTR_RO_MODE(panel_extinfo, 0400);
 
 static struct attribute *panel_info_dev_attrs[] = {
 	&dev_attr_panel_vendor_name.attr,
 	&dev_attr_serial_number.attr,
+	&dev_attr_panel_ext_info.attr,
 	NULL
 };
 
