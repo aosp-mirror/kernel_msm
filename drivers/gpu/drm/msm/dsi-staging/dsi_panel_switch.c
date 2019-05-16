@@ -596,10 +596,17 @@ const struct panel_switch_funcs panel_switch_default_funcs = {
 	.perform_switch = panel_switch_cmd_set_transfer,
 };
 
+enum s6e3hc2_gamma_state {
+	GAMMA_STATE_UNINITIALIZED,
+	GAMMA_STATE_EMPTY,
+	GAMMA_STATE_READ,
+	GAMMA_STATE_MAX,
+};
+
 struct s6e3hc2_switch_data {
 	struct panel_switch_data base;
 
-	bool gamma_ready;
+	enum s6e3hc2_gamma_state gamma_state;
 	struct kthread_work gamma_work;
 };
 
@@ -616,6 +623,10 @@ const struct s6e3hc2_gamma_info {
 
 #define S6E3HC2_NUM_GAMMA_TABLES ARRAY_SIZE(s6e3hc2_gamma_tables)
 
+#define S6E3HC2_REV_READ_CMD   0xDA
+#define S6E3HC2_REV_MASK       0xF0
+#define S6E3HC2_REV_PROTO      0x00
+
 struct s6e3hc2_panel_data {
 	u8 *gamma_data[S6E3HC2_NUM_GAMMA_TABLES];
 };
@@ -624,8 +635,13 @@ static void s6e3hc2_gamma_update(struct panel_switch_data *pdata,
 				 const struct dsi_display_mode *mode)
 {
 	struct mipi_dsi_device *dsi = &pdata->panel->mipi_device;
+	struct s6e3hc2_switch_data *sdata;
 	struct s6e3hc2_panel_data *priv_data;
 	int i;
+
+	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
+	if (sdata->gamma_state != GAMMA_STATE_READ)
+		return;
 
 	if (unlikely(!mode || !mode->priv_info))
 		return;
@@ -646,6 +662,21 @@ static void s6e3hc2_gamma_update(struct panel_switch_data *pdata,
 			pr_warn("failed sending gamma cmd 0x%02x\n",
 				s6e3hc2_gamma_tables[i].cmd);
 	}
+}
+
+static bool s6e3hc2_is_gamma_available(struct dsi_panel *panel)
+{
+	struct mipi_dsi_device *dsi = &panel->mipi_device;
+	u8 revision = 0;
+	int rc;
+
+	rc = mipi_dsi_dcs_read(dsi, S6E3HC2_REV_READ_CMD, &revision, 1);
+	if (rc != 1) {
+		pr_warn("Unable to read panel revision\n");
+		return false;
+	}
+
+	return (revision & S6E3HC2_REV_MASK) > S6E3HC2_REV_PROTO;
 }
 
 static int s6e3hc2_gamma_read_otp(struct panel_switch_data *pdata,
@@ -867,8 +898,13 @@ static int s6e3hc2_gamma_read_tables(struct panel_switch_data *pdata)
 		return -ENOENT;
 
 	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
-	if (sdata->gamma_ready)
+	if (sdata->gamma_state != GAMMA_STATE_UNINITIALIZED)
 		return 0;
+
+	if (!s6e3hc2_is_gamma_available(pdata->panel)) {
+		sdata->gamma_state = GAMMA_STATE_EMPTY;
+		return 0;
+	}
 
 	dsi = &pdata->panel->mipi_device;
 	if (DSI_WRITE_CMD_BUF(dsi, unlock_cmd))
@@ -882,7 +918,7 @@ static int s6e3hc2_gamma_read_tables(struct panel_switch_data *pdata)
 		}
 	}
 
-	sdata->gamma_ready = true;
+	sdata->gamma_state = GAMMA_STATE_READ;
 
 abort:
 	if (DSI_WRITE_CMD_BUF(dsi, lock_cmd))
@@ -972,14 +1008,22 @@ ssize_t debugfs_s6e3hc2_gamma_write(struct file *file,
 	struct seq_file *seq = file->private_data;
 	struct panel_switch_data *pdata = seq->private;
 	struct s6e3hc2_switch_data *sdata;
+	u32 state = GAMMA_STATE_UNINITIALIZED;
+	int rc;
 
-	if (!pdata || !pdata->panel)
+	if (unlikely(!pdata || !pdata->panel))
+		return -EINVAL;
+
+	rc = kstrtou32_from_user(user_buf, count, 0, &state);
+	if (rc)
+		return rc;
+	if (state >= GAMMA_STATE_MAX)
 		return -EINVAL;
 
 	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
 
 	mutex_lock(&pdata->panel->panel_lock);
-	sdata->gamma_ready = false;
+	sdata->gamma_state = state;
 	mutex_unlock(&pdata->panel->panel_lock);
 
 	return count;
@@ -1058,7 +1102,7 @@ static int s6e3hc2_post_enable(struct panel_switch_data *pdata)
 	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
 
 	kthread_flush_work(&sdata->gamma_work);
-	if (!sdata->gamma_ready)
+	if (sdata->gamma_state == GAMMA_STATE_UNINITIALIZED)
 		kthread_queue_work(&pdata->worker, &sdata->gamma_work);
 
 	return 0;
