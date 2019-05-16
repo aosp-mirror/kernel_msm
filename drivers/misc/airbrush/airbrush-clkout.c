@@ -688,6 +688,10 @@ int ab_clkout_freq(struct ab_state_context *sc, u64 *val)
 	counter_cnt0_high = RD_REG(AB_CLKOUT_COUNTER_REG_COUNTER0_HIGH);
 	counter_cnt1_high = RD_REG(AB_CLKOUT_COUNTER_REG_COUNTER1_HIGH);
 
+	/* Once the counter values are read, reset the counters */
+	WR_REG(AB_CLKOUT_COUNTER_REG_CONTROL,
+	       CLKGATE_EN_COUNTER0 | CLKGATE_EN_COUNTER1 | COUNTER_RESET);
+
 	counter_cnt0 = (counter_cnt0_high << 32) | counter_cnt0_low;
 	counter_cnt1 = (counter_cnt1_high << 32) | counter_cnt1_low;
 
