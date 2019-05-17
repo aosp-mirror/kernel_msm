@@ -128,3 +128,13 @@
 		memory-region = <&pil_faceauth_fw_mem>;
 	};
 };
+
+/* Override TZ App (secapp) memory region 0x2200000 -> 0x2800000 */
+
+&qcom_seecom {
+	reg = <0x87900000 0x2800000>;
+};
+
+&qcom_smcinvoke {
+	reg = <0x87900000 0x2800000>;
+};
