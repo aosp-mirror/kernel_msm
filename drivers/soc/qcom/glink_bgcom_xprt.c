@@ -1381,7 +1381,6 @@ static int tx_short_data(struct glink_transport_if *if_ptr,
 	mutex_lock(&einfo->write_lock);
 	if (glink_bgcom_get_tx_avail(einfo) <= sizeof(cmd)/WORD_SIZE) {
 		einfo->tx_resume_needed = true;
-		send_tx_blocked_signal(einfo);
 		mutex_unlock(&einfo->write_lock);
 		srcu_read_unlock(&einfo->use_ref, rcu_id);
 		return -EAGAIN;
