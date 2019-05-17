@@ -953,6 +953,7 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 	bool usb_online;
 	int twm_ibat;
 
+	if (chip->fg_can_restart_flag == 1) {
 	rc = fg_get_msoc_raw(chip, msoc);
 	if (rc < 0)
 		return rc;
@@ -972,6 +973,9 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 				FULL_SOC_RAW - 2) + 1;
 
 	chip->last_soc = *msoc;
+	} else
+		*msoc = chip->last_soc;
+
 	if (chip->last_soc <= chip->twm_soc_value) {
 		fg_get_usb_online(chip, &usb_online);
 		fg_get_battery_current(chip, &twm_ibat);
