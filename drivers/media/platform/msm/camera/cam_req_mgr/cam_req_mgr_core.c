@@ -700,7 +700,7 @@ static int __cam_req_mgr_check_sync_for_mslave(
 
 	for (i = 0; i < link->sync_links_num; i++) {
 		sync_link = link->sync_links[i];
-		sync_q = link->req.in_q;
+		sync_q = sync_link->req.in_q;
 		sync_rd_idx = sync_q->rd_idx;
 		sync_req_id = sync_q->slot[sync_rd_idx].req_id;
 		sync_apply_timestamp =
