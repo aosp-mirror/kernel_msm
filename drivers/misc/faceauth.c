@@ -44,7 +44,8 @@
 
 /* Timeout in ms */
 #define FACEAUTH_TIMEOUT_MS 3000
-#define M0_POLLING_PAUSE_MS 80
+#define M0_ENROLL_POLLING_PAUSE_MS 60
+#define M0_AUTH_POLLING_PAUSE_MS 80
 /* Polling interval in us */
 #define M0_POLLING_INTERVAL_US 6000
 
@@ -132,7 +133,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_data *data = file->private_data;
 	bool need_trace_end = false;
 	struct faceauth_debug_data debug_step_data;
-
+	unsigned int polling_pause = M0_AUTH_POLLING_PAUSE_MS;
 	down_read(&data->rwsem);
 	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
 		err = -EIO;
@@ -205,8 +206,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
+		if(start_step_data.operation == COMMAND_ENROLL){
+			polling_pause = M0_ENROLL_POLLING_PAUSE_MS;
+		}
 		ATRACE_BLOCK("M0_POLLING_PAUSE_MS", {
-			msleep(M0_POLLING_PAUSE_MS);
+			msleep(polling_pause);
 		});
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
 		need_trace_end = true;
