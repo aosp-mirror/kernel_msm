@@ -595,9 +595,6 @@ static void abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 		writel_relaxed(l1_l0s_enable, abc_dev->pcie_config
 				+ LINK_CONTROL_LINK_STATUS_REG);
 
-	abc_dev->l1sub_reg_cache = aspm_l11_l12;
-	abc_dev->link_status_reg_cache = l1_l0s_enable;
-
 	if (pmctrl->l1_en)
 		abc_l1ss_timeout_ctrl(false);
 
@@ -614,6 +611,9 @@ static void abc_set_pcie_pm_ctrl(struct abc_pcie_pm_ctrl *pmctrl)
 
 	/* Prevent concurrent access to SYSREG_FSYS's DBI_OVERRIDE. */
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
+
+	abc_dev->l1sub_reg_cache = aspm_l11_l12;
+	abc_dev->link_status_reg_cache = l1_l0s_enable;
 
 	/* LTR Enable */
 	if (pmctrl->aspm_L12 && !abc_dev->ltr_enable) {
