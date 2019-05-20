@@ -825,10 +825,13 @@ sde_connector_atomic_duplicate_state(struct drm_connector *connector)
 		return NULL;
 	}
 
+	mutex_lock(&c_conn->mode_info_lock);
 	/* duplicate value helper */
 	msm_property_duplicate_state(&c_conn->property_info,
 			c_oldstate, c_state,
 			&c_state->property_state, c_state->property_values);
+
+	mutex_unlock(&c_conn->mode_info_lock);
 
 	__drm_atomic_helper_connector_duplicate_state(connector,
 			&c_state->base);
@@ -2123,6 +2126,7 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	}
 
 	mutex_init(&c_conn->lock);
+	mutex_init(&c_conn->mode_info_lock);
 
 	rc = drm_mode_connector_attach_encoder(&c_conn->base, encoder);
 	if (rc) {

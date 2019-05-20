@@ -2749,6 +2749,7 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	struct sde_rm_hw_request request_hw;
 	bool is_cmd_mode = false;
 	int i = 0, ret;
+	struct msm_mode_info mode_info;
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder\n");
@@ -2796,8 +2797,9 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 	sde_conn = to_sde_connector(conn);
 	sde_conn_state = to_sde_connector_state(conn->state);
 	if (sde_conn && sde_conn_state) {
+		memset(&mode_info, 0, sizeof(mode_info));
 		ret = sde_conn->ops.get_mode_info(&sde_conn->base, adj_mode,
-				&sde_conn_state->mode_info,
+				&mode_info,
 				sde_kms->catalog->max_mixer_width,
 				sde_conn->display);
 		if (ret) {
@@ -2805,6 +2807,12 @@ static void sde_encoder_virt_mode_set(struct drm_encoder *drm_enc,
 				"failed to get mode info from the display\n");
 			return;
 		}
+		mutex_lock(&sde_conn->mode_info_lock);
+
+		memcpy(&sde_conn_state->mode_info, &mode_info,
+			sizeof(sde_conn_state->mode_info));
+
+		mutex_unlock(&sde_conn->mode_info_lock);
 	}
 
 	/* release resources before seamless mode change */
