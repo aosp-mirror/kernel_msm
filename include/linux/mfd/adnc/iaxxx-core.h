@@ -354,6 +354,7 @@ struct iaxxx_priv {
 	atomic_t pm_resume;
 	struct mutex resume_mutex;
 	struct mutex pm_mutex;
+	struct wakeup_source ws;
 
 	/* Debug flags */
 	bool debug_isr_disable;

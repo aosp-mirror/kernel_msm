@@ -60,8 +60,9 @@
 #define IAXXX_RESET_PWR_VLD_DELAY		(3*1000)
 #define IAXXX_RESET_PWR_VLD_RANGE_INTERVAL	100
 
-/* 2 retries if failed */
-#define IAXXX_FW_RETRY_COUNT		2
+/* 10 retries if failed */
+#define IAXXX_FW_RETRY_COUNT		10
+#define IAXXX_FW_RETRY_DELAY_MS	100
 #define IAXXX_BYTES_IN_A_WORD		4
 #define IAXXX_INT_OSC_TRIM_MASK	0x20000
 #define IAXXX_INT_OSC_TRIM_POS	17
@@ -1203,6 +1204,7 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		if (++priv->try_count < IAXXX_FW_RETRY_COUNT) {
 			dev_err(dev, "%s: Bootup error. retrying... %d\n",
 				__func__, priv->try_count);
+			msleep(IAXXX_FW_RETRY_DELAY_MS);
 			iaxxx_work(priv, fw_update_work);
 			return;
 		}
@@ -1644,6 +1646,7 @@ int iaxxx_core_dev_suspend(struct device *dev)
 
 	atomic_set(&priv->pm_resume, IAXXX_DEV_SUSPENDING);
 	flush_work(&priv->event_work_struct);
+	iaxxx_tunnel_kthread_suspend(priv);
 	iaxxx_flush_kthread_worker(&priv->worker);
 	atomic_set(&priv->pm_resume, IAXXX_DEV_SUSPEND);
 
@@ -1668,7 +1671,7 @@ int iaxxx_wait_dev_resume(struct device *dev)
 
 	mutex_lock(&priv->resume_mutex);
 
-	pm_wakeup_event(priv->dev, WAKEUP_TIMEOUT);
+	__pm_wakeup_event(&priv->ws, WAKEUP_TIMEOUT);
 
 	if (atomic_read(&priv->pm_resume) == IAXXX_DEV_SUSPEND) {
 		rc = wait_event_timeout(priv->irq_wake,
@@ -1849,6 +1852,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	init_waitqueue_head(&priv->wakeup_wq);
 	init_waitqueue_head(&priv->irq_wake);
 	atomic_set(&priv->pm_resume, IAXXX_DEV_RESUME);
+	wakeup_source_init(&priv->ws, "iaxxx-spi");
 
 	priv->thread = kthread_run(kthread_worker_fn, &priv->worker,
 				   "iaxxx-core");

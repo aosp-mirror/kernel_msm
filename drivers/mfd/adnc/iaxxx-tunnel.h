@@ -17,4 +17,5 @@
 #define _IAXXX_TUNNEL_H
 
 int iaxxx_tunnel_dev_init_early(struct iaxxx_priv *priv);
+void iaxxx_tunnel_kthread_suspend(struct iaxxx_priv *priv);
 #endif

@@ -109,6 +109,8 @@ struct iaxxx_tunnel_data {
 	struct notifier_block crash_notifier;
 	bool event_registered;
 	unsigned long tunnel_state;
+	wait_queue_head_t suspend_wq;
+	atomic_t kthread_suspend;
 };
 
 struct iaxxx_tunnel_client {

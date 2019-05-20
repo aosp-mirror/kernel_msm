@@ -64,6 +64,11 @@
 
 #define IAXXX_TFLG_FW_CRASH		0
 
+enum {
+	IAXXX_KTHREAD_RUN = 0,
+	IAXXX_KTHREAD_WAIT = 1,
+};
+
 struct iaxxx_tunnel_ep {
 	struct tunlMsg tnl_ep;
 	struct list_head src_head_list;
@@ -547,6 +552,7 @@ static int producer_thread(void *arg)
 	void *buf;
 	unsigned long flags;
 	int wait_time_us = PRODUCER_WAIT_TIME_US;
+	struct device *dev = priv->dev;
 
 	while (1) {
 		/* Get a free contiguous buffer */
@@ -560,6 +566,18 @@ static int producer_thread(void *arg)
 			kthread_parkme();
 			continue;
 		}
+
+		if (iaxxx_wait_dev_resume(dev)) {
+			if (atomic_read(&t_intf_priv->kthread_suspend)) {
+				atomic_set(&t_intf_priv->kthread_suspend,
+					IAXXX_KTHREAD_WAIT);
+				wake_up(&t_intf_priv->suspend_wq);
+			}
+			pr_debug("device suspend\n");
+			continue;
+		}
+
+		atomic_set(&t_intf_priv->kthread_suspend, IAXXX_KTHREAD_RUN);
 
 		flags = t_intf_priv->flags;
 		if (flags != tunnel_flags)
@@ -616,6 +634,14 @@ static int producer_thread(void *arg)
 				pr_debug("%s: tnl producer wait for event\n",
 							__func__);
 
+				if (atomic_read(
+					&t_intf_priv->kthread_suspend)) {
+					atomic_set(
+						&t_intf_priv->kthread_suspend,
+						IAXXX_KTHREAD_WAIT);
+					wake_up(&t_intf_priv->suspend_wq);
+				}
+
 				wait_event(t_intf_priv->producer_wq,
 					atomic_read(
 						&t_intf_priv->event_occurred)
@@ -638,6 +664,13 @@ static int producer_thread(void *arg)
 			continue;
 		}
 		pr_info("%s: producer thread wait for start\n", __func__);
+
+		if (atomic_read(&t_intf_priv->kthread_suspend)) {
+			atomic_set(&t_intf_priv->kthread_suspend,
+				IAXXX_KTHREAD_WAIT);
+			wake_up(&t_intf_priv->suspend_wq);
+		}
+
 		wait_event(t_intf_priv->producer_wq,
 			t_intf_priv->flags ||
 			kthread_should_stop() ||
@@ -1585,6 +1618,7 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 	t_intf_priv = priv->tunnel_data;
 	t_intf_priv->event_registered = false;
 	t_intf_priv->dev = dev;
+	atomic_set(&t_intf_priv->kthread_suspend, IAXXX_KTHREAD_RUN);
 
 	mutex_init(&t_intf_priv->tunnel_dev_lock);
 
@@ -1662,6 +1696,8 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 		goto error_consumer_thread;
 	}
 
+	init_waitqueue_head(&t_intf_priv->suspend_wq);
+
 	return 0;
 
 error_consumer_thread:
@@ -1710,6 +1746,22 @@ int iaxxx_tunnel_signal_event(struct iaxxx_priv *priv)
 	return 0;
 }
 EXPORT_SYMBOL(iaxxx_tunnel_signal_event);
+
+void iaxxx_tunnel_kthread_suspend(struct iaxxx_priv *priv)
+{
+	struct iaxxx_tunnel_data *t_intf_priv = priv->tunnel_data;
+	int rc;
+
+	if (!atomic_read(&t_intf_priv->kthread_suspend)) {
+		rc = wait_event_timeout(t_intf_priv->suspend_wq,
+			atomic_read(&t_intf_priv->kthread_suspend),
+			HZ);
+
+		if (!rc && !atomic_read(&t_intf_priv->kthread_suspend))
+			pr_err("Failed to suspend kthread");
+	}
+}
+EXPORT_SYMBOL(iaxxx_tunnel_kthread_suspend);
 
 static int __init iaxxx_reserve_audio_buffer(char *p)
 {
