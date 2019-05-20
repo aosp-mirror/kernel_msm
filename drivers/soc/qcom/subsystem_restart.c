@@ -1323,7 +1323,7 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		break;
 	case RESET_SOC:
 		__pm_stay_awake(&dev->ssr_wlock);
-		/* REVERT ME: schedule_work(&dev->device_restart_work); */
+		schedule_work(&dev->device_restart_work);
 		return 0;
 	default:
 		panic("subsys-restart: Unknown restart level!\n");
