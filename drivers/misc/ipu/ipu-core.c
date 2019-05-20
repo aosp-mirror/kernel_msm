@@ -482,7 +482,12 @@ void ipu_request_reset(struct device *dev)
 	struct paintbox_bus *bus = pb_dev->bus;
 
 	dev_err(bus->parent_dev, "%s: Reset requested\n", __func__);
-
+	/* we never want to call ipu_core_jqs_stop once we are in this
+	 * situation
+	 */
+	mutex_lock(&bus->jqs.lock);
+	bus->jqs.runtime_requested = false;
+	mutex_unlock(&bus->jqs.lock);
 	ipu_bus_notify_fatal_error(bus);
 }
 

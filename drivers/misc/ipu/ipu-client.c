@@ -267,6 +267,7 @@ static int ipu_client_open(struct inode *ip, struct file *fp)
 free_session_idr:
 	pb->session_count--;
 	idr_remove(&pb->session_idr, session->session_id);
+	ipu_client_request_reset(pb);
 free_buffer_table:
 	ipu_buffer_release_session(pb, session);
 put_runtime:
