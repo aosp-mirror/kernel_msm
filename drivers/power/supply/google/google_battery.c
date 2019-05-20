@@ -180,6 +180,7 @@ struct batt_drv {
 
 	/* stats */
 	int msc_state;
+	int msc_irdrop_state;
 	struct mutex stats_lock;
 	struct gbms_charging_event ce_data;
 	struct gbms_charging_event ce_qual;
@@ -634,30 +635,33 @@ static bool batt_chg_stats_qual(const struct gbms_charging_event *ce_data)
 	    ssoc_delta >= ce_data->chg_sts_delta_soc;
 }
 
-/* call holding the log */
-static void batt_chg_stats_update(struct batt_drv *batt_drv,
-				  int msc_state, int vbatt_idx,
-				  int ibatt_ma, int temp)
+/* call holding stats_lock */
+static void batt_chg_stats_tier(struct gbms_ce_tier_stats *tier,
+				int msc_state,
+				time_t elap)
 {
-	const time_t now = get_boot_sec();
-	const time_t elap = now - batt_drv->ce_data.last_update;
+	tier->msc_cnt[msc_state] += 1;
+	tier->msc_elap[msc_state] += elap;
+}
+
+/* call holding stats_lock */
+static void batt_chg_stats_update(struct batt_drv *batt_drv, int tier_idx,
+				  int ibatt_ma, int temp, time_t elap)
+{
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 	struct gbms_ce_tier_stats *tier =
-				&batt_drv->ce_data.tier_stats[vbatt_idx];
+				&batt_drv->ce_data.tier_stats[tier_idx];
 
-	if (msc_state == -1 || vbatt_idx == -1) {
-		pr_err("MSC_STAT error msc_state=%d, vbatt_idx=%d\n",
-				msc_state, vbatt_idx);
-		return;
-	}
+	/* book to previous state */
+	batt_chg_stats_tier(tier, batt_drv->msc_state, elap);
 
 	if (tier->soc_in == -1) {
 		int soc_in, cc_in;
 
 		soc_in = GPSY_GET_PROP(batt_drv->fg_psy,
-					POWER_SUPPLY_PROP_CAPACITY_RAW);
+				       POWER_SUPPLY_PROP_CAPACITY_RAW);
 		cc_in = GPSY_GET_PROP(batt_drv->fg_psy,
-					POWER_SUPPLY_PROP_CHARGE_COUNTER);
+				      POWER_SUPPLY_PROP_CHARGE_COUNTER);
 		if (soc_in < 0 || cc_in < 0) {
 			pr_info("MSC_STAT cannot read soc_in=%d or cc_in=%d\n",
 				soc_in, cc_in);
@@ -687,37 +691,31 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 			tier->time_other += elap;
 		}
 
-		if (temp < tier->temp_min)
-			tier->temp_min = temp;
-		if (temp > tier->temp_max)
-			tier->temp_max = temp;
-
-		if (ibatt_ma < tier->ibatt_min)
-			tier->ibatt_min = ibatt_ma;
-		if (ibatt_ma > tier->ibatt_max)
-			tier->ibatt_max = ibatt_ma;
-
-		if (icl_settled < tier->icl_min)
-			tier->icl_min = icl_settled;
-		if (icl_settled > tier->icl_max)
-			tier->icl_max = icl_settled;
-
 		/* averages: temp < 100. icl_settled < 3000, sum(ibatt)
 		 * is bound to battery capacity, elap in seconds, sums
 		 * are stored in an s64. For icl_settled I need a tier
 		 * to last for more than ~97M years.
 		 */
-		tier->msc_cnt[batt_drv->msc_state] += 1;
-		tier->msc_elap[batt_drv->msc_state] += elap;
-		tier->icl_sum += icl_settled * elap;
+		if (temp < tier->temp_min)
+			tier->temp_min = temp;
+		if (temp > tier->temp_max)
+			tier->temp_max = temp;
 		tier->temp_sum += temp * elap;
+
+		if (icl_settled < tier->icl_min)
+			tier->icl_min = icl_settled;
+		if (icl_settled > tier->icl_max)
+			tier->icl_max = icl_settled;
+		tier->icl_sum += icl_settled * elap;
+
+		if (ibatt_ma < tier->ibatt_min)
+			tier->ibatt_min = ibatt_ma;
+		if (ibatt_ma > tier->ibatt_max)
+			tier->ibatt_max = ibatt_ma;
 		tier->ibatt_sum += ibatt_ma * elap;
 	}
 
 	tier->sample_count += 1;
-	/* nex update will book to msc_state */
-	batt_drv->msc_state = msc_state;
-	batt_drv->ce_data.last_update = now;
 }
 
 /* Only the qualified copy gets the timestamp and the exit voltage.
@@ -735,9 +733,13 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 	mutex_lock(&batt_drv->stats_lock);
 
 	/* book last period to the current tier */
-	if (batt_drv->msc_state != -1 && batt_drv->vbatt_idx != -1)
-		batt_chg_stats_update(batt_drv, batt_drv->msc_state,
-				      batt_drv->vbatt_idx, 0, 0);
+	if (batt_drv->vbatt_idx != -1) {
+		const time_t now = get_boot_sec();
+		const time_t elap = now - batt_drv->ce_data.last_update;
+
+		batt_chg_stats_update(batt_drv, batt_drv->vbatt_idx,
+				      0, 0, elap);
+	}
 
 	/* record the closing in data (and qual) */
 	batt_drv->ce_data.charging_stats.voltage_out =
@@ -1041,16 +1043,174 @@ static bool msc_logic_soft_jeita(struct batt_drv *batt_drv, int temp)
 	return 0;
 }
 
+/* TODO: only change batt_drv->checked_ov_cnt, an */
+static int msc_logic_irdrop(struct batt_drv *batt_drv,
+			    int vbatt, int ibatt, int temp_idx,
+			    int *vbatt_idx, int *fv_uv, int *update_interval)
+{
+	int msc_state = MSC_NONE;
+	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
+	const int vtier = profile->volt_limits[*vbatt_idx];
+	const int chg_type = batt_drv->chg_state.f.chg_type;
+	const int utv_margin = profile->cv_range_accuracy;
+	const int otv_margin = profile->cv_otv_margin;
+
+	if ((vbatt - vtier) > otv_margin) {
+		/* OVER: vbatt over vtier for more than margin */
+		const int cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
+						    *vbatt_idx);
+
+		/* pullback when over tier voltage, fast poll, penalty
+		 * on TAPER_RAISE and no cv debounce (so will consider
+		 * switching voltage tiers if the current is right).
+		 * NOTE: lowering voltage might cause a small drop in
+		 * current (we should remain  under next tier)
+		 */
+		*fv_uv = gbms_msc_round_fv_uv(profile, vtier,
+			*fv_uv - profile->fv_uv_resolution);
+		if (*fv_uv < vtier)
+			*fv_uv = vtier;
+
+		*update_interval = profile->cv_update_interval;
+		batt_drv->checked_ov_cnt = profile->cv_tier_ov_cnt;
+		batt_drv->checked_cv_cnt = 0;
+
+		if (batt_drv->checked_tier_switch_cnt > 0) {
+			/* no pullback, next tier if already counting */
+			msc_state = MSC_VSWITCH;
+			*vbatt_idx = batt_drv->vbatt_idx + 1;
+
+			pr_info("MSC_VSWITCH vt=%d vb=%d ibatt=%d\n",
+				vtier, vbatt, ibatt);
+		} else if (-ibatt == cc_max) {
+			/* pullback, double penalty if at full current */
+			msc_state = MSC_VOVER;
+			batt_drv->checked_ov_cnt *= 2;
+
+			pr_info("MSC_VOVER vt=%d  vb=%d ibatt=%d fv_uv=%d->%d\n",
+				vtier, vbatt, ibatt,
+				batt_drv->fv_uv, *fv_uv);
+		} else {
+			msc_state = MSC_PULLBACK;
+			pr_info("MSC_PULLBACK vt=%d vb=%d ibatt=%d fv_uv=%d->%d\n",
+				vtier, vbatt, ibatt,
+				batt_drv->fv_uv, *fv_uv);
+		}
+
+		/* NOTE: might get here after windup because algo will
+		 * track the voltage drop caused from load as IRDROP.
+		 * TODO: make sure that being current limited clear
+		 * the taper condition.
+		 */
+
+	} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST) {
+		/* FAST: usual compensation (vchrg is vqcom)
+		 * NOTE: there is a race in reading from charger and
+		 * data might not be consistent (b/110318684)
+		 * NOTE: could add PID loop for management of thermals
+		 */
+		const int vchrg = batt_drv->chg_state.f.vchrg;
+
+		msc_state = MSC_FAST;
+
+		/* invalid or 0 vchg disable IDROP compensation in FAST */
+		if (vchrg <= 0) {
+			/* could keep it steady instead */
+			*fv_uv = vtier;
+		} else if (vchrg > vbatt) {
+			*fv_uv = gbms_msc_round_fv_uv(profile, vtier,
+				vtier + (vchrg - vbatt));
+		}
+
+		/* no tier switch during fast charge */
+		if (batt_drv->checked_cv_cnt == 0)
+			batt_drv->checked_cv_cnt = 1;
+
+		pr_info("MSC_FAST vt=%d vb=%d fv_uv=%d->%d vchrg=%d cv_cnt=%d\n",
+			vtier, vbatt, batt_drv->fv_uv, *fv_uv,
+			vchrg, batt_drv->checked_cv_cnt);
+
+	} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TRICKLE) {
+		/* Precharge: charging current/voltage are limited in
+		 * hardware, no point in applying irdrop compensation.
+		 * Just wait for battery voltage to raise over the
+		 * precharge to fast charge threshold.
+		 */
+		msc_state = MSC_TYPE;
+
+		/* no tier switching in trickle */
+		if (batt_drv->checked_cv_cnt == 0)
+			batt_drv->checked_cv_cnt = 1;
+
+		pr_info("MSC_PRE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
+			vtier, vbatt, *fv_uv, chg_type);
+	} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
+		/* Not fast, taper or precharge: in *_UNKNOWN and *_NONE
+		 * set checked_cv_cnt=0 and check current to avoid early
+		 * termination in case of lack of headroom
+		 * NOTE: this can cause early switch on low ilim
+		 * TODO: check if we are really lacking hedrooom.
+		 */
+		msc_state = MSC_TYPE;
+		*update_interval = profile->cv_update_interval;
+		batt_drv->checked_cv_cnt = 0;
+
+		pr_info("MSC_TYPE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
+			vtier, vbatt, *fv_uv, chg_type);
+
+	} else if (batt_drv->checked_ov_cnt) {
+		/* TAPER_DLY: countdown to raise fv_uv and/or check
+		 * for tier switch, will keep steady...
+		 */
+		pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d\n",
+			vtier, vbatt, *fv_uv, profile->cv_range_accuracy,
+			batt_drv->checked_cv_cnt,
+			batt_drv->checked_ov_cnt);
+
+		msc_state = MSC_DLY;
+		batt_drv->checked_ov_cnt -= 1;
+		*update_interval = profile->cv_update_interval;
+
+	} else if ((vtier - vbatt) < utv_margin) {
+		/* TAPER_STEADY: close enough to tier */
+
+		msc_state = MSC_STEADY;
+		*update_interval = profile->cv_update_interval;
+
+		pr_info("MSC_STEADY vt=%d vb=%d fv_uv=%d margin=%d\n",
+			vtier, vbatt, *fv_uv,
+			profile->cv_range_accuracy);
+	} else {
+		/* TAPER_RAISE: under tier vlim, raise one click &
+		 * debounce taper (see above handling of STEADY)
+		 */
+		msc_state = MSC_RAISE;
+		*fv_uv = gbms_msc_round_fv_uv(profile, vtier,
+			*fv_uv + profile->fv_uv_resolution);
+		*update_interval = profile->cv_update_interval;
+
+		/* debounce next taper voltage adjustment */
+		batt_drv->checked_cv_cnt = profile->cv_debounce_cnt;
+
+		pr_info("MSC_RAISE vt=%d vb=%d fv_uv=%d->%d\n",
+			vtier, vbatt, batt_drv->fv_uv, *fv_uv);
+	}
+
+	return msc_state;
+}
+
 /* TODO: this function is too long and need to be split (b/117897301) */
 static int msc_logic_internal(struct batt_drv *batt_drv)
 {
+	bool sw_jeita;
 	int msc_state = MSC_NONE;
 	struct power_supply *fg_psy = batt_drv->fg_psy;
 	struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	int vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv, temp_idx;
-	int temp, ibatt, vbatt, vchrg, chg_type, ioerr;
+	int temp, ibatt, vbatt, ioerr;
 	int update_interval = MSC_DEFAULT_UPDATE_INTERVAL;
-	bool sw_jeita;
+	const time_t now = get_boot_sec();
+	time_t elap = now - batt_drv->ce_data.last_update;
 
 	temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP,&ioerr);
 	if (ioerr < 0)
@@ -1069,12 +1229,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	if (vbatt < 0)
 		return -EIO;
 
-	/* invalid or 0 vchg disable IDROP compensation in FAST */
-	chg_type = batt_drv->chg_state.f.chg_type;
-	vchrg = batt_drv->chg_state.f.vchrg;
-	if (vchrg <= 0)
-		vchrg = vbatt;
-
 	/* Multi Step Charging with IRDROP compensation when vchrg is != 0
 	 * vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv
 	 */
@@ -1084,7 +1238,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 
 		msc_state = MSC_SEED;
 
-		/* seed voltage only when really needed */
+		/* seed voltage only on connect, book 0 time */
 		if (batt_drv->vbatt_idx == -1)
 			vbatt_idx = gbms_msc_voltage_idx(profile, vbatt);
 
@@ -1123,156 +1277,31 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		pr_info("MSC_LAST vbatt=%d ibatt=%d fv_uv=%d\n",
 			vbatt, ibatt, fv_uv);
 	} else {
+		const int tier_idx = batt_drv->vbatt_idx;
 		const int vtier = profile->volt_limits[vbatt_idx];
-		const int utv_margin = profile->cv_range_accuracy;
-		const int otv_margin = profile->cv_otv_margin;
 		const int switch_cnt = profile->cv_tier_switch_cnt;
 		const int cc_next_max = GBMS_CCCM_LIMITS(profile, temp_idx,
-						    vbatt_idx + 1);
+							vbatt_idx + 1);
 
-		if ((vbatt - vtier) > otv_margin) {
-			/* OVER: vbatt over vtier for more than margin */
-			const int cc_max =
-				GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
+		/* book elapsed time to previous tier & msc_irdrop_state */
+		msc_state = msc_logic_irdrop(batt_drv,
+					     vbatt, ibatt, temp_idx,
+					     &vbatt_idx, &fv_uv,
+					     &update_interval);
+		mutex_lock(&batt_drv->stats_lock);
+		batt_chg_stats_tier(&batt_drv->ce_data.tier_stats[tier_idx],
+				    batt_drv->msc_irdrop_state, elap);
+		batt_drv->msc_irdrop_state = msc_state;
+		mutex_unlock(&batt_drv->stats_lock);
 
-			/* pullback when over tier voltage, fast poll, penalty
-			 * on TAPER_RAISE and no cv debounce (so will consider
-			 * switching voltage tiers if the current is right).
-			 * NOTE: lowering voltage might cause a small drop in
-			 * current (we should remain  under next tier)
-			 */
-			fv_uv = gbms_msc_round_fv_uv(profile, vtier,
-				fv_uv - profile->fv_uv_resolution);
-			if (fv_uv < vtier)
-				fv_uv = vtier;
-
-			update_interval = profile->cv_update_interval;
-			batt_drv->checked_ov_cnt = profile->cv_tier_ov_cnt;
-			batt_drv->checked_cv_cnt = 0;
-
-			if (batt_drv->checked_tier_switch_cnt > 0) {
-			/* no pullback, next tier if already counting */
-				msc_state = MSC_VSWITCH;
-				vbatt_idx = batt_drv->vbatt_idx + 1;
-
-				pr_info("MSC_VSWITCH vt=%d vb=%d ibatt=%d\n",
-					vtier, vbatt, ibatt);
-			} else if (-ibatt == cc_max) {
-			/* pullback, double penalty if at full current */
-				msc_state = MSC_VOVER;
-				batt_drv->checked_ov_cnt *= 2;
-
-				pr_info("MSC_VOVER vt=%d  vb=%d ibatt=%d fv_uv=%d->%d\n",
-					vtier, vbatt, ibatt,
-					batt_drv->fv_uv, fv_uv);
-			} else {
-				msc_state = MSC_PULLBACK;
-				pr_info("MSC_PULLBACK vt=%d vb=%d ibatt=%d fv_uv=%d->%d\n",
-					vtier, vbatt, ibatt,
-					batt_drv->fv_uv, fv_uv);
-			}
-
-			/* NOTE: might get here after windup because algo will
-			 * track the voltage drop caused from load as IRDROP.
-			 * TODO: make sure that being current limited clear
-			 * the taper condition.
-			 */
-
-		} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST) {
-			/* FAST: usual compensation (vchrg is vqcom)
-			* NOTE: there is a race in reading from charger and
-			* data might not be consistent (b/110318684)
-			* NOTE: could add PID loop for management of thermals
-			*/
-			msc_state = MSC_FAST;
-			if (vchrg && vchrg > vbatt) {
-				fv_uv = gbms_msc_round_fv_uv(profile, vtier,
-					vtier + (vchrg - vbatt));
-			} else {
-				/* could keep it steady instead */
-				fv_uv = vtier;
-			}
-
-			/* no tier switch during fast charge */
-			if (batt_drv->checked_cv_cnt == 0)
-				batt_drv->checked_cv_cnt = 1;
-
-			pr_info("MSC_FAST vt=%d vb=%d fv_uv=%d->%d vchrg=%d cv_cnt=%d\n",
-				vtier, vbatt, batt_drv->fv_uv, fv_uv,
-				vchrg, batt_drv->checked_cv_cnt);
-
-		} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TRICKLE) {
-			/* Precharge: charging current/voltage are limited in
-			 * hardware, no point in applying irdrop compensation:
-			 * just wait for battery voltgage to raise over the
-			 * precharge to fast charge threshold.
-			 */
-			msc_state = MSC_TYPE;
-			/* no tier switching in trickle */
-			if (batt_drv->checked_cv_cnt == 0)
-				batt_drv->checked_cv_cnt = 1;
-
-			pr_info("MSC_PRE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
-				vtier, vbatt, fv_uv, chg_type);
-		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
-			/* Not fast, taper or precharge: in *_UNKNOWN and *_NONE
-			* set checked_cv_cnt=0 and check current to avoid early
-			* termination in case of lack of headroom
-			* NOTE: this can cause early switch on low ilim
-			* TODO: check if we are really lacking hedrooom.
-			*/
-			msc_state = MSC_TYPE;
-			update_interval = profile->cv_update_interval;
-			batt_drv->checked_cv_cnt = 0;
-
-			pr_info("MSC_TYPE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
-				vtier, vbatt, fv_uv, chg_type);
-
-		} else if (batt_drv->checked_cv_cnt +
-			   batt_drv->checked_ov_cnt) {
-			/* TAPER_DLY: countdown to raise fv_uv and/or check
-			 * for tier switch, will keep steady...
-			 */
-			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d\n",
-				vtier, vbatt, fv_uv, profile->cv_range_accuracy,
-				batt_drv->checked_cv_cnt,
-				batt_drv->checked_ov_cnt);
-
-			msc_state = MSC_DLY;
-			update_interval = profile->cv_update_interval;
-			if (batt_drv->checked_cv_cnt)
-				batt_drv->checked_cv_cnt -= 1;
-			if (batt_drv->checked_ov_cnt)
-				batt_drv->checked_ov_cnt -= 1;
-
-		} else if ((vtier - vbatt) < utv_margin) {
-			/* TAPER_STEADY: close enough to tier */
-
-			msc_state = MSC_STEADY;
-			update_interval = profile->cv_update_interval;
-
-			pr_info("MSC_STEADY vt=%d vb=%d fv_uv=%d margin=%d\n",
-				vtier, vbatt, fv_uv,
-				profile->cv_range_accuracy);
-		} else {
-			/* TAPER_RAISE: under tier vlim, raise one click &
-			 * debounce taper (see above handling of STEADY)
-			 */
-			msc_state = MSC_RAISE;
-			fv_uv = gbms_msc_round_fv_uv(profile, vtier,
-				fv_uv + profile->fv_uv_resolution);
-			update_interval = profile->cv_update_interval;
-
-			/* debounce next taper voltage adjustment */
-			batt_drv->checked_cv_cnt = profile->cv_debounce_cnt;
-
-			pr_info("MSC_RAISE vt=%d vb=%d fv_uv=%d->%d\n",
-				vtier, vbatt, batt_drv->fv_uv, fv_uv);
-		}
-
+		/* Basic multi step charging: switch to next tier when ibatt
+		 * is under next tier cc_max.
+		 */
 		if (batt_drv->checked_cv_cnt > 0) {
 			/* debounce period on tier switch */
 			msc_state = MSC_WAIT;
+			batt_drv->checked_cv_cnt -= 1;
+
 			pr_info("MSC_WAIT vt=%d vb=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d\n",
 				vtier, vbatt, fv_uv, ibatt,
 				batt_drv->checked_cv_cnt,
@@ -1304,25 +1333,33 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 
 	}
 
-	/* need a new fv_uv only on a new voltage tier */
+	/* need a new fv_uv only on a new voltage tier.  */
 	if (vbatt_idx != batt_drv->vbatt_idx) {
 		fv_uv = profile->volt_limits[vbatt_idx];
 		batt_drv->checked_tier_switch_cnt = 0;
 		batt_drv->checked_ov_cnt = 0;
 	}
 
-	/* book elapsed time to previous tier */
+	/* book elapsed time to previous tier & msc_state */
+	mutex_lock(&batt_drv->stats_lock);
 	if (vbatt_idx != -1 && vbatt_idx < GBMS_STATS_TIER_COUNT) {
 		int tier_idx = batt_drv->vbatt_idx;
 
-		if (tier_idx == -1)
+		/* this is the seed after the connect */
+		if (batt_drv->vbatt_idx == -1) {
 			tier_idx = vbatt_idx;
+			elap = 0;
+		}
 
-		mutex_lock(&batt_drv->stats_lock);
-		batt_chg_stats_update(batt_drv, msc_state,
-				      tier_idx, ibatt / 1000, temp);
-		mutex_unlock(&batt_drv->stats_lock);
+		batt_chg_stats_update(batt_drv, tier_idx,
+				      ibatt / 1000, temp,
+				      elap);
+
 	}
+
+	batt_drv->msc_state = msc_state;
+	batt_drv->ce_data.last_update = now;
+	mutex_unlock(&batt_drv->stats_lock);
 
 	batt_drv->vbatt_idx = vbatt_idx;
 	batt_drv->temp_idx = temp_idx;

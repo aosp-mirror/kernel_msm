@@ -275,11 +275,32 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 			chg_state.v);
 }
 
+static int info_usb_ad_type(int usb_type, int usbc_type)
+{
+	switch (usb_type) {
+	case POWER_SUPPLY_TYPE_USB:
+		return CHG_EV_ADAPTER_TYPE_USB_SDP;
+	case POWER_SUPPLY_TYPE_USB_CDP:
+		return CHG_EV_ADAPTER_TYPE_USB_CDP;
+	case POWER_SUPPLY_TYPE_USB_DCP:
+		return CHG_EV_ADAPTER_TYPE_USB_DCP;
+	case POWER_SUPPLY_TYPE_USB_PD:
+		return (usbc_type == POWER_SUPPLY_USB_TYPE_PD_PPS) ?
+			CHG_EV_ADAPTER_TYPE_USB_PD_PPS :
+			CHG_EV_ADAPTER_TYPE_USB_PD;
+	case POWER_SUPPLY_TYPE_USB_FLOAT:
+		return CHG_EV_ADAPTER_TYPE_USB_FLOAT;
+	default:
+		return CHG_EV_ADAPTER_TYPE_USB;
+	}
+}
+
 static int info_usb_state(union gbms_ce_adapter_details *ad,
 			  struct power_supply *usb_psy,
 			  struct power_supply *tcpm_psy)
 {
-	int usb_type, usbc_type, voltage_max, amperage_max;
+	int usb_type, voltage_max, amperage_max;
+	int usbc_type = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 
 	usb_type = GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_REAL_TYPE);
 	if (tcpm_psy)
@@ -306,29 +327,7 @@ static int info_usb_state(union gbms_ce_adapter_details *ad,
 		return -EINVAL;
 	}
 
-	switch (usb_type) {
-	case POWER_SUPPLY_TYPE_USB:
-		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_SDP;
-		break;
-	case POWER_SUPPLY_TYPE_USB_CDP:
-		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_CDP;
-		break;
-	case POWER_SUPPLY_TYPE_USB_DCP:
-		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_DCP;
-		break;
-	case POWER_SUPPLY_TYPE_USB_PD:
-		if (tcpm_psy && usbc_type == POWER_SUPPLY_USB_TYPE_PD_PPS)
-			ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_PD_PPS;
-		else
-			ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_PD;
-		break;
-	case POWER_SUPPLY_TYPE_USB_FLOAT:
-		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB_FLOAT;
-		break;
-	default:
-		ad->ad_type = CHG_EV_ADAPTER_TYPE_USB;
-		break;
-	}
+	ad->ad_type = info_usb_ad_type(usb_type, usbc_type);
 
 	return 0;
 }
