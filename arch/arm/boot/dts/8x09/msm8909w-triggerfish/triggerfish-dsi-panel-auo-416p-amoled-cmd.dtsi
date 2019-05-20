@@ -105,7 +105,6 @@
 		qcom,mdss-dsi-te-dcs-command = <1>;
 		qcom,mdss-dsi-te-using-te-pin;
 		qcom,mdss-dsi-te-check-enable;
-		qcom,ulps-enabled;
 		qcom,mdss-dsi-panel-timings = [
 			4E 0E 08 00 2E 30 0E 12 0A 03 04 00
 		];
