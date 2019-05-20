@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -954,10 +954,6 @@ static int qmp_mbox_probe(struct platform_device *pdev)
 			mdev->rx_irq_line, ret);
 		return ret;
 	}
-	ret = enable_irq_wake(mdev->rx_irq_line);
-	if (ret < 0)
-		QMP_ERR(mdev->ilc, "enable_irq_wake on %d failed: %d\n",
-			mdev->rx_irq_line, ret);
 
 	/* Trigger fake RX in case of missed interrupt */
 	if (of_property_read_bool(edge_node, "qcom,early-boot"))
