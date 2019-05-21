@@ -265,8 +265,6 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 
 	/* TODO: handle interaction with PPS code */
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
-	/* normal when disconnected */
-	vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, true, 0);
 	/* when/if enabled */
 	GPSY_SET_PROP(chg_drv->chg_psy,
 			POWER_SUPPLY_PROP_TAPER_CONTROL,
@@ -969,24 +967,25 @@ static void chg_work(struct work_struct *work)
 						usb_online, wlc_online);
 		goto rerun_error;
 	} else if (!usb_online && !wlc_online) {
+
 		if (!chg_drv->stop_charging) {
 			pr_info("MSC_CHG no power source, disabling charging\n");
+
+			vote(chg_drv->msc_chg_disable_votable,
+			     MSC_CHG_VOTER, true, 0);
+			chg_drv->stop_charging = true;
+
 			chg_reset_state(chg_drv);
 		}
 		goto exit_chg_work;
+
 	} else if (chg_drv->stop_charging) {
-		/* If power source, enable charging and set ILIM,ICHG later
-		 * if disabled.
-		 */
+		/* will re-enable charging after setting FCC,CC_MAX */
 		pr_info("MSC_CHG power source usb=%d wlc=%d, enabling charging\n",
 			usb_online, wlc_online);
 
 		if (chg_drv->therm_wlc_override_fcc)
-			chg_therm_update_fcc(chg_drv);
-
-		/* TODO: re-able at after roundrip */
-		vote(chg_drv->msc_chg_disable_votable, MSC_CHG_VOTER, false, 0);
-		chg_drv->stop_charging = false;
+			(void)chg_therm_update_fcc(chg_drv);
 	}
 
 	soc = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY, &rc);
@@ -1036,6 +1035,13 @@ static void chg_work(struct work_struct *work)
 		vote(chg_drv->msc_interval_votable,
 			MSC_CHG_VOTER, true,
 			update_interval);
+
+		/* if disabled, enable charging after setting FV, CC_MAX */
+		if (chg_drv->stop_charging) {
+			vote(chg_drv->msc_chg_disable_votable,
+			     MSC_CHG_VOTER, false, 0);
+			chg_drv->stop_charging = false;
+		}
 
 		goto exit_chg_work;
 	}
