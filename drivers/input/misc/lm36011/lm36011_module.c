@@ -93,7 +93,7 @@
 #define VIO_VOLTAGE_MIN 1800000
 #define VIO_VOLTAGE_MAX 1800000
 #define SLIEGO_VDD_VOlTAGE_MIN 2800000
-#define SLIEGO_VDD_VOlTAGE_MAX 2800000
+#define SLIEGO_VDD_VOlTAGE_MAX 3200000
 #define SX9320_VDD_VOlTAGE_MIN 1800000
 #define SX9320_VDD_VOlTAGE_MAX 1800000
 #define HDC2010_VDD_VOlTAGE_MIN 1800000
@@ -180,6 +180,8 @@ struct led_laser_ctrl_t {
 		struct gpio *gpio_array;
 		unsigned int irq[MAX_SILEGO_GPIO_SIZE];
 		int32_t fault_flag;
+		struct camera_io_master io_master_info;
+		bool is_cci_init;
 	} silego;
 	struct {
 		bool is_power_up;
@@ -254,7 +256,7 @@ static const struct reg_setting silego_reg_settings_ver3[] = {
 };
 
 static const struct reg_setting silego_reg_settings_ver4[] = {
-	{0xc0, 0x01}, {0xc1, 0xa6}, {0xc2, 0xe0}, {0xc3, 0xa6}, {0xcb, 0x93},
+	{0xc0, 0x01}, {0xc1, 0xa6}, {0xc2, 0xe0}, {0xc3, 0xa6}, {0xcb, 0x97},
 	{0xcc, 0x9a}, {0xce, 0x9b}, {0x92, 0x00}, {0x93, 0x00}, {0xa0, 0x1a},
 	{0xa2, 0x1a}, {0x80, 0xb0}, {0x81, 0x24}, {0x82, 0x58}, {0x83, 0x2c},
 	{0x84, 0x60}, {0x85, 0x2c}, {0x86, 0x40}, {0x87, 0x40}, {0x88, 0x3e},
@@ -632,23 +634,10 @@ int sx9320_init_setting(struct led_laser_ctrl_t *ctrl)
 
 static int silego_check_fault_type(struct led_laser_ctrl_t *ctrl)
 {
-	int rc, io_release_rc;
-	uint32_t old_sid, old_cci_master;
-
-	old_sid = ctrl->io_master_info.cci_client->sid;
-	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
-	ctrl->io_master_info.cci_client->sid = 0x08;
-	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
-
-	rc = camera_io_init(&(ctrl->io_master_info));
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"cam io init for silego failed: rc: %d", rc);
-		goto out;
-	}
+	int rc;
 
 	rc = camera_io_dev_read(
-		&ctrl->io_master_info,
+		&ctrl->silego.io_master_info,
 		FAULT_FLAG_ADDR,
 		&ctrl->silego.fault_flag,
 		CAMERA_SENSOR_I2C_TYPE_BYTE,
@@ -658,16 +647,6 @@ static int silego_check_fault_type(struct led_laser_ctrl_t *ctrl)
 		dev_err(ctrl->soc_info.dev,
 			"failed to read silego fault flag");
 
-	io_release_rc = camera_io_release(&(ctrl->io_master_info));
-	if (io_release_rc < 0) {
-		dev_err(ctrl->soc_info.dev, "silego cci_release failed");
-		if (!rc)
-			rc = io_release_rc;
-	}
-
-out:
-	ctrl->io_master_info.cci_client->sid = old_sid;
-	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
 	return rc;
 }
 
@@ -688,7 +667,7 @@ static int silego_override_setting(
 	write_setting.size = 1;
 	write_setting.delay = 0;
 
-	rc = camera_io_dev_write(&ctrl->io_master_info, &write_setting);
+	rc = camera_io_dev_write(&ctrl->silego.io_master_info, &write_setting);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev,
 			"%s: failed to overwrite setting: rc: %d",
@@ -697,7 +676,7 @@ static int silego_override_setting(
 	}
 
 	rc = camera_io_dev_read(
-		&ctrl->io_master_info,
+		&ctrl->silego.io_master_info,
 		reg_settings.reg_addr,
 		&check_value,
 		CAMERA_SENSOR_I2C_TYPE_BYTE,
@@ -721,26 +700,9 @@ static int silego_override_setting(
 static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 {
 	uint32_t data;
-	int rc, io_release_rc;
+	int rc;
 	size_t i, settings_size;
-	uint32_t old_sid, old_cci_master;
 	const struct reg_setting *reg_map;
-
-	old_sid = ctrl->io_master_info.cci_client->sid;
-	old_cci_master = ctrl->io_master_info.cci_client->cci_i2c_master;
-	ctrl->io_master_info.cci_client->sid = 0x08;
-	ctrl->io_master_info.cci_client->cci_i2c_master = 0;
-
-	rc = camera_io_init(&(ctrl->io_master_info));
-	if (rc < 0) {
-		dev_err(ctrl->soc_info.dev,
-			"%s: cam io init for silego failed: rc: %d",
-			__func__, rc);
-		ctrl->io_master_info.cci_client->sid = old_sid;
-		ctrl->io_master_info.cci_client->cci_i2c_master =
-			old_cci_master;
-		return rc;
-	}
 
 	switch (ctrl->hw_version) {
 	case BUILD_PROTO:
@@ -765,7 +727,7 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 
 	for (i = 0; i < settings_size; i++) {
 		rc = camera_io_dev_read(
-			&ctrl->io_master_info,
+			&ctrl->silego.io_master_info,
 			reg_map[i].addr,
 			&data,
 			CAMERA_SENSOR_I2C_TYPE_BYTE,
@@ -804,16 +766,8 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 			goto out;
 		}
 	}
+
 out:
-	io_release_rc = camera_io_release(&(ctrl->io_master_info));
-	if (io_release_rc < 0) {
-		dev_err(ctrl->soc_info.dev, "%s: silego cci_release failed",
-			__func__);
-		if (!rc)
-			rc = io_release_rc;
-	}
-	ctrl->io_master_info.cci_client->sid = old_sid;
-	ctrl->io_master_info.cci_client->cci_i2c_master = old_cci_master;
 	return rc;
 }
 
@@ -1025,6 +979,16 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		ctrl->is_cci_init = true;
 	}
 
+	if (!ctrl->silego.is_cci_init) {
+		rc = camera_io_init(&(ctrl->silego.io_master_info));
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"silego io init failed: rc: %d", rc);
+			return rc;
+		}
+		ctrl->silego.is_cci_init = true;
+	}
+
 	if (ctrl->hw_version < BUILD_DVT) {
 		if (!ctrl->cap_sense.is_cci_init) {
 			rc = camera_io_init(&(ctrl->cap_sense.io_master_info));
@@ -1049,9 +1013,30 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 		}
 	}
 
-
 	/* Silego i2c need at least 3 ms after power up */
 	usleep_range(3000, 6000);
+
+	/* Suppress ITO-R by change register 0xCB */
+	if (ctrl->hw_version >= BUILD_DVT) {
+		rc = silego_override_setting(ctrl, 0xcb, 0x97);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"failed to update Silego REG 0xCB");
+			return rc;
+		}
+
+		/* Wait 1 ms for Silego register change taking effect */
+		usleep_range(1000, 3000);
+
+		rc = regulator_set_voltage(ctrl->silego.vdd,
+			SLIEGO_VDD_VOlTAGE_MAX, SLIEGO_VDD_VOlTAGE_MAX);
+		if (rc < 0) {
+			dev_err(ctrl->soc_info.dev,
+				"set silego vdd voltage failed: %d", rc);
+			return rc;
+		}
+		dev_info(ctrl->soc_info.dev, "updated ldo6 to 3.2V");
+	}
 
 	rc = silego_verify_settings(ctrl);
 	if (rc < 0) {
@@ -1108,6 +1093,16 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 			ctrl->is_cci_init = false;
 	}
 
+	if (ctrl->silego.is_cci_init) {
+		is_error = camera_io_release(&(ctrl->silego.io_master_info));
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(ctrl->soc_info.dev,
+				"silego cci_release failed: rc: %d", rc);
+		} else
+			ctrl->silego.is_cci_init = false;
+	}
+
 	if (ctrl->hw_version < BUILD_DVT) {
 		if (ctrl->cap_sense.is_cci_init) {
 			is_error = camera_io_release(
@@ -1135,6 +1130,14 @@ static int lm36011_power_down(struct led_laser_ctrl_t *ctrl)
 	}
 
 	if (ctrl->silego.is_power_up) {
+		is_error = regulator_set_voltage(ctrl->silego.vdd, 0,
+			PMIC_BUCK2_VOlTAGE_MAX);
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(ctrl->soc_info.dev,
+				"silego set voltage failed: rc: %d", rc);
+		}
+
 		is_error = regulator_disable(ctrl->silego.vdd);
 		if (is_error < 0) {
 			rc = is_error;
@@ -1753,6 +1756,15 @@ static int32_t lm36011_update_i2c_info(struct device *dev)
 	ctrl->io_master_info.cci_client->retries = 3;
 	ctrl->io_master_info.cci_client->id_map = 0;
 	ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
+
+	/* Fill up Silego io info */
+	ctrl->silego.io_master_info.cci_client->cci_device = value;
+	ctrl->silego.io_master_info.cci_client->retries = 3;
+	ctrl->silego.io_master_info.cci_client->id_map = 0;
+	ctrl->silego.io_master_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
+	ctrl->silego.io_master_info.cci_client->sid = 0x08;
+	ctrl->silego.io_master_info.cci_client->cci_i2c_master = 0;
+	ctrl->silego.io_master_info.master_type = CCI_MASTER;
 
 	if (ctrl->hw_version < BUILD_DVT) {
 		/* Fill up cap sense io info */
@@ -2513,6 +2525,7 @@ static int32_t lm36011_driver_platform_probe(
 	ctrl->silego.is_csense_halt = false;
 	ctrl->silego.fault_flag = 0;
 	ctrl->silego.vcsel_fault_count = 0;
+	ctrl->silego.is_cci_init = false;
 	ctrl->silego.self_test_result = false;
 	ctrl->cap_sense.is_validated = false;
 	ctrl->cap_sense.sample_count = 0;
@@ -2554,6 +2567,13 @@ static int32_t lm36011_driver_platform_probe(
 		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
 	if (!(ctrl->th_sensor.io_master_info.cci_client)) {
 		dev_err(&pdev->dev, "no memory for th sensor cci client");
+		return -ENOMEM;
+	}
+
+	ctrl->silego.io_master_info.cci_client = devm_kzalloc(&pdev->dev,
+		sizeof(struct cam_sensor_cci_client), GFP_KERNEL);
+	if (!(ctrl->silego.io_master_info.cci_client)) {
+		dev_err(&pdev->dev, "no memory for silego cci client");
 		return -ENOMEM;
 	}
 
