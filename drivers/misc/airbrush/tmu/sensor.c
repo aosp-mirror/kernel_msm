@@ -205,7 +205,6 @@ static int ab_tmu_sensor_op_get_trip_temp(void *data, int trip, int *temp)
 	struct ab_tmu_hw *hw = sensor->hw;
 	bool pcie_link_ready;
 	u32 thd_rise;
-	int ret;
 
 	if (trip < 0 || trip >= AB_TMU_SENSOR_TRIP_NUM)
 		return -EINVAL;
@@ -218,13 +217,20 @@ static int ab_tmu_sensor_op_get_trip_temp(void *data, int trip, int *temp)
 		thd_rise &= AB_TMU_TEMP_MASK;
 		*temp = ab_tmu_trim_raw_to_cel(&sensor->trim, thd_rise) *
 				MCELSIUS;
-		ret = 0;
 	} else {
-		ret = -ENODEV;
+		/*
+		 * Thermal governor would get trip point and ignore the
+		 * error code even TMU is not ready. Return a highest
+		 * invalid Celsius in such case to prevent trigger any
+		 * trip point. The value named 'LOW' since it is a high
+		 * value indicating invalid for *low* temperature
+		 * tracking zone.
+		 */
+		*temp = THERMAL_TEMP_INVALID_LOW;
 	}
 	ab_tmu_hw_pcie_link_unlock(hw);
 
-	return ret;
+	return 0;
 }
 
 /*
