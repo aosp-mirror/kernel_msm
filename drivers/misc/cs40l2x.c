@@ -754,8 +754,9 @@ err_mutex:
 static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 			unsigned int hiber_cmd)
 {
-	int ret, i;
+	struct regmap *regmap = cs40l2x->regmap;
 	unsigned int val;
+	int ret, i;
 
 	switch (hiber_cmd) {
 	case CS40L2X_POWERCONTROL_NONE:
@@ -769,7 +770,7 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 		 * control port is unavailable immediately after
 		 * this write, so don't poll for acknowledgment
 		 */
-		return regmap_write(cs40l2x->regmap,
+		return regmap_write(regmap,
 				CS40L2X_MBOX_POWERCONTROL, hiber_cmd);
 
 	case CS40L2X_POWERCONTROL_WAKEUP:
@@ -778,21 +779,36 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 			 * the first several transactions are expected to be
 			 * NAK'd, so retry multiple times in rapid succession
 			 */
-			ret = regmap_write(cs40l2x->regmap,
-					CS40L2X_MBOX_POWERCONTROL,
-					hiber_cmd);
-			if (!ret)
+			ret = regmap_write(regmap,
+					CS40L2X_MBOX_POWERCONTROL, hiber_cmd);
+			if (ret) {
+				usleep_range(1000, 1100);
+				continue;
+			}
+
+			usleep_range(5000, 5100);
+
+			ret = regmap_read(regmap, CS40L2X_XM_FW_ID, &val);
+			if (ret)
+				return ret;
+
+			if (val == cs40l2x->fw_desc->id)
 				break;
 
-			usleep_range(1000, 1100);
+			/*
+			 * this write may force the device into hibernation
+			 * before the ACK is returned, so ignore the return
+			 * value
+			 */
+			regmap_write(regmap, CS40L2X_PWRMGT_CTL,
+					(1 << CS40L2X_MEM_RDY_SHIFT) |
+					(1 << CS40L2X_TRIG_HIBER_SHIFT));
 		}
 		if (i == CS40L2X_WAKEUP_RETRIES)
 			return -EIO;
 
 		for (i = 0; i < CS40L2X_WAKEUP_RETRIES; i++) {
-			usleep_range(5000, 5100);
-
-			ret = regmap_read(cs40l2x->regmap,
+			ret = regmap_read(regmap,
 					cs40l2x_dsp_reg(cs40l2x, "POWERSTATE",
 						CS40L2X_XM_UNPACKED_TYPE,
 						cs40l2x->fw_desc->id),
@@ -800,8 +816,17 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 			if (ret)
 				return ret;
 
-			if (val != CS40L2X_POWERSTATE_HIBERNATE)
+			switch (val) {
+			case CS40L2X_POWERSTATE_ACTIVE:
+			case CS40L2X_POWERSTATE_STANDBY:
 				return 0;
+			case CS40L2X_POWERSTATE_HIBERNATE:
+				break;
+			default:
+				return -EINVAL;
+			}
+
+			usleep_range(5000, 5100);
 		}
 		return -ETIME;
 
