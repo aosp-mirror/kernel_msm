@@ -3508,7 +3508,8 @@ static ssize_t cs40l2x_hw_reset_store(struct device *dev,
 			const char *buf, size_t count)
 {
 	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
-	int ret;
+	struct i2c_client *i2c_client = to_i2c_client(cs40l2x->dev);
+	int ret, state;
 	unsigned int val, fw_id_restore;
 
 	ret = kstrtou32(buf, 10, &val);
@@ -3518,9 +3519,25 @@ static ssize_t cs40l2x_hw_reset_store(struct device *dev,
 	if (cs40l2x->revid < CS40L2X_REVID_B1)
 		return -EPERM;
 
+	state = gpiod_get_value_cansleep(cs40l2x->reset_gpio);
+	if (state < 0)
+		return state;
+
+	/*
+	 * resetting the device prompts it to briefly assert the /ALERT pin,
+	 * so disable the interrupt line until the device has been restored
+	 */
+	disable_irq(i2c_client->irq);
+
 	mutex_lock(&cs40l2x->lock);
 
-	if (val) {
+	if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO
+			|| cs40l2x->vibe_state == CS40L2X_VIBE_STATE_RUNNING) {
+		ret = -EPERM;
+		goto err_mutex;
+	}
+
+	if (val && !state) {
 		gpiod_set_value_cansleep(cs40l2x->reset_gpio, 1);
 		usleep_range(1000, 1100);
 
@@ -3533,7 +3550,7 @@ static ssize_t cs40l2x_hw_reset_store(struct device *dev,
 			goto err_mutex;
 
 		cs40l2x->dsp_cache_depth = 0;
-	} else {
+	} else if (!val && state) {
 		gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
 		usleep_range(2000, 2100);
 	}
@@ -3542,6 +3559,8 @@ static ssize_t cs40l2x_hw_reset_store(struct device *dev,
 
 err_mutex:
 	mutex_unlock(&cs40l2x->lock);
+
+	enable_irq(i2c_client->irq);
 
 	return ret;
 }
