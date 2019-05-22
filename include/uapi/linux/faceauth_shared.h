@@ -76,6 +76,7 @@
 #define ERROR_MAX_THRESHOLD_FACES -75
 /* TODO (masterwilliams) b/126613551 */
 #define ERROR_INSUFFICIENT_ALLOCATOR_MEMORY -76
+#define ERROR_IPU_TIMEOUT -77
 
 #define ERROR_FW_DRIVER_SYNC_ERROR -84
 
@@ -111,12 +112,16 @@ typedef enum _workload_status {
 	WORKLOAD_STATUS_REJECT_TILT_ANGLE,
 	/* Reject Face Check when the face pan angle is too extreme */
 	WORKLOAD_STATUS_REJECT_PAN_ANGLE,
+	/* Reject depth when the face is too close */
+	WORKLOAD_STATUS_REJECT_TOO_CLOSE,
+	/* Reject depth when the face is too far */
+	WORKLOAD_STATUS_REJECT_TOO_FAR,
 
 	/* hard errors */
 	/* Reject Skin TODO (masterwilliams) b/126249618 - deprecate value */
 	WORKLOAD_STATUS_REJECT_SKIN,
-	/* Reject Depth Remap when unable to find 5 percentile */
-	WORKLOAD_STATUS_REJECT_DEPTH_REMAP,
+	/* Reject an invalid depth thumbnail (bad calibration or a smudge) */
+	WORKLOAD_STATUS_REJECT_INVALID_DEPTH,
 	WORKLOAD_STATUS_HARD_REJECT,
 
 	/* fatal error */
@@ -151,6 +156,7 @@ typedef enum _faceauth_ack_messages {
 	STATUS_NONE = 0,
 	STATUS_READY,
 	STATUS_BUSY,
+	STATUS_CLEAN,
 	STATUS_INTMAX =
 		0xffffffff /* used to extend enum size to 4 bytes */
 } FaceAckMessages;

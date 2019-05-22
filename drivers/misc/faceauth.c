@@ -44,7 +44,7 @@
 
 /* Timeout in ms */
 #define FACEAUTH_TIMEOUT_MS 3000
-#define M0_ENROLL_POLLING_PAUSE_MS 60
+#define M0_ENROLL_POLLING_PAUSE_MS 50
 #define M0_AUTH_POLLING_PAUSE_MS 80
 /* Polling interval in us */
 #define M0_POLLING_INTERVAL_US 6000
