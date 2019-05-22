@@ -1377,8 +1377,15 @@ static int __ipu_iommu_pgtable_unmap(struct ipu_iommu_page_table *pg_table,
 
 			__ipu_iommu_free_pgtable(
 				pg_table, lvl + 1, shadow_nptep, entries);
-		} else
-			entries = max_entries;
+		} else {
+			for (entries = 1; entries < max_entries; ++entries) {
+				pte = READ_ONCE(
+					*(shadow_ptep->page_table_entry +
+					diff + entries));
+				if (!iopte_leaf(pte, lvl))
+					break;
+			}
+		}
 
 		ab_addr = ab_dram_get_dma_buf_paddr(
 					shadow_ptep->ab_dram_dma_buf);
