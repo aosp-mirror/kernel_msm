@@ -280,9 +280,9 @@ static struct chip_to_block_map chip_state_map[] = {
 	/* Suspend */
 	CHIP_TO_BLOCK_MAP_INIT(100,  0,   0,  100,  0,   0,   0),
 	/* Deep Sleep */
-	CHIP_TO_BLOCK_MAP_INIT(200, 100, 100, 101, 100, 304, 300),
+	CHIP_TO_BLOCK_MAP_INIT(200, 100, 100, 101, 100, 300, 300),
 	/* Sleep */
-	CHIP_TO_BLOCK_MAP_INIT(300, 200, 200, 101, 100, 304, 300),
+	CHIP_TO_BLOCK_MAP_INIT(300, 200, 200, 101, 100, 300, 300),
 
 	/* Active */
 	CHIP_TO_BLOCK_MAP_INIT(400, 300, 300, 305, 305, 300, 302),
