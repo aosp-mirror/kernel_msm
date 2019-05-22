@@ -4510,26 +4510,22 @@ static int cs40l2x_peak_capture(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
-static int cs40l2x_check_recovery(struct cs40l2x_private *cs40l2x)
+static int cs40l2x_reset_recovery(struct cs40l2x_private *cs40l2x)
 {
-	struct regmap *regmap = cs40l2x->regmap;
-	struct device *dev = cs40l2x->dev;
-	unsigned int val, fw_id_restore;
+	bool wl_pending = (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_AUDIO)
+			|| (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_RUNNING);
+	unsigned int fw_id_restore;
 	int ret, i;
-
-	ret = regmap_read(regmap, CS40L2X_DSP1_RX2_SRC, &val);
-	if (ret) {
-		dev_err(dev, "Failed to read known register\n");
-		return ret;
-	}
-
-	if (val == CS40L2X_DSP1_RXn_SRC_VMON)
-		return 0;
-
-	dev_err(dev, "Failed to verify known register\n");
 
 	if (cs40l2x->revid < CS40L2X_REVID_B1)
 		return -EPERM;
+
+	cs40l2x->asp_enable = CS40L2X_ASP_DISABLED;
+
+	cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
+	cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+
+	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
 
 	gpiod_set_value_cansleep(cs40l2x->reset_gpio, 0);
 	usleep_range(2000, 2100);
@@ -4545,18 +4541,60 @@ static int cs40l2x_check_recovery(struct cs40l2x_private *cs40l2x)
 		return ret;
 
 	for (i = 0; i < cs40l2x->dsp_cache_depth; i++) {
-		ret = regmap_write(regmap,
+		ret = regmap_write(cs40l2x->regmap,
 				cs40l2x->dsp_cache[i].reg,
 				cs40l2x->dsp_cache[i].val);
 		if (ret) {
-			dev_err(dev, "Failed to restore DSP cache\n");
+			dev_err(cs40l2x->dev, "Failed to restore DSP cache\n");
 			return ret;
 		}
 	}
 
-	dev_info(dev, "Successfully restored device state\n");
+	if (cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE) {
+		ret = cs40l2x_cp_dig_scale_set(cs40l2x,
+				cs40l2x->pbq_cp_dig_scale);
+		if (ret)
+			return ret;
+
+		cs40l2x->pbq_state = CS40L2X_PBQ_STATE_IDLE;
+	}
+
+	if (wl_pending)
+		cs40l2x_wl_relax(cs40l2x);
+
+	dev_info(cs40l2x->dev, "Successfully restored device state\n");
 
 	return 0;
+}
+
+static int cs40l2x_check_recovery(struct cs40l2x_private *cs40l2x)
+{
+	struct i2c_client *i2c_client = to_i2c_client(cs40l2x->dev);
+	unsigned int val;
+	int ret;
+
+	ret = regmap_read(cs40l2x->regmap, CS40L2X_DSP1_RX2_SRC, &val);
+	if (ret) {
+		dev_err(cs40l2x->dev, "Failed to read known register\n");
+		return ret;
+	}
+
+	if (val == CS40L2X_DSP1_RXn_SRC_VMON)
+		return 0;
+
+	dev_err(cs40l2x->dev, "Failed to verify known register\n");
+
+	/*
+	 * resetting the device prompts it to briefly assert the /ALERT pin,
+	 * so disable the interrupt line until the device has been restored
+	 */
+	disable_irq_nosync(i2c_client->irq);
+
+	ret = cs40l2x_reset_recovery(cs40l2x);
+
+	enable_irq(i2c_client->irq);
+
+	return ret;
 }
 
 static void cs40l2x_vibe_start_worker(struct work_struct *work)
@@ -7935,6 +7973,23 @@ static irqreturn_t cs40l2x_irq(int irq, void *data)
 	irqreturn_t ret_irq = IRQ_NONE;
 
 	mutex_lock(&cs40l2x->lock);
+
+	ret = regmap_read(regmap, CS40L2X_DSP1_SCRATCH1, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read DSP scratch contents\n");
+		goto err_mutex;
+	}
+
+	if (val) {
+		dev_err(dev, "Fatal runtime error with DSP scratch = %u\n",
+				val);
+
+		ret = cs40l2x_reset_recovery(cs40l2x);
+		if (!ret)
+			ret_irq = IRQ_HANDLED;
+
+		goto err_mutex;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(cs40l2x_event_regs); i++) {
 		/* skip disabled event notifiers */
