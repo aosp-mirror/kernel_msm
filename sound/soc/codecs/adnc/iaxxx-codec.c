@@ -4071,6 +4071,38 @@ static int iaxxx_put_start_pdm(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int iaxxx_pdm_port_to_clk_port_and_src(
+					struct iaxxx_codec_priv *iaxxx,
+					int port,
+					int *clk_port,
+					int *clk_src)
+{
+	*clk_port = iaxxx_pdm_port_clk_src(iaxxx, port);
+	switch (*clk_port) {
+	case PDM_PORTC:
+		*clk_src = IAXXX_PDM_DMIC_PORT_CLK_SRC_PORTC;
+		break;
+	case PDM_PORTB:
+		*clk_src = IAXXX_PDM_DMIC_PORT_CLK_SRC_PORTB;
+		break;
+	case PDM_PORTD:
+		*clk_src = IAXXX_PDM_CDC_ADC_CLK_SRC_PORTD;
+		break;
+	case PDM_CDC:
+		*clk_src = IAXXX_PDM_CDC_ADC_CLK_SRC_CDC_MCLK;
+		break;
+	default:
+		if (*clk_port < IAXXX_MAX_PDM_PORTS) {
+			pr_info("may be slave pdm %d", *clk_port);
+		} else {
+			pr_err("wrong port is requested %d", *clk_port);
+			return -EINVAL;
+		}
+		break;
+	}
+	return 0;
+}
+
 static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol, int port)
 {
@@ -4079,6 +4111,8 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 	u32 status = 0;
 	u32 pad_ctrl_clk_reg, pad_ctrl_clk_val;
 	int ret = 0;
+	int clk_port = 0;
+	int clk_src = 0;
 
 	dev_dbg(codec->dev, "enter %s()\n", __func__);
 	if (iaxxx->port_start_en[port] == ucontrol->value.integer.value[0])
@@ -4122,8 +4156,14 @@ static int iaxxx_put_port_clk_stop(struct snd_kcontrol *kcontrol,
 	}
 	iaxxx->port_start_en[port] = 0;
 
-	pad_ctrl_clk_reg = iaxxx_pdm_pad_ctrl_clk[port][0];
-	pad_ctrl_clk_val = iaxxx_pdm_pad_ctrl_clk[port][2];
+	ret = iaxxx_pdm_port_to_clk_port_and_src(iaxxx, port,
+						&clk_port, &clk_src);
+	if (ret) {
+		dev_err(codec->dev, "Invalid port number");
+		return -EINVAL;
+	}
+	pad_ctrl_clk_reg = iaxxx_pdm_pad_ctrl_clk[clk_src][0];
+	pad_ctrl_clk_val = iaxxx_pdm_pad_ctrl_clk[clk_src][2];
 	snd_soc_write(codec, pad_ctrl_clk_reg, pad_ctrl_clk_val);
 
 	return ret;
@@ -4345,30 +4385,13 @@ static int iaxxx_pdm_mic_setup(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	clk_port = iaxxx_pdm_port_clk_src(iaxxx, port);
-	switch (clk_port) {
-	case PDM_PORTC:
-		clk_src = IAXXX_PDM_DMIC_PORT_CLK_SRC_PORTC;
-		break;
-	case PDM_PORTB:
-		clk_src = IAXXX_PDM_DMIC_PORT_CLK_SRC_PORTB;
-		break;
-	case PDM_PORTD:
-		clk_src = IAXXX_PDM_CDC_ADC_CLK_SRC_PORTD;
-		break;
-	case PDM_CDC:
-		clk_src = IAXXX_PDM_CDC_ADC_CLK_SRC_CDC_MCLK;
-		break;
-	default:
-		if (clk_port < IAXXX_MAX_PDM_PORTS) {
-			dev_info(dev, "may be slave pdm %d",
-						clk_port);
-		} else {
-			dev_err(dev, "wrong port is requested %d",
-						clk_port);
-			return -EINVAL;
-		}
+	ret = iaxxx_pdm_port_to_clk_port_and_src(iaxxx, port,
+						&clk_port, &clk_src);
+	if (ret) {
+		dev_err(dev, "Invalid port number");
+		return -EINVAL;
 	}
+
 	pdm_mstr = iaxxx->ip_pdm_clk_src[clk_port];
 
 	dev_dbg(dev, "clk_port:%d clk_src:%d pdm_mstr=%d\n", clk_port,
