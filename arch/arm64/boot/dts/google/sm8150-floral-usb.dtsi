@@ -40,6 +40,12 @@
 			    PDO_FIXED(9000, 3000, 0)
 			    PDO_PPS_APDO(5000, 6000, 3000)>;
 		op-sink-microwatt = <7600000>;
+		sink-vdos = <VDO_IDH(IDH_USB_HOST | IDH_USB_DEVICE,
+				     IDH_PTYPE_PERIPH,
+				     IDH_PTYPE_HOST,
+				     0x18D1)
+			     VDO_CERT(0x0)
+			     VDO_PRODUCT(0x4EE1, 0x0)>;
 	};
 };
 
