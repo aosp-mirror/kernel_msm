@@ -43,4 +43,5 @@
 	qcom,panel-supply-entries = <&dsi_pm660_panel_pwr_supply>;
 	qcom,mdss-dsi-power-off-disable;
 	qcom,mdss-dsi-tear-disable;
+	qcom,esd-check-model = "auo_u128blx";
 };

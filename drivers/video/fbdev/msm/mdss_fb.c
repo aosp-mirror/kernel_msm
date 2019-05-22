@@ -2037,6 +2037,12 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	int cur_power_state, req_power_state = MDSS_PANEL_POWER_OFF;
 	char trace_buffer[32];
 
+	struct mdss_panel_info *pinfo = mfd->panel_info;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	ctrl = container_of(dev_get_platdata(&mfd->pdev->dev),
+				struct mdss_dsi_ctrl_pdata, panel_data);
+
 	if (!mfd || !op_enable)
 		return -EPERM;
 
@@ -2075,6 +2081,13 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
 		ret = mdss_fb_blank_unblank(mfd);
+
+		if (!pinfo->cont_splash_enabled) {
+			if (ctrl->check_model == ESD_AUO_U128BLX)
+				cancel_delayed_work_sync(&ctrl->check_esd_work);
+
+				schedule_delayed_work(&ctrl->check_esd_work, 0);
+		}
 		break;
 	case BLANK_FLAG_ULP:
 		req_power_state = MDSS_PANEL_POWER_LP2;

@@ -379,7 +379,11 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	ret = mdss_dsi_panel_reset(pdata, 0);
+	if (ctrl_pdata->check_model == ESD_AUO_U128BLX)
+		mdss_dsi_raydium_panel_reset(pdata, 0);
+	else
+		ret = mdss_dsi_panel_reset(pdata, 0);
+
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
 		ret = 0;
@@ -449,7 +453,10 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
 			pr_debug("reset enable: pinctrl not enabled\n");
 
-		ret = mdss_dsi_panel_reset(pdata, 1);
+		if (ctrl_pdata->check_model == ESD_AUO_U128BLX)
+			mdss_dsi_raydium_panel_reset(pdata, 1);
+		else
+			ret = mdss_dsi_panel_reset(pdata, 1);
 		if (ret)
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
@@ -548,9 +555,8 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 
 	switch (power_state) {
 	case MDSS_PANEL_POWER_OFF:
-		if (!pinfo->pwr_off_disable) {
+		if ((!pinfo->pwr_off_disable) || (pinfo->panel_dead))
 			ret = mdss_dsi_panel_power_off(pdata);
-		}
 
 		mdss_dsi_buck_boost_enable(pdata, 0);
 		break;
@@ -562,7 +568,7 @@ int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata,
 			ret = mdss_dsi_panel_power_lp(pdata, false);
 			goto end;
 		} else {
-			if (!pinfo->pwr_off_disable) {
+			if ((!pinfo->pwr_off_disable) || (pinfo->panel_dead)) {
 				ret = mdss_dsi_panel_power_on(pdata);
 			} else {
 				if (!g_init_once) {
@@ -2878,6 +2884,8 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 			queue_delayed_work(ctrl_pdata->workq,
 				&ctrl_pdata->dba_work, HZ);
 		}
+
+		ctrl_pdata->mfd = (struct msm_fb_data_type *)fbi->par;
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
@@ -3464,6 +3472,9 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	}
 
 	INIT_DELAYED_WORK(&ctrl_pdata->dba_work, mdss_dsi_dba_work);
+
+	INIT_DELAYED_WORK(&ctrl_pdata->check_esd_work,
+		__mdss_dsi_check_esd_work);
 
 	pr_info("%s: Dsi Ctrl->%d initialized, DSI rev:0x%x, PHY rev:0x%x\n",
 		__func__, index, ctrl_pdata->shared_data->hw_rev,
@@ -4249,6 +4260,18 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
+
+	ctrl_pdata->tp_rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-tsresout-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->tp_rst_gpio)) {
+		pr_err("%s:%d, TP reset gpio not specified\n",
+						__func__, __LINE__);
+	} else {
+		if (gpio_direction_output(ctrl_pdata->tp_rst_gpio, 1)) {
+			pr_err("%s: unable to set dir for TP reset gpio\n",
+					__func__);
+		}
+	}
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 

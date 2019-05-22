@@ -25,6 +25,11 @@
 #include <linux/iopoll.h>
 #include <linux/kthread.h>
 
+enum {
+	ESD_NA = 0,
+	ESD_AUO_U128BLX
+};
+
 struct mdss_dsi_ctrl_pdata;
 struct mdss_panel_data;
 
@@ -48,6 +53,14 @@ extern void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl);
 extern int mdss_dsi_buck_boost_enable(struct mdss_panel_data*, int);
 
 extern int dsi_auo_set_boost_mode(struct mdss_dsi_ctrl_pdata*, int);
+
+extern void mdss_dsi_parse_esd_check_model(struct device_node *np,
+		struct mdss_dsi_ctrl_pdata *ctrl);
+
+extern void __mdss_dsi_check_esd_work(struct work_struct *work);
+
+extern void mdss_dsi_raydium_panel_reset(struct mdss_panel_data *pdata,
+		int enable);
 
 #endif /*AUO_DSI_H */
 

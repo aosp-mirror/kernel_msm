@@ -433,6 +433,7 @@ struct mdss_dsi_ctrl_pdata {
 	int irq_cnt;
 	int disp_te_gpio;
 	int rst_gpio;
+	int tp_rst_gpio;
 	int disp_en_gpio;
 	int disp_avdden_gpio;
 	int bklt_en_gpio;
@@ -575,7 +576,13 @@ struct mdss_dsi_ctrl_pdata {
 	/* boost mode */
 	char read_back_param[1];
 	/*for Module/Driver ID*/
-	char id3_code[1]; 
+	char id3_code[1];
+
+	/* ESD */
+	int check_model;
+	char DPM[1]; /* Display Power Mode */
+	struct delayed_work check_esd_work;
+	struct msm_fb_data_type *mfd;
 };
 
 struct dsi_status_data {

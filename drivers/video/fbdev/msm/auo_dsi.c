@@ -55,6 +55,8 @@
 #define AUO_PARSE_DT_SUCCESS 0
 #define AUO_PANEL_PRE_INIT 1
 
+#define PANEL_RESET_DELAY_TIME 10
+
 /* Protects access For both FB device node and mdss_dsi driver */
 static DEFINE_MUTEX(boost_mode_lock);
 
@@ -175,7 +177,7 @@ int mdss_dsi_raydium_parse_dt(struct device_node *np,
 }
 
 int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl,
-	char page, char addr, void (*fxn)(int), char *rbuf, int len)
+		char page, char addr, void (*fxn)(int), char *rbuf, int len)
 {
 	static unsigned char _dcs_cmd[2] = {0x00, 0x00};
 	static struct dsi_cmd_desc _dcs_read_cmd = {
@@ -193,6 +195,9 @@ int mdss_dsi_raydium_cmd_read(struct mdss_dsi_ctrl_pdata *ctrl,
 
 	//switch to the correct page prior to reading
 	mdss_dsi_switch_page(ctrl, page);
+
+	//clear the returned buffer
+	memset(rbuf, 0, len);
 
 	_dcs_cmd[0] = addr;
 	memset(&cmdreq, 0, sizeof(cmdreq));
@@ -292,6 +297,117 @@ int mdss_dsi_buck_boost_enable (struct mdss_panel_data *pdata, int enable)
 
 	}
 	return ret;
+}
+
+void mdss_dsi_parse_esd_check_model(struct device_node *np,
+		struct mdss_dsi_ctrl_pdata *ctrl)
+{
+	int rc;
+	const char *string;
+
+	ctrl->check_model = ESD_NA;
+
+	rc = of_property_read_string(np,
+			"qcom,esd-check-model", &string);
+	if (!rc) {
+		if (!strcmp(string, "auo_u128blx"))
+			ctrl->check_model = ESD_AUO_U128BLX;
+		else
+			pr_err("no valid esd-check-model string\n");
+	}
+}
+
+void __mdss_dsi_check_esd_work(struct work_struct *work)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct delayed_work *dw = to_delayed_work(work);
+
+	pr_info("%s: __mdss_dsi_check_esd_work+\n", __func__);
+
+	ctrl_pdata = container_of(dw, struct mdss_dsi_ctrl_pdata,
+		check_esd_work);
+	if (!ctrl_pdata) {
+		pr_err("%s: invalid ctrl data\n", __func__);
+		return;
+	}
+
+	if (!mdss_fb_is_power_on_interactive(ctrl_pdata->mfd)) {
+		pr_err("%s: not in normal mode, skip esd check!\n", __func__);
+		return;
+	}
+
+	mdss_dsi_raydium_cmd_read(ctrl_pdata, 0x00, 0x0A, NULL,
+				ctrl_pdata->DPM, 1);
+	pr_info("%s: DPM[0] = 0x%02X\n", __func__, ctrl_pdata->DPM[0]);
+
+	switch (ctrl_pdata->DPM[0]) {
+	case 0xB4:
+		break;
+	default:
+		pr_err("%s: ESD failure: default case(0x%02X)\n", __func__,
+				ctrl_pdata->DPM[0]);
+
+		mdss_fb_report_panel_dead(ctrl_pdata->mfd);
+		break;
+	}
+}
+
+void mdss_dsi_raydium_panel_reset(struct mdss_panel_data *pdata,
+		int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct mdss_panel_info *pinfo = NULL;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	pinfo = &(ctrl_pdata->panel_data.panel_info);
+
+	pr_info("%s: enable = %d\n", __func__, enable);
+
+	if (enable) {
+		if (!pinfo->cont_splash_enabled) {
+			//RESX pin low
+			gpio_set_value((ctrl_pdata->rst_gpio), 0);
+
+			//TP_EXT pin low
+			gpio_set_value((ctrl_pdata->tp_rst_gpio), 0);
+
+			//VCI_EN enable
+			gpio_set_value((ctrl_pdata->disp_avdden_gpio), 1);
+			usleep_range(PANEL_RESET_DELAY_TIME * 1000,
+				(PANEL_RESET_DELAY_TIME * 1000) + 10);
+
+			//RESX pin high
+			gpio_set_value((ctrl_pdata->rst_gpio), 1);
+
+			//TP_EXT pin high
+			gpio_set_value((ctrl_pdata->tp_rst_gpio), 1);
+			usleep_range(PANEL_RESET_DELAY_TIME * 1000,
+				(PANEL_RESET_DELAY_TIME * 1000) + 10);
+
+			pr_info("%s: rst(%d), tp(%d), avdden(%d)+\n", __func__,
+				gpio_get_value(ctrl_pdata->rst_gpio),
+				gpio_get_value(ctrl_pdata->tp_rst_gpio),
+				gpio_get_value(ctrl_pdata->disp_avdden_gpio)
+			);
+		}
+	} else {
+		gpio_set_value((ctrl_pdata->rst_gpio), 0);
+		gpio_set_value((ctrl_pdata->tp_rst_gpio), 0);
+		gpio_set_value((ctrl_pdata->disp_avdden_gpio), 0);
+
+		pr_info("%s: rst(%d), tp(%d), avdden(%d)-\n", __func__,
+			gpio_get_value(ctrl_pdata->rst_gpio),
+			gpio_get_value(ctrl_pdata->tp_rst_gpio),
+			gpio_get_value(ctrl_pdata->disp_avdden_gpio)
+		);
+	}
 }
 
 #endif /*AUO_DSI_C */

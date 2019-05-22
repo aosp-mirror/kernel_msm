@@ -2193,6 +2193,8 @@ static int mdss_dsi_parse_panel_features(struct device_node *np,
 	pinfo->buck_boost_disable = of_property_read_bool(np,
 		"qcom,mdss-dsi-buck-boost-disable");
 
+	mdss_dsi_parse_esd_check_model(np, ctrl);
+
 	return 0;
 }
 
