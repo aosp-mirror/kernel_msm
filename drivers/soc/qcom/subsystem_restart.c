@@ -999,19 +999,31 @@ static void subsystem_restart_wq_func(struct work_struct *work)
 	pr_info("[%s:%d]: SUBSYS_AFTER_SHUTDOWN notification end %s\n",
 			current->comm, current->pid, desc->name);
 
-	pr_info("[%s:%d]: SUBSYS_RAMDUMP_NOTIFICATION notification start %s\n",
+	if (strnstr(desc->last_crash_reason, "[disable_ramdump]",
+		strlen(desc->last_crash_reason)) &&
+		!strncmp(desc->name, "modem", sizeof("modem"))) {
+		pr_info("[%s:%d]: Skip subsystem_ramdump for modem restart with disable_ramdump\n",
+			current->comm, current->pid);
+
+		spin_lock_irqsave(&track->s_lock, flags);
+		track->p_state = SUBSYS_RESTARTING;
+		spin_unlock_irqrestore(&track->s_lock, flags);
+	} else {
+		pr_info("[%s:%d]: SUBSYS_RAMDUMP_NOTIFICATION notification start %s\n",
 			current->comm, current->pid, desc->name);
 
-	notify_each_subsys_device(list, count, SUBSYS_RAMDUMP_NOTIFICATION,
-									NULL);
-	pr_info("[%s:%d]: SUBSYS_RAMDUMP_NOTIFICATION notification end %s\n",
+		notify_each_subsys_device(list, count,
+			SUBSYS_RAMDUMP_NOTIFICATION, NULL);
+		pr_info("[%s:%d]: SUBSYS_RAMDUMP_NOTIFICATION notification end %s\n",
 			current->comm, current->pid, desc->name);
-	spin_lock_irqsave(&track->s_lock, flags);
-	track->p_state = SUBSYS_RESTARTING;
-	spin_unlock_irqrestore(&track->s_lock, flags);
 
-	/* Collect ram dumps for all subsystems in order here */
-	for_each_subsys_device(list, count, NULL, subsystem_ramdump);
+		spin_lock_irqsave(&track->s_lock, flags);
+		track->p_state = SUBSYS_RESTARTING;
+		spin_unlock_irqrestore(&track->s_lock, flags);
+
+		/* Collect ram dumps for all subsystems in order here */
+		for_each_subsys_device(list, count, NULL, subsystem_ramdump);
+	}
 
 	for_each_subsys_device(list, count, NULL, subsystem_free_memory);
 
