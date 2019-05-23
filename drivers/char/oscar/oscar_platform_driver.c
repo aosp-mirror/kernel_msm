@@ -478,7 +478,9 @@ oscar_abc_unmap_abdram(struct oscar_dev *oscar_dev,
 	struct gasket_dev *gasket_dev = oscar_dev->gasket_dev;
 	struct abc_buffer *abc_buffer;
 	struct oscar_abdram_map_ioctl ibuf;
-	size_t len;
+	struct scatterlist *sg;
+	size_t len = 0;
+	int i;
 
 	if (copy_from_user(&ibuf, argp, sizeof(ibuf)))
 		return -EFAULT;
@@ -492,7 +494,9 @@ oscar_abc_unmap_abdram(struct oscar_dev *oscar_dev,
 
 	mutex_lock(&abc_buffer->mapping_lock);
 	if (!WARN_ON(!abc_buffer->sg_table)) {
-		len = sg_dma_len(abc_buffer->sg_table->sgl);
+		for_each_sg(abc_buffer->sg_table->sgl, sg,
+			    abc_buffer->sg_table->nents, i)
+			len += sg_dma_len(sg);
 		gasket_page_table_unmap(
 			gasket_dev->page_table[ibuf.page_table_index],
 			ibuf.device_address, len / PAGE_SIZE);
