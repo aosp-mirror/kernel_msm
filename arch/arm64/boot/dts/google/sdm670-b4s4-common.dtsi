@@ -23,6 +23,7 @@
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/msm/power-on.h>
 
 #include "../qcom/sdm670-pmic-overlay.dtsi"
 #include "sdm670-b4s4-display.dtsi"
@@ -313,10 +314,6 @@
 	interrupt-names = "kpdpwr", "resin", "kpdpwr-bark",
 			"resin-bark", "kpdpwr-resin-bark";
 	qcom,pon_1 {
-		qcom,support-reset = <1>;
-		qcom,s1-timer = <10256>;
-		qcom,s2-timer = <2000>;
-		qcom,s2-type = <1>;
 		qcom,use-bark;
 	};
 	qcom,pon_2 {
@@ -327,7 +324,7 @@
 		qcom,support-reset = <1>;
 		qcom,s1-timer = <10256>;
 		qcom,s2-timer = <2000>;
-		qcom,s2-type = <8>;
+		qcom,s2-type = <PON_POWER_OFF_DVDD_HARD_RESET>;
 		qcom,pull-up = <1>;
 	};
 };
