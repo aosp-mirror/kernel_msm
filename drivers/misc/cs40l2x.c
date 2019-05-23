@@ -6545,6 +6545,62 @@ static int cs40l2x_wavetable_sync(struct cs40l2x_private *cs40l2x)
 	return 0;
 }
 
+static int cs40l2x_boost_short_test(struct cs40l2x_private *cs40l2x)
+{
+	struct regmap *regmap = cs40l2x->regmap;
+	struct device *dev = cs40l2x->dev;
+	unsigned int val;
+	int ret;
+
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
+			CS40L2X_BST_CTL_SEL_MASK,
+			CS40L2X_BST_CTL_SEL_CP_VAL
+				<< CS40L2X_BST_CTL_SEL_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to change VBST target selection\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_PWR_CTRL1,
+			CS40L2X_GLOBAL_EN_MASK, 1 << CS40L2X_GLOBAL_EN_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to enable device\n");
+		return ret;
+	}
+
+	usleep_range(10000, 10100);
+
+	ret = regmap_read(regmap, CS40L2X_IRQ1_STATUS1, &val);
+	if (ret) {
+		dev_err(dev, "Failed to read boost converter error status\n");
+		return ret;
+	}
+
+	if (val & CS40L2X_BST_SHORT_ERR) {
+		dev_err(dev, "Encountered fatal boost converter short error\n");
+		return -EIO;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_PWR_CTRL1,
+			CS40L2X_GLOBAL_EN_MASK, 0 << CS40L2X_GLOBAL_EN_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to disable device\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS40L2X_BSTCVRT_VCTRL2,
+			CS40L2X_BST_CTL_SEL_MASK,
+			CS40L2X_BST_CTL_SEL_CLASSH
+				<< CS40L2X_BST_CTL_SEL_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to restore VBST target selection\n");
+		return ret;
+	}
+
+	return cs40l2x_wseq_replace(cs40l2x,
+			CS40L2X_TEST_LBST, CS40L2X_EXPL_MODE_DIS);
+}
+
 static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
 {
 	struct regmap *regmap = cs40l2x->regmap;
@@ -6748,7 +6804,7 @@ static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
 		return -EINVAL;
 	}
 
-	return 0;
+	return cs40l2x_boost_short_test(cs40l2x);
 }
 
 static int cs40l2x_asp_config(struct cs40l2x_private *cs40l2x)
@@ -7510,7 +7566,6 @@ static const struct reg_sequence cs40l2x_basic_mode_revert[] = {
 	{CS40L2X_PWR_CTRL2,		0x00003321},
 	{CS40L2X_LRCK_PAD_CONTROL,	0x00000007},
 	{CS40L2X_SDIN_PAD_CONTROL,	0x00000007},
-	{CS40L2X_GPIO_PAD_CONTROL,	0x00000000},
 	{CS40L2X_AMP_DIG_VOL_CTRL,	0x00008000},
 	{CS40L2X_IRQ2_MASK1,		0xFFFFFFFF},
 	{CS40L2X_IRQ2_MASK2,		0xFFFFFFFF},
@@ -7641,6 +7696,7 @@ static const struct reg_sequence cs40l2x_rev_b0_errata[] = {
 	{CS40L2X_PLL_MISC_CTRL,		0x03008E0E},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE1},
 	{CS40L2X_TEST_KEY_CTL,		CS40L2X_TEST_KEY_UNLOCK_CODE2},
+	{CS40L2X_TEST_LBST,		CS40L2X_EXPL_MODE_EN},
 	{CS40L2X_OTP_TRIM_12,		0x002F0065},
 	{CS40L2X_OTP_TRIM_13,		0x00002B4F},
 	{CS40L2X_SPKMON_RESYNC,		0x00000000},
