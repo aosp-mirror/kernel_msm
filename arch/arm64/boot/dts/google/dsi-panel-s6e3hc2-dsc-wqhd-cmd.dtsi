@@ -15,6 +15,7 @@
 		compatible = "google,dsi_binned_lp";
 
 		qcom,mdss-dsi-panel-name = "s6e3hc2 amoled 6.2 cmd mode panel";
+		qcom,mdss-dsi-panel-physical-type = "oled";
 		google,mdss-dsi-panel-vendor = "SAMSUNG";
 		google,mdss-dsi-panel-sn-location = <0xA1 6 7>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";

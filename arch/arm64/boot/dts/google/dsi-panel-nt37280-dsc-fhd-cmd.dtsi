@@ -15,6 +15,7 @@
 		compatible = "google,dsi_binned_lp";
 
 		qcom,mdss-dsi-panel-name = "nt37280 amoled 5.68 cmd mode panel";
+		qcom,mdss-dsi-panel-physical-type = "oled";
 		google,mdss-dsi-panel-vendor = "LG";
 		google,mdss-dsi-panel-sn-location = <0xA0 0 9>;
 		google,mdss-dsi-panel-vendor-extinfo-loc = <0xDA 0 1>,
