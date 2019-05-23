@@ -132,6 +132,11 @@ static int sm8150_masked_write(struct regmap *pmic_regmap,
 	return regmap_update_bits(pmic_regmap, addr, mask, val);
 }
 
+static int sm8150_rd8(struct regmap *pmic_regmap, int addr, u8 *val)
+{
+	return sm8150_read(pmic_regmap, addr, val, 1);
+}
+
 /* ------------------------------------------------------------------------- */
 
 static irqreturn_t sm8150_chg_state_change_irq_handler(int irq, void *data)
@@ -567,31 +572,60 @@ int sm8150_rerun_aicl(const struct bms_dev *bms)
 	return 0;
 }
 
-static int sm8150_get_batt_status(const struct bms_dev *bms)
+static int sm8150_get_chg_type(const struct bms_dev *bms)
 {
-	bool usb_online, dc_online;
+	u8 val;
+	int chg_type, rc;
+
+	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
+				&val, 1);
+	if (rc < 0)
+		return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
+
+	switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
+	case SM8150_TRICKLE_CHARGE:
+	case SM8150_PRE_CHARGE:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
+		break;
+	case SM8150_FULLON_CHARGE:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
+		break;
+	case SM8150_TAPER_CHARGE:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_TAPER;
+		break;
+	default:
+		chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
+		break;
+	}
+
+	return chg_type;
+}
+
+static int sm8150_get_chg_status(const struct bms_dev *bms,
+				 bool *dc_valid, bool *usb_valid)
+{
+	bool plugged, valid;
 	int rc, ret;
 	u8 stat;
 
-	rc = sm8150_read(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG,
-				&stat, 1);
+	rc = sm8150_rd8(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG, &stat);
 	if (rc < 0)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 
-	dc_online = (stat & USE_DCIN_BIT) &&
-			(stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+	valid = (stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+	plugged = (stat & USE_DCIN_BIT) || (stat & USE_USBIN_BIT);
 
-	usb_online = (stat & USE_USBIN_BIT) &&
-			(stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+	*dc_valid = valid && (stat & USE_DCIN_BIT);
+	*usb_valid = valid && (stat & USE_USBIN_BIT);
 
-	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
-				&stat, 1);
+	rc = sm8150_rd8(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
+			&stat);
 	if (rc < 0)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 
 	stat = stat & CHGR_BATTERY_CHARGER_STATUS_MASK;
 
-	if (!usb_online && !dc_online) {
+	if (!plugged) {
 		switch (stat) {
 		case SM8150_TERMINATE_CHARGE:
 		case SM8150_INHIBIT_CHARGE:
@@ -627,56 +661,32 @@ static int sm8150_get_batt_status(const struct bms_dev *bms)
 	if (ret != POWER_SUPPLY_STATUS_CHARGING)
 		return ret;
 
-	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_5_REG,
-				&stat, 1);
-	if (rc < 0)
-		return ret;
+	if (valid) {
+		rc = sm8150_rd8(bms->pmic_regmap,
+				CHGR_BATTERY_CHARGER_STATUS_5_REG,
+				&stat);
+		if (rc < 0)
+			return POWER_SUPPLY_STATUS_UNKNOWN;
 
-	stat &= ENABLE_TRICKLE_BIT | ENABLE_PRE_CHARGING_BIT |
+		stat &= ENABLE_TRICKLE_BIT | ENABLE_PRE_CHARGING_BIT |
 					ENABLE_FULLON_MODE_BIT;
-	if (!stat)
-		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
-
-	return ret;
-}
-
-static int sm8150_get_chg_type(const struct bms_dev *bms)
-{
-	u8 val;
-	int chg_type, rc;
-
-	rc = sm8150_read(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
-				&val, 1);
-	if (rc < 0)
-		return POWER_SUPPLY_CHARGE_TYPE_UNKNOWN;
-
-	switch (val & CHGR_BATTERY_CHARGER_STATUS_MASK) {
-	case SM8150_TRICKLE_CHARGE:
-	case SM8150_PRE_CHARGE:
-		chg_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE;
-		break;
-	case SM8150_FULLON_CHARGE:
-		chg_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
-		break;
-	case SM8150_TAPER_CHARGE:
-		chg_type = POWER_SUPPLY_CHARGE_TYPE_TAPER;
-		break;
-	default:
-		chg_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
-		break;
+		if (stat)
+			return POWER_SUPPLY_STATUS_CHARGING;
 	}
 
-	return chg_type;
+	return POWER_SUPPLY_STATUS_NOT_CHARGING;
 }
 
 static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 			  union gbms_charger_state *chg_state)
 {
-	u8 icl = -1;
 	int vchrg, rc;
+	bool usb_valid, dc_valid;
+	u8 icl = 0;
 
 	chg_state->v = 0;
-	chg_state->f.chg_status = sm8150_get_batt_status(bms);
+	chg_state->f.chg_status = sm8150_get_chg_status(bms, &dc_valid,
+							&usb_valid);
 	chg_state->f.chg_type = sm8150_get_chg_type(bms);
 	chg_state->f.flags = gbms_gen_chg_flags(chg_state->f.chg_status,
 						chg_state->f.chg_type);
@@ -689,18 +699,23 @@ static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 	if (rc == 0)
 		chg_state->f.vchrg = (vchrg / 1000);
 
-	/* todo input current limit */
-	rc = sm8150_read(bms->pmic_regmap, DCDC_AICL_ICL_STATUS_REG, &icl, 1);
-	if (rc == 0)
-		chg_state->f.icl = (icl * 50);
+	if (usb_valid) {
+		(void)sm8150_rd8(bms->pmic_regmap, DCDC_AICL_ICL_STATUS_REG,
+				 &icl);
+	} else if (dc_valid) {
+		(void)sm8150_rd8(bms->pmic_regmap, DCDC_CFG_REF_MAX_PSNS_REG,
+				 &icl);
+	}
+	chg_state->f.icl = (icl * 50);
 
-	pr_info("MSC_PCS chg_state=%lx [0x%x:%d:%d:%d:%d]\n",
+	pr_info("MSC_PCS chg_state=%lx [0x%x:%d:%d:%d:%d] chg=%c\n",
 		(unsigned long)chg_state->v,
 		chg_state->f.flags,
 		chg_state->f.chg_type,
 		chg_state->f.chg_status,
 		chg_state->f.vchrg,
-		chg_state->f.icl);
+		chg_state->f.icl,
+		usb_valid ? 'u' : dc_valid ? 'w' : ' ');
 
 	return 0;
 }
@@ -783,7 +798,6 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 		rc = sm8150_get_battery_temp(bms, &ivalue);
 		if (rc < 0)
 			break;
-		pr_info("TEMP : %d\n", ivalue);
 		pval->intval = ivalue;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
