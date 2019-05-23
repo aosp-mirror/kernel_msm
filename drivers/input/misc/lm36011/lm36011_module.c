@@ -1855,6 +1855,7 @@ static ssize_t led_laser_enable_store(struct device *dev,
 			return rc;
 		}
 		/* Prepare safety ic IRQ */
+		cam_req_mgr_update_safety_ic_status(NO_ERROR);
 		mutex_lock(&lm36011_mutex);
 		if (ctrl->type == safety_ic_owner) {
 			if (ctrl->hw_version >= BUILD_EVT1_0 &&
@@ -1876,7 +1877,6 @@ static ssize_t led_laser_enable_store(struct device *dev,
 					ctrl->cap_sense.proxavg[PHASE1] != 0)
 					sx9320_crack_detection(ctrl);
 			}
-			cam_req_mgr_update_safety_ic_status(NO_ERROR);
 			lm36011_enable_gpio_irq(dev);
 			dev_info(ctrl->soc_info.dev,
 				"enable safety ic funciton, safety_ic_owner %d",
