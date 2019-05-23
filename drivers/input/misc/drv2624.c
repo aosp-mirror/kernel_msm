@@ -222,16 +222,30 @@ static int drv2624_get_mode(struct drv2624_data *drv2624)
 	return drv2624_reg_read(drv2624, DRV2624_REG_MODE) & WORKMODE_MASK;
 }
 
-static void drv2624_stop(struct drv2624_data *drv2624)
+static int drv2624_stop(struct drv2624_data *drv2624)
 {
+	int nResult = 0, mode = 0;
+
+	nResult = drv2624_reg_read(drv2624, DRV2624_REG_MODE);
+	if (nResult < 0)
+		return 0;
+
+	mode =  nResult & WORKMODE_MASK;
+	if (mode == MODE_WAVEFORM_SEQUENCER) {
+		dev_dbg(drv2624->dev, "In sequence play, ignore stop\n");
+		return 0;
+	}
+
 	if (drv2624->vibrator_playing) {
 		dev_dbg(drv2624->dev, "%s\n", __func__);
 		drv2624_disable_irq(drv2624);
-		drv2624_set_go_bit(drv2624, STOP);
+		nResult = drv2624_set_go_bit(drv2624, STOP);
 		drv2624->work_mode = WORK_IDLE;
 		drv2624->vibrator_playing = false;
 		pm_relax(drv2624->dev);
 	}
+
+	return nResult;
 }
 
 static void drv2624_haptics_stopwork(struct work_struct *work)
