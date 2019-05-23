@@ -445,6 +445,7 @@
 	};
 
 	pm8150l-vph-lvl0 {
+		status = "disabled";
 		disable-thermal-zone;
 		cooling-maps {
 			vph_cpu4 {
@@ -465,6 +466,7 @@
 	};
 
 	pm8150l-vph-lvl1 {
+		status = "disabled";
 		disable-thermal-zone;
 		cooling-maps {
 			vph_cpu6 {
@@ -487,6 +489,7 @@
 	};
 
 	pm8150l-vph-lvl2 {
+		status = "disabled";
 		disable-thermal-zone;
 		cooling-maps {
 			vph_gpu2 {
