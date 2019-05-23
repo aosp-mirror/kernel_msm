@@ -6721,7 +6721,8 @@ static int iaxxx_digital_mute(struct snd_soc_dai *dai, int mute)
 			/* Update the gain based on mute unmute */
 			snd_soc_write(codec,
 			IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_REG((active + TX_0)),
-			STEP_INST | gain);
+			(STEP_INST <<
+			IAXXX_OUT_CH_GRP_CH_GAIN_CTRL_GAIN_RAMP_POS) | gain);
 		}
 		active++;
 	}
