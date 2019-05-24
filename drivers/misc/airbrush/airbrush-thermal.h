@@ -19,6 +19,9 @@
 #define AB_OF_CDEV_NAME "abc-cooling"
 #define AB_CDEV_NAME "ab"
 
+#define AB_OF_CDEV_BCL_NAME "abc-cooling-bcl"
+#define AB_CDEV_BCL_NAME "ab-bcl"
+
 #define AB_OF_CDEV_INTERNAL_NAME "abc-cooling-internal"
 #define AB_CDEV_INTERNAL_NAME "ab-internal"
 

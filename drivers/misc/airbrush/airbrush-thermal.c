@@ -55,7 +55,11 @@ struct ab_thermal {
 	/* Combined from cooling_external and cooling_internal */
 	enum throttle_state raw_throttle_state;
 
+	/* For system wide phone skin temperature sensor */
 	struct ab_thermal_cooling cooling_external;
+	/* For battery current limiter (BCL) */
+	struct ab_thermal_cooling cooling_bcl;
+	/* For sensors probed by Airbrush TMU */
 	struct ab_thermal_cooling cooling_internal;
 };
 
@@ -75,6 +79,7 @@ static void ab_thermal_exit_cooling(struct ab_thermal_cooling *thermal_cooling)
 static void ab_thermal_exit(struct ab_thermal *thermal)
 {
 	ab_thermal_exit_cooling(&thermal->cooling_internal);
+	ab_thermal_exit_cooling(&thermal->cooling_bcl);
 	ab_thermal_exit_cooling(&thermal->cooling_external);
 }
 
@@ -93,7 +98,12 @@ static void ab_thermal_cooling_op_state_updated(
 	thermal_cooling->state = new_state;
 
 	cooling_state = max(cooling_state, thermal->cooling_external.state);
+	cooling_state = max(cooling_state, thermal->cooling_bcl.state);
 	cooling_state = max(cooling_state, thermal->cooling_internal.state);
+
+	dev_info(thermal->dev, "Cooling state updated: ext=%d, bcl=%d, int=%d, ready=%d",
+		thermal->cooling_external.state, thermal->cooling_bcl.state,
+		thermal->cooling_internal.state, thermal->throttle_ready);
 
 	old_throttle_state = ab_thermal_get_throttle_state(thermal);
 	thermal->raw_throttle_state = to_throttle_state(cooling_state);
@@ -157,6 +167,14 @@ static int ab_thermal_init(struct ab_thermal *thermal, struct device *dev,
 			AB_OF_CDEV_NAME, AB_CDEV_NAME, true);
 	if (err) {
 		dev_err(dev, "failed to initialize external cooling\n");
+		ab_thermal_exit(thermal);
+		return err;
+	}
+
+	err = ab_thermal_init_cooling(&thermal->cooling_bcl, thermal,
+			AB_OF_CDEV_BCL_NAME, AB_CDEV_BCL_NAME, true);
+	if (err) {
+		dev_err(dev, "failed to initialize bcl cooling\n");
 		ab_thermal_exit(thermal);
 		return err;
 	}
