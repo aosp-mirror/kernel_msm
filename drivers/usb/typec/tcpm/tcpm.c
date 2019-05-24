@@ -3239,7 +3239,9 @@ static int tcpm_src_attach(struct tcpm_port *port)
 	if (ret < 0)
 		return ret;
 
-	ret = port->tcpc->set_pd_rx(port->tcpc, true);
+	ret = port->tcpc->set_pd_rx(port->tcpc, true,
+				    FRAME_FILTER_EN_SOP |
+				    FRAME_FILTER_EN_HARD_RESET);
 	if (ret < 0)
 		goto out_disable_mux;
 
@@ -3271,7 +3273,8 @@ static int tcpm_src_attach(struct tcpm_port *port)
 out_disable_vconn:
 	tcpm_set_vconn(port, false);
 out_disable_pd:
-	port->tcpc->set_pd_rx(port->tcpc, false);
+	port->tcpc->set_pd_rx(port->tcpc, false, FRAME_FILTER_EN_SOP |
+			      FRAME_FILTER_EN_HARD_RESET);
 out_disable_mux:
 	tcpm_mux_set(port, TYPEC_STATE_SAFE, USB_ROLE_NONE,
 		     TYPEC_ORIENTATION_NONE);
@@ -3317,7 +3320,8 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	 */
 	port->rx_msgid = -1;
 
-	port->tcpc->set_pd_rx(port->tcpc, false);
+	port->tcpc->set_pd_rx(port->tcpc, false, FRAME_FILTER_EN_HARD_RESET |
+			      FRAME_FILTER_EN_SOP);
 	tcpm_init_vbus(port);	/* also disables charging */
 	tcpm_init_vconn(port);
 	tcpm_set_current_limit(port, 0, 0);
@@ -3450,6 +3454,10 @@ static void tcpm_check_send_discover(struct tcpm_port *port)
 		   port->data_role == TYPEC_HOST &&
 		   port->pwr_role == TYPEC_SOURCE) {
 		port->vdm_sm_running = true;
+		port->tcpc->set_pd_rx(port->tcpc, true,
+				      FRAME_FILTER_EN_HARD_RESET |
+				      FRAME_FILTER_EN_SOP |
+				      FRAME_FILTER_EN_SOPI);
 		/* PD 3.0 discover identity */
 		tcpm_send_vdm(port, USB_SID_PD, CMD_DISCOVER_IDENT,
 			      NULL, 0, TCPC_TX_SOP_PRIME);
@@ -3844,7 +3852,9 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state(port, unattached_state(port), 0);
 		break;
 	case SNK_WAIT_CAPABILITIES:
-		ret = port->tcpc->set_pd_rx(port->tcpc, true);
+		ret = port->tcpc->set_pd_rx(port->tcpc, true,
+					    FRAME_FILTER_EN_HARD_RESET |
+					    FRAME_FILTER_EN_SOP);
 		if (ret < 0) {
 			tcpm_set_state(port, SNK_READY, 0);
 			break;
@@ -3973,7 +3983,9 @@ static void run_state_machine(struct tcpm_port *port)
 	case HARD_RESET_START:
 		tcpm_port_in_hard_reset(port, true);
 		port->hard_reset_count++;
-		port->tcpc->set_pd_rx(port->tcpc, false);
+		port->tcpc->set_pd_rx(port->tcpc, false,
+				      FRAME_FILTER_EN_HARD_RESET |
+				      FRAME_FILTER_EN_SOP);
 		tcpm_unregister_altmodes(port);
 		port->send_discover = true;
 		port->usb_comm_capable = false;
@@ -3995,7 +4007,9 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_vbus(port, true);
 		if (port->ams == HARD_RESET)
 			tcpm_ams_finish(port);
-		port->tcpc->set_pd_rx(port->tcpc, true);
+		port->tcpc->set_pd_rx(port->tcpc, true,
+				      FRAME_FILTER_EN_HARD_RESET |
+				      FRAME_FILTER_EN_SOP);
 		tcpm_set_attached_state(port, true);
 		tcpm_set_state(port, SRC_UNATTACHED, PD_T_PS_SOURCE_ON);
 		break;

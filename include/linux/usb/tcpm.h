@@ -65,6 +65,14 @@ enum usb_pd_sop_type {
 	SOP_PRIME_PRIME = 2,
 };
 
+#define FRAME_FILTER_EN_SOP            BIT(0)
+#define FRAME_FILTER_EN_SOPI           BIT(1)
+#define FRAME_FILTER_EN_SOPII          BIT(2)
+#define FRAME_FILTER_EN_SOPI_DEBUG     BIT(3)
+#define FRAME_FILTER_EN_SOPII_DEBUG    BIT(4)
+#define FRAME_FILTER_EN_HARD_RESET     BIT(5)
+#define FRAME_FILTER_EN_CABLE_RESET    BIT(6)
+
 /**
  * struct tcpc_config - Port configuration
  * @src_pdo:	PDO parameters sent to port partner as response to
@@ -159,7 +167,7 @@ struct tcpc_dev {
 	int (*set_vconn)(struct tcpc_dev *dev, bool on);
 	int (*set_vbus)(struct tcpc_dev *dev, bool on, bool charge);
 	int (*set_current_limit)(struct tcpc_dev *dev, u32 max_ma, u32 mv);
-	int (*set_pd_rx)(struct tcpc_dev *dev, bool on);
+	int (*set_pd_rx)(struct tcpc_dev *dev, bool on, int frame_filter);
 	int (*set_roles)(struct tcpc_dev *dev, bool attached,
 			 enum typec_role role, enum typec_data_role data,
 			 bool usb_comm_capable);
