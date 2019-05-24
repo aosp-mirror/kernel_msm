@@ -360,7 +360,7 @@
 			cooling-maps {
 				airbrush {
 					trip = <&vbat_lvl0>;
-					cooling-device = <&abc_cooling 3 3>;
+					cooling-device = <&abc_cooling_bcl 3 3>;
 				};
 			};
 		};
