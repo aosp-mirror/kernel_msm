@@ -110,24 +110,25 @@
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 11 00 01 28
 					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 51 00 00
 					15 01 00 00 00 00 02 8B 00 /* ZA off */
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 
 				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
 					39 01 00 00 00 00 03 F0 5A 5A
-					15 01 00 00 00 00 02 53 00 /* HLPM OFF */
 					39 01 00 00 00 00 03 B0 A8 B1
-					15 01 00 00 14 00 02 B1 01
+					15 01 00 00 22 00 02 B1 01
+				];
+
+				qcom,mdss-dsi-post-nolp-command = [
 					15 01 00 00 00 00 02 53 20 /* write ctl 60 hz */
-
 					/* Enable 5% Zonal Attenuation */
-					39 01 00 00 00 00 03 51 00 00
 					15 01 00 00 00 00 02 8B 11
-
-					39 01 00 00 00 00 03 F0 A5 A5
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
 				];
 
 				qcom,compression-mode = "dsc";
@@ -202,24 +203,25 @@
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 11 00 01 28
 					39 01 00 00 00 00 03 F0 5A 5A
-					39 01 00 00 00 00 03 51 00 00
 					15 01 00 00 00 00 02 8B 00 /* ZA off */
 					39 01 00 00 00 00 03 F0 A5 A5
 				];
 
 				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
 					39 01 00 00 00 00 03 F0 5A 5A
-					15 01 00 00 00 00 02 53 00 /* HLPM OFF */
 					39 01 00 00 00 00 03 B0 A8 B1
-					15 01 00 00 14 00 02 B1 01
+					15 01 00 00 22 00 02 B1 01
+				];
+
+				qcom,mdss-dsi-post-nolp-command = [
 					15 01 00 00 00 00 02 53 30 /* write ctl 90 hz */
-
 					/* Enable 5% Zonal Attenuation */
-					39 01 00 00 00 00 03 51 00 00
 					15 01 00 00 00 00 02 8B 11
-
-					39 01 00 00 00 00 03 F0 A5 A5
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
 				];
 
 				qcom,compression-mode = "dsc";
@@ -245,8 +247,7 @@
 
 				google,dsi-lp-brightness-threshold = <0>;
 				google,dsi-lp-command = [
-					39 01 00 00 00 00 03 51 00 00 /* turn screen dark */
-					15 01 00 00 14 00 02 53 20    /* HLPM off */
+					05 01 00 00 11 00 01 28
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
@@ -264,6 +265,7 @@
 					15 01 00 00 00 00 02 53 03
 					15 01 00 00 00 00 02 F7 02
 					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+					05 01 00 00 00 00 01 29
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
@@ -280,6 +282,7 @@
 					15 01 00 00 00 00 02 53 02
 					15 01 00 00 00 00 02 F7 02
 					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+					05 01 00 00 00 00 01 29
 				];
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
