@@ -670,6 +670,7 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 				      0x4, val);
 		abc_dev->ltr_enable = false;
 		abc_dev->clk_req_enable = false;
+		abc_dev->link_config_cache = target_linkstate;
 		return;
 	case ASPM_L12:
 		smctrl.aspm_L12 = ABC_PCIE_PM_ENABLE;
