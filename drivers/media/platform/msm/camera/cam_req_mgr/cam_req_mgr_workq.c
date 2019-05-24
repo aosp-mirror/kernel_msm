@@ -277,16 +277,16 @@ void cam_req_mgr_workq_destroy(struct cam_req_mgr_core_workq **crm_workq)
 
 void cam_req_mgr_workq_flush(struct cam_req_mgr_core_workq **crm_workq)
 {
-	unsigned long flags = 0;
 	struct workqueue_struct   *job;
 	CAM_DBG(CAM_CRM, "flush workque %pK", crm_workq);
-	if (*crm_workq) {
-		WORKQ_ACQUIRE_LOCK(*crm_workq, flags);
-		if ((*crm_workq)->job) {
-			job = (*crm_workq)->job;
-			flush_workqueue(job);
+	if (!crm_workq)
+		return;
 
-		}
-		WORKQ_RELEASE_LOCK(*crm_workq, flags);
+	if (!(*crm_workq))
+		return;
+
+	if ((*crm_workq)->job) {
+		job = (*crm_workq)->job;
+		flush_workqueue(job);
 	}
 }
