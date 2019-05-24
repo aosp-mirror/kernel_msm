@@ -16,7 +16,7 @@
 #ifndef __FACEAUTH_SHARED_H__
 #define __FACEAUTH_SHARED_H__
 
-/* bug: 123535349 */
+/* Feature Flags - bug: 123535349 */
 #define DISABLE_GAZE                            (1ULL << 0) //bit 0
 #define DISABLE_MULTI_ANGLE_ENROLLMENT          (1ULL << 1) //bit 1
 #define SECURE_CAMERA_DATA                      (1ULL << 2) //bit 2
@@ -56,7 +56,7 @@
 #define ERROR_CITADEL_TIMEOUT -49
 #define ERROR_CITADEL_CACHE_FULL -50
 #define ERROR_CITADEL_CACHE_INVALID_INDEX -51
-#define ERROR_CITADEL_CACHE_INVALID_PROFILE -52
+#define ERROR_CITADEL_CACHE_INVALID_PROFILE -52 /* deprecated */
 #define ERROR_CITADEL_EARLY_FAIL -53
 #define ERROR_CITADEL_SESSION_ID -54
 #define ERROR_CITADEL_CRC -55
@@ -77,6 +77,8 @@
 /* TODO (masterwilliams) b/126613551 */
 #define ERROR_INSUFFICIENT_ALLOCATOR_MEMORY -76
 #define ERROR_IPU_TIMEOUT -77
+#define ERROR_REJECT_USERS_FULL -78
+#define ERROR_REJECT_PROFILES_FULL -79
 
 #define ERROR_FW_DRIVER_SYNC_ERROR -84
 
@@ -116,6 +118,10 @@ typedef enum _workload_status {
 	WORKLOAD_STATUS_REJECT_TOO_CLOSE,
 	/* Reject depth when the face is too far */
 	WORKLOAD_STATUS_REJECT_TOO_FAR,
+	/* Reject enrollment due to max users enrolled */
+	WORKLOAD_STATUS_REJECT_USERS_FULL,
+	/* Reject enrollment/migration due to no additional free profiles */
+	WORKLOAD_STATUS_REJECT_PROFILES_FULL,
 
 	/* hard errors */
 	/* Reject Skin TODO (masterwilliams) b/126249618 - deprecate value */
