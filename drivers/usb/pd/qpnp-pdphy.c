@@ -362,8 +362,12 @@ EXPORT_SYMBOL(pd_phy_assign_pm_callbacks);
 int pd_phy_update_frame_filter(u8 frame_filter_val)
 {
 	struct usb_pdphy *pdphy = __pdphy;
+	int ret = 0;
 
-	return pdphy_reg_write(pdphy, USB_PDPHY_FRAME_FILTER, frame_filter_val);
+	ret = pdphy_reg_write(pdphy, USB_PDPHY_FRAME_FILTER, frame_filter_val);
+	if (!ret)
+		pdphy->frame_filter_val = frame_filter_val;
+	return ret;
 }
 EXPORT_SYMBOL(pd_phy_update_frame_filter);
 

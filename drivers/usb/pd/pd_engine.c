@@ -1221,13 +1221,23 @@ static int tcpm_set_current_limit(struct tcpc_dev *dev, u32 max_ma, u32 mv)
 	return 0;
 }
 
-static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on)
+static int tcpm_set_pd_rx(struct tcpc_dev *dev, bool on, int filter)
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret = 0;
 
 	if (pd->pd_disabled)
 		return -EINVAL;
+
+	if (on) {
+		ret = pd_phy_update_frame_filter(filter);
+		if (ret < 0) {
+			logbuffer_log(pd->log,
+				      "unable to set frame filter %d: ret=%d",
+				      filter, ret);
+			return ret;
+		}
+	}
 
 	if (pd->pdphy_open == on) {
 		logbuffer_log(pd->log, "pd_phy already %s",
@@ -1920,8 +1930,7 @@ static void init_pd_phy_params(struct pd_phy_params *pdphy_params)
 	pdphy_params->data_role = DR_UFP;
 	pdphy_params->power_role = PR_SINK;
 	pdphy_params->frame_filter_val = FRAME_FILTER_EN_SOP |
-					 FRAME_FILTER_EN_HARD_RESET |
-					 FRAME_FILTER_EN_SOPI;
+					 FRAME_FILTER_EN_HARD_RESET;
 }
 
 static int update_ext_vbus(struct notifier_block *self, unsigned long action,
