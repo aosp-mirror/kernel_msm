@@ -571,7 +571,7 @@ static int iaxxx_core_create_plg_common(
 	}
 
 	/* Insert plugin node to the list */
-	plugin_data = kvmalloc(sizeof(*plugin_data), __GFP_ZERO);
+	plugin_data = kvzalloc(sizeof(*plugin_data), GFP_KERNEL);
 	if (!plugin_data) {
 		ret = -ENOMEM;
 		goto core_create_plugin_err;
@@ -1035,7 +1035,7 @@ int iaxxx_core_set_create_cfg(struct device *dev, uint32_t inst_id,
 			dev_dbg(dev, "%s() cfg_val 0x%llx\n",
 					__func__, cfg_val);
 		} else {
-			data = kvmalloc(cfg_size, 0);
+			data = kvmalloc(cfg_size, GFP_KERNEL);
 			if (!data) {
 				ret = -ENOMEM;
 				goto set_create_cfg_err;
@@ -1187,7 +1187,7 @@ int iaxxx_core_set_param_blk_from_file(
 			ret = -EINVAL;
 			goto iaxxx_core_set_param_blk_from_file_err;
 		}
-		data = kvmalloc(fw->size, 0);
+		data = kvmalloc(fw->size, GFP_KERNEL);
 		if (!data)
 			goto iaxxx_core_set_param_blk_from_file_err;
 		iaxxx_copy_le32_to_cpu(data, fw->data, fw->size);
@@ -1440,8 +1440,9 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 					text_phy_addr, data_phy_addr, bin_info);
 			dev_dbg(dev, "%s() Physical address %x\n",
 					__func__, file_section.start_address);
-			buf_data = kvmalloc(file_section.length *
-						sizeof(uint32_t), __GFP_ZERO);
+			buf_data = kvzalloc(file_section.length *
+						sizeof(uint32_t),
+						GFP_KERNEL);
 			if (!buf_data)
 				return -ENOMEM;
 			if (((data - fw->data) + (file_section.length
@@ -1506,8 +1507,9 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			(bin_info.bss_start_addr - bin_info.ro_data_start_addr);
 		file_section.length = (bin_info.bss_end_addr
 				- bin_info.bss_start_addr) >> 2;
-		buf_data = kvmalloc(file_section.length *
-					sizeof(uint32_t), __GFP_ZERO);
+		buf_data = kvzalloc(file_section.length *
+					sizeof(uint32_t),
+					GFP_KERNEL);
 		if (!buf_data)
 			return -ENOMEM;
 
@@ -1619,7 +1621,7 @@ int iaxxx_package_load(struct device *dev, const char *pkg_name,
 	}
 
 	/* Insert package node to the list */
-	pkg_data = kvmalloc(sizeof(*pkg_data), __GFP_ZERO);
+	pkg_data = kvzalloc(sizeof(*pkg_data), GFP_KERNEL);
 	if (!pkg_data) {
 		rc = -ENOMEM;
 		goto out;

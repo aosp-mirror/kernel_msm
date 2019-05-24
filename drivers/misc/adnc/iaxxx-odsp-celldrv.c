@@ -363,8 +363,9 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 
-		get_param_blk_buf = kvmalloc(param_blk_info.param_size *
-						sizeof(uint32_t), __GFP_ZERO);
+		get_param_blk_buf = kvzalloc(param_blk_info.param_size *
+						sizeof(uint32_t),
+						GFP_KERNEL);
 		if (!get_param_blk_buf)
 			return -ENOMEM;
 
@@ -458,9 +459,10 @@ get_param_blk_err:
 			return ret;
 		}
 
-		get_param_blk_buf = kvmalloc(
+		get_param_blk_buf = kvzalloc(
 					param_blk_with_ack.response_buf_size *
-					sizeof(uint32_t), __GFP_ZERO);
+					sizeof(uint32_t),
+					GFP_KERNEL);
 		if (!get_param_blk_buf) {
 			ret = -ENOMEM;
 			goto set_param_blk_err;
@@ -1085,7 +1087,7 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 		return -ENOBUFS;
 	}
 
-	odsp_dev_priv = kvmalloc(sizeof(*odsp_dev_priv), __GFP_ZERO);
+	odsp_dev_priv = kvzalloc(sizeof(*odsp_dev_priv), GFP_KERNEL);
 	if (!odsp_dev_priv) {
 		ret = -ENOMEM;
 		goto out_err;

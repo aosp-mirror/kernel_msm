@@ -267,9 +267,10 @@ static int get_tunnel_info_dump(struct iaxxx_priv *iaxxx,
 		return -EINVAL;
 	}
 
-	tmp_buf = kvmalloc(max(IAXXX_TNL_HDR_REG_NUM,
+	tmp_buf = kvzalloc(max(IAXXX_TNL_HDR_REG_NUM,
 				IAXXX_OUT_TNL_GRP_REG_NUM) *
-				sizeof(uint32_t), __GFP_ZERO);
+				sizeof(uint32_t),
+				GFP_KERNEL);
 	if (!tmp_buf)
 		return -ENOMEM;
 
@@ -336,9 +337,10 @@ static int get_channel_info_dump(struct iaxxx_priv *iaxxx,
 		return -EINVAL;
 	}
 
-	tmp_buf = kvmalloc(max(IAXXX_CH_HDR_REG_NUM,
+	tmp_buf = kvzalloc(max(IAXXX_CH_HDR_REG_NUM,
 				IAXXX_IN_CH_GRP_REG_NUM) *
-				sizeof(uint32_t), __GFP_ZERO);
+				sizeof(uint32_t),
+				GFP_KERNEL);
 	if (!tmp_buf)
 		return -ENOMEM;
 
@@ -400,9 +402,10 @@ static int get_stream_info_dump(struct iaxxx_priv *iaxxx,
 		return -EINVAL;
 	}
 
-	tmp_buf = kvmalloc(max(IAXXX_STR_HDR_REG_NUM,
+	tmp_buf = kvzalloc(max(IAXXX_STR_HDR_REG_NUM,
 				IAXXX_STR_GRP_REG_NUM) *
-				sizeof(uint32_t), __GFP_ZERO);
+				sizeof(uint32_t),
+				GFP_KERNEL);
 	if (!tmp_buf)
 		return -ENOMEM;
 
@@ -777,7 +780,7 @@ static ssize_t regdump_write(struct file *filp, const char __user *buf,
 	dev_dbg(iaxxx->dev, "%s() called\n", __func__);
 	if (!iaxxx)
 		return -EINVAL;
-	kbuf = kvmalloc(count, __GFP_ZERO);
+	kbuf = kvzalloc(count, GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
 	err = copy_from_user(kbuf, buf, count);
@@ -823,7 +826,7 @@ static ssize_t regdump_read(struct file *filp, char __user *buf,
 		return 0;
 	}
 	/* Allocate kernel buffer to read register dump */
-	kbuf = kvmalloc(count, __GFP_ZERO);
+	kbuf = kvzalloc(count, GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
 	reg_dump = iaxxx->reg_dump;
@@ -1054,7 +1057,7 @@ int iaxxx_debug_init(struct iaxxx_priv *priv)
 		goto crashdump_cdev_err;
 	}
 
-	priv->raw_ops = kvmalloc(sizeof(struct iaxxx_raw_bus_ops), 0);
+	priv->raw_ops = kvmalloc(sizeof(struct iaxxx_raw_bus_ops), GFP_KERNEL);
 	if (!priv->raw_ops) {
 		err = -ENOMEM;
 		goto raw_mem_alloc_err;

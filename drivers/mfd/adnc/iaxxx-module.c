@@ -454,7 +454,7 @@ static int iaxxx_download_script(struct iaxxx_priv *priv,
 	}
 	script_size = fw->size - sizeof(uint32_t);
 
-	buf_data = kvmalloc(fw->size, __GFP_ZERO);
+	buf_data = kvzalloc(fw->size, GFP_KERNEL);
 	if (!buf_data)
 		return -ENOMEM;
 

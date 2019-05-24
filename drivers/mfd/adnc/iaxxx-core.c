@@ -915,13 +915,14 @@ static int iaxxx_regdump_init(struct iaxxx_priv *priv)
 	dev_dbg(priv->dev, "%s()", __func__);
 
 	priv->dump_log = true;
-	priv->reg_dump = kvmalloc(sizeof(struct iaxxx_reg_dump_priv),
-					__GFP_ZERO);
+	priv->reg_dump = kvzalloc(sizeof(struct iaxxx_reg_dump_priv),
+					GFP_KERNEL);
 	if (!priv->reg_dump)
 		return -ENOMEM;
 
-	priv->reg_dump->log = kvmalloc(sizeof(struct iaxxx_register_log) *
-					IAXXX_BUF_MAX_LEN, __GFP_ZERO);
+	priv->reg_dump->log = kvzalloc(sizeof(struct iaxxx_register_log) *
+					IAXXX_BUF_MAX_LEN,
+					GFP_KERNEL);
 	if (!priv->reg_dump->log) {
 		kvfree(priv->reg_dump);
 		priv->reg_dump = NULL;
@@ -1132,7 +1133,7 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 		buf_size += crashlog_header[i].log_size;
 	priv->crashlog->log_buffer_size = buf_size;
 	/* Allocate the memory */
-	priv->crashlog->log_buffer = kvmalloc(buf_size, __GFP_ZERO);
+	priv->crashlog->log_buffer = kvzalloc(buf_size, GFP_KERNEL);
 	if (!priv->crashlog->log_buffer)
 		return -ENOMEM;
 

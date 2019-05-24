@@ -131,14 +131,12 @@ static int iaxxx_dfs_open(struct iaxxx_dbgfs_data *node_data, struct file *file)
 	}
 
 	/* Per file "transaction" data */
-	trans = kvmalloc(sizeof(*trans), __GFP_ZERO);
-
+	trans = kvzalloc(sizeof(*trans), GFP_KERNEL);
 	if (!trans)
 		return -ENOMEM;
 
 	/* Allocate log buffer */
-	log = kvmalloc(logbufsize, __GFP_ZERO);
-
+	log = kvzalloc(logbufsize, GFP_KERNEL);
 	if (!log) {
 		kvfree(trans);
 		pr_err("Unable to allocate memory for log buffer\n");
@@ -402,7 +400,7 @@ static ssize_t iaxxx_dfs_reg_write(struct file *file, const char __user *buf,
 	char *kbuf;
 
 	/* Make a copy of the user data */
-	kbuf = kvmalloc(count + 1, 0);
+	kbuf = kvmalloc(count + 1, GFP_KERNEL);
 	if (!kbuf)
 		return -ENOMEM;
 
@@ -602,7 +600,7 @@ int iaxxx_dfs_add_regmap(struct device *dev,
 		return -ENOENT;
 
 	/* Allocate transaction data for the controller */
-	node_data = kvmalloc(sizeof(*node_data), __GFP_ZERO);
+	node_data = kvzalloc(sizeof(*node_data), GFP_KERNEL);
 	if (!node_data)
 		return -ENOMEM;
 

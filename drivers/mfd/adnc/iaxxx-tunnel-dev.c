@@ -692,7 +692,7 @@ static int producer_thread(void *arg)
 static int tunneling_attach_client(struct iaxxx_tunnel_data *tunnel_data,
 			struct iaxxx_tunnel_client *client)
 {
-	client->user_circ.buf = kvmalloc(UBUFF_SIZE, 0);
+	client->user_circ.buf = kvmalloc(UBUFF_SIZE, GFP_KERNEL);
 	if (!client->user_circ.buf)
 		return -ENOMEM;
 
@@ -922,8 +922,8 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 		__func__, id, atomic_read(&t_intf_priv->src_enable_id[id]));
 	if (atomic_read(&t_intf_priv->src_enable_id[id]) == 0) {
 		/* Allocate tunnel endpoint list for the tunneling */
-		tnl_src_node =
-		kvmalloc(sizeof(struct iaxxx_tunnel_ep), __GFP_ZERO);
+		tnl_src_node = kvzalloc(sizeof(struct iaxxx_tunnel_ep),
+					GFP_KERNEL);
 		if (!tnl_src_node) {
 			rc = -ENOMEM;
 			goto exit;
@@ -1057,8 +1057,7 @@ int iaxxx_tunnel_open_common(struct inode *inode, struct file *filp, int id)
 	if (!iaxxx_is_firmware_ready(priv))
 		return -EIO;
 
-	client = kvmalloc(sizeof(struct iaxxx_tunnel_client),
-				__GFP_ZERO | __GFP_NOWARN);
+	client = kvzalloc(sizeof(struct iaxxx_tunnel_client), GFP_KERNEL);
 	if (!client)
 		return -ENOMEM;
 

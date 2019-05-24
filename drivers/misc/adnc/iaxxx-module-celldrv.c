@@ -339,8 +339,8 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 		return -ENOBUFS;
 	}
 
-	module_dev_priv = kvmalloc(sizeof(struct module_device_priv),
-					__GFP_ZERO);
+	module_dev_priv = kvzalloc(sizeof(struct module_device_priv),
+					GFP_KERNEL);
 	if (!module_dev_priv) {
 		ret = -ENOMEM;
 		goto out_err;

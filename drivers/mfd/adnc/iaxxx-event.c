@@ -781,7 +781,8 @@ int iaxxx_event_init(struct iaxxx_priv *priv)
 {
 	int rc;
 
-	priv->event_queue = kvmalloc(sizeof(struct iaxxx_evt_queue), 0);
+	priv->event_queue = kvmalloc(sizeof(struct iaxxx_evt_queue),
+					GFP_KERNEL);
 	if (!priv->event_queue)
 		return -ENOMEM;
 	priv->event_queue->r_index = -1;

@@ -122,8 +122,8 @@ static int parse_config_filedata_send_as_chunks(
 	uint32_t  chunk_data_free = 0;
 	uint32_t  chunk_data_used = 0;
 
-	chunk_data_buffer = kvmalloc(CHUNK_SIZE_IN_WORDS *
-					sizeof(uint32_t), __GFP_ZERO);
+	chunk_data_buffer = kvzalloc(CHUNK_SIZE_IN_WORDS * sizeof(uint32_t),
+					GFP_KERNEL);
 	if (!chunk_data_buffer)
 		return -ENOMEM;
 
