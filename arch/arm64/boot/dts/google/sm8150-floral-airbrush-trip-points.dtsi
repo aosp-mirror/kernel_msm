@@ -31,7 +31,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_MAIN>;
-
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_tmu_trip4: trip4 {
@@ -79,6 +79,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU0>;
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu0_trip4: trip4 {
@@ -126,6 +127,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU1>;
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu1_trip4: trip4 {
@@ -173,6 +175,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU2>;
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu2_trip4: trip4 {
@@ -220,6 +223,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_IPU_TPU>;
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_ipu3_trip4: trip4 {
@@ -267,6 +271,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_TPU0>;
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_tpu0_trip4: trip4 {
@@ -314,6 +319,7 @@
 			polling-delay = <0>;
 			thermal-sensors =
 				<&airbrush_tmu AB_TMU_TEMP_PROBE_TPU1>;
+			wake-capable-sensor;
 			trips {
 			/include/ "sm8150-floral-airbrush-dummy-trips.dtsi"
 				airbrush_tpu1_trip4: trip4 {
