@@ -6548,7 +6548,7 @@ static void wma_set_wifi_start_packet_stats(void *wma_handle,
 		return;
 	}
 
-	if (start_log->verbose_level == WLAN_LOG_LEVEL_ACTIVE) {
+	if (start_log->verbose_level >= WLAN_LOG_LEVEL_REPRO) {
 		pktlog_enable(scn, log_state, start_log->ini_triggered,
 			      start_log->user_triggered,
 			      start_log->is_iwpriv_command);
