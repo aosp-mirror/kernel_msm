@@ -50,6 +50,8 @@
 #define CAM_FLASH_PACKET_OPCODE_NON_REALTIME_SET_OPS 2
 #define CAM_FLASH_THERMAL_INITIAL_LEVEL              0
 #define CAM_FLASH_THERMAL_MITIGATION_LEVEL           3
+#define CAM_FLASH_THERMAL_MITIGATION_COUNT \
+(CAM_FLASH_THERMAL_MITIGATION_LEVEL + 1)
 
 struct cam_flash_ctrl;
 
@@ -219,7 +221,7 @@ struct cam_flash_ctrl {
 	/* Thermal settings */
 	struct thermal_cooling_device       *cdev;
 	int                                 thermal_current_level;
-	int             thermal_mitigation[CAM_FLASH_THERMAL_MITIGATION_LEVEL];
+	int    max_current_under_mitigation[CAM_FLASH_THERMAL_MITIGATION_COUNT];
 	struct delayed_work                 init_work;
 	const char                          *cooling_name;
 	const char                          *bcl_flash_node;

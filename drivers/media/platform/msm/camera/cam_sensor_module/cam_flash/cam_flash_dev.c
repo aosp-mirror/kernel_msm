@@ -339,12 +339,14 @@ static long cam_flash_subdev_ioctl(struct v4l2_subdev *sd,
 
 	// apply cooling settings
 	if ((fctrl->cdev && !IS_ERR(fctrl->cdev)) &&
-	    ((fctrl->thermal_mitigation[fctrl->thermal_current_level] > 0) &&
-	     (fctrl->thermal_mitigation[fctrl->thermal_current_level] !=
+	    ((fctrl->max_current_under_mitigation[
+	      fctrl->thermal_current_level] > 0) &&
+	     (fctrl->max_current_under_mitigation[
+	      fctrl->thermal_current_level] !=
 	      soc_private->flash_max_current[0]))) {
 		for (i = 0; i < CAM_FLASH_MAX_LED_TRIGGERS; i++) {
 			soc_private->flash_max_current[i] =
-				fctrl->thermal_mitigation[
+				fctrl->max_current_under_mitigation[
 				fctrl->thermal_current_level];
 		}
 	}

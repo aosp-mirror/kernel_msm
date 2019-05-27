@@ -201,14 +201,14 @@ static int32_t cam_get_source_node_info(
 	}
 	if (of_find_property(of_node, "thermal-mitigation", &count)) {
 		count /= sizeof(uint32_t);
-		if (count != (CAM_FLASH_THERMAL_MITIGATION_LEVEL + 1)) {
+		if (count != (CAM_FLASH_THERMAL_MITIGATION_COUNT)) {
 			CAM_WARN(CAM_FLASH,
 				"thermal-mitigation level not matched:%d",
 				count);
 			return -EINVAL;
 		}
 		rc = of_property_read_u32_array(of_node, "thermal-mitigation",
-			fctrl->thermal_mitigation, count);
+			fctrl->max_current_under_mitigation, count);
 		if (rc < 0) {
 			CAM_WARN(CAM_FLASH,
 				 "thermal-mitigation array unavailable");
