@@ -204,6 +204,9 @@ static int vd6281_power_up(struct rainbow_ctrl_t *ctrl)
 		ctrl->is_power_up[REGULATOR_VIO] = true;
 	}
 
+	/* At least 1 ms delay after power up */
+	usleep_range(1000, 3000);
+
 	if (!ctrl->is_cci_init) {
 		rc = camera_io_init(&(ctrl->io_master_info));
 		if (rc < 0) {
