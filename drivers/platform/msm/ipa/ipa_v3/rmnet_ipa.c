@@ -83,6 +83,8 @@ MODULE_PARM_DESC(outstanding_low, "Outstanding low");
 
 #define IPA_WWAN_CONS_DESC_FIFO_SZ 256
 
+#define LAN_STATS_FOR_ALL_CLIENTS 0xFFFFFFFF
+
 static void rmnet_ipa_free_msg(void *buff, u32 len, u32 type);
 static void rmnet_ipa_get_stats_and_update(void);
 
@@ -166,7 +168,7 @@ struct rmnet_ipa3_context {
 		tether_device
 		[IPACM_MAX_CLIENT_DEVICE_TYPES];
 	bool dl_csum_offload_enabled;
-	atomic_t suspend_pend;
+	atomic_t ap_suspend;
 };
 
 static struct rmnet_ipa3_context *rmnet_ipa3_ctx;
@@ -1170,19 +1172,25 @@ static netdev_tx_t ipa3_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	qmap_check = RMNET_MAP_GET_CD_BIT(skb);
 	spin_lock_irqsave(&wwan_ptr->lock, flags);
+	/* There can be a race between enabling the wake queue and
+	 * suspend in progress. Check if suspend is pending and
+	 * return from here itself.
+	 */
+	if (atomic_read(&rmnet_ipa3_ctx->ap_suspend)) {
+		netif_stop_queue(dev);
+		spin_unlock_irqrestore(&wwan_ptr->lock, flags);
+		return NETDEV_TX_BUSY;
+	}
 	if (netif_queue_stopped(dev)) {
-		/*
-		 * Checking rmnet suspend in progress or not, because in suspend
-		 * clock will be disabled, without clock transferring data
-		 * not possible.
-		 */
-		if (!atomic_read(&rmnet_ipa3_ctx->suspend_pend) && qmap_check &&
+		if (qmap_check &&
 			atomic_read(&wwan_ptr->outstanding_pkts) <
 					outstanding_high_ctl) {
-			pr_err("[%s]Queue stop, send ctrl pkts\n", dev->name);
+			IPAWANERR("[%s]Queue stop, send ctrl pkts\n",
+							dev->name);
 			goto send;
 		} else {
-			pr_err("[%s]fatal: %s stopped\n", dev->name, __func__);
+			IPAWANERR("[%s]fatal: %s stopped\n", dev->name,
+							__func__);
 			spin_unlock_irqrestore(&wwan_ptr->lock, flags);
 			return NETDEV_TX_BUSY;
 		}
@@ -1219,7 +1227,7 @@ send:
 		return NETDEV_TX_BUSY;
 	}
 	if (ret) {
-		pr_err("[%s] fatal: ipa rm timer request resource failed %d\n",
+		IPAWANERR("[%s] fatal: ipa rm timer req resource failed %d\n",
 		       dev->name, ret);
 		dev_kfree_skb_any(skb);
 		dev->stats.tx_dropped++;
@@ -2241,6 +2249,7 @@ static void ipa3_wake_tx_queue(struct work_struct *work)
 {
 	if (IPA_NETDEV()) {
 		__netif_tx_lock_bh(netdev_get_tx_queue(IPA_NETDEV(), 0));
+		IPAWANDBG("Waking up the workqueue.\n");
 		netif_wake_queue(IPA_NETDEV());
 		__netif_tx_unlock_bh(netdev_get_tx_queue(IPA_NETDEV(), 0));
 	}
@@ -2560,8 +2569,11 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 	if (ipa3_rmnet_res.is_platform_type_msm)
 		/* Android platform loads uC */
 		ipa3_qmi_service_init(QMI_IPA_PLATFORM_TYPE_MSM_ANDROID_V01);
+	else if (ipa3_ctx->ipa_config_is_mhi)
+		/* LE MHI platform */
+		ipa3_qmi_service_init(QMI_IPA_PLATFORM_TYPE_LE_MHI_V01);
 	else
-		/* LE platform */
+		/* LE platform not loads uC */
 		ipa3_qmi_service_init(QMI_IPA_PLATFORM_TYPE_LE_V01);
 
 	if (!atomic_read(&rmnet_ipa3_ctx->is_ssr)) {
@@ -2652,7 +2664,7 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 		ipa3_proxy_clk_unvote();
 	}
 	atomic_set(&rmnet_ipa3_ctx->is_ssr, 0);
-	atomic_set(&rmnet_ipa3_ctx->suspend_pend, 0);
+	atomic_set(&rmnet_ipa3_ctx->ap_suspend, 0);
 	ipa3_update_ssr_state(false);
 
 	IPAWANERR("rmnet_ipa completed initialization\n");
@@ -2775,12 +2787,13 @@ static int rmnet_ipa_ap_suspend(struct device *dev)
 	 * scenarios observing the data was processed when IPA clock are off.
 	 * Added changes to synchronize rmnet supend and xmit.
 	 */
-	atomic_set(&rmnet_ipa3_ctx->suspend_pend, 1);
+	atomic_set(&rmnet_ipa3_ctx->ap_suspend, 1);
 	spin_lock_irqsave(&wwan_ptr->lock, flags);
 	/* Do not allow A7 to suspend in case there are outstanding packets */
 	if (atomic_read(&wwan_ptr->outstanding_pkts) != 0) {
 		IPAWANDBG("Outstanding packets, postponing AP suspend.\n");
 		ret = -EAGAIN;
+		atomic_set(&rmnet_ipa3_ctx->ap_suspend, 0);
 		spin_unlock_irqrestore(&wwan_ptr->lock, flags);
 		goto bail;
 	}
@@ -2792,11 +2805,11 @@ static int rmnet_ipa_ap_suspend(struct device *dev)
 		dev_put(netdev);
 	spin_unlock_irqrestore(&wwan_ptr->lock, flags);
 
+	IPAWANDBG("De-activating the PM/RM resource.\n");
 	if (ipa3_ctx->use_ipa_pm)
 		ipa_pm_deactivate_sync(rmnet_ipa3_ctx->pm_hdl);
 	else
 		ipa_rm_release_resource(IPA_RM_RESOURCE_WWAN_0_PROD);
-	atomic_set(&rmnet_ipa3_ctx->suspend_pend, 0);
 	ret = 0;
 bail:
 	IPAWANDBG("Exit with %d\n", ret);
@@ -2818,6 +2831,8 @@ static int rmnet_ipa_ap_resume(struct device *dev)
 	struct net_device *netdev = IPA_NETDEV();
 
 	IPAWANDBG("Enter...\n");
+	/* Clear the suspend in progress flag. */
+	atomic_set(&rmnet_ipa3_ctx->ap_suspend, 0);
 	if (netdev) {
 		netif_wake_queue(netdev);
 		/* Starting Watch dog timer, pipe was changes to resume state */
@@ -3916,13 +3931,6 @@ void ipa3_q6_handshake_complete(bool ssr_bootup)
 		 * SSR recovery
 		 */
 		rmnet_ipa_get_network_stats_and_update();
-	} else {
-		/*
-		 * To enable ipa power collapse we need to enable rpmh and uc
-		 * handshake So that uc can do register retention. To enable
-		 * this handshake we need to send the below message to rpmh
-		 */
-		ipa_pc_qmp_enable();
 	}
 
 	imp_handle_modem_ready();
@@ -4022,6 +4030,54 @@ static inline int rmnet_ipa3_delete_lan_client_info
 	return 0;
 }
 
+/* Query must be free-d by the caller */
+static int rmnet_ipa_get_hw_fnr_stats_v2(
+	struct ipa_lan_client_cntr_index *client,
+	struct wan_ioctl_query_per_client_stats *data,
+	struct ipa_ioc_flt_rt_query *query)
+{
+	int num_counters;
+
+	query->start_id = client->ul_cnt_idx;
+	query->end_id = client->dl_cnt_idx;
+
+	query->reset = data->reset_stats;
+	num_counters = query->end_id - query->start_id + 1;
+
+	if (num_counters != 2) {
+		IPAWANERR("Dont support more than 2 counter\n");
+		return -EINVAL;
+	}
+
+	IPAWANDBG(" Start/End %u/%u, num counters = %d\n",
+		query->start_id, query->end_id, num_counters);
+
+	query->stats = (uint64_t)kcalloc(
+			num_counters,
+			sizeof(struct ipa_flt_rt_stats),
+			GFP_KERNEL);
+	if (!query->stats) {
+		IPAERR("Failed to allocate memory for query stats\n");
+		return -ENOMEM;
+	}
+
+	if (ipa_get_flt_rt_stats(query)) {
+		IPAERR("Failed to request stats from h/w\n");
+		return -EINVAL;
+	}
+
+	IPAWANDBG("ul: bytes = %llu, pkts = %u, pkts_hash = %u\n",
+	  ((struct ipa_flt_rt_stats *)query->stats)[0].num_bytes,
+	  ((struct ipa_flt_rt_stats *)query->stats)[0].num_pkts,
+	  ((struct ipa_flt_rt_stats *)query->stats)[0].num_pkts_hash);
+	IPAWANDBG("dl: bytes = %llu, pkts = %u, pkts_hash = %u\n",
+	  ((struct ipa_flt_rt_stats *)query->stats)[1].num_bytes,
+	  ((struct ipa_flt_rt_stats *)query->stats)[1].num_pkts,
+	  ((struct ipa_flt_rt_stats *)query->stats)[1].num_pkts_hash);
+
+	return 0;
+}
+
 /* rmnet_ipa3_set_lan_client_info() -
  * @data - IOCTL data
  *
@@ -4037,6 +4093,8 @@ int rmnet_ipa3_set_lan_client_info(
 	struct wan_ioctl_lan_client_info *data)
 {
 	struct ipa_lan_client *lan_client = NULL;
+	struct ipa_lan_client_cntr_index
+		*client_index = NULL;
 	struct ipa_tether_device_info *teth_ptr = NULL;
 
 
@@ -4058,6 +4116,14 @@ int rmnet_ipa3_set_lan_client_info(
 		return -EINVAL;
 	}
 
+	/* This should be done when allocation of hw fnr counters happens */
+	if (!(data->ul_cnt_idx > 0 &&
+		data->dl_cnt_idx == (data->ul_cnt_idx + 1))) {
+		IPAWANERR("Invalid counter indices %u, %u\n",
+				data->ul_cnt_idx, data->dl_cnt_idx);
+		return -EINVAL;
+	}
+
 	mutex_lock(&rmnet_ipa3_ctx->per_client_stats_guard);
 	if (data->client_init) {
 		/* check if the client is already inited. */
@@ -4072,6 +4138,7 @@ int rmnet_ipa3_set_lan_client_info(
 
 	teth_ptr = &rmnet_ipa3_ctx->tether_device[data->device_type];
 	lan_client = &teth_ptr->lan_client[data->client_idx];
+	client_index = &teth_ptr->lan_client_indices[data->client_idx];
 
 	memcpy(lan_client->mac, data->mac, IPA_MAC_ADDR_SIZE);
 
@@ -4085,6 +4152,13 @@ int rmnet_ipa3_set_lan_client_info(
 	if (!rmnet_ipa3_ctx->tether_device[data->device_type].hdr_len)
 		rmnet_ipa3_ctx->tether_device[data->device_type].hdr_len =
 			data->hdr_len;
+	client_index->ul_cnt_idx = data->ul_cnt_idx;
+	client_index->dl_cnt_idx = data->dl_cnt_idx;
+
+	IPAWANDBG("Device type %d, ul/dl = %d/%d\n",
+			data->device_type,
+			data->ul_cnt_idx,
+			data->dl_cnt_idx);
 
 	lan_client->inited = true;
 
@@ -4450,6 +4524,145 @@ int rmnet_ipa3_query_per_client_stats(
 	kfree(req);
 	kfree(resp);
 	return 0;
+}
+
+int rmnet_ipa3_query_per_client_stats_v2(
+		struct wan_ioctl_query_per_client_stats *data)
+{
+	int lan_clnt_idx, i, j;
+	struct ipa_lan_client *lan_client = NULL;
+	struct ipa_lan_client_cntr_index
+		*lan_client_index = NULL;
+	struct ipa_tether_device_info *teth_ptr = NULL;
+	struct ipa_ioc_flt_rt_query query_f;
+	struct ipa_ioc_flt_rt_query *query = &query_f;
+	struct ipa_flt_rt_stats *fnr_stats = NULL;
+	int ret = 1;
+
+	/* Check if Device type is valid. */
+	if (data->device_type >= IPACM_MAX_CLIENT_DEVICE_TYPES ||
+			data->device_type < 0) {
+		IPAWANERR("Invalid Device type: %d\n", data->device_type);
+		return -EINVAL;
+	}
+
+	/* Check if num_clients is valid. */
+	if (data->num_clients != IPA_MAX_NUM_HW_PATH_CLIENTS &&
+			data->num_clients != 1) {
+		IPAWANERR("Invalid number of clients: %d\n", data->num_clients);
+		return -EINVAL;
+	}
+
+	mutex_lock(&rmnet_ipa3_ctx->per_client_stats_guard);
+
+	/* Check if Source pipe is valid. */
+	if (rmnet_ipa3_ctx->tether_device
+			[data->device_type].ul_src_pipe == -1) {
+		IPAWANERR("Device not initialized: %d\n", data->device_type);
+		mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
+		return -EINVAL;
+	}
+
+	/* Check if we have clients connected. */
+	if (rmnet_ipa3_ctx->tether_device[data->device_type].num_clients == 0) {
+		IPAWANERR("No clients connected: %d\n", data->device_type);
+		mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
+		return -EINVAL;
+	}
+
+	if (data->num_clients == 1) {
+		/* Check if the client info is valid.*/
+		lan_clnt_idx = rmnet_ipa3_get_lan_client_info(
+				data->device_type,
+				data->client_info[0].mac);
+		if (lan_clnt_idx < 0) {
+			IPAWANERR("Client info not available return.\n");
+			mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
+			return -EINVAL;
+		}
+	} else {
+		/* Max number of clients. */
+		/* Check if disconnect flag is set and
+		 * see if all the clients info are cleared.
+		 */
+		if (data->disconnect_clnt &&
+			rmnet_ipa3_check_any_client_inited(data->device_type)) {
+			IPAWANERR("CLient not inited. Try again.\n");
+			mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
+			return -EAGAIN;
+		}
+		lan_clnt_idx = LAN_STATS_FOR_ALL_CLIENTS;
+	}
+
+	IPAWANDBG("Query stats for client index (0x%x)\n",
+		lan_clnt_idx);
+
+	teth_ptr = &rmnet_ipa3_ctx->tether_device[data->device_type];
+	lan_client = teth_ptr->lan_client;
+	lan_client_index = teth_ptr->lan_client_indices;
+
+	if (lan_clnt_idx == LAN_STATS_FOR_ALL_CLIENTS) {
+		i = 0;
+		j = IPA_MAX_NUM_HW_PATH_CLIENTS;
+	} else {
+		i = lan_clnt_idx;
+		j = i + 1;
+	}
+
+	for (; i < j; i++) {
+		if (!lan_client[i].inited && !data->disconnect_clnt)
+			continue;
+
+		IPAWANDBG("Client MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
+				lan_client[i].mac[0],
+				lan_client[i].mac[1],
+				lan_client[i].mac[2],
+				lan_client[i].mac[3],
+				lan_client[i].mac[4],
+				lan_client[i].mac[5]);
+		IPAWANDBG("Lan client %d inited\n", i);
+		IPAWANDBG("Query stats ul/dl indices = %u/%u\n",
+				lan_client_index[i].ul_cnt_idx,
+				lan_client_index[i].dl_cnt_idx);
+		memset(query, 0, sizeof(query_f));
+		ret = rmnet_ipa_get_hw_fnr_stats_v2(&lan_client_index[i],
+				data, query);
+		if (ret) {
+			IPAWANERR("Failed: Client type %d, idx %d\n",
+					data->device_type, i);
+			kfree((void *)query->stats);
+			continue;
+		}
+		fnr_stats = &((struct ipa_flt_rt_stats *)
+				query->stats)[0];
+		data->client_info[i].ipv4_tx_bytes =
+			fnr_stats->num_bytes;
+		fnr_stats = &((struct ipa_flt_rt_stats *)
+				query->stats)[1];
+		data->client_info[i].ipv4_rx_bytes =
+			fnr_stats->num_bytes;
+		memcpy(data->client_info[i].mac,
+				lan_client[i].mac,
+				IPA_MAC_ADDR_SIZE);
+
+		IPAWANDBG("Client ipv4_tx_bytes = %lu, ipv4_rx_bytes = %lu\n",
+				data->client_info[i].ipv4_tx_bytes,
+				data->client_info[i].ipv4_rx_bytes);
+
+		kfree((void *)query->stats);
+	}
+
+	/* Legacy per-client stats */
+	IPAWANDBG("Disconnect clnt: %s",
+			data->disconnect_clnt?"Yes":"No");
+
+	if (data->disconnect_clnt) {
+		rmnet_ipa3_delete_lan_client_info(data->device_type,
+				lan_clnt_idx);
+	}
+
+	mutex_unlock(&rmnet_ipa3_ctx->per_client_stats_guard);
+	return ret;
 }
 
 static int __init ipa3_wwan_init(void)

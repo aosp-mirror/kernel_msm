@@ -200,9 +200,6 @@ static int uid_time_in_state_seq_show(struct seq_file *m, void *v)
 				continue;
 			last_freqs = freqs;
 			for (i = 0; i < freqs->max_state; i++) {
-				if (freqs->freq_table[i] ==
-				    CPUFREQ_ENTRY_INVALID)
-					continue;
 				seq_put_decimal_ull(m, " ",
 						    freqs->freq_table[i]);
 			}

@@ -26,6 +26,7 @@
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_flip_work.h>
 #include <linux/clk/qcom.h>
+#include <linux/sde_rsc.h>
 
 #include "sde_kms.h"
 #include "sde_hw_lm.h"
@@ -4755,11 +4756,13 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	struct sde_kms *sde_kms;
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *cstate;
-	struct drm_encoder *encoder;
+	struct drm_encoder *encoder = NULL;
 	struct msm_drm_private *priv;
 	unsigned long flags;
 	struct sde_crtc_irq_info *node = NULL;
 	struct drm_event event;
+	wait_queue_head_t *vblank_queue;
+	int primary_crtc_id = -1;
 	u32 power_on;
 	bool in_cont_splash = false;
 	int ret, i;
@@ -4809,6 +4812,17 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 	SDE_EVT32(DRMID(crtc), sde_crtc->enabled, sde_crtc->suspend,
 			sde_crtc->vblank_requested,
 			crtc->state->active, crtc->state->enable);
+
+	/* check if anyone is waiting for primary vsync */
+	primary_crtc_id = get_sde_rsc_primary_crtc(SDE_RSC_INDEX);
+	if (crtc->base.id == primary_crtc_id) {
+		vblank_queue = drm_crtc_vblank_waitqueue(crtc);
+		if (waitqueue_active(vblank_queue)) {/* check for wait_queue */
+			drm_crtc_handle_vblank(crtc);
+			SDE_EVT32(DRMID(crtc), primary_crtc_id);
+		}
+	}
+
 	if (sde_crtc->enabled && !sde_crtc->suspend &&
 			sde_crtc->vblank_requested) {
 		ret = _sde_crtc_vblank_enable_no_lock(sde_crtc, false);
@@ -5220,7 +5234,7 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	struct drm_plane *plane;
 	struct drm_display_mode *mode;
 
-	int cnt = 0, rc = 0, mixer_width, i, z_pos;
+	int cnt = 0, rc = 0, mixer_width, i, z_pos, mixer_height;
 
 	struct sde_multirect_plane_states *multirect_plane = NULL;
 	int multirect_count = 0;
@@ -5286,6 +5300,7 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	drm_connector_list_iter_end(&conn_iter);
 
 	mixer_width = sde_crtc_get_mixer_width(sde_crtc, cstate, mode);
+	mixer_height = sde_crtc_get_mixer_height(sde_crtc, cstate, mode);
 
 	_sde_crtc_setup_is_ppsplit(state);
 	_sde_crtc_setup_lm_bounds(crtc, state);
@@ -5349,6 +5364,19 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 		}
 
 		cnt++;
+
+		/*
+		 * TODO: num_mixers could be 0 on first commit, this should
+		 * be revisited to avoid depending on current sde_crtc state
+		 */
+		if (sde_crtc->num_mixers && ((pstate->crtc_h > mixer_height) ||
+		 (pstate->crtc_w > (mixer_width * sde_crtc->num_mixers)))) {
+			SDE_ERROR("plane w/h:%x*%x more than mixer w/h:%x*%x\n",
+			pstate->crtc_w, pstate->crtc_h,
+			sde_crtc->num_mixers * mixer_width, mixer_height);
+			rc = -E2BIG;
+			goto end;
+		}
 
 		if (CHECK_LAYER_BOUNDS(pstate->crtc_y, pstate->crtc_h,
 				mode->vdisplay) ||

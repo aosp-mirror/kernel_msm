@@ -499,6 +499,13 @@ static void ipa3_uc_response_hdlr(enum ipa_irq_type interrupt,
 		 */
 		ipa3_proxy_clk_unvote();
 
+		/*
+		 * To enable ipa power collapse we need to enable rpmh and uc
+		 * handshake So that uc can do register retention. To enable
+		 * this handshake we need to send the below message to rpmh.
+		 */
+		ipa_pc_qmp_enable();
+
 		for (i = 0; i < IPA_HW_NUM_FEATURES; i++) {
 			if (ipa3_uc_hdlrs[i].ipa_uc_loaded_hdlr)
 				ipa3_uc_hdlrs[i].ipa_uc_loaded_hdlr();

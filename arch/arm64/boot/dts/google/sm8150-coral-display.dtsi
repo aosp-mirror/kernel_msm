@@ -20,6 +20,7 @@
 
 &ab_vreg {
 	qcom,aod-pd-control;
+	qcom,aod-entry-poll-time-ms = <300>;
 };
 
 &ibb_vreg {

@@ -692,6 +692,7 @@ static int __cam_req_mgr_check_sync_for_mslave(
 	struct cam_req_mgr_req_queue *link_q = NULL, *sync_q = NULL;
 	int64_t req_id = 0, sync_req_id = 0, req_diff = 0;
 	uint64_t sync_apply_timestamp = 0;
+	int32_t sync_num_slots = 0;
 
 	if (link->sync_links_num == 0) {
 		CAM_ERR(CAM_CRM, "No Synced links");
@@ -704,6 +705,7 @@ static int __cam_req_mgr_check_sync_for_mslave(
 	for (i = 0; i < link->sync_links_num; i++) {
 		sync_link = link->sync_links[i];
 		sync_q = sync_link->req.in_q;
+		sync_num_slots = sync_link->req.in_q->num_slots;
 		sync_rd_idx = sync_q->rd_idx;
 		sync_req_id = sync_q->slot[sync_rd_idx].req_id;
 		sync_apply_timestamp =
@@ -818,7 +820,8 @@ static int __cam_req_mgr_check_sync_for_mslave(
 
 				if ((sync_q->slot[sync_slot_idx].status !=
 					 CRM_SLOT_STATUS_REQ_APPLIED) &&
-					((sync_slot_idx - sync_rd_idx) >= 1) &&
+					(((sync_slot_idx - sync_rd_idx + sync_num_slots) %
+					sync_num_slots) >= 1) &&
 					(sync_q->slot[sync_rd_idx].status !=
 					 CRM_SLOT_STATUS_REQ_APPLIED)) {
 					CAM_DBG(CAM_CRM,
@@ -931,6 +934,7 @@ static int __cam_req_mgr_check_sync_req_is_ready(
 	int64_t req_id = 0;
 	int sync_slot_idx = 0, sync_rd_idx = 0, rc = 0, i;
 	struct cam_req_mgr_core_link *sync_link;
+	int32_t sync_num_slots = 0;
 
 	if (link->sync_links_num == 0) {
 		CAM_ERR(CAM_CRM, "No synced links");
@@ -938,6 +942,7 @@ static int __cam_req_mgr_check_sync_req_is_ready(
 	}
 
 	req_id = slot->req_id;
+	sync_num_slots = sync_link->req.in_q->num_slots;
 
 	for (i = 0; i < link->sync_links_num; i++) {
 		sync_link = link->sync_links[i];
@@ -990,7 +995,8 @@ static int __cam_req_mgr_check_sync_req_is_ready(
 		sync_rd_idx = sync_link->req.in_q->rd_idx;
 		if ((sync_link->req.in_q->slot[sync_slot_idx].status !=
 			 CRM_SLOT_STATUS_REQ_APPLIED) &&
-			((sync_slot_idx - sync_rd_idx) >= 1) &&
+			(((sync_slot_idx - sync_rd_idx + sync_num_slots) %
+			sync_num_slots) >= 1) &&
 			(sync_link->req.in_q->slot[sync_rd_idx].status !=
 			 CRM_SLOT_STATUS_REQ_APPLIED)) {
 			CAM_DBG(CAM_CRM,
@@ -2023,7 +2029,9 @@ int cam_req_mgr_process_add_req(void *priv, void *data)
 	mutex_lock(&link->req.lock);
 	idx = __cam_req_mgr_find_slot_for_req(link->req.in_q, add_req->req_id);
 	if (idx < 0) {
-		CAM_ERR(CAM_CRM, "req %lld not found in in_q", add_req->req_id);
+		CAM_ERR(CAM_CRM,
+			"req %lld not found in in_q for dev %s on link 0x%x",
+			add_req->req_id, device->dev_info.name, link->link_hdl);
 		rc = -EBADSLT;
 		mutex_unlock(&link->req.lock);
 		goto end;
@@ -2043,8 +2051,10 @@ int cam_req_mgr_process_add_req(void *priv, void *data)
 
 	if (slot->state != CRM_REQ_STATE_PENDING &&
 		slot->state != CRM_REQ_STATE_EMPTY) {
-		CAM_WARN(CAM_CRM, "Unexpected state %d for slot %d map %x",
-			slot->state, idx, slot->req_ready_map);
+		CAM_WARN(CAM_CRM,
+			"Unexpected state %d for slot %d map %x for dev %s on link 0x%x",
+			slot->state, idx, slot->req_ready_map,
+			device->dev_info.name, link->link_hdl);
 	}
 
 	slot->state = CRM_REQ_STATE_PENDING;
