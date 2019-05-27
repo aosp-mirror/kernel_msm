@@ -44,6 +44,17 @@ static int adc_tm_set_trip_temp(void *data, int low_temp, int high_temp)
 	return 0;
 }
 
+static int adc_tm_set_emul_temp(void *data, int temp)
+{
+	struct adc_tm_sensor *s = data;
+	struct adc_tm_chip *adc_tm = s->chip;
+
+	if (adc_tm->ops->set_emul_temp)
+		return adc_tm->ops->set_emul_temp(s, temp);
+
+	return 0;
+}
+
 static int adc_tm_register_interrupts(struct adc_tm_chip *adc_tm)
 {
 	if (adc_tm->ops->interrupts_reg)
@@ -63,6 +74,7 @@ static int adc_tm_init(struct adc_tm_chip *adc_tm, uint32_t dt_chans)
 static struct thermal_zone_of_device_ops adc_tm_ops = {
 	.get_temp = adc_tm_get_temp,
 	.set_trips = adc_tm_set_trip_temp,
+	.set_emul_temp = adc_tm_set_emul_temp,
 };
 
 static struct thermal_zone_of_device_ops adc_tm_ops_iio = {
@@ -78,6 +90,7 @@ static int adc_tm_register_tzd(struct adc_tm_chip *adc_tm, int dt_chan_num,
 	for (i = 0; i < dt_chan_num; i++) {
 		adc_tm->sensor[i].chip = adc_tm;
 		if (!adc_tm->sensor[i].non_thermal) {
+			adc_tm->sensor[i].emul_temperature = 0;
 			if (set_trips)
 				tzd = devm_thermal_zone_of_sensor_register(
 					adc_tm->dev, adc_tm->sensor[i].adc_ch,
