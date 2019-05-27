@@ -29,6 +29,7 @@
 #define BATT_SOC_STS_CLR(chip)			(chip->batt_soc_base + 0x4A)
 #define BATT_SOC_LOW_PWR_CFG(chip)		(chip->batt_soc_base + 0x52)
 #define BATT_SOC_LOW_PWR_STS(chip)		(chip->batt_soc_base + 0x56)
+#define BATT_SOC_RST_CTRL0(chip)		(chip->batt_soc_base + 0xBA)
 
 /* BATT_SOC_INT_RT_STS */
 #define SOC_READY_BIT				BIT(1)
@@ -40,6 +41,9 @@
 
 /* BATT_SOC_RESTART */
 #define RESTART_GO_BIT				BIT(0)
+
+/* BCL_RESET */
+#define BCL_RESET_BIT				BIT(2)
 
 /* FG_BATT_INFO register definitions */
 #define BATT_INFO_BATT_TEMP_STS(chip)		(chip->batt_info_base + 0x06)
@@ -60,7 +64,6 @@
 #define BATT_INFO_JEITA_COLD(chip)		(chip->batt_info_base + 0x63)
 #define BATT_INFO_JEITA_HOT(chip)		(chip->batt_info_base + 0x64)
 #define BATT_INFO_JEITA_TOO_HOT(chip)		(chip->batt_info_base + 0x65)
-
 /* only for v1.1 */
 #define BATT_INFO_ESR_CFG(chip)			(chip->batt_info_base + 0x69)
 /* starting from v2.0 */
@@ -97,6 +100,8 @@
 #define BATT_INFO_IADC_MSB(chip)		(chip->batt_info_base + 0xAF)
 #define BATT_INFO_TM_MISC(chip)			(chip->batt_info_base + 0xE5)
 #define BATT_INFO_TM_MISC1(chip)		(chip->batt_info_base + 0xE6)
+#define BATT_INFO_PEEK_MUX1(chip)		(chip->batt_info_base + 0xEB)
+#define BATT_INFO_RDBACK(chip)			(chip->batt_info_base + 0xEF)
 
 /* BATT_INFO_BATT_TEMP_STS */
 #define JEITA_TOO_HOT_STS_BIT			BIT(7)
@@ -266,6 +271,9 @@
 #define ESR_REQ_CTL_BIT				BIT(1)
 #define ESR_REQ_CTL_EN_BIT			BIT(0)
 
+/* BATT_INFO_PEEK_MUX1 */
+#define PEEK_MUX1_BIT                          BIT(0)
+
 /* FG_MEM_IF register and bit definitions */
 #define MEM_IF_INT_RT_STS(chip)			((chip->mem_if_base) + 0x10)
 #define MEM_IF_MEM_ARB_CFG(chip)		((chip->mem_if_base) + 0x40)
@@ -335,6 +343,9 @@
 /* MEM_IF_DMA_CTL */
 #define ADDR_KIND_BIT				BIT(1)
 #define DMA_CLEAR_LOG_BIT			BIT(0)
+
+/* MEM_IF_REQ */
+#define MEM_IF_ARB_REQ_BIT                     BIT(0)
 
 /* FG_DMAx */
 #define FG_DMA0_BASE				0x4800

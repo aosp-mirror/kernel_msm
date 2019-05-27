@@ -494,6 +494,8 @@ struct fg_chip {
 	struct delayed_work	ttf_work;
 	struct delayed_work	sram_dump_work;
 	struct delayed_work	pl_enable_work;
+	struct delayed_work	bcl_vbat_deferred_probe_work;
+	struct delayed_work	bcl_reset_retry_work;
 	struct work_struct	esr_filter_work;
 	struct alarm		esr_filter_alarm;
 	ktime_t			last_delta_temp_time;
@@ -563,4 +565,5 @@ extern int fg_circ_buf_avg(struct fg_circ_buf *buf, int *avg);
 extern int fg_circ_buf_median(struct fg_circ_buf *buf, int *median);
 extern int fg_lerp(const struct fg_pt *pts, size_t tablesize, s32 input,
 			s32 *output);
+extern int fg_dma_mem_req(struct fg_chip *chip, bool request);
 #endif

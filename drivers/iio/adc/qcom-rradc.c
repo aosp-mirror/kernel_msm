@@ -238,6 +238,7 @@ struct rradc_chip {
 	struct pmic_revid_data		*pmic_fab_id;
 	int volt;
 	struct power_supply		*usb_trig;
+	struct power_supply		*bms_psy;
 };
 
 struct rradc_channels {
@@ -682,6 +683,17 @@ static const struct rradc_channels rradc_chans[] = {
 			FG_ADC_RR_AUX_THERM_STS)
 };
 
+static bool rradc_is_bms_psy_available(struct rradc_chip *chip)
+{
+	if (!chip->bms_psy)
+		chip->bms_psy = power_supply_get_by_name("bms");
+
+	if (!chip->bms_psy)
+		return false;
+
+	return true;
+}
+
 static int rradc_enable_continuous_mode(struct rradc_chip *chip)
 {
 	int rc = 0;
@@ -751,6 +763,7 @@ static int rradc_check_status_ready_with_retry(struct rradc_chip *chip,
 		struct rradc_chan_prop *prop, u8 *buf, u16 status)
 {
 	int rc = 0, retry_cnt = 0, mask = 0;
+	union power_supply_propval pval = {0, };
 
 	switch (prop->channel) {
 	case RR_ADC_BATT_ID:
@@ -785,8 +798,26 @@ static int rradc_check_status_ready_with_retry(struct rradc_chip *chip,
 		}
 	}
 
-	if (retry_cnt >= FG_RR_CONV_MAX_RETRY_CNT)
-		rc = -ENODATA;
+	if ((retry_cnt >= FG_RR_CONV_MAX_RETRY_CNT) &&
+		((prop->channel != RR_ADC_DCIN_V) ||
+			(prop->channel != RR_ADC_DCIN_I))) {
+		if (rradc_is_bms_psy_available(chip)) {
+			pval.intval = 1;
+			rc = power_supply_set_property(chip->bms_psy,
+					POWER_SUPPLY_PROP_FG_RESET_CLOCK,
+					&pval);
+			if (rc < 0) {
+				pr_err("Couldn't reset FG clock rc=%d\n", rc);
+				return rc;
+			}
+		} else {
+			pr_err("Error obtaining bms power supply\n");
+			rc = -EINVAL;
+		}
+	} else {
+		if (retry_cnt >= FG_RR_CONV_MAX_RETRY_CNT)
+			rc = -ENODATA;
+	}
 
 	return rc;
 }
@@ -1199,6 +1230,10 @@ static int rradc_probe(struct platform_device *pdev)
 				FG_ADC_RR_AUX_THERM_EVERY_CYCLE);
 	if (rc < 0)
 		pr_err("Failed to set FG_ADC_RR_AUX_THERM_EVERY_CYCLE");
+
+	chip->bms_psy = power_supply_get_by_name("bms");
+	if (!chip->bms_psy)
+		pr_debug("Error obtaining bms power supply\n");
 
 	return devm_iio_device_register(dev, indio_dev);
 }
