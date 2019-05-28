@@ -394,13 +394,19 @@ static int ipu_iommu_page_table_dma_transfer(
 	struct abc_pcie_kernel_dma_desc desc;
 
 	memset((void *)&desc, 0, sizeof(desc));
-	desc.local_buf = (void *)dma_map_single(pg_table->dma_dev,
-		local_buffer, size,
-		DMA_TO_DEVICE);
-	if (desc.local_buf == 0)
-		return -ENOMEM;
+	if (is_vmalloc_addr(local_buffer)) {
+		/* mapping is handled by DMA driver for VMALLOC buffers */
+		desc.local_buf_kind = DMA_BUFFER_KIND_VMALLOC;
+		desc.local_buf = local_buffer;
+	} else {
+		desc.local_buf = (void *)dma_map_single(pg_table->dma_dev,
+			local_buffer, size,
+			DMA_TO_DEVICE);
+		if (desc.local_buf == 0)
+			return -ENOMEM;
+		desc.local_buf_kind = DMA_BUFFER_KIND_CMA;
+	}
 
-	desc.local_buf_kind = DMA_BUFFER_KIND_CMA;
 	desc.remote_buf = (uint64_t)remote_addr;
 	desc.remote_buf_kind = DMA_BUFFER_KIND_USER;
 	desc.size = size;
@@ -411,9 +417,9 @@ static int ipu_iommu_page_table_dma_transfer(
 		dev_err(pg_table->dma_dev,
 			"Error (%d) transferring page table with PCIe DMA\n",
 			err);
-
-	dma_unmap_single(pg_table->dma_dev, (dma_addr_t)desc.local_buf,
-		size, DMA_TO_DEVICE);
+	if (!is_vmalloc_addr(local_buffer))
+		dma_unmap_single(pg_table->dma_dev, (dma_addr_t)desc.local_buf,
+			size, DMA_TO_DEVICE);
 
 	return err;
 }
@@ -576,17 +582,16 @@ static int ipu_iommu_page_table_reset_ab_mem(
 
 static struct ipu_iommu_page_table_shadow_entry
 	__ipu_iommu_pgtable_alloc_pages(
-	struct ipu_iommu_page_table *pg_table,
-	size_t size, gfp_t gfp,
-	struct io_pgtable_cfg *cfg, void *cookie, bool alloc_shadow,
-	bool reset_ab_mem)
+		struct ipu_iommu_page_table *pg_table,
+		size_t size, gfp_t gfp,
+		struct io_pgtable_cfg *cfg, void *cookie, bool alloc_shadow,
+		bool reset_ab_mem)
 {
 	struct device *dev = cfg->iommu_dev;
 	struct ipu_iommu_page_table_shadow_entry res;
 
 	memset(&res, 0, sizeof(res));
-	res.page_table_entry = io_pgtable_alloc_pages_exact(cfg, cookie, size,
-						   gfp | __GFP_ZERO);
+	res.page_table_entry = kvzalloc(size, gfp);
 
 	if (!res.page_table_entry) {
 		dev_err(dev,
@@ -595,7 +600,7 @@ static struct ipu_iommu_page_table_shadow_entry
 	}
 
 	if (alloc_shadow) {
-		res.next_lvl = kzalloc(PTE_ARM_TO_IPU * size, gfp);
+		res.next_lvl = kvzalloc(PTE_ARM_TO_IPU * size, gfp);
 		if (!res.next_lvl)
 			goto out_free_local;
 	} else {
@@ -626,10 +631,10 @@ free_ab_dram:
 	ab_dram_free_dma_buf_kernel(res.ab_dram_dma_buf);
 free_shadow:
 	if (alloc_shadow)
-		kfree(res.next_lvl);
+		kvfree(res.next_lvl);
 	res.next_lvl = NULL;
 out_free_local:
-	io_pgtable_free_pages_exact(cfg, cookie, res.page_table_entry, size);
+	kvfree(res.page_table_entry);
 	res.page_table_entry = NULL;
 	return res;
 }
@@ -642,9 +647,9 @@ static void __ipu_iommu_pgtable_free_pages(
 {
 	COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_LOCAL_ALLOC, -size *
 		(1 + (entry->next_lvl ? PTE_ARM_TO_IPU : 0)));
-	io_pgtable_free_pages_exact(cfg, cookie, entry->page_table_entry, size);
+	kvfree(entry->page_table_entry);
 	entry->page_table_entry = NULL;
-	kfree(entry->next_lvl);
+	kvfree(entry->next_lvl);
 	entry->next_lvl = NULL;
 	if (entry->ab_dram_dma_buf)
 		COLLECT_SAMPLE(IPU_IOMMU_PT_CNT_ABDRAM_ALLOC, -size);
