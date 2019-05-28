@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/printk.h>
+#include <linux/rwlock.h>
 #include <linux/version.h>
 #ifdef GASKET_KERNEL_TRACE_SUPPORT
 #define CREATE_TRACE_POINTS
@@ -59,6 +60,9 @@ struct gasket_interrupt_data {
 
 	/* The eventfd "callback" data for each interrupt. */
 	struct eventfd_ctx **eventfd_ctxs;
+
+	/* Spinlock to protect read/write races to eventfd_ctxs. */
+	rwlock_t eventfd_ctx_lock;
 
 	/* The number of times each interrupt has been called. */
 	ulong *interrupt_counts;
@@ -151,9 +155,11 @@ gasket_handle_interrupt(struct gasket_interrupt_data *interrupt_data,
 	struct eventfd_ctx *ctx;
 
 	trace_gasket_interrupt_event(interrupt_data->name, interrupt_index);
+	read_lock(&interrupt_data->eventfd_ctx_lock);
 	ctx = interrupt_data->eventfd_ctxs[interrupt_index];
 	if (ctx)
 		eventfd_signal(ctx, 1);
+	read_unlock(&interrupt_data->eventfd_ctx_lock);
 
 	++(interrupt_data->interrupt_counts[interrupt_index]);
 }
@@ -355,6 +361,8 @@ int gasket_interrupt_init(struct gasket_dev *gasket_dev)
 		return -ENOMEM;
 	}
 
+	rwlock_init(&interrupt_data->eventfd_ctx_lock);
+
 	switch (interrupt_data->type) {
 	case PCI_MSIX:
 		ret = gasket_interrupt_msix_init(interrupt_data);
@@ -393,9 +401,11 @@ gasket_interrupt_msix_cleanup(struct gasket_interrupt_data *interrupt_data)
 {
 	int i;
 
-	for (i = 0; i < interrupt_data->num_configured; i++)
+	for (i = 0; i < interrupt_data->num_configured; i++) {
+		gasket_interrupt_clear_eventfd(interrupt_data, i);
 		free_irq(interrupt_data->msix_entries[i].vector,
 			 interrupt_data);
+	}
 	interrupt_data->num_configured = 0;
 
 	if (interrupt_data->msix_configured)
@@ -505,24 +515,38 @@ int gasket_interrupt_system_status(struct gasket_dev *gasket_dev)
 int gasket_interrupt_set_eventfd(struct gasket_interrupt_data *interrupt_data,
 				 int interrupt, int event_fd)
 {
-	struct eventfd_ctx *ctx = eventfd_ctx_fdget(event_fd);
-
-	if (IS_ERR(ctx))
-		return PTR_ERR(ctx);
+	struct eventfd_ctx *ctx;
+	ulong flags;
 
 	if (interrupt < 0 || interrupt >= interrupt_data->num_interrupts)
 		return -EINVAL;
 
+	ctx = eventfd_ctx_fdget(event_fd);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
+
+	/* Put the old eventfd ctx before setting, else we leak the ref. */
+	write_lock_irqsave(&interrupt_data->eventfd_ctx_lock, flags);
+	if (interrupt_data->eventfd_ctxs[interrupt] != NULL)
+		eventfd_ctx_put(interrupt_data->eventfd_ctxs[interrupt]);
 	interrupt_data->eventfd_ctxs[interrupt] = ctx;
+	write_unlock_irqrestore(&interrupt_data->eventfd_ctx_lock, flags);
 	return 0;
 }
 
 int gasket_interrupt_clear_eventfd(struct gasket_interrupt_data *interrupt_data,
 				   int interrupt)
 {
+	ulong flags;
+
 	if (interrupt < 0 || interrupt >= interrupt_data->num_interrupts)
 		return -EINVAL;
 
+	/* Put the old eventfd ctx before clearing, else we leak the ref. */
+	write_lock_irqsave(&interrupt_data->eventfd_ctx_lock, flags);
+	if (interrupt_data->eventfd_ctxs[interrupt] != NULL)
+		eventfd_ctx_put(interrupt_data->eventfd_ctxs[interrupt]);
 	interrupt_data->eventfd_ctxs[interrupt] = NULL;
+	write_unlock_irqrestore(&interrupt_data->eventfd_ctx_lock, flags);
 	return 0;
 }
