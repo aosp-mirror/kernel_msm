@@ -224,7 +224,7 @@
 	qcom,fg-esr-tight-lt-filter-micro-pct = <30000>;
 	qcom,fg-esr-broad-lt-filter-micro-pct = <30000>;
 	qcom,fg-batt-temp-compensation;
-	qcom,fg-temp-charging-factor = <35>;
+	qcom,fg-temp-charging-factor = <0>;
 	qcom,fg-temp-info = <(-300)  (-200)  (-190)  (-180)
 			(-170)  (-160)  (-150)  (-100)
 			(-50)   0       50      100
@@ -236,8 +236,8 @@
 				5  10  10  20
 				30  30  10  10
 				0  (-10)  (-20)  (-30)
-				(-40)  (-40)  (-65)  (-60)
-				(-60)  (-40)  (-40)  (-30)
+				(-35)  (-40)  (-45)  (-50)
+				(-50)  (-40)  (-40)  (-30)
 				(-30)>;
 	qcom,fg-cutoff-voltage = <3400>;
 	qcom,fg-empty-voltage = <2650>;
