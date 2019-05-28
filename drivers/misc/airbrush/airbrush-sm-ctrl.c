@@ -285,9 +285,12 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(200, 100, 100, 101, 100, 300, 300),
 	/* Sleep */
 	CHIP_TO_BLOCK_MAP_INIT(300, 200, 200, 101, 100, 300, 300),
+	CHIP_TO_BLOCK_MAP_INIT(301, 300, 200, 101, 100, 300, 300),
+	CHIP_TO_BLOCK_MAP_INIT(302, 200, 300, 101, 100, 300, 300),
+	CHIP_TO_BLOCK_MAP_INIT(303, 300, 300, 101, 100, 300, 300),
 
 	/* Active */
-	CHIP_TO_BLOCK_MAP_INIT(400, 300, 300, 305, 305, 300, 302),
+	CHIP_TO_BLOCK_MAP_INIT(400, 300, 300, 305, 305, 300, 301),
 	CHIP_TO_BLOCK_MAP_INIT(401, 301, 301, 305, 305, 300, 302),
 	CHIP_TO_BLOCK_MAP_INIT(402, 302, 302, 305, 305, 300, 302),
 	CHIP_TO_BLOCK_MAP_INIT(403, 303, 303, 305, 305, 300, 302),
@@ -324,12 +327,12 @@ static struct chip_to_block_map chip_state_map[] = {
 	CHIP_TO_BLOCK_MAP_INIT(705, 200, 305, 101, 100, 304, 301),
 
 	/* IPU Only - Low DRAM */
-	CHIP_TO_BLOCK_MAP_INIT(800, 300, 200, 101, 100, 300, 300),
-	CHIP_TO_BLOCK_MAP_INIT(801, 301, 200, 305, 303, 300, 300),
-	CHIP_TO_BLOCK_MAP_INIT(802, 302, 200, 305, 303, 300, 301),
-	CHIP_TO_BLOCK_MAP_INIT(803, 303, 200, 305, 303, 300, 301),
-	CHIP_TO_BLOCK_MAP_INIT(804, 304, 200, 305, 303, 300, 301),
-	CHIP_TO_BLOCK_MAP_INIT(805, 305, 200, 305, 303, 300, 301),
+	CHIP_TO_BLOCK_MAP_INIT(800, 300, 200, 305, 305, 300, 300),
+	CHIP_TO_BLOCK_MAP_INIT(801, 301, 200, 305, 305, 300, 300),
+	CHIP_TO_BLOCK_MAP_INIT(802, 302, 200, 305, 305, 300, 301),
+	CHIP_TO_BLOCK_MAP_INIT(803, 303, 200, 305, 305, 300, 301),
+	CHIP_TO_BLOCK_MAP_INIT(804, 304, 200, 305, 305, 300, 301),
+	CHIP_TO_BLOCK_MAP_INIT(805, 305, 200, 305, 305, 300, 301),
 
 	/* Secure app only state */
 	CHIP_TO_BLOCK_MAP_INIT(900, 305, 305, 305, 305, 300, 303),
@@ -425,7 +428,7 @@ void ab_sm_register_blk_callback(enum block_name name,
 
 static inline bool is_low_power(u32 state_id)
 {
-	return (state_id <= CHIP_STATE_SLEEP);
+	return (state_id <= CHIP_STATE_SLEEP_BOTH_UP);
 }
 
 static inline bool is_active(u32 state_id)
@@ -446,7 +449,8 @@ static inline bool is_partially_active(u32 state_id)
 
 static inline bool is_sleep(u32 state_id)
 {
-	return (state_id == CHIP_STATE_SLEEP ||
+	return ((state_id >= CHIP_STATE_SLEEP &&
+				state_id <= CHIP_STATE_SLEEP_BOTH_UP) ||
 			state_id == CHIP_STATE_DEEP_SLEEP);
 }
 
@@ -851,21 +855,17 @@ static bool is_valid_transition(struct ab_state_context *sc,
 
 	switch (curr_chip_substate_id) {
 	case CHIP_STATE_DEEP_SLEEP:
-		if (to_chip_substate_id == CHIP_STATE_SLEEP)
+		if (is_sleep(to_chip_substate_id))
 			return false;
 		break;
 	case CHIP_STATE_SUSPEND:
-		if (to_chip_substate_id == CHIP_STATE_DEEP_SLEEP)
-			return false;
-		if (to_chip_substate_id == CHIP_STATE_SLEEP)
+		if (is_sleep(to_chip_substate_id))
 			return false;
 		break;
 	case CHIP_STATE_OFF:
 		if (to_chip_substate_id == CHIP_STATE_SUSPEND)
 			return false;
-		if (to_chip_substate_id == CHIP_STATE_DEEP_SLEEP)
-			return false;
-		if (to_chip_substate_id == CHIP_STATE_SLEEP)
+		if (is_sleep(to_chip_substate_id))
 			return false;
 		break;
 	}
@@ -944,6 +944,9 @@ const enum stat_state ab_chip_state_to_stat_state(
 
 	switch (id) {
 	case CHIP_STATE_SLEEP:
+	case CHIP_STATE_SLEEP_IPU_UP:
+	case CHIP_STATE_SLEEP_TPU_UP:
+	case CHIP_STATE_SLEEP_BOTH_UP:
 		return STAT_STATE_SLEEP;
 	case CHIP_STATE_DEEP_SLEEP:
 		return STAT_STATE_DEEP_SLEEP;
