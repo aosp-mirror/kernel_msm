@@ -1793,6 +1793,7 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-lp1-command",
 	"qcom,mdss-dsi-lp2-command",
 	"qcom,mdss-dsi-nolp-command",
+	"qcom,mdss-dsi-post-nolp-command",
 	"qcom,mdss-dsi-vr-command",
 	"qcom,mdss-dsi-novr-command",
 	"PPS not parsed from DTSI, generated dynamically",
@@ -1821,6 +1822,7 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-lp1-command-state",
 	"qcom,mdss-dsi-lp2-command-state",
 	"qcom,mdss-dsi-nolp-command-state",
+	"qcom,mdss-dsi-post-nolp-command-state",
 	"qcom,mdss-dsi-vr-command-state",
 	"qcom,mdss-dsi-novr-command-state",
 	"PPS not parsed from DTSI, generated dynamically",
@@ -3549,6 +3551,7 @@ struct {
 	{ "lp1",		DSI_CMD_SET_LP1 },
 	{ "lp2",		DSI_CMD_SET_LP2 },
 	{ "no_lp",		DSI_CMD_SET_NOLP },
+	{ "post_nolp",		DSI_CMD_SET_POST_NOLP },
 	{ "vr",			DSI_CMD_SET_VR },
 	{ "novr",		DSI_CMD_SET_NOVR },
 	{ "switch",		DSI_CMD_SET_TIMING_SWITCH },
@@ -4253,7 +4256,13 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	if (!panel->panel_initialized)
 		goto exit;
 
-	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+	if (!panel->funcs || !panel->funcs->send_nolp)
+		goto exit;
+
+	rc = panel->funcs->send_nolp(panel);
+	if (rc == -EOPNOTSUPP)
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_NOLP);
+
 	if (rc)
 		pr_err("[%s] failed to send DSI_CMD_SET_NOLP cmd, rc=%d\n",
 		       panel->name, rc);

@@ -327,6 +327,7 @@ struct dsi_panel {
  * @update_hbm: for certain projects hbm/dimming configuration may need to be
  * kept in sync depending on current mode. This function should be called with
  * updated hbm/dimming params
+ * @send_nolp: called when sending nolp commands
  */
 struct dsi_panel_funcs {
 	int (*pre_disable)(struct dsi_panel *);
@@ -336,6 +337,7 @@ struct dsi_panel_funcs {
 	int (*idle)(struct dsi_panel *);
 	int (*wakeup)(struct dsi_panel *);
 	int (*update_hbm)(struct dsi_panel *);
+	int (*send_nolp)(struct dsi_panel *);
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
