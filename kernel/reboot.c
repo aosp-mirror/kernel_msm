@@ -249,6 +249,9 @@ void kernel_halt(void)
 }
 EXPORT_SYMBOL_GPL(kernel_halt);
 
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+extern unsigned int lcd_reset_high;
+#endif
 /**
  *	kernel_power_off - power_off the system
  *
@@ -256,6 +259,9 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  */
 void kernel_power_off(void)
 {
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+	lcd_reset_high = 0;
+#endif
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();

@@ -259,6 +259,9 @@ error:
 }
 EXPORT_SYMBOL(msm_mdss_config_vreg_opt_mode);
 
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+extern unsigned int lcd_reset_high;
+#endif
 int msm_mdss_enable_vreg(struct mdss_vreg *in_vreg, int num_vreg, int enable)
 {
 	int i = 0, rc = 0;
@@ -285,6 +288,12 @@ int msm_mdss_enable_vreg(struct mdss_vreg *in_vreg, int num_vreg, int enable)
 					in_vreg[i].vreg_name);
 				goto vreg_set_opt_mode_fail;
 			}
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+			if(!strcmp(in_vreg[i].vreg_name, "vdd")){
+				if (!lcd_reset_high)
+					rc = regulator_enable(in_vreg[i].vreg);
+			}else
+#endif
 			rc = regulator_enable(in_vreg[i].vreg);
 			if (in_vreg[i].post_on_sleep && need_sleep)
 				usleep_range((in_vreg[i].post_on_sleep * 1000),
@@ -304,9 +313,15 @@ int msm_mdss_enable_vreg(struct mdss_vreg *in_vreg, int num_vreg, int enable)
 			regulator_set_load(in_vreg[i].vreg,
 				in_vreg[i].load[DSS_REG_MODE_DISABLE]);
 
-			if (regulator_is_enabled(in_vreg[i].vreg))
+			if (regulator_is_enabled(in_vreg[i].vreg)){
+#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
+			if(!strcmp(in_vreg[i].vreg_name, "vdd")){
+				if (!lcd_reset_high)
+					regulator_disable(in_vreg[i].vreg);
+			}else
+#endif
 				regulator_disable(in_vreg[i].vreg);
-
+			}
 			if (in_vreg[i].post_off_sleep)
 				usleep_range((in_vreg[i].post_off_sleep * 1000),
 				(in_vreg[i].post_off_sleep * 1000) + 10);
