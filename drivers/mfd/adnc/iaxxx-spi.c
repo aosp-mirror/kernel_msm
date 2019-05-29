@@ -30,6 +30,7 @@
  * our code request max read as 8k bytes
  * which translates to 2048 words
  */
+#define IAXXX_SPI_MAX_SIZE	((128*1024) + IAXXX_REG_LEN_WITH_PADDING)
 #define IAXXX_SPI_PACKET_LEN	2048
 #define IAXXX_REG_LEN		4
 /* Padding is required to give time FW ready for data */
@@ -48,6 +49,9 @@
 struct iaxxx_spi_priv {
 	struct iaxxx_priv priv;	/* private data */
 	struct spi_device *spi;
+	struct mutex spi_mutex;
+	uint8_t *rx_buf;
+	uint8_t *tx_buf;
 };
 
 static inline struct iaxxx_spi_priv *to_spi_priv(struct iaxxx_priv *priv)
@@ -79,47 +83,71 @@ static void register_dump_log(struct device *dev,
 
 static int iaxxx_spi_read(struct spi_device *spi, void *buf, int len)
 {
+	struct iaxxx_priv *priv = to_iaxxx_priv(&spi->dev);
+	struct iaxxx_spi_priv *spi_priv = to_spi_priv(priv);
 	int rc;
 	void *dmabuf;
 
-	/* TODO: don't have so many kmallocs on each spi transaction. */
-	dmabuf = kmalloc(len, GFP_DMA | GFP_KERNEL);
+	mutex_lock(&spi_priv->spi_mutex);
+	memset(spi_priv->rx_buf, 0, IAXXX_SPI_MAX_SIZE);
+
+	if (len > IAXXX_SPI_MAX_SIZE) {
+		pr_err("%s() msg_len excess MAX!\n", __func__);
+		rc = -EINVAL;
+		goto err;
+	}
+
+	dmabuf = spi_priv->rx_buf;
 	if (!dmabuf) {
 		pr_err("%s: allocate DMA buffer failed\n", __func__);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err;
 	}
 
 	rc = spi_read(spi, dmabuf, len);
 	memcpy(buf, dmabuf, len);
-	kfree(dmabuf);
 	if (rc < 0) {
 		dev_err(&spi->dev, "spi_read() failed, rc = %d\n", rc);
-		return rc;
+		goto err;
 	}
 
-	return 0;
+err:
+	mutex_unlock(&spi_priv->spi_mutex);
+	return rc;
 }
 
 static int iaxxx_spi_write(struct spi_device *spi, const void *buf, int len)
 {
+	struct iaxxx_priv *priv = to_iaxxx_priv(&spi->dev);
+	struct iaxxx_spi_priv *spi_priv = to_spi_priv(priv);
 	int rc;
 	void *dmabuf;
 
-	/* TODO: don't have so many kmallocs on each spi transaction. */
-	dmabuf = kmalloc(len, GFP_DMA | GFP_KERNEL);
+	mutex_lock(&spi_priv->spi_mutex);
+	memset(spi_priv->tx_buf, 0, IAXXX_SPI_MAX_SIZE);
+
+	if (len > IAXXX_SPI_MAX_SIZE) {
+		pr_err("%s() msg_len excess MAX!\n", __func__);
+		rc = -EINVAL;
+		goto err;
+	}
+
+	dmabuf = spi_priv->tx_buf;
 	if (!dmabuf) {
 		pr_err("%s: allocate DMA buffer failed\n", __func__);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto err;
 	}
 
 	memcpy(dmabuf, buf, len);
 	rc = spi_write(spi, dmabuf, len);
-	kfree(dmabuf);
 	if (rc < 0) {
 		dev_err(&spi->dev, "spi_write() failed, rc = %d\n", rc);
-		return rc;
+		goto err;
 	}
 
+err:
+	mutex_unlock(&spi_priv->spi_mutex);
 	return rc;
 }
 
@@ -132,6 +160,7 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 		pr_err("%s: NULL input pointer(s)\n", __func__);
 		return -EINVAL;
 	}
+
 	ret = iaxxx_pm_get_sync(&spi->dev);
 	if (ret < 0)
 		return ret;
@@ -201,6 +230,8 @@ static int iaxxx_spi_write_common(void *context,
 	size_t val_len_new = val_len;
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	struct iaxxx_spi_priv *spi_priv = to_spi_priv(priv);
 	struct spi_message m;
 	struct spi_transfer t[1] = { };
 	uint8_t *padding;
@@ -208,10 +239,22 @@ static int iaxxx_spi_write_common(void *context,
 
 	pr_debug("%s() Register address %x\n", __func__, reg_addr);
 
-	padding = kzalloc((val_len + IAXXX_REG_LEN_WITH_PADDING),
-				GFP_DMA | GFP_KERNEL);
-	if (!padding)
-		return -ENOMEM;
+	if (pm_needed) {
+		rc = iaxxx_pm_get_sync(&spi->dev);
+		if (rc < 0)
+			goto get_sync_err;
+	}
+
+	mutex_lock(&spi_priv->spi_mutex);
+	memset(spi_priv->tx_buf, 0, IAXXX_SPI_MAX_SIZE);
+
+	if ((val_len + IAXXX_REG_LEN_WITH_PADDING) > IAXXX_SPI_MAX_SIZE) {
+		rc = -EINVAL;
+		pr_err("%s() val_len %d excess MAX!\n", __func__, (int)val_len);
+		goto err;
+	}
+
+	padding = spi_priv->tx_buf;
 
 	if (data_in_be32_fmt)
 		reg_addr = be32_to_cpu(reg_addr);
@@ -234,19 +277,13 @@ static int iaxxx_spi_write_common(void *context,
 	t[0].tx_buf = padding;
 	spi_message_add_tail(&t[0], &m);
 
-	if (pm_needed) {
-		rc = iaxxx_pm_get_sync(&spi->dev);
-		if (rc < 0)
-			goto pm_sync_err;
-	}
 	rc = spi_sync(spi, &m);
 	if (pm_needed)
 		iaxxx_pm_put_autosuspend(&spi->dev);
 
-pm_sync_err:
-	if (padding != NULL)
-		kfree(padding);
-
+err:
+	mutex_unlock(&spi_priv->spi_mutex);
+get_sync_err:
 	return rc;
 }
 
@@ -349,26 +386,36 @@ static int iaxxx_spi_read_common(void *context,
 {
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
+	struct iaxxx_spi_priv *spi_priv = to_spi_priv(priv);
 	struct spi_message m;
 	struct spi_transfer t[1] = { };
 	uint32_t reg2[4] = {0};
 	uint8_t *rx_buf;
 	uint8_t *tx_buf;
 	int rc = 0;
-
 	uint32_t reg_addr = be32_to_cpu(*(uint32_t *)reg);
 	size_t msg_len = max(sizeof(reg2),
 			     val_len + IAXXX_REG_LEN_WITH_PADDING);
 
-	tx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
-	if (tx_buf == NULL)
-		return -ENOMEM;
-
-	rx_buf = kzalloc(msg_len, GFP_DMA | GFP_KERNEL);
-	if (rx_buf == NULL) {
-		rc = -ENOMEM;
-		goto mem_alloc_fail;
+	if (pm_needed) {
+		rc = iaxxx_pm_get_sync(&spi->dev);
+		if (rc < 0)
+			goto get_sync_err;
 	}
+
+	mutex_lock(&spi_priv->spi_mutex);
+	memset(spi_priv->rx_buf, 0, IAXXX_SPI_MAX_SIZE);
+	memset(spi_priv->tx_buf, 0, IAXXX_SPI_MAX_SIZE);
+
+	if (msg_len > IAXXX_SPI_MAX_SIZE) {
+		rc = -EINVAL;
+		pr_err("%s() msg_len excess MAX!\n", __func__);
+		goto err;
+	}
+
+	rx_buf = spi_priv->rx_buf;
+	tx_buf = spi_priv->tx_buf;
 
 	/* For reads, most significant bit is set after address shifted */
 	reg_addr = cpu_to_be32(reg_addr >> 1) | 0x80;
@@ -377,11 +424,6 @@ static int iaxxx_spi_read_common(void *context,
 
 	spi_message_init(&m);
 
-	if (pm_needed) {
-		rc = iaxxx_pm_get_sync(&spi->dev);
-		if (rc < 0)
-			goto pm_sync_err;
-	}
 	/* Register address */
 	t[0].len = msg_len;
 	t[0].tx_buf = tx_buf;
@@ -397,10 +439,9 @@ static int iaxxx_spi_read_common(void *context,
 spi_sync_err:
 	if (pm_needed)
 		iaxxx_pm_put_autosuspend(&spi->dev);
-pm_sync_err:
-	kfree(rx_buf);
-mem_alloc_fail:
-	kfree(tx_buf);
+err:
+	mutex_unlock(&spi_priv->spi_mutex);
+get_sync_err:
 	return rc;
 }
 
@@ -437,6 +478,7 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 {
 	struct device *dev = priv->dev;
 	struct spi_device *spi = to_spi_device(dev);
+	struct iaxxx_spi_priv *spi_priv = to_spi_priv(priv);
 	struct spi_transfer t[1] = {};
 	struct spi_message m;
 	uint8_t *cbuf = (uint8_t *)buf;
@@ -445,33 +487,37 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	uint32_t val_len;
 	uint8_t *preg_addr;
 
+	rc = iaxxx_pm_get_sync(&spi->dev);
+	if (rc < 0)
+		goto get_sync_err;
+
+	mutex_lock(&spi_priv->spi_mutex);
+	memset(spi_priv->rx_buf, 0, IAXXX_SPI_MAX_SIZE);
+	memset(spi_priv->tx_buf, 0, IAXXX_SPI_MAX_SIZE);
+
 	if (len <= IAXXX_REG_LEN_WITH_PADDING) {
 		dev_err(dev, "%s() len parameter invalid\n", __func__);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto err;
+	}
+
+	if (len > IAXXX_SPI_MAX_SIZE) {
+		dev_err(dev, "%s() msg_len excess MAX!\n", __func__);
+		rc = -EINVAL;
+		goto err;
 	}
 
 	spi_message_init(&m);
 
-	preg_addr = kzalloc(len, GFP_DMA | GFP_KERNEL);
-	if (preg_addr == NULL) {
-		pr_err("%s() failed to allocate memory\n", __func__);
-		return -ENOMEM;
-	}
+	preg_addr = spi_priv->tx_buf;
 
 	/* Create buffer to store read data */
 	val_len = len - IAXXX_REG_LEN_WITH_PADDING;
-	val = kzalloc(len, GFP_DMA | GFP_KERNEL);
-	if (!val) {
-		pr_err("%s() failed to allocate memory\n", __func__);
-		rc = -ENOMEM;
-		goto mem_alloc_fail;
-	}
+	val = spi_priv->rx_buf;
+
 	/* Fetch the Register address with padding */
 	memcpy(preg_addr, cbuf, IAXXX_REG_LEN_WITH_PADDING);
 
-	rc = iaxxx_pm_get_sync(&spi->dev);
-	if (rc < 0)
-		goto pm_sync_err;
 	/* Add Register address write message */
 	t[0].len = len;
 	t[0].tx_buf = (void *)preg_addr;
@@ -481,16 +527,15 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	/* Transfer the message */
 	rc = spi_sync(spi, &m);
 	if (rc)
-		goto err;
+		goto spi_fail;
 	/* Copy the read data into buffer after reagister address */
 	memcpy((uint8_t *)(buf + IAXXX_REG_LEN_WITH_PADDING),
 			val + IAXXX_REG_LEN_WITH_PADDING, val_len);
-err:
+spi_fail:
 	iaxxx_pm_put_autosuspend(&spi->dev);
-mem_alloc_fail:
-pm_sync_err:
-	kfree(val);
-	kfree(preg_addr);
+err:
+	mutex_unlock(&spi_priv->spi_mutex);
+get_sync_err:
 	return rc;
 }
 
@@ -509,7 +554,6 @@ static int iaxxx_spi_bus_raw_write(struct iaxxx_priv *priv, const void *buf,
 		pr_err("%s() len parameter invalid\n", __func__);
 		return -EINVAL;
 	}
-
 
 	rc = iaxxx_pm_get_sync(dev);
 	if (rc < 0)
@@ -923,6 +967,24 @@ static int iaxxx_spi_probe(struct spi_device *spi)
 	if (!spi_priv)
 		return -ENOMEM;
 
+	mutex_init(&spi_priv->spi_mutex);
+
+	spi_priv->rx_buf = devm_kzalloc(dev,
+			IAXXX_SPI_MAX_SIZE, GFP_DMA | GFP_KERNEL);
+	if (!spi_priv->rx_buf) {
+		rc = -ENOMEM;
+		dev_err(dev, "%s rx buf alloc fail\n", __func__);
+		goto rx_mem_failed;
+	}
+
+	spi_priv->tx_buf = devm_kzalloc(dev,
+			IAXXX_SPI_MAX_SIZE, GFP_DMA | GFP_KERNEL);
+	if (!spi_priv->tx_buf) {
+		rc = -ENOMEM;
+		dev_err(dev, "%s tx buf alloc fail\n", __func__);
+		goto tx_mem_failed;
+	}
+
 	spi_priv->priv.iaxxx_state = devm_kzalloc(dev,
 			sizeof(struct iaxxx_system_state), GFP_KERNEL);
 	if (!spi_priv->priv.iaxxx_state) {
@@ -971,7 +1033,13 @@ probe_failed:
 	devm_kfree(&spi->dev, spi_priv->priv.crashlog);
 crash_mem_failed:
 	devm_kfree(&spi->dev, spi_priv->priv.iaxxx_state);
+
 state_mem_failed:
+	devm_kfree(dev, spi_priv->tx_buf);
+tx_mem_failed:
+	devm_kfree(dev, spi_priv->rx_buf);
+rx_mem_failed:
+	mutex_destroy(&spi_priv->spi_mutex);
 	devm_kfree(dev, spi_priv);
 	spi_set_drvdata(spi, NULL);
 	return rc;
@@ -982,6 +1050,7 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 	struct iaxxx_spi_priv *spi_priv = spi_get_drvdata(spi);
 
 	if (spi_priv) {
+		mutex_destroy(&spi_priv->spi_mutex);
 		iaxxx_device_exit(&spi_priv->priv);
 		devm_kfree(&spi->dev, spi_priv->priv.iaxxx_state);
 		kvfree(spi_priv->priv.crashlog->log_buffer);
