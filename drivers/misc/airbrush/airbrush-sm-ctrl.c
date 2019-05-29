@@ -587,7 +587,8 @@ int clk_set_frequency(struct ab_state_context *sc, struct block *blk,
 }
 
 int blk_set_state(struct ab_state_context *sc, struct block *blk,
-	enum block_state to_block_state_id)
+	enum block_state to_block_state_id,
+	u32 to_chip_substate_id)
 {
 	struct ab_sm_pmu_ops *pmu;
 	struct ab_sm_clk_ops *clk;
@@ -633,10 +634,14 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		}
 	}
 
-	if (clk_set_frequency(sc, blk, last_state, desired_state->clk_frequency,
-			desired_state->clk_status)) {
-		mutex_unlock(&sc->op_lock);
-		return -EAGAIN;
+	/* Clock settings */
+	if (!is_powered_down(to_chip_substate_id)) {
+		if (clk_set_frequency(sc, blk, last_state,
+					desired_state->clk_frequency,
+					desired_state->clk_status)) {
+			mutex_unlock(&sc->op_lock);
+			return -EAGAIN;
+		}
 	}
 
 	/* Block specific hooks */
@@ -705,7 +710,8 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 
 int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 		struct block *ipu_blk, enum block_state to_ipu_state,
-		struct block *tpu_blk, enum block_state to_tpu_state)
+		struct block *tpu_blk, enum block_state to_tpu_state,
+		u32 to_chip_substate_id)
 {
 	struct ab_sm_pmu_ops *pmu;
 	struct ab_sm_clk_ops *clk;
@@ -723,9 +729,11 @@ int blk_set_ipu_tpu_states(struct ab_state_context *sc,
 			last_tpu_state->id == next_tpu_state->id)
 		return 0;
 	else if (last_ipu_state->id == next_ipu_state->id)
-		return blk_set_state(sc, tpu_blk, to_tpu_state);
+		return blk_set_state(sc, tpu_blk, to_tpu_state,
+				to_chip_substate_id);
 	else if (last_tpu_state->id == next_tpu_state->id)
-		return blk_set_state(sc, ipu_blk, to_ipu_state);
+		return blk_set_state(sc, ipu_blk, to_ipu_state,
+				to_chip_substate_id);
 
 	ipu_blk->current_state = next_ipu_state;
 	tpu_blk->current_state = next_tpu_state;
@@ -1137,11 +1145,16 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	dev_err(sc->dev, "Cleaning AB state\n");
 	blk_set_ipu_tpu_states(sc,
 			&(sc->blocks[BLK_IPU]), map->ipu_block_state_id,
-			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id);
-	blk_set_state(sc, &(sc->blocks[DRAM]), map->dram_block_state_id);
-	blk_set_state(sc, &(sc->blocks[BLK_MIF]), map->mif_block_state_id);
-	blk_set_state(sc, &(sc->blocks[BLK_FSYS]), map->fsys_block_state_id);
-	blk_set_state(sc, &(sc->blocks[BLK_AON]), map->aon_block_state_id);
+			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id,
+			CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[DRAM]),
+			map->dram_block_state_id, CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[BLK_MIF]),
+			map->mif_block_state_id, CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
+			map->fsys_block_state_id, CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[BLK_AON]),
+			map->aon_block_state_id, CHIP_STATE_OFF);
 
 	dev_err(sc->dev, "AB block states cleaned\n");
 
@@ -1278,14 +1291,16 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 					&(sc->blocks[BLK_IPU]),
 					active_map->ipu_block_state_id,
 					&(sc->blocks[BLK_TPU]),
-					active_map->tpu_block_state_id)) {
+					active_map->tpu_block_state_id,
+					to_chip_substate_id)) {
 				ret = -EINVAL;
 				dev_err(sc->dev, "blk_set_ipu_tpu_state failed\n");
 				goto cleanup_state;
 
 			}
 			if (blk_set_state(sc, &(sc->blocks[DRAM]),
-					active_map->dram_block_state_id)) {
+					active_map->dram_block_state_id,
+					to_chip_substate_id)) {
 				ret = -EINVAL;
 				dev_err(sc->dev, "blk_set_state failed for DRAM\n");
 				goto cleanup_state;
@@ -1324,7 +1339,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 		ab_sm_start_ts(AB_SM_TS_AON_DRAM_INIT);
 		if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-					active_map->aon_block_state_id)) {
+					active_map->aon_block_state_id,
+					to_chip_substate_id)) {
 			ret = -EINVAL;
 			if (to_chip_substate_id != CHIP_STATE_OFF)
 				goto cleanup_state;
@@ -1336,7 +1352,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	ab_sm_start_ts(AB_SM_TS_IPU_TPU);
 	if (blk_set_ipu_tpu_states(sc,
 			&(sc->blocks[BLK_IPU]), dest_map->ipu_block_state_id,
-			&(sc->blocks[BLK_TPU]), dest_map->tpu_block_state_id)) {
+			&(sc->blocks[BLK_TPU]), dest_map->tpu_block_state_id,
+			to_chip_substate_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_ipu_tpu_state failed\n");
 		if (to_chip_substate_id != CHIP_STATE_OFF)
@@ -1347,7 +1364,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	ab_sm_start_ts(AB_SM_TS_DRAM);
 	if (blk_set_state(sc, &(sc->blocks[DRAM]),
-			dest_map->dram_block_state_id)) {
+			dest_map->dram_block_state_id,
+			to_chip_substate_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for DRAM\n");
 		if (to_chip_substate_id != CHIP_STATE_OFF)
@@ -1357,7 +1375,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	ab_sm_start_ts(AB_SM_TS_MIF);
 	if (blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-			dest_map->mif_block_state_id)) {
+			dest_map->mif_block_state_id,
+			to_chip_substate_id)) {
 		ret = -EINVAL;
 		dev_err(sc->dev, "blk_set_state failed for MIF\n");
 		if (to_chip_substate_id != CHIP_STATE_OFF)
@@ -1372,7 +1391,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	 */
 	if (is_sleep(to_chip_substate_id)) {
 		if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-					dest_map->fsys_block_state_id)) {
+					dest_map->fsys_block_state_id,
+					to_chip_substate_id)) {
 			ret = -EINVAL;
 			dev_err(sc->dev, "blk_set_state failed for FSYS\n");
 			if (to_chip_substate_id != CHIP_STATE_OFF)
@@ -1383,7 +1403,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 	ab_sm_start_ts(AB_SM_TS_AON);
 	if (blk_set_state(sc, &(sc->blocks[BLK_AON]),
-			dest_map->aon_block_state_id)) {
+			dest_map->aon_block_state_id,
+			to_chip_substate_id)) {
 		ret = -EINVAL;
 		if (to_chip_substate_id != CHIP_STATE_OFF)
 			goto cleanup_state;
