@@ -1586,7 +1586,7 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 /* TODO (b/127500645): Remove once old mappings are completely deprecated */
 int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 {
-	static const u32 remap_table[86] = {
+	static const u32 remap_table[91] = {
 		[0]  = CHIP_STATE_400,
 		[1]  = CHIP_STATE_401,
 		[2]  = CHIP_STATE_402,
@@ -1625,6 +1625,7 @@ int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
 		[83] = CHIP_STATE_803,
 		[84] = CHIP_STATE_804,
 		[85] = CHIP_STATE_805,
+		[90] = CHIP_STATE_900,
 	};
 
 	if (old_mapping >= ARRAY_SIZE(remap_table))
@@ -1671,6 +1672,9 @@ int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping)
 		break;
 	case CHIP_STATE_800 ... CHIP_STATE_805:
 		*old_mapping = (new_mapping - 720);
+		break;
+	case CHIP_STATE_900:
+		*old_mapping = 90;
 		break;
 	default:
 		pr_err("couldn't unmap %d\n", new_mapping);
