@@ -51,7 +51,10 @@
 #define OTG_ICL_VOTER "OTG_ICL_VOTER"
 #define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
 
+#define SUZYQ_ENABLED "enabled"
+
 static char boot_mode_string[64];
+static char suzyq_enabled[15];
 
 struct usbpd {
 	struct device		dev;
@@ -930,7 +933,9 @@ static void psy_changed_handler(struct work_struct *work)
 			      get_typec_cc_status_name(cc2));
 
 		/* fake CC for SuzyQ cables */
-		if (typec_mode == POWER_SUPPLY_TYPEC_DAM_MEDIUM)
+		if (!strncmp(suzyq_enabled, SUZYQ_ENABLED,
+		    strlen(SUZYQ_ENABLED)) &&
+		    typec_mode == POWER_SUPPLY_TYPEC_DAM_MEDIUM)
 			parse_cc_status(POWER_SUPPLY_TYPEC_SOURCE_DEFAULT,
 					typec_cc_orientation, &cc1, &cc2);
 
@@ -2290,3 +2295,7 @@ MODULE_LICENSE("GPL v2");
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "androidboot."
 module_param_string(mode, boot_mode_string, sizeof(boot_mode_string), 0);
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX "usbcfg."
+module_param_string(suzyq, suzyq_enabled, sizeof(suzyq_enabled), 0);
