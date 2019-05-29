@@ -56,7 +56,7 @@
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-clockrate = <550000000>;
-				qcom,mdss-mdp-transfer-time-us = <14000>;
+				qcom,mdss-mdp-transfer-time-us = <9100>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-panel-jitter = <10 3>;
 				qcom,mdss-dsi-panel-width = <1080>;

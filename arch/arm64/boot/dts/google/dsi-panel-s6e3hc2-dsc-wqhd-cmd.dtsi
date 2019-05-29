@@ -56,7 +56,7 @@
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-panel-clockrate = <962150400>;
-				qcom,mdss-mdp-transfer-time-us = <14000>;
+				qcom,mdss-mdp-transfer-time-us = <9100>;
 				qcom,mdss-dsi-panel-width = <1440>;
 				qcom,mdss-dsi-panel-height = <3040>;
 				qcom,mdss-dsi-h-pulse-width = <16>;
