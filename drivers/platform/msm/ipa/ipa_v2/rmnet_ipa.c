@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -977,6 +977,10 @@ static int __ipa_wwan_close(struct net_device *dev)
 	int rc = 0;
 
 	if (wwan_ptr->device_status == WWAN_DEVICE_ACTIVE) {
+		if (dev->name == NULL) {
+			IPAWANERR("invalid param name\n");
+			return -EINVAL;
+		}
 		wwan_ptr->device_status = WWAN_DEVICE_INACTIVE;
 		/* do not close wwan port once up,  this causes
 			remote side to hang if tried to open again */
