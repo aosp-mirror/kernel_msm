@@ -1940,20 +1940,6 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 					ABC_PCIE_LINK_STATE_MASK)))
 		return -ENOTCONN;
 
-	dev_info(dev, "%s: testing pcie read\n", __func__);
-	ret = abc_pcie_config_read(ABC_BASE_OTP_WRAPPER & 0xffffff,
-					   0x0, &test_read_data);
-	if (ret) {
-		/*
-		 * Note: if it were an smmu issue, this error log
-		 * may not have a chance to print.
-		 */
-		dev_err(dev, "%s: failed to read 0x%08x, ret = %d\n",
-			__func__, ABC_BASE_OTP_WRAPPER, ret);
-	} else {
-		dev_info(dev, "%s: test read [0x%08x] = 0x%08x\n",
-			 __func__, ABC_BASE_OTP_WRAPPER, test_read_data);
-	}
 
 	dev_info(dev, "%s: attaching SMMU\n", __func__);
 
@@ -1974,6 +1960,21 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	/* Call PCIe DMA ops before notifying other clients */
 	if (abc_dev->dma_device_ops)
 		abc_dev->dma_device_ops->post_enable();
+
+	dev_info(dev, "%s: testing pcie read\n", __func__);
+	ret = abc_pcie_config_read(ABC_BASE_OTP_WRAPPER & 0xffffff,
+					   0x0, &test_read_data);
+	if (ret) {
+		/*
+		 * Note: if it were an smmu issue, this error log
+		 * may not have a chance to print.
+		 */
+		dev_err(dev, "%s: failed to read 0x%08x, ret = %d\n",
+			__func__, ABC_BASE_OTP_WRAPPER, ret);
+	} else {
+		dev_info(dev, "%s: test read [0x%08x] = 0x%08x\n",
+			 __func__, ABC_BASE_OTP_WRAPPER, test_read_data);
+	}
 
 	dev_info(dev, "Broadcast Exit EL2 notification\n");
 
