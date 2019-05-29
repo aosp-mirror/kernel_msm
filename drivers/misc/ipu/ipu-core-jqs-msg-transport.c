@@ -152,6 +152,11 @@ static void ipu_core_jqs_msg_process_ack_message(struct paintbox_bus *bus,
 			ipu_core_get_kernel_waiter(trans);
 	int ret = 0;
 
+	/* TODO(b/133843882): will remove after firmware update */
+	if (((struct jqs_message_ack *)jqs_msg)->msg_type ==
+			JQS_MESSAGE_TYPE_IOMMU_ACTIVATE)
+		return;
+
 	if (!waiter->enabled) {
 		/* No one is waiting for this response */
 		dev_err(bus->parent_dev, "%s: unexpected response", __func__);

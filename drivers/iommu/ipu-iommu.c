@@ -100,7 +100,6 @@ static int ipu_iommu_send_jqs_iommu_activation_msg(
 {
 	uint64_t err;
 	struct jqs_message_iommu_activate req;
-	struct jqs_message_ack rsp;
 
 	if (iommu == NULL)
 		return -EINVAL;
@@ -113,13 +112,11 @@ static int ipu_iommu_send_jqs_iommu_activation_msg(
 	req.activate = activate;
 	req.page_table_addr = page_table_addr;
 
-	err = ipu_kernel_write_sync(iommu->dev,
-		(const struct jqs_message *)&req,
-		(struct jqs_message *)&rsp,
-		sizeof(rsp));
+	err = ipu_kernel_write(iommu->dev, (const struct jqs_message *)&req);
+
 	if (err < 0)
 		return err;
-	return rsp.error;
+	return 0;
 }
 
 static inline void jsq_reg_msg_append(
