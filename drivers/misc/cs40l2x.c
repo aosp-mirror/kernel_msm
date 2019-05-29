@@ -756,7 +756,7 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 {
 	struct regmap *regmap = cs40l2x->regmap;
 	unsigned int val;
-	int ret, i;
+	int ret, i, j;
 
 	switch (hiber_cmd) {
 	case CS40L2X_POWERCONTROL_NONE:
@@ -786,14 +786,27 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 				continue;
 			}
 
-			usleep_range(5000, 5100);
+			/*
+			 * verify the previous firmware ID remains intact and
+			 * brute-force a dummy hibernation cycle if otherwise
+			 */
+			for (j = 0; j < CS40L2X_STATUS_RETRIES; j++) {
+				usleep_range(5000, 5100);
 
-			ret = regmap_read(regmap, CS40L2X_XM_FW_ID, &val);
-			if (ret)
-				return ret;
+				ret = regmap_read(regmap,
+						CS40L2X_XM_FW_ID, &val);
+				if (ret)
+					return ret;
 
-			if (val == cs40l2x->fw_desc->id)
+				if (val == cs40l2x->fw_desc->id)
+					break;
+			}
+			if (j < CS40L2X_STATUS_RETRIES)
 				break;
+
+			dev_warn(cs40l2x->dev,
+					"Unexpected firmware ID: 0x%06X\n",
+					val);
 
 			/*
 			 * this write may force the device into hibernation
@@ -803,11 +816,13 @@ static int cs40l2x_hiber_cmd_send(struct cs40l2x_private *cs40l2x,
 			regmap_write(regmap, CS40L2X_PWRMGT_CTL,
 					(1 << CS40L2X_MEM_RDY_SHIFT) |
 					(1 << CS40L2X_TRIG_HIBER_SHIFT));
+
+			usleep_range(1000, 1100);
 		}
 		if (i == CS40L2X_WAKEUP_RETRIES)
 			return -EIO;
 
-		for (i = 0; i < CS40L2X_WAKEUP_RETRIES; i++) {
+		for (i = 0; i < CS40L2X_STATUS_RETRIES; i++) {
 			ret = regmap_read(regmap,
 					cs40l2x_dsp_reg(cs40l2x, "POWERSTATE",
 						CS40L2X_XM_UNPACKED_TYPE,
