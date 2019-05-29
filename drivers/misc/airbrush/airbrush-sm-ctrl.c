@@ -3109,7 +3109,14 @@ int ab_sm_init(struct platform_device *pdev)
 
 	ab_sm_ctx->regulator_nb.notifier_call = ab_sm_regulator_listener;
 
-	ab_sm_ctx->smps2_delay = SMPS2_DEFAULT_DELAY;
+	/*
+	 * Some ab_ready GPIO issues happen on some devices with
+	 * alternate_boot (b/132757389). Increase smps2_delay when
+	 * alternate_boot is enabled.
+	 */
+	ab_sm_ctx->smps2_delay = ab_sm_ctx->alternate_boot ?
+						20000 :
+						SMPS2_DEFAULT_DELAY;
 	ab_sm_ctx->ldo4_delay = LDO4_DEFAULT_DELAY;
 	ab_sm_ctx->ldo5_delay = LDO5_DEFAULT_DELAY;
 	ab_sm_ctx->s60_delay = S60_DEFAULT_DELAY;
