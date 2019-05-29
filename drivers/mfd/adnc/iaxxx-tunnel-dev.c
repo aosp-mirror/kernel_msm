@@ -568,7 +568,8 @@ static int producer_thread(void *arg)
 		}
 
 		if (iaxxx_wait_dev_resume(dev)) {
-			if (atomic_read(&t_intf_priv->kthread_suspend)) {
+			if (atomic_read(&t_intf_priv->kthread_suspend) ==
+				IAXXX_KTHREAD_RUN) {
 				atomic_set(&t_intf_priv->kthread_suspend,
 					IAXXX_KTHREAD_WAIT);
 				wake_up(&t_intf_priv->suspend_wq);
@@ -635,7 +636,8 @@ static int producer_thread(void *arg)
 							__func__);
 
 				if (atomic_read(
-					&t_intf_priv->kthread_suspend)) {
+					&t_intf_priv->kthread_suspend) ==
+					IAXXX_KTHREAD_RUN) {
 					atomic_set(
 						&t_intf_priv->kthread_suspend,
 						IAXXX_KTHREAD_WAIT);
@@ -665,7 +667,8 @@ static int producer_thread(void *arg)
 		}
 		pr_info("%s: producer thread wait for start\n", __func__);
 
-		if (atomic_read(&t_intf_priv->kthread_suspend)) {
+		if (atomic_read(&t_intf_priv->kthread_suspend) ==
+			IAXXX_KTHREAD_RUN) {
 			atomic_set(&t_intf_priv->kthread_suspend,
 				IAXXX_KTHREAD_WAIT);
 			wake_up(&t_intf_priv->suspend_wq);
@@ -1618,6 +1621,7 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 	t_intf_priv->event_registered = false;
 	t_intf_priv->dev = dev;
 	atomic_set(&t_intf_priv->kthread_suspend, IAXXX_KTHREAD_RUN);
+	init_waitqueue_head(&t_intf_priv->suspend_wq);
 
 	mutex_init(&t_intf_priv->tunnel_dev_lock);
 
@@ -1695,8 +1699,6 @@ static int iaxxx_tunnel_dev_probe(struct platform_device *pdev)
 		goto error_consumer_thread;
 	}
 
-	init_waitqueue_head(&t_intf_priv->suspend_wq);
-
 	return 0;
 
 error_consumer_thread:
@@ -1751,7 +1753,7 @@ void iaxxx_tunnel_kthread_suspend(struct iaxxx_priv *priv)
 	struct iaxxx_tunnel_data *t_intf_priv = priv->tunnel_data;
 	int rc;
 
-	if (!atomic_read(&t_intf_priv->kthread_suspend)) {
+	if (atomic_read(&t_intf_priv->kthread_suspend) == IAXXX_KTHREAD_RUN) {
 		rc = wait_event_timeout(t_intf_priv->suspend_wq,
 			atomic_read(&t_intf_priv->kthread_suspend),
 			HZ);
