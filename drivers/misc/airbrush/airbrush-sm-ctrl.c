@@ -1245,11 +1245,10 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	last_map = ab_sm_get_block_map(sc, prev_state);
 	if (!is_valid_transition(sc, prev_state, to_chip_substate_id) ||
 			!dest_map || !last_map) {
-		dev_err(sc->dev,
-			"Entered %s with invalid destination state\n",
-			__func__);
-		WARN_ON(1);
-
+		dev_info(sc->dev,
+			"Preventing invalid state transition %d -> %d (%d requested)\n",
+			prev_state, to_chip_substate_id,
+			sc->dest_chip_substate_id);
 		return -EINVAL;
 	}
 
