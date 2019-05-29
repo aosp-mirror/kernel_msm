@@ -223,6 +223,17 @@ struct iaxxx_crashlog {
 	uint32_t logs_read;
 };
 
+/* iaxxx_misc hwinfo
+ * Revision: EFUSE_BOOT_0 bit 11:8
+ * Trim LDO_BG: EFUSE_BOOT_1 bit 7
+ * If LDO_BG_TRIM is above 0, it means chip trimmed.
+ */
+
+struct hwinfo_type {
+	char revision[4];
+	uint32_t trim_ldo_bg;
+};
+
 /**
  * Description of driver private data
  *
@@ -369,6 +380,8 @@ struct iaxxx_priv {
 
 	/* Misc statistics data */
 	void *misc_priv;
+	/* iaxxx_misc hwinfo data */
+	struct hwinfo_type hwinfo;
 };
 
 enum update_block_options_t	{

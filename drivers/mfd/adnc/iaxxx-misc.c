@@ -21,6 +21,11 @@
 #include "iaxxx-cdev.h"
 #include "iaxxx-misc.h"
 
+struct iaxxx_misc_hwinfo_type {
+	char part[128];
+	bool initialized;
+};
+
 /*
  * DSP Speech Up/Down time and counts
  */
@@ -31,7 +36,7 @@ struct wdsp_stat_priv_type {
 	s64 total_uptime;
 	s64 total_downtime;
 	u64 crash_count;
-	u64 recover_count; /* re-use this field to fill FW ver. & chip rev.*/
+	u64 recover_count;
 	uint32_t action;
 	struct mutex lock;
 };
@@ -45,6 +50,85 @@ struct iaxxx_misc_priv_type {
 	struct notifier_block nb_core;	/* IAXXX Core notifier */
 	struct device *dev;
 	struct iaxxx_cdev misc_cdev;
+	struct iaxxx_misc_hwinfo_type hwinfo_priv;
+};
+
+static ssize_t iaxxx_misc_hwinfo_part_number_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct iaxxx_misc_priv_type *misc_priv = dev_get_drvdata(dev);
+	struct iaxxx_misc_hwinfo_type *hwinfo = (misc_priv ?
+			&misc_priv->hwinfo_priv : NULL);
+	ssize_t ret = 0;
+
+
+	if (!hwinfo || !(hwinfo->initialized))
+		return scnprintf(buf, PAGE_SIZE, "Unknown\n");
+
+	ret = scnprintf(buf, PAGE_SIZE, "%s", hwinfo->part);
+
+	return ret;
+}
+static DEVICE_ATTR(hwinfo_part_number, 0440,
+		iaxxx_misc_hwinfo_part_number_show, NULL);
+
+static ssize_t iaxxx_misc_update_pn(struct iaxxx_misc_priv_type *misc_priv)
+{
+	struct iaxxx_priv *priv = misc_priv ? misc_priv->priv : NULL;
+	struct iaxxx_misc_hwinfo_type *hwinfo = (misc_priv ?
+			&misc_priv->hwinfo_priv : NULL);
+
+	int ret = 0;
+	uint32_t trim_ldo_bg = 0;
+	char tmpbuf[64];
+
+	if (!misc_priv || !priv || !hwinfo)
+		return -EFAULT;
+
+	scnprintf(tmpbuf, sizeof(tmpbuf),
+			"%s", priv->hwinfo.revision);
+	trim_ldo_bg = priv->hwinfo.trim_ldo_bg;
+
+	if (strnlen(tmpbuf, sizeof(tmpbuf)) > 0) {
+		ret = scnprintf(hwinfo->part,
+				sizeof(hwinfo->part),
+				"IA8508%s%s",
+				tmpbuf,
+				(trim_ldo_bg > 0) ? "C" : "");
+	} else {
+		ret = scnprintf(hwinfo->part, sizeof(hwinfo->part), "%s",
+			"Unknown");
+	}
+
+	return ret;
+}
+
+void iaxxx_misc_update_hwinfo(struct iaxxx_misc_priv_type *misc_priv,
+				unsigned long action)
+{
+	struct iaxxx_misc_hwinfo_type *hwinfo = (misc_priv ?
+			&misc_priv->hwinfo_priv : NULL);
+
+	switch (action) {
+	case IAXXX_EV_STARTUP:
+		/* only do it once after boot no matter hw status */
+		if (!hwinfo->initialized) {
+			iaxxx_misc_update_pn(misc_priv);
+			hwinfo->initialized = true;
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static struct attribute *iaxxx_misc_hwinfo_attrs[] = {
+	&dev_attr_hwinfo_part_number.attr,
+	NULL,
+};
+
+static const struct attribute_group iaxxx_misc_hwinfo_attr_group = {
+	.attrs = iaxxx_misc_hwinfo_attrs,
 };
 
 /*
@@ -197,6 +281,7 @@ static int iaxxx_misc_notify(struct notifier_block *nb,
 	case IAXXX_EV_STARTUP:
 		iaxxx_misc_update_wdsp_stat(misc_priv, WDSP_STAT_DOWN);
 		iaxxx_misc_update_wdsp_stat(misc_priv, WDSP_STAT_UP);
+		iaxxx_misc_update_hwinfo(misc_priv, action);
 		break;
 	case IAXXX_EV_RECOVERY:
 		iaxxx_misc_update_wdsp_stat(misc_priv, WDSP_STAT_UP);
@@ -260,9 +345,17 @@ int iaxxx_misc_init(struct iaxxx_priv *priv)
 		goto err_iaxxx_misc_notifier_failed;
 	}
 
+	ret = sysfs_create_group(&misc_priv->dev->kobj,
+		&iaxxx_misc_hwinfo_attr_group);
+	if (ret) {
+		dev_err(misc_priv->dev,
+			"%s sysfs_create_group for hwinfo failed\n", __func__);
+		goto err_iaxxx_misc_hwinfo_failed;
+	}
+
 	return ret;
 
-
+err_iaxxx_misc_hwinfo_failed:
 err_iaxxx_misc_notifier_failed:
 err_iaxxx_misc_file_wdsp_failed:
 	device_remove_file(misc_priv->dev, &dev_attr_wdsp_stat);
@@ -286,7 +379,12 @@ void iaxxx_misc_exit(struct iaxxx_priv *priv)
 		pr_err("Invalid iaxxx private data pointer\n");
 		return;
 	}
+
 	misc_priv = (struct iaxxx_misc_priv_type *) priv->misc_priv;
+
+	sysfs_remove_group(&misc_priv->dev->kobj,
+		&iaxxx_misc_hwinfo_attr_group);
+
 	iaxxx_cdev_destroy(&misc_priv->misc_cdev);
 	devm_kfree(priv->dev, misc_priv);
 	priv->misc_priv = NULL;

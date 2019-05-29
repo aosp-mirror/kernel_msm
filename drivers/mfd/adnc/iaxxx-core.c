@@ -659,6 +659,17 @@ static int iaxxx_get_efuse_boot_values(struct iaxxx_priv *priv)
 		>> IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_POS) ?
 		"B" : "A");
 
+	/* store iaxxx_misc hwinfo data */
+	rc = scnprintf(priv->hwinfo.revision, sizeof(priv->hwinfo.revision),
+		"%s", ((efuse_boot0_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_MASK)
+		>> IAXXX_PWR_MGMT_EFUSE_BOOT_0_LAYOUT_REV_POS) ?
+		"B" : "A");
+	if (rc) {
+		dev_warn(dev, "%s: cannot recognize revision\n",
+			__func__);
+	}
+
 	rc = regmap_read(priv->regmap, IAXXX_PWR_MGMT_EFUSE_BOOT_1_ADDR,
 			&efuse_boot1_val);
 	if (rc) {
@@ -682,6 +693,11 @@ static int iaxxx_get_efuse_boot_values(struct iaxxx_priv *priv)
 		((efuse_boot1_val &
 			IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_MASK)
 		>> IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_1_TRIM_DATA_POS));
+
+	/* store iaxxx_misc hwinfo data */
+	priv->hwinfo.trim_ldo_bg = ((efuse_boot1_val &
+			IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_MASK)
+		>> IAXXX_PWR_MGMT_EFUSE_BOOT_1_LDO_BG_TRIM_PG_POS);
 
 efuse_read_fail:
 	return rc;
