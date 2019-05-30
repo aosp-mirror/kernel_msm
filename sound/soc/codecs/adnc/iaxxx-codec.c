@@ -51,6 +51,8 @@
 #define IAXXX_MAX_PDM_PORTS	7
 #define IAXXX_MAX_SENSOR	4
 #define IAXXX_PORTD_PORTE_PORT_EN	0x18
+#define IAXXX_SSR_CODEC_NAME	"tx_codec_state"
+#define IAXXX_SSR_STATE_SIZE	8
 
 static int iaxxx_calc_i2s_div(u32 bits_per_frame, u32 sampling_rate,
 		u32 apll_clk, u32 *period, u32 *div_val, u32 *nr_val);
@@ -73,6 +75,12 @@ static int non_zero_bit_num(uint32_t x)
 	}
 	return num;
 }
+
+struct ssr_entry {
+	int offline;
+	wait_queue_head_t offline_poll_wait;
+	struct snd_info_entry *entry;
+};
 
 struct iaxxx_codec_priv {
 	int is_codec_master[IAXXX_MAX_PORTS];
@@ -139,6 +147,8 @@ struct iaxxx_codec_priv {
 	u32 head_of_strm_all;
 	u32 cdc_dmic_enable;
 	int is_stream_in_use[IAXXX_MAX_PORTS][2];
+	struct ssr_entry ssr_entry;
+	struct mutex ssr_lock;
 };
 
 static const u32 cic_rx_addr[] = {
@@ -7760,6 +7770,90 @@ static int iaxxx_add_widgets(struct snd_soc_codec *codec)
 	return 0;
 }
 
+static ssize_t iaxxx_state_read(struct snd_info_entry *entry,
+			       void *file_private_data, struct file *file,
+			       char __user *buf, size_t count, loff_t pos)
+{
+	int len = 0;
+	char buffer[IAXXX_SSR_STATE_SIZE];
+	struct ssr_entry *ssr_entry = NULL;
+	struct iaxxx_codec_priv *iaxxx =
+		(struct iaxxx_codec_priv *)entry->private_data;
+
+	if (!iaxxx) {
+		pr_err("%s: iaxxx codec priv NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	ssr_entry = &iaxxx->ssr_entry;
+
+	mutex_lock(&iaxxx->ssr_lock);
+	len = scnprintf(buffer, sizeof(buffer), "%s\n",
+		       ssr_entry->offline ? "OFFLINE" : "ONLINE");
+	mutex_unlock(&iaxxx->ssr_lock);
+
+	return simple_read_from_buffer(buf, count, &pos, buffer, len);
+}
+
+static unsigned int iaxxx_state_poll(struct snd_info_entry *entry,
+					void *private_data, struct file *file,
+					poll_table *wait)
+{
+	int ret = 0;
+	struct ssr_entry *ssr_entry = NULL;
+	struct iaxxx_codec_priv *iaxxx =
+		(struct iaxxx_codec_priv *)entry->private_data;
+
+	if (!iaxxx) {
+		pr_err("%s: iaxxx codec priv NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	ssr_entry = &iaxxx->ssr_entry;
+
+	poll_wait(file, &ssr_entry->offline_poll_wait, wait);
+
+	ret = POLLIN | POLLPRI | POLLRDNORM;
+	return ret;
+}
+
+static struct snd_info_entry_ops iaxxx_state_proc_ops = {
+	.read = iaxxx_state_read,
+	.poll = iaxxx_state_poll,
+};
+
+static void iaxxx_codec_ssr_init(struct snd_soc_codec *codec)
+{
+	char *node_name = IAXXX_SSR_CODEC_NAME;
+	struct snd_card *card = NULL;
+	struct snd_info_entry *entry = NULL;
+	int ret;
+	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
+
+	card = codec->component.card->snd_card;
+	entry = snd_info_create_card_entry(card, node_name,
+					   card->proc_root);
+	if (!entry) {
+		dev_err(codec->dev,
+			"%s: Failed to create iaxxx SSR status entry\n",
+			__func__);
+		return;
+	}
+
+	iaxxx->ssr_entry.entry = entry;
+	entry->size = IAXXX_SSR_STATE_SIZE;
+	entry->content = SNDRV_INFO_CONTENT_DATA;
+	entry->c.ops = &iaxxx_state_proc_ops;
+	entry->private_data = iaxxx;
+	ret = snd_info_register(entry);
+	if (ret < 0) {
+		dev_err(codec->dev,
+			"snd_info_register failed (%d)\n", ret);
+		snd_info_free_entry(entry);
+		entry = NULL;
+	}
+}
+
 static int iaxxx_codec_probe(struct snd_soc_codec *codec)
 {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0))
@@ -7777,6 +7871,7 @@ static int iaxxx_codec_probe(struct snd_soc_codec *codec)
 	dev_info(codec->dev, "%s\n", __func__);
 
 	iaxxx_add_widgets(codec);
+	iaxxx_codec_ssr_init(codec);
 
 	return 0;
 }
@@ -7816,6 +7911,25 @@ static const struct of_device_id iaxxx_platform_dt_match[] = {
 	{}
 };
 
+static void iaxxx_change_online_state(struct iaxxx_codec_priv *iaxxx,
+			int online)
+{
+	struct ssr_entry *ssr_entry = NULL;
+
+	if (!iaxxx) {
+		pr_err("%s:Invalid core handle\n", __func__);
+		return;
+	}
+
+	ssr_entry = &iaxxx->ssr_entry;
+
+	mutex_lock(&iaxxx->ssr_lock);
+	ssr_entry->offline = !online;
+	wake_up_interruptible(&ssr_entry->offline_poll_wait);
+	mutex_unlock(&iaxxx->ssr_lock);
+}
+
+
 static int iaxxx_codec_notify(struct notifier_block *nb,
 			unsigned long action, void *data)
 {
@@ -7823,8 +7937,13 @@ static int iaxxx_codec_notify(struct notifier_block *nb,
 		container_of(nb, struct iaxxx_codec_priv, nb_core);
 
 	switch (action) {
+	case IAXXX_EV_STARTUP:
+	case IAXXX_EV_RECOVERY:
+		iaxxx_change_online_state(iaxxx, 1);
+		break;
 	case IAXXX_EV_CRASH:
 	case IAXXX_EV_FW_RESET:
+		iaxxx_change_online_state(iaxxx, 0);
 		iaxxx_reset_codec_params(iaxxx);
 		break;
 	}
@@ -7879,6 +7998,11 @@ static int iaxxx_codec_driver_probe(struct platform_device *pdev)
 	iaxxx->dev = dev;
 	iaxxx->dev_parent = dev->parent;
 	iaxxx->cdc_dmic_enable = 0;
+	iaxxx->ssr_entry.offline = 1;
+
+	init_waitqueue_head(&iaxxx->ssr_entry.offline_poll_wait);
+	mutex_init(&iaxxx->ssr_lock);
+
 	platform_set_drvdata(pdev, iaxxx);
 	if (pdev->dev.of_node)
 		dev_set_name(dev, "%s", "iaxxx-codec");
