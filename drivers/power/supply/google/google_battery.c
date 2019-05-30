@@ -770,7 +770,7 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 	mutex_unlock(&batt_drv->stats_lock);
 
 	if (publish)
-		power_supply_changed(batt_drv->psy);
+		kobject_uevent(&batt_drv->device->kobj, KOBJ_CHANGE);
 }
 
 
@@ -1895,6 +1895,7 @@ static ssize_t batt_ctl_chg_stats(struct device *dev,
 
 	mutex_lock(&batt_drv->stats_lock);
 	switch (buf[0]) {
+	case 0:
 	case '0': /* invalidate current qual */
 		batt_chg_stats_init(&batt_drv->ce_qual);
 		break;
@@ -1914,7 +1915,7 @@ static ssize_t batt_show_chg_stats(struct device *dev,
 
 	mutex_lock(&batt_drv->stats_lock);
 
-	if (batt_drv->ce_qual.first_update != 0)
+	if (batt_drv->ce_qual.last_update - batt_drv->ce_qual.first_update)
 		len = batt_chg_stats_cstr(buf,
 					  PAGE_SIZE,
 					  &batt_drv->ce_qual, false);
@@ -1940,7 +1941,7 @@ static ssize_t batt_show_chg_details(struct device *dev,
 	len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 				   &batt_drv->ce_data, true);
 
-	if (batt_drv->ce_qual.first_update)
+	if (batt_drv->ce_qual.last_update - batt_drv->ce_qual.first_update)
 		len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 					   &batt_drv->ce_qual, true);
 
