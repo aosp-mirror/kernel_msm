@@ -310,15 +310,30 @@ Optional properties:
     of 125. If this value is omitted, the threshold remains at 12 V.
 
   - cirrus,vpbr-enable : Boolean for enabling VP brownout prevention. If this
-    property is omitted, VP brownout prevention remains disabled.
+    property is omitted, VP brownout prevention remains disabled unless it is
+    enabled through a cirrus,vpbr-config child node.
+
+    This property remains available for backwards compatibility and need not be
+    specified if a cirrus,vpbr-config child node is present and cirrus,br-enable
+    is already specified within the child node.
 
   - cirrus,vpbr-thld1-millivolt : Initial VP brownout prevention threshold,
     expressed in mV. Valid values range from 2497 to 3874 (inclusive). The value
     written to the device is quantized in steps of approximately 48 mV. If this
     value is omitted, the threshold remains at 2.639 V.
 
+    This property remains available for backwards compatibility and need not be
+    specified if a cirrus,vpbr-config child node is present and cirrus,br-thld1
+    is already specified within the child node. If both are present, however,
+    cirrus,vpbr-thld1-millivolt takes priority.
+
   - cirrus,vbbr-enable : Boolean for enabling VBST brownout prevention. If this
-    property is omitted, VBST brownout prevention remains disabled.
+    property is omitted, VBST brownout prevention remains disabled unless it is
+    enabled through a cirrus,vbbr-config child node.
+
+    This property remains available for backwards compatibility and need not be
+    specified if a cirrus,vbbr-config child node is present and cirrus,br-enable
+    is already specified within the child node.
 
   - cirrus,vbbr-thld1-millivolt : Initial VBST brownout prevention threshold,
     expressed in mV. Valid values range from 109 to 3445 (inclusive). The value
@@ -326,6 +341,11 @@ Optional properties:
     value is omitted, the threshold remains at 0.273 V. This threshold is
     interpreted as the difference between the target VBST level and the actual
     measured VBST level.
+
+    This property remains available for backwards compatibility and need not be
+    specified if a cirrus,vbbr-config child node is present and cirrus,br-thld1
+    is already specified within the child node. If both are present, however,
+    cirrus,vbbr-thld1-millivolt takes priority.
 
   - cirrus,fw-id-remap : Alternative firmware build ID (silicon revision B1
     only), equal to one of the following.
@@ -344,6 +364,40 @@ Optional properties:
     Auto-recovery mode increases the latency of I2C-triggered playback by that
     of a single I2C read transaction. If this property is omitted, auto-recovery
     mode remains disabled and I2C-triggered playback is unaffected.
+
+Optional properties for VP (cirrus,vpbr-config) and VBST (cirrus,vbbr-config)
+brownout prevention child nodes:
+
+  - cirrus,br-enable: Boolean for enabling brownout prevention.
+
+  - cirrus,br-thld1: Value to be used for the VPBR_THLD1/VBBR_THLD1 register
+    field (see the CS40L25/B data sheet for more information). If this property
+    is omitted, a value of zero is assumed. Note that this field is interpreted
+    differently between VP and VBST brownout prevention.
+
+  - cirrus,br-max-att: Value to be used for the VPBR_MAX_ATT/VBBR_MAX_ATT
+    register field (see the CS40L25/B data sheet for more information). If this
+    property is omitted, a value of zero is assumed.
+
+  - cirrus,br-atk-vol: Value to be used for the VPBR_ATK_VOL/VBBR_ATK_VOL
+    register field (see the CS40L25/B data sheet for more information). If this
+    property is omitted, a value of zero is assumed.
+
+  - cirrus,br-atk-rate: Value to be used for the VPBR_ATK_RATE/VBBR_ATK_RATE
+    register field (see the CS40L25/B data sheet for more information). If this
+    property is omitted, a value of zero is assumed.
+
+  - cirrus,br-wait: Value to be used for the VPBR_WAIT/VBBR_WAIT register field
+    (see the CS40L25/B data sheet for more information). If this property is
+    omitted, a value of zero is assumed.
+
+  - cirrus,br-rel-rate: Value to be used for the VPBR_REL_RATE/VBBR_REL_RATE
+    register field (see the CS40L25/B data sheet for more information). If this
+    property is omitted, a value of zero is assumed.
+
+  - cirrus,br-mute-enable: Boolean to specify that the output shall be muted
+    if VPBR_MAX_ATT/VBBR_MAX_ATT is reached during the attack state in the
+    continued presence of a brownout condition.
 
 Examples:
 
