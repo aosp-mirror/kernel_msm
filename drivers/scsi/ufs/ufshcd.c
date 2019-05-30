@@ -11359,6 +11359,10 @@ static ssize_t health_attr_show(struct device *dev,
 					UFSHCD_HEALTH_ERASE_OFFSET, 2);
 			if (erase)
 				value = erase * 100 / UFSHCD_DEFAULT_PE_CYCLE;
+			if (!erase && !strncmp(hba->sdev_ufs_device->model,
+						"KLUDG4U1FB-B0C1", 15))
+				value = health_get_bytes(desc_buf,
+						UFSHCD_HEALTH_LIFEB_OFFSET, 1);
 		}
 		return scnprintf(buf, PAGE_SIZE, "%u\n",
 					value > 100 ? 100: value);
