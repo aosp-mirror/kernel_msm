@@ -517,6 +517,99 @@ static ssize_t ppmu_get_result_show(struct device *child,
 	return scnprintf(buf, PAGE_SIZE, "PPMU results:\n");
 }
 
+static ssize_t selective_measurement_mask_store(struct device *child,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	/* Caution: This register should be configured only when there is no
+	 * outstanding transaction in the monitored AXI channel.
+	 */
+	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 16, &val);
+	if (ret) {
+		dev_err(&ppmu->dev, "Error in parsing mask\n");
+		return ret;
+	}
+
+	dev_info(&ppmu->dev, "mask %lu\n", val);
+	ppmu_write(val, ppmu->base + PPMU25_SM_ID_MASK);
+	return count;
+}
+
+static ssize_t selective_measurement_mask_show(struct device *child,
+	struct device_attribute *attr, char *buf)
+{
+	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
+	u32 val = ppmu_read(ppmu->base + PPMU25_SM_ID_MASK);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", val);
+}
+
+static ssize_t selective_measurement_value_store(struct device *child,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	/* Caution: This register should be configured only when there is no
+	 * outstanding transaction in the monitored AXI channel.
+	 */
+	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 16, &val);
+	if (ret) {
+		dev_err(&ppmu->dev, "Error in parsing value\n");
+		return ret;
+	}
+
+	dev_info(&ppmu->dev, "value %lu\n", val);
+	ppmu_write(val, ppmu->base + PPMU25_SM_ID_V);
+	return count;
+}
+
+static ssize_t selective_measurement_value_show(struct device *child,
+	struct device_attribute *attr, char *buf)
+{
+	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
+	u32 val = ppmu_read(ppmu->base + PPMU25_SM_ID_V);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", val);
+}
+
+static ssize_t selective_measurement_allocate_store(struct device *child,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	/* Caution: This register should be configured only when there is no
+	 * outstanding transaction in the monitored AXI channel.
+	 */
+	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
+	unsigned long val;
+	int ret;
+
+	ret = kstrtoul(buf, 16, &val);
+	if (ret) {
+		dev_err(&ppmu->dev, "Error in parsing allocation bits\n");
+		return ret;
+	}
+
+	dev_info(&ppmu->dev, "allocation bits %lu\n", val);
+	ppmu_write(val, ppmu->base + PPMU25_SM_ID_A);
+	return count;
+}
+
+static ssize_t selective_measurement_allocate_show(struct device *child,
+	struct device_attribute *attr, char *buf)
+{
+	struct airbrush_ppmu *ppmu = dev_get_drvdata(child);
+	u32 val = ppmu_read(ppmu->base + PPMU25_SM_ID_A);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", val);
+}
+
 static DEVICE_ATTR(test_read, 0664, NULL, test_read_store);
 static DEVICE_ATTR(test_write, 0664, NULL, test_write_store);
 static DEVICE_ATTR(ppmu_reset, 0664, NULL, ppmu_reset_store);
@@ -527,6 +620,15 @@ static DEVICE_ATTR(ppmu_get_result, 0664, ppmu_get_result_show, NULL);
 static DEVICE_ATTR(register_irq, 0664, NULL, register_irq_store);
 static DEVICE_ATTR(set_cnt_size, 0664, NULL, set_cnt_size_store);
 static DEVICE_ATTR(set_clk_freq, 0664, NULL, set_clk_freq_store);
+static DEVICE_ATTR(selective_measurement_mask, 0664,
+	selective_measurement_mask_show,
+	selective_measurement_mask_store);
+static DEVICE_ATTR(selective_measurement_value, 0664,
+	selective_measurement_value_show,
+	selective_measurement_value_store);
+static DEVICE_ATTR(selective_measurement_allocate, 0664,
+	selective_measurement_allocate_show,
+	selective_measurement_allocate_store);
 
 struct attribute *ppmu_attrs[] = {
 &dev_attr_test_read.attr,
@@ -539,6 +641,9 @@ struct attribute *ppmu_attrs[] = {
 &dev_attr_register_irq.attr,
 &dev_attr_set_cnt_size.attr,
 &dev_attr_set_clk_freq.attr,
+&dev_attr_selective_measurement_mask.attr,
+&dev_attr_selective_measurement_value.attr,
+&dev_attr_selective_measurement_allocate.attr,
 NULL,
 };
 
