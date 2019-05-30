@@ -2288,8 +2288,9 @@ static enum silego_self_test_result_type silego_self_test(
 
 	mutex_lock(&ctrl->cam_sensor_mutex);
 	mutex_lock(&lm36011_mutex);
-	if (safety_ic_owner != LASER_TYPE_MAX) {
-		/* Bypass test when dot or flood power is on */
+
+	if (regulator_is_enabled(ctrl->silego.vdd)) {
+		/* Bypass test when silego power is on */
 		mutex_unlock(&lm36011_mutex);
 		result = SILEGO_TEST_BYPASS;
 		goto out;
