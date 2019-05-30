@@ -583,6 +583,7 @@
 		rgltr-min-voltage = <2800000>;
 		rgltr-max-voltage = <2800000>;
 		rgltr-load-current = <80000>;
+		ois-version = <2>;
 	};
 
 	eeprom_rear: qcom,eeprom@0 {
@@ -656,6 +657,7 @@
 		rgltr-min-voltage = <2800000>;
 		rgltr-max-voltage = <2800000>;
 		rgltr-load-current = <80000>;
+		ois-version = <2>;
 	};
 
 	eeprom_rear_aux: qcom,eeprom@1 {

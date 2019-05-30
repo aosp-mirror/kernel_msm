@@ -83,6 +83,14 @@
 	hw-version = <2>;
 };
 
+&ois_rear {
+	ois-version = <1>;
+};
+
+&ois_rear_aux {
+	ois-version = <1>;
+};
+
 &cam_cci0 {
 	qcom,cam-sensor@3 {
 		rgltr-min-voltage = <1800000 2900000 1350000 4100000 0>;
