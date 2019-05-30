@@ -491,9 +491,15 @@ static void cam_ois_read_work(struct work_struct *work)
 	struct timespec ts;
 	struct cam_ois_shift ois_shift_data;
 	struct cam_ois_timer_t *ois_timer_in;
+	int8_t y_sign;
 
 	ois_timer_in = container_of(work, struct cam_ois_timer_t, g_work);
 	get_monotonic_boottime(&ts);
+
+	/* later ois module change the magnetic polarity,
+	 * sign of y axis needs to be corrected
+	 */
+	y_sign = ois_timer_in->o_ctrl->ois_version == 2 ? -1 : 1;
 
 	if (ois_debug) {
 		rc = camera_io_dev_read_seq(
@@ -546,7 +552,8 @@ static void cam_ois_read_work(struct work_struct *work)
 	ois_shift_data.ois_shift_x =
 		(int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
 	ois_shift_data.ois_shift_y =
-		(int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+		(int16_t)((((uint16_t)buf[2] << 8) + (uint16_t)buf[3])
+		* y_sign);
 	ois_shift_data.af_lop1 =
 		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
 
