@@ -231,6 +231,7 @@ static struct qmi_elem_info sns_client_report_ind_msg_v01_ei[] = {
 
 static struct vsync_ctx_type cam_vsync_ctx;
 static void cam_vsync_qmi_work(struct work_struct *work);
+static int cam_vsync_get_cam_id(int32_t link_hdl, uint32_t *cam_id);
 
 static int cam_send_request_qmi(
 	struct qmi_handle *qmi,
@@ -330,14 +331,20 @@ out:
 	return ret;
 }
 
-static int cam_vsync_add_pending_req(struct cam_req_mgr_message *msg)
+static int cam_vsync_add_pending_req(struct cam_req_mgr_message *msg,
+		uint32_t cam_id)
 {
 	struct cam_sensor_vsync_req *vsync_req;
 	struct vsync_ctx_type *ctx = &cam_vsync_ctx;
 
+	if (!msg)
+		return -EINVAL;
+
 	vsync_req = kzalloc(sizeof(struct cam_sensor_vsync_req), GFP_ATOMIC);
 	if (!vsync_req)
 		return -EINVAL;
+
+	vsync_req->cam_id = cam_id;
 	memcpy(&vsync_req->req_message, msg, sizeof(*msg));
 	mutex_lock(&ctx->list_lock);
 	list_add(&vsync_req->list, &ctx->pending_reqs);
@@ -466,7 +473,7 @@ static void cam_vsync_qmi_work(struct work_struct *work)
 		goto out;
 	}
 
-	rc = cam_vsync_add_pending_req(msg);
+	rc = cam_vsync_add_pending_req(msg, cam_id);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "Can't add pending req\n");
 		goto out;
@@ -528,7 +535,7 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 				&result);
 
 	if (rc < 0) {
-		CAM_ERR(CAM_SENSOR,
+		CAM_INFO(CAM_SENSOR,
 				"failed to parse QMI indication\n");
 		return;
 	}
@@ -542,14 +549,7 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 	list_for_each_entry_safe(vsync_req, vsync_req_temp,
 			&ctx->pending_reqs, list) {
 		frame_msg = &vsync_req->req_message.u.frame_msg;
-		/* check if it is a stale link or old req*/
-		if (!cam_get_device_priv(frame_msg->link_hdl))
-			goto free_n_go;
-		rc = cam_vsync_get_cam_id(frame_msg->link_hdl, &cam_id);
-		/* remove if cam_id is invalid */
-		if (rc < 0)
-			goto free_n_go;
-
+		cam_id = vsync_req->cam_id;
 		CAM_DBG(CAM_SENSOR,
 			"pending req cam_id %d, frame_id %d, sof %lld",
 			cam_id,

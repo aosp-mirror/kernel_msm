@@ -121,6 +121,7 @@ struct cam_sensor_vsync_result {
 struct cam_sensor_vsync_req {
 	uint32_t                     state;
 	struct list_head             list;
+	uint32_t                     cam_id;
 	struct cam_req_mgr_message   req_message;
 };
 
