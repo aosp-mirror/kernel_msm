@@ -76,6 +76,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	uint32_t *get_param_blk_buf = NULL;
 	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
+	uint32_t size_in_words;
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
 
@@ -363,8 +364,9 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 
-		get_param_blk_buf = kvzalloc(param_blk_info.param_size *
-						sizeof(uint32_t),
+		size_in_words = (param_blk_info.param_size >> 2) +
+			(!!(param_blk_info.param_size & 0x3));
+		get_param_blk_buf = kvzalloc(size_in_words << 2,
 						GFP_KERNEL);
 		if (!get_param_blk_buf)
 			return -ENOMEM;
@@ -373,7 +375,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			param_blk_info.inst_id, param_blk_info.block_id,
 			param_blk_info.id,
 			get_param_blk_buf,
-			param_blk_info.param_size);
+			size_in_words);
 		if (ret) {
 			pr_err("%s() Get param blk fail\n", __func__);
 			goto get_param_blk_err;
@@ -381,7 +383,7 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 
 		if (copy_to_user((void __user *) param_blk_info.param_blk,
 				get_param_blk_buf,
-				param_blk_info.param_size*sizeof(uint32_t))) {
+				param_blk_info.param_size)) {
 			pr_err("%s() copy to user fail\n", __func__);
 			ret = -EFAULT;
 		}
