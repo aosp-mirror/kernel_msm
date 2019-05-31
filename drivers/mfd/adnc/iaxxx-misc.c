@@ -335,6 +335,7 @@ int iaxxx_misc_init(struct iaxxx_priv *priv)
 	}
 
 	misc_priv->wdsp_stat_priv.ktime_zero = ktime_set(0, 0);
+	mutex_init(&misc_priv->wdsp_stat_priv.lock);
 
 	misc_priv->nb_core.notifier_call = iaxxx_misc_notify;
 	ret = iaxxx_fw_notifier_register(misc_priv->priv->dev,
