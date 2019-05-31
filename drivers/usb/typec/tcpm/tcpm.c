@@ -3625,6 +3625,11 @@ static void run_state_machine(struct tcpm_port *port)
 			/* port->hard_reset_count = 0; */
 			port->caps_count = 0;
 			tcpm_set_pd_capable(port, true);
+			/*
+			 * This should ideally timeout with PD_T_SENDER_RESPONSE
+			 * to pass compliance. However trading compliance to
+			 * user behavior while connecting to slow starting sink.
+			 */
 			tcpm_set_state_cond(port, hard_reset_state(port),
 					    PD_T_SEND_SOURCE_CAP);
 		}
