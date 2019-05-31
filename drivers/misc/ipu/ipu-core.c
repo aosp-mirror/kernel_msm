@@ -605,7 +605,7 @@ void ipu_bus_notify_shutdown(struct paintbox_bus *bus)
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_notify_dram_down(bus);
-	ipu_core_jqs_shutdown_firmware(bus);
+	ipu_core_jqs_shutdown_firmware(bus, true /* send_msg */);
 
 	mutex_unlock(&bus->jqs.lock);
 }

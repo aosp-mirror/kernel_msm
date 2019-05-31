@@ -34,10 +34,10 @@
 #define JQS_LOG_SINK_DEF          JQS_LOG_SINK_MESSAGE
 #define JQS_LOG_UART_BAUD_DEF     115200
 
-#define JQS_SHUTDOWN_TIMEOUT_INTERVAL_US	100
-#define JQS_SHUTDOWN_TIMEOUT_INTERVAL_US_LOWER	90
-#define JQS_SHUTDOWN_TIMEOUT_INTERVAL_US_UPPER	110
-#define JQS_SHUTDOWN_TIMEOUT_LIMIT_US		1000
+#define JQS_SHUTDOWN_TIMEOUT_INTERVAL_US	30
+#define JQS_SHUTDOWN_TIMEOUT_INTERVAL_US_LOWER	20
+#define JQS_SHUTDOWN_TIMEOUT_INTERVAL_US_UPPER	40
+#define JQS_SHUTDOWN_TIMEOUT_LIMIT_US		2000
 
 #define A0_IPU_DEFAULT_CLOCK_RATE 549000000 /* hz */
 
@@ -166,15 +166,13 @@ int ipu_core_jqs_send_shutdown_mode(struct paintbox_bus *bus,
 		enum jqs_shutdown_mode shutdown_mode)
 {
 	struct jqs_message_shutdown_mode req;
-	struct jqs_message_ack rsp;
 
 	req.shutdown_mode = shutdown_mode;
 
 	INIT_JQS_MSG(req, JQS_MESSAGE_TYPE_SHUTDOWN_MODE);
 
-	return ipu_core_jqs_msg_transport_kernel_write_sync(bus,
-			(const struct jqs_message *)&req,
-			(struct jqs_message *)&rsp, sizeof(rsp));
+	return ipu_core_jqs_msg_transport_kernel_write(bus,
+			(const struct jqs_message *)&req);
 }
 
 /* The caller to this function must hold bus->jqs.lock */
@@ -589,7 +587,7 @@ void ipu_core_jqs_suspend_firmware(struct paintbox_bus *bus)
 			JQS_SHUTDOWN_MODE_FOR_RESUME);
 
 	if (ret < 0) {
-		ipu_core_jqs_shutdown_firmware(bus);
+		ipu_core_jqs_shutdown_firmware(bus, false /* send_msg */);
 		return;
 	}
 
@@ -613,18 +611,33 @@ void ipu_core_jqs_suspend_firmware(struct paintbox_bus *bus)
 		bus->jqs.status = JQS_FW_STATUS_SUSPENDED;
 		ipu_core_notify_firmware_suspended(bus);
 	} else {
-		ipu_core_jqs_shutdown_firmware(bus);
+		ipu_core_jqs_shutdown_firmware(bus, false /* send_msg */);
 	}
 }
 
 /* The caller to this function must hold bus->jqs.lock */
-void ipu_core_jqs_shutdown_firmware(struct paintbox_bus *bus)
+void ipu_core_jqs_shutdown_firmware(struct paintbox_bus *bus, bool send_msg)
 {
 	if (bus->jqs.status == JQS_FW_STATUS_REQUESTED)
 		return;
 
-	if (ipu_core_jqs_is_ready(bus))
+	if (send_msg && ipu_core_jqs_is_ready(bus)) {
+		int shutdown_timeout;
+
 		ipu_core_jqs_send_shutdown_mode(bus, JQS_SHUTDOWN_MODE_HARD);
+		shutdown_timeout = 0;
+		while ((ipu_core_readl(bus, IPU_CSR_JQS_OFFSET +
+				JQS_SYS_GPR_SHUTDOWN) !=
+				JQS_SHUTDOWN_COMPLETE) &&
+				(shutdown_timeout <
+				JQS_SHUTDOWN_TIMEOUT_LIMIT_US)) {
+
+			usleep_range(JQS_SHUTDOWN_TIMEOUT_INTERVAL_US_LOWER,
+					JQS_SHUTDOWN_TIMEOUT_INTERVAL_US_UPPER);
+
+			shutdown_timeout += JQS_SHUTDOWN_TIMEOUT_INTERVAL_US;
+		}
+	}
 
 	ipu_core_jqs_disable_firmware_fatal_error(bus);
 	ipu_core_jqs_unstage_firmware(bus);
