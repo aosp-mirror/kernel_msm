@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2346,16 +2346,36 @@ int mdss_dsi_post_clkoff_cb(void *priv,
 			if ((ctrl->ctrl_state & CTRL_STATE_DSI_ACTIVE) &&
 				(i != DSI_CORE_PM))
 				continue;
-			rc = msm_mdss_enable_vreg(
-				sdata->power_data[i].vreg_config,
-				sdata->power_data[i].num_vreg, 0);
-			if (rc) {
-				pr_warn("%s: failed to disable vregs for %s\n",
-					__func__,
-					__mdss_dsi_pm_name(i));
-				rc = 0;
+			/*
+			 * temp workaround until power leakage issue during
+			 * subsequent LP2 power state transition from power_off
+			 * state is fixed. Don't disable CTRL_PM vreg.
+			 */
+			if (i == DSI_CTRL_PM) {
+				rc = msm_mdss_config_vreg_opt_mode(
+					sdata->power_data[i].vreg_config,
+					sdata->power_data[i].num_vreg,
+					DSS_REG_MODE_DISABLE);
+				if (rc) {
+					pr_warn("%s: failed to set opt mode for %s\n",
+							__func__,
+							__mdss_dsi_pm_name(i));
+					rc = 0;
+				}
 			} else {
-				ctrl->core_power = false;
+				rc = msm_mdss_enable_vreg(
+					sdata->power_data[i].vreg_config,
+					sdata->power_data[i].num_vreg, 0);
+				if (rc) {
+					pr_warn("%s: failed to disable vregs for %s\n",
+						__func__,
+						__mdss_dsi_pm_name(i));
+					rc = 0;
+				} else {
+					ctrl->core_power = false;
+					sdata->power_data[i].
+						is_vreg_enabled = false;
+				}
 			}
 		}
 
@@ -2407,6 +2427,9 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 				(!pdata->panel_info.cont_splash_enabled) &&
 				(i != DSI_CORE_PM))
 				continue;
+			if ((i == DSI_CTRL_PM) &&
+				sdata->power_data[i].is_vreg_enabled)
+				continue;
 			rc = msm_mdss_enable_vreg(
 				sdata->power_data[i].vreg_config,
 				sdata->power_data[i].num_vreg, 1);
@@ -2416,6 +2439,7 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 					__mdss_dsi_pm_name(i));
 			} else {
 				ctrl->core_power = true;
+				sdata->power_data[i].is_vreg_enabled = true;
 			}
 
 		}
