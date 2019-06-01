@@ -23,6 +23,8 @@
 #define IAXXX_MAC_OFFSET_SIGN(offset, sign)	((((sign) << 16) & 0x10000) | \
 		(offset))
 
+#define IAXXX_BTP_MAX_BLOCK_SIZE	(0x2000)
+
 struct proc_id_type {
 	uint32_t start;
 	uint32_t end;
@@ -96,6 +98,12 @@ static int iaxxx_get_btp_size_addr(struct iaxxx_priv *priv,
 
 	dev_dbg(priv->dev, "BTP information Size 0x%x", *btp_size);
 	dev_dbg(priv->dev, "BTP addr 0x%x", *btp_addr);
+
+	if (!(*btp_size) || *btp_size > IAXXX_BTP_MAX_BLOCK_SIZE) {
+		dev_err(priv->dev, "Invalid BTP size 0x%x", *btp_size);
+		ret = -EIO;
+	}
+
 exit:
 	return ret;
 }
