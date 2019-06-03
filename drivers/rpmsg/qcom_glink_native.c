@@ -2002,15 +2002,17 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	irq = of_irq_get(dev->of_node, 0);
 	ret = devm_request_irq(dev, irq,
 			       qcom_glink_native_intr,
-			       IRQF_NO_SUSPEND | IRQF_SHARED,
-			       glink->irq_name, glink);
-
+			       IRQF_SHARED,
+			       "glink-native", glink);
 	if (ret) {
 		dev_err(dev, "failed to request IRQ\n");
 		goto unregister;
 	}
 
 	glink->irq = irq;
+	ret = enable_irq_wake(glink->irq);
+	if (ret)
+		dev_err(dev, "failed to set irq wake\n");
 
 	size = of_property_count_u32_elems(dev->of_node, "cpu-affinity");
 	if (size > 0) {
