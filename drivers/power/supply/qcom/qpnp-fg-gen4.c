@@ -270,6 +270,7 @@ struct fg_gen4_chip {
 	struct work_struct	pl_current_en_work;
 	struct completion	mem_attn;
 	struct mutex		soc_scale_lock;
+	ktime_t			last_restart_time;
 	char			batt_profile[PROFILE_LEN];
 	enum slope_limit_status	slope_limit_sts;
 	int			ki_coeff_full_soc[2];
@@ -331,6 +332,7 @@ static bool fg_sram_dump;
 static bool fg_esr_fast_cal_en;
 
 static int fg_gen4_validate_soc_scale_mode(struct fg_gen4_chip *chip);
+static int fg_gen4_esr_fast_calib_config(struct fg_gen4_chip *chip, bool en);
 
 static struct fg_sram_param pm8150b_v1_sram_params[] = {
 	PARAM(BATT_SOC, BATT_SOC_WORD, BATT_SOC_OFFSET, 4, 1, 1, 0, NULL,
@@ -2077,6 +2079,7 @@ static int qpnp_fg_gen4_load_profile(struct fg_gen4_chip *chip)
 	}
 
 	if (normal_profile_load) {
+		chip->last_restart_time = ktime_get();
 		rc = fg_restart(fg, SOC_READY_WAIT_TIME_MS);
 		if (rc < 0) {
 			pr_err("Error in restarting FG, rc=%d\n", rc);
@@ -2272,6 +2275,12 @@ done:
 	schedule_delayed_work(&chip->ttf->ttf_work, msecs_to_jiffies(10000));
 	fg_dbg(fg, FG_STATUS, "profile loaded successfully");
 out:
+	if (!chip->esr_fast_calib || is_debug_batt_id(fg)) {
+		/* If it is debug battery, then disable ESR fast calibration */
+		chip->esr_fast_calib = false;
+		fg_gen4_esr_fast_calib_config(chip, false);
+	}
+
 	if (chip->dt.multi_profile_load && rc < 0)
 		chip->batt_age_level = chip->last_batt_age_level;
 	fg->soc_reporting_ready = true;
@@ -2906,6 +2915,13 @@ static int fg_gen4_esr_fast_calib_config(struct fg_gen4_chip *chip, bool en)
 		return rc;
 	}
 
+	/*
+	 * esr_fast_cal_timer won't be initialized if esr_fast_calib is
+	 * not enabled. Hence don't start/cancel the timer.
+	 */
+	if (!chip->esr_fast_calib)
+		goto out;
+
 	if (en) {
 		/* Set ESR fast calibration timer to 50 seconds as default */
 		esr_fast_cal_ms = 50000;
@@ -2920,6 +2936,7 @@ static int fg_gen4_esr_fast_calib_config(struct fg_gen4_chip *chip, bool en)
 		alarm_cancel(&chip->esr_fast_cal_timer);
 	}
 
+out:
 	fg_dbg(fg, FG_STATUS, "%sabling ESR fast calibration\n",
 		en ? "En" : "Dis");
 	return 0;
@@ -3180,6 +3197,7 @@ static irqreturn_t fg_vbatt_low_irq_handler(int irq, void *data)
 	struct fg_dev *fg = data;
 	struct fg_gen4_chip *chip = container_of(fg, struct fg_gen4_chip, fg);
 	int rc, vbatt_mv, msoc_raw;
+	s64 time_us;
 
 	rc = fg_get_battery_voltage(fg, &vbatt_mv);
 	if (rc < 0)
@@ -3192,6 +3210,20 @@ static irqreturn_t fg_vbatt_low_irq_handler(int irq, void *data)
 
 	fg_dbg(fg, FG_IRQ, "irq %d triggered vbatt_mv: %d msoc_raw:%d\n", irq,
 		vbatt_mv, msoc_raw);
+
+	if (!fg->soc_reporting_ready) {
+		fg_dbg(fg, FG_IRQ, "SOC reporting is not ready\n");
+		return IRQ_HANDLED;
+	}
+
+	if (chip->last_restart_time) {
+		time_us = ktime_us_delta(ktime_get(), chip->last_restart_time);
+		if (time_us < 10000000) {
+			fg_dbg(fg, FG_IRQ, "FG restarted before %lld us\n",
+				time_us);
+			return IRQ_HANDLED;
+		}
+	}
 
 	if (vbatt_mv < chip->dt.cutoff_volt_mv) {
 		if (chip->dt.rapid_soc_dec_en) {
