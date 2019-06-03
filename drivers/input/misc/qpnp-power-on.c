@@ -2198,17 +2198,6 @@ static int pon_register_twm_notifier(struct qpnp_pon *pon)
 	return rc;
 }
 
-extern bool is_charger_bootmode(void);
-static bool is_ramdump_enable;
-static int __init is_ramdump_en(char *str)
-{
-	if (!strcmp(str, "enabled"))
-		is_ramdump_enable = true;
-
-	return 1;
-}
-__setup("androidboot.ramdump=", is_ramdump_en);
-
 static int qpnp_pon_probe(struct platform_device *pdev)
 {
 	struct qpnp_pon *pon;
@@ -2224,7 +2213,6 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	u8 s3_src_reg;
 	unsigned long flags;
 	uint temp = 0;
-	int data;
 
 	pon = devm_kzalloc(&pdev->dev, sizeof(struct qpnp_pon), GFP_KERNEL);
 	if (!pon)
@@ -2404,18 +2392,6 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	}
 
 	memset(pon->pmic_pon_reg, 0, sizeof(pon->pmic_pon_reg));
-
-	if (is_ramdump_enable && is_charger_bootmode()) {
-		rc = regmap_read(pon->regmap,
-			QPNP_PON_OFF_REASON(pon),
-			&data);
-		if (!rc && (data & QPNP_GEN2_FAULT_SEQ)) {
-			/* ps_hold is needed to set to WARM for a panic */
-			pon->warm_reset_poff_type = PON_POWER_OFF_WARM_RESET;
-			panic("An PMIC Fault %s was occurred.",
-				qpnp_poff_reason[index]);
-		}
-	}
 
 	/* Print PON registers */
 	rc = regmap_bulk_read(pon->regmap, QPNP_PON_REASON1(pon),
