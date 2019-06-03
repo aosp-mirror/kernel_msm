@@ -300,6 +300,7 @@ enum {
 	PLUGIN7,
 	PLUGIN8,
 	PLUGIN9,
+/*
 	PLUGIN10,
 	PLUGIN11,
 	PLUGIN12,
@@ -314,6 +315,7 @@ enum {
 	PLUGIN21,
 	PLUGIN22,
 	PLUGIN23,
+*/
 };
 
 enum {
@@ -1598,12 +1600,14 @@ enum {
 	STREAM7,
 	STREAM8,
 	STREAM9,
+/*
 	STREAM10,
 	STREAM11,
 	STREAM12,
 	STREAM13,
 	STREAM14,
 	STREAM15,
+*/
 	STREAM_NONE,
 };
 
@@ -2047,6 +2051,22 @@ static const char * const channel##_rx_off_on_texts[] = { \
 	"Rx6"channel_name"On", "Rx7"channel_name"On", \
 	"Rx8"channel_name"On", "Rx9"channel_name"On", \
 	"Rx10"channel_name"On", "Rx11"channel_name"On", \
+	"Plgin0"channel_name"On", "Plgin1"channel_name"On", \
+	"Plgin2"channel_name"On", "Plgin3"channel_name"On", \
+	"Plgin4"channel_name"On", "Plgin5"channel_name"On", \
+	"Plgin6"channel_name"On", "Plgin7"channel_name"On", \
+	"Plgin8"channel_name"On", "Plgin9"channel_name"On", \
+}
+/*
+#define IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(channel, channel_name) \
+static const char * const channel##_rx_off_on_texts[] = { \
+	"Off", \
+	"Rx0"channel_name"On", "Rx1"channel_name"On", \
+	"Rx2"channel_name"On", "Rx3"channel_name"On", \
+	"Rx4"channel_name"On", "Rx5"channel_name"On", \
+	"Rx6"channel_name"On", "Rx7"channel_name"On", \
+	"Rx8"channel_name"On", "Rx9"channel_name"On", \
+	"Rx10"channel_name"On", "Rx11"channel_name"On", \
 	"Rx12"channel_name"On", "Rx13"channel_name"On", \
 	"Rx14"channel_name"On", "Rx15"channel_name"On", \
 	"Plgin0"channel_name"On", "Plgin1"channel_name"On", \
@@ -2058,6 +2078,7 @@ static const char * const channel##_rx_off_on_texts[] = { \
 	"Plgin12"channel_name"On", "Plgin13"channel_name"On", \
 	"Plgin14"channel_name"On", "Plgin15"channel_name"On", \
 }
+*/
 
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_0, "Tx0");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_1, "Tx1");
@@ -2067,6 +2088,7 @@ IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_4, "Tx4");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_5, "Tx5");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_6, "Tx6");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_7, "Tx7");
+/*
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_8, "Tx8");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_9, "Tx9");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_10, "Tx10");
@@ -2075,6 +2097,7 @@ IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_12, "Tx12");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_13, "Tx13");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_14, "Tx14");
 IAXXX_INPUT_TO_TX_CH_ON_OFF_TEXTS(TX_15, "Tx15");
+*/
 
 static const char * const iaxxx_route_status_texts[] = {
 	"InActive", "Active"
@@ -2225,8 +2248,6 @@ IAXXX_UPDATE_BLOCK_SET_GET(block0, IAXXX_BLOCK_0)
 IAXXX_UPDATE_BLOCK_SET_GET(block1, IAXXX_BLOCK_1)
 IAXXX_UPDATE_BLOCK_SET_GET(block2, IAXXX_BLOCK_2)
 
-
-
 static int iaxxx_put_route_status(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
@@ -2311,11 +2332,12 @@ IAXXXCORE_RX_CHMGR_ENUM(RX_8, 8);
 IAXXXCORE_RX_CHMGR_ENUM(RX_9, 9);
 IAXXXCORE_RX_CHMGR_ENUM(RX_10, 10);
 IAXXXCORE_RX_CHMGR_ENUM(RX_11, 11);
+/*
 IAXXXCORE_RX_CHMGR_ENUM(RX_12, 12);
 IAXXXCORE_RX_CHMGR_ENUM(RX_13, 13);
 IAXXXCORE_RX_CHMGR_ENUM(RX_14, 14);
 IAXXXCORE_RX_CHMGR_ENUM(RX_15, 15);
-
+*/
 
 #define IAXXXCORE_RX_CHMGR_KCTRL(channel, channel_name) \
 	SOC_ENUM(channel_name "Chan GnRmp", channel##_gn_rmp_enum), \
@@ -2339,23 +2361,25 @@ IAXXX_CH_MGR_DAPM_CTLS(RX_8, "Rx8 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(RX_9, "Rx9 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(RX_10, "Rx10 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(RX_11, "Rx11 Mux");
+/*
 IAXXX_CH_MGR_DAPM_CTLS(RX_12, "Rx12 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(RX_13, "Rx13 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(RX_14, "Rx14 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(RX_15, "Rx15 Mux");
-
+*/
 
 static const unsigned int str_mstr_id_values[] = {0x0, 0x1,
 	0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9,
-	0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0xFFFF, };
+/*	0xA, 0xB, 0xC, 0xD, 0xE, 0xF,*/
+	0xFFFF, };
 
 static const char * const str_mstr_id_texts[] = {
 	ENUM_NAME(STREAMID_0), ENUM_NAME(STREAMID_1), ENUM_NAME(STREAMID_2),
 	ENUM_NAME(STREAMID_3), ENUM_NAME(STREAMID_4), ENUM_NAME(STREAMID_5),
 	ENUM_NAME(STREAMID_6), ENUM_NAME(STREAMID_7), ENUM_NAME(STREAMID_8),
-	ENUM_NAME(STREAMID_9), ENUM_NAME(STREAMID_10), ENUM_NAME(STREAMID_11),
+	ENUM_NAME(STREAMID_9), /*ENUM_NAME(STREAMID_10), ENUM_NAME(STREAMID_11),
 	ENUM_NAME(STREAMID_12), ENUM_NAME(STREAMID_13), ENUM_NAME(STREAMID_14),
-	ENUM_NAME(STREAMID_15), ENUM_NAME(STREAMID_NONE),
+	ENUM_NAME(STREAMID_15),*/ ENUM_NAME(STREAMID_NONE),
 };
 
 static const unsigned int strm_pwr_mode_value[] = {
@@ -2486,12 +2510,14 @@ IAXXXCORE_STREAM_ENUM(STREAM6);
 IAXXXCORE_STREAM_ENUM(STREAM7);
 IAXXXCORE_STREAM_ENUM(STREAM8);
 IAXXXCORE_STREAM_ENUM(STREAM9);
+/*
 IAXXXCORE_STREAM_ENUM(STREAM10);
 IAXXXCORE_STREAM_ENUM(STREAM11);
 IAXXXCORE_STREAM_ENUM(STREAM12);
 IAXXXCORE_STREAM_ENUM(STREAM13);
 IAXXXCORE_STREAM_ENUM(STREAM14);
 IAXXXCORE_STREAM_ENUM(STREAM15);
+*/
 
 #define IAXXX_STREAM_EN_SET_GET(stream) \
 static int iaxxxcore_set_strm##stream##_en( \
@@ -2546,12 +2572,14 @@ IAXXX_STREAM_EN_SET_GET(STREAM6)
 IAXXX_STREAM_EN_SET_GET(STREAM7)
 IAXXX_STREAM_EN_SET_GET(STREAM8)
 IAXXX_STREAM_EN_SET_GET(STREAM9)
+/*
 IAXXX_STREAM_EN_SET_GET(STREAM10)
 IAXXX_STREAM_EN_SET_GET(STREAM11)
 IAXXX_STREAM_EN_SET_GET(STREAM12)
 IAXXX_STREAM_EN_SET_GET(STREAM13)
 IAXXX_STREAM_EN_SET_GET(STREAM14)
 IAXXX_STREAM_EN_SET_GET(STREAM15)
+*/
 
 #define IAXXXCORE_STREAM_KCTRL(stream, strm_name, shift) \
 	SOC_SINGLE_BOOL_EXT(strm_name" En", 0, \
@@ -2612,10 +2640,12 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_CHANNEL_RX_9_EP_0,
 	IAXXX_SYSID_CHANNEL_RX_10_EP_0,
 	IAXXX_SYSID_CHANNEL_RX_11_EP_0,
+/*
 	IAXXX_SYSID_CHANNEL_RX_12_EP_0,
 	IAXXX_SYSID_CHANNEL_RX_13_EP_0,
 	IAXXX_SYSID_CHANNEL_RX_14_EP_0,
 	IAXXX_SYSID_CHANNEL_RX_15_EP_0,
+*/
 
 	/* Plugin 0 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_0,
@@ -2624,6 +2654,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_8,
@@ -2634,6 +2665,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_0_OUT_EP_15,
+*/
 
 	/* Plugin 1 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_0,
@@ -2642,6 +2674,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_8,
@@ -2652,6 +2685,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_1_OUT_EP_15,
+*/
 
 	/* Plugin 2 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_0,
@@ -2660,6 +2694,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_8,
@@ -2670,6 +2705,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_2_OUT_EP_15,
+*/
 
 	/* Plugin 3 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_0,
@@ -2678,6 +2714,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_8,
@@ -2688,6 +2725,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_3_OUT_EP_15,
+*/
 
 	/* Plugin 4 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_0,
@@ -2696,6 +2734,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_8,
@@ -2706,6 +2745,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_4_OUT_EP_15,
+*/
 
 	/* Plugin 5 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_0,
@@ -2714,6 +2754,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_8,
@@ -2724,6 +2765,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_5_OUT_EP_15,
+*/
 
 	/* Plugin 6 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_0,
@@ -2732,6 +2774,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_8,
@@ -2742,6 +2785,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_6_OUT_EP_15,
+*/
 
 	/* Plugin 7 EndPoint 0 to 15 */
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_0,
@@ -2750,6 +2794,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_8,
@@ -2760,6 +2805,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_7_OUT_EP_15,
+*/
 
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_0,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_1,
@@ -2767,6 +2813,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_8,
@@ -2777,6 +2824,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_8_OUT_EP_15,
+*/
 
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_0,
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_1,
@@ -2784,6 +2832,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_3,
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_4,
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_5,
+/*
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_6,
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_7,
 	IAXXX_SYSID_PLUGIN_9_OUT_EP_8,
@@ -2896,6 +2945,7 @@ static const unsigned int ip_ep_values[] = {
 	IAXXX_SYSID_PLUGIN_15_OUT_EP_13,
 	IAXXX_SYSID_PLUGIN_15_OUT_EP_14,
 	IAXXX_SYSID_PLUGIN_15_OUT_EP_15,
+*/
 
 	IAXXX_SYSID_SENSOR_OUTPUT_0,
 	IAXXX_SYSID_SENSOR_OUTPUT_1,
@@ -2912,84 +2962,105 @@ static const char * const ip_ep_texts[] = {
 	ENUM_NAME(RX6_ChanMgr), ENUM_NAME(RX7_ChanMgr),
 	ENUM_NAME(RX8_ChanMgr), ENUM_NAME(RX9_ChanMgr),
 	ENUM_NAME(RX10_ChanMgr), ENUM_NAME(RX11_ChanMgr),
+/*
 	ENUM_NAME(RX12_ChanMgr), ENUM_NAME(RX13_ChanMgr),
 	ENUM_NAME(RX14_ChanMgr), ENUM_NAME(RX15_ChanMgr),
+*/
 
 	ENUM_NAME(plugin0Out0), ENUM_NAME(plugin0Out1),
 	ENUM_NAME(plugin0Out2), ENUM_NAME(plugin0Out3),
 	ENUM_NAME(plugin0Out4), ENUM_NAME(plugin0Out5),
+/*
 	ENUM_NAME(plugin0Out6), ENUM_NAME(plugin0Out7),
 	ENUM_NAME(plugin0Out8), ENUM_NAME(plugin0Out9),
 	ENUM_NAME(plugin0Out10), ENUM_NAME(plugin0Out11),
 	ENUM_NAME(plugin0Out12), ENUM_NAME(plugin0Out13),
 	ENUM_NAME(plugin0Out14), ENUM_NAME(plugin0Out15),
+*/
 	ENUM_NAME(plugin1Out0), ENUM_NAME(plugin1Out1),
 	ENUM_NAME(plugin1Out2), ENUM_NAME(plugin1Out3),
 	ENUM_NAME(plugin1Out4), ENUM_NAME(plugin1Out5),
+/*
 	ENUM_NAME(plugin1Out6), ENUM_NAME(plugin1Out7),
 	ENUM_NAME(plugin1Out8), ENUM_NAME(plugin1Out9),
 	ENUM_NAME(plugin1Out10), ENUM_NAME(plugin1Out11),
 	ENUM_NAME(plugin1Out12), ENUM_NAME(plugin1Out13),
 	ENUM_NAME(plugin1Out14), ENUM_NAME(plugin1Out15),
+*/
 	ENUM_NAME(plugin2Out0), ENUM_NAME(plugin2Out1),
 	ENUM_NAME(plugin2Out2), ENUM_NAME(plugin2Out3),
 	ENUM_NAME(plugin2Out4), ENUM_NAME(plugin2Out5),
+/*
 	ENUM_NAME(plugin2Out6), ENUM_NAME(plugin2Out7),
 	ENUM_NAME(plugin2Out8), ENUM_NAME(plugin2Out9),
 	ENUM_NAME(plugin2Out10), ENUM_NAME(plugin2Out11),
 	ENUM_NAME(plugin2Out12), ENUM_NAME(plugin2Out13),
 	ENUM_NAME(plugin2Out14), ENUM_NAME(plugin2Out15),
+*/
 	ENUM_NAME(plugin3Out0), ENUM_NAME(plugin3Out1),
 	ENUM_NAME(plugin3Out2), ENUM_NAME(plugin3Out3),
 	ENUM_NAME(plugin3Out4), ENUM_NAME(plugin3Out5),
+/*
 	ENUM_NAME(plugin3Out6), ENUM_NAME(plugin3Out7),
 	ENUM_NAME(plugin3Out8), ENUM_NAME(plugin3Out9),
 	ENUM_NAME(plugin3Out10), ENUM_NAME(plugin3Out11),
 	ENUM_NAME(plugin3Out12), ENUM_NAME(plugin3Out13),
 	ENUM_NAME(plugin3Out14), ENUM_NAME(plugin3Out15),
+*/
 	ENUM_NAME(plugin4Out0), ENUM_NAME(plugin4Out1),
 	ENUM_NAME(plugin4Out2), ENUM_NAME(plugin4Out3),
 	ENUM_NAME(plugin4Out4), ENUM_NAME(plugin4Out5),
+/*
 	ENUM_NAME(plugin4Out6), ENUM_NAME(plugin4Out7),
 	ENUM_NAME(plugin4Out8), ENUM_NAME(plugin4Out9),
 	ENUM_NAME(plugin4Out10), ENUM_NAME(plugin4Out11),
 	ENUM_NAME(plugin4Out12), ENUM_NAME(plugin4Out13),
 	ENUM_NAME(plugin4Out14), ENUM_NAME(plugin4Out15),
+*/
 	ENUM_NAME(plugin5Out0), ENUM_NAME(plugin5Out1),
 	ENUM_NAME(plugin5Out2), ENUM_NAME(plugin5Out3),
 	ENUM_NAME(plugin5Out4), ENUM_NAME(plugin5Out5),
+/*
 	ENUM_NAME(plugin5Out6), ENUM_NAME(plugin5Out7),
 	ENUM_NAME(plugin5Out8), ENUM_NAME(plugin5Out9),
 	ENUM_NAME(plugin5Out10), ENUM_NAME(plugin5Out11),
 	ENUM_NAME(plugin5Out12), ENUM_NAME(plugin5Out13),
 	ENUM_NAME(plugin5Out14), ENUM_NAME(plugin5Out15),
+*/
 	ENUM_NAME(plugin6Out0), ENUM_NAME(plugin6Out1),
 	ENUM_NAME(plugin6Out2), ENUM_NAME(plugin6Out3),
 	ENUM_NAME(plugin6Out4), ENUM_NAME(plugin6Out5),
+/*
 	ENUM_NAME(plugin6Out6), ENUM_NAME(plugin6Out7),
 	ENUM_NAME(plugin6Out8), ENUM_NAME(plugin6Out9),
 	ENUM_NAME(plugin6Out10), ENUM_NAME(plugin6Out11),
 	ENUM_NAME(plugin6Out12), ENUM_NAME(plugin6Out13),
 	ENUM_NAME(plugin6Out14), ENUM_NAME(plugin6Out15),
+*/
 	ENUM_NAME(plugin7Out0), ENUM_NAME(plugin7Out1),
 	ENUM_NAME(plugin7Out2), ENUM_NAME(plugin7Out3),
 	ENUM_NAME(plugin7Out4), ENUM_NAME(plugin7Out5),
+/*
 	ENUM_NAME(plugin7Out6), ENUM_NAME(plugin7Out7),
 	ENUM_NAME(plugin7Out8), ENUM_NAME(plugin7Out9),
 	ENUM_NAME(plugin7Out10), ENUM_NAME(plugin7Out11),
 	ENUM_NAME(plugin7Out12), ENUM_NAME(plugin7Out13),
 	ENUM_NAME(plugin7Out14), ENUM_NAME(plugin7Out15),
+*/
 	ENUM_NAME(plugin8Out0), ENUM_NAME(plugin8Out1),
 	ENUM_NAME(plugin8Out2), ENUM_NAME(plugin8Out3),
 	ENUM_NAME(plugin8Out4), ENUM_NAME(plugin8Out5),
+/*
 	ENUM_NAME(plugin8Out6), ENUM_NAME(plugin8Out7),
 	ENUM_NAME(plugin8Out8), ENUM_NAME(plugin8Out9),
 	ENUM_NAME(plugin8Out10), ENUM_NAME(plugin8Out11),
 	ENUM_NAME(plugin8Out12), ENUM_NAME(plugin8Out13),
 	ENUM_NAME(plugin8Out14), ENUM_NAME(plugin8Out15),
+*/
 	ENUM_NAME(plugin9Out0), ENUM_NAME(plugin9Out1),
 	ENUM_NAME(plugin9Out2), ENUM_NAME(plugin9Out3),
 	ENUM_NAME(plugin9Out4), ENUM_NAME(plugin9Out5),
+/*
 	ENUM_NAME(plugin9Out6), ENUM_NAME(plugin9Out7),
 	ENUM_NAME(plugin9Out8), ENUM_NAME(plugin9Out9),
 	ENUM_NAME(plugin9Out10), ENUM_NAME(plugin9Out11),
@@ -3043,6 +3114,7 @@ static const char * const ip_ep_texts[] = {
 	ENUM_NAME(plugin15Out10), ENUM_NAME(plugin15Out11),
 	ENUM_NAME(plugin15Out12), ENUM_NAME(plugin15Out13),
 	ENUM_NAME(plugin15Out14), ENUM_NAME(plugin15Out15),
+*/
 
 	ENUM_NAME(SensorOut0), ENUM_NAME(SensorOut1),
 	ENUM_NAME(SensorOut2), ENUM_NAME(SensorOut3),
@@ -3076,6 +3148,7 @@ IAXXXCORE_TX_CHMGR_ENUM(TX_4);
 IAXXXCORE_TX_CHMGR_ENUM(TX_5);
 IAXXXCORE_TX_CHMGR_ENUM(TX_6);
 IAXXXCORE_TX_CHMGR_ENUM(TX_7);
+/*
 IAXXXCORE_TX_CHMGR_ENUM(TX_8);
 IAXXXCORE_TX_CHMGR_ENUM(TX_9);
 IAXXXCORE_TX_CHMGR_ENUM(TX_10);
@@ -3084,6 +3157,7 @@ IAXXXCORE_TX_CHMGR_ENUM(TX_12);
 IAXXXCORE_TX_CHMGR_ENUM(TX_13);
 IAXXXCORE_TX_CHMGR_ENUM(TX_14);
 IAXXXCORE_TX_CHMGR_ENUM(TX_15);
+*/
 
 #define IAXXXCORE_TX_CHMGR_KCTRL(channel, channel_name) \
 	SOC_ENUM(channel_name "Chan IpSrcId", channel##_ip_src_id_enum), \
@@ -3105,6 +3179,7 @@ IAXXX_CH_MGR_DAPM_CTLS(TX_4, "Tx4 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_5, "Tx5 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_6, "Tx6 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_7, "Tx7 Mux");
+/*
 IAXXX_CH_MGR_DAPM_CTLS(TX_8, "Tx8 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_9, "Tx9 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_10, "Tx10 Mux");
@@ -3113,6 +3188,7 @@ IAXXX_CH_MGR_DAPM_CTLS(TX_12, "Tx12 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_13, "Tx13 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_14, "Tx14 Mux");
 IAXXX_CH_MGR_DAPM_CTLS(TX_15, "Tx15 Mux");
+*/
 
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_0, "Tx0");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_1, "Tx1");
@@ -3122,6 +3198,7 @@ IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_4, "Tx4");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_5, "Tx5");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_6, "Tx6");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_7, "Tx7");
+/*
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_8, "Tx8");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_9, "Tx9");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_10, "Tx10");
@@ -3130,7 +3207,7 @@ IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_12, "Tx12");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_13, "Tx13");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_14, "Tx14");
 IAXXX_CH_RX_TO_TX_DAPM_CTLS(TX_15, "Tx15");
-
+*/
 
 #define IAXXXCORE_PLUGIN_ENUM_EP0(plugin)  \
 SOC_VALUE_ENUM_SINGLE_DECL(plugin##_ip_ep0_enum, \
@@ -3240,6 +3317,7 @@ static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN9);
 static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN9);
 static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN9);
 static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_EP0(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_EP1(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN10);
@@ -3276,7 +3354,7 @@ static IAXXXCORE_PLUGIN_ENUM_EP2(PLUGIN15);
 static IAXXXCORE_PLUGIN_ENUM_EP3(PLUGIN15);
 static IAXXXCORE_PLUGIN_ENUM_EP4(PLUGIN15);
 static IAXXXCORE_PLUGIN_ENUM_EP5(PLUGIN15);
-
+*/
 
 #ifdef CONFIG_IAXXX_TO_MAX_PLUGIN_IP_EP
 #define IAXXXCORE_PLUGIN_ENUM_IP_EP6_TO_MAX(plugin) \
@@ -3370,12 +3448,14 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN6);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN7);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN8);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN11);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN12);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN13);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN14);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP0_TO_MAX(PLUGIN15);
+*/
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN0);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN1);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN2);
@@ -3386,12 +3466,14 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN6);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN7);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN8);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN11);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN12);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN13);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN14);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP1_TO_MAX(PLUGIN15);
+*/
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN0);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN1);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN2);
@@ -3402,12 +3484,14 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN6);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN7);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN8);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN11);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN12);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN13);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN14);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP2_TO_MAX(PLUGIN15);
+*/
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN0);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN1);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN2);
@@ -3418,12 +3502,14 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN6);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN7);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN8);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN11);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN12);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN13);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN14);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP3_TO_MAX(PLUGIN15);
+*/
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN0);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN1);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN2);
@@ -3434,12 +3520,14 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN6);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN7);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN8);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN11);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN12);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN13);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN14);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP4_TO_MAX(PLUGIN15);
+*/
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN0);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN1);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN2);
@@ -3450,6 +3538,7 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN6);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN7);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN8);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN9);
+/*
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN10);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN11);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP5_TO_MAX(PLUGIN12);
@@ -3616,8 +3705,8 @@ static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN12);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN13);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN14);
 static IAXXXCORE_PLUGIN_ENUM_IP_EP15_TO_MAX(PLUGIN15);
+*/
 #endif
-
 
 #define IAXXXCORE_PLUGIN_KCTRL(plugin, plugin_name) \
 	IAXXXCORE_PLUGIN_KCTRL_IP_EP6_TO_MAX(plugin, plugin_name) \
@@ -3679,9 +3768,19 @@ static const char * const plugin##_off_on_texts[] = { \
 	"Rx3"plugin_name"On", "Rx4"plugin_name"On", "Rx5"plugin_name"On", \
 	"Rx6"plugin_name"On", "Rx7"plugin_name"On", "Rx8"plugin_name"On", \
 	"Rx9"plugin_name"On", "Rx10"plugin_name"On", "Rx11"plugin_name"On", \
+}
+/*
+#define IAXXXCORE_PLUGIN_ON_OFF_TEXTS(plugin, plugin_name) \
+static const char * const plugin##_off_on_texts[] = { \
+	"Off", \
+	"Rx0"plugin_name"On", "Rx1"plugin_name"On", "Rx2"plugin_name"On", \
+	"Rx3"plugin_name"On", "Rx4"plugin_name"On", "Rx5"plugin_name"On", \
+	"Rx6"plugin_name"On", "Rx7"plugin_name"On", "Rx8"plugin_name"On", \
+	"Rx9"plugin_name"On", "Rx10"plugin_name"On", "Rx11"plugin_name"On", \
 	"Rx12"plugin_name"On", "Rx13"plugin_name"On", "Rx14"plugin_name"On", \
 	"Rx15"plugin_name"On", \
 }
+*/
 
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN0, "Plgin0");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN1, "Plgin1");
@@ -3693,16 +3792,17 @@ IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN6, "Plgin6");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN7, "Plgin7");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN8, "Plgin8");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN9, "Plgin9");
+/*
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN10, "Plgin10");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN11, "Plgin11");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN12, "Plgin12");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN13, "Plgin13");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN14, "Plgin14");
 IAXXXCORE_PLUGIN_ON_OFF_TEXTS(PLUGIN15, "Plgin15");
+*/
 
 #define IAXXX_PLUGIN_DAPM_MUX(plugin, plugin_name) \
 	SND_SOC_DAPM_MUX(plugin_name "En", SND_SOC_NOPM, 0, 0, &plugin##_mux)
-
 
 #define IAXXX_PLUGIN_BLK_SET_GET(plugin) \
 static int iaxxxcore_set_plgin##plugin##_Blk0En( \
@@ -3827,12 +3927,14 @@ IAXXX_PLUGIN_BLK_SET_GET(PLUGIN6)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN7)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN8)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN9)
+/*
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN10)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN11)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN12)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN13)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN14)
 IAXXX_PLUGIN_BLK_SET_GET(PLUGIN15)
+*/
 
 #define IAXXX_PLUGIN_EN_CTLS(plugin, plugin_name) \
 	SOC_SINGLE_BOOL_EXT(plugin_name "Blk0En", 0, \
@@ -3862,12 +3964,14 @@ IAXXX_PLUGIN_DAPM_CTLS(PLUGIN6, "Plgin6");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN7, "Plgin7");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN8, "Plgin8");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN9, "Plgin9");
+/*
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN10, "Plgin10");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN11, "Plgin11");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN12, "Plgin12");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN13, "Plgin13");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN14, "Plgin14");
 IAXXX_PLUGIN_DAPM_CTLS(PLUGIN15, "Plgin15");
+*/
 
 #define IAXXX_SENSOR_EN_SET_GET(sensor) \
 static int iaxxxcore_set_sensor##sensor##_en( \
@@ -5800,10 +5904,12 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_9, "Rx9"),
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_10, "Rx10"),
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_11, "Rx11"),
+/*
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_12, "Rx12"),
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_13, "Rx13"),
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_14, "Rx14"),
 	IAXXXCORE_RX_CHMGR_KCTRL(RX_15, "Rx15"),
+*/
 
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_0, "Tx0"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_1, "Tx1"),
@@ -5813,6 +5919,7 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_5, "Tx5"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_6, "Tx6"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_7, "Tx7"),
+/*
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_8, "Tx8"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_9, "Tx9"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_10, "Tx10"),
@@ -5821,6 +5928,7 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_13, "Tx13"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_14, "Tx14"),
 	IAXXXCORE_TX_CHMGR_KCTRL(TX_15, "Tx15"),
+*/
 
 	IAXXXCORE_STREAM_KCTRL(STREAM0, "strm0", 0),
 	IAXXXCORE_STREAM_KCTRL(STREAM1, "strm1", 0),
@@ -5832,12 +5940,14 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXXCORE_STREAM_KCTRL(STREAM7, "strm7", 0),
 	IAXXXCORE_STREAM_KCTRL(STREAM8, "strm8", 16),
 	IAXXXCORE_STREAM_KCTRL(STREAM9, "strm9", 16),
+/*
 	IAXXXCORE_STREAM_KCTRL(STREAM10, "strm10", 16),
 	IAXXXCORE_STREAM_KCTRL(STREAM11, "strm11", 16),
 	IAXXXCORE_STREAM_KCTRL(STREAM12, "strm12", 16),
 	IAXXXCORE_STREAM_KCTRL(STREAM13, "strm13", 16),
 	IAXXXCORE_STREAM_KCTRL(STREAM14, "strm14", 16),
 	IAXXXCORE_STREAM_KCTRL(STREAM15, "strm15", 16),
+*/
 
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN0, "Plgin0"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN1, "Plgin1"),
@@ -5849,12 +5959,14 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN7, "Plgin7"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN8, "Plgin8"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN9, "Plgin9"),
+/*
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN10, "Plgin10"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN11, "Plgin11"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN12, "Plgin12"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN13, "Plgin13"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN14, "Plgin14"),
 	IAXXXCORE_PLUGIN_KCTRL(PLUGIN15, "Plgin15"),
+*/
 
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN0, "Plgin0"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN1, "Plgin1"),
@@ -5866,12 +5978,14 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN7, "Plgin7"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN8, "Plgin8"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN9, "Plgin9"),
+/*
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN10, "Plgin10"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN11, "Plgin11"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN12, "Plgin12"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN13, "Plgin13"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN14, "Plgin14"),
 	IAXXX_PLUGIN_EN_CTLS(PLUGIN15, "Plgin15"),
+*/
 
 	IAXXXCORE_SENSOR_KCTRL(SENSOR0, "sensor0"),
 	IAXXXCORE_SENSOR_KCTRL(SENSOR1, "sensor1"),
@@ -6293,10 +6407,12 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	IAXXX_CH_MGR_DAPM_MUX(RX_9, "Rx9 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(RX_10, "Rx10 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(RX_11, "Rx11 Mux"),
+/*
 	IAXXX_CH_MGR_DAPM_MUX(RX_12, "Rx12 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(RX_13, "Rx13 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(RX_14, "Rx14 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(RX_15, "Rx15 Mux"),
+*/
 
 	IAXXX_CH_MGR_DAPM_MUX(TX_0, "Tx0 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_1, "Tx1 Mux"),
@@ -6306,6 +6422,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	IAXXX_CH_MGR_DAPM_MUX(TX_5, "Tx5 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_6, "Tx6 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_7, "Tx7 Mux"),
+/*
 	IAXXX_CH_MGR_DAPM_MUX(TX_8, "Tx8 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_9, "Tx9 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_10, "Tx10 Mux"),
@@ -6314,6 +6431,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	IAXXX_CH_MGR_DAPM_MUX(TX_13, "Tx13 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_14, "Tx14 Mux"),
 	IAXXX_CH_MGR_DAPM_MUX(TX_15, "Tx15 Mux"),
+*/
 
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_0, "Tx0"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_1, "Tx1"),
@@ -6323,6 +6441,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_5, "Tx5"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_6, "Tx6"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_7, "Tx7"),
+/*
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_8, "Tx8"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_9, "Tx9"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_10, "Tx10"),
@@ -6331,6 +6450,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_13, "Tx13"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_14, "Tx14"),
 	IAXXX_CH_RX_TO_TX_DAPM_MUX(TX_15, "Tx15"),
+*/
 
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN0, "Plgin0"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN1, "Plgin1"),
@@ -6342,12 +6462,14 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN7, "Plgin7"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN8, "Plgin8"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN9, "Plgin9"),
+/*
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN10, "Plgin10"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN11, "Plgin11"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN12, "Plgin12"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN13, "Plgin13"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN14, "Plgin14"),
 	IAXXX_PLUGIN_DAPM_MUX(PLUGIN15, "Plgin15"),
+*/
 
 	SND_SOC_DAPM_OUTPUT("PCMOUTPUT1"),
 	SND_SOC_DAPM_OUTPUT("PCMOUTPUT2"),
@@ -6367,7 +6489,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	{"Tx4 PortMux En", Plgin"Tx4On", Plgin"En"}, \
 	{"Tx5 PortMux En", Plgin"Tx5On", Plgin"En"}, \
 	{"Tx6 PortMux En", Plgin"Tx6On", Plgin"En"}, \
-	{"Tx7 PortMux En", Plgin"Tx7On", Plgin"En"}, \
+	{"Tx7 PortMux En", Plgin"Tx7On", Plgin"En"} /*, \
 	{"Tx8 PortMux En", Plgin"Tx8On", Plgin"En"}, \
 	{"Tx9 PortMux En", Plgin"Tx9On", Plgin"En"}, \
 	{"Tx10 PortMux En", Plgin"Tx10On", Plgin"En"}, \
@@ -6376,6 +6498,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	{"Tx13 PortMux En", Plgin"Tx13On", Plgin"En"}, \
 	{"Tx14 PortMux En", Plgin"Tx14On", Plgin"En"}, \
 	{"Tx15 PortMux En", Plgin"Tx15On", Plgin"En"}
+*/
 
 #define RX_MUX_TO_TX_MUX_ROUTE(Tx) \
 	{Tx" PortMux En", "Rx0"Tx"On", "Rx0 Mux Port"}, \
@@ -6389,11 +6512,12 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	{Tx" PortMux En", "Rx8"Tx"On", "Rx8 Mux Port"}, \
 	{Tx" PortMux En", "Rx9"Tx"On", "Rx9 Mux Port"}, \
 	{Tx" PortMux En", "Rx10"Tx"On", "Rx10 Mux Port"}, \
-	{Tx" PortMux En", "Rx11"Tx"On", "Rx11 Mux Port"}, \
+	{Tx" PortMux En", "Rx11"Tx"On", "Rx11 Mux Port"} /*, \
 	{Tx" PortMux En", "Rx12"Tx"On", "Rx12 Mux Port"}, \
 	{Tx" PortMux En", "Rx13"Tx"On", "Rx13 Mux Port"}, \
 	{Tx" PortMux En", "Rx14"Tx"On", "Rx14 Mux Port"}, \
 	{Tx" PortMux En", "Rx15"Tx"On", "Rx15 Mux Port"}
+*/
 
 #define RX_MUX_TO_PLUGIN_ROUTE(name) \
 	{"Plgin0En", name"Plgin0On", name" Mux Port"}, \
@@ -6405,13 +6529,14 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	{"Plgin6En", name"Plgin6On", name" Mux Port"}, \
 	{"Plgin7En", name"Plgin7On", name" Mux Port"}, \
 	{"Plgin8En", name"Plgin8On", name" Mux Port"}, \
-	{"Plgin9En", name"Plgin9On", name" Mux Port"}, \
+	{"Plgin9En", name"Plgin9On", name" Mux Port"} /*, \
 	{"Plgin10En", name"Plgin10On", name" Mux Port"}, \
 	{"Plgin11En", name"Plgin11On", name" Mux Port"}, \
 	{"Plgin12En", name"Plgin12On", name" Mux Port"}, \
 	{"Plgin13En", name"Plgin13On", name" Mux Port"}, \
 	{"Plgin14En", name"Plgin14On", name" Mux Port"}, \
 	{"Plgin15En", name"Plgin15On", name" Mux Port"}
+*/
 
 #define PORT_TO_RX_MUX_ROUTE(name) \
 	{name, "PCM0", "PCM0.0 RX"}, \
@@ -6528,7 +6653,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	{"Tx4 Mux Port", name, "Tx4 PortMux En"}, \
 	{"Tx5 Mux Port", name, "Tx5 PortMux En"}, \
 	{"Tx6 Mux Port", name, "Tx6 PortMux En"}, \
-	{"Tx7 Mux Port", name, "Tx7 PortMux En"}, \
+	{"Tx7 Mux Port", name, "Tx7 PortMux En"} /*, \
 	{"Tx8 Mux Port", name, "Tx8 PortMux En"}, \
 	{"Tx9 Mux Port", name, "Tx9 PortMux En"}, \
 	{"Tx10 Mux Port", name, "Tx10 PortMux En"}, \
@@ -6537,6 +6662,7 @@ static const struct snd_soc_dapm_widget iaxxx_dapm_widgets[] = {
 	{"Tx13 Mux Port", name, "Tx13 PortMux En"}, \
 	{"Tx14 Mux Port", name, "Tx14 PortMux En"}, \
 	{"Tx15 Mux Port", name, "Tx15 PortMux En"}
+*/
 
 static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 
@@ -6557,10 +6683,12 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	PORT_TO_RX_MUX_ROUTE("Rx9 Mux Port"),
 	PORT_TO_RX_MUX_ROUTE("Rx10 Mux Port"),
 	PORT_TO_RX_MUX_ROUTE("Rx11 Mux Port"),
+/*
 	PORT_TO_RX_MUX_ROUTE("Rx12 Mux Port"),
 	PORT_TO_RX_MUX_ROUTE("Rx13 Mux Port"),
 	PORT_TO_RX_MUX_ROUTE("Rx14 Mux Port"),
 	PORT_TO_RX_MUX_ROUTE("Rx15 Mux Port"),
+*/
 
 	RX_MUX_TO_PLUGIN_ROUTE("Rx0"),
 	RX_MUX_TO_PLUGIN_ROUTE("Rx1"),
@@ -6574,10 +6702,12 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	RX_MUX_TO_PLUGIN_ROUTE("Rx9"),
 	RX_MUX_TO_PLUGIN_ROUTE("Rx10"),
 	RX_MUX_TO_PLUGIN_ROUTE("Rx11"),
+/*
 	RX_MUX_TO_PLUGIN_ROUTE("Rx12"),
 	RX_MUX_TO_PLUGIN_ROUTE("Rx13"),
 	RX_MUX_TO_PLUGIN_ROUTE("Rx14"),
 	RX_MUX_TO_PLUGIN_ROUTE("Rx15"),
+*/
 
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin0"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin1"),
@@ -6589,12 +6719,14 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin7"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin8"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin9"),
+/*
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin10"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin11"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin12"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin13"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin14"),
 	PLUGIN_TO_TX_MUX_ROUTE("Plgin15"),
+*/
 
 	RX_MUX_TO_TX_MUX_ROUTE("Tx0"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx1"),
@@ -6604,6 +6736,7 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	RX_MUX_TO_TX_MUX_ROUTE("Tx5"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx6"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx7"),
+/*
 	RX_MUX_TO_TX_MUX_ROUTE("Tx8"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx9"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx10"),
@@ -6612,6 +6745,7 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	RX_MUX_TO_TX_MUX_ROUTE("Tx13"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx14"),
 	RX_MUX_TO_TX_MUX_ROUTE("Tx15"),
+*/
 
 	TX_PORT_MUX_TO_TX_PORT("PCM0"),
 	TX_PORT_MUX_TO_TX_PORT("PCM1"),
@@ -6629,6 +6763,7 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	TX_MUX_TO_PORT_ROUTE("Tx5 Mux Port"),
 	TX_MUX_TO_PORT_ROUTE("Tx6 Mux Port"),
 	TX_MUX_TO_PORT_ROUTE("Tx7 Mux Port"),
+/*
 	TX_MUX_TO_PORT_ROUTE("Tx8 Mux Port"),
 	TX_MUX_TO_PORT_ROUTE("Tx9 Mux Port"),
 	TX_MUX_TO_PORT_ROUTE("Tx10 Mux Port"),
@@ -6637,6 +6772,7 @@ static const struct snd_soc_dapm_route iaxxx_dapm_routes[] = {
 	TX_MUX_TO_PORT_ROUTE("Tx13 Mux Port"),
 	TX_MUX_TO_PORT_ROUTE("Tx14 Mux Port"),
 	TX_MUX_TO_PORT_ROUTE("Tx15 Mux Port"),
+*/
 
 	PCM_PORT_TO_OUTPUT_ROUTE("PCMOUTPUT1"),
 	PCM_PORT_TO_OUTPUT_ROUTE("PCMOUTPUT2"),
