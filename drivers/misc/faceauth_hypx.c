@@ -319,7 +319,7 @@ static void hypx_create_blob_userbuf(struct device *dev,
 	data->buffer = buffer;
 
 	/* note that allocated page is not reclaimable */
-	blob = (void *)get_zeroed_page(0);
+	blob = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!blob) {
 		pr_err("Cannot allocate memory for hypx segments blob\n");
 		goto exit1;
@@ -459,7 +459,7 @@ static void hypx_create_blob_dmabuf(struct device *dev,
 	/* struct hypx_blob struct have to be page aligned as we remap
 	 * it to EL2 memory
 	 */
-	data->hypx_blob = (void *)get_zeroed_page(0);
+	data->hypx_blob = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!data->hypx_blob) {
 		pr_err("Cannot allocate memory for hypx data\n");
 		goto err4;
@@ -711,7 +711,7 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 	unsigned long save_trace;
 	unsigned long stop;
 
-	hypx_data = (void *)get_zeroed_page(0);
+	hypx_data = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		goto exit2;
@@ -803,7 +803,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	pass_images_to_el2 = data->operation == COMMAND_ENROLL ||
 			     data->operation == COMMAND_VALIDATE;
 
-	hypx_data = (void *)get_zeroed_page(0);
+	hypx_data = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
@@ -936,7 +936,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 	struct hypx_fa_process_results *hypx_data;
 	struct faceauth_data citadel_token = { 0 };
 
-	hypx_data = (void *)get_zeroed_page(0);
+	hypx_data = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
@@ -1016,7 +1016,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 	struct hypx_fa_process_results *hypx_data;
 	struct faceauth_data debug_buf = { 0 };
 
-	hypx_data = (void *)get_zeroed_page(0);
+	hypx_data = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!hypx_data) {
 		ret = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
@@ -1098,7 +1098,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 			     image_flood_right = { 0 }, calibration = { 0 },
 			     ab_state = { 0 }, output_blob = { 0 };
 
-	hypx_data = (void *)get_zeroed_page(0);
+	hypx_data = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!hypx_data) {
 		err = -ENOMEM;
 		pr_err("Cannot allocate memory for hypx_data\n");
