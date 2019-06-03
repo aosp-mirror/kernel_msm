@@ -757,26 +757,29 @@ uint32_t iaxxx_conv_physical_to_virtual_register_address(
 		const uint32_t phy_addr)
 {
 	int i;
-	uint32_t virt_addr;
+	uint32_t virt_addr, addr, size;
+	unsigned int blk_index;
+	const struct regmap_range_cfg *def_range_cfg;
 
-	if (!priv->is_application_mode)
-		return phy_addr;
+	/* Using the array of virtual address ranges and
+	 * ARB address/size array, find the virtual address
+	 * for the physical address
+	 */
+	for (i = 0 ; i < ARRAY_SIZE(iaxxx_ranges) ; i++) {
+		def_range_cfg = &iaxxx_ranges[i];
+		blk_index = IAXXX_INDEX_FROM_VIRTUAL(def_range_cfg->range_min);
+		if (blk_index < IAXXX_RBDT_NUM_ENTRIES) {
+			addr = priv->sys_rbdt[RBDT_N_ADDR(blk_index)];
+			size = priv->sys_rbdt[RBDT_N_SIZE(blk_index)];
 
-	for (i = 0 ; i < priv->regmap_config->num_ranges; i++) {
-		if ((phy_addr >=
-			priv->regmap_config->ranges[i].window_start) &&
-			(phy_addr <=
-			priv->regmap_config->ranges[i].window_start+
-			priv->regmap_config->ranges[i].window_len)) {
-
-			virt_addr = phy_addr -
-				priv->regmap_config->ranges[i].window_start;
-			virt_addr += priv->regmap_config->ranges[i].range_min;
-			return virt_addr;
+			if (addr && size && (phy_addr >= addr) &&
+				(phy_addr < addr + size)) {
+				virt_addr = phy_addr - addr;
+				virt_addr += def_range_cfg->range_min;
+				return virt_addr;
+			}
 		}
-
 	}
-
 	return phy_addr;
 }
 
