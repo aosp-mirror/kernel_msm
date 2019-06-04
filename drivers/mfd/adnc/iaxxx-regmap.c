@@ -87,7 +87,7 @@
 #define SRB_BLOCK_SELECT_MASK	0x1F
 #define SRB_BLOCK_SELECT_SHIFT	0
 
-#define IAXXX_REGMAP_NO_PM_NUM_ARBS     2
+#define IAXXX_REGMAP_NO_PM_NUM_ARBS     4
 
 #define IAXXX_PHYSICAL_ADDRESS_BASE	0x50000000
 #define IAXXX_I2S_SIZE			0x00001000
@@ -234,6 +234,8 @@ static bool iaxxx_application_volatile_reg(struct device *dev, unsigned int reg)
 	case IAXXX_CH_HDR_CH_GAIN_ADDR:
 	/* Stream ARB regs */
 	case IAXXX_STR_HDR_STR_CNT_ADDR:
+	/* Stream status reg */
+	case IAXXX_STR_HDR_STR_ST_ADDR:
 	/* Package ARB regs */
 	case IAXXX_PKG_MGMT_PKG_REQ_ADDR:
 	case IAXXX_PKG_MGMT_PKG_ERROR_ADDR:
@@ -406,6 +408,17 @@ static bool iaxxx_application_volatile_reg_no_pm
 		reg < (IAXXX_EVT_MGMT_EVT_ADDR + (IAXXX_EVT_MGMT_REG_NUM*4)))
 		return true;
 
+	if ((reg == IAXXX_STR_HDR_STR_ST_ADDR) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_1, IAXXX_HOST_0)) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_1, IAXXX_HOST_1)) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_2, IAXXX_HOST_0)) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_2, IAXXX_HOST_1)))
+		return true;
+
 	return false;
 }
 
@@ -436,6 +449,17 @@ static bool iaxxx_readable_register_no_pm(struct device *dev, unsigned int reg)
 
 	/* Electrical control register used during boot */
 	if (reg == IAXXX_AO_MEM_ELEC_CTRL_ADDR)
+		return true;
+
+	if ((reg == IAXXX_STR_HDR_STR_ST_ADDR) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_1, IAXXX_HOST_0)) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_1, IAXXX_HOST_1)) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_2, IAXXX_HOST_0)) ||
+			(reg == IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+						IAXXX_BLOCK_2, IAXXX_HOST_1)))
 		return true;
 
 	return false;
@@ -713,11 +737,13 @@ static int iaxxx_update_relocatable_blocks(struct iaxxx_priv *priv)
 
 			++curr_range_cfg;
 
-			/* Second regmap only has range for Power Management
-			 * registers.
+			/* Second regmap only has range for below ARBS, which
+			 * might be needed in pm ops
 			 */
 			if ((blk_index == IAXXX_BLOCK_POWER) ||
-				(blk_index == IAXXX_BLOCK_EVENT)) {
+				(blk_index == IAXXX_BLOCK_EVENT) ||
+				(blk_index == IAXXX_BLOCK_STREAM) ||
+				(blk_index == IAXXX_BLOCK_PLUGIN)) {
 				*curr_range_cfg_1 = *def_range_cfg;
 				curr_range_cfg_1->window_len   = size;
 				curr_range_cfg_1->window_start = addr;

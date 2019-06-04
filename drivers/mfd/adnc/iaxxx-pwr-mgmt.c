@@ -23,12 +23,14 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-srb.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-pwr-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-register-defs-plugin-instance-header.h>
 #include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-ao.h>
 #include <linux/mfd/adnc/iaxxx-stream-registers.h>
 #include <linux/mfd/adnc/iaxxx-odsp.h>
 #include <linux/mfd/adnc/iaxxx-module.h>
 #include <linux/mfd/adnc/iaxxx-plugin-common.h>
+#include <linux/mfd/adnc/iaxxx-plugin-registers.h>
 #include "iaxxx-btp.h"
 #include "iaxxx.h"
 
@@ -262,6 +264,127 @@ chip_recovery:
 	return -EIO;
 }
 
+static int iaxxx_check_and_powerdown_cores(struct iaxxx_priv *priv,
+		uint32_t *proc_status)
+{
+	int rc;
+	uint32_t status, proc_active, core_status;
+
+	/* Read core processor status */
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
+			&proc_active);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read proc status %s\n", __func__);
+		return rc;
+	}
+	/* Check if SSP, DMX or HMD processor is active */
+	proc_active = proc_active & IAXXX_PROC_STATUS_MASK;
+	if (proc_active)
+		dev_info(priv->dev, "Proc status 0x%x\n", proc_active);
+	else {
+		*proc_status = 0;
+		return 0;
+	}
+
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_STR_HDR_STR_ST_ADDR,
+			&status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read stream status %s\n", __func__);
+		return rc;
+	}
+
+	/*Check if SSP need to be powered down*/
+	if (!status && (proc_active &
+			IAXXX_GET_PROC_PWR_STATUS_MASK(IAXXX_SSP_ID))) {
+		rc = iaxxx_power_down_core_mem(priv, IAXXX_SSP_ID);
+		if (rc) {
+			dev_err(priv->dev,
+				"Failed to power down SSP in %s\n", __func__);
+			return rc;
+		}
+		proc_active &= ~(IAXXX_GET_PROC_PWR_STATUS_MASK(IAXXX_SSP_ID));
+	}
+
+	/* Read Plugin crate status for HMD */
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+			IAXXX_BLOCK_1, IAXXX_HOST_0),
+			&status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read HMD plugin status %s\n", __func__);
+		return rc;
+	}
+
+	core_status = status;
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+			IAXXX_BLOCK_1, IAXXX_HOST_1),
+			&status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read HMD plugin status %s\n", __func__);
+		return rc;
+	}
+
+	core_status |= status;
+
+	/*Check if HMD need to be powered down*/
+	if (!core_status && (proc_active &
+			IAXXX_GET_PROC_PWR_STATUS_MASK(IAXXX_HMD_ID))) {
+		rc = iaxxx_power_down_core_mem(priv, IAXXX_HMD_ID);
+		if (rc) {
+			dev_err(priv->dev,
+				"Failed to power down HMD in %s\n", __func__);
+			return rc;
+		}
+		proc_active &= ~(IAXXX_GET_PROC_PWR_STATUS_MASK(IAXXX_HMD_ID));
+	}
+
+	/* Read Plgin crate status for DMX */
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+			IAXXX_BLOCK_2, IAXXX_HOST_0),
+			&status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read DMX plugin status %s\n", __func__);
+		return rc;
+	}
+
+	core_status = status;
+	rc = regmap_read(priv->regmap_no_pm,
+			IAXXX_PLUGIN_HDR_CREATE_STATUS_BLOCK_ADDR(
+			IAXXX_BLOCK_2, IAXXX_HOST_1),
+			&status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read DMX plugin status %s\n", __func__);
+		return rc;
+	}
+
+	core_status |= status;
+	/*Check if DMX  need to be powered down*/
+	if (!core_status && (proc_active &
+			IAXXX_GET_PROC_PWR_STATUS_MASK(IAXXX_DMX_ID))) {
+		rc = iaxxx_power_down_core_mem(priv, IAXXX_DMX_ID);
+		if (rc) {
+			dev_err(priv->dev,
+				"Failed to power down DMX in %s\n", __func__);
+			return rc;
+		}
+		proc_active &= ~(IAXXX_GET_PROC_PWR_STATUS_MASK(IAXXX_DMX_ID));
+	}
+
+	*proc_status = proc_active;
+	return rc;
+
+}
+
 int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 {
 	int rc;
@@ -282,20 +405,12 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 		goto chip_recovery;
 	}
 
-	/* Read core processor status */
-	rc = regmap_read(priv->regmap_no_pm,
-			IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
-			&proc_status);
+	rc = iaxxx_check_and_powerdown_cores(priv, &proc_status);
 	if (rc) {
 		dev_err(priv->dev,
-			"Failed to read proc status %s\n", __func__);
-		return rc;
+			"Failed to do power check on cores in %s\n", __func__);
+		goto chip_recovery;
 	}
-
-	/* Check if SSP, DMX or HMD processor is active */
-	proc_status = proc_status & IAXXX_PROC_STATUS_MASK;
-	if (proc_status)
-		dev_info(priv->dev, "Proc status 0x%x\n", proc_status);
 
 	/* Note: Control interface of second host should also be disabled
 	 * to achieve optimal or sleep mode.
@@ -671,43 +786,6 @@ int iaxxx_set_apll_source(struct iaxxx_priv *priv, int source)
 
 }
 
-static int check_stream_active_status(struct iaxxx_priv *priv)
-{
-	uint32_t strm_cnt = 0;
-	uint32_t strm_status = 0;
-	uint32_t strm_id = 0;
-	int rc;
-
-	/* Read the no of streams count */
-	rc = regmap_read(priv->regmap,
-			IAXXX_STR_HDR_STR_CNT_ADDR, &strm_cnt);
-	if (rc) {
-		dev_err(priv->dev, "%s IAXXX_STR_HDR_STR_CNT read err = %0x\n",
-			__func__, rc);
-		return rc;
-	}
-
-	/* Read the stream status for each stream group
-	 * to confirm stream is not in use before disabling
-	 * the SSP core.
-	 */
-	while (strm_id < strm_cnt) {
-		rc = regmap_read(priv->regmap,
-				IAXXX_STR_GRP_STR_STATUS_REG(strm_id),
-				&strm_status);
-		if (rc) {
-			dev_err(priv->dev, "%s STR_GRP_STR_STATUS(%d) read err = %0x\n",
-				__func__, strm_id, rc);
-			return rc;
-		} else if (strm_status != IAXXX_STRM_STATUS_INIT) {
-			dev_err(priv->dev, "%s strm_id(%d) stream is still active\n",
-				__func__, strm_id);
-			return -EBUSY;
-		}
-		strm_id++;
-	}
-	return 0;
-}
 
 int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 			uint32_t proc_id, uint32_t proc_state)
@@ -717,7 +795,7 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 	int rc;
 
 	/* Make sure update block bit is in cleared state */
-	rc = iaxxx_poll_update_block_req_bit_clr(priv);
+	rc = iaxxx_poll_update_block_req_bit_clr(priv, priv->regmap_no_pm);
 	if (rc) {
 		dev_err(priv->dev,
 			"%s() Don't do Update Block in progress, rc = %d\n",
@@ -727,16 +805,6 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 
 	switch (proc_state) {
 	case PROC_PWR_DOWN:
-		if (proc_id == IAXXX_SSP_ID) {
-			/* Check if any active streams are present */
-			rc = check_stream_active_status(priv);
-			if (rc) {
-				dev_err(priv->dev,
-					"%s streams still active rc = %0x\n",
-					__func__, rc);
-				goto exit;
-			}
-		}
 		proc_pwr_ctrl_mask = IAXXX_PROC_POWER_UP_DOWN_MASK(proc_id);
 		proc_pwr_ctrl_val = 0;
 		break;
@@ -745,16 +813,6 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 		proc_pwr_ctrl_val = IAXXX_PROC_POWER_UP_DOWN_MASK(proc_id);
 		break;
 	case PROC_STALL_ENABLE:
-		if (proc_id == IAXXX_SSP_ID) {
-			/* Check if any active streams are present */
-			rc = check_stream_active_status(priv);
-			if (rc) {
-				dev_err(priv->dev,
-					"%s streams still active rc = %0x\n",
-					__func__, rc);
-				goto exit;
-			}
-		}
 		proc_pwr_ctrl_mask =
 				IAXXX_PROC_STALL_ENABLE_DISABLE_MASK(proc_id);
 		proc_pwr_ctrl_val =
@@ -768,11 +826,12 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 	default:
 		dev_err(priv->dev, "%s wrong proc state requested (%d)\n",
 			__func__, proc_state);
+		rc = -EINVAL;
 		goto exit;
 	}
 
 	/* set the processor bits */
-	rc = regmap_update_bits(priv->regmap,
+	rc = regmap_update_bits(priv->regmap_no_pm,
 				IAXXX_SRB_PROC_PWR_CTRL_ADDR,
 				proc_pwr_ctrl_mask, proc_pwr_ctrl_val);
 	if (rc) {
@@ -782,7 +841,7 @@ int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
 		goto exit;
 	}
 
-	rc = regmap_update_bits(priv->regmap,
+	rc = regmap_update_bits(priv->regmap_no_pm,
 			IAXXX_SRB_SYS_POWER_CTRL_ADDR,
 			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK,
 			IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK);
@@ -808,25 +867,12 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 		proc_id, mem_state);
 
 	/* Make sure update block bit is in cleared state */
-	rc = iaxxx_poll_update_block_req_bit_clr(priv);
+	rc = iaxxx_poll_update_block_req_bit_clr(priv, priv->regmap_no_pm);
 	if (rc) {
 		dev_err(priv->dev,
 			"%s() Don't do Update Block in progress, rc = %d\n",
 			__func__, rc);
 		goto exit;
-	}
-
-	if (mem_state == MEM_PWR_DOWN || mem_state == MEM_RETN_ON) {
-		if (proc_id == IAXXX_SSP_ID) {
-			/* Check if any active streams are present */
-			rc = check_stream_active_status(priv);
-			if (rc) {
-				dev_err(priv->dev,
-					"%s stream still active rc = %0x\n",
-					__func__, rc);
-				goto exit;
-			}
-		}
 	}
 
 	switch (mem_state) {
@@ -849,11 +895,12 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 	default:
 		dev_err(priv->dev, "%s wrong mem_state state requested (%d)\n",
 			__func__, mem_state);
+		rc = -EINVAL;
 		goto exit;
 	}
 
 	/* set the processor bits */
-	rc = regmap_update_bits(priv->regmap,
+	rc = regmap_update_bits(priv->regmap_no_pm,
 				IAXXX_SRB_DED_MEM_PWR_CTRL_ADDR,
 				mem_pwr_ctrl_mask, mem_pwr_ctrl_val);
 	if (rc) {
@@ -862,7 +909,7 @@ int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
 		goto exit;
 	}
 
-	rc = regmap_update_bits(priv->regmap,
+	rc = regmap_update_bits(priv->regmap_no_pm,
 				IAXXX_SRB_SYS_POWER_CTRL_ADDR,
 				IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK,
 				IAXXX_SRB_SYS_POWER_CTRL_SET_PROC_PWR_REQ_MASK);
@@ -884,7 +931,7 @@ int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv)
 	dev_dbg(priv->dev, "%s()\n", __func__);
 
 	/* Make sure update block bit is in cleared state */
-	rc = iaxxx_poll_update_block_req_bit_clr(priv);
+	rc = iaxxx_poll_update_block_req_bit_clr(priv, priv->regmap);
 	if (rc) {
 		dev_err(priv->dev,
 			"%s() Don't do Update Block in progress, rc = %d\n",
@@ -930,7 +977,7 @@ static int iaxxx_get_proc_pwr_status(struct iaxxx_priv *priv,
 	uint32_t mem_pwr_status;
 	int rc;
 
-	rc = regmap_read(priv->regmap, IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
 		&proc_pwr_status);
 	if (rc) {
 		dev_err(priv->dev,
@@ -944,7 +991,7 @@ static int iaxxx_get_proc_pwr_status(struct iaxxx_priv *priv,
 		"%s() SRB_PROC_ACTIVE_STATUS_ADDR: %u pwr_status: 0x%08x\n",
 		__func__, proc_pwr_status, *pwr_status);
 
-	rc = regmap_read(priv->regmap, IAXXX_SRB_DED_MEM_PWR_STATUS_ADDR,
+	rc = regmap_read(priv->regmap_no_pm, IAXXX_SRB_DED_MEM_PWR_STATUS_ADDR,
 		&mem_pwr_status);
 	if (rc) {
 		dev_err(priv->dev,
@@ -995,32 +1042,25 @@ int iaxxx_power_up_core_mem(
 
 	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
 
-	mutex_lock(&priv->proc_on_off_lock);
-
-	/* Add processor usage count for SSP only */
-	if ((proc_id == IAXXX_SSP_ID) &&
-		atomic_inc_return(&priv->proc_on_off_ref_cnt) != 1)
-		goto exit;
-
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_STALL_ENABLE);
 	if (rc) {
 		dev_err(priv->dev, "%s proc power ctrl PROC_STALL_ENABLE failed = %0x\n",
 					__func__, rc);
-		goto exit;
+		return rc;
 	}
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_UP);
 	if (rc) {
 		dev_err(priv->dev, "%s proc power ctrl PROC_PWR_UP failed = %0x\n",
 					__func__, rc);
-		goto exit;
+		return rc;
 	}
 
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_PWR_UP);
 	if (rc) {
 		dev_err(priv->dev, "%s mem power ctrl MEM_PWR_UP failed = %0x\n",
 					__func__, rc);
-		goto exit;
+		return rc;
 	}
 
 	rc = iaxxx_send_update_block_request(priv->dev,
@@ -1028,13 +1068,13 @@ int iaxxx_power_up_core_mem(
 	if (rc) {
 		dev_err(priv->dev, "Update blk failed before download %s(): %d\n",
 				__func__, status);
-		goto exit;
+		return rc;
 	}
 
 	rc = iaxxx_boot_core(priv, proc_id);
 	if (rc) {
 		dev_err(priv->dev, "boot_core (%d) fail :%d\n", proc_id, rc);
-		goto exit;
+		return rc;
 	}
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id,
@@ -1042,16 +1082,19 @@ int iaxxx_power_up_core_mem(
 	if (rc) {
 		dev_err(priv->dev, "%s proc power ctrl PROC_STALL_DIS failed = %0x\n",
 					__func__, rc);
-		goto exit;
+		return rc;
 	}
 
 	rc = iaxxx_send_update_block_request(priv->dev, &status,
 				IAXXX_BLOCK_0);
-	if (rc)
+	if (rc) {
 		dev_err(priv->dev, "Update blk failed after download %s(): %d\n",
 				__func__, status);
-exit:
-	mutex_unlock(&priv->proc_on_off_lock);
+		return rc;
+	}
+
+	dev_info(priv->dev,
+		"proc(%u) %s() Success\n", proc_id, __func__);
 	return rc;
 }
 
@@ -1065,12 +1108,6 @@ int iaxxx_power_down_core_mem(
 
 	mutex_lock(&priv->proc_on_off_lock);
 
-	/* Check processor usage count for SSP before turning off */
-	if ((proc_id == IAXXX_SSP_ID) &&
-		((atomic_read(&priv->proc_on_off_ref_cnt) == 0) ||
-		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0))
-		goto exit;
-
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
 	if (rc) {
 		dev_err(priv->dev, "%s proc power ctrl PROC_PWR_DOWN failed = %0x\n",
@@ -1079,8 +1116,14 @@ int iaxxx_power_down_core_mem(
 	}
 
 	if (proc_id != IAXXX_SSP_ID) {
-		rc = iaxxx_send_update_block_request(priv->dev,
-					&status, IAXXX_BLOCK_0);
+		rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, priv->regmap_no_pm,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION |
+			UPDATE_BLOCK_NO_LOCK_OPTION |
+			UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION,
+			&status);
 		if (rc) {
 			dev_err(priv->dev,
 			"Update blk failed after proc pwr down %s(): %d\n",
@@ -1103,8 +1146,14 @@ int iaxxx_power_down_core_mem(
 		goto exit;
 	}
 
-	rc = iaxxx_send_update_block_request(priv->dev,
-				&status, IAXXX_BLOCK_0);
+	rc = iaxxx_send_update_block_request_with_options(
+			priv->dev, IAXXX_BLOCK_0,
+			IAXXX_HOST_0, priv->regmap_no_pm,
+			20,
+			UPDATE_BLOCK_FIXED_WAIT_OPTION |
+			UPDATE_BLOCK_NO_LOCK_OPTION |
+			UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION,
+			&status);
 	if (rc)
 		dev_err(priv->dev, "Update blk failed after mem pwr down%s(): %d\n",
 				__func__, status);
@@ -1123,11 +1172,6 @@ int iaxxx_power_up_core_mem_on(
 	dev_dbg(priv->dev, "%s() proc_id:%u\n", __func__, proc_id);
 
 	mutex_lock(&priv->proc_on_off_lock);
-
-	/* Add processor usage count for SSP only */
-	if ((proc_id == IAXXX_SSP_ID) &&
-		atomic_inc_return(&priv->proc_on_off_ref_cnt) != 1)
-		goto exit;
 
 	rc = iaxxx_set_mem_pwr_ctrl(priv, proc_id, MEM_RETN_OFF);
 	if (rc) {
@@ -1164,11 +1208,6 @@ int iaxxx_power_down_core_mem_in_retn(
 
 	mutex_lock(&priv->proc_on_off_lock);
 
-	/* Check processor usage count for SSP before turning off */
-	if ((proc_id == IAXXX_SSP_ID) &&
-		((atomic_read(&priv->proc_on_off_ref_cnt) == 0) ||
-		atomic_dec_return(&priv->proc_on_off_ref_cnt) != 0))
-		goto exit;
 
 	rc = iaxxx_set_proc_pwr_ctrl(priv, proc_id, PROC_PWR_DOWN);
 	if (rc) {
@@ -1211,6 +1250,70 @@ int iaxxx_power_down_core_mem_in_retn(
 exit:
 	mutex_unlock(&priv->proc_on_off_lock);
 	return rc;
+}
+
+int iaxxx_check_and_powerup_core(struct iaxxx_priv *priv, uint32_t proc_id)
+{
+	uint32_t proc_status;
+	int rc = 0;
+
+	if ((proc_id != IAXXX_HMD_ID) && (proc_id != IAXXX_DMX_ID) &&
+			(proc_id != IAXXX_SSP_ID)) {
+		dev_err(priv->dev, "Invalid proc id in %s\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&priv->proc_on_off_lock);
+
+	if (!iaxxx_is_firmware_ready(priv)) {
+		rc = -EIO;
+		goto exit;
+	}
+
+	/* Read core processor status */
+	rc = regmap_read(priv->regmap,
+			IAXXX_SRB_PROC_ACTIVE_STATUS_ADDR,
+			&proc_status);
+	if (rc) {
+		dev_err(priv->dev,
+			"Failed to read proc status %s\n", __func__);
+		goto exit;
+	}
+
+	proc_status &= IAXXX_GET_PROC_PWR_STATUS_MASK(proc_id);
+
+	if (!proc_status)
+		rc = iaxxx_power_up_core_mem(priv, proc_id);
+
+	if (rc)
+		dev_err(priv->dev, "Failed to power up core %d in %s\n",
+				proc_id, __func__);
+
+exit:
+	mutex_unlock(&priv->proc_on_off_lock);
+	return rc;
+}
+
+int iaxxx_check_and_power_up_ssp(struct iaxxx_priv *priv)
+{
+	uint32_t str_status;
+	int ret = 0;
+
+	ret = regmap_read(priv->regmap, IAXXX_STR_HDR_STR_ST_ADDR, &str_status);
+	if (ret) {
+		dev_err(priv->dev, "Failed to read stream  status in %s\n",
+				__func__);
+		return ret;
+	}
+
+	/*this means its the first stream to get enabled*/
+	if (!str_status) {
+		ret = iaxxx_check_and_powerup_core(priv, IAXXX_SSP_ID);
+		if (ret)
+			dev_err(priv->dev, " Error in powering up SSP %s %d\n",
+					__func__, ret);
+	}
+	return ret;
 }
 
 /*

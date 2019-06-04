@@ -61,4 +61,6 @@ int iaxxx_power_down_core_mem(
 	struct iaxxx_priv *priv, uint32_t proc_id);
 int iaxxx_power_up_core_mem(
 	struct iaxxx_priv *priv, uint32_t proc_id);
+int iaxxx_check_and_powerup_core(struct iaxxx_priv *priv, uint32_t proc_id);
+int iaxxx_check_and_power_up_ssp(struct iaxxx_priv *priv);
 #endif /* _IAXXX_PWR_MGMT_H */

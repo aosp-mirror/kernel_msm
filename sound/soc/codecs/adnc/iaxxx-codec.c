@@ -109,7 +109,6 @@ struct iaxxx_codec_priv {
 	bool port_pcm_setup[IAXXX_MAX_PORTS];
 	bool plugin_blk_en[32];
 	bool stream_en[32];
-	u32 core_boot_status[IAXXX_PROC_ID_NUM];
 	bool sensor_en[IAXXX_MAX_SENSOR];
 	u32 op_channels_active;
 	/* pdm mic enable flags*/
@@ -2084,15 +2083,6 @@ static const struct soc_enum iaxxx_route_status_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(iaxxx_route_status_texts),
 			iaxxx_route_status_texts);
 
-static const char * const iaxxx_core_mem_ctrl_texts[] = {
-	"None", "CoreMemOff", "CoreMemOn",
-	"CoreOffMemRetnOn", "CoreOnMemOutOffRetn"
-};
-
-static const struct soc_enum iaxxx_core_mem_ctrl_enum =
-	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0, ARRAY_SIZE(iaxxx_core_mem_ctrl_texts),
-					iaxxx_core_mem_ctrl_texts);
-
 static int iaxxx_get_pdm_bclk(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
@@ -2234,73 +2224,7 @@ IAXXX_UPDATE_BLOCK_SET_GET(block0, IAXXX_BLOCK_0)
 IAXXX_UPDATE_BLOCK_SET_GET(block1, IAXXX_BLOCK_1)
 IAXXX_UPDATE_BLOCK_SET_GET(block2, IAXXX_BLOCK_2)
 
-#define IAXXX_PROC_CORE_BOOT_SET_GET(proc_name, core_mask) \
-static int iaxxx_put_core_boot_##proc_name( \
-		struct snd_kcontrol *kcontrol, \
-		struct snd_ctl_elem_value *ucontrol) \
-{ \
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
-	struct device *dev = iaxxx->dev_parent; \
-	struct iaxxx_priv *priv = to_iaxxx_priv(dev); \
-	u32 value = ucontrol->value.enumerated.item[0]; \
-	int ret = 0; \
-	if (!iaxxx_is_firmware_ready(priv))	\
-		return ret;			\
-	dev_dbg(codec->dev, \
-		"enter %s connection val: %u core_mask: %u\n", \
-		__func__, value, core_mask); \
-	if (iaxxx->core_boot_status[core_mask] == value) \
-		return ret; \
-	if (value == 2) { \
-		ret = iaxxx_power_up_core_mem(priv, core_mask); \
-		if (ret) { \
-			dev_err(priv->dev, \
-				"%s() Failed core(%d) & mem power up\n", \
-				__func__, core_mask); \
-			return ret; \
-		} \
-	} else if (value == 1) { \
-		ret = iaxxx_power_down_core_mem(priv, core_mask); \
-		if (ret) { \
-			dev_err(priv->dev, \
-				"%s() Failed core(%d) & mem power down\n", \
-				__func__, core_mask); \
-			return ret; \
-		} \
-	} else if (value == 3) { \
-		ret = iaxxx_power_down_core_mem_in_retn(priv, core_mask); \
-		if (ret) { \
-			dev_err(priv->dev, \
-				"%s() Failed core(%d) off & mem in retn\n", \
-				__func__, core_mask); \
-			return ret; \
-		} \
-	} else if (value == 4) { \
-		ret = iaxxx_power_up_core_mem_on(priv, core_mask); \
-		if (ret) { \
-			dev_err(priv->dev, \
-				"%s() Failed core(%d) on mem out off retn\n", \
-				__func__, core_mask); \
-			return ret; \
-		} \
-	} \
-	iaxxx->core_boot_status[core_mask] = value; \
-	return ret; \
-} \
-static int iaxxx_get_core_boot_##proc_name(struct snd_kcontrol *kcontrol, \
-				 struct snd_ctl_elem_value *ucontrol) \
-{ \
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol); \
-	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
-	ucontrol->value.enumerated.item[0] = \
-		iaxxx->core_boot_status[core_mask]; \
-	return 0; \
-}
 
-IAXXX_PROC_CORE_BOOT_SET_GET(ssp, IAXXX_SSP_ID)
-IAXXX_PROC_CORE_BOOT_SET_GET(hmd, IAXXX_HMD_ID)
-IAXXX_PROC_CORE_BOOT_SET_GET(dmx, IAXXX_DMX_ID)
 
 static int iaxxx_put_route_status(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
@@ -2580,6 +2504,12 @@ static int iaxxxcore_set_strm##stream##_en( \
 	int ret = 0; \
 	dev_dbg(priv->dev, "enter %s connection\n", __func__); \
 	if (ucontrol->value.integer.value[0]) { \
+		ret = iaxxx_check_and_power_up_ssp(priv); \
+		if (ret) { \
+			dev_err(priv->dev, "SSP power up failed %s()\n", \
+					__func__); \
+			return ret; \
+		} \
 		snd_soc_update_bits(codec, IAXXX_STR_HDR_STR_EN_ADDR, \
 					1 << stream, 1 << stream); \
 		iaxxx->stream_en[stream] = 1; \
@@ -5954,16 +5884,6 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 	SOC_SINGLE_BOOL_EXT("Update Block2 Req", 0,
 		iaxxx_get_update_block2, iaxxx_put_update_block2),
 
-	SOC_ENUM_EXT("SSP Core Boot", iaxxx_core_mem_ctrl_enum,
-		       iaxxx_get_core_boot_ssp,
-		       iaxxx_put_core_boot_ssp),
-	SOC_ENUM_EXT("DMX Core Boot", iaxxx_core_mem_ctrl_enum,
-		       iaxxx_get_core_boot_dmx,
-		       iaxxx_put_core_boot_dmx),
-	SOC_ENUM_EXT("HMD Core Boot", iaxxx_core_mem_ctrl_enum,
-		       iaxxx_get_core_boot_hmd,
-		       iaxxx_put_core_boot_hmd),
-
 	SOC_ENUM_EXT("PDM BCLK", iaxxx_pdm_bclk_enum,
 		       iaxxx_get_pdm_bclk,
 		       iaxxx_put_pdm_bclk),
@@ -7713,8 +7633,6 @@ static void iaxxx_reset_codec_params(struct iaxxx_codec_priv *iaxxx)
 		iaxxx->plugin_blk_en[i] = 0;
 		iaxxx->stream_en[i] = 0;
 	}
-	for (i = 0; i < IAXXX_PROC_ID_NUM; i++)
-		iaxxx->core_boot_status[i] = 0;
 
 	iaxxx->port_mic0_en = 0;
 	iaxxx->port_mic1_en = 0;

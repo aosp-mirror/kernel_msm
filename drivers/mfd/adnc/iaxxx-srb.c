@@ -702,7 +702,8 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_hostid);
 
-int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv)
+int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
+			struct regmap *regmap)
 {
 	int rc = 0;
 	uint32_t status;
@@ -711,7 +712,7 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv)
 	mutex_lock(&priv->update_block_lock);
 	/* Make sure update block bit is in cleared state */
 	do {
-		rc = regmap_read(priv->regmap,
+		rc = regmap_read(regmap,
 				IAXXX_SRB_SYS_BLK_UPDATE_ADDR,
 				&status);
 		if (rc) {

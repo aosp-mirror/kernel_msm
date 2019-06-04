@@ -1384,7 +1384,6 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	priv->event_queue->r_index = -1;
 	mutex_unlock(&priv->event_queue_lock);
 
-	atomic_set(&priv->proc_on_off_ref_cnt, 1);
 	atomic_set(&priv->fli_route_status, 0);
 
 	if (priv->cm4_crashed) {
@@ -1514,7 +1513,6 @@ int iaxxx_fw_reset(struct iaxxx_priv *priv)
 	priv->event_queue->w_index = -1;
 	priv->event_queue->r_index = -1;
 	mutex_unlock(&priv->event_queue_lock);
-	atomic_set(&priv->proc_on_off_ref_cnt, 1);
 	atomic_set(&priv->fli_route_status, 0);
 	iaxxx_reset_check_sbl_mode(priv);
 	regcache_cache_bypass(priv->regmap, true);
@@ -1877,7 +1875,6 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	INIT_LIST_HEAD(&priv->iaxxx_state->plugin_head_list);
 	INIT_LIST_HEAD(&priv->iaxxx_state->pkg_head_list);
 
-	atomic_set(&priv->proc_on_off_ref_cnt, 1);
 	atomic_set(&priv->fli_route_status, 0);
 
 	/* Initialize regmap for SBL */

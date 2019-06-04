@@ -22,6 +22,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-pkg-mgmt.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include <linux/mfd/adnc/iaxxx-plugin-common.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include "iaxxx.h"
 #include "iaxxx-btp.h"
 #include "ia8508a-memory-map.h"
@@ -1391,6 +1392,15 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			for (j = 0 ; j < file_section.length; j++)
 				CALC_FLETCHER16(word_data[j], sum1, sum2);
 			data += sizeof(bin_info);
+
+			rc = iaxxx_check_and_powerup_core(priv,
+					bin_info.core_id);
+			if (rc) {
+				dev_err(dev, "%s Failed to bring up core %d\n",
+						__func__, bin_info.core_id);
+				return rc;
+			}
+
 			rc = write_pkg_info(true, priv, pkg_id, bin_info, &pkg);
 			if (rc) {
 				dev_err(dev, "%s() Pkg info error\n", __func__);

@@ -140,11 +140,14 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 	}
 
 	if (enable) { /* Set up the route */
-		ret = iaxxx_power_up_core_mem(priv, IAXXX_SSP_ID);
+
+		ret = iaxxx_check_and_power_up_ssp(priv);
 		if (ret) {
-			dev_err(priv->dev, "set proc mem on failed\n");
+			dev_err(priv->dev, "Failed to power up SSP core in %s\n",
+					__func__);
 			return ret;
 		}
+
 		regmap_update_bits(priv->regmap, IAXXX_SRB_PORTB_DDR_ADDR,
 				IAXXX_SRB_PORTB_DDR_COMMF_2_MASK,
 				(0x1 << IAXXX_SRB_PORTB_DDR_COMMF_2_POS));
@@ -494,11 +497,6 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 					IAXXX_PAD_CTRL_PORTB_DI_LOW_PWR);
 		}
 
-		ret = iaxxx_power_down_core_mem(priv, IAXXX_SSP_ID);
-		if (ret) {
-			dev_err(priv->dev, "set proc mem off failed\n");
-			return ret;
-		}
 	}
 
 exit:

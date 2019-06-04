@@ -345,7 +345,6 @@ struct iaxxx_priv {
 	/* iaxxx core flags for atomic bit field operations */
 	unsigned long flags;
 
-	atomic_t proc_on_off_ref_cnt;
 	atomic_t fli_route_status;
 	/* Synchronize suspend/resume on this */
 	struct iaxxx_system_state *iaxxx_state;
@@ -437,7 +436,8 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			int id);
 int iaxxx_send_update_block_hostid(struct device *dev,
 			int host_id, int block_id);
-int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv);
+int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
+					struct regmap *regmap);
 int iaxxx_send_update_block_request_with_options(struct device *dev,
 			int block_id,
 			int host_id,
