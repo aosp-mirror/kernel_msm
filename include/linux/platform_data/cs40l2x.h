@@ -12,6 +12,18 @@
 #ifndef __CS40L2X_H
 #define __CS40L2X_H
 
+struct cs40l2x_br_desc {
+	bool present;
+	bool enable;
+	unsigned int thld1;
+	unsigned int max_att;
+	unsigned int atk_vol;
+	unsigned int atk_rate;
+	unsigned int wait;
+	unsigned int rel_rate;
+	bool mute_enable;
+};
+
 struct cs40l2x_platform_data {
 	unsigned int boost_ind;
 	unsigned int boost_cap;
@@ -55,6 +67,8 @@ struct cs40l2x_platform_data {
 	bool vbbr_enable;
 	unsigned int vpbr_thld1;
 	unsigned int vbbr_thld1;
+	struct cs40l2x_br_desc vpbr_config;
+	struct cs40l2x_br_desc vbbr_config;
 	unsigned int fw_id_remap;
 	bool amp_gnd_stby;
 	bool auto_recovery;
