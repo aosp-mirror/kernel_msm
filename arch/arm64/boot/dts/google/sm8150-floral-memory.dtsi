@@ -111,11 +111,16 @@
 		reg = <0 0xA4BFF000 0 0x1000>;
 	};
 
-	/* Took some free space from go/pixel-mem-layout */
 	pil_faceauth_fw_mem: pil_faceauth_fw_mem@a8800000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0x0 0xa8800000 0x0 0x4000000>;
+		reg = <0x0 0xa8800000 0x0 0x2000000>;
+	};
+
+	pil_faceauth_fw_b_mem: pil_faceauth_fw_mem@aa800000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0x0 0xaa800000 0x0 0x2000000>;
 	};
 };
 
@@ -126,6 +131,14 @@
 		qcom,firmware-name = "faceauth";
 		qcom,pil-force-shutdown;
 		memory-region = <&pil_faceauth_fw_mem>;
+	};
+
+	qcom,faceauth_fws_b {
+		compatible = "qcom,pil-tz-generic";
+		qcom,pas-id = <0x1d>; // 29
+		qcom,firmware-name = "faceauth_b";
+		qcom,pil-force-shutdown;
+		memory-region = <&pil_faceauth_fw_b_mem>;
 	};
 };
 
