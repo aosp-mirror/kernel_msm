@@ -2970,15 +2970,6 @@ static int32_t ab_ddr_init(void *ctx)
 	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_933] = 0;
 	ddr_ctx->ddr_train_completed[AB_DRAM_FREQ_MHZ_800] = 0;
 
-	/* Train all the ddr frequencies during Airbrush boot */
-	ab_sm_start_ts(AB_SM_TS_DDR_TRAIN);
-	ret = __ab_ddr_train_all(ddr_ctx);
-	ab_sm_record_ts(AB_SM_TS_DDR_TRAIN);
-	if (ret) {
-		pr_err("ddr_init:  error!! ddr train_all failed\n");
-		goto ddr_init_done;
-	}
-
 	/* Read the DDR_SR */
 	ddr_sr = GPIO_DDR_SR();
 
