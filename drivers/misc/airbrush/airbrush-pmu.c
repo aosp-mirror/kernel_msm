@@ -338,6 +338,10 @@ static int __ab_pmu_ipu_resume_handler(struct ab_pmu_context *pmu_ctx)
 		return -EBUSY;
 	}
 
+	// Enable IPU_IO power (See b/127824210)
+	ABC_WRITE(0x10200068, 0x00);
+	ABC_WRITE(0x1020006C, 0x00);
+
 	abc_ipu_apb_clk_fix();
 
 	return 0;
@@ -431,6 +435,10 @@ static int __ab_pmu_ipu_tpu_resume_handler(struct ab_pmu_context *pmu_ctx)
 		dev_err(pmu_ctx->dev, "Timeout waiting for IPU/TPU up status\n");
 		return -EBUSY;
 	}
+
+	// Enable IPU_IO power (See b/127824210)
+	ABC_WRITE(0x10200068, 0x00);
+	ABC_WRITE(0x1020006C, 0x00);
 
 	abc_ipu_apb_clk_fix();
 	abc_tpu_apb_clk_fix();

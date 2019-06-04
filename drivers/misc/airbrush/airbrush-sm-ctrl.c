@@ -194,7 +194,7 @@ static struct ab_sm_mfd_ops mfd_ops_stub = {
 static struct block_property ipu_property_table[] = {
 	BLK_(0,   Disabled,  NoRail,    0, off, 0_0, off, 0,     0,  0,  0, 0),
 	BLK_(100, DeepSleep, DeepSleep, 1, off, 0_0, off, 0,     0,  0,  0, 0),
-	BLK_(200, Sleep,  Sleep,      2,  on,  0_75, off, 0,     0,  0,  0, 0),
+	BLK_(200, Sleep,  Sleep,      3,  on,  0_75, off, 0,     0,  0,  0, 0),
 	BLK_(300, Normal, Ready,      3,  on,  0_75, on,  19.2,  14, 0,  0, 0),
 	BLK_(301, Normal, AonCompute, 3,  on,  0_75, on,  50,    2,  2,  0, 0),
 	BLK_(302, Normal, MinCompute, 3,  on,  0_75, on,  271.8, 14, 14, 0, 0),

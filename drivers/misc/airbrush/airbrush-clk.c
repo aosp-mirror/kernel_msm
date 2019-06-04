@@ -145,6 +145,8 @@ static int64_t __ab_clk_ipu_start_rate_change(
 		/* Set pll_ipu clock source to OSCCLK_AON */
 		ab_sm_start_ts(AB_SM_TS_IPU_SET_OSCCLK);
 		val = last_val & ~PLL_IPU_MUX_SEL_MASK;
+		if (new_rate == 0)
+			val &= ~PLL_IPU_ENABLE_MASK;
 		ABC_WRITE(PLL_CON0_PLL_IPU, val);
 		last_val = val;
 		ab_sm_record_ts(AB_SM_TS_IPU_SET_OSCCLK);
@@ -156,13 +158,14 @@ static int64_t __ab_clk_ipu_start_rate_change(
 		return new_rate;
 	}
 
-	/* If pms values aren't changing we can immediately switch
-	 * to pll_ipu as parent
+	/* If pms values aren't changing and PLL is enabled
+	 * we can immediately switch to pll_ipu as parent
 	 */
 	ab_sm_start_ts(AB_SM_TS_IPU_SET_CLKRATE);
 	pms_val = get_ipu_pms_val(clk_ctx, last_val, new_rate);
-	if ((last_val & PLL_IPU_PMS_MASK) == (
-			pms_val & PLL_IPU_PMS_MASK)) {
+	if ((last_val & PLL_IPU_PMS_MASK) ==
+			(pms_val & PLL_IPU_PMS_MASK) &&
+			(last_val & PLL_IPU_ENABLE_MASK)) {
 		val = last_val | PLL_IPU_MUX_SEL_MASK;
 		ABC_WRITE(PLL_CON0_PLL_IPU, val);
 		last_val = val;
@@ -353,6 +356,8 @@ static int64_t __ab_clk_tpu_start_rate_change(
 		ab_sm_start_ts(AB_SM_TS_TPU_SET_OSCCLK);
 		/* Set pll_tpu clock source to OSCCLK_AON */
 		val = last_val & ~PLL_TPU_MUX_SEL_MASK;
+		if (new_rate == 0)
+			val &= ~PLL_TPU_ENABLE_MASK;
 		ABC_WRITE(PLL_CON0_PLL_TPU, val);
 		last_val = val;
 		ab_sm_record_ts(AB_SM_TS_TPU_SET_OSCCLK);
@@ -370,12 +375,13 @@ static int64_t __ab_clk_tpu_start_rate_change(
 	/* Switch mux parent to SHARED_DIV_AON_PLL to prevent droop */
 	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK1, MUX_SHARED_DIV_AON_PLL);
 
-	/* If pms values aren't changing we can immediately switch
-	 * to pll_tpu as parent
+	/* If pms values aren't changing and PLL is enabled
+	 * we can immediately switch to pll_tpu as parent
 	 */
 	pms_val = get_tpu_pms_val(clk_ctx, last_val, new_rate);
-	if ((last_val & PLL_TPU_PMS_MASK) == (
-			pms_val & PLL_TPU_PMS_MASK)) {
+	if ((last_val & PLL_TPU_PMS_MASK) ==
+			(pms_val & PLL_TPU_PMS_MASK) &&
+			(last_val & PLL_TPU_ENABLE_MASK)) {
 		val = last_val | PLL_TPU_MUX_SEL_MASK;
 		ABC_WRITE(PLL_CON0_PLL_TPU, val);
 		last_val = val;
