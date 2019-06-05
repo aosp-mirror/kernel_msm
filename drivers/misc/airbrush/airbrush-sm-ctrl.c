@@ -1385,18 +1385,13 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 
 
 	ab_sm_start_ts(AB_SM_TS_FSYS);
-	/* Save time by not updating FSYS block when going to
-	 * SLEEP or DEEP-SLEEP
-	 */
-	if (is_sleep(to_chip_substate_id)) {
-		if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-					dest_map->fsys_block_state_id,
-					to_chip_substate_id)) {
-			ret = -EINVAL;
-			dev_err(sc->dev, "blk_set_state failed for FSYS\n");
-			if (to_chip_substate_id != CHIP_STATE_OFF)
-				goto cleanup_state;
-		}
+	if (blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
+				dest_map->fsys_block_state_id,
+				to_chip_substate_id)) {
+		ret = -EINVAL;
+		dev_err(sc->dev, "blk_set_state failed for FSYS\n");
+		if (to_chip_substate_id != CHIP_STATE_OFF)
+			goto cleanup_state;
 	}
 	ab_sm_record_ts(AB_SM_TS_FSYS);
 
