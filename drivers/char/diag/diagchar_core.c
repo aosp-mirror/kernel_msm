@@ -462,16 +462,6 @@ static void diag_close_logging_process(const int pid)
 	session_info = diag_md_session_get_pid(pid);
 	if (!session_info) {
 		mutex_unlock(&driver->md_session_lock);
-		if (driver->pcie_transport_def == DIAG_ROUTE_TO_PCIE)
-			params.req_mode = PCIE_MODE;
-		else
-			params.req_mode = USB_MODE;
-		params.mode_param = 0;
-		params.pd_mask = 0;
-		params.peripheral_mask = DIAG_CON_ALL;
-		mutex_lock(&driver->diagchar_mutex);
-		diag_switch_logging(&params);
-		mutex_unlock(&driver->diagchar_mutex);
 		return;
 	}
 
