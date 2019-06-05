@@ -97,10 +97,7 @@ struct sde_plane_rot_state {
 #define SDE_PLANE_DIRTY_VIG_IGC 0x40
 #define SDE_PLANE_DIRTY_DMA_IGC 0x80
 #define SDE_PLANE_DIRTY_DMA_GC 0x100
-#define SDE_PLANE_DIRTY_CP (SDE_PLANE_DIRTY_VIG_GAMUT |\
-		SDE_PLANE_DIRTY_VIG_IGC | SDE_PLANE_DIRTY_DMA_IGC |\
-		SDE_PLANE_DIRTY_DMA_GC)
-#define SDE_PLANE_DIRTY_ALL	(0xFFFFFFFF & ~(SDE_PLANE_DIRTY_CP))
+#define SDE_PLANE_DIRTY_ALL	0xFFFFFFFF
 
 /**
  * enum sde_plane_sclcheck_state - User scaler data status
