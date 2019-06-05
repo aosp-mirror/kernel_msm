@@ -58,6 +58,10 @@ enum btsco_rates {
 	RATE_16KHZ_ID,
 };
 
+#define MSM_BTSCO_TX_BITS_WIDTH 16
+#define MSM_BTSCO_RX_BITS_WIDTH 16
+#define MSM_BTSCO_I2S_CH 2
+
 static int msm8952_auxpcm_rate = 8000;
 static int msm_btsco_rate = BTSCO_RATE_8KHZ;
 static int msm_btsco_ch = 1;
@@ -621,9 +625,12 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 						msm8952_get_clk_id(port_id);
 				mi2s_rx_clk.clk_freq_in_hz =
 						get_mi2s_clk_val(port_id);
-				/*bt need 256KHz IBIT clk freq */
+				/*set bt RX IBIT clk freq */
 			        if (port_id == AFE_PORT_ID_QUATERNARY_MI2S_RX) {
-					mi2s_rx_clk.clk_freq_in_hz = Q6AFE_LPASS_IBIT_CLK_256_KHZ;
+					mi2s_rx_clk.clk_freq_in_hz =
+						msm_btsco_rate
+						* MSM_BTSCO_RX_BITS_WIDTH
+						* MSM_BTSCO_I2S_CH;
 				}
 				ret = afe_set_lpass_clock_v2(port_id,
 							&mi2s_rx_clk);
@@ -640,9 +647,12 @@ static int msm_mi2s_sclk_ctl(struct snd_pcm_substream *substream, bool enable)
 						msm8952_get_clk_id(port_id);
 				mi2s_tx_clk.clk_freq_in_hz =
 						get_mi2s_clk_val(port_id);
-				/*bt need 256KHz IBIT clk freq */
+				/*set bt TX IBIT clk freq */
 			        if (port_id == AFE_PORT_ID_QUATERNARY_MI2S_TX) {
-					mi2s_tx_clk.clk_freq_in_hz = Q6AFE_LPASS_IBIT_CLK_256_KHZ;
+					mi2s_tx_clk.clk_freq_in_hz =
+						msm_btsco_rate
+						* MSM_BTSCO_TX_BITS_WIDTH
+						* MSM_BTSCO_I2S_CH;
 				}
 				ret = afe_set_lpass_clock_v2(port_id,
 							&mi2s_tx_clk);
@@ -2518,8 +2528,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
 
-		/* do not use 48k freq for BT SCO*/
-		/*.be_hw_params_fixup = msm_be_hw_params_fixup,*/
+		.be_hw_params_fixup = msm_btsco_be_hw_params_fixup,
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_pmdown_time = 1, /* dai link has playback support */
 		.ignore_suspend = 1,
@@ -2535,8 +2544,7 @@ static struct snd_soc_dai_link msm8952_dai[] = {
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_QUATERNARY_MI2S_TX,
 
-		/* do not use 48k freq for BT SCO*/
-		/* .be_hw_params_fixup = msm_be_hw_params_fixup,*/
+		.be_hw_params_fixup = msm_btsco_be_hw_params_fixup,
 		.ops = &msm8952_quat_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
