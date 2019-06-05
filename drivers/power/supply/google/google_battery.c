@@ -449,35 +449,36 @@ static int ssoc_work(struct batt_ssoc_state *ssoc_state,
 	return 0;
 }
 
-/* Called on connect and disconnect to adjust the UI curve. no op when type is
- * the same as ssoc_curve_type and when in recharge logic.
+/* Called on connect and disconnect to adjust the UI curve. Splice at GDF less
+ * a fixed delta while UI is at 100% (i.e. in RL) to avoid showing 100% for
+ * "too long" after disconnect.
  */
+#define SSOC_DELTA 3
 void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
 		       enum ssoc_uic_type type)
 {
-	qnum_t ssoc_level = ssoc_get_capacity_raw(ssoc_state);
 	struct ssoc_uicurve *new_curve;
+	qnum_t gdf = ssoc_state->ssoc_gdf; /* actual battery level */
+	const qnum_t ssoc_level = ssoc_get_capacity(ssoc_state);
 
-	if (ssoc_state->ssoc_curve_type == type)
-		return;
+	/* force dsg curve when connect/disconnect with battery at 100% */
+	if (ssoc_level >= SSOC_FULL) {
+		const qnum_t rlt = qnum_fromint(ssoc_state->rl_soc_threshold);
 
-	/* force dsg curve when showing 100% (includes recharge logic) */
-	if (ssoc_level >= ssoc_point_full)
+		gdf -=  qnum_rconst(SSOC_DELTA);
+		if (gdf > rlt)
+			gdf = rlt;
 		type = SSOC_UIC_TYPE_DSG;
+	}
 
 	new_curve = (type == SSOC_UIC_TYPE_DSG) ? dsg_curve : chg_curve;
 	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
 	ssoc_state->ssoc_curve_type = type;
 
-	/* this really means do not splice the (DSG) curve on disconnect */
-	if (ssoc_state->rl_status != BATT_RL_STATUS_NONE
-	    || ssoc_level >= ssoc_point_full)
-		return;
-
 	/* splice at (->ssoc_gdf,->ssoc_rl) because past spoof */
 	ssoc_uicurve_splice(ssoc_state->ssoc_curve,
-			    ssoc_state->ssoc_gdf,
-			    ssoc_level);
+			    gdf,
+			    ssoc_get_capacity_raw(ssoc_state));
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1430,6 +1431,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 		/* change curve before changing the state */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
 		batt_reset_chg_drv_state(batt_drv);
+		batt_update_cycle_count(batt_drv);
 		batt_rl_reset(batt_drv);
 
 		err = GPSY_SET_PROP(batt_drv->fg_psy,
@@ -1440,8 +1442,6 @@ static int msc_logic(struct batt_drv *batt_drv)
 
 		batt_drv->buck_enabled = 0;
 		changed = true;
-
-		batt_update_cycle_count(batt_drv);
 
 		goto msc_logic_done;
 	}
