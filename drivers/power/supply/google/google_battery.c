@@ -2443,9 +2443,11 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_rl_reset(batt_drv);
 	batt_drv->buck_enabled = -1;
 	batt_reset_chg_drv_state(batt_drv);
+
 	mutex_init(&batt_drv->chg_lock);
 	mutex_init(&batt_drv->batt_lock);
 	mutex_init(&batt_drv->stats_lock);
+	mutex_init(&batt_drv->cc_data.lock);
 	batt_chg_stats_init(&batt_drv->ce_data);
 	batt_chg_stats_init(&batt_drv->ce_qual);
 
