@@ -44,10 +44,10 @@
 
 /* Timeout in ms */
 #define FACEAUTH_TIMEOUT_MS 3000
-#define M0_ENROLL_POLLING_PAUSE_MS 50
-#define M0_AUTH_POLLING_PAUSE_MS 80
+#define M0_ENROLL_POLLING_PAUSE_US 50000
+#define M0_AUTH_POLLING_PAUSE_US 15000
 /* Polling interval in us */
-#define M0_POLLING_INTERVAL_US 6000
+#define M0_POLLING_INTERVAL_US 65000
 
 /* Citadel */
 #define MAX_CACHE_SIZE 512
@@ -133,7 +133,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 	struct faceauth_data *data = file->private_data;
 	bool need_trace_end = false;
 	struct faceauth_debug_data debug_step_data;
-	unsigned int polling_pause = M0_AUTH_POLLING_PAUSE_MS;
+	unsigned int polling_pause = M0_AUTH_POLLING_PAUSE_US;
 	down_read(&data->rwsem);
 	if (!data->can_transfer && cmd != FACEAUTH_DEV_IOC_DEBUG_DATA) {
 		err = -EIO;
@@ -211,10 +211,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
 		if(start_step_data.operation == COMMAND_ENROLL){
-			polling_pause = M0_ENROLL_POLLING_PAUSE_MS;
+			polling_pause = M0_ENROLL_POLLING_PAUSE_US;
 		}
-		ATRACE_BLOCK("M0_POLLING_PAUSE_MS", {
-			msleep(polling_pause);
+		ATRACE_BLOCK("M0_POLLING_PAUSE_US", {
+			usleep_range(polling_pause, polling_pause + 1);
 		});
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
 		need_trace_end = true;
@@ -250,9 +250,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			}
 
 			usleep_range(polling_interval, polling_interval + 1);
-			polling_interval = polling_interval > 1 ?
-						   polling_interval >> 1 :
-						   1;
+			polling_interval = polling_interval > 1000 ?
+						   polling_interval >> 2 :
+						   1000;
 		}
 		ATRACE_END();
 		ATRACE_BEGIN("copy_faceauth_result_to_user");
