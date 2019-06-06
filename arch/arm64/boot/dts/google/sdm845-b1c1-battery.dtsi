@@ -37,6 +37,7 @@
 	qcom,fg-jeita-thresholds = <0 0 55 55>;
 	qcom,fg-force-load-profile;
 	google,fg-soc-irq-disable;
+	google,batt_psy_is_bms;
 };
 
 &tlmm {
