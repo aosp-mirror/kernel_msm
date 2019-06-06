@@ -271,7 +271,10 @@
 			};
 		};
 	};
-
+	qcom,lpm-workarounds {
+		compatible = "qcom,lpm-workarounds";
+		qcom,lpm-wa-skip-l2-spm;
+	};
 	qcom,pm@8600664 {
 		compatible = "qcom,pm";
 		reg = <0x8600664 0x40>;
@@ -284,6 +287,9 @@
 		qcom,pc-mode = "tz_l2_int";
 		qcom,use-sync-timer;
 		qcom,synced-clocks;
+	};
+	qcom,cpu-sleep-status {
+		compatible = "qcom,cpu-sleep-status";
 	};
 
 	qcom,rpm-stats@29dba0 {
