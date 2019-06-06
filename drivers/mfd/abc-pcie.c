@@ -453,15 +453,16 @@ u32 abc_pcie_get_linkstate(void)
 	abc_pcie_config_read(ABC_PCIE_DBI_BASE + L1SUB_CONTROL1_REG,
 			 0x0, &l1_substate);
 	if (link_state & ASPM_L1_ENABLE) {
-		val = readl(
-			abc_dev->fsys_config + CLOCK_REQ_EN);
-		if ((val & 0x1) == 0)
+		if (!(l1_substate & (ASPM_L1_2_ENABLE | ASPM_L1_1_ENABLE)))
 			return ASPM_L10;
+		val = readl_relaxed(abc_dev->fsys_config + CLOCK_REQ_EN) & 0x1;
+		__iormb(val);
+		if (!val)
+			return ASPM_UNKNOWN;
 		if (l1_substate & ASPM_L1_2_ENABLE)
 			return ASPM_L12;
 		if (l1_substate & ASPM_L1_1_ENABLE)
 			return ASPM_L11;
-		return ASPM_L10;
 	}
 	if (link_state & ASPM_L0s_ENABLE)
 		return ASPM_L0s;
@@ -651,9 +652,6 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 	smctrl.aspm_L11 = ABC_PCIE_PM_DISABLE;
 	smctrl.aspm_L12 = ABC_PCIE_PM_DISABLE;
 
-	if (abc_dev->link_config_cache == ABC_PCIE_CACHE_UNKNOWN)
-		abc_dev->link_config_cache = abc_pcie_get_linkstate();
-
 	current_linkstate = abc_dev->link_config_cache;
 	if (target_linkstate == current_linkstate)
 		return;
@@ -670,6 +668,8 @@ void abc_pcie_set_linkstate(u32 target_linkstate)
 				      0x4, val);
 		abc_dev->ltr_enable = false;
 		abc_dev->clk_req_enable = false;
+		abc_dev->l1sub_reg_cache = ABC_PCIE_CACHE_UNKNOWN;
+		abc_dev->link_status_reg_cache = ABC_PCIE_CACHE_UNKNOWN;
 		abc_dev->link_config_cache = target_linkstate;
 		return;
 	case ASPM_L12:

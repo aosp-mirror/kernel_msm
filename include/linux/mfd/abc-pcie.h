@@ -311,6 +311,7 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 #define ASPM_L12					0x3
 #define NOASPM						0x4
 #define PM_L2						0x5
+#define ASPM_UNKNOWN				0x6
 
 #define ABC_PCIE_CACHE_UNKNOWN		0xFFFFFFFF
 
