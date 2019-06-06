@@ -19,11 +19,19 @@
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/irq.h>
 #include <linux/pmic-voter.h>
+#include <linux/moduleparam.h>
 #include "smb-lib.h"
 #include "smb-reg.h"
 #include "battery.h"
 #include "step-chg-jeita.h"
 #include "storm-watch.h"
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX		"androidboot."
+#define BOOTMODE_STR_CHARGER		"charger"
+#define BOOTMODE_LENGTH			20
+static char bootmode[BOOTMODE_LENGTH];
+module_param_string(mode, bootmode, BOOTMODE_LENGTH, 0000);
 
 #define smblib_err(chg, fmt, ...)				\
 	logbuffer_log(chg->log, "%s: %s: " fmt,			\
@@ -3737,6 +3745,10 @@ void smblib_usb_plugin_hard_reset_locked(struct smb_charger *chg)
 		}
 	}
 
+	if (!strncmp(bootmode, BOOTMODE_STR_CHARGER,
+			sizeof(BOOTMODE_STR_CHARGER)))
+		vote(chg->awake_votable, CHARGER_MODE_VOTER, !vbus_rising, 0);
+
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
@@ -3812,6 +3824,10 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	else
 		vote(chg->disable_prebias_resistor, USBIN_PLUGIN_VOTER,
 							false, 0);
+
+	if (!strncmp(bootmode, BOOTMODE_STR_CHARGER,
+			sizeof(BOOTMODE_STR_CHARGER)))
+		vote(chg->awake_votable, CHARGER_MODE_VOTER, !vbus_rising, 0);
 
 	power_supply_changed(chg->usb_psy);
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
