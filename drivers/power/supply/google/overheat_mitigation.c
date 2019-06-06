@@ -33,7 +33,7 @@ enum {
 	USB_MAX_THROTTLE_STATE = USB_OVERHEAT_THROTTLE,
 };
 
-static bool mitigation_enabled = true;
+static bool mitigation_enabled;
 module_param_named(
 	enable, mitigation_enabled, bool, 0600
 );
