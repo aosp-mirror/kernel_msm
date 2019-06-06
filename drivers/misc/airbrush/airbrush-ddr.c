@@ -1515,7 +1515,6 @@ static void ddr_axi_enable_after_all_training(struct ab_ddr_context *ddr_ctx)
 
 	/* enable refresh and axi access controls */
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN | DBI_EN);
-	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
 	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL,
 			DFI_INIT_START_PHY2 | DFI_INIT_START);
 	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
@@ -2267,7 +2266,6 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 
 	/* Enable PB Refresh & Auto Refresh */
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
 	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
@@ -2564,7 +2562,6 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 
 	/* Enable PB Refresh & Auto Refresh */
 	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_set(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
 	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* Allow AXI after exiting from self-refresh */
