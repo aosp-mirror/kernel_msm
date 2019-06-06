@@ -75,7 +75,6 @@ struct drm_dp_mst_dsc_info {
  * @vcpi: Virtual Channel Payload info for this port.
  * @connector: DRM connector this port is connected to.
  * @mgr: topology manager this port lives under.
- * @fec_capability: Tracks full path fec capability.
  * @dsc_info: stores dpcd and configuration information.
  *
  * This structure represents an MST port endpoint on a device somewhere
@@ -113,11 +112,9 @@ struct drm_dp_mst_port {
 	 * audio-capable.
 	 */
 	bool has_audio;
-	/**
-	 * @fec_capability: Tracks full path fec capability as reported by
-	 * enum path resources.
-	 */
-	bool fec_capability;
+
+	bool fec_capable;
+
 	/**
 	 * @dsc_info: stores dpcd and configuration information for the mst
 	 * port where dsc decoding will be enabled.
@@ -316,7 +313,7 @@ struct drm_dp_port_number_req {
 
 struct drm_dp_enum_path_resources_ack_reply {
 	u8 port_number;
-	bool fec_capability;
+	bool fec_capable;
 	u16 full_payload_bw_number;
 	u16 avail_payload_bw_number;
 };

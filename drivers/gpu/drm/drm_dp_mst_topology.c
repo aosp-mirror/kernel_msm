@@ -484,7 +484,7 @@ static bool drm_dp_sideband_parse_enum_path_resources_ack(struct drm_dp_sideband
 {
 	int idx = 1;
 	repmsg->u.path_resources.port_number = (raw->msg[idx] >> 4) & 0xf;
-	repmsg->u.path_resources.fec_capability = (raw->msg[idx]) & 0x1;
+	repmsg->u.path_resources.fec_capable = raw->msg[idx] & 0x1;
 	idx++;
 	if (idx > raw->curlen)
 		goto fail_len;
@@ -1735,12 +1735,12 @@ static int drm_dp_send_enum_path_resources(struct drm_dp_mst_topology_mgr *mgr,
 				DRM_ERROR("got incorrect port in response\n");
 			DRM_DEBUG_KMS("enum path resources %d: %d %d %d\n",
 			txmsg->reply.u.path_resources.port_number,
-			txmsg->reply.u.path_resources.fec_capability,
+			txmsg->reply.u.path_resources.fec_capable,
 			txmsg->reply.u.path_resources.full_payload_bw_number,
 			txmsg->reply.u.path_resources.avail_payload_bw_number);
 			port->available_pbn = txmsg->reply.u.path_resources.avail_payload_bw_number;
-			port->fec_capability =
-				txmsg->reply.u.path_resources.fec_capability;
+			port->fec_capable =
+				txmsg->reply.u.path_resources.fec_capable;
 		}
 	}
 
@@ -2713,7 +2713,7 @@ bool drm_dp_mst_has_fec(struct drm_dp_mst_topology_mgr *mgr,
 	port = drm_dp_get_validated_port_ref(mgr, port);
 	if (!port)
 		return ret;
-	ret = port->fec_capability;
+	ret = port->fec_capable;
 	drm_dp_put_port(port);
 	return ret;
 }
