@@ -305,6 +305,7 @@ struct iaxxx_priv {
 	struct kthread_work runtime_work;
 
 	wait_queue_head_t boot_wq;
+	wait_queue_head_t wakeup_wq;
 	wait_queue_head_t irq_wake;
 
 	void *tunnel_data;
