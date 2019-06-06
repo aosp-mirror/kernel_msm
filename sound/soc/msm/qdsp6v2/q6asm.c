@@ -1572,6 +1572,13 @@ static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv)
 	}
 
 	dir = (data->token & 0x0F);
+	if (dir != IN && dir != OUT) {
+		pr_err("%s: Invalid audio port index: %d\n", __func__, dir);
+		if ((sid > 0 && sid <= SESSION_MAX))
+			spin_unlock_irqrestore(
+				&(session[sid].session_lock), flags);
+		return 0;
+	}
 	port = &ac->port[dir];
 
 	switch (data->opcode) {
@@ -1752,6 +1759,7 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 		data->dest_port);
 	if ((data->opcode != ASM_DATA_EVENT_RENDERED_EOS) &&
 	    (data->opcode != ASM_DATA_EVENT_EOS) &&
+	    (data->opcode != ASM_SESSION_EVENTX_OVERFLOW) &&
 	    (data->opcode != ASM_SESSION_EVENT_RX_UNDERFLOW)) {
 		if (payload == NULL) {
 			pr_err("%s: payload is null\n", __func__);
@@ -1897,6 +1905,17 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 				return -EINVAL;
 			}
 			spin_lock_irqsave(&port->dsp_lock, dsp_flags);
+			if (data->token < 0 ||
+					data->token >= port->max_buf_cnt) {
+				pr_debug("%s: Invalid token buffer index %u\n",
+					__func__, data->token);
+				spin_unlock_irqrestore(&port->dsp_lock,
+								dsp_flags);
+				spin_unlock_irqrestore(
+					&(session[session_id].session_lock),
+					flags);
+				return -EINVAL;
+			}
 			if (lower_32_bits(port->buf[data->token].phys) !=
 			payload[0] ||
 			msm_audio_populate_upper_32_bits(
@@ -1988,6 +2007,16 @@ static int32_t q6asm_callback(struct apr_client_data *data, void *priv)
 			}
 			spin_lock_irqsave(&port->dsp_lock, dsp_flags);
 			token = data->token;
+			if (token < 0 || token >= port->max_buf_cnt) {
+				pr_debug("%s: Invalid token buffer index %u\n",
+					__func__, token);
+				spin_unlock_irqrestore(&port->dsp_lock,
+								dsp_flags);
+				spin_unlock_irqrestore(
+					&(session[session_id].session_lock),
+					flags);
+				return -EINVAL;
+			}
 			port->buf[token].used = 0;
 			if (lower_32_bits(port->buf[token].phys) !=
 			payload[READDONE_IDX_BUFADD_LSW] ||
