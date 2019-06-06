@@ -334,6 +334,7 @@ static int cam_ife_hw_mgr_init_hw(
 {
 	struct cam_ife_hw_mgr_res *hw_mgr_res;
 	int rc = 0, i;
+	struct cam_hw_intf *hw_intf;
 
 	CAM_DBG(CAM_ISP, "INIT IFE CID ... in ctx id:%d",
 		ctx->ctx_index);
@@ -357,6 +358,26 @@ static int cam_ife_hw_mgr_init_hw(
 			CAM_ERR(CAM_ISP, "Can not INIT IFE CSID(id :%d)",
 				 hw_mgr_res->res_id);
 			goto deinit;
+		}
+	}
+
+	/* Enable CSID IRQ */
+	list_for_each_entry(hw_mgr_res, &ctx->res_list_ife_csid, list) {
+		if (hw_mgr_res->hw_res[0]) {
+			hw_intf = hw_mgr_res->hw_res[0]->hw_intf;
+			if (hw_intf->hw_ops.process_cmd) {
+				rc = hw_intf->hw_ops.process_cmd(
+					hw_intf->hw_priv,
+					CAM_IFE_CSID_ENABLE_IRQ,
+					hw_mgr_res->hw_res[0],
+					sizeof(struct cam_isp_resource_node));
+				if (rc < 0) {
+					CAM_ERR(CAM_ISP,
+						"Failed to enable CSID IRQ");
+					goto deinit;
+				}
+				break;
+			}
 		}
 	}
 
