@@ -1124,11 +1124,7 @@ int iaxxx_power_down_core_mem(
 		rc = iaxxx_send_update_block_request_with_options(
 			priv->dev, IAXXX_BLOCK_0,
 			IAXXX_HOST_0, priv->regmap_no_pm,
-			20,
-			UPDATE_BLOCK_FIXED_WAIT_OPTION |
-			UPDATE_BLOCK_NO_LOCK_OPTION |
-			UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION,
-			&status);
+			0, UPDATE_BLOCK_NO_LOCK_OPTION, &status);
 		if (rc) {
 			dev_err(priv->dev,
 			"Update blk failed after proc pwr down %s(): %d\n",
@@ -1154,11 +1150,7 @@ int iaxxx_power_down_core_mem(
 	rc = iaxxx_send_update_block_request_with_options(
 			priv->dev, IAXXX_BLOCK_0,
 			IAXXX_HOST_0, priv->regmap_no_pm,
-			20,
-			UPDATE_BLOCK_FIXED_WAIT_OPTION |
-			UPDATE_BLOCK_NO_LOCK_OPTION |
-			UPDATE_BLOCK_STATUS_CHECK_AFTER_FIXED_WAIT_OPTION,
-			&status);
+			0, UPDATE_BLOCK_NO_LOCK_OPTION, &status);
 	if (rc)
 		dev_err(priv->dev, "Update blk failed after mem pwr down%s(): %d\n",
 				__func__, status);

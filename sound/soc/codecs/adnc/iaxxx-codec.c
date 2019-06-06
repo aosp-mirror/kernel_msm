@@ -51,6 +51,9 @@
 #define IAXXX_MAX_PDM_PORTS	7
 #define IAXXX_MAX_SENSOR	4
 #define IAXXX_PORTD_PORTE_PORT_EN	0x18
+#define STREAM_STATUS_CHECK_RETRY	100
+#define STREAM_STATUS_CHECK_WAIT_TIME	2000
+#define WAIT_EXCESS_TIME	5
 #define IAXXX_SSR_CODEC_NAME	"tx_codec_state"
 #define IAXXX_SSR_STATE_SIZE	8
 
@@ -2528,7 +2531,11 @@ static int iaxxxcore_set_strm##stream##_en( \
 	struct iaxxx_codec_priv *iaxxx = dev_get_drvdata(codec->dev); \
 	struct iaxxx_priv *priv = to_iaxxx_priv(iaxxx->dev_parent); \
 	u32 status = 0; \
+	u32 str_status = 0; \
 	int ret = 0; \
+	int retry = STREAM_STATUS_CHECK_RETRY; \
+	if (ucontrol->value.integer.value[0] == iaxxx->stream_en[stream]) \
+		return 0; \
 	dev_dbg(priv->dev, "enter %s connection\n", __func__); \
 	if (ucontrol->value.integer.value[0]) { \
 		ret = iaxxx_check_and_power_up_ssp(priv); \
@@ -2547,9 +2554,28 @@ static int iaxxxcore_set_strm##stream##_en( \
 	} \
 	ret = iaxxx_send_update_block_request(iaxxx->dev_parent, \
 				 &status, IAXXX_BLOCK_0); \
-	if (ret) \
+	if (ret) { \
 		dev_err(priv->dev, "Update blk failed %s():%u\n", \
 					__func__, status); \
+		return ret; \
+	} \
+	if (iaxxx->stream_en[stream] == 0) { \
+		do { \
+			str_status = snd_soc_read(codec, \
+			IAXXX_STR_GRP_STR_STATUS_REG(stream)); \
+			str_status &= IAXXX_STR_GRP_STR_STATUS_STR_STATE_MASK; \
+			if (str_status) \
+				usleep_range(STREAM_STATUS_CHECK_WAIT_TIME, \
+					STREAM_STATUS_CHECK_WAIT_TIME + \
+					WAIT_EXCESS_TIME); \
+		} while (!(--retry) && str_status); \
+		if (!retry) { \
+			dev_err(priv->dev, \
+			"%s() strm status not in initialized after retry\n", \
+			__func__); \
+			ret = -EBUSY; \
+		} \
+	} \
 	return ret; \
 } \
 static int iaxxxcore_get_strm##stream##_en( \
