@@ -2547,6 +2547,7 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
 	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, MDLL_CG_EN);
 	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, MDLL_CG_EN);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
 	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_POWER_EN);
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_MODE);
