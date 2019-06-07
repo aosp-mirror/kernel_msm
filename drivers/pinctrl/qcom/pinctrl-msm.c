@@ -598,12 +598,27 @@ static void msm_gpio_dbg_show_one(struct seq_file *s,
 		seq_printf(s, ", %s", out ? "high" : "low");
 }
 
+static bool msm_gpio_is_ignored(struct gpio_chip *chip, unsigned int gpio)
+{
+	int i;
+
+	for (i = 0; i < chip->ignored_gpios_nr; i++) {
+		if (gpio == chip->ignored_gpios[i])
+			return true;
+	}
+
+	return false;
+}
+
 static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 {
 	unsigned gpio = chip->base;
 	unsigned i;
 
 	for (i = 0; i < chip->ngpio; i++, gpio++) {
+		if (msm_gpio_is_ignored(chip, gpio))
+			continue;
+
 		msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
 		seq_puts(s, "\n");
 	}
@@ -1677,6 +1692,7 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	unsigned ngpio = pctrl->soc->ngpios;
 	struct device_node *irq_parent = NULL;
 	struct irq_domain *domain_parent;
+	int ignored_gpios_nr;
 
 	if (WARN_ON(ngpio > MAX_NR_GPIO))
 		return -EINVAL;
@@ -1693,6 +1709,19 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	if (ret) {
 		dev_err(pctrl->dev, "Failed register gpiochip\n");
 		return ret;
+	}
+
+	ignored_gpios_nr = of_property_count_u32_elems(chip->of_node,
+		"goog,ignored-gpios");
+	if (ignored_gpios_nr > 0) {
+		chip->ignored_gpios = kmalloc_array(ignored_gpios_nr,
+			sizeof(*chip->ignored_gpios), GFP_KERNEL);
+		if (!chip->ignored_gpios)
+			return -ENOMEM;
+		of_property_read_u32_array(chip->of_node, "goog,ignored-gpios",
+			chip->ignored_gpios,
+			ignored_gpios_nr);
+		chip->ignored_gpios_nr = ignored_gpios_nr;
 	}
 
 	/*
@@ -1926,6 +1955,7 @@ int msm_pinctrl_remove(struct platform_device *pdev)
 {
 	struct msm_pinctrl *pctrl = platform_get_drvdata(pdev);
 
+	kfree(pctrl->chip.ignored_gpios);
 	gpiochip_remove(&pctrl->chip);
 
 	unregister_restart_handler(&pctrl->restart_nb);
