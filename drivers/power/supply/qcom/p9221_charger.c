@@ -2322,8 +2322,13 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 				  u16 irq_src)
 {
 
+	/*
+	 * It is suspected that p9221 misses to set the interrupt status
+	 * register occasionally. Evaluate spurious interrupt case for
+	 * dc reset as well.
+	 */
 	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_MODECHANGED &&
-	    irq_src & P9221R5_STAT_MODECHANGED) {
+	    (irq_src & P9221R5_STAT_MODECHANGED || !irq_src)) {
 		u8 mode_reg = 0;
 		int res;
 
