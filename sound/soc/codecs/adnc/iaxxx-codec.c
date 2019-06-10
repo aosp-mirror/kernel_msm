@@ -78,6 +78,7 @@ static int non_zero_bit_num(uint32_t x)
 
 struct ssr_entry {
 	int offline;
+	u32 offline_change;
 	wait_queue_head_t offline_poll_wait;
 	struct snd_info_entry *entry;
 };
@@ -7731,7 +7732,11 @@ static unsigned int iaxxx_state_poll(struct snd_info_entry *entry,
 
 	poll_wait(file, &ssr_entry->offline_poll_wait, wait);
 
-	ret = POLLIN | POLLPRI | POLLRDNORM;
+	mutex_lock(&iaxxx->ssr_lock);
+	if (xchg(&ssr_entry->offline_change, 0))
+		ret = POLLIN | POLLPRI | POLLRDNORM;
+	mutex_unlock(&iaxxx->ssr_lock);
+
 	return ret;
 }
 
@@ -7843,6 +7848,9 @@ static void iaxxx_change_online_state(struct iaxxx_codec_priv *iaxxx,
 
 	mutex_lock(&iaxxx->ssr_lock);
 	ssr_entry->offline = !online;
+	/* make sure offline is updated prior to wake up */
+	wmb();
+	xchg(&ssr_entry->offline_change, 1);
 	wake_up_interruptible(&ssr_entry->offline_poll_wait);
 	mutex_unlock(&iaxxx->ssr_lock);
 }
