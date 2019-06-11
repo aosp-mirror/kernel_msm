@@ -51,6 +51,8 @@
 /* iATU region 0 is reserved for ABC configuration registers */
 #define ABC_CONFIG_IATU_REGION 1
 
+#define ABC_INVALID_DATA	0xFFFFFFFF
+
 static struct abc_device *abc_dev;
 
 enum l1_entry_delay_value {
@@ -1964,17 +1966,20 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	dev_info(dev, "%s: testing pcie read\n", __func__);
 	ret = abc_pcie_config_read(ABC_BASE_OTP_WRAPPER & 0xffffff,
 					   0x0, &test_read_data);
-	if (ret) {
+
+	if (ret || test_read_data == ABC_INVALID_DATA) {
 		/*
 		 * Note: if it were an smmu issue, this error log
 		 * may not have a chance to print.
 		 */
-		dev_err(dev, "%s: failed to read 0x%08x, ret = %d\n",
-			__func__, ABC_BASE_OTP_WRAPPER, ret);
-	} else {
-		dev_info(dev, "%s: test read [0x%08x] = 0x%08x\n",
-			 __func__, ABC_BASE_OTP_WRAPPER, test_read_data);
+		dev_err(dev, "%s: failed to read 0x%08x, val=0x%08X, ret=%d\n",
+			__func__, ABC_BASE_OTP_WRAPPER, test_read_data, ret);
+
+		return (test_read_data == ABC_INVALID_DATA) ? -ENOTCONN : ret;
 	}
+
+	dev_info(dev, "%s: test read [0x%08x] = 0x%08x\n",
+			__func__, ABC_BASE_OTP_WRAPPER, test_read_data);
 
 	dev_info(dev, "Broadcast Exit EL2 notification\n");
 
