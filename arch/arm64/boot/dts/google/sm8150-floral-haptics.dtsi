@@ -51,6 +51,7 @@
 		reg = <0x43>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <129 IRQ_TYPE_LEVEL_LOW>;
+		async-suspend;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <4>;
 		cirrus,boost-ipk-milliamp = <4500>;
