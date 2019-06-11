@@ -2300,7 +2300,6 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		err = fts_ctpm_auto_upgrade_for_cci(client, data->fw_vendor_id, false);
 		if(err == 0) {
 			fts_update_fw_ver(data);
-			fts_update_fw_vendor_id(data);
 		}
 	} else {
 		printk(KERN_ERR "[fts] fw_vendor_id is woring : %d  \n", data->fw_vendor_id );

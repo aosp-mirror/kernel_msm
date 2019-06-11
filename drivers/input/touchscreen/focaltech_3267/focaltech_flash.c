@@ -158,6 +158,9 @@ int fts_8606_writepram(struct i2c_client * client, u8* pbt_buf, u32 dw_lenth);
 int fts_8606_ctpm_fw_upgrade(struct i2c_client * client, u8* pbt_buf, u32 dw_lenth);
 int fts_3x07_ctpm_fw_upgrade(struct i2c_client *client, u8 *pbt_buf, u32 dw_lenth);
 int hidi2c_to_stdi2c(struct i2c_client * client);
+int fts_fwupg_reset_in_boot(struct i2c_client *client);
+bool fts_fwupg_check_state(struct i2c_client *client, enum FW_STATUS rstate);
+bool fts_fwupg_check_fw_valid(struct i2c_client *client);
 
 /************************************************************************
 * Name: hidi2c_to_stdi2c
@@ -196,6 +199,169 @@ int hidi2c_to_stdi2c(struct i2c_client * client)
 	return bRet;
 }
 
+static int fts_fwupg_reset_to_boot(struct i2c_client *client)
+{
+	int ret = 0;
+
+	u8 reg = FTS_REG_UPGRADE2;
+
+	ret = fts_write_reg(client, reg, FTS_UPGRADE_AA);
+	if (ret < 0) {
+		printk(KERN_ERR "fts write FC=0xAA fail\n");
+		return ret;
+	}
+	msleep(FTS_DELAY_UPGRADE_AA);
+
+	ret = fts_write_reg(client, reg, FTS_UPGRADE_55);
+	if (ret < 0) {
+		printk(KERN_ERR"fts write FC=0x55 fail");
+		return ret;
+	}
+
+	msleep(FTS_DELAY_UPGRADE_RESET);
+	return 0;
+}
+
+/************************************************************************
+* Name: fts_fwupg_enter_into_boot
+* Brief: enter into boot environment, ready for upgrade
+* Input:
+* Output:
+* Return: return 0 if success, otherwise return error code
+***********************************************************************/
+int fts_fwupg_enter_into_boot(struct i2c_client *client)
+{
+	int ret = 0;
+	bool state = false;
+	bool fwvalid = false;
+
+	fwvalid = fts_fwupg_check_fw_valid(client);
+	if (fwvalid) {
+		printk(KERN_INFO "fts fwvalid true\n");
+		ret = fts_fwupg_reset_to_boot(client);
+		if (ret < 0) {
+			printk(KERN_ERR "fts enter into romboot/bootloader fail\n");
+			return ret;
+		}
+	} else {
+		printk(KERN_INFO "fts fwvalid false\n");
+		ret = fts_fwupg_reset_in_boot(client);
+		if (ret < 0) {
+			printk(KERN_ERR "fts reset before read boot id when fw invalid fail\n");
+			return ret;
+		}
+	}
+
+	state = fts_fwupg_check_state(client, FTS_RUN_IN_BOOTLOADER);
+	if (!state) {
+		printk(KERN_ERR "fts fw not in bootloader, fail\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+/************************************************************************
+ * Name: fts_flash_read_buf
+ * Brief: read data from flash
+ * Input: saddr - start address data write to flash
+ *        buf - buffer to store data read from flash
+ *        len - read length
+ * Output:
+ * Return: return 0 if success, otherwise return error code
+ *
+ * Warning: can't call this function directly, need call in boot environment
+ ***********************************************************************/
+int fts_flash_read_buf(struct i2c_client *client, u32 saddr, u8 *buf, u32 len)
+{
+	int ret = 0;
+	u32 i = 0;
+	u32 packet_number = 0;
+	u32 packet_len = 0;
+	u32 addr = 0;
+	u32 offset = 0;
+	u32 remainder = 0;
+	u8 wbuf[FTS_CMD_READ_LEN];
+
+	if ((NULL == buf) || (0 == len)) {
+		printk(KERN_ERR "fts buf is NULL or len is 0\n");
+		return -EINVAL;
+	}
+
+	packet_number = len / FTS_FLASH_PACKET_LENGTH;
+	remainder = len % FTS_FLASH_PACKET_LENGTH;
+	if (remainder > 0)
+		packet_number++;
+	packet_len = FTS_FLASH_PACKET_LENGTH;
+	printk(KERN_INFO "fts read packet_number:%d, remainder:%d\n", packet_number, remainder);
+
+	wbuf[0] = FTS_CMD_READ;
+	for (i = 0; i < packet_number; i++) {
+		offset = i * FTS_FLASH_PACKET_LENGTH;
+		addr = saddr + offset;
+		wbuf[1] = BYTE_OFF_16(addr);
+		wbuf[2] = BYTE_OFF_8(addr);
+		wbuf[3] = BYTE_OFF_0(addr);
+
+		/* last packet */
+		if ((i == (packet_number - 1)) && remainder)
+			packet_len = remainder;
+
+		ret = fts_i2c_write(client, wbuf, FTS_CMD_READ_LEN);
+		if (ret < 0) {
+			printk(KERN_ERR "fts pram/bootloader write 03 command fail\n");
+			return ret;
+		}
+
+		msleep(FTS_CMD_READ_DELAY); /* must wait, otherwise read wrong data */
+		ret = fts_i2c_read(client, NULL, 0, buf + offset, packet_len);
+		if (ret < 0) {
+			printk(KERN_ERR "fts pram/bootloader read 03 command fail\n");
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+/************************************************************************
+ * Name: fts_flash_read
+ * Brief:
+ * Input:  addr  - address of flash
+ *         len   - length of read
+ * Output: buf   - data read from flash
+ * Return: return 0 if success, otherwise return error code
+ ***********************************************************************/
+int fts_flash_read(struct i2c_client *client, u32 addr, u8 *buf, u32 len)
+{
+	int ret = 0;
+
+	if ((NULL == buf) || (0 == len)) {
+		printk(KERN_ERR "fts buf is NULL or len is 0\n");
+		return -EINVAL;
+	}
+
+	ret = fts_fwupg_enter_into_boot(client);
+	if (ret < 0) {
+		printk(KERN_ERR "fts enter into pramboot/bootloader fail\n");
+		goto read_flash_err;
+	}
+
+	ret = fts_flash_read_buf(client, addr, buf, len);
+	if (ret < 0) {
+		printk(KERN_ERR "fts read flash fail\n");
+		goto read_flash_err;
+	}
+
+read_flash_err:
+	/* reset to normal boot */
+	ret = fts_fwupg_reset_in_boot(client);
+	if (ret < 0)
+		printk(KERN_ERR "fts reset to normal boot fail\n");
+	return ret;
+}
+
+
 /*******************************************************************************
 * Name: fts_update_fw_vendor_id
 * Brief:
@@ -206,13 +372,12 @@ int hidi2c_to_stdi2c(struct i2c_client * client)
 void fts_update_fw_vendor_id(struct fts_ts_data *data)
 {
 	struct i2c_client *client = data->client;
-	u8 reg_addr;
 	int err;
+	u32 fwcfg_addr = 0x07B0;
+	u8 cfgbuf[FTS_HEADER_LEN] = { 0 };
 
-	reg_addr = FTS_REG_FW_VENDOR_ID;
-	err = fts_i2c_read(client, &reg_addr, 1, &data->fw_vendor_id, 1);
-	if (err < 0)
-		dev_err(&client->dev, "fw vendor id read failed");
+	err = fts_flash_read(client, fwcfg_addr, cfgbuf, FTS_HEADER_LEN);
+	data->fw_vendor_id = cfgbuf[FTS_CONIFG_VENDORID_OFF];
 }
 
 /*******************************************************************************
@@ -3400,14 +3565,10 @@ int fts_ctpm_fw_upgrade_with_i_file_for_cci_3207(struct i2c_client *client)
 	/*judge the fw that will be upgraded
 	* if illegal, then stop upgrade and return.
 	*/
-	if (fts_updateinfo_curr.CHIP_ID == 0x64)
-	{
-	    i_ret = fts_ft6336gu_upgrade(client, CTPM_FW, fw_size);
-	    if (i_ret != 0)
+
+	i_ret = fts_ft6336gu_upgrade(client, CTPM_FW, fw_size);
+	if (i_ret != 0)
 		dev_err(&client->dev, "%s:upgrade failed. err.\n",__func__);
-	} else {
-		dev_err(&client->dev, "%s:CHIP_ID is wrong. 0x%x.\n",__func__, fts_updateinfo_curr.CHIP_ID);
-	}
 
 	return i_ret;
 }
@@ -3461,31 +3622,33 @@ int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_id, boo
 	u8 uc_host_fm_ver = FTS_REG_FW_VER;
 	u8 uc_tp_fm_ver;
 	int i_ret;
+	struct fts_ts_data *fts_data  = (struct fts_ts_data *)i2c_get_clientdata(client);
 
-	switch(tp_id){
-		case TP_ID_0:
-			CTPM_FW = CTPM_FW_TP_ID_0;
-			fw_size = sizeof(CTPM_FW_TP_ID_0);
-			break;
-		case TP_ID_1:
-			CTPM_FW = CTPM_FW_TP_ID_1;
-			fw_size = sizeof(CTPM_FW_TP_ID_1);
-			break;
-		case TP_ID_2:
-			CTPM_FW = CTPM_FW_TP_ID_2;
-			fw_size = sizeof(CTPM_FW_TP_ID_2);
-			break;
-		case TP_ID_3:
-			CTPM_FW = CTPM_FW_TP_ID_3;
-			fw_size = sizeof(CTPM_FW_TP_ID_3);
-			break;
-		default:
-			FTS_DBG("[FTS] TP ID 0x%x isn't correct\n",tp_id);
-			return 1;
-			break;
+	switch (tp_id) {
+	case 0:
+	case TP_ID_0:
+		CTPM_FW = CTPM_FW_TP_ID_0;
+		fw_size = sizeof(CTPM_FW_TP_ID_0);
+		break;
+	case TP_ID_1:
+		CTPM_FW = CTPM_FW_TP_ID_1;
+		fw_size = sizeof(CTPM_FW_TP_ID_1);
+		break;
+	case TP_ID_2:
+		CTPM_FW = CTPM_FW_TP_ID_2;
+		fw_size = sizeof(CTPM_FW_TP_ID_2);
+		break;
+	case TP_ID_3:
+		CTPM_FW = CTPM_FW_TP_ID_3;
+		fw_size = sizeof(CTPM_FW_TP_ID_3);
+		break;
+	default:
+		FTS_DBG("[FTS] TP ID 0x%x isn't correct\n", tp_id);
+		return 1;
+		break;
 	}
 
-	fts_read_reg(client, FTS_REG_FW_VER, &uc_tp_fm_ver);
+	uc_tp_fm_ver = fts_data->fw_ver[0];
 	uc_host_fm_ver = fts_ctpm_get_i_file_ver_for_cci();
 	FTS_DBG("[FTS] uc_tp_fm_ver = 0x%x, uc_host_fm_ver = 0x%x\n",uc_tp_fm_ver, uc_host_fm_ver);
 

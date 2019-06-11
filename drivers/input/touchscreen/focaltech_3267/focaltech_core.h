@@ -220,6 +220,7 @@
 #define FTS_FLASH_PACKET_LENGTH                     32     /* max=128 */
 #define FTS_CMD_WRITE_LEN                           6
 #define FTS_CMD_WRITE                               0xBF
+#define FTS_CMD_READ                                0x03
 #define FTS_RETRIES_DELAY_WRITE                     1
 #define FTS_DELAY_UPGRADE_RESET                     80
 #define FTX_MAX_COMPATIBLE_TYPE                     4
@@ -230,6 +231,11 @@
 #define FTS_REG_UPGRADE2                        0xBC
 #define FTS_RETRIES_WRITE                           100
 #define FTS_CMD_RESET                               0x07
+#define FTS_HEADER_LEN                              32
+#define FTS_CONIFG_VENDORID_OFF                     0x04
+#define FTS_CMD_READ_LEN                            4
+#define FTS_CMD_READ_DELAY                          1
+#define FTS_DELAY_UPGRADE_AA                        10
 #define BYTE_OFF_0(x)           (u8)((x) & 0xFF)
 #define BYTE_OFF_8(x)           (u8)((x >> 8) & 0xFF)
 #define BYTE_OFF_16(x)          (u8)((x >> 16) & 0xFF)
@@ -469,7 +475,7 @@ extern int fts_ctpm_auto_upgrade_for_cci(struct i2c_client *client, const u8 tp_
 extern int fts_fw_upgrade(struct device *dev, bool force);
 extern int fts_ctpm_auto_clb(struct i2c_client *client);
 extern int fts_ctpm_fw_upgrade_with_app_file(struct i2c_client *client, char *firmware_name);
-extern int fts_ctpm_fw_upgrade_with_i_file(struct i2c_client *client);
+extern int fts_ctpm_fw_upgrade_with_i_file_for_cci_3207(struct i2c_client *client);
 extern int fts_ctpm_get_i_file_ver(void);
 
 //Apk and functions

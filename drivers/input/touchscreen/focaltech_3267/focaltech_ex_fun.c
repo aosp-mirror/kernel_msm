@@ -637,13 +637,13 @@ static ssize_t fts_fwupdate_store(struct device *dev, struct device_attribute *a
 	#if GTP_ESD_PROTECT
 		apk_debug_flag = 1;
 	#endif
-	
-	i_ret = fts_ctpm_fw_upgrade_with_i_file(client);
+
+	i_ret = fts_ctpm_fw_upgrade_with_i_file_for_cci_3207(client);
 	if (i_ret == 0)
 	{
 		msleep(300);
 		uc_host_fm_ver = fts_ctpm_get_i_file_ver();
-		dev_dbg(dev, "%s [FTS] upgrade to new version 0x%x\n", __func__, uc_host_fm_ver);
+		dev_err(dev, "%s [FTS] upgrade to new version 0x%x\n", __func__, uc_host_fm_ver);
 	}
 	else
 	{
