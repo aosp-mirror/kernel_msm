@@ -56,7 +56,7 @@
 #define PHASE3 3
 #define PHASENUM 4
 
-#define MAX_RETRY_COUNT 3
+#define MAX_RETRY_COUNT 10
 
 #define PHASE_SELECT_REG 0x60
 #define PROXAVG_REG 0x63
@@ -2344,11 +2344,8 @@ static enum silego_self_test_result_type silego_self_test(
 			result = SILEGO_TEST_PASS;
 			break;
 		}
-		dev_info(ctrl->soc_info.dev,
-			"silego fault doesn't received yet. tried count: %d",
-			retry+1);
-		/* wait 1~3 ms and retry */
-		usleep_range(1000, 3000);
+		/* wait 3~5 ms and retry */
+		usleep_range(3000, 5000);
 	}
 
 	if (retry == MAX_RETRY_COUNT)
