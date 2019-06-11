@@ -42,6 +42,7 @@ struct st54j_se_dev {
 	bool device_open;
 	/* GPIO for SE Reset pin (output) */
 	struct gpio_desc *gpiod_se_reset;
+	char *kbuf;
 };
 
 static long st54j_se_ioctl(struct file *filp, unsigned int cmd,
@@ -108,7 +109,7 @@ static ssize_t st54j_se_write(struct file *filp, const char __user *ubuf,
 	struct st54j_se_dev *ese_dev = filp->private_data;
 	int ret = -EFAULT;
 	size_t bytes = len;
-	char tx_buf[ST54_MAX_BUF];
+	char *tx_buf = NULL;
 
 	if (len > INT_MAX)
 		return -EINVAL;
@@ -116,8 +117,14 @@ static ssize_t st54j_se_write(struct file *filp, const char __user *ubuf,
 		bytes);
 	mutex_lock(&ese_dev->mutex);
 	while (bytes > 0) {
-		size_t block = bytes < sizeof(tx_buf) ? bytes : sizeof(tx_buf);
+		size_t block = bytes < ST54_MAX_BUF ? bytes : ST54_MAX_BUF;
 
+		tx_buf = ese_dev->kbuf;
+		if (!tx_buf) {
+			dev_err(&ese_dev->spi->dev, "kbuf NULL\n");
+			ret = -ENOMEM;
+			goto err;
+		}
 		if (copy_from_user(tx_buf, ubuf, block)) {
 			dev_dbg(&ese_dev->spi->dev,
 				"failed to copy from user\n");
@@ -145,7 +152,7 @@ static ssize_t st54j_se_read(struct file *filp, char __user *ubuf, size_t len,
 	struct st54j_se_dev *ese_dev = filp->private_data;
 	ssize_t ret = -EFAULT;
 	size_t bytes = len;
-	char rx_buf[ST54_MAX_BUF];
+	char *rx_buf = NULL;
 
 	if (len > INT_MAX)
 		return -EINVAL;
@@ -153,9 +160,16 @@ static ssize_t st54j_se_read(struct file *filp, char __user *ubuf, size_t len,
 		bytes);
 	mutex_lock(&ese_dev->mutex);
 	while (bytes > 0) {
-		size_t block = bytes < sizeof(rx_buf) ? bytes : sizeof(rx_buf);
+		size_t block = bytes < ST54_MAX_BUF ? bytes : ST54_MAX_BUF;
 
-		memset(rx_buf, 0, sizeof(rx_buf));
+		rx_buf = ese_dev->kbuf;
+		if (!rx_buf) {
+			dev_err(&ese_dev->spi->dev, "kbuf NULL\n");
+			ret = -ENOMEM;
+			goto err;
+		}
+
+		memset(rx_buf, 0, ST54_MAX_BUF);
 		ret = spi_read(ese_dev->spi, rx_buf, block);
 		if (ret < 0) {
 			dev_err(&ese_dev->spi->dev,
@@ -212,6 +226,10 @@ static int st54j_se_probe(struct spi_device *spi)
 	if (spi_param == NULL) {
 		return -ENOMEM;
 	}
+
+	ese_dev->kbuf = devm_kzalloc(dev, ST54_MAX_BUF, GFP_KERNEL);
+	if (ese_dev->kbuf == NULL)
+		return -ENOMEM;
 
 	ese_dev->spi = spi;
 	ese_dev->device.minor = MISC_DYNAMIC_MINOR;
