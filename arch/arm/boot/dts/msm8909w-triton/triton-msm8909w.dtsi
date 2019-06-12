@@ -33,7 +33,7 @@
 		cpubw-cpufreq {
 			target-dev = <&cpubw>;
 			cpu-to-dev-map =
-				<  800000  1464>,
+				<  800000  2929>,
 				< 1094400  2929>;
 		};
 	};
