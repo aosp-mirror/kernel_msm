@@ -23,6 +23,7 @@
 #include <linux/mfd/adnc/iaxxx-register-defs-plugin-instance-header.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-register-defs-event-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
 #include "iaxxx.h"
 
 #define IAXXX_MAX_CORES	3
@@ -287,6 +288,21 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 		return -EINVAL;
 	}
 
+	/* This check ensure that pm_resume is executed in normal use case
+	 * scenarios except from the suspend path as regmap_no_pm is used in
+	 * those functions.  This ensure that update_block_lock is not contended
+	 * by both resume and suspend paths simultaneously
+	 */
+	if (regmap == priv->regmap) {
+		rc = iaxxx_pm_get_sync(priv->dev);
+		if (rc < 0) {
+			dev_err(priv->dev,
+				"%s failed to get pm_sync rc= 0x%x\n",
+				__func__, rc);
+			return rc;
+		}
+	}
+
 	/* To protect concurrent update blocks requests.
 	 *
 	 * If the option to not use update block locking
@@ -371,7 +387,9 @@ out:
 		if (ret)
 			dev_err(dev, "Read error register failed %d\n", ret);
 	}
-
+	if (regmap == priv->regmap) {
+		iaxxx_pm_put_autosuspend(priv->dev);
+	}
 	return rc;
 }
 
@@ -709,6 +727,16 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
 	uint32_t status;
 	uint32_t retry_count = 10;
 
+	if (regmap == priv->regmap) {
+		rc = iaxxx_pm_get_sync(priv->dev);
+		if (rc < 0) {
+			dev_err(priv->dev,
+				"%s failed to get pm_sync rc= 0x%x\n",
+				__func__, rc);
+			return rc;
+		}
+	}
+
 	mutex_lock(&priv->update_block_lock);
 	/* Make sure update block bit is in cleared state */
 	do {
@@ -731,6 +759,9 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
 	}
 update_block_clr_check_err:
 	mutex_unlock(&priv->update_block_lock);
+	if (regmap == priv->regmap)
+		iaxxx_pm_put_autosuspend(priv->dev);
+
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_poll_update_block_req_bit_clr);

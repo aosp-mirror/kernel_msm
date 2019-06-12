@@ -1268,12 +1268,23 @@ int iaxxx_check_and_powerup_core(struct iaxxx_priv *priv, uint32_t proc_id)
 		return -EINVAL;
 	}
 
-	mutex_lock(&priv->proc_on_off_lock);
-
 	if (!iaxxx_is_firmware_ready(priv)) {
 		rc = -EIO;
-		goto exit;
+		return rc;
 	}
+
+	/* Core power up would happen only in the resume path w.r.t pm
+	 * getting the sync ensure that resume callback is called without
+	 * holding the proc_on_off_lock
+	 */
+	rc = iaxxx_pm_get_sync(priv->dev);
+	if (rc < 0) {
+		dev_err(priv->dev, "%s failed to get pm_sync rc= 0x%x\n",
+			__func__, rc);
+		return rc;
+	}
+
+	mutex_lock(&priv->proc_on_off_lock);
 
 	/* Read core processor status */
 	rc = regmap_read(priv->regmap,
@@ -1296,6 +1307,7 @@ int iaxxx_check_and_powerup_core(struct iaxxx_priv *priv, uint32_t proc_id)
 
 exit:
 	mutex_unlock(&priv->proc_on_off_lock);
+	iaxxx_pm_put_autosuspend(priv->dev);
 	return rc;
 }
 
