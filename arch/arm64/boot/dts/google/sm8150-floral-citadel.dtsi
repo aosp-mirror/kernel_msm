@@ -11,6 +11,8 @@
  */
 
 &tlmm {
+	goog,ignored-gpios = <130>;
+
 	citadel {
 		ctdl_ap_irq: ctdl_ap_irq {
 			mux {
