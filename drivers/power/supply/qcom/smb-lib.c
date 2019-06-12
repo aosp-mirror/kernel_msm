@@ -1767,6 +1767,14 @@ int smblib_debug_info(struct smb_charger *chg)
 	return rc;
 }
 
+static void smblib_debug_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+							debug_work.work);
+	smblib_debug_info(chg);
+	schedule_delayed_work(&chg->debug_work, msecs_to_jiffies(30000));
+}
+
 int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 				  union power_supply_propval *val)
 {
@@ -1781,7 +1789,6 @@ int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 		rc = power_supply_get_property(chg->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, val);
 
-	smblib_debug_info(chg);
 
 	return rc;
 }
@@ -3632,6 +3639,7 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 		usbicl_rerun_time = AICL_RERUN_TIME_3S;
 		schedule_delayed_work(&chg->usbicl_rerun_work,
 						msecs_to_jiffies(3000));
+		schedule_delayed_work(&chg->debug_work, msecs_to_jiffies(5000));
 		if (smblib_get_prop_dfp_mode(chg) != POWER_SUPPLY_TYPEC_NONE) {
 			chg->fake_usb_insertion = true;
 			return;
@@ -3654,6 +3662,7 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 				!chg->pd_active)
 			pr_err("APSD disabled on vbus rising without PD\n");
 	} else {
+		cancel_delayed_work(&chg->debug_work);
 		cancel_delayed_work(&chg->usbicl_rerun_work);
 		if (chg->fake_usb_insertion) {
 			chg->fake_usb_insertion = false;
@@ -5395,6 +5404,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+	INIT_DELAYED_WORK(&chg->debug_work, smblib_debug_work);
 	INIT_DELAYED_WORK(&chg->usbicl_rerun_work, smblib_usbicl_rerun_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
