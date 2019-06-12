@@ -1377,6 +1377,10 @@ struct ab_ddr_context {
 	struct ddr_refresh_info_t ref_info;
 	unsigned int ref_rate;
 
+	/* pcie link notifier registration */
+	bool pcie_link_ready; /* Guarded by ddr_lock */
+	struct notifier_block pcie_link_blocking_nb;
+
 #ifdef CONFIG_AB_DDR_RW_TEST
 	/* read/write test data */
 	ktime_t st_read, et_read;

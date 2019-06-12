@@ -10,6 +10,8 @@
  * only version 2 as published by the Free Software Foundation.
  */
 
+#define pr_fmt(fmt) "ab-ddr: " fmt
+
 #include <linux/airbrush-sm-ctrl.h>
 #include <linux/airbrush-sm-notifier.h>
 #include <linux/delay.h>
@@ -558,6 +560,31 @@ static const struct ddr_train_save_restore_t *
 	};
 
 	return &train_save_restore_regs[idx];
+}
+
+static int ab_ddr_pcie_link_listener(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	struct ab_ddr_context *ddr_ctx = container_of(nb,
+			struct ab_ddr_context, pcie_link_blocking_nb);
+
+	if (action & ABC_PCIE_LINK_POST_ENABLE) {
+		pr_debug("%s: pcie link enable\n", __func__);
+		mutex_lock(&ddr_ctx->ddr_lock);
+		ddr_ctx->pcie_link_ready = true;
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return NOTIFY_OK;
+	}
+
+	if (action & (ABC_PCIE_LINK_PRE_DISABLE | ABC_PCIE_LINK_ERROR)) {
+		pr_debug("%s: pcie link disable\n", __func__);
+		mutex_lock(&ddr_ctx->ddr_lock);
+		ddr_ctx->pcie_link_ready = false;
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return NOTIFY_OK;
+	}
+
+	return NOTIFY_DONE;
 }
 
 static unsigned int ddr_freq_param(enum ddr_freq_t freq, unsigned int index)
@@ -2201,6 +2228,11 @@ static int32_t ab_ddr_train_all(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
 	ret = __ab_ddr_train_all(ddr_ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2335,6 +2367,13 @@ int ab_ddr_wait_for_m0_ddr_init(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	ret = __ab_ddr_wait_for_m0_ddr_init(ddr_ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2396,6 +2435,13 @@ static int32_t ab_ddr_resume(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	ret = __ab_ddr_resume(ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2539,6 +2585,13 @@ static int32_t ab_ddr_suspend(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	ret = __ab_ddr_suspend(ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2617,6 +2670,13 @@ static int32_t ab_ddr_selfrefresh_exit(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	ret = __ab_ddr_selfrefresh_exit(ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2668,6 +2728,13 @@ static int32_t ab_ddr_selfrefresh_enter(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	ret = __ab_ddr_selfrefresh_enter(ctx);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2686,6 +2753,12 @@ static int ab_ddr_get_freq(void *ctx, u64 *val)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
 
 	switch (ddr_ctx->cur_freq) {
 	case AB_DRAM_FREQ_MHZ_1866:
@@ -2761,6 +2834,13 @@ static int ab_ddr_set_freq(void *ctx, u64 val)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	ret = __ab_ddr_set_freq(ctx, val);
 	mutex_unlock(&ddr_ctx->ddr_lock);
 
@@ -2803,6 +2883,13 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		cancel_delayed_work_sync(&ddr_ctx->ddr_ref_control_work);
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	old_rate = prop_from->clk_frequency;
 	new_rate = prop_to->clk_frequency;
 	ab_sm_clk_notify(AB_DRAM_PRE_RATE_CHANGE | extra_pre_notify_flag,
@@ -2938,6 +3025,13 @@ static int32_t ab_ddr_setup(void *ctx, void *ab_ctx)
 #endif
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
+
 	/* Keeps track of setup call.
 	 * Should be checked in all other dram_ops callbacks
 	 */
@@ -2961,6 +3055,12 @@ static int32_t ab_ddr_init(void *ctx)
 	}
 
 	mutex_lock(&ddr_ctx->ddr_lock);
+
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_err("%s: pcie link not ready\n", __func__);
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		return -EINVAL;
+	}
 
 	/* set 1866MHz ddr clock during airbrush normal and resume boot */
 	ddr_ctx->cur_freq = AB_DRAM_FREQ_MHZ_1866;
@@ -3092,6 +3192,11 @@ static void ddr_refresh_control_wkqueue(struct work_struct *refresh_ctrl_wq)
 
 	mutex_lock(&ddr_ctx->ddr_lock);
 
+	if (!ddr_ctx->pcie_link_ready) {
+		pr_debug("%s: pcie link not ready\n", __func__);
+		goto mr_poll_thread_sleep;
+	}
+
 	/* Refresh rate control is only required during ddr ON state */
 	if (ddr_ctx->ddr_state != DDR_ON)  {
 		WARN(1, "refresh control work while not in DDR_ON");
@@ -3135,6 +3240,7 @@ static int ab_ddr_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct ab_ddr_context *ddr_ctx;
+	int err;
 
 	ddr_ctx = kzalloc(sizeof(struct ab_ddr_context), GFP_KERNEL);
 	if (ddr_ctx == NULL)
@@ -3163,6 +3269,18 @@ static int ab_ddr_probe(struct platform_device *pdev)
 	/* Create Work Queue for DDR Refresh Control */
 	INIT_DELAYED_WORK(&ddr_ctx->ddr_ref_control_work,
 			  ddr_refresh_control_wkqueue);
+
+	ddr_ctx->pcie_link_ready = true;
+	ddr_ctx->pcie_link_blocking_nb.notifier_call =
+			ab_ddr_pcie_link_listener;
+	err = abc_register_pcie_link_blocking_event(
+			&ddr_ctx->pcie_link_blocking_nb);
+	if (err) {
+		dev_err(dev,
+			"fail: PCIe blocking link event subscribe, ret %d\n",
+			err);
+		return err;
+	}
 
 	dram_ops.ctx = ddr_ctx;
 	ab_sm_register_dram_ops(&dram_ops);
