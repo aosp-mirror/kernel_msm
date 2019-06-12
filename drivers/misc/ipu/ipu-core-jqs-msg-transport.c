@@ -453,9 +453,16 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt_handler(
 		if ((1 << q_id) > q_ids)
 			break;
 
-		if (!((1 << q_id) & q_ids) ||
-				WARN_ON((1 << q_id) & trans->free_queue_ids))
+		if (!((1 << q_id) & q_ids))
 			continue;
+
+		if ((1 << q_id) & trans->free_queue_ids) {
+			dev_err(bus->parent_dev,
+				"%s: JQS received an interrupt for a free queue\n",
+				__func__);
+			ipu_bus_notify_fatal_error(bus);
+			break;
+		}
 
 		host_q = &trans->queues[q_id];
 
