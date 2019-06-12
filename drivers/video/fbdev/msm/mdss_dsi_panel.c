@@ -276,8 +276,12 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
-			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
-					CMD_REQ_COMMIT);
+			__pm_stay_awake(&ctrl->idle_ws);
+			pr_info("%s: idle wake lock\n", __func__);
+
+			schedule_delayed_work(&ctrl->idle_work,
+				msecs_to_jiffies(IDLE_WAITING_MS));
+
 			ctrl->idle = true;
 			pr_debug("Idle on\n");
 		}
@@ -285,6 +289,11 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 		mdss_dsi_buck_boost_enable(pdata, 0);
 	} else {
 		mdss_dsi_buck_boost_enable(pdata, 1);
+
+		cancel_delayed_work_sync(&ctrl->idle_work);
+
+		__pm_relax(&ctrl->idle_ws);
+		pr_info("%s: idle wake unlock\n", __func__);
 
 		if (ctrl->idle_off_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_off_cmds,
@@ -3019,5 +3028,8 @@ int mdss_dsi_panel_init(struct device_node *node,
 			mdss_dsi_panel_apply_display_setting;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+
+	INIT_DELAYED_WORK(&ctrl_pdata->idle_work, __mdss_dsi_idle_work);
+	wakeup_source_init(&ctrl_pdata->idle_ws, "idle_wake_lock");
 	return 0;
 }
