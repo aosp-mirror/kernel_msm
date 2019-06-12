@@ -2294,39 +2294,27 @@ static int ab_sm_misc_release(struct inode *ip, struct file *fp)
 
 int ab_sm_enter_el2(struct ab_state_context *sc)
 {
-	int ret = 0;
-	bool thermal_disabled = false;
+	int ret;
 
 	mutex_lock(&sc->state_transitioning_lock);
 	if (sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
-		ret = -EBUSY;
-	} else {
-		sc->return_chip_substate_id = sc->dest_chip_substate_id;
-		sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
-
-		/*
-		 * Disable thermal in state transitioning lock to make sure we
-		 * exit throttling into our desired CHIP_STATE_SECURE_APP state
-		 */
-		ab_thermal_disable(sc->thermal);
-		thermal_disabled = true;
-		reinit_completion(&sc->transition_comp);
+		mutex_unlock(&sc->state_transitioning_lock);
+		return -EBUSY;
 	}
-	mutex_unlock(&sc->state_transitioning_lock);
-	if (ret < 0)
-		goto exit;
 
-	/*
-	 * Disable thermal may cause a state change. Wait for state change
-	 * to be applied if needed.
-	 */
+	sc->return_chip_substate_id = sc->dest_chip_substate_id;
+	sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+
+	mutex_unlock(&sc->state_transitioning_lock);
+
+	/* Wait for state change to SECURE_APP state */
+	reinit_completion(&sc->transition_comp);
 	complete_all(&sc->request_state_change_comp);
 	ret = wait_for_completion_timeout(&sc->transition_comp,
 			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
 	if (ret == 0) {
 		dev_warn(sc->dev, "State change timed out\n");
-		ret = -ETIMEDOUT;
-		goto exit;
+		return -ETIMEDOUT;
 	}
 
 	mutex_lock(&sc->state_transitioning_lock);
@@ -2336,8 +2324,7 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 		dev_warn(sc->dev,
 			 "Can't enter EL2 while PCIe is mapped to the secure context\n");
 		mutex_unlock(&sc->state_transitioning_lock);
-		ret = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
 	if (!sc->el2_mode) {
@@ -2353,9 +2340,6 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	}
 	mutex_unlock(&sc->state_transitioning_lock);
 
-exit:
-	if (ret && thermal_disabled)
-		ab_thermal_enable(sc->thermal);
 	return ret;
 }
 
@@ -2373,45 +2357,41 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 		return -EINVAL;
 	}
 
-	if (sc->el2_mode) {
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
-		mutex_unlock(&sc->mfd_lock);
-
-		if (!ret) {
-			/* Restore destination substate to pre-el2-mode value */
-			sc->dest_chip_substate_id = sc->return_chip_substate_id;
-			sc->el2_mode = false;
-			/*
-			 * Enable thermal after all pcie subscribers getting
-			 * enabled.
-			 */
-			ab_thermal_enable(sc->thermal);
-			reinit_completion(&sc->transition_comp);
-			complete_all(&sc->request_state_change_comp);
-		} else {
-			dev_warn(sc->dev, "exit_el2 failed (%d)\n", ret);
-			mutex_unlock(&sc->state_transitioning_lock);
-			if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
-						AB_SM_CLEANUP_NOT_IN_PROGRESS,
-						AB_SM_CLEANUP_IN_PROGRESS) ==
-					AB_SM_CLEANUP_IN_PROGRESS) {
-				dev_warn(sc->dev,
-						"%s: cleanup in progress; don't schedule work\n",
-						__func__);
-				return ret;
-			}
-			dev_info(sc->dev,
-				"%s: schedule shutdown work\n", __func__);
-			schedule_work(&sc->shutdown_work);
-			sysfs_notify(&sc->dev->kobj, NULL, "error_event");
-			return ret;
-		}
-	} else {
+	if (!sc->el2_mode) {
 		dev_warn(sc->dev, "Not in el2 mode\n");
 		mutex_unlock(&sc->state_transitioning_lock);
 		return -EINVAL;
 	}
+
+	mutex_lock(&sc->mfd_lock);
+	ret = sc->mfd_ops->exit_el2(sc->mfd_ops->ctx);
+	mutex_unlock(&sc->mfd_lock);
+
+	if (ret) {
+		dev_warn(sc->dev, "exit_el2 failed (%d)\n", ret);
+		mutex_unlock(&sc->state_transitioning_lock);
+		if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
+					AB_SM_CLEANUP_NOT_IN_PROGRESS,
+					AB_SM_CLEANUP_IN_PROGRESS) ==
+				AB_SM_CLEANUP_IN_PROGRESS) {
+			dev_warn(sc->dev,
+					"%s: cleanup in progress; don't schedule work\n",
+					__func__);
+			return ret;
+		}
+		dev_info(sc->dev, "%s: schedule shutdown work\n", __func__);
+		schedule_work(&sc->shutdown_work);
+		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		return ret;
+	}
+
+	/* Restore destination substate to pre-el2-mode value */
+	sc->dest_chip_substate_id = sc->return_chip_substate_id;
+	sc->el2_mode = false;
+
+	reinit_completion(&sc->transition_comp);
+	complete_all(&sc->request_state_change_comp);
+
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	ret = wait_for_completion_timeout(&sc->transition_comp,
