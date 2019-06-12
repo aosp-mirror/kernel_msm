@@ -2013,10 +2013,14 @@ static void mnh_pci_remove(struct pci_dev *pdev)
 	dev_dbg(&pdev->dev, "MNH PCIe driver is removed\n");
 }
 
-int mnh_pci_suspend(void)
+int mnh_pci_suspend(struct pci_dev *pdev)
 {
-	struct pci_dev *pdev = mnh_dev->pdev;
-	struct device *dev = &mnh_dev->pdev->dev;
+	struct device *dev;
+
+	if (!pdev || !pci_get_drvdata(pdev))
+		return 0;
+
+	dev = &pdev->dev;
 
 	dev_dbg(dev, "%s: enter\n", __func__);
 
@@ -2042,11 +2046,15 @@ int mnh_pci_suspend(void)
 }
 EXPORT_SYMBOL_GPL(mnh_pci_suspend);
 
-int mnh_pci_resume(void)
+int mnh_pci_resume(struct pci_dev *pdev)
 {
-	struct pci_dev *pdev = mnh_dev->pdev;
-	struct device *dev = &mnh_dev->pdev->dev;
+	struct device *dev;
 	int ret = 0;
+
+	if (!pdev || !pci_get_drvdata(pdev))
+		return -ENODEV;
+
+	dev = &pdev->dev;
 
 	dev_dbg(dev, "%s: enter\n", __func__);
 

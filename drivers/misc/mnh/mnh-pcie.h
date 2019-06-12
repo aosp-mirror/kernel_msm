@@ -474,6 +474,6 @@ dma_addr_t mnh_map_mem(
 void mnh_unmap_mem(
         dma_addr_t dma_addr, size_t size, enum dma_data_direction direction);
 
-int mnh_pci_suspend(void);
-int mnh_pci_resume(void);
+int mnh_pci_suspend(struct pci_dev *pdev);
+int mnh_pci_resume(struct pci_dev *pdev);
 #endif /* __MNH_PCIE_HOST */

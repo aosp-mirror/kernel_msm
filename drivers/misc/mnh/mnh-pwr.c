@@ -264,7 +264,7 @@ static int mnh_pwr_pcie_suspend(void)
 		 * Due to pcie failure, suspend the driver state only after
 		 * updating link status.
 		 */
-		ret = mnh_pci_suspend();
+		ret = mnh_pci_suspend(pcidev);
 		if (ret)
 			dev_warn(mnh_pwr->dev,
 				 "%s: mnh_pci_suspend failed (%d)\n",
@@ -273,7 +273,7 @@ static int mnh_pwr_pcie_suspend(void)
 		mnh_pwr->pcie_failure = false;
 	} else {
 		/* suspend the driver state */
-		ret = mnh_pci_suspend();
+		ret = mnh_pci_suspend(pcidev);
 		if (ret)
 			dev_warn(mnh_pwr->dev,
 				 "%s: mnh_pci_suspend failed (%d)\n",
@@ -363,7 +363,7 @@ static int mnh_pwr_pcie_resume(void)
 		pci_restore_state(pcidev);
 
 		/* resume the driver state */
-		ret = mnh_pci_resume();
+		ret = mnh_pci_resume(pcidev);
 		if (ret) {
 			dev_err(mnh_pwr->dev, "%s: mnh_pci_resume failed (%d)\n",
 				__func__, ret);
