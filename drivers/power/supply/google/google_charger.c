@@ -59,6 +59,7 @@
 #define CHG_PPS_VOTER			"pps_chg"
 #define MSC_USER_VOTER			"msc_user"
 #define MSC_USER_CHG_LEVEL_VOTER	"msc_user_chg_level"
+#define MSC_CHG_TERM_VOTER		"msc_chg_term"
 
 #define PD_T_PPS_TIMEOUT		9000	/* Maximum of 10 seconds */
 #define PD_T_PPS_DEADLINE_S		7
@@ -71,6 +72,11 @@
 #define PD_SNK_MIN_MV			5000
 #define PD_SNK_MAX_MA			3000
 #define PD_SNK_MAX_MA_9V		2200
+
+#define CHG_TERM_LONG_DELAY_MS		300000	/* 5 min */
+#define CHG_TERM_SHORT_DELAY_MS		60000	/* 1 min */
+#define CHG_TERM_RETRY_MS		2000	/* 2 sec */
+#define CHG_TERM_RETRY_CNT		5
 
 #define FCC_OF_CDEV_NAME "google,charger"
 #define FCC_CDEV_NAME "fcc"
@@ -120,8 +126,20 @@ struct chg_thermal_device {
 	int current_level;
 };
 
+struct chg_termination {
+	bool enable;
+	bool alarm_start;
+	struct work_struct work;
+	struct alarm alarm;
+	int cc_full_ref;
+	int retry_cnt;
+};
+
 /* re-evaluate FCC when switching power supplies */
 static int chg_therm_update_fcc(struct chg_drv *chg_drv);
+static void chg_reset_termination_data(struct chg_drv *chg_drv);
+static int chg_vote_input_suspend(struct chg_drv *chg_drv,
+				  char *voter, bool suspend);
 
 struct chg_drv {
 	struct device *device;
@@ -185,6 +203,9 @@ struct chg_drv {
 	int user_fv_uv;
 	int user_cc_max;
 	int user_interval;
+
+	/* prevent overcharge */
+	struct chg_termination	chg_term;
 };
 
 static void reschedule_chg_work(struct chg_drv *chg_drv)
@@ -283,6 +304,9 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 	union gbms_charger_state chg_state = { .v = 0 };
 
 	chg_init_state(chg_drv);
+
+	if (chg_drv->chg_term.enable)
+		chg_reset_termination_data(chg_drv);
 
 	/* TODO: handle interaction with PPS code */
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
@@ -769,6 +793,116 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 	return ret;
 }
 
+static void chg_termination_work(struct work_struct *work)
+{
+	struct chg_termination *chg_term =
+			container_of(work, struct chg_termination, work);
+	struct chg_drv *chg_drv =
+			container_of(chg_term, struct chg_drv, chg_term);
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+	int rc, cc, full, delay = CHG_TERM_LONG_DELAY_MS;
+
+	cc = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER, &rc);
+	if (rc == -EAGAIN) {
+		chg_term->retry_cnt++;
+
+		if (chg_term->retry_cnt <= CHG_TERM_RETRY_CNT) {
+			pr_info("Get CHARGE_COUNTER fail, try_cnt=%d, rc=%d\n",
+				chg_term->retry_cnt, rc);
+			/* try again and keep the pm_stay_awake */
+			alarm_start_relative(&chg_term->alarm,
+					     ms_to_ktime(CHG_TERM_RETRY_MS));
+			return;
+		} else {
+			goto error;
+		}
+	} else if (rc < 0) {
+		goto error;
+	}
+
+	/* Reset count if read successfully */
+	chg_term->retry_cnt = 0;
+
+	if (chg_term->cc_full_ref == 0)
+		chg_term->cc_full_ref = cc;
+
+	/*
+	 * Suspend/Unsuspend USB input to keep cc_soc within the 0.5% to 0.75%
+	 * overshoot range of the cc_soc value at termination, to prevent
+	 * overcharging.
+	 */
+	full = chg_term->cc_full_ref;
+	if ((long)cc < DIV_ROUND_CLOSEST((long)full * 10050, 10000)) {
+		chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, false);
+		delay = CHG_TERM_LONG_DELAY_MS;
+	} else if ((long)cc > DIV_ROUND_CLOSEST((long)full * 10075, 10000)) {
+		chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, true);
+		delay = CHG_TERM_SHORT_DELAY_MS;
+	}
+
+	pr_info("Prevent overcharge data: cc: %d, cc_full_ref: %d, delay: %d\n",
+		cc, chg_term->cc_full_ref, delay);
+
+	alarm_start_relative(&chg_term->alarm, ms_to_ktime(delay));
+
+	pm_relax(chg_drv->device);
+	return;
+
+error:
+	pr_info("Get CHARGE_COUNTER fail, rc=%d\n", rc);
+	chg_reset_termination_data(chg_drv);
+}
+
+static enum alarmtimer_restart chg_termination_alarm_cb(struct alarm *alarm,
+							ktime_t now)
+{
+	struct chg_termination *chg_term =
+			container_of(alarm, struct chg_termination, alarm);
+	struct chg_drv *chg_drv =
+			container_of(chg_term, struct chg_drv, chg_term);
+
+	pr_info("Prevent overcharge alarm triggered %lld\n",
+		ktime_to_ms(now));
+
+	pm_stay_awake(chg_drv->device);
+	schedule_work(&chg_term->work);
+
+	return ALARMTIMER_NORESTART;
+}
+
+static void chg_reset_termination_data(struct chg_drv *chg_drv)
+{
+	if (!chg_drv->chg_term.alarm_start)
+		return;
+
+	chg_drv->chg_term.alarm_start = false;
+	alarm_cancel(&chg_drv->chg_term.alarm);
+	cancel_work_sync(&chg_drv->chg_term.work);
+	chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, false);
+	chg_drv->chg_term.cc_full_ref = 0;
+	chg_drv->chg_term.retry_cnt = 0;
+	pm_relax(chg_drv->device);
+}
+
+static void chg_eval_chg_termination(struct chg_termination *chg_term)
+{
+	if (chg_term->alarm_start)
+		return;
+
+	/*
+	 * Post charge termination, switch to BSM mode triggers the risk of
+	 * over charging as BATFET opening may take some time post the necessity
+	 * of staying in supplemental mode, leading to unintended charging of
+	 * battery. Trigger the function once charging is completed
+	 * to prevent overcharing.
+	 */
+	alarm_start_relative(&chg_term->alarm,
+			     ms_to_ktime(CHG_TERM_LONG_DELAY_MS));
+	chg_term->alarm_start = true;
+	chg_term->cc_full_ref = 0;
+	chg_term->retry_cnt = 0;
+}
+
 static int chg_work_gen_state(union gbms_charger_state *chg_state,
 			       struct power_supply *chg_psy)
 {
@@ -905,20 +1039,20 @@ static void chg_work_adapter_details(union gbms_ce_adapter_details *ad,
 }
 
 /* not executed when battery is NOT present */
-static int chg_work_roundtrip(struct chg_drv *chg_drv)
+static int chg_work_roundtrip(struct chg_drv *chg_drv,
+			      union gbms_charger_state *chg_state)
 {
 	int fv_uv = -1, cc_max = -1, update_interval, rc;
-	union gbms_charger_state chg_state = { .v = 0 };
 
-	rc = chg_work_read_state(&chg_state, chg_drv->chg_psy);
+	rc = chg_work_read_state(chg_state, chg_drv->chg_psy);
 	if (rc < 0)
 		return rc;
 
 	if (chg_drv->chg_mode == CHG_DRV_MODE_NOIRDROP)
-		chg_state.f.vchrg = 0;
+		chg_state->f.vchrg = 0;
 
 	/* might return negative values in fv_uv and cc_max */
-	rc = chg_work_batt_roundtrip(&chg_state, chg_drv->bat_psy,
+	rc = chg_work_batt_roundtrip(chg_state, chg_drv->bat_psy,
 				     &fv_uv, &cc_max);
 	if (rc < 0)
 		return rc;
@@ -944,7 +1078,7 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	 */
 
 	/* update_interval<=0 means stop charging */
-	update_interval = chg_work_next_interval(chg_drv, &chg_state);
+	update_interval = chg_work_next_interval(chg_drv, chg_state);
 	if (update_interval == 0)
 		return 0;
 
@@ -955,7 +1089,7 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 		if (pps_ui < 0)
 			pps_ui = MSEC_PER_SEC;
 
-		chg_drv->pps_data.chg_flags = chg_state.f.flags;
+		chg_drv->pps_data.chg_flags = chg_state->f.flags;
 
 		vote(chg_drv->msc_interval_votable,
 			CHG_PPS_VOTER,
@@ -997,6 +1131,7 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	union gbms_ce_adapter_details ad = { .v = 0 };
+	union gbms_charger_state chg_state = { .v = 0 };
 	int soc, disable_charging, disable_pwrsrc;
 	int usb_online, wlc_online = 0;
 	int update_interval;
@@ -1092,12 +1227,13 @@ static void chg_work(struct work_struct *work)
 
 	/* make sure ->fv_uv and ->cc_max are always correct */
 	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
-	update_interval = chg_work_roundtrip(chg_drv);
+	update_interval = chg_work_roundtrip(chg_drv, &chg_state);
 
 	/* update_interval=0 when disconnected (check for races)
 	 * NOTE: can still have cc_max==0 from the roundtrip
 	 */
 	if (!disable_charging && update_interval > 0) {
+		bool chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
 
 		/* msc_update_charger_cb will write to charger and reschedule */
 		vote(chg_drv->msc_interval_votable,
@@ -1112,6 +1248,10 @@ static void chg_work(struct work_struct *work)
 			     MSC_CHG_VOTER, false, 0);
 			chg_drv->stop_charging = false;
 		}
+
+		if (chg_drv->chg_term.enable && chg_done && (soc == 100))
+			chg_eval_chg_termination(&chg_drv->chg_term);
+
 	} else {
 		/* connected but needs to disable_charging */
 		rc = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
@@ -1214,6 +1354,9 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 		chg_drv->batt_profile_fv_uv = -EINVAL;
 	else
 		chg_drv->batt_profile_fv_uv = temp;
+
+	chg_drv->chg_term.enable =
+		of_property_read_bool(node, "google,chg-termination-enable");
 
 	pr_info("charging profile in the battery\n");
 
@@ -1327,7 +1470,7 @@ static int chg_vote_input_suspend(struct chg_drv *chg_drv,
 		return rc;
 	}
 
-	rc = vote(chg_drv->dc_suspend_votable, USER_VOTER, suspend, 0);
+	rc = vote(chg_drv->dc_suspend_votable, voter, suspend, 0);
 	if (rc < 0) {
 		dev_err(chg_drv->device, "Couldn't vote to %s DC rc=%d\n",
 			suspend ? "suspend" : "resume", rc);
@@ -2493,6 +2636,22 @@ static int google_charger_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
+	if (chg_drv->chg_term.enable) {
+		INIT_WORK(&chg_drv->chg_term.work,
+			  chg_termination_work);
+
+		if (alarmtimer_get_rtcdev()) {
+			alarm_init(&chg_drv->chg_term.alarm,
+				   ALARM_BOOTTIME,
+				   chg_termination_alarm_cb);
+		} else {
+			/* keep the driver init even if get alarmtimer fail */
+			chg_drv->chg_term.enable = false;
+			cancel_work_sync(&chg_drv->chg_term.work);
+			pr_err("Couldn't get rtc device\n");
+		}
+	}
+
 	INIT_DELAYED_WORK(&chg_drv->init_work, google_charger_init_work);
 	INIT_DELAYED_WORK(&chg_drv->chg_work, chg_work);
 	INIT_WORK(&chg_drv->chg_psy_work, chg_psy_work);
@@ -2539,6 +2698,11 @@ static int google_charger_remove(struct platform_device *pdev)
 	struct chg_drv *chg_drv = (struct chg_drv *)platform_get_drvdata(pdev);
 
 	if (chg_drv) {
+		if (chg_drv->chg_term.enable) {
+			alarm_cancel(&chg_drv->chg_term.alarm);
+			cancel_work_sync(&chg_drv->chg_term.work);
+		}
+
 		chg_destroy_votables(chg_drv);
 
 		if (chg_drv->chg_psy)
