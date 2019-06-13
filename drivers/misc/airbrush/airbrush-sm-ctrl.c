@@ -2297,14 +2297,8 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	int ret;
 
 	mutex_lock(&sc->state_transitioning_lock);
-	if (sc->throttle_state_id == THROTTLE_NOCOMPUTE) {
-		mutex_unlock(&sc->state_transitioning_lock);
-		return -EBUSY;
-	}
-
 	sc->return_chip_substate_id = sc->dest_chip_substate_id;
 	sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
-
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	/* Wait for state change to SECURE_APP state */
