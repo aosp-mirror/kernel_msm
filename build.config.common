@@ -27,3 +27,6 @@ private/msm-google-modules/wlan/qcacld-3.0
 "
 IN_KERNEL_MODULES=1
 STOP_SHIP_TRACEPRINTK=1
+UNSTRIPPED_MODULES="
+wlan.ko
+"
