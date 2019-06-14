@@ -234,6 +234,13 @@ struct hwinfo_type {
 	uint32_t trim_ldo_bg;
 };
 
+struct iaxxx_static_mem_blk {
+	uint32_t  blk_id;
+	uint32_t  blk_size;
+	void     *blk_mem;
+	struct list_head blk_node;
+};
+
 /**
  * Description of driver private data
  *
@@ -377,6 +384,8 @@ struct iaxxx_priv {
 	int int_osc_trim_period;
 
 	struct mutex btp_lock;
+
+	struct list_head static_mem_blks_list;
 
 	/* Misc statistics data */
 	void *misc_priv;

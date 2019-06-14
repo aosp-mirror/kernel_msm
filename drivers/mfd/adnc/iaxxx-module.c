@@ -341,8 +341,6 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 		__func__, inst_id, param_blk_id, blk_size);
 
 	inst_id &= IAXXX_SENSR_ID_MASK;
-	/* protect this sensor operation */
-	mutex_lock(&priv->module_lock);
 
 	/* The block size is divided by 4 here because this function gets it
 	 * as block size in bytes but firmware expects in 32bit words.
@@ -418,7 +416,6 @@ int iaxxx_core_sensor_write_param_blk_by_inst(struct device *dev,
 	}
 
 sensor_write_param_blk_err:
-	mutex_unlock(&priv->module_lock);
 	return ret;
 }
 EXPORT_SYMBOL(iaxxx_core_sensor_write_param_blk_by_inst);

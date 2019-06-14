@@ -30,9 +30,14 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/mfd/adnc/iaxxx-plugin-common.h>
+#include <linux/mfd/adnc/iaxxx-static-mem.h>
 #include "iaxxx-odsp-celldrv.h"
 
 static struct odsp_cell_params odsp_cell_priv;
+
+/* 1MB block is reserved at boot-time for odsp ioctls' use
+ */
+#define IAXXX_ODSP_STATIC_MEM_BLK_SIZE (1 * 1024 * 1024)
 
 static int get_execution_status(struct device *dev,
 					uint8_t proc_id, uint32_t *status)
@@ -50,7 +55,7 @@ static int get_execution_status(struct device *dev,
 	return ret;
 }
 
-static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
+static long odsp_dev_ioctl_common(struct file *file, unsigned int cmd,
 							unsigned long arg)
 {
 	struct odsp_device_priv *odsp_dev_priv = file->private_data;
@@ -74,6 +79,8 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_plugin_endpoint_status_data plugin_ep_status_data;
 
 	uint32_t *get_param_blk_buf = NULL;
+	uint32_t *set_param_blk_buf = NULL;
+
 	void __user *blk_buff = NULL;
 	int ret = -EINVAL;
 	uint32_t size_in_words;
@@ -316,22 +323,24 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 		if (param_blk_info.param_size > 0) {
 			blk_buff = (void __user *)
 					(uintptr_t)param_blk_info.param_blk;
-			blk_buff = memdup_user(blk_buff,
+			set_param_blk_buf = iaxxx_alloc_from_static_mem_blk(
+					priv,
+					odsp_dev_priv->static_mem_blk_id,
 					param_blk_info.param_size);
-			param_blk_info.param_blk = (uintptr_t)blk_buff;
-			if (IS_ERR(blk_buff)) {
-				ret = PTR_ERR(blk_buff);
-				pr_err("%s memdup failed %d\n", __func__, ret);
-				return ret;
-			}
-			blk_buff = (void *)(uintptr_t)
-					(param_blk_info.param_blk);
+
+			if (!set_param_blk_buf)
+				return -ENOMEM;
+
+			if (copy_from_user(set_param_blk_buf, blk_buff,
+					param_blk_info.param_size))
+				return -EFAULT;
+
 			ret = iaxxx_core_set_param_blk(odsp_dev_priv->parent,
 				param_blk_info.inst_id,
 				param_blk_info.param_size,
-				blk_buff, param_blk_info.block_id,
+				set_param_blk_buf, param_blk_info.block_id,
 				param_blk_info.id);
-			kfree(blk_buff);
+
 		} else {
 			ret = iaxxx_core_set_param_blk_from_file(
 				odsp_dev_priv->parent,
@@ -366,8 +375,9 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 
 		size_in_words = (param_blk_info.param_size >> 2) +
 			(!!(param_blk_info.param_size & 0x3));
-		get_param_blk_buf = kvzalloc(size_in_words << 2,
-						GFP_KERNEL);
+		get_param_blk_buf = iaxxx_alloc_from_static_mem_blk(priv,
+				odsp_dev_priv->static_mem_blk_id,
+				size_in_words << 2);
 		if (!get_param_blk_buf)
 			return -ENOMEM;
 
@@ -388,7 +398,6 @@ static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
 			ret = -EFAULT;
 		}
 get_param_blk_err:
-		kvfree(get_param_blk_buf);
 		get_param_blk_buf = NULL;
 		if (ret)
 			return ret;
@@ -1041,6 +1050,19 @@ set_param_blk_err:
 	return 0;
 }
 
+static long odsp_dev_ioctl(struct file *file, unsigned int cmd,
+							unsigned long arg)
+{
+	struct odsp_device_priv *odsp_dev_priv = file->private_data;
+	int ret;
+
+	/* Lock all ioctls so only one gets executed at a time */
+	mutex_lock(&odsp_dev_priv->ioctl_lock);
+	ret = odsp_dev_ioctl_common(file, cmd, (unsigned long)compat_ptr(arg));
+	mutex_unlock(&odsp_dev_priv->ioctl_lock);
+	return ret;
+}
+
 #ifdef CONFIG_COMPAT
 static long odsp_dev_compat_ioctl(struct file *file, unsigned int cmd,
 							unsigned long arg)
@@ -1100,6 +1122,7 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 	odsp_dev_priv->cdev.owner = THIS_MODULE;
 	odsp_dev_priv->dev_num =
 	MKDEV(MAJOR(odsp_cell_priv.dev_num), odsp_cell_priv.cdev_minor);
+	mutex_init(&odsp_dev_priv->ioctl_lock);
 	cdev_init(&odsp_dev_priv->cdev, &odsp_dev_fops);
 	ret = cdev_add(&odsp_dev_priv->cdev, odsp_dev_priv->dev_num, 1);
 	if (ret) {
@@ -1112,6 +1135,14 @@ static int iaxxx_odsp_dev_probe(struct platform_device *pdev)
 	if (IS_ERR(odsp_dev_priv->dev)) {
 		ret = PTR_ERR(odsp_dev_priv->dev);
 		dev_err(dev, "Failed (%d) to create cdev device\n", ret);
+		goto err_device_create;
+	}
+
+	odsp_dev_priv->static_mem_blk_id = iaxxx_create_static_mem_blk(
+			priv, IAXXX_ODSP_STATIC_MEM_BLK_SIZE);
+	if (odsp_dev_priv->static_mem_blk_id < 0) {
+		ret = odsp_dev_priv->static_mem_blk_id;
+		dev_err(dev, "Failed (%d) to allocate static memory\n", ret);
 		goto err_device_create;
 	}
 
@@ -1135,8 +1166,11 @@ out_err:
 static int iaxxx_odsp_dev_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev->parent);
 	struct odsp_device_priv *odsp_dev_priv = dev_get_drvdata(dev);
 
+	iaxxx_destroy_static_mem_blk(priv, odsp_dev_priv->static_mem_blk_id);
+	mutex_destroy(&odsp_dev_priv->ioctl_lock);
 	device_destroy(odsp_cell_priv.cdev_class, odsp_dev_priv->dev_num);
 	cdev_del(&odsp_dev_priv->cdev);
 

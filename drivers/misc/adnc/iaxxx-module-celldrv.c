@@ -21,6 +21,7 @@
 #include <linux/mfd/adnc/iaxxx-module.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/mfd/adnc/iaxxx-pwr-mgmt.h>
+#include <linux/mfd/adnc/iaxxx-static-mem.h>
 #include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
@@ -30,6 +31,9 @@
 #include "iaxxx-module-celldrv.h"
 
 static struct module_cell_params module_cell_priv;
+/* 16KB block is reserved at boot-time for odsp ioctls' use
+ */
+#define IAXXX_MODULE_STATIC_MEM_BLK_SIZE (16 * 1024)
 
 static long module_dev_ioctl(struct file *file, unsigned int cmd,
 							unsigned long arg)
@@ -45,6 +49,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 	struct iaxxx_sensor_mode_stats sensor_stats[SENSOR_NUM_MODE];
 	uint16_t script_id;
 	void __user *blk_buff = NULL;
+	uint32_t *set_param_blk_buf = NULL;
 	int ret = -EINVAL;
 
 	pr_debug("%s() cmd %d\n", __func__, cmd);
@@ -226,22 +231,34 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		}
 
 		if (param_blk_info.blk_size > 0) {
+			mutex_lock(&priv->module_lock);
+
 			blk_buff = (void __user *)
 					(uintptr_t)param_blk_info.blk_data;
-			blk_buff = memdup_user(blk_buff,
+
+			set_param_blk_buf = iaxxx_alloc_from_static_mem_blk(
+					priv,
+					module_dev_priv->static_mem_blk_id,
 					param_blk_info.blk_size);
-			if (IS_ERR(blk_buff)) {
-				ret = PTR_ERR(blk_buff);
-				pr_err("%s memdup failed %d\n", __func__, ret);
-				return ret;
+
+			if (!set_param_blk_buf) {
+				mutex_unlock(&priv->module_lock);
+				return -ENOMEM;
+			}
+
+			if (copy_from_user(set_param_blk_buf, blk_buff,
+					param_blk_info.blk_size)) {
+				mutex_unlock(&priv->module_lock);
+				return -EFAULT;
 			}
 			ret = iaxxx_core_sensor_write_param_blk_by_inst(
 					module_dev_priv->parent,
 					param_blk_info.inst_id,
 					param_blk_info.param_blk_id,
-					blk_buff, param_blk_info.blk_size,
+					set_param_blk_buf,
+					param_blk_info.blk_size,
 					param_blk_info.block_id);
-			kfree(blk_buff);
+			mutex_unlock(&priv->module_lock);
 		} else {
 			pr_err("invalid block-size received\n");
 			return -EINVAL;
@@ -384,6 +401,14 @@ static int iaxxx_module_dev_probe(struct platform_device *pdev)
 		goto err_device_create;
 	}
 
+	module_dev_priv->static_mem_blk_id = iaxxx_create_static_mem_blk(
+			priv, IAXXX_MODULE_STATIC_MEM_BLK_SIZE);
+	if (module_dev_priv->static_mem_blk_id < 0) {
+		ret = module_dev_priv->static_mem_blk_id;
+		dev_err(dev, "Failed (%d) to allocate static memory\n", ret);
+		goto err_device_create;
+	}
+
 	dev_set_drvdata(dev, module_dev_priv);
 	pr_debug("MODULE device cdev initialized.\n");
 
@@ -403,7 +428,9 @@ static int iaxxx_module_dev_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct module_device_priv *module_dev_priv = dev_get_drvdata(dev);
+	struct iaxxx_priv *priv = to_iaxxx_priv(dev->parent);
 
+	iaxxx_destroy_static_mem_blk(priv, module_dev_priv->static_mem_blk_id);
 	device_destroy(module_cell_priv.cdev_class, module_dev_priv->dev_num);
 	cdev_del(&module_dev_priv->cdev);
 

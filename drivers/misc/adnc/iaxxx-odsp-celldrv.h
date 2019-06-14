@@ -47,10 +47,10 @@ struct odsp_device_priv {
 	dev_t dev_num;
 	struct device *dev;
 	struct device *parent;
-	/* Add lock to protect cell params
-	 * spinlock_t odsp_cell_lock
-	 */
 	struct regmap *regmap;
+	struct mutex ioctl_lock;
+	int  static_mem_blk_id;
+
 };
 
 #endif

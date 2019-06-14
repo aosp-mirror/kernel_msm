@@ -37,5 +37,6 @@ struct module_device_priv {
 	 * spinlock_t module_cell_lock
 	 */
 	struct regmap *regmap;
+	int static_mem_blk_id;
 };
 #endif

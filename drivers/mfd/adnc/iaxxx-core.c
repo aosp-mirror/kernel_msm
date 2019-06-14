@@ -1870,6 +1870,7 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	}
 
 	iaxxx_mutex_init(priv);
+	INIT_LIST_HEAD(&priv->static_mem_blks_list);
 
 	iaxxx_init_kthread_worker(&priv->worker);
 	init_waitqueue_head(&priv->boot_wq);
