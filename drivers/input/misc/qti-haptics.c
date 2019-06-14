@@ -206,6 +206,7 @@ struct qti_hap_config {
 	u16			play_rate_us;
 	bool			lra_allow_variable_play_rate;
 	bool			use_ext_wf_src;
+	bool			lra_auto_res_disable;
 };
 
 struct qti_hap_chip {
@@ -640,7 +641,8 @@ static int qti_haptics_load_constant_waveform(struct qti_hap_chip *chip)
 
 		/* Enable Auto-Resonance when VMAX wf-src is selected */
 		if (config->act_type == ACT_LRA) {
-			rc = qti_haptics_lra_auto_res_enable(chip, true);
+			rc = qti_haptics_lra_auto_res_enable(chip,
+				!config->lra_auto_res_disable);
 			if (rc < 0)
 				return rc;
 		}
@@ -1302,6 +1304,9 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 				return -EINVAL;
 			}
 		}
+
+		config->lra_auto_res_disable = of_property_read_bool(child_node,
+				"qcom,lra-auto-resonance-disable");
 	}
 
 	chip->constant.pattern = devm_kcalloc(chip->dev,
@@ -1408,7 +1413,7 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 		}
 
 		effect->lra_auto_res_disable = of_property_read_bool(child_node,
-				"qcom,lra-auto-resonance-disable");
+				"qcom,wf-lra-auto-resonance-disable");
 
 		tmp = of_property_count_elems_of_size(child_node,
 				"qcom,wf-brake-pattern", sizeof(u8));
@@ -1451,7 +1456,7 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 				chip->predefined[j].wf_repeat_n);
 		dev_dbg(chip->dev, "    wf_s_repeat_n: %d\n",
 				chip->predefined[j].wf_s_repeat_n);
-		dev_dbg(chip->dev, "    lra_auto_res_disable: %d\n",
+		dev_dbg(chip->dev, "    wf-lra_auto_res_disable: %d\n",
 				chip->predefined[j].lra_auto_res_disable);
 	}
 
