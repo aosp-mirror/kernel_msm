@@ -1884,8 +1884,23 @@ static ssize_t led_laser_enable_store(struct device *dev,
 		}
 		mutex_unlock(&lm36011_mutex);
 
+		/* Check ITO-R state, report to camera driver if lens crack
+		 * has been detected.
+		 */
+		if (ctrl->hw_version >= BUILD_DVT) {
+			if (silego_check_fault_type(ctrl) < 0)
+				dev_err(ctrl->soc_info.dev,
+					"failed to get Silego state");
+			else if (ctrl->silego.fault_flag == ITOR_OPEN_CIRCUIT) {
+				dev_info(ctrl->soc_info.dev,
+					"ITO-R detected crack");
+				cam_req_mgr_update_safety_ic_status(LENS_CRACK);
+			}
+			dev_info(ctrl->soc_info.dev, "Silego state: 0x%x",
+				ctrl->silego.fault_flag);
+		}
 		/* Clean up IRQ for PROTO and DEV device */
-		if (ctrl->hw_version < BUILD_EVT1_0)
+		else if (ctrl->hw_version < BUILD_EVT1_0)
 			sx9320_cleanup_nirq(ctrl);
 
 		rc = lm36011_write_data(ctrl,
@@ -2371,6 +2386,21 @@ out:
 	return result;
 }
 
+static ssize_t get_silego_state_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	int rc;
+	struct led_laser_ctrl_t *ctrl = dev_get_drvdata(dev);
+
+	rc = silego_check_fault_type(ctrl);
+	if (rc < 0) {
+		dev_err(ctrl->soc_info.dev, "failed to read Silego fault flag");
+		return rc;
+	}
+	return scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->silego.fault_flag);
+}
+
 static DEVICE_ATTR_RW(led_laser_enable);
 static DEVICE_ATTR_RW(led_laser_read_byte);
 static DEVICE_ATTR_WO(led_laser_write_byte);
@@ -2385,6 +2415,7 @@ static DEVICE_ATTR_WO(cap_sense_write_byte);
 static DEVICE_ATTR_WO(itoc_cali_data_store);
 static DEVICE_ATTR_RO(is_th_sensor_validated);
 static DEVICE_ATTR_RO(th_sensor_get_data_once);
+static DEVICE_ATTR_RO(get_silego_state);
 
 static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_led_laser_enable.attr,
@@ -2401,6 +2432,7 @@ static struct attribute *led_laser_dev_attrs[] = {
 	&dev_attr_itoc_cali_data_store.attr,
 	&dev_attr_is_th_sensor_validated.attr,
 	&dev_attr_th_sensor_get_data_once.attr,
+	&dev_attr_get_silego_state.attr,
 	NULL
 };
 
