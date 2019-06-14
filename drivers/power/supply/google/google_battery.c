@@ -1119,7 +1119,7 @@ static int msc_logic_irdrop(struct batt_drv *batt_drv,
 		 * data might not be consistent (b/110318684)
 		 * NOTE: could add PID loop for management of thermals
 		 */
-		const int vchrg = batt_drv->chg_state.f.vchrg;
+		const int vchrg = batt_drv->chg_state.f.vchrg * 1000;
 
 		msc_state = MSC_FAST;
 
@@ -1138,7 +1138,8 @@ static int msc_logic_irdrop(struct batt_drv *batt_drv,
 
 		pr_info("MSC_FAST vt=%d vb=%d fv_uv=%d->%d vchrg=%d cv_cnt=%d\n",
 			vtier, vbatt, batt_drv->fv_uv, *fv_uv,
-			vchrg, batt_drv->checked_cv_cnt);
+			batt_drv->chg_state.f.vchrg,
+			batt_drv->checked_cv_cnt);
 
 	} else if (chg_type == POWER_SUPPLY_CHARGE_TYPE_TRICKLE) {
 		/* Precharge: charging current/voltage are limited in
