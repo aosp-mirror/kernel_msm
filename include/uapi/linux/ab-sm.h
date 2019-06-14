@@ -21,34 +21,6 @@
 
 #define AB_SM_IOCTL_MAGIC	'a'
 
-/* First call after open will immediately return the current
- * state. Subsequent calls will block until next state change,
- * then return the new state.
- *
- * Parameter int *:
- *	Pass pointer to integer to be filled in with new state value
- * On success will return 0, otherwise will return error < 0.
- */
-#define AB_SM_ASYNC_NOTIFY	_IOR(AB_SM_IOCTL_MAGIC, 0, int *)
-
-/*
- * Parameter int:
- *	Pass new state value to set
- * On success will return 0, otherwise will return error < 0.
- * Note: State changes are not allowed after calling AB_SM_ENTER_EL2
- *     until subsequently calling AB_SM_EXIT EL2.
- *     All calls to AB_SM_SET_STATE will fail with -ENODEV
- *     during that time.
- */
-#define AB_SM_SET_STATE		_IOW(AB_SM_IOCTL_MAGIC, 1, int)
-
-/*
- * Parameter int *:
- *	Pass pointer to integer to be filled in with state value
- * On success will return 0, otherwise will return error < 0.
- */
-#define AB_SM_GET_STATE		_IOR(AB_SM_IOCTL_MAGIC, 2, int *)
-
 /*
  * On success will return 0, otherwise will return error < 0.
  * -ETIMEDOUT: state change for thermal disabling timed out.

@@ -21,35 +21,12 @@
 
 int ab_interrupt_M0(int tar_dev);
 
-static int chip_state_set(void *data, u64 val)
-{
-	struct ab_state_context *sc = (struct ab_state_context *)data;
-	int ret;
-
-	ret = ab_sm_set_state(sc, val, false);
-	if (ret < 0)
-		dev_err(sc->dev, "%s: State change failed, ret %d\n",
-				__func__, ret);
-
-	return ret;
-}
-
-static int chip_state_get(void *sc, u64 *val)
-{
-	*val = ab_sm_get_state((struct ab_state_context *)sc, false);
-
-	return 0;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(fops_chip_state, chip_state_get,
-		chip_state_set, "%llu\n");
-
 static int mapped_chip_state_set(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *)data;
 	int ret;
 
-	ret = ab_sm_set_state(sc, val, true);
+	ret = ab_sm_set_state(sc, val);
 	if (ret < 0)
 		dev_err(sc->dev, "%s: State change failed, ret %d\n",
 				__func__, ret);
@@ -59,7 +36,7 @@ static int mapped_chip_state_set(void *data, u64 val)
 
 static int mapped_chip_state_get(void *sc, u64 *val)
 {
-	*val = ab_sm_get_state((struct ab_state_context *)sc, true);
+	*val = ab_sm_get_state((struct ab_state_context *)sc);
 	return 0;
 }
 
@@ -698,11 +675,6 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	d_chip = debugfs_create_dir("airbrush_sm", sc->d_entry);
 	if (!d_chip)
-		goto err_out;
-
-	d = debugfs_create_file("chip_state", 0666, d_chip, sc,
-				&fops_chip_state);
-	if (!d)
 		goto err_out;
 
 	d = debugfs_create_file("mapped_chip_state", 0666, d_chip, sc,

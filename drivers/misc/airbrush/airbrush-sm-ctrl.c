@@ -1577,141 +1577,24 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 	return ret;
 }
 
-/* TODO (b/127500645): Remove once old mappings are completely deprecated */
-int ab_sm_map_state(u32 old_mapping, u32 *new_mapping)
-{
-	static const u32 remap_table[91] = {
-		[0]  = CHIP_STATE_400,
-		[1]  = CHIP_STATE_401,
-		[2]  = CHIP_STATE_402,
-		[3]  = CHIP_STATE_403,
-		[4]  = CHIP_STATE_404,
-		[5]  = CHIP_STATE_405,
-		[6]  = CHIP_STATE_406,
-		[7]  = CHIP_STATE_407,
-		[8]  = CHIP_STATE_408,
-		[9]  = CHIP_STATE_409,
-		[10] = CHIP_STATE_500,
-		[11] = CHIP_STATE_501,
-		[12] = CHIP_STATE_502,
-		[13] = CHIP_STATE_503,
-		[14] = CHIP_STATE_504,
-		[15] = CHIP_STATE_505,
-		[20] = CHIP_STATE_600,
-		[21] = CHIP_STATE_601,
-		[22] = CHIP_STATE_602,
-		[23] = CHIP_STATE_603,
-		[24] = CHIP_STATE_604,
-		[25] = CHIP_STATE_605,
-		[30] = CHIP_STATE_300,
-		[40] = CHIP_STATE_200,
-		[50] = CHIP_STATE_100,
-		[60] = CHIP_STATE_0,
-		[70] = CHIP_STATE_700,
-		[71] = CHIP_STATE_701,
-		[72] = CHIP_STATE_702,
-		[73] = CHIP_STATE_703,
-		[74] = CHIP_STATE_704,
-		[75] = CHIP_STATE_705,
-		[80] = CHIP_STATE_800,
-		[81] = CHIP_STATE_801,
-		[82] = CHIP_STATE_802,
-		[83] = CHIP_STATE_803,
-		[84] = CHIP_STATE_804,
-		[85] = CHIP_STATE_805,
-		[90] = CHIP_STATE_900,
-	};
-
-	if (old_mapping >= ARRAY_SIZE(remap_table))
-		return -EINVAL;
-
-	*new_mapping = remap_table[old_mapping];
-
-	/* Checking case where input was eg. 34
-	 * Only valid output of 0 is input of 60
-	 */
-	if (*new_mapping == 0 && old_mapping != 60)
-		return -EINVAL;
-
-	return 0;
-
-}
-
-int ab_sm_unmap_state(u32 new_mapping, u32 *old_mapping)
-{
-	switch (new_mapping) {
-	case CHIP_STATE_0:
-		*old_mapping = 60;
-		break;
-	case CHIP_STATE_100:
-		*old_mapping = 50;
-		break;
-	case CHIP_STATE_200:
-		*old_mapping = 40;
-		break;
-	case CHIP_STATE_300:
-		*old_mapping = 30;
-		break;
-	case CHIP_STATE_400 ... CHIP_STATE_409:
-		*old_mapping = (new_mapping - 400);
-		break;
-	case CHIP_STATE_500 ... CHIP_STATE_505:
-		*old_mapping = (new_mapping - 490);
-		break;
-	case CHIP_STATE_600 ... CHIP_STATE_605:
-		*old_mapping = (new_mapping - 580);
-		break;
-	case CHIP_STATE_700 ... CHIP_STATE_705:
-		*old_mapping = (new_mapping - 630);
-		break;
-	case CHIP_STATE_800 ... CHIP_STATE_805:
-		*old_mapping = (new_mapping - 720);
-		break;
-	case CHIP_STATE_900:
-		*old_mapping = 90;
-		break;
-	default:
-		pr_err("couldn't unmap %d\n", new_mapping);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 int ab_sm_set_state(struct ab_state_context *sc,
-		u32 dest_chip_substate_id, bool mapped)
+		u32 dest_chip_substate_id)
 {
 	int ret;
-	u32 mapped_val;
-
 	mutex_lock(&sc->set_state_lock);
-	if (!mapped) {
-		ret = ab_sm_map_state(dest_chip_substate_id, &mapped_val);
-		if (ret) {
-			mutex_unlock(&sc->set_state_lock);
-			return ret;
-		}
-	} else {
-		mapped_val = dest_chip_substate_id;
-	}
-
-	ret = _ab_sm_set_state(sc, mapped_val);
+	ret = _ab_sm_set_state(sc, dest_chip_substate_id);
 	mutex_unlock(&sc->set_state_lock);
 
 	return ret;
 }
 EXPORT_SYMBOL(ab_sm_set_state);
 
-u32 ab_sm_get_state(struct ab_state_context *sc, bool mapped)
+u32 ab_sm_get_state(struct ab_state_context *sc)
 {
 	u32 state;
 
 	mutex_lock(&sc->state_transitioning_lock);
-	if (!mapped)
-		ab_sm_unmap_state(sc->curr_chip_substate_id, &state);
-	else
-		state = sc->curr_chip_substate_id;
-
+	state = sc->curr_chip_substate_id;
 	mutex_unlock(&sc->state_transitioning_lock);
 	return state;
 }
@@ -2178,11 +2061,10 @@ static int ab_sm_regulator_listener(struct notifier_block *nb,
 }
 
 static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
-		unsigned long arg, bool mapped)
+		unsigned long arg)
 {
 	int ret;
 	int chip_state;
-	u32 unmapped_val;
 	struct ab_state_context *sc;
 
 	mutex_lock(&sess->sc->async_fifo_lock);
@@ -2193,17 +2075,7 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 		mutex_unlock(&sc->async_fifo_lock);
 		if (sess->first_entry) {
 			sess->first_entry = false;
-			if (!mapped) {
-				ret = ab_sm_unmap_state(
-						sc->curr_chip_substate_id,
-						&unmapped_val);
-				if (ret)
-					return ret;
-				if (copy_to_user((void __user *)arg,
-						&unmapped_val,
-						sizeof(unmapped_val)))
-					return -EFAULT;
-			} else if (copy_to_user((void __user *)arg,
+			if (copy_to_user((void __user *)arg,
 					&sc->curr_chip_substate_id,
 					sizeof(sc->curr_chip_substate_id))) {
 				return -EFAULT;
@@ -2231,24 +2103,10 @@ static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 
 	kfifo_out(sc->async_entries, &chip_state, sizeof(chip_state));
 
-	if (!mapped) {
-		ret = ab_sm_unmap_state(chip_state, &unmapped_val);
-		if (ret) {
-			mutex_unlock(&sc->async_fifo_lock);
-			return ret;
-		}
-
-		if (copy_to_user((void __user *)arg,
-					&unmapped_val, sizeof(unmapped_val))) {
-			mutex_unlock(&sc->async_fifo_lock);
-			return -EFAULT;
-		}
-	} else {
-		if (copy_to_user((void __user *)arg,
-					&chip_state, sizeof(chip_state))) {
-			mutex_unlock(&sc->async_fifo_lock);
-			return -EFAULT;
-		}
+	if (copy_to_user((void __user *)arg,
+				&chip_state, sizeof(chip_state))) {
+		mutex_unlock(&sc->async_fifo_lock);
+		return -EFAULT;
 	}
 
 	sess->first_entry = false;
@@ -2735,30 +2593,9 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 #endif /* CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS */
 
 	switch (cmd) {
-	case AB_SM_ASYNC_NOTIFY:
-		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
-			ret = ab_sm_async_notify(sess, arg, false);
-			atomic_set(&sc->async_in_use, 0);
-		} else {
-			dev_warn(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
-			ret = -EBUSY;
-		}
-		break;
-
-	case AB_SM_SET_STATE:
-		ret = ab_sm_set_state(sc, arg, false);
-		break;
-
-	case AB_SM_GET_STATE:
-		state = ab_sm_get_state(sess->sc, false);
-		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
-			return -EFAULT;
-		ret = 0;
-		break;
-
 	case AB_SM_MAPPED_ASYNC_NOTIFY:
 		if (!atomic_cmpxchg(&sc->async_in_use, 0, 1)) {
-			ret = ab_sm_async_notify(sess, arg, true);
+			ret = ab_sm_async_notify(sess, arg);
 			atomic_set(&sc->async_in_use, 0);
 		} else {
 			dev_warn(sc->dev, "AB_SM_ASYNC_NOTIFY is in use\n");
@@ -2767,11 +2604,11 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_MAPPED_SET_STATE:
-		ret = ab_sm_set_state(sc, arg, true);
+		ret = ab_sm_set_state(sc, arg);
 		break;
 
 	case AB_SM_MAPPED_GET_STATE:
-		state = ab_sm_get_state(sess->sc, true);
+		state = ab_sm_get_state(sess->sc);
 		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
 			return -EFAULT;
 		ret = 0;
