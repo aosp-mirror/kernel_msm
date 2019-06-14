@@ -2203,6 +2203,9 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 		/* ->buck_enabled = true, device is connected */
 		if (ssoc != SSOC_FULL)
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+	} else if (val->intval == POWER_SUPPLY_STATUS_DISCHARGING) {
+		/* connected and discharging is NOT charging */
+		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 	}
 
 	return 0;
