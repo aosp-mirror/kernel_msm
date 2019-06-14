@@ -416,6 +416,8 @@
 		"ADC1_IN", "ADC1_OUT",
 		"ADC2_IN", "ADC2_OUT",
 		"ADC3_IN", "ADC3_OUT",
+		"MIC BIAS External2", "Headset Mic",
+		"AMIC2", "MIC BIAS External2",
 		"MIC1_REC BIAS", "Handset Mic",
 		"MIC1_ST BIAS", "SoundTrigger Mic1",
 		"MIC2_3 BIAS", "SoundTrigger Mic2",
@@ -478,4 +480,8 @@
 		qcom,master-en = <1>;
 		status = "okay";
 	};
+};
+
+&pmic_analog_codec {
+       qcom,cdc-micbias-cfilt-mv = <2500000>;
 };
