@@ -164,15 +164,14 @@
 		google,update-interval = <30000>;
 		/* IRDrop Compensation */
 		google,fv-uv-resolution = <25000>;
-		google,cv-range-accuracy = <10000>;
 		google,fv-uv-margin-dpct = <1020>;
 		/* tier switch */
+		google,cv-range-accuracy = <10000>;
+		google,cv-otv-margin = <12000>;
 		google,cv-debounce-cnt = <3>;
-		google,cv-tier-ov-cnt = <10>;
+		google,cv-tier-ov-cnt = <1>;
 		google,cv-tier-switch-cnt = <3>;
-		/* experimental */
-		google,cv-otv-margin = <0>;
-		#thermal-sensor-cells = <0>;
+		/* charging stats */
 		google,chg-stats-qual-time = <900>;
 		google,chg-stats-delta-soc = <15>;
 		/* resistance estimation */
@@ -182,6 +181,8 @@
 		google,res-filt-length = <10>;
 		/* enable cycle counts */
 		google,cycle-counts;
+
+		#thermal-sensor-cells = <0>;
 	};
 
 	google_charger: google,charger {
