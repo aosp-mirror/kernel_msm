@@ -123,8 +123,8 @@ static void _logbuffer_log(struct logbuffer *instance, const char *fmt,
 		__logbuffer_log(instance, tmpbuffer, true);
 		suspend_since_last_logged = false;
 	} else if (!fmt) {
-		pr_warn("Fmt is empty. Aborting after printing RTC timestamp\n"
-			);
+		pr_debug("Fmt is empty. Aborting after printing RTC timestamp\n"
+			 );
 		goto abort;
 	}
 
