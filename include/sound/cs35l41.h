@@ -69,6 +69,19 @@ struct cs35l41_vol_ctl {
 	ktime_t dev_timestamp;
 };
 
+struct cs35l41_rst_cache {
+	bool extclk_cfg;
+	int asp_width;
+	int asp_wl;
+	int asp_fmt;
+	int lrclk_fmt;
+	int sclk_fmt;
+	int slave_mode;
+	int fs_cfg;
+};
+
+#define CS35L41_CTR_CACHE_SIZE 9
+
 struct cs35l41_private {
 	struct wm_adsp dsp; /* needs to be first member */
 	struct snd_soc_codec *codec;
@@ -103,6 +116,8 @@ struct cs35l41_private {
 	struct delayed_work hb_work;
 	struct workqueue_struct *wq;
 	struct mutex hb_lock;
+	struct cs35l41_rst_cache reset_cache;
+	struct reg_sequence ctl_cache[CS35L41_CTR_CACHE_SIZE];
 	struct mutex rate_lock;
 	struct mutex force_int_lock;
 	struct cs35l41_vol_ctl vol_ctl;
