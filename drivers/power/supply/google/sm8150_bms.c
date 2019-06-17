@@ -69,6 +69,7 @@ struct bias_config {
 #define CHGR_FAST_CHARGE_CURRENT_SETTING	0x1061
 #define CHGR_FLOAT_VOLTAGE_SETTING		0x1070
 
+#define DCDC_ICL_STATUS_REG			0x1107
 #define DCDC_AICL_ICL_STATUS_REG		0x1108
 #define DCDC_AICL_STATUS_REG			0x110A
 #define DCDC_SOFT_ILIMIT_BIT			BIT(6)
@@ -712,7 +713,7 @@ static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 		chg_state->f.vchrg = (vchrg / 1000);
 
 	if (usb_valid) {
-		(void)sm8150_rd8(bms->pmic_regmap, DCDC_AICL_ICL_STATUS_REG,
+		(void)sm8150_rd8(bms->pmic_regmap, DCDC_ICL_STATUS_REG,
 				 &icl);
 	} else if (dc_valid) {
 		(void)sm8150_rd8(bms->pmic_regmap, DCDC_CFG_REF_MAX_PSNS_REG,
@@ -860,6 +861,22 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 	return 0;
 }
 
+
+static int sm8150_charge_disable(struct bms_dev *bms, bool disable)
+{
+	const u8 val = disable ? 0 : CHARGING_ENABLE_CMD_BIT;
+	int rc;
+
+	rc = sm8150_masked_write(bms->pmic_regmap,
+				 CHGR_CHARGING_ENABLE_CMD,
+				 CHARGING_ENABLE_CMD_BIT, val);
+
+	pr_info("CHARGE_DISABLE : val=%d disable=%d (%d)\n",
+		val, disable, rc);
+
+	return rc;
+}
+
 static int sm8150_psy_set_property(struct power_supply *psy,
 				  enum power_supply_property psp,
 				  const union power_supply_propval *pval)
@@ -885,8 +902,15 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		rc = sm8150_write(bms->pmic_regmap,
 					CHGR_FAST_CHARGE_CURRENT_SETTING,
 					&val, 1);
-		pr_info("CONSTANT_CHARGE_CURRENT_MAX : ivalue=%d, val=%d (%d)\n",
-							ivalue, val, rc);
+		/* NOTE FCC==0 must also set charge disable or the device will
+		 * not draw any current. Need to take care of this detail
+		 * in the platform driver to keep the charger code sane.
+		 */
+		if (rc == 0)
+			rc = sm8150_charge_disable(bms, val == 0);
+
+		pr_info("CONSTANT_CHARGE_CURRENT_MAX : ivalue=%d, val=%d disable=%d (%d)\n",
+			ivalue, val, val == 0, rc);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
@@ -911,11 +935,7 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 		bms->taper_control = pval->intval;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
-		val = (pval->intval) ? 0 : CHARGING_ENABLE_CMD_BIT;
-		rc = sm8150_write(bms->pmic_regmap, CHGR_CHARGING_ENABLE_CMD,
-				&val, 1);
-		pr_info("CHARGE_DISABLE : val=%d (%d)\n",
-						pval->intval != 0, rc);
+		rc = sm8150_charge_disable(bms, pval->intval != 0);
 		break;
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 		(void)sm8150_rerun_aicl(bms);

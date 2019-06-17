@@ -472,21 +472,21 @@ static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 		return 0;
 
 	if (chg_drv->lowerdb_reached && upperbd <= capacity) {
-		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=1->0, charging off\n",
-			__func__, lowerbd, upperbd, capacity);
+		pr_info("MSC_CHG lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=1->0, charging off\n",
+			lowerbd, upperbd, capacity);
 		disable_charging = 1;
 		chg_drv->lowerdb_reached = false;
 	} else if (!chg_drv->lowerdb_reached && lowerbd < capacity) {
-		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging off\n",
-			__func__, lowerbd, upperbd, capacity);
+		pr_info("MSC_CHG lowerbd=%d, upperbd=%d, capacity=%d, charging off\n",
+			lowerbd, upperbd, capacity);
 		disable_charging = 1;
 	} else if (!chg_drv->lowerdb_reached && capacity <= lowerbd) {
-		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=0->1, charging on\n",
-			__func__, lowerbd, upperbd, capacity);
+		pr_info("MSC_CHG lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=0->1, charging on\n",
+			lowerbd, upperbd, capacity);
 		chg_drv->lowerdb_reached = true;
 	} else {
-		pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging on\n",
-			__func__, lowerbd, upperbd, capacity);
+		pr_info("MSC_CHG lowerbd=%d, upperbd=%d, capacity=%d, charging on\n",
+			lowerbd, upperbd, capacity);
 	}
 
 	return disable_charging;
@@ -1010,8 +1010,6 @@ static void chg_work(struct work_struct *work)
 
 	} else if (chg_drv->stop_charging) {
 		/* will re-enable charging after setting FCC,CC_MAX */
-		pr_info("MSC_CHG power source usb=%d wlc=%d, enabling charging\n",
-			usb_online, wlc_online);
 
 		if (chg_drv->therm_wlc_override_fcc)
 			(void)chg_therm_update_fcc(chg_drv);
@@ -1030,14 +1028,15 @@ static void chg_work(struct work_struct *work)
 	else
 		disable_pwrsrc = 0;
 
+	/* disable charging is set in retail mode */
 	if (disable_charging != chg_drv->disable_charging) {
 		pr_info("MSC_CHG disable_charging %d -> %d",
 			chg_drv->disable_charging, disable_charging);
 
-		/* NOTE: I have a 0 vote on msc_interval_votable */
+		/* voted but not applied since msc_interval_votable <= 0 */
 		vote(chg_drv->msc_fcc_votable,
-			MSC_USER_CHG_LEVEL_VOTER,
-			disable_charging != 0, 0);
+		     MSC_USER_CHG_LEVEL_VOTER,
+		     disable_charging != 0, 0);
 	}
 	chg_drv->disable_charging = disable_charging;
 
@@ -1046,39 +1045,43 @@ static void chg_work(struct work_struct *work)
 		pr_info("MSC_CHG disable_pwrsrc %d -> %d",
 			chg_drv->disable_pwrsrc, disable_pwrsrc);
 
-		/* still have the 0 vote on FCC when enabling */
+		/* applied right away */
 		vote(chg_drv->msc_pwr_disable_votable,
 		     MSC_USER_CHG_LEVEL_VOTER,
 		     disable_pwrsrc != 0, 0);
 	}
 	chg_drv->disable_pwrsrc = disable_pwrsrc;
 
-	/* make sure adapter, ->fv_uv and ->cc_max are always correct */
+	/* make sure ->fv_uv and ->cc_max are always correct */
 	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
 	update_interval = chg_work_roundtrip(chg_drv);
 
-	/* keeps 0 vote on msc_interval_votable and write 0 to cc_max */
+	/* update_interval=0 when disconnected (check for races)
+	 * NOTE: can still have cc_max==0 from the roundtrip
+	 */
 	if (!disable_charging && update_interval > 0) {
 
-		/* voter callback will reschedule at correct interval */
+		/* msc_update_charger_cb will write to charger and reschedule */
 		vote(chg_drv->msc_interval_votable,
 			MSC_CHG_VOTER, true,
 			update_interval);
 
-		/* if disabled, enable charging after setting FV, CC_MAX */
 		if (chg_drv->stop_charging) {
+			pr_info("MSC_CHG power source usb=%d wlc=%d, enabling charging\n",
+				usb_online, wlc_online);
+
 			vote(chg_drv->msc_chg_disable_votable,
 			     MSC_CHG_VOTER, false, 0);
 			chg_drv->stop_charging = false;
 		}
-
-		goto exit_chg_work;
+	} else {
+		/* connected but needs to disable_charging */
+		rc = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
+		if (rc < 0)
+			goto rerun_error;
 	}
 
-	/* here on disable_charging */
-	rc = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
-	if (rc == 0)
-		goto exit_chg_work;
+	goto exit_chg_work;
 
 rerun_error:
 	success = schedule_delayed_work(&chg_drv->chg_work,
@@ -1270,6 +1273,7 @@ static int chg_find_votables(struct chg_drv *chg_drv)
 		? -EINVAL : 0;
 }
 
+/* input suspend votes 0 ICL and call suspend on DC_ICL */
 static int chg_vote_input_suspend(struct chg_drv *chg_drv,
 				  char *voter, bool suspend)
 {
