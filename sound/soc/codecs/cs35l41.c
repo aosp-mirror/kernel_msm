@@ -58,17 +58,6 @@ struct cs35l41_pll_sysclk_config {
 	int clk_cfg;
 };
 
-struct cs35l41_rst_cache {
-	bool extclk_cfg;
-	int asp_width;
-	int asp_wl;
-	int asp_fmt;
-	int lrclk_fmt;
-	int sclk_fmt;
-	int slave_mode;
-	int fs_cfg;
-} cs35l41_reset_cache;
-
 struct reg_sequence cs35l41_ctl_cache[] = {
 	{CS35L41_DAC_PCM1_SRC,		0},
 	{CS35L41_DSP1_RX1_SRC,		0},
@@ -2002,10 +1991,10 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		return -EINVAL;
 	}
 
-	cs35l41_reset_cache.slave_mode = slave_mode;
-	cs35l41_reset_cache.asp_fmt = asp_fmt;
-	cs35l41_reset_cache.lrclk_fmt = lrclk_fmt;
-	cs35l41_reset_cache.sclk_fmt = sclk_fmt;
+	cs35l41->reset_cache.slave_mode = slave_mode;
+	cs35l41->reset_cache.asp_fmt = asp_fmt;
+	cs35l41->reset_cache.lrclk_fmt = lrclk_fmt;
+	cs35l41->reset_cache.sclk_fmt = sclk_fmt;
 	/* Amp is in reset. Cache values to be applied later. */
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
@@ -2074,10 +2063,10 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 	asp_width = params_physical_width(params);
 
 
-	cs35l41_reset_cache.asp_wl = asp_wl;
-	cs35l41_reset_cache.asp_width = asp_width;
+	cs35l41->reset_cache.asp_wl = asp_wl;
+	cs35l41->reset_cache.asp_width = asp_width;
 	if (i < ARRAY_SIZE(cs35l41_fs_rates))
-		cs35l41_reset_cache.fs_cfg = cs35l41_fs_rates[i].fs_cfg;
+		cs35l41->reset_cache.fs_cfg = cs35l41_fs_rates[i].fs_cfg;
 
 	/* Amp is in reset. Cache values to be applied later */
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
@@ -2187,7 +2176,7 @@ static int cs35l41_component_set_sysclk(struct snd_soc_component *component,
 		return -EINVAL;
 	}
 
-	cs35l41_reset_cache.extclk_cfg = true;
+	cs35l41->reset_cache.extclk_cfg = true;
 	/* Amp is in reset. Set flag to restore clock config */
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
@@ -2937,9 +2926,9 @@ static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
-	for (i = 0; i < ARRAY_SIZE(cs35l41_ctl_cache); i++)
-		regmap_read(cs35l41->regmap, cs35l41_ctl_cache[i].reg,
-			    &cs35l41_ctl_cache[i].def);
+	for (i = 0; i < ARRAY_SIZE(cs35l41->ctl_cache); i++)
+		regmap_read(cs35l41->regmap, cs35l41->ctl_cache[i].reg,
+			    &cs35l41->ctl_cache[i].def);
 
 	/* Disable interrupts */
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
@@ -3147,7 +3136,7 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 			((cs35l41->pdata.right_channel) ? 0 : 1)
 			<< CS35L41_ASP_RX2_SLOT_SHIFT);
 
-	if (cs35l41_reset_cache.extclk_cfg) {
+	if (cs35l41->reset_cache.extclk_cfg) {
 	/* These values are already cached in cs35l41_private struct */
 
 		if (cs35l41->clksrc == CS35L41_PLLSRC_SCLK)
@@ -3175,66 +3164,66 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 				1 << CS35L41_PLL_CLK_EN_SHIFT);
 	}
 
-	if (cs35l41_reset_cache.asp_width >= 0) {
+	if (cs35l41->reset_cache.asp_width >= 0) {
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_ASP_WIDTH_RX_MASK,
-				cs35l41_reset_cache.asp_width <<
+				cs35l41->reset_cache.asp_width <<
 					CS35L41_ASP_WIDTH_RX_SHIFT);
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_ASP_WIDTH_TX_MASK,
-				cs35l41_reset_cache.asp_width <<
+				cs35l41->reset_cache.asp_width <<
 					CS35L41_ASP_WIDTH_TX_SHIFT);
 	}
 
-	if (cs35l41_reset_cache.asp_wl >= 0) {
+	if (cs35l41->reset_cache.asp_wl >= 0) {
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_RX_WL,
 				CS35L41_ASP_RX_WL_MASK,
-				cs35l41_reset_cache.asp_wl <<
+				cs35l41->reset_cache.asp_wl <<
 					CS35L41_ASP_RX_WL_SHIFT);
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_TX_WL,
 				CS35L41_ASP_TX_WL_MASK,
-				cs35l41_reset_cache.asp_wl <<
+				cs35l41->reset_cache.asp_wl <<
 					CS35L41_ASP_TX_WL_SHIFT);
 	}
 
-	if (cs35l41_reset_cache.asp_fmt >= 0)
+	if (cs35l41->reset_cache.asp_fmt >= 0)
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 			CS35L41_ASP_FMT_MASK,
-			cs35l41_reset_cache.asp_fmt << CS35L41_ASP_FMT_SHIFT);
+			cs35l41->reset_cache.asp_fmt << CS35L41_ASP_FMT_SHIFT);
 
-	if (cs35l41_reset_cache.lrclk_fmt >= 0)
+	if (cs35l41->reset_cache.lrclk_fmt >= 0)
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_LRCLK_INV_MASK,
-				cs35l41_reset_cache.lrclk_fmt <<
+				cs35l41->reset_cache.lrclk_fmt <<
 				CS35L41_LRCLK_INV_SHIFT);
 
-	if (cs35l41_reset_cache.sclk_fmt >= 0)
+	if (cs35l41->reset_cache.sclk_fmt >= 0)
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_SCLK_INV_MASK,
-				cs35l41_reset_cache.sclk_fmt <<
+				cs35l41->reset_cache.sclk_fmt <<
 				CS35L41_SCLK_INV_SHIFT);
 
-	if (cs35l41_reset_cache.slave_mode >= 0) {
+	if (cs35l41->reset_cache.slave_mode >= 0) {
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 			CS35L41_SCLK_MSTR_MASK,
-			cs35l41_reset_cache.slave_mode <<
+			cs35l41->reset_cache.slave_mode <<
 			CS35L41_SCLK_MSTR_SHIFT);
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 			CS35L41_LRCLK_MSTR_MASK,
-			cs35l41_reset_cache.slave_mode <<
+			cs35l41->reset_cache.slave_mode <<
 			CS35L41_LRCLK_MSTR_SHIFT);
 	}
 
-	if (cs35l41_reset_cache.fs_cfg >= 0)
+	if (cs35l41->reset_cache.fs_cfg >= 0)
 		regmap_update_bits(cs35l41->regmap, CS35L41_GLOBAL_CLK_CTRL,
 			CS35L41_GLOBAL_FS_MASK,
-			cs35l41_reset_cache.fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
+			cs35l41->reset_cache.fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
 
 
-	for (i = 0; i < ARRAY_SIZE(cs35l41_ctl_cache); i++)
+	for (i = 0; i < ARRAY_SIZE(cs35l41->ctl_cache); i++)
 		regmap_write(cs35l41->regmap,
-				cs35l41_ctl_cache[i].reg,
-				cs35l41_ctl_cache[i].def);
+				cs35l41->ctl_cache[i].reg,
+				cs35l41->ctl_cache[i].def);
 
 	return 0;
 }
@@ -3351,6 +3340,9 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		goto err;
 	}
 
+	memcpy(&cs35l41->ctl_cache, cs35l41_ctl_cache,
+		 sizeof(cs35l41->ctl_cache));
+
 	irq_pol = cs35l41_irq_gpio_config(cs35l41);
 
 	mutex_init(&cs35l41->vol_ctl.vol_mutex);
@@ -3421,14 +3413,14 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 		cs35l41->amp_hibernate = CS35L41_HIBERNATE_NOT_LOADED;
 
-		cs35l41_reset_cache.extclk_cfg = false;
-		cs35l41_reset_cache.asp_wl = -1;
-		cs35l41_reset_cache.asp_width = -1;
-		cs35l41_reset_cache.asp_fmt = -1;
-		cs35l41_reset_cache.sclk_fmt = -1;
-		cs35l41_reset_cache.slave_mode = -1;
-		cs35l41_reset_cache.lrclk_fmt = -1;
-		cs35l41_reset_cache.fs_cfg = -1;
+		cs35l41->reset_cache.extclk_cfg = false;
+		cs35l41->reset_cache.asp_wl = -1;
+		cs35l41->reset_cache.asp_width = -1;
+		cs35l41->reset_cache.asp_fmt = -1;
+		cs35l41->reset_cache.sclk_fmt = -1;
+		cs35l41->reset_cache.slave_mode = -1;
+		cs35l41->reset_cache.lrclk_fmt = -1;
+		cs35l41->reset_cache.fs_cfg = -1;
 		break;
 	}
 
