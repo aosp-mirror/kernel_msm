@@ -69,6 +69,7 @@
 #define PD_SNK_MAX_MV			9000
 #define PD_SNK_MIN_MV			5000
 #define PD_SNK_MAX_MA			3000
+#define PD_SNK_MAX_MA_9V		2200
 
 #define FCC_OF_CDEV_NAME "google,charger"
 #define FCC_CDEV_NAME "fcc"
@@ -566,7 +567,7 @@ static int pps_update_capability(struct power_supply *tcpm_psy, u32 pps_cap)
 
 	/* Always Fixed 5V in the first PDO */
 	pdo[0] = PDO_FIXED(5000, PD_SNK_MAX_MA, PDO_FIXED_FLAGS);
-	pdo[1] = PDO_FIXED(PD_SNK_MAX_MV, PD_SNK_MAX_MA, 0);
+	pdo[1] = PDO_FIXED(PD_SNK_MAX_MV, PD_SNK_MAX_MA_9V, 0);
 	pdo[2] = pps_cap;
 
 	ret = tcpm_update_sink_capabilities(port, pdo,
@@ -1762,6 +1763,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 		return 0;
 
 	/* always maximize the input current first */
+	/* TODO: b/134799977 adjust the max current */
 	if (pps->op_ua < pps->max_ua) {
 		pps->op_ua = pps->max_ua;
 		return 0;
@@ -1779,6 +1781,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 		}
 
 		pps_adjust_volt(pps, 100000);
+		/* TODO: b/134799977 adjust the max current */
 	/* input power is enough */
 	} else {
 		/* everything is fine; try to lower the Vout if
@@ -1791,6 +1794,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 			return -ECANCELED;
 
 		pps_adjust_volt(pps, -100000);
+		/* TODO: b/134799977 adjust the max current */
 	}
 
 	return ret;
