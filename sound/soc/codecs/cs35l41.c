@@ -58,6 +58,29 @@ struct cs35l41_pll_sysclk_config {
 	int clk_cfg;
 };
 
+struct cs35l41_rst_cache {
+	bool extclk_cfg;
+	int asp_width;
+	int asp_wl;
+	int asp_fmt;
+	int lrclk_fmt;
+	int sclk_fmt;
+	int slave_mode;
+	int fs_cfg;
+} cs35l41_reset_cache;
+
+struct reg_sequence cs35l41_ctl_cache[] = {
+	{CS35L41_DAC_PCM1_SRC,		0},
+	{CS35L41_DSP1_RX1_SRC,		0},
+	{CS35L41_DSP1_RX2_SRC,		0},
+	{CS35L41_ASP_TX1_SRC,		0},
+	{CS35L41_ASP_TX2_SRC,		0},
+	{CS35L41_ASP_TX3_SRC,		0},
+	{CS35L41_ASP_TX4_SRC,		0},
+	{CS35L41_SP_FRAME_TX_SLOT,	0},
+	{CS35L41_AMP_GAIN_CTRL,		0}
+};
+
 static const struct cs35l41_pll_sysclk_config cs35l41_pll_sysclk[] = {
 	{ 32768,	0x00 },
 	{ 8000,		0x01 },
@@ -1567,6 +1590,52 @@ static const struct reg_sequence cs35l41_pdn_patch[] = {
 	{0x00000040, 0x00000033},
 };
 
+static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41);
+static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41);
+static int cs35l41_restore(struct cs35l41_private *cs35l41);
+
+static void cs35l41_hibernate_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct cs35l41_private *cs35l41 =
+		container_of(dwork, struct cs35l41_private, hb_work);
+
+	mutex_lock(&cs35l41->hb_lock);
+	cs35l41_enter_hibernate(cs35l41);
+	mutex_unlock(&cs35l41->hb_lock);
+}
+
+static int cs35l41_hibernate(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_component *component =
+		snd_soc_dapm_to_component(w->dapm);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	int ret = 0;
+
+	if (!cs35l41->dsp.running ||
+	     cs35l41->amp_hibernate == CS35L41_HIBERNATE_INCOMPATIBLE)
+		return 0;
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		cancel_delayed_work(&cs35l41->hb_work);
+		mutex_lock(&cs35l41->hb_lock);
+		ret = cs35l41_exit_hibernate(cs35l41);
+		mutex_unlock(&cs35l41->hb_lock);
+		break;
+	case SND_SOC_DAPM_POST_PMD:
+		queue_delayed_work(cs35l41->wq, &cs35l41->hb_work,
+					msecs_to_jiffies(2000));
+		break;
+	default:
+		dev_err(cs35l41->dev, "Invalid event = 0x%x\n", event);
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
 static bool cs35l41_need_auto_vol_ramp(struct cs35l41_private *cs35l41)
 {
 	bool ramp = false;
@@ -1744,7 +1813,9 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 	SND_SOC_DAPM_OUT_DRV_E("Main AMP", CS35L41_PWR_CTRL2, 0, 0, NULL, 0,
 				cs35l41_main_amp_event,
 				SND_SOC_DAPM_POST_PMD |	SND_SOC_DAPM_POST_PMU),
-
+	SND_SOC_DAPM_SUPPLY("Hibernate",  SND_SOC_NOPM, 0, 0,
+			    cs35l41_hibernate,
+			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_INPUT("VP"),
 	SND_SOC_DAPM_INPUT("VBST"),
 	SND_SOC_DAPM_INPUT("ISENSE"),
@@ -1856,6 +1927,7 @@ static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
 
 	{"Main AMP Enable", "Switch", "Main AMP"},
 	{"SPK", NULL, "Main AMP Enable"},
+	{"SPK", NULL, "Hibernate"},
 
 	{"PCM Source", "ASP", "ASPRX1"},
 	{"PCM Source", "DSP", "DSP1"},
@@ -1890,13 +1962,6 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		return -EINVAL;
 	}
 
-	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
-				CS35L41_SCLK_MSTR_MASK,
-				slave_mode << CS35L41_SCLK_MSTR_SHIFT);
-	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
-				CS35L41_LRCLK_MSTR_MASK,
-				slave_mode << CS35L41_LRCLK_MSTR_SHIFT);
-
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_DSP_A:
 		asp_fmt = 0;
@@ -1913,10 +1978,6 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 			"%s: Invalid or unsupported DAI format\n", __func__);
 		return -EINVAL;
 	}
-
-	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
-					CS35L41_ASP_FMT_MASK,
-					asp_fmt << CS35L41_ASP_FMT_SHIFT);
 
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 	case SND_SOC_DAIFMT_NB_IF:
@@ -1940,6 +2001,28 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 			"%s: Invalid DAI clock INV\n", __func__);
 		return -EINVAL;
 	}
+
+	cs35l41_reset_cache.slave_mode = slave_mode;
+	cs35l41_reset_cache.asp_fmt = asp_fmt;
+	cs35l41_reset_cache.lrclk_fmt = lrclk_fmt;
+	cs35l41_reset_cache.sclk_fmt = sclk_fmt;
+	/* Amp is in reset. Cache values to be applied later. */
+	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
+		return 0;
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+					CS35L41_ASP_FMT_MASK,
+					asp_fmt << CS35L41_ASP_FMT_SHIFT);
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+				CS35L41_SCLK_MSTR_MASK,
+				slave_mode << CS35L41_SCLK_MSTR_SHIFT);
+	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+				CS35L41_LRCLK_MSTR_MASK,
+				slave_mode << CS35L41_LRCLK_MSTR_SHIFT);
+
+	cs35l41->lrclk_fmt = lrclk_fmt;
+	cs35l41->sclk_fmt = sclk_fmt;
 
 	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_LRCLK_INV_MASK,
@@ -1986,12 +2069,23 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 		if (rate == cs35l41_fs_rates[i].rate)
 			break;
 	}
-	regmap_update_bits(cs35l41->regmap, CS35L41_GLOBAL_CLK_CTRL,
-			CS35L41_GLOBAL_FS_MASK,
-			cs35l41_fs_rates[i].fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
 
 	asp_wl = params_width(params);
 	asp_width = params_physical_width(params);
+
+
+	cs35l41_reset_cache.asp_wl = asp_wl;
+	cs35l41_reset_cache.asp_width = asp_width;
+	if (i < ARRAY_SIZE(cs35l41_fs_rates))
+		cs35l41_reset_cache.fs_cfg = cs35l41_fs_rates[i].fs_cfg;
+
+	/* Amp is in reset. Cache values to be applied later */
+	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
+		return 0;
+
+	regmap_update_bits(cs35l41->regmap, CS35L41_GLOBAL_CLK_CTRL,
+			CS35L41_GLOBAL_FS_MASK,
+			cs35l41_fs_rates[i].fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
@@ -2092,6 +2186,11 @@ static int cs35l41_component_set_sysclk(struct snd_soc_component *component,
 			cs35l41->extclk_cfg, freq);
 		return -EINVAL;
 	}
+
+	cs35l41_reset_cache.extclk_cfg = true;
+	/* Amp is in reset. Set flag to restore clock config */
+	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
+		return 0;
 
 	regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
 			CS35L41_PLL_OPENLOOP_MASK,
@@ -2827,6 +2926,319 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	return ret;
 }
 
+
+static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
+{
+	int i;
+
+	dev_dbg(cs35l41->dev, "%s: hibernate state %d\n",
+		__func__, cs35l41->amp_hibernate);
+
+	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(cs35l41_ctl_cache); i++)
+		regmap_read(cs35l41->regmap, cs35l41_ctl_cache[i].reg,
+			    &cs35l41_ctl_cache[i].def);
+
+	/* Disable interrupts */
+	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
+	disable_irq(cs35l41->irq);
+
+	/* Reset DSP sticky bit */
+	regmap_write(cs35l41->regmap, CS35L41_IRQ2_STATUS2,
+			1 << CS35L41_CSPL_MBOX_CMD_DRV_SHIFT);
+
+	/* Reset AP sticky bit */
+	regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS2,
+			1 << CS35L41_CSPL_MBOX_CMD_FW_SHIFT);
+
+	regmap_write(cs35l41->regmap, CS35L41_WAKESRC_CTL, 0x0088);
+	regmap_write(cs35l41->regmap, CS35L41_WAKESRC_CTL, 0x0188);
+
+	regmap_write(cs35l41->regmap, CS35L41_CSPL_MBOX_CMD_DRV,
+			CSPL_MBOX_CMD_HIBERNATE);
+
+	cs35l41->amp_hibernate = CS35L41_HIBERNATE_STANDBY;
+	return 0;
+}
+
+static int cs35l41_wait_for_pwrmgt_sts(struct cs35l41_private *cs35l41)
+{
+	int i, ret;
+	unsigned int wrpend_sts = 0x2;
+
+	for (i = 0; (i < 10) && (wrpend_sts & 0x2); i++)
+		ret = regmap_read(cs35l41->regmap, CS35L41_PWRMGT_STS,
+				  &wrpend_sts);
+	return ret;
+}
+
+static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
+{
+	int timeout = 10, ret;
+	unsigned int status;
+	int retries = 5;
+
+	dev_dbg(cs35l41->dev, "%s: hibernate state %d\n",
+		__func__, cs35l41->amp_hibernate);
+
+	if (cs35l41->amp_hibernate != CS35L41_HIBERNATE_STANDBY)
+		return 0;
+
+	do {
+		do {
+			ret = regmap_write(cs35l41->regmap,
+					   CS35L41_CSPL_MBOX_CMD_DRV,
+					   CSPL_MBOX_CMD_OUT_OF_HIBERNATE);
+			if (ret < 0)
+				dev_dbg(cs35l41->dev,
+					"%s: wakeup write fail\n", __func__);
+
+			usleep_range(1000, 1100);
+
+			ret = regmap_read(cs35l41->regmap,
+					  CS35L41_CSPL_MBOX_STS, &status);
+			if (ret < 0)
+				dev_err(cs35l41->dev,
+					"%s: mbox status read fail\n",
+					__func__);
+
+		} while (status != CSPL_MBOX_STS_PAUSED && --timeout > 0);
+
+		if (timeout != 0)
+			break;
+
+		dev_err(cs35l41->dev, "hibernate wake failed\n");
+
+		cs35l41_wait_for_pwrmgt_sts(cs35l41);
+		regmap_write(cs35l41->regmap, CS35L41_WAKESRC_CTL, 0x0088);
+
+		cs35l41_wait_for_pwrmgt_sts(cs35l41);
+		regmap_write(cs35l41->regmap, CS35L41_WAKESRC_CTL, 0x0188);
+
+		cs35l41_wait_for_pwrmgt_sts(cs35l41);
+		regmap_write(cs35l41->regmap, CS35L41_PWRMGT_CTL, 0x3);
+
+		timeout = 10;
+
+	} while (--retries > 0);
+
+	/* Reset DSP sticky bit */
+	regmap_write(cs35l41->regmap, CS35L41_IRQ2_STATUS2,
+			1 << CS35L41_CSPL_MBOX_CMD_DRV_SHIFT);
+
+	/* Reset AP sticky bit */
+	regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS2,
+			1 << CS35L41_CSPL_MBOX_CMD_FW_SHIFT);
+
+	cs35l41->amp_hibernate = CS35L41_HIBERNATE_AWAKE;
+
+	regcache_drop_region(cs35l41->regmap, CS35L41_DEVID,
+					CS35L41_MIXER_NGATE_CH2_CFG);
+
+	retries = 5;
+
+	do {
+		dev_dbg(cs35l41->dev, "cs35l41_restore attempt %d\n",
+		 6 - retries);
+		ret = cs35l41_restore(cs35l41);
+		usleep_range(4000, 5000);
+	} while (ret < 0 && --retries > 0);
+
+	if (retries < 0)
+		dev_err(cs35l41->dev, "Failed to exit from hibernate\n");
+	else
+		dev_dbg(cs35l41->dev, "cs35l41 restored in %d attempts\n",
+			6 - retries);
+
+	enable_irq(cs35l41->irq);
+
+	return ret;
+}
+
+/* Restore amp state after hibernate */
+static int cs35l41_restore(struct cs35l41_private *cs35l41)
+{
+	int ret, i;
+	u32 regid, reg_revid, mtl_revid, chipid_match;
+
+	ret = regmap_read(cs35l41->regmap, CS35L41_DEVID, &regid);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "%s: Get Device ID fail\n", __func__);
+		return -ENODEV;
+	}
+
+	ret = regmap_read(cs35l41->regmap, CS35L41_REVID, &reg_revid);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Get Revision ID failed\n");
+		return -ENODEV;
+	}
+
+	mtl_revid = reg_revid & CS35L41_MTLREVID_MASK;
+	chipid_match = (mtl_revid % 2) ? CS35L41R_CHIP_ID : CS35L41_CHIP_ID;
+	if (regid != chipid_match) {
+		dev_err(cs35l41->dev, "CS35L41 Device ID (%X). Expected ID %X\n",
+			regid, chipid_match);
+		return -ENODEV;
+	}
+
+	cs35l41_irq_gpio_config(cs35l41);
+
+	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
+		CS35L41_INT1_MASK_DEFAULT);
+
+	regmap_write(cs35l41->regmap,
+		     CS35L41_DSP1_RX5_SRC, CS35L41_INPUT_SRC_VPMON);
+	regmap_write(cs35l41->regmap,
+		     CS35L41_DSP1_RX6_SRC, CS35L41_INPUT_SRC_CLASSH);
+	regmap_write(cs35l41->regmap,
+		     CS35L41_DSP1_RX7_SRC, CS35L41_INPUT_SRC_TEMPMON);
+	regmap_write(cs35l41->regmap,
+		     CS35L41_DSP1_RX8_SRC, CS35L41_INPUT_SRC_RSVD);
+
+	switch (reg_revid) {
+	case CS35L41_REVID_A0:
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+				cs35l41_reva0_errata_patch,
+				ARRAY_SIZE(cs35l41_reva0_errata_patch));
+		if (ret < 0) {
+			dev_err(cs35l41->dev,
+				"Failed to apply A0 errata patch %d\n", ret);
+		}
+		break;
+	case CS35L41_REVID_B0:
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+				cs35l41_revb0_errata_patch,
+				ARRAY_SIZE(cs35l41_revb0_errata_patch));
+		if (ret < 0) {
+			dev_err(cs35l41->dev,
+				"Failed to apply B0 errata patch %d\n", ret);
+		}
+		break;
+	case CS35L41_REVID_B2:
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+				cs35l41_revb2_errata_patch,
+				ARRAY_SIZE(cs35l41_revb2_errata_patch));
+		if (ret < 0) {
+			dev_err(cs35l41->dev,
+				"Failed to apply B2 errata patch %d\n", ret);
+		}
+		break;
+	}
+
+	cs35l41_otp_unpack(cs35l41);
+
+	dev_dbg(cs35l41->dev, "Restored CS35L41 (%x), Revision: %02X\n",
+		regid, reg_revid);
+
+	cs35l41_set_pdata(cs35l41);
+
+	/* Restore cached values set by ALSA during or before amp reset */
+
+	regmap_update_bits(cs35l41->regmap,
+			CS35L41_SP_FRAME_RX_SLOT,
+			CS35L41_ASP_RX1_SLOT_MASK,
+			((cs35l41->pdata.right_channel) ? 1 : 0)
+			<< CS35L41_ASP_RX1_SLOT_SHIFT);
+	regmap_update_bits(cs35l41->regmap,
+			CS35L41_SP_FRAME_RX_SLOT,
+			CS35L41_ASP_RX2_SLOT_MASK,
+			((cs35l41->pdata.right_channel) ? 0 : 1)
+			<< CS35L41_ASP_RX2_SLOT_SHIFT);
+
+	if (cs35l41_reset_cache.extclk_cfg) {
+	/* These values are already cached in cs35l41_private struct */
+
+		if (cs35l41->clksrc == CS35L41_PLLSRC_SCLK)
+			regmap_update_bits(cs35l41->regmap,
+					   CS35L41_SP_RATE_CTRL, 0x3F,
+					   cs35l41->extclk_cfg);
+
+		regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
+				CS35L41_PLL_OPENLOOP_MASK,
+				1 << CS35L41_PLL_OPENLOOP_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
+				CS35L41_REFCLK_FREQ_MASK,
+				cs35l41->extclk_cfg <<
+				CS35L41_REFCLK_FREQ_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
+				CS35L41_PLL_CLK_EN_MASK,
+				0 << CS35L41_PLL_CLK_EN_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
+				CS35L41_PLL_CLK_SEL_MASK, cs35l41->clksrc);
+		regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
+				CS35L41_PLL_OPENLOOP_MASK,
+				0 << CS35L41_PLL_OPENLOOP_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
+				CS35L41_PLL_CLK_EN_MASK,
+				1 << CS35L41_PLL_CLK_EN_SHIFT);
+	}
+
+	if (cs35l41_reset_cache.asp_width >= 0) {
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+				CS35L41_ASP_WIDTH_RX_MASK,
+				cs35l41_reset_cache.asp_width <<
+					CS35L41_ASP_WIDTH_RX_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+				CS35L41_ASP_WIDTH_TX_MASK,
+				cs35l41_reset_cache.asp_width <<
+					CS35L41_ASP_WIDTH_TX_SHIFT);
+	}
+
+	if (cs35l41_reset_cache.asp_wl >= 0) {
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_RX_WL,
+				CS35L41_ASP_RX_WL_MASK,
+				cs35l41_reset_cache.asp_wl <<
+					CS35L41_ASP_RX_WL_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_TX_WL,
+				CS35L41_ASP_TX_WL_MASK,
+				cs35l41_reset_cache.asp_wl <<
+					CS35L41_ASP_TX_WL_SHIFT);
+	}
+
+	if (cs35l41_reset_cache.asp_fmt >= 0)
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+			CS35L41_ASP_FMT_MASK,
+			cs35l41_reset_cache.asp_fmt << CS35L41_ASP_FMT_SHIFT);
+
+	if (cs35l41_reset_cache.lrclk_fmt >= 0)
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+				CS35L41_LRCLK_INV_MASK,
+				cs35l41_reset_cache.lrclk_fmt <<
+				CS35L41_LRCLK_INV_SHIFT);
+
+	if (cs35l41_reset_cache.sclk_fmt >= 0)
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+				CS35L41_SCLK_INV_MASK,
+				cs35l41_reset_cache.sclk_fmt <<
+				CS35L41_SCLK_INV_SHIFT);
+
+	if (cs35l41_reset_cache.slave_mode >= 0) {
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+			CS35L41_SCLK_MSTR_MASK,
+			cs35l41_reset_cache.slave_mode <<
+			CS35L41_SCLK_MSTR_SHIFT);
+		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
+			CS35L41_LRCLK_MSTR_MASK,
+			cs35l41_reset_cache.slave_mode <<
+			CS35L41_LRCLK_MSTR_SHIFT);
+	}
+
+	if (cs35l41_reset_cache.fs_cfg >= 0)
+		regmap_update_bits(cs35l41->regmap, CS35L41_GLOBAL_CLK_CTRL,
+			CS35L41_GLOBAL_FS_MASK,
+			cs35l41_reset_cache.fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
+
+
+	for (i = 0; i < ARRAY_SIZE(cs35l41_ctl_cache); i++)
+		regmap_write(cs35l41->regmap,
+				cs35l41_ctl_cache[i].reg,
+				cs35l41_ctl_cache[i].def);
+
+	return 0;
+}
+
 int cs35l41_probe(struct cs35l41_private *cs35l41,
 				struct cs35l41_platform_data *pdata)
 {
@@ -2976,6 +3388,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	switch (reg_revid) {
 	case CS35L41_REVID_A0:
+		cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_reva0_errata_patch,
 				ARRAY_SIZE(cs35l41_reva0_errata_patch));
@@ -2986,6 +3399,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		}
 		break;
 	case CS35L41_REVID_B0:
+		cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_revb0_errata_patch,
 				ARRAY_SIZE(cs35l41_revb0_errata_patch));
@@ -3004,6 +3418,17 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 				"Failed to apply B2 errata patch %d\n", ret);
 			goto err;
 		}
+
+		cs35l41->amp_hibernate = CS35L41_HIBERNATE_NOT_LOADED;
+
+		cs35l41_reset_cache.extclk_cfg = false;
+		cs35l41_reset_cache.asp_wl = -1;
+		cs35l41_reset_cache.asp_width = -1;
+		cs35l41_reset_cache.asp_fmt = -1;
+		cs35l41_reset_cache.sclk_fmt = -1;
+		cs35l41_reset_cache.slave_mode = -1;
+		cs35l41_reset_cache.lrclk_fmt = -1;
+		cs35l41_reset_cache.fs_cfg = -1;
 		break;
 	}
 
@@ -3028,6 +3453,14 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	dev_info(cs35l41->dev, "Cirrus Logic CS35L41 (%x), Revision: %02X\n",
 			regid, reg_revid);
 
+	cs35l41->wq = create_singlethread_workqueue("cs35l41");
+	if (cs35l41->wq == NULL) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	INIT_DELAYED_WORK(&cs35l41->hb_work, cs35l41_hibernate_work);
+	mutex_init(&cs35l41->hb_lock);
 err:
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
 	return ret;
@@ -3035,6 +3468,8 @@ err:
 
 int cs35l41_remove(struct cs35l41_private *cs35l41)
 {
+	destroy_workqueue(cs35l41->wq);
+	mutex_destroy(&cs35l41->hb_lock);
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
 	mutex_destroy(&cs35l41->force_int_lock);
 	wm_adsp2_remove(&cs35l41->dsp);
