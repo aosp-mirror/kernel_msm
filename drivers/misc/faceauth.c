@@ -48,7 +48,7 @@
 #define M0_AUTH_POLLING_PAUSE_US 15000
 /* Polling interval in us */
 #define M0_ENROLL_POLLING_INTERVAL_US 6000
-#define M0_POLLING_INTERVAL_US 65000
+#define M0_POLLING_INTERVAL_US 100000
 
 /* Citadel */
 #define MAX_CACHE_SIZE 512
