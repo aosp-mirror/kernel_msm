@@ -153,6 +153,14 @@ struct faceauth_airbrush_state {
 	__s32 error_code;
 	__u32 internal_state_size;
 	__u32 command;
+	__s32 rightbox_x1;
+	__s32 rightbox_y1;
+	__s32 rightbox_x2;
+	__s32 rightbox_y2;
+	__s32 leftbox_x1;
+	__s32 leftbox_y1;
+	__s32 leftbox_x2;
+	__s32 leftbox_y2;
 	__u32 num_tasks;
 	__u32 register_list_length;
 	__u32 saved_register_count;
