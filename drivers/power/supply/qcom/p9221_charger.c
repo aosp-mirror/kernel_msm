@@ -46,6 +46,8 @@
 
 #define WLC_ALIGNMENT_MAX		100
 #define WLC_MFG_GOOGLE			0x72
+#define WLC_CURRENT_FILTER_LENGTH	10
+#define WLC_ALIGN_DEFAULT_SCALAR	4
 
 static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger);
@@ -749,7 +751,8 @@ static void p9221_align_work(struct work_struct *work)
 {
 	int res, align_buckets, i;
 	u16 mfg, status_reg = 0;
-	u32 wlc_freq;
+	u16 current_now, current_filter_sample;
+	u32 wlc_freq, current_scaling;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, align_work.work);
 
@@ -785,7 +788,34 @@ static void p9221_align_work(struct work_struct *work)
 		return;
 	}
 
+	if (charger->pdata->wlc_alignment_scalar == 0)
+		goto no_scaling;
+
+	res = p9221_reg_read_16(charger, P9221R5_IOUT_REG, &current_now);
+
+	if (res != 0) {
+		logbuffer_log(charger->log, "align: failed to read IOUT");
+		current_now = 0;
+	}
+
+	current_filter_sample =
+			charger->current_filtered / WLC_CURRENT_FILTER_LENGTH;
+
+	if (charger->current_sample_cnt < WLC_CURRENT_FILTER_LENGTH)
+		charger->current_sample_cnt++;
+	else
+		charger->current_filtered -= current_filter_sample;
+
+	charger->current_filtered += (current_now / WLC_CURRENT_FILTER_LENGTH);
+	dev_dbg(&charger->client->dev, "current = %umA, avg_current = %umA\n",
+		current_now, charger->current_filtered);
+
+	current_scaling = charger->pdata->wlc_alignment_scalar *
+			  charger->current_filtered;
+
+no_scaling:
 	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
+
 	if (res != 0) {
 		logbuffer_log(charger->log, "align: failed to read op_freq");
 		return;
@@ -796,10 +826,12 @@ static void p9221_align_work(struct work_struct *work)
 	charger->wlc_alignment = -1;
 
 	for (i = 0; i < align_buckets; i += 1) {
-		if ((wlc_freq > charger->pdata->alignment_freq[i]) &&
-		    (wlc_freq <= charger->pdata->alignment_freq[i + 1])) {
+		if ((wlc_freq > (charger->pdata->alignment_freq[i] -
+				 current_scaling)) &&
+		    (wlc_freq <= (charger->pdata->alignment_freq[i + 1] -
+				  current_scaling))) {
 			charger->wlc_alignment = (WLC_ALIGNMENT_MAX * i) /
-					(align_buckets - 1);
+						 (align_buckets - 1);
 			break;
 		}
 	}
@@ -810,8 +842,10 @@ static void p9221_align_work(struct work_struct *work)
 	}
 
 	if (charger->wlc_alignment != charger->wlc_alignment_last) {
-		logbuffer_log(charger->log, "align: alignment is %i. op_freq is %u",
-			     charger->wlc_alignment, wlc_freq);
+		logbuffer_log(charger->log,
+			      "align: alignment=%i. op_freq=%u. current_avg=%u",
+			     charger->wlc_alignment, wlc_freq,
+			     charger->current_filtered);
 		charger->wlc_alignment_last = charger->wlc_alignment;
 	}
 }
@@ -1216,6 +1250,8 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 
 	/* Reset last alignment value when online */
 	charger->wlc_alignment_last = -1;
+	charger->current_filtered = 0;
+	charger->current_sample_cnt = 0;
 	schedule_delayed_work(&charger->align_work,
 			msecs_to_jiffies(P9221_ALIGN_TIMEOUT_MS));
 }
@@ -2328,6 +2364,16 @@ static int p9221_parse_dt(struct device *dev,
 				devm_kfree(dev, pdata->alignment_freq);
 			}
 		}
+	}
+
+	ret = of_property_read_u32(node, "google,alignment_scalar", &data);
+	if (ret < 0)
+		pdata->wlc_alignment_scalar = WLC_ALIGN_DEFAULT_SCALAR;
+	else {
+		pdata->wlc_alignment_scalar = data;
+		if (pdata->wlc_alignment_scalar != WLC_ALIGN_DEFAULT_SCALAR)
+			dev_info(dev, "google,alignment_scalar updated to: %d\n",
+				 pdata->wlc_alignment_scalar);
 	}
 
 	return 0;

@@ -220,6 +220,7 @@ struct p9221_charger_platform_data {
 	int				fod_epp_num;
 	int				nb_alignment_freq;
 	int				*alignment_freq;
+	u32				wlc_alignment_scalar;
 };
 
 struct p9221_charger_data {
@@ -266,6 +267,8 @@ struct p9221_charger_data {
 	u32				icl_ramp_delay_ms;
 	int				wlc_alignment;
 	int				wlc_alignment_last;
+	u32				current_filtered;
+	u32				current_sample_cnt;
 };
 
 struct p9221_prop_reg_map_entry {
