@@ -25,6 +25,9 @@
 static bool ois_debug;
 module_param(ois_debug, bool, 0644);
 
+#define OIS_WIDE_SID (0x76 >> 1)
+#define OIS_TELE_SID (0x78 >> 1)
+
 int cam_ois_calibration(struct cam_ois_ctrl_t *o_ctrl,
 	stReCalib *cal_result)
 {
@@ -784,6 +787,36 @@ static int cam_ois_util_validate_packet(struct cam_packet *packet)
 	return 0;
 }
 
+static void cam_ois_tele_standby(struct cam_ois_ctrl_t *o_ctrl)
+{
+	uint32_t rc = 0;
+	enum camera_sensor_i2c_type addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	enum camera_sensor_i2c_type data_type = CAMERA_SENSOR_I2C_TYPE_DWORD;
+	struct cam_sensor_i2c_reg_array servo_setting = {0xF010, 0x70000, 0, 0};
+	struct cam_sensor_i2c_reg_array standby_setting = {0xF01F, 0x2, 0, 0};
+	struct cam_sensor_i2c_reg_setting write_setting = {&servo_setting, 1,
+		addr_type, data_type, 0, OIS_TELE_SID};
+	uint32_t delay_ms = 3;
+	uint32_t orig_sid = o_ctrl->io_master_info.cci_client->sid;
+	uint32_t orig_master =
+		o_ctrl->io_master_info.cci_client->cci_i2c_master;
+
+	o_ctrl->io_master_info.cci_client->sid = OIS_TELE_SID;
+	o_ctrl->io_master_info.cci_client->cci_i2c_master = 1;
+	rc |= camera_io_dev_poll(&(o_ctrl->io_master_info),
+		0xF100, 0, 0, addr_type, data_type, delay_ms);
+	rc |= camera_io_dev_write(&(o_ctrl->io_master_info), &write_setting);
+	rc |= camera_io_dev_poll(&(o_ctrl->io_master_info),
+		0xF100, 0, 0, addr_type, data_type, delay_ms);
+	write_setting.reg_setting = &standby_setting;
+	rc |= camera_io_dev_write(&(o_ctrl->io_master_info), &write_setting);
+
+	if (rc != 0)
+		CAM_WARN(CAM_UTIL, "%s failed rc %d", __func__, rc);
+	o_ctrl->io_master_info.cci_client->sid = orig_sid;
+	o_ctrl->io_master_info.cci_client->cci_i2c_master = orig_master;
+}
+
 /**
  * cam_ois_pkt_parse - Parse csl packet
  * @o_ctrl:     ctrl structure
@@ -986,6 +1019,10 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				goto pwr_dwn;
 			}
 		}
+
+		/* OIS-tele enters standby mode on OIS-wide init */
+		if (o_ctrl->io_master_info.cci_client->sid == OIS_WIDE_SID)
+			cam_ois_tele_standby(o_ctrl);
 
 		rc = delete_request(&o_ctrl->i2c_init_data);
 		if (rc < 0) {
