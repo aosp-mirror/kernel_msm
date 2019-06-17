@@ -433,8 +433,7 @@ static int usb_set_cur_state(struct thermal_cooling_device *cooling_dev,
 	if (current_state != state) {
 		dev_info(ovh_info->dev, "usb overheat throttle state=%lu\n",
 			 state);
-		cancel_delayed_work_sync(&ovh_info->port_overheat_work);
-		schedule_delayed_work(&ovh_info->port_overheat_work, 0);
+		mod_delayed_work(system_wq, &ovh_info->port_overheat_work, 0);
 	}
 	return 0;
 }
