@@ -233,6 +233,7 @@ struct p9221_charger_platform_data {
 	int				needs_dcin_reset;
 	int				nb_alignment_freq;
 	int				*alignment_freq;
+	u32				wlc_alignment_scalar;
 };
 
 struct p9221_charger_data {
@@ -283,6 +284,8 @@ struct p9221_charger_data {
 	u32				dc_icl_bpp;
 	int				wlc_alignment;
 	int				wlc_alignment_last;
+	u32				current_filtered;
+	u32				current_sample_cnt;
 };
 
 struct p9221_prop_reg_map_entry {
