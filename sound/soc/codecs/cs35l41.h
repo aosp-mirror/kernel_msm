@@ -770,6 +770,10 @@ extern const struct cs35l41_otp_map_element_t
 #define CS35L41_CSPL_MBOX_CMD_DRV		CS35L41_DSP_VIRT1_MBOX_1
 #define CS35L41_CSPL_MBOX_CMD_DRV_SHIFT		CS35L41_DSP_VIRT1_MBOX_SHIFT
 
+#define CS35L41_CTRL_CACHE_SIZE 14
+
+extern const unsigned int cs35l41_ctl_cache_regs[CS35L41_CTRL_CACHE_SIZE];
+
 enum cs35l41_cspl_mboxstate {
 	CSPL_MBOX_STS_RUNNING = 0,
 	CSPL_MBOX_STS_PAUSED = 1,

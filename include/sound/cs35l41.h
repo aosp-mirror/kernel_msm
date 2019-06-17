@@ -80,8 +80,6 @@ struct cs35l41_rst_cache {
 	int fs_cfg;
 };
 
-#define CS35L41_CTR_CACHE_SIZE 9
-
 struct cs35l41_private {
 	struct wm_adsp dsp; /* needs to be first member */
 	struct snd_soc_codec *codec;
@@ -117,10 +115,10 @@ struct cs35l41_private {
 	struct workqueue_struct *wq;
 	struct mutex hb_lock;
 	struct cs35l41_rst_cache reset_cache;
-	struct reg_sequence ctl_cache[CS35L41_CTR_CACHE_SIZE];
 	struct mutex rate_lock;
 	struct mutex force_int_lock;
 	struct cs35l41_vol_ctl vol_ctl;
+	unsigned int ctl_cache[CS35L41_CTRL_CACHE_SIZE];
 };
 
 int cs35l41_probe(struct cs35l41_private *cs35l41,
