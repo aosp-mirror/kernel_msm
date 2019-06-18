@@ -525,237 +525,143 @@ DEFINE_DEBUGFS_ATTRIBUTE(ab_ddr_ppc_ctrl_fops, NULL,
 
 void create_block_debugfs(struct dentry *parent_dir, struct block *blk)
 {
-	struct dentry *d;
+	debugfs_create_file("state_id", 0444, parent_dir,
+			blk, &fops_id);
 
-	d = debugfs_create_file("state_id", 0444, parent_dir,
-			       blk, &fops_id);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("rail_en", 0444, parent_dir,
+			blk, &fops_vrail_status);
 
-	d = debugfs_create_file("rail_en", 0444, parent_dir,
-			       blk, &fops_vrail_status);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("logic_voltage", 0444, parent_dir,
+			blk, &fops_logic_voltage);
 
-	d = debugfs_create_file("logic_voltage", 0444, parent_dir,
-			       blk, &fops_logic_voltage);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("clk_status", 0444, parent_dir,
+			blk, &fops_clk_status);
 
-	d = debugfs_create_file("clk_status", 0444, parent_dir,
-			       blk, &fops_clk_status);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("clk_frequency", 0444, parent_dir,
+			blk, &fops_clk_frequency);
 
-	d = debugfs_create_file("clk_frequency", 0444, parent_dir,
-			       blk, &fops_clk_frequency);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("num_powered_cores", 0444, parent_dir,
+			blk, &fops_num_powered_cores);
 
-	d = debugfs_create_file("num_powered_cores", 0444, parent_dir,
-			       blk, &fops_num_powered_cores);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("num_computing_cores", 0444, parent_dir,
+			blk, &fops_num_computing_cores);
 
-	d = debugfs_create_file("num_computing_cores", 0444, parent_dir,
-			       blk, &fops_num_computing_cores);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("num_powered_tiles", 0444, parent_dir,
+			blk, &fops_num_powered_tiles);
 
-	d = debugfs_create_file("num_powered_tiles", 0444, parent_dir,
-			       blk, &fops_num_powered_tiles);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("data_rate", 0444, parent_dir,
+			blk, &fops_data_rate);
 
-	d = debugfs_create_file("data_rate", 0444, parent_dir,
-			       blk, &fops_data_rate);
-	if (!d)
-		goto err_out;
-
-	d = debugfs_create_file("prop_table", 0444, parent_dir,
-				blk, &fops_prop_table);
-	if (!d)
-		goto err_out;
+	debugfs_create_file("prop_table", 0444, parent_dir,
+			blk, &fops_prop_table);
 
 	return;
-
-err_out:
-	pr_err("Some error occured, couldn't create debugfs entry for airbrush blocks\n");
 }
 
 void ab_sm_create_debugfs(struct ab_state_context *sc)
 {
-	struct dentry *d_chip, *d_block, *d;
+	struct dentry *d_chip, *d_block;
 
 	sc->d_entry = debugfs_create_dir("airbrush", NULL);
-	if (!sc->d_entry) {
-		dev_err(sc->dev, "failed to create debugfs entry for airbrush");
-		goto err_out;
-	}
 
-	d = debugfs_create_file("m0_intr", 0666, sc->d_entry, sc,
+	debugfs_create_file("m0_intr", 0664, sc->d_entry, sc,
 					&ab_m0_intr_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ab_ddr_ctrl", 0200, sc->d_entry, sc,
+	debugfs_create_file("ab_ddr_ctrl", 0200, sc->d_entry, sc,
 				&ab_ddr_ctrl_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ab_ddr_test", 0200, sc->d_entry, sc,
+	debugfs_create_file("ab_ddr_test", 0200, sc->d_entry, sc,
 				&ab_ddr_test_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_eye_margin", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_eye_margin", 0200, sc->d_entry, sc,
 				&ab_ddr_eye_margin_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_eye_margin_plot", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_eye_margin_plot", 0200, sc->d_entry, sc,
 				&ab_ddr_eye_margin_plot_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("clkout_sel", 0200, sc->d_entry, sc,
+	debugfs_create_file("clkout_sel", 0200, sc->d_entry, sc,
 				&ab_clkout_sel_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("clkout_blksel", 0200, sc->d_entry, sc,
+	debugfs_create_file("clkout_blksel", 0200, sc->d_entry, sc,
 				&ab_clkout_blksel_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("clkout_clksel", 0200, sc->d_entry, sc,
+	debugfs_create_file("clkout_clksel", 0200, sc->d_entry, sc,
 				&ab_clkout_clksel_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("clkout_enable", 0200, sc->d_entry, sc,
+	debugfs_create_file("clkout_enable", 0200, sc->d_entry, sc,
 				&ab_clkout_enable_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("clkout_freq", 0400, sc->d_entry, sc,
+	debugfs_create_file("clkout_freq", 0400, sc->d_entry, sc,
 				&ab_clkout_freq_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_ppc_event0", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_ppc_event0", 0200, sc->d_entry, sc,
 				&ab_ddr_ppc_event0_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_ppc_event1", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_ppc_event1", 0200, sc->d_entry, sc,
 				&ab_ddr_ppc_event1_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_ppc_event2", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_ppc_event2", 0200, sc->d_entry, sc,
 				&ab_ddr_ppc_event2_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_ppc_event3", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_ppc_event3", 0200, sc->d_entry, sc,
 				&ab_ddr_ppc_event3_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ddr_ppc_ctrl", 0200, sc->d_entry, sc,
+	debugfs_create_file("ddr_ppc_ctrl", 0200, sc->d_entry, sc,
 				&ab_ddr_ppc_ctrl_fops);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("chip_info", 0444, sc->d_entry, NULL,
+	debugfs_create_file("chip_info", 0444, sc->d_entry, NULL,
 				&chip_info_fops);
-	if (!d)
-		goto err_out;
 
 	d_chip = debugfs_create_dir("airbrush_sm", sc->d_entry);
-	if (!d_chip)
-		goto err_out;
 
-	d = debugfs_create_file("mapped_chip_state", 0666, d_chip, sc,
+	debugfs_create_file("mapped_chip_state", 0664, d_chip, sc,
 				&fops_mapped_chip_state);
 
-	d = debugfs_create_file("smps2_delay", 0664, d_chip, sc,
+	debugfs_create_file("smps2_delay", 0664, d_chip, sc,
 			&fops_smps2_delay);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ldo4_delay", 0664, d_chip, sc,
+	debugfs_create_file("ldo4_delay", 0664, d_chip, sc,
 			&fops_ldo4_delay);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("ldo5_delay", 0664, d_chip, sc,
+	debugfs_create_file("ldo5_delay", 0664, d_chip, sc,
 			&fops_ldo5_delay);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("s60_delay", 0664, d_chip, sc,
+	debugfs_create_file("s60_delay", 0664, d_chip, sc,
 			&fops_s60_delay);
-	if (!d)
-		goto err_out;
 
 #if IS_ENABLED(CONFIG_AIRBRUSH_SM_PROFILE)
-	d = debugfs_create_file("time_stamps", 0666, d_chip, sc,
+	debugfs_create_file("time_stamps", 0664, d_chip, sc,
 			&fops_time_stamps);
-	if (!d)
-		goto err_out;
 #endif
 
-	d = debugfs_create_file("alternate_boot", 0666, d_chip, sc,
+	debugfs_create_file("alternate_boot", 0664, d_chip, sc,
 				&fops_alternate_boot);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("asv_version", 0660, d_chip, sc,
+	debugfs_create_file("asv_version", 0660, d_chip, sc,
 				&fops_asv_version_override);
-	if (!d)
-		goto err_out;
 
-	d = debugfs_create_file("skip_pcie_link_init", 0660, d_chip, sc,
+	debugfs_create_file("skip_pcie_link_init", 0660, d_chip, sc,
 				&ab_sm_skip_pcie_link_init_fops);
-	if (!d)
-		goto err_out;
 
 	d_block = debugfs_create_dir("ipu", d_chip);
-	if (!d_block)
-		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_IPU]));
 
 	d_block = debugfs_create_dir("tpu", d_chip);
-	if (!d_block)
-		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_TPU]));
 
 	d_block = debugfs_create_dir("dram", d_chip);
-	if (!d_block)
-		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[DRAM]));
 
 	d_block = debugfs_create_dir("mif", d_chip);
-	if (!d_block)
-		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_MIF]));
 
 	d_block = debugfs_create_dir("fsys", d_chip);
-	if (!d_block)
-		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_FSYS]));
 
 	d_block = debugfs_create_dir("aon", d_chip);
-	if (!d_block)
-		goto err_out;
 	create_block_debugfs(d_block, &(sc->blocks[BLK_AON]));
 
 	return;
-
-err_out:
-	pr_err("Some error occured, couldn't create debugfs entry for ab_device states\n");
 }
 
 void ab_sm_remove_debugfs(struct ab_state_context *sc)
