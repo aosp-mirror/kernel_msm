@@ -56,7 +56,7 @@
 #define MAX_CPU_CTX_SIZE	2048
 
 #define WDOG_BITE_OFFSET_IN_SECONDS 3
-#define WDOG_CONSOLE_OFFSET_IN_SECONDS 10
+#define WDOG_CONSOLE_OFFSET_IN_SECONDS 17
 
 static struct msm_watchdog_data *wdog_data;
 
@@ -838,7 +838,8 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 	configure_bark_dump(wdog_dd);
 	if (console_enabled) {
 		dev_info(wdog_dd->dev, "Console enabled, extend "
-				"bark/bite times by 10 seconds\n");
+				"bark/bite times by %d seconds\n",
+				WDOG_CONSOLE_OFFSET_IN_SECONDS);
 		wdog_dd->bark_time += WDOG_CONSOLE_OFFSET_IN_SECONDS*1000;
 	}
 	timeout = (wdog_dd->bark_time * WDT_HZ)/1000;
