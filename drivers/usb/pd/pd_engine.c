@@ -406,6 +406,18 @@ static int update_extcon_prop(struct usbpd *pd, int extcon_type)
 		return ret;
 	}
 
+	if (extcon_type == EXTCON_USB) {
+		val.intval = pd->pd_capable ? 1 : 0;
+		ret = extcon_set_property(pd->extcon, extcon_type,
+					EXTCON_PROP_USB_TYPEC_MED_HIGH_CURRENT,
+					val);
+		if (ret < 0) {
+			logbuffer_log(pd->log,
+				      "unable to set extcon usb typec med high current, ret=%d",
+				      ret);
+		}
+	}
+
 	return ret;
 }
 
@@ -2095,6 +2107,8 @@ struct usbpd *usbpd_create(struct device *parent)
 				       EXTCON_PROP_USB_TYPEC_POLARITY);
 	extcon_set_property_capability(pd->extcon, EXTCON_USB,
 				       EXTCON_PROP_USB_SS);
+	extcon_set_property_capability(pd->extcon, EXTCON_USB,
+				       EXTCON_PROP_USB_TYPEC_MED_HIGH_CURRENT);
 	extcon_set_property_capability(pd->extcon, EXTCON_USB_HOST,
 				       EXTCON_PROP_USB_TYPEC_POLARITY);
 	extcon_set_property_capability(pd->extcon, EXTCON_USB_HOST,
