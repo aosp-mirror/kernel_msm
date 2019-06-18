@@ -311,7 +311,13 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-ctl-select = <0x01>;
 		cirrus,boost-ctl-millivolt = <10000>;
-		cirrus,boost-peak-milliamp = <1800>;
+		cirrus,boost-peak-milliamp = <2700>;
+		cirrus,brownout-protection-enable;
+		cirrus,vpbr-thld1 = <0x15>; // Initial VPBR_1 threshold 3.4V
+		cirrus,vpbr-max-att = <0x4>; // Maximum attenuation 4dB
+		cirrus,vpbr-atk-vol = <0x7>; // attack step size 1.500 dB / 3.000 dB / 6.000 dB
+		cirrus,vpbr-atk-rate = <0x0>; // Attenuation attack step rate 2.5 us
+		cirrus,vpbr-rel-rate = <0x3>; // Attenuation release step rate 50ms
 		cirrus,amp-gain-zc;
 		cirrus,ldm-mode-select = <0x01>;
 		cirrus,pdm-ldm-exit;
