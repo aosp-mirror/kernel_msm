@@ -1760,6 +1760,9 @@ static void ddr_train_restore_configuration(struct ab_ddr_context *ddr_ctx,
 			ddr_train_save_value[s_DPHY_ZQ_CON9]);
 	ddr_reg_wr(ddr_ctx, DPHY2_ZQ_CON9,
 			ddr_train_save_value[s_DPHY2_ZQ_CON9]);
+
+	/* Update pointers of FIFO within PHY and all of the DLL information */
+	ddr_dphy_ctrl_resync(ddr_ctx);
 }
 
 static int ab_ddr_initial_trainings(struct ab_ddr_context *ddr_ctx)
