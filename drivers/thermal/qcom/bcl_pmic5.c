@@ -38,6 +38,7 @@
 #define BCL_IBAT_READ         0x86
 #define BCL_IBAT_SCALING_UA   78127
 
+#define BCL_VBAT_SCALING      25
 #define BCL_VBAT_READ         0x76
 #define BCL_VBAT_ADC_LOW      0x48
 #define BCL_VBAT_COMP_LOW     0x49
@@ -160,6 +161,11 @@ static void convert_adc_to_vbat_thresh_val(int *val)
 static void convert_adc_to_vbat_val(int *val)
 {
 	*val = (*val * BCL_VBAT_SCALING_UV) / 1000;
+}
+
+static void convert_vbat_to_adc_val(int *val)
+{
+	*val = *val / BCL_VBAT_SCALING + 1;
 }
 
 static void convert_ibat_to_adc_val(int *val)
@@ -306,10 +312,14 @@ static int bcl_get_vbat_trip(void *data, int type, int *trip)
 
 static int bcl_set_vbat(void *data, int low, int high)
 {
+	int thresh_value;
+	int16_t addr;
+	int8_t val = 0;
 	struct bcl_peripheral_data *bat_data =
 		(struct bcl_peripheral_data *)data;
 
 	mutex_lock(&bat_data->state_trans_lock);
+	thresh_value = low;
 
 	if (low == INT_MIN &&
 		bat_data->irq_num && bat_data->irq_enabled) {
@@ -323,10 +333,23 @@ static int bcl_set_vbat(void *data, int low, int high)
 		pr_debug("vbat: enable irq:%d\n", bat_data->irq_num);
 	}
 
-	/*
-	 * Vbat threshold's are pre-configured and cant be
-	 * programmed.
-	 */
+	switch (bat_data->type) {
+	case BCL_VBAT_LVL0:
+		addr = BCL_VBAT_ADC_LOW;
+		break;
+	case BCL_VBAT_LVL1:
+		addr = BCL_VBAT_COMP_LOW;
+		thresh_value = thresh_value - 2250;
+		break;
+	default:
+		addr = BCL_VBAT_COMP_TLOW;
+		thresh_value = thresh_value - 2250;
+		break;
+	};
+	convert_vbat_to_adc_val(&thresh_value);
+	val = (int8_t)thresh_value;
+	bcl_write_register(bat_data->dev, addr, val);
+
 	mutex_unlock(&bat_data->state_trans_lock);
 
 	return 0;
