@@ -150,6 +150,17 @@ struct faceauth_buffer_list {
 	struct faceauth_buffer_descriptor buffers[FACEAUTH_BUFFER_LIST_LENGTH];
 } __attribute__((packed));
 
+#define SHA1SUM_LEN 20
+
+struct faceauth_model_version_list {
+	__u8 fssd_version[SHA1SUM_LEN];
+	__u8 facenet_version[SHA1SUM_LEN];
+	__u8 gazenet_version[SHA1SUM_LEN];
+	__u8 skin_version[SHA1SUM_LEN];
+	__u8 ultradepth_version[SHA1SUM_LEN];
+	__u8 depthid_version[SHA1SUM_LEN];
+} __attribute__((packed));
+
 struct faceauth_airbrush_state {
 	__u32 faceauth_version;
 	__s32 error_code;
@@ -175,6 +186,7 @@ struct faceauth_airbrush_state {
 	__u64 citadel_input_data;
 	__u64 feature_bypass_flags;
 	__u32 embedding_version;
+	struct faceauth_model_version_list model_versions;
 } __attribute__((packed));
 
 struct faceauth_debug_image {
