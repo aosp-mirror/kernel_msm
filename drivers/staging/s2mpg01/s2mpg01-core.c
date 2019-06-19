@@ -90,7 +90,7 @@ void s2mpg01_toggle_pon_oneway(struct s2mpg01_core *ddata, bool turn_on)
 
 	gpio_set_value_cansleep(ddata->pdata->pon_gpio, 1);
 
-	/* wait for chip to come out of reset, signaled by resetb interrupt */
+	/* wait for chip to come out of reset */
 	timeout = wait_for_completion_timeout(&ddata->init_complete,
 					      S2MPG01_SHUTDOWN_RESET_TIMEOUT);
 	if (!timeout)
@@ -438,8 +438,6 @@ static int s2mpg01_handle_int(struct s2mpg01_core *ddata,
 		break;
 	case S2MPG01_INT_PONF:
 		dev_warn(dev, "%s: Observed PON falling edge\n", __func__);
-		/* reset initiated during debug; notify regulator failures */
-		s2mpg01_notify_fail_all();
 		break;
 	case S2MPG01_INT_ADC_CH0:
 		dev_dbg(dev, "%s: ADC channel0 over threshold\n", __func__);
@@ -459,7 +457,6 @@ static int s2mpg01_handle_int(struct s2mpg01_core *ddata,
 		break;
 	case S2MPG01_INT_WATCHDOG:
 		dev_err(dev, "%s: Watchdog timer expired\n", __func__);
-		s2mpg01_notify_fail_all();
 		break;
 	case S2MPG01_INT_T_ALARM:
 		dev_warn(dev, "%s: Watchdog alarm event\n", __func__);
@@ -480,11 +477,9 @@ static int s2mpg01_handle_int(struct s2mpg01_core *ddata,
 		break;
 	case S2MPG01_INT_TSD:
 		dev_err(dev, "%s: Thermal shutdown\n", __func__);
-		s2mpg01_notify_fail_all();
 		break;
 	case S2MPG01_INT_TH_TRIPR:
 		dev_err(dev, "%s: therm_trip asserted\n", __func__);
-		s2mpg01_notify_fail_all();
 		break;
 	case S2MPG01_INT_TH_TRIPF:
 		dev_info(dev, "%s: therm_trip has returned to normal\n",
@@ -587,6 +582,46 @@ static int s2mpg01_check_int_flags(struct s2mpg01_core *ddata)
 	return ret;
 }
 
+/* delayed work to poll for ready after reset
+ */
+static void s2mpg01_poll_ready_work(struct work_struct *data)
+{
+	static int poll_count;
+	int poll_interval_ms;
+	struct s2mpg01_core *ddata = container_of(data, struct s2mpg01_core,
+						   poll_ready_work.work);
+
+	poll_count++;
+
+	if (!gpio_get_value(ddata->pdata->pmic_ready_gpio)) {
+		/*
+		 * Use shorter interval at the beginning, and increase
+		 * the interval as the retry count increases.
+		 */
+		poll_interval_ms = (poll_count < 10) ? 100 : poll_count * 200;
+		schedule_delayed_work(&ddata->poll_ready_work,
+				      msecs_to_jiffies(poll_interval_ms));
+		return;
+	}
+
+	dev_info(ddata->dev,
+		 "%s: completing reset after %d attempts\n",
+		 __func__, poll_count);
+	poll_count = 0;
+
+	/* read chip status */
+	s2mpg01_print_status(ddata);
+	s2mpg01_core_fixup(ddata);
+	s2mpg01_unmask_interrupts_all(ddata);
+	/*
+	 * Voltage changes at normal mode could also trigger
+	 * boost mode interrupts. Mask the 2 boost mode interrupts
+	 * in normal mode to avoid confusion.
+	 */
+	s2mpg01_mask_boost_mode_interrupts(ddata);
+	complete(&ddata->init_complete);
+}
+
 /* kernel thread to notify regulator fail event and clear any pending
  * interrupt status
  */
@@ -595,40 +630,30 @@ static void s2mpg01_reset_work(struct work_struct *data)
 	struct s2mpg01_core *ddata = container_of(data, struct s2mpg01_core,
 						   reset_work);
 
+	/* cancel existing polling work if any */
+	cancel_delayed_work_sync(&ddata->poll_ready_work);
+
 	/* notify regulators of shutdown event */
 	dev_err(ddata->dev,
 		"%s: Notifying regulators of shutdown event\n", __func__);
 	s2mpg01_notify_fail_all();
+
+	schedule_delayed_work(&ddata->poll_ready_work, 0);
 }
 
-/* irq handler for resetb pin.
- * It may not catch falling edge. But, that will not be an issue as intb
- * interrupt handler will notify regulator fail event.
+/* irq handler for resetb falling edge only
  */
 static irqreturn_t s2mpg01_resetb_irq_handler(int irq, void *cookie)
 {
 	struct s2mpg01_core *ddata = (struct s2mpg01_core *)cookie;
 
-	dev_info(ddata->dev, "%s: observed resetb, irq = %d\n", __func__, irq);
+	dev_dbg(ddata->dev, "%s: observed resetb, irq = %d\n", __func__, irq);
 
-	if (gpio_get_value(ddata->pdata->pmic_ready_gpio)) {
-		dev_info(ddata->dev, "%s: completing reset\n", __func__);
-		/* read chip status */
-		s2mpg01_print_status(ddata);
-		s2mpg01_core_fixup(ddata);
-		s2mpg01_unmask_interrupts_all(ddata);
-		/*
-		 * Voltage changes at normal mode could also trigger
-		 * boost mode interrupts. Mask the 2 boost mode interrupts
-		 * in normal mode to avoid confusion.
-		 */
-		s2mpg01_mask_boost_mode_interrupts(ddata);
-		complete(&ddata->init_complete);
-	} else {
-		dev_err(ddata->dev, "%s: device reset\n", __func__);
-		reinit_completion(&ddata->init_complete);
-		schedule_work(&ddata->reset_work);
-	}
+	dev_err(ddata->dev,
+		"%s: device reset, scheduling reset work\n",
+		__func__);
+	reinit_completion(&ddata->init_complete);
+	schedule_work(&ddata->reset_work);
 
 	return IRQ_HANDLED;
 }
@@ -765,6 +790,7 @@ static int s2mpg01_probe(struct i2c_client *client,
 
 	/* initialize some structures */
 	INIT_WORK(&ddata->reset_work, s2mpg01_reset_work);
+	INIT_DELAYED_WORK(&ddata->poll_ready_work, s2mpg01_poll_ready_work);
 
 	/* initialize completions */
 	init_completion(&ddata->init_complete);
@@ -879,8 +905,7 @@ static int s2mpg01_probe(struct i2c_client *client,
 
 	ret = devm_request_threaded_irq(dev, pdata->resetb_irq, NULL,
 					s2mpg01_resetb_irq_handler,
-					IRQF_TRIGGER_FALLING |
-					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 					"s2mpg01-resetb", ddata);
 	if (ret) {
 		dev_err(dev,

@@ -203,6 +203,9 @@ struct s2mpg01_core {
 	 */
 	struct work_struct reset_work;
 
+	/* delayed work to poll for ready after reset */
+	struct delayed_work poll_ready_work;
+
 	/* completion used for initialization */
 	struct completion init_complete;
 
