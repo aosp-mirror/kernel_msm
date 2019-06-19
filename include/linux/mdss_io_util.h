@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -89,6 +89,7 @@ struct mdss_clk {
 struct mdss_module_power {
 	unsigned int num_vreg;
 	struct mdss_vreg *vreg_config;
+	bool is_vreg_enabled;
 	unsigned int num_gpio;
 	struct mdss_gpio *gpio_config;
 	unsigned int num_clk;
