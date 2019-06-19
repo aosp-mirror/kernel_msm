@@ -23,6 +23,8 @@
 #include "cam_debug_util.h"
 #include "cam_req_mgr_dev.h"
 #include "cam_sensor_dev.h"
+#include "cam_sensor_core.h"
+#include "cam_sensor_hw_sync.h"
 
 static struct cam_req_mgr_core_device *g_crm_core_dev;
 static struct cam_req_mgr_core_link g_links[MAXIMUM_LINKS_PER_SESSION];
@@ -49,6 +51,7 @@ void cam_req_mgr_core_link_reset(struct cam_req_mgr_core_link *link)
 	link->initial_sync_req = -1;
 	link->in_msync_mode = false;
 	link->sync_links_num = 0;
+
 	for (i = 0; i < MAXIMUM_LINKS_PER_SESSION; i++) {
 		link->sync_links[i] = NULL;
 		link->sync_link_sof_skip_cnt = 0;
@@ -1069,44 +1072,16 @@ static bool __cam_req_mgr_is_link_role_set(struct cam_req_mgr_core_link *link)
  * @return   : camera id
  *
  */
-static uint32_t __cam_req_mgr_get_cam_id(struct cam_req_mgr_core_link *link)
+static int32_t __cam_req_mgr_get_cam_id(struct cam_req_mgr_core_link *link)
 {
-	uint32_t cam_id = 0;
-	int i;
-	struct cam_req_mgr_connected_device *dev = NULL;
 	struct cam_sensor_ctrl_t *s_ctrl = NULL;
 
-	for (i = 0; i < link->num_devs; i++) {
-		dev = &link->l_dev[i];
-		if (!dev)
-			continue;
-		if (dev->dev_info.dev_id != CAM_REQ_MGR_DEVICE_SENSOR)
-			continue;
-		s_ctrl = (struct cam_sensor_ctrl_t *)
-			cam_get_device_priv(dev->dev_info.dev_hdl);
-
-		if (!s_ctrl) {
-			CAM_ERR(CAM_SENSOR, "Device data is NULL");
-			return -EINVAL;
-		}
-		/* Kernel    REAR_WIDE REAR_TELE FRONT_CAM IR_1 IR_2*/
-		/* Userspace REAR_WIDE FRONT_CAM REAR_TELE IR_1 IR_2*/
-		cam_id = s_ctrl->soc_info.index;
-		switch (s_ctrl->soc_info.index) {
-		case 0:
-			cam_id = 0;
-			break;
-		case 1:
-			cam_id = 2;
-			break;
-		case 2:
-			cam_id = 1;
-			break;
-		default:
-			break;
-		}
+	s_ctrl = cam_sensor_get_sensor_ctrl(link);
+	if (!s_ctrl) {
+		CAM_ERR(CAM_SENSOR, "Device data is NULL");
+		return -EINVAL;
 	}
-	return cam_id;
+	return s_ctrl->soc_info.index;
 }
 
 /**
@@ -1232,6 +1207,9 @@ static int __cam_req_mgr_process_req(struct cam_req_mgr_core_link *link,
 			goto error;
 		}
 	}
+	cam_sensor_sof_notify(cam_sensor_get_sensor_ctrl(link),
+		slot->req_id,
+		sof_timestamp_val);
 
 	rc = __cam_req_mgr_send_req(link, link->req.in_q, trigger);
 	if (rc < 0) {
@@ -2772,6 +2750,7 @@ int cam_req_mgr_destroy_session(
 		goto end;
 
 	}
+	cam_sensor_sync_deinit(cam_session);
 	if (cam_session->num_links) {
 		CAM_DBG(CAM_CRM, "destroy session %x num_active_links %d",
 			ses_info->session_hdl,
@@ -2894,7 +2873,7 @@ int cam_req_mgr_link(struct cam_req_mgr_link_info *link_info)
 		cam_req_mgr_workq_destroy(&link->workq);
 		goto setup_failed;
 	}
-
+	cam_sensor_sync_init(cam_session);
 	mutex_unlock(&link->lock);
 	mutex_unlock(&g_crm_core_dev->crm_lock);
 	return rc;
@@ -3065,7 +3044,7 @@ static void __cam_req_mgr_set_master_link(
 			if (cam_id == IR_MASTER || cam_id == IR_SLAVE)
 				continue;
 			for (j = 0; j < links[i]->sync_links_num; j++) {
-				sync_link = links[max_pd_idx]->sync_links[i];
+				sync_link = links[i]->sync_links[j];
 				if (sync_link)
 					sync_link->initial_skip = true;
 			}
@@ -3145,7 +3124,7 @@ int cam_req_mgr_sync_config(
 				if (i != j) {
 					cam_id = __cam_req_mgr_get_cam_id(
 						links[j]);
-					CAM_DBG(CAM_CRM,
+					CAM_INFO(CAM_CRM,
 						"link handle 0x%x, sync[%d] handle 0x%x cam_id %d",
 						links[i]->link_hdl, k,
 						links[j]->link_hdl, cam_id);
