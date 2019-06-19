@@ -160,7 +160,7 @@
 		};
 		config {
 			pins = "gpio124";
-			bias-disable;
+			bias-pull-up;
 			input-enable;
 		};
 	};
@@ -172,30 +172,6 @@
 		};
 		config {
 			pins = "gpio124";
-			bias-pull-down;
-			input-enable;
-		};
-	};
-
-	temp_sensor_irq_active: temp_sensor_irq_active {
-		mux {
-			pins = "gpio49";
-			function = "gpio";
-		};
-		config {
-			pins = "gpio49";
-			bias-pull-up;
-			input-enable;
-		};
-	};
-
-	temp_sensor_irq_suspend: temp_sensor_irq_suspend {
-		mux {
-			pins = "gpio49";
-			function = "gpio";
-		};
-		config {
-			pins = "gpio49";
 			bias-pull-down;
 			input-enable;
 		};
@@ -271,20 +247,18 @@
 
 &lm36011_flood {
 	pinctrl-names = "lm36011_active", "lm36011_suspend";
-	pinctrl-0 = <&ir_vcsel_fault_active &temp_sensor_irq_active>;
-	pinctrl-1 = <&ir_vcsel_fault_suspend &temp_sensor_irq_suspend>;
-	gpios = <&tlmm 124 0>,
-		<&tlmm 49 0>;
-	hw-version = <4>;
+	pinctrl-0 = <&ir_vcsel_fault_active>;
+	pinctrl-1 = <&ir_vcsel_fault_suspend>;
+	gpios = <&tlmm 124 0>;
+	hw-version = <5>;
 };
 
 &lm36011_dot {
 	pinctrl-names = "lm36011_active", "lm36011_suspend";
-	pinctrl-0 = <&ir_vcsel_fault_active &temp_sensor_irq_active>;
-	pinctrl-1 = <&ir_vcsel_fault_suspend &temp_sensor_irq_suspend>;
-	gpios = <&tlmm 124 0>,
-		<&tlmm 49 0>;
-	hw-version = <4>;
+	pinctrl-0 = <&ir_vcsel_fault_active>;
+	pinctrl-1 = <&ir_vcsel_fault_suspend>;
+	gpios = <&tlmm 124 0>;
+	hw-version = <5>;
 };
 
 &cam_cci0 {

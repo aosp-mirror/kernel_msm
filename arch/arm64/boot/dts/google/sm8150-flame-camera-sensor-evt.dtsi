@@ -55,11 +55,23 @@
 			input-enable;
 		};
 	};
+
+	ir_vcsel_fault_active_np: ir_vcsel_fault_active_np {
+		mux {
+			pins = "gpio124";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio124";
+			bias-disable;
+			input-enable;
+		};
+	};
 };
 
 &lm36011_flood {
 	sx9320_vdd-supply = <&max77826_ldo11>;
-	pinctrl-0 = <&ir_vcsel_fault_active &ir_vcsel_test_active
+	pinctrl-0 = <&ir_vcsel_fault_active_np &ir_vcsel_test_active
 			&csense_irq_active>;
 	pinctrl-1 = <&ir_vcsel_fault_suspend &ir_vcsel_test_suspend
 			&csense_irq_suspend>;
@@ -72,7 +84,7 @@
 
 &lm36011_dot {
 	sx9320_vdd-supply = <&max77826_ldo11>;
-	pinctrl-0 = <&ir_vcsel_fault_active &ir_vcsel_test_active
+	pinctrl-0 = <&ir_vcsel_fault_active_np &ir_vcsel_test_active
 			&csense_irq_active>;
 	pinctrl-1 = <&ir_vcsel_fault_suspend &ir_vcsel_test_suspend
 			&csense_irq_suspend>;
