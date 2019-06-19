@@ -345,8 +345,8 @@ static int panel_idle(struct dsi_panel *panel)
 		 * clocks are going to be turned off right after this call, so
 		 * switch needs to happen synchronously
 		 */
-		panel_switch_to_mode(pdata, idle_mode);
 		pdata->display_mode = idle_mode;
+		panel_switch_to_mode(pdata, idle_mode);
 
 		sde_atrace_mode_fps(pdata, idle_mode);
 	}
@@ -1139,11 +1139,10 @@ static int s6e3hc2_write_ctrld_reg(struct mipi_dsi_device *dsi,
 		&wrctrl_reg, sizeof(wrctrl_reg));
 }
 
-static int s6e3hc2_switch_mode_update(struct dsi_panel *panel)
+static int s6e3hc2_switch_mode_update(struct dsi_panel *panel,
+				      const struct dsi_display_mode *mode)
 {
 	struct mipi_dsi_device *dsi = &panel->mipi_device;
-	const struct panel_switch_data *pdata = panel->private_data;
-	const struct dsi_display_mode *mode = pdata->display_mode;
 	const struct hbm_data *hbm = panel->bl_config.hbm;
 	struct s6e3hc2_wrctrl_data data = {0};
 
@@ -1160,6 +1159,13 @@ static int s6e3hc2_switch_mode_update(struct dsi_panel *panel)
 	return s6e3hc2_write_ctrld_reg(dsi, &data);
 }
 
+static int s6e3hc2_update_hbm(struct dsi_panel *panel)
+{
+	const struct panel_switch_data *pdata = panel->private_data;
+
+	return s6e3hc2_switch_mode_update(panel, pdata->display_mode);
+}
+
 static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 				   const struct dsi_display_mode *mode)
 {
@@ -1174,7 +1180,7 @@ static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 	if (DSI_WRITE_CMD_BUF(dsi, unlock_cmd))
 		return;
 
-	s6e3hc2_switch_mode_update(panel);
+	s6e3hc2_switch_mode_update(panel, mode);
 	s6e3hc2_gamma_update(pdata, mode);
 
 	DSI_WRITE_CMD_BUF(dsi, lock_cmd);
@@ -1232,7 +1238,7 @@ const struct panel_switch_funcs s6e3hc2_switch_funcs = {
 	.destroy            = s6e3hc2_switch_data_destroy,
 	.perform_switch     = s6e3hc2_perform_switch,
 	.post_enable        = s6e3hc2_post_enable,
-	.support_update_hbm = s6e3hc2_switch_mode_update,
+	.support_update_hbm = s6e3hc2_update_hbm,
 	.send_nolp_cmds     = s6e3hc2_send_nolp_cmds,
 };
 
