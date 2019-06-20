@@ -28,6 +28,7 @@
 #include "smb-lib.h"
 #include "storm-watch.h"
 #include <linux/pmic-voter.h>
+#include "external-smb2.h"
 
 #define SMB2_DEFAULT_WPWR_UW	8000000
 
@@ -337,6 +338,8 @@ static int smb2_parse_dt(struct smb2 *chip)
 	chg->fcc_stepper_enable = of_property_read_bool(node,
 					"qcom,fcc-stepping-enable");
 
+	ext_smb2_read_dt(chg);
+
 	return 0;
 }
 
@@ -401,6 +404,8 @@ static int smb2_usb_get_prop(struct power_supply *psy,
 			val->intval = 1;
 		if (chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN)
 			val->intval = 0;
+		if (chg->is_wpc_charger && ext_smb2_fake_charger_icon(chg))
+			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = smblib_get_prop_usb_voltage_max(chg, val);
@@ -649,6 +654,8 @@ static int smb2_usb_port_get_prop(struct power_supply *psy,
 			val->intval = 1;
 		else
 			val->intval = 0;
+		if (chg->is_wpc_charger && ext_smb2_fake_charger_icon(chg))
+			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		val->intval = 5000000;
@@ -1223,6 +1230,16 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		chg->die_health = val->intval;
 		power_supply_changed(chg->batt_psy);
 		break;
+	case POWER_SUPPLY_PROP_CALIBRATE:
+		pr_err("batt power supply prop set voltage mode.\n");
+		rc = smblib_masked_write(chg, FG_UPDATE_CFG_2_SEL_REG,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT |
+				VBT_LT_CHG_RECHARGE_THRESH_SEL_BIT,
+				SOC_LT_CHG_RECHARGE_THRESH_SEL_BIT);
+		if (rc < 0)
+			dev_err(chg->dev, "Couldn't configure FG_UPDATE_CFG2_SEL_REG rc=%d\n",
+				rc);
+		break;
 	default:
 		rc = -EINVAL;
 	}
@@ -1245,6 +1262,7 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
+	case POWER_SUPPLY_PROP_CALIBRATE:
 		return 1;
 	default:
 		break;
@@ -1870,8 +1888,7 @@ static int smb2_init_hw(struct smb2 *chip)
 		}
 	}
 
-	/* Disable USBIN AICL */
-	smblib_write(chg, 0x1380, 0x40);
+	ext_smb2_init_hw(chg);
 
 	return rc;
 }

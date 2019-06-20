@@ -382,6 +382,26 @@ struct smb_charger {
 	int			pulse_cnt;
 
 	int			die_health;
+
+	struct delayed_work	usbicl_rerun_work;
+	struct delayed_work	debug_work;
+	struct delayed_work	alg_work;
+	struct delayed_work	vbatt_therm_icl_work;
+	struct delayed_work	wpc_enable_work;
+	struct delayed_work	fake_charger_icon_work;
+	bool			external_smb2;
+	bool			two_pin_charger;
+	int			input_current_limit;
+	bool			is_wpc_charger;
+	int			wpc_en_gpio;
+	int			fake_charger_icon_flag;
+	int			wpc_boot_delay;
+	int			boot_delay_count;
+	int			wpc_fastchg_current;
+	int			wpc_normal_temp;
+	int			wpc_overheat_temp;
+	int			wpc_retailmode_temp_diff;
+	int			wpc_vote_current;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);

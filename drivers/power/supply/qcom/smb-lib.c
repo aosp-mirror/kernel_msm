@@ -24,6 +24,7 @@
 #include "battery.h"
 #include "step-chg-jeita.h"
 #include "storm-watch.h"
+#include "external-smb2.h"
 
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
@@ -363,10 +364,7 @@ int smblib_set_charge_param(struct smb_charger *chg,
 	int rc = 0;
 	u8 val_raw;
 
-	if (!strcmp(param->name, "usb input current limit")) {
-		pr_info("smblib_set_charge_param: set usb input current to 500mA\n");
-		val_u = 500000;
-	}
+	val_u = ext_smblib_input_current_limit(chg, param, val_u);
 
 	if (param->set_proc) {
 		rc = param->set_proc(param, val_u, &val_raw);
@@ -1753,19 +1751,6 @@ int smblib_get_prop_batt_present(struct smb_charger *chg,
 	return rc;
 }
 
-//TODO:Remove the debug info after charge function is ok
-int smblib_debug_info(struct smb_charger *chg)
-{
-	int rc = -EINVAL;
-	u8 data1, data2, data3;
-
-	rc = smblib_read(chg, 0x00001061, &data1);
-	rc = smblib_read(chg, 0x00001370, &data2);
-	rc = smblib_read(chg, 0x00001607, &data3);
-	smblib_err(chg, "fast charge current=%d mA, USB current limit=%d mA, MISC ICL=%d mA\n", data1*25, data2*25, data3*25);
-	return rc;
-}
-
 int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 				  union power_supply_propval *val)
 {
@@ -1779,9 +1764,6 @@ int smblib_get_prop_batt_capacity(struct smb_charger *chg,
 	if (chg->bms_psy)
 		rc = power_supply_get_property(chg->bms_psy,
 				POWER_SUPPLY_PROP_CAPACITY, val);
-
-	smblib_debug_info(chg);
-
 	return rc;
 }
 
@@ -1800,6 +1782,8 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 		return rc;
 	}
 	usb_online = (bool)pval.intval;
+	if (chg->is_wpc_charger && ext_smb2_fake_charger_icon(chg))
+		usb_online = 1;
 
 	rc = smblib_get_prop_dc_online(chg, &pval);
 	if (rc < 0) {
@@ -2433,6 +2417,9 @@ int smblib_get_prop_usb_online(struct smb_charger *chg,
 
 	val->intval = (stat & USE_USBIN_BIT) &&
 		      (stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+	if (chg->is_wpc_charger && ext_smb2_fake_charger_icon(chg))
+		val->intval = 1;
+
 	return rc;
 }
 
@@ -3596,6 +3583,8 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 						chg->chg_freq.freq_removal);
 
 	if (vbus_rising) {
+
+		ext_smblib_usb_plugin(chg, 1);
 		if (smblib_get_prop_dfp_mode(chg) != POWER_SUPPLY_TYPEC_NONE) {
 			chg->fake_usb_insertion = true;
 			return;
@@ -3618,6 +3607,7 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 				!chg->pd_active)
 			pr_err("APSD disabled on vbus rising without PD\n");
 	} else {
+		ext_smblib_usb_plugin(chg, 0);
 		if (chg->fake_usb_insertion) {
 			chg->fake_usb_insertion = false;
 			return;
@@ -3649,7 +3639,9 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
 		smblib_micro_usb_plugin(chg, vbus_rising);
 
-	power_supply_changed(chg->usb_psy);
+	if (chg->is_wpc_charger && !chg->fake_charger_icon_flag)
+		power_supply_changed(chg->usb_psy);
+
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
 }
@@ -3925,7 +3917,8 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		 * limit ICL to 100mA, the USB driver will enumerate to check
 		 * if this is a SDP and appropriately set the current
 		 */
-		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 500000);
+		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true,
+						chg->input_current_limit);
 		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:
@@ -4671,17 +4664,24 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 			 */
 			update_storm_count(wdata, BOOST_BACK_STORM_COUNT);
 		} else {
-			smblib_err(chg,
-				"Reverse boost detected: voting 0mA to suspend input\n");
-			vote(chg->usb_icl_votable, BOOST_BACK_VOTER, true, 0);
-			vote(chg->awake_votable, BOOST_BACK_VOTER, true, 0);
-			/*
-			 * Remove the boost-back vote after a delay, to avoid
-			 * permanently suspending the input if the boost-back
-			 * condition is unintentionally hit.
-			 */
-			schedule_delayed_work(&chg->bb_removal_work,
+			if (chg->is_wpc_charger)
+				ext_smblib_power_ok(chg);
+			else {
+				smblib_err(chg,
+					"Reverse boost detected: voting 0mA to suspend input\n");
+				vote(chg->usb_icl_votable, BOOST_BACK_VOTER,
+								true, 0);
+				vote(chg->awake_votable, BOOST_BACK_VOTER,
+								true, 0);
+				/*
+				 * Remove the boost-back vote after a delay,
+				 * to avoid permanently suspending the input
+				 * if the boost-backcondition is
+				 * unintentionally hit.
+				 */
+				schedule_delayed_work(&chg->bb_removal_work,
 				msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
+			}
 		}
 	}
 
@@ -5410,6 +5410,8 @@ int smblib_init(struct smb_charger *chg)
 		smblib_err(chg, "Unsupported mode %d\n", chg->mode);
 		return -EINVAL;
 	}
+
+	ext_smblib_init(chg);
 
 	return rc;
 }
