@@ -467,7 +467,9 @@ int nfc_ioctl_power_states(struct file *filp, unsigned long arg)
 		 * interrupts to avoid spurious notifications to upper
 		 * layers.
 		 */
-		nqx_disable_irq(nqx_dev);
+		/*we do not need disable irq, this may causes fw check fail
+		 and distroy the hw reset*/
+		//nqx_disable_irq(nqx_dev);
 		dev_dbg(&nqx_dev->client->dev,
 			"gpio_set_value disable: %s: info: %p\n",
 			__func__, nqx_dev);
@@ -1091,9 +1093,12 @@ static int nqx_probe(struct i2c_client *client,
 	r = nfcc_hw_check(client, nqx_dev);
 	if (r) {
 		/* make sure NFCC is not enabled */
-		gpio_set_value(platform_data->en_gpio, 0);
+	//	gpio_set_value(platform_data->en_gpio, 0);
 		/* We don't think there is hardware switch NFC OFF */
-		goto err_request_hw_check_failed;
+	//	goto err_request_hw_check_failed;
+	/*we do not hope fw check failed cause the device probe fail,
+	 framework will fix this issue, so just show a log*/
+		dev_err(&client->dev, "%s: nfcc_hw_check failed\n", __func__);
 	}
 
 	/* Register reboot notifier here */
