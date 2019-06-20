@@ -148,6 +148,8 @@ struct hypx_fa_process_results {
 	uint32_t exception_number;
 	uint32_t citadel_token_size;
 	uint64_t citadel_token; /* PHY addr */
+	uint64_t deferred_autocal; /* PHY addr */
+	uint32_t deferred_autocal_size;
 } __packed;
 
 struct hypx_fa_debug_data {
@@ -934,7 +936,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 	unsigned long save_trace;
 	struct scm_desc desc = { 0 };
 	struct hypx_fa_process_results *hypx_data;
-	struct faceauth_data citadel_token = { 0 };
+	struct faceauth_data citadel_token = { 0 }, deferred_autocal = { 0 };
 
 	hypx_data = (void *)get_zeroed_page(GFP_KERNEL);
 	if (!hypx_data) {
@@ -954,6 +956,26 @@ int el2_faceauth_get_process_result(struct device *dev,
 		hypx_data->citadel_token =
 			virt_to_phys(citadel_token.hypx_blob);
 		hypx_data->citadel_token_size = data->citadel_token_size;
+	}
+
+	if (data->deferred_autocal_size) {
+		/* The autocal buffer is for a small amount of data and
+		 * we restrict its size to 4K
+		 */
+		if (data->deferred_autocal_size > PAGE_SIZE) {
+			pr_err("deferred_autocal buffer is too big: %d\n",
+			       data->deferred_autocal_size);
+			ret = -EMSGSIZE;
+			goto exit1;
+		}
+		hypx_create_blob_dmabuf(dev, &deferred_autocal,
+					data->deferred_autocal_fd,
+					DMA_FROM_DEVICE, true);
+		if (!deferred_autocal.hypx_blob)
+			goto exit1;
+		hypx_data->deferred_autocal =
+			virt_to_phys(deferred_autocal.hypx_blob);
+		hypx_data->deferred_autocal_size = data->deferred_autocal_size;
 	}
 
 	dma_sync_single_for_device(dev, virt_to_phys(hypx_data), PAGE_SIZE,
@@ -1000,6 +1022,8 @@ int el2_faceauth_get_process_result(struct device *dev,
 	}
 
 exit2:
+	if (hypx_data->deferred_autocal)
+		hypx_free_blob(dev, &deferred_autocal);
 	if (hypx_data->citadel_token)
 		hypx_free_blob_userbuf(&citadel_token);
 	free_page((unsigned long)hypx_data);
