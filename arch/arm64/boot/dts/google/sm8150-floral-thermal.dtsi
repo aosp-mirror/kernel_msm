@@ -76,6 +76,24 @@
 };
 
 
+&vbat_lvl0 {
+	temperature = <3200>;
+	hysteresis = <200>;
+	type = "passive";
+};
+
+&vbat_lvl1 {
+	temperature = <3000>;
+	hysteresis = <200>;
+	type = "passive";
+};
+
+&vbat_lvl2 {
+	temperature = <2800>;
+	hysteresis = <200>;
+	type = "passive";
+};
+
 &thermal_zones {
 
 	pa-therm {
