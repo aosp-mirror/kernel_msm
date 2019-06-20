@@ -2568,7 +2568,7 @@ static int iaxxxcore_set_strm##stream##_en( \
 				usleep_range(STREAM_STATUS_CHECK_WAIT_TIME, \
 					STREAM_STATUS_CHECK_WAIT_TIME + \
 					WAIT_EXCESS_TIME); \
-		} while (!(--retry) && str_status); \
+		} while ((--retry) && str_status); \
 		if (!retry) { \
 			dev_err(priv->dev, \
 			"%s() strm status not in initialized after retry\n", \
