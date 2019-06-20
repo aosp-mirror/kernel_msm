@@ -104,10 +104,16 @@
 #define PMIC_BUCK2_VOlTAGE_MAX 4100000
 
 #define BUILD_DEV 0
+/* ITO-R + Silego register map V1 */
 #define BUILD_PROTO 1
+/* ITO-C + Silego register map V2 */
 #define BUILD_EVT1_0 2
+/* ITO-C + Silego register map V3 */
 #define BUILD_EVT1_1 3
+/* ITO-R + Silego register map V4 */
 #define BUILD_DVT 4
+/* ITO-R + Silego register map V4 + Silego i2c write locked */
+#define BUILD_PVT 5
 
 #define MAX_SILEGO_GPIO_SIZE (SILEGO_GPIO_MAX_ITOC + SILEGO_GPIO_MAX_ITOR)
 
@@ -719,6 +725,7 @@ static int32_t silego_verify_settings(struct led_laser_ctrl_t *ctrl)
 		settings_size = ARRAY_SIZE(silego_reg_settings_ver3);
 		break;
 	case BUILD_DVT:
+	case BUILD_PVT:
 	default:
 		reg_map = silego_reg_settings_ver4;
 		settings_size = ARRAY_SIZE(silego_reg_settings_ver4);
@@ -953,8 +960,11 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	}
 
 	if (!ctrl->silego.is_power_up) {
+		/* For PVT device, set VDD to 3.2 V now */
 		rc = regulator_set_voltage(ctrl->silego.vdd,
-			SLIEGO_VDD_VOlTAGE_MIN, SLIEGO_VDD_VOlTAGE_MAX);
+			(ctrl->hw_version == BUILD_PVT ?
+			SLIEGO_VDD_VOlTAGE_MAX : SLIEGO_VDD_VOlTAGE_MIN),
+			SLIEGO_VDD_VOlTAGE_MAX);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
 				"set silego vdd voltage failed: %d", rc);
@@ -1017,7 +1027,7 @@ static int lm36011_power_up(struct led_laser_ctrl_t *ctrl)
 	usleep_range(3000, 6000);
 
 	/* Suppress ITO-R by change register 0xCB */
-	if (ctrl->hw_version >= BUILD_DVT) {
+	if (ctrl->hw_version == BUILD_DVT) {
 		rc = silego_override_setting(ctrl, 0xcb, 0x97);
 		if (rc < 0) {
 			dev_err(ctrl->soc_info.dev,
