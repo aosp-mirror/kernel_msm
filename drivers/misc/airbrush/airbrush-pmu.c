@@ -24,6 +24,9 @@
 #define CMU_IPU_IPU_CONTROLLER_OPTION			0x10240800
 #define CMU_TPU_TPU_CONTROLLER_OPTION			0x10040800
 
+#define CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK 0x10041000
+#define CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK 0x10241000
+
 static struct ab_sm_pmu_ops pmu_ops;
 static int ab_pmu_pcie_link_listener(struct notifier_block *nb,
 		unsigned long action, void *data)
@@ -62,9 +65,7 @@ static int __ab_pmu_ipu_sleep(struct ab_pmu_context *pmu_ctx)
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
 
 	/* IPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
-	ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
-	val |= (0x1 << 29);
-	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
+	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, (0x1 << 29));
 
 	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
 	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
@@ -111,21 +112,23 @@ static int __ab_pmu_tpu_sleep(struct ab_pmu_context *pmu_ctx)
 	uint32_t val;
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
 
+	ab_sm_start_ts(AB_SM_TS_TPU_PREP_SLEEP);
 	/* TPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
-	ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
-	val |= (0x1 << 29);
-	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
+	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, (0x1 << 29));
 
 	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
 	ABC_READ(SYSREG_PMU_PMU_CONTROL, &val);
 	val &= ~0x2;
 	ABC_WRITE(SYSREG_PMU_PMU_CONTROL, val);
+	ab_sm_record_ts(AB_SM_TS_TPU_PREP_SLEEP);
 
+	ab_sm_start_ts(AB_SM_TS_TPU_POLL_SLEEP);
 	do {
 		/* PMU_STATUS[1:1] BLK_TPU_UP_STATUS */
 		ABC_READ(SYSREG_PMU_PMU_STATUS, &val);
 	} while ((val & 0x2) && --timeout > 0);
 
+	ab_sm_record_ts(AB_SM_TS_TPU_POLL_SLEEP);
 	if (timeout == 0) {
 		dev_err(pmu_ctx->dev, "Timeout waiting for TPU down status\n");
 		return -EBUSY;
@@ -162,14 +165,10 @@ static int __ab_pmu_ipu_tpu_sleep(struct ab_pmu_context *pmu_ctx)
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
 
 	/* IPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
-	ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
-	val |= (0x1 << 29);
-	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
+	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, (0x1 << 29));
 
 	/* TPU_CONTROLLER_OPTION[29:29] ENABLE_POWER_MANAGEMENT */
-	ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
-	val |= (0x1 << 29);
-	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
+	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, (0x1 << 29));
 
 	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
 	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
@@ -219,14 +218,10 @@ static int __ab_pmu_deep_sleep_handler(struct ab_pmu_context *pmu_ctx)
 	uint32_t timeout = IPU_TPU_STATUS_TIMEOUT;
 
 	/* IPU_CONTROLLER_OPTION[29:29] ENABLE_PWR_MANAGEMENT */
-	ABC_READ(CMU_IPU_IPU_CONTROLLER_OPTION, &val);
-	val |= (0x1 << 29);
-	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, val);
+	ABC_WRITE(CMU_IPU_IPU_CONTROLLER_OPTION, (0x1 << 29));
 
 	/* TPU_CONTROLLER_OPTION[29:29] ENABLE_PWR_MANAGEMENT */
-	ABC_READ(CMU_TPU_TPU_CONTROLLER_OPTION, &val);
-	val |= (0x1 << 29);
-	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, val);
+	ABC_WRITE(CMU_TPU_TPU_CONTROLLER_OPTION, (0x1 << 29));
 
 	/* PMU_CONTROL[0:0] BLK_IPU_UP_REQ */
 	/* PMU_CONTROL[1:1] BLK_TPU_UP_REQ */
@@ -288,36 +283,6 @@ static int ab_pmu_deep_sleep_handler(void *ctx)
 	return ret;
 }
 
-#define CLK_CON_DIV_PLL_AON_CLK 0x10B1180C
-#define CLK_CON_DIV_DIV4_PLLCLK_TPU 0x10041800
-#define CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK 0x10041000
-#define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
-#define CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK 0x10241000
-
-/*
- * Reduce ipu apb clk rate from 933MHz to 233MHz on A0 samples
- * TODO(b/120795157): Remove when A0 is obsolete
- */
-static void abc_ipu_apb_clk_fix(void)
-{
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_IPU, 0x3);
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
-	ABC_WRITE(CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK, 0x1);
-}
-
-/*
- * Reduce tpu apb clk rate from 933MHz to 233MHz on A0 samples
- * TODO(b/120795157): Remove when A0 is obsolete
- */
-static void abc_tpu_apb_clk_fix(void)
-{
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x3);
-	ABC_WRITE(CLK_CON_DIV_DIV4_PLLCLK_TPU, 0x3);
-	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, 0x0);
-	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK, 0x1);
-}
-
 /* Caller must hold pmu_ctx->pcie_link_lock */
 static int __ab_pmu_ipu_resume_handler(struct ab_pmu_context *pmu_ctx)
 {
@@ -342,7 +307,8 @@ static int __ab_pmu_ipu_resume_handler(struct ab_pmu_context *pmu_ctx)
 	ABC_WRITE(0x10200068, 0x00);
 	ABC_WRITE(0x1020006C, 0x00);
 
-	abc_ipu_apb_clk_fix();
+	// Select IPU PLL as parent clock of IPU block
+	ABC_WRITE(CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK, 0x1);
 
 	return 0;
 }
@@ -388,7 +354,8 @@ static int __ab_pmu_tpu_resume_handler(struct ab_pmu_context *pmu_ctx)
 		return -EBUSY;
 	}
 
-	abc_tpu_apb_clk_fix();
+	// Select TPU PLL as parent clock of TPU block
+	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK, 0x1);
 
 	return 0;
 }
@@ -440,8 +407,9 @@ static int __ab_pmu_ipu_tpu_resume_handler(struct ab_pmu_context *pmu_ctx)
 	ABC_WRITE(0x10200068, 0x00);
 	ABC_WRITE(0x1020006C, 0x00);
 
-	abc_ipu_apb_clk_fix();
-	abc_tpu_apb_clk_fix();
+	// Select IPU/TPU PLL as parent clocks of IPU/TPU blocks
+	ABC_WRITE(CLK_CON_MUX_MOUT_IPU_AONCLK_PLLCLK, 0x1);
+	ABC_WRITE(CLK_CON_MUX_MOUT_TPU_AONCLK_PLLCLK, 0x1);
 
 	return 0;
 }

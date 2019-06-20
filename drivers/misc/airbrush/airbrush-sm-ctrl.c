@@ -94,6 +94,10 @@ static int64_t aon_set_rate_stub(void *ctx, u64 old_rate, u64 new_rate)
 {
 	return -ENODEV;
 }
+static int64_t aon_set_pll_div_stub(void *ctx, uint32_t div)
+{
+	return -ENODEV;
+}
 
 static struct ab_sm_clk_ops clk_ops_stub = {
 	.ctx = NULL,
@@ -105,6 +109,7 @@ static struct ab_sm_clk_ops clk_ops_stub = {
 	.tpu_set_rate = &tpu_set_rate_stub,
 	.ipu_tpu_set_rate = &ipu_tpu_set_rate_stub,
 	.aon_set_rate = &aon_set_rate_stub,
+	.aon_set_pll_div = &aon_set_pll_div_stub,
 };
 
 static int ddr_setup_stub(void *ctx, void *ab_state_ctx) { return -ENODEV; }
@@ -1041,6 +1046,7 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"    IPU/TPU clock settings",
 		"    IPU state change",
 		"        IPU PMU resume",
+		"            IPU APB clk fix",
 		"        IPU clock settings",
 		"            IPU pre rate change notify",
 		"            IPU get clk",
@@ -1052,6 +1058,7 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"        IPU PMU sleep",
 		"    TPU state change",
 		"        TPU PMU resume",
+		"            TPU APB clk fix",
 		"        TPU clock settings",
 		"            TPU pre rate change notify",
 		"            TPU get clk",
@@ -1061,6 +1068,8 @@ void ab_sm_print_ts(struct ab_state_context *sc)
 		"            TPU finish clk rate",
 		"            TPU post rate change notify",
 		"        TPU PMU sleep",
+		"            TPU PMU prep sleep",
+		"            TPU PMU poll sleep",
 		"        PMU deep sleep",
 		"    IPU/TPU PMU sleep",
 		"    DDR state change",
@@ -1329,8 +1338,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 	ab_sm_record_ts(AB_SM_TS_LVCC);
 
-	/* If DRAM is changing state, ensure AON
-	 * clock rate is at maximum to speed up initialization
+
+	/* If DRAM is changing state, ensure AON clock rate is at maximum
+	 * to speed up transition
 	 */
 	if (dest_map->dram_block_state_id != last_map->dram_block_state_id) {
 		active_map = ab_sm_get_block_map(sc, CHIP_STATE_ACTIVE_MAX);
@@ -1345,6 +1355,13 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		}
 		ab_sm_record_ts(AB_SM_TS_AON_DRAM_INIT);
 
+	/* If AON clock rate is low, increase it to an acceptible rate
+	 * to speed up transition.
+	 */
+	} else if (last_map->aon_block_state_id < BLOCK_STATE_303) {
+		mutex_lock(&sc->op_lock);
+		sc->clk_ops->aon_set_pll_div(sc->clk_ops->ctx, 0);
+		mutex_unlock(&sc->op_lock);
 	}
 
 	ab_sm_start_ts(AB_SM_TS_IPU_TPU);
@@ -1402,6 +1419,20 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (to_chip_substate_id != CHIP_STATE_OFF)
 			goto cleanup_state;
 	}
+
+	/* Restore AON divider back to expected value, after decreasing
+	 * it to speed up state transition
+	 */
+	if (dest_map->aon_block_state_id <= BLOCK_STATE_301) {
+		mutex_lock(&sc->op_lock);
+		sc->clk_ops->aon_set_pll_div(sc->clk_ops->ctx, 9);
+		mutex_unlock(&sc->op_lock);
+	} else if (dest_map->aon_block_state_id == BLOCK_STATE_302) {
+		mutex_lock(&sc->op_lock);
+		sc->clk_ops->aon_set_pll_div(sc->clk_ops->ctx, 1);
+		mutex_unlock(&sc->op_lock);
+	}
+
 	ab_sm_record_ts(AB_SM_TS_AON);
 
 	if (is_powered_down(to_chip_substate_id) &&

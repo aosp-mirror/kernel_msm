@@ -281,6 +281,7 @@ enum ab_sm_time_stamps {
 	/*IPU blk_set_state*/
 	AB_SM_TS_IPU,
 	AB_SM_TS_IPU_PMU_RES,
+	AB_SM_TS_IPU_APB_FIX,
 	AB_SM_TS_IPU_CLK,
 	AB_SM_TS_IPU_PRE_RC_NOTIFY,
 	AB_SM_TS_IPU_GET_CLK,
@@ -294,6 +295,7 @@ enum ab_sm_time_stamps {
 	/* TPU blk_set_state */
 	AB_SM_TS_TPU,
 	AB_SM_TS_TPU_PMU_RES,
+	AB_SM_TS_TPU_APB_FIX,
 	AB_SM_TS_TPU_CLK,
 	AB_SM_TS_TPU_PRE_RC_NOTIFY,
 	AB_SM_TS_TPU_GET_CLK,
@@ -303,6 +305,8 @@ enum ab_sm_time_stamps {
 	AB_SM_TS_TPU_FINISH_SET_CLKRATE,
 	AB_SM_TS_TPU_POST_RC_NOTIFY,
 	AB_SM_TS_TPU_PMU_SLEEP,
+	AB_SM_TS_TPU_PREP_SLEEP,
+	AB_SM_TS_TPU_POLL_SLEEP,
 	AB_SM_TS_PMU_DEEP_SLEEP,
 
 	AB_SM_TS_IPU_TPU_PMU_SLEEP,
@@ -378,6 +382,7 @@ struct ab_sm_clk_ops {
 			u64 old_ipu_rate, u64 new_ipu_rate,
 			u64 old_tpu_rate, u64 new_tpu_rate);
 	int64_t (*aon_set_rate)(void *ctx, u64 old_rate, u64 new_rate);
+	int64_t (*aon_set_pll_div)(void *ctx, uint32_t div);
 };
 
 struct ab_sm_dram_ops {

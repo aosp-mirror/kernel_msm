@@ -36,6 +36,7 @@
 #define AB_PLL_LOCK_TIMEOUT 1000
 
 #define AB_SM_CLK_RESET		0xFFFFFFFF
+#define AB_CLK_AON_PLL_MAX_DIV	9
 
 static void __ab_aon_clk_div_2(struct ab_clk_context *ctx);
 static void __ab_aon_clk_div_2_restore(struct ab_clk_context *ctx);
@@ -666,7 +667,6 @@ static int64_t ab_clk_aon_set_rate_handler(void *ctx,
 #define CLK_CON_DIV_DIV4_PLLCLK_IPU 0x10241800
 #define CLK_CON_DIV_DIV4_PLLCLK_FSYS 0x10711804
 #define CLK_CON_DIV_DIV4_PLLCLK_CORE 0x10f11804
-#define CLK_CON_DIV_PLL_AON_CLK 0x10b1180c
 
 /* Only Bus clock are reduced by 2x */
 static void __ab_aon_clk_div_2(struct ab_clk_context *ctx)
@@ -737,6 +737,30 @@ static void __ab_aon_clk_div_10_restore(struct ab_clk_context *ctx)
 
 }
 
+static int64_t ab_clk_aon_set_pll_div(void *ctx, uint32_t div)
+{
+	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
+
+	if (div > AB_CLK_AON_PLL_MAX_DIV)
+		return -EINVAL;
+
+	mutex_lock(&clk_ctx->pcie_link_lock);
+	if (!clk_ctx->pcie_link_ready) {
+		dev_err(clk_ctx->dev,
+				"%s: pcie link down during clk request\n",
+				__func__);
+		mutex_unlock(&clk_ctx->pcie_link_lock);
+		return -ENODEV;
+	}
+
+	dev_dbg(clk_ctx->dev,
+			"%s: set AON pll div to %llu\n", __func__, div);
+	ABC_WRITE(CLK_CON_DIV_PLL_AON_CLK, div);
+
+	mutex_unlock(&clk_ctx->pcie_link_lock);
+	return 0;
+}
+
 static void ab_clk_clear_cache(void *ctx, enum block_name name)
 {
 	struct ab_clk_context *clk_ctx = (struct ab_clk_context *)ctx;
@@ -786,6 +810,7 @@ static struct ab_sm_clk_ops clk_ops = {
 	.tpu_set_rate = &ab_clk_tpu_set_rate_handler,
 	.ipu_tpu_set_rate = &ab_clk_ipu_tpu_set_rate_handler,
 	.aon_set_rate = &ab_clk_aon_set_rate_handler,
+	.aon_set_pll_div = &ab_clk_aon_set_pll_div,
 };
 
 static int ab_clk_probe(struct platform_device *pdev)
