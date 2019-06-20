@@ -1923,6 +1923,25 @@ int ab_sm_disable_pcie(struct ab_state_context *ab_ctx)
 	return 0;
 }
 
+static void __ab_sm_schedule_shutdown_work(struct ab_state_context *sc,
+					   const char *reason)
+{
+
+	if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
+			   AB_SM_CLEANUP_NOT_IN_PROGRESS,
+			   AB_SM_CLEANUP_IN_PROGRESS) ==
+			   AB_SM_CLEANUP_IN_PROGRESS) {
+		dev_warn(sc->dev,
+			 "cleanup in progress; don't schedule work\n");
+		return;
+	}
+	sc->asv_info.last_volt = 0; /* reset cache of last voltage */
+	dev_info(sc->dev, "schedule shutdown work for reason: %s\n", reason);
+	schedule_work(&sc->shutdown_work);
+	sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+
+}
+
 static void ab_sm_shutdown_work(struct work_struct *data)
 {
 	struct ab_state_context *sc =
@@ -1988,18 +2007,7 @@ static void ab_sm_pcie_linkdown_cb(struct msm_pcie_notify *notify)
 	switch (notify->event) {
 	case MSM_PCIE_EVENT_LINKDOWN:
 		dev_err(sc->dev, "received PCIe linkdown event\n");
-		if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
-				   AB_SM_CLEANUP_NOT_IN_PROGRESS,
-				   AB_SM_CLEANUP_IN_PROGRESS) ==
-				   AB_SM_CLEANUP_IN_PROGRESS) {
-			dev_warn(sc->dev,
-				 "%s: cleanup in progress; don't schedule work\n",
-				 __func__);
-			break;
-		}
-		dev_info(sc->dev, "%s: schedule shutdown work\n", __func__);
-		schedule_work(&sc->shutdown_work);
-		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		__ab_sm_schedule_shutdown_work(sc, "host-reported linkdown");
 		break;
 	default:
 		dev_warn(sc->dev,
@@ -2041,24 +2049,20 @@ static int ab_sm_regulator_listener(struct notifier_block *nb,
 
 	if (event & REGULATOR_EVENT_FAIL) {
 		dev_err(sc->dev, "received regulator failure 0x%lx\n", event);
-		if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
-				   AB_SM_CLEANUP_NOT_IN_PROGRESS,
-				   AB_SM_CLEANUP_IN_PROGRESS) ==
-				   AB_SM_CLEANUP_IN_PROGRESS) {
-			dev_warn(sc->dev,
-				 "%s: cleanup in progress; don't schedule work\n",
-				 __func__);
-			return NOTIFY_DONE; /* Don't care */
-		}
-		sc->asv_info.last_volt = 0;
-		dev_info(sc->dev, "%s: schedule shutdown work\n", __func__);
-		schedule_work(&sc->shutdown_work);
-		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		__ab_sm_schedule_shutdown_work(sc, "regulator failure");
 		return NOTIFY_OK;
 	}
 
 	return NOTIFY_DONE; /* Don't care */
 }
+
+void ab_sm_report_fatal(const char *reason)
+{
+	struct ab_state_context *sc = ab_sm_ctx;
+
+	__ab_sm_schedule_shutdown_work(sc, reason);
+}
+EXPORT_SYMBOL(ab_sm_report_fatal);
 
 static long ab_sm_async_notify(struct ab_sm_misc_session *sess,
 		unsigned long arg)
@@ -2222,18 +2226,7 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 	if (ret) {
 		dev_warn(sc->dev, "exit_el2 failed (%d)\n", ret);
 		mutex_unlock(&sc->state_transitioning_lock);
-		if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
-					AB_SM_CLEANUP_NOT_IN_PROGRESS,
-					AB_SM_CLEANUP_IN_PROGRESS) ==
-				AB_SM_CLEANUP_IN_PROGRESS) {
-			dev_warn(sc->dev,
-					"%s: cleanup in progress; don't schedule work\n",
-					__func__);
-			return ret;
-		}
-		dev_info(sc->dev, "%s: schedule shutdown work\n", __func__);
-		schedule_work(&sc->shutdown_work);
-		sysfs_notify(&sc->dev->kobj, NULL, "error_event");
+		__ab_sm_schedule_shutdown_work(sc, "exit_el2 failure");
 		return ret;
 	}
 

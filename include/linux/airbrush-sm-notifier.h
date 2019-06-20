@@ -56,4 +56,7 @@ int ab_sm_clk_notify(unsigned long event,
 		     unsigned long old_rate,
 		     unsigned long new_rate);
 
+/* Allow client drivers to report a fatal error */
+void ab_sm_report_fatal(const char *reason);
+
 #endif /* _AIRBRUSH_SM_NOTIFIER_H */
