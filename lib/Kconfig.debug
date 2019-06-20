@@ -900,6 +900,14 @@ config PANIC_ON_OOPS_VALUE
 	default 0 if !PANIC_ON_OOPS
 	default 1 if PANIC_ON_OOPS
 
+config PANIC_ON_WARN_DEFAULT_ENABLE
+	bool "Panic on warn"
+	default n
+	help
+	  Say Y here to enable the kernel to panic when detect warnings. This
+	  has the same effect as setting panic_on_warn on the kernel command
+	  line.
+
 config PANIC_TIMEOUT
 	int "panic timeout"
 	default 0

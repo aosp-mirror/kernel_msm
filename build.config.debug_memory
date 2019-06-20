@@ -18,6 +18,7 @@ function update_debug_config() {
          -e CONFIG_DEBUG_STACK_USAGE \
          -e CONFIG_FORCE_PAGES \
          -e CONFIG_FREE_PAGES_RDONLY \
+         -e CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE \
          -d CONFIG_KERNEL_LZ4
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)

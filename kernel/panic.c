@@ -37,7 +37,17 @@ static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 bool crash_kexec_post_notifiers;
+
+/*
+ * With panic_on_warn, it enable too many panic on all warnings, and kernel may
+ * not be free from legit warnings. So use CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE
+ * to control panic_on_warn in debug purpose.
+ */
+#ifdef CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE
+int panic_on_warn __read_mostly = 1;
+#else
 int panic_on_warn __read_mostly;
+#endif
 
 int panic_timeout = CONFIG_PANIC_TIMEOUT;
 EXPORT_SYMBOL_GPL(panic_timeout);

@@ -14,6 +14,7 @@ function update_debug_config() {
          -e CONFIG_RCU_STALL_WATCHDOG_BITE \
          -e CONFIG_PANIC_ON_RT_THROTTLING \
          -e CONFIG_RCU_EQS_DEBUG \
+         -e CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE \
          -d CONFIG_KERNEL_LZ4
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)

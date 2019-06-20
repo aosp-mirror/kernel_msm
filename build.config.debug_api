@@ -12,6 +12,7 @@ function update_debug_config() {
          -e CONFIG_DEBUG_PI_LIST \
          -e CONFIG_DEBUG_NOTIFIERS \
          -e CONFIG_DEBUG_CREDENTIALS \
+         -e CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE \
          -d CONFIG_KERNEL_LZ4
     (cd ${OUT_DIR} && \
      make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
