@@ -1135,28 +1135,6 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 {
 	struct chip_to_block_map *map = ab_sm_get_block_map(sc, CHIP_STATE_OFF);
 
-	/*
-	 * Mark PMIC rails to be disabled so that regulator_enable() and
-	 * regualtor_disable() calls are balanced.
-	 */
-	ab_prep_pmic_settings(sc, map);
-
-	dev_err(sc->dev, "Cleaning AB state\n");
-	blk_set_ipu_tpu_states(sc,
-			&(sc->blocks[BLK_IPU]), map->ipu_block_state_id,
-			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id,
-			CHIP_STATE_OFF);
-	blk_set_state(sc, &(sc->blocks[DRAM]),
-			map->dram_block_state_id, CHIP_STATE_OFF);
-	blk_set_state(sc, &(sc->blocks[BLK_MIF]),
-			map->mif_block_state_id, CHIP_STATE_OFF);
-	blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
-			map->fsys_block_state_id, CHIP_STATE_OFF);
-	blk_set_state(sc, &(sc->blocks[BLK_AON]),
-			map->aon_block_state_id, CHIP_STATE_OFF);
-
-	dev_err(sc->dev, "AB block states cleaned\n");
-
 	if (!is_linkdown_event) {
 		/*
 		 * Disable thermal before all pcie subscribers getting
@@ -1183,6 +1161,28 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 		sc->mfd_ops->pcie_linkdown(sc->mfd_ops->ctx);
 		mutex_unlock(&sc->mfd_lock);
 	}
+
+	/*
+	 * Mark PMIC rails to be disabled so that regulator_enable() and
+	 * regualtor_disable() calls are balanced.
+	 */
+	ab_prep_pmic_settings(sc, map);
+
+	dev_err(sc->dev, "Cleaning AB state\n");
+	blk_set_ipu_tpu_states(sc,
+			&(sc->blocks[BLK_IPU]), map->ipu_block_state_id,
+			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id,
+			CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[DRAM]),
+			map->dram_block_state_id, CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[BLK_MIF]),
+			map->mif_block_state_id, CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[BLK_FSYS]),
+			map->fsys_block_state_id, CHIP_STATE_OFF);
+	blk_set_state(sc, &(sc->blocks[BLK_AON]),
+			map->aon_block_state_id, CHIP_STATE_OFF);
+
+	dev_err(sc->dev, "AB block states cleaned\n");
 
 	pm_relax(sc->dev);
 	ab_disable_pgood(sc);
