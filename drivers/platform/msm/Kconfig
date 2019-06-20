@@ -186,6 +186,14 @@ config RMNET_IPA3
 	  for RmNet Data Driver and also exchange of QMI messages between
 	  A7 and Q6 IPA-driver.
 
+config RMNET_IPA3_TX_TIMEOUT_DETECT
+	tristate "RMNET IPA3 TX timeout detect"
+	depends on RMNET_IPA3 && DEBUG_FS
+	help
+	  RmNet IPA3 TX timeout detected is used to check TX timeout of
+	  RmNet IPA driver. It will trigger panic if TX stall timeout
+	  happened more then 60 seconds.
+
 config ECM_IPA
 	tristate "STD ECM LAN Driver support"
 	depends on IPA3
