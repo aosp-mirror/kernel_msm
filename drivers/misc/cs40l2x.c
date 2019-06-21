@@ -6913,6 +6913,9 @@ static int cs40l2x_boost_config(struct cs40l2x_private *cs40l2x)
 		return -EINVAL;
 	}
 
+	if (cs40l2x->devid == CS40L2X_DEVID_L20)
+		return 0;
+
 	return cs40l2x_boost_short_test(cs40l2x);
 }
 
