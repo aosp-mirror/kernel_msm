@@ -456,6 +456,7 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 						unsigned int mode)
 {
 	struct qpnp_amoled *chip  = rdev_get_drvdata(rdev);
+	unsigned int last_mode;
 
 	if (mode != REGULATOR_MODE_NORMAL && mode != REGULATOR_MODE_STANDBY &&
 		mode != REGULATOR_MODE_IDLE) {
@@ -468,10 +469,12 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 		return 0;
 
 	mutex_lock(&chip->reg_lock);
+	last_mode = chip->ab.vreg.mode;
 	chip->ab.vreg.mode = chip->ibb.vreg.mode = mode;
 	mutex_unlock(&chip->reg_lock);
 
-	queue_work(chip->wq, &chip->aod_work);
+	if (last_mode == REGULATOR_MODE_IDLE || mode == REGULATOR_MODE_IDLE)
+		queue_work(chip->wq, &chip->aod_work);
 	return 0;
 }
 
