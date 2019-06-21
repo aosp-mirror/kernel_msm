@@ -366,7 +366,8 @@ struct fts_ts_info {
 	unsigned long stylus_id;	/* Bitmask for the stylus */
 #endif
 
-	u64 timestamp; /* nanoseconds, acquired during hard interrupt */
+	ktime_t timestamp; /* time that the event was first received from the
+		touch IC, acquired during hard interrupt, in CLOCK_MONOTONIC */
 
 	struct fts_hw_platform_data     *board;	/* HW info from device tree */
 	struct regulator        *vdd_reg;	/* DVDD power regulator */
