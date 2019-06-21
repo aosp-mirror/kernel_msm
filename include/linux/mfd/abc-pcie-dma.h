@@ -52,6 +52,11 @@ struct abc_pcie_dma {
 	struct device *dma_dev;
 	struct abc_pcie_dma_uapi uapi;
 	bool pcie_link_up;
+	/* marks that an error was found on the link and it's
+	 * going down. all transactions that come until the
+	 * link down process finishes will result in an error
+	 */
+	unsigned long link_poisoned;
 	enum abc_dma_dram_state_e dram_state;
 	struct abc_pcie_dma_ops pcie_notify_ops;
 	struct notifier_block dram_nb;

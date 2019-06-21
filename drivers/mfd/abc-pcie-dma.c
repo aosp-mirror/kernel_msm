@@ -9,6 +9,7 @@
  */
 
 #include <linux/ab-dram.h>
+#include <linux/airbrush-sm-notifier.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
@@ -38,6 +39,8 @@
 #define DMA_CHANS_PER_READ_XFER 3
 #define DMA_CHANS_PER_WRITE_XFER 1
 
+/* ((size / 500 bytes to us) + setup time ) * timeout buffer multiplier*/
+#define SIZE_TO_US_TIMEOUT(sz) ((sz / 500 + 200) * 10)
 static struct abc_pcie_dma abc_dma;
 
 static DEFINE_SPINLOCK(dma_spinlock);
@@ -263,6 +266,8 @@ static void dma_pcie_link_ops_link_error(void)
 		handle_dma_state_transition(/*pcie_link_up=*/false,
 					    /*dram_state=*/AB_DMA_DRAM_DOWN,
 					    /*wait_active_transfer=*/false);
+
+	clear_bit(0, &abc_dma.link_poisoned);
 	up_write(&abc_dma.state_transition_rwsem);
 
 	dev_warn(&abc_dma.pdev->dev, "Done link_error sequence\n");
@@ -815,6 +820,20 @@ int abc_pcie_clean_dma_remote_buffers(struct abc_dma_xfer *xfer)
 	return 0;
 }
 
+static char *abc_pcie_dma_xfer_method_to_str(dma_xfer_method_t method)
+{
+	switch (method) {
+	case DMA_TRANSFER_USING_PIO:
+		return "PIO";
+	case DMA_TRANSFER_USING_SBLOCK:
+		return "SBLOCK";
+	case DMA_TRANSFER_USING_MBLOCK:
+		return "MBLOCK";
+	default:
+		return "";
+	}
+}
+
 /**
  * Internal DMA API for cleaning a transfer and removing it from the internal,
  * data structures. De-allocates abc_dma_xfer passed to it.
@@ -851,10 +870,27 @@ void abc_pcie_clean_dma_xfer_locked(struct abc_dma_xfer *xfer)
 		/* Wait for transfer to be done. Note that the interrupt
 		 * handler will dequeue from pending list as well as
 		 * re-start the new transaction.
+		 * Check for timeout
 		 */
+		unsigned long remaining, timeout = usecs_to_jiffies(
+			SIZE_TO_US_TIMEOUT(xfer->size));
+
 		dev_dbg(&abc_dma.pdev->dev,
 			"%s: Waiting for transfer to finish\n", __func__);
-		wait_for_completion(&wait_info->done);
+
+		remaining = wait_for_completion_timeout(
+			&wait_info->done, timeout);
+		if (WARN_ON(remaining == 0)) {
+			dev_err(&abc_dma.pdev->dev,
+				"%s: DMA Transfer timed out! id:%0llu, size:%lld, type:%s\n",
+				__func__, xfer->id, xfer->size,
+				abc_pcie_dma_xfer_method_to_str(
+					xfer->transfer_method));
+			set_bit(0, &abc_dma.link_poisoned);
+			poison_all_transfers();
+			ab_sm_report_fatal("PCIe DMA timeout");
+			return;
+		}
 	}
 
 	if (wait_info != NULL) {
@@ -966,6 +1002,9 @@ int abc_pcie_dma_do_wait(struct abc_pcie_dma_session *session,
 	long remaining = 0;
 	struct abc_dma_xfer *xfer;
 	struct abc_pcie_sg_list *sgl;
+
+	if (wait_info->xfer != NULL && timeout < 0)
+		timeout = SIZE_TO_US_TIMEOUT(wait_info->xfer->size);
 
 	remaining = wait_for_completion_interruptible_timeout(&wait_info->done,
 					usecs_to_jiffies(timeout));
@@ -1547,7 +1586,8 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 
 	down_read(&abc_dma.state_transition_rwsem);
 
-	if (!abc_dma.pcie_link_up || (abc_dma.dram_state != AB_DMA_DRAM_UP)) {
+	if (!abc_dma.pcie_link_up || (abc_dma.dram_state != AB_DMA_DRAM_UP) ||
+			test_bit(0, &abc_dma.link_poisoned)) {
 		up_read(&abc_dma.state_transition_rwsem);
 		return -EREMOTEIO;
 	}
@@ -1950,6 +1990,7 @@ int abc_pcie_dma_drv_probe(struct platform_device *pdev)
 	abc_dma.pdev = pdev;
 	abc_dma.pcie_link_up = true;
 	abc_dma.dram_state = AB_DMA_DRAM_DOWN;
+	abc_dma.link_poisoned = 0;
 
 	err = sysfs_create_files(&pdev->dev.kobj, abc_pcie_dma_attrs);
 	if (err) {
