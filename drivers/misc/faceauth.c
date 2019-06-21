@@ -47,6 +47,7 @@
 #define M0_ENROLL_POLLING_PAUSE_US 50000
 #define M0_AUTH_POLLING_PAUSE_US 15000
 /* Polling interval in us */
+#define M0_ENROLL_POLLING_INTERVAL_US 6000
 #define M0_POLLING_INTERVAL_US 65000
 
 /* Citadel */
@@ -212,6 +213,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		pr_info("Waiting for completion.\n");
 		if(start_step_data.operation == COMMAND_ENROLL){
 			polling_pause = M0_ENROLL_POLLING_PAUSE_US;
+			polling_interval = M0_ENROLL_POLLING_INTERVAL_US;
 		}
 		ATRACE_BLOCK("M0_POLLING_PAUSE_US", {
 			usleep_range(polling_pause, polling_pause + 1);
