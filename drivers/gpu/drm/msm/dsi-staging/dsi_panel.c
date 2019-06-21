@@ -4152,6 +4152,9 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
+	if (panel->funcs && panel->funcs->pre_lp1)
+		panel->funcs->pre_lp1(panel);
+
 	dsi_backlight_early_dpms(&panel->bl_config, SDE_MODE_DPMS_LP1);
 
 	mutex_lock(&panel->panel_lock);

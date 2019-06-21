@@ -321,6 +321,7 @@ struct dsi_panel {
  * @pre_kickoff: called just before frame kickoff
  * @idle: called when updates haven't been received for a while (idle)
  * @wakeup: called when coming out of idle state
+ * @pre_lp1: called before power mode is going to be lp1
  *
  * Note: none of these functions above should be called while holding panel_lock
  *
@@ -336,6 +337,7 @@ struct dsi_panel_funcs {
 	int (*pre_kickoff)(struct dsi_panel *);
 	int (*idle)(struct dsi_panel *);
 	int (*wakeup)(struct dsi_panel *);
+	int (*pre_lp1)(struct dsi_panel *);
 	int (*update_hbm)(struct dsi_panel *);
 	int (*send_nolp)(struct dsi_panel *);
 };
