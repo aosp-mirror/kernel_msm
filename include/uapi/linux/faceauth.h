@@ -52,12 +52,14 @@ struct faceauth_start_data {
 	__u64 image_flood_fd;
 	__u64 image_flood_right_fd;
 	__u64 calibration_fd;
+	__u64 deferred_autocal_fd; /* b/134792835 */
 
 	__u32 image_dot_left_size;
 	__u32 image_dot_right_size;
 	__u32 image_flood_size;
 	__u32 image_flood_right_size;
 	__u32 calibration_size;
+	__u32 deferred_autocal_size;
 
 	__s16 cache_flush_indexes[FACEAUTH_MAX_CACHE_FLUSH_SIZE];
 	__u32 cache_flush_size;
