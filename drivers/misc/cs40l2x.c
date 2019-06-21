@@ -4520,7 +4520,22 @@ static int cs40l2x_reset_recovery(struct cs40l2x_private *cs40l2x)
 	if (cs40l2x->revid < CS40L2X_REVID_B1)
 		return -EPERM;
 
-	cs40l2x->asp_enable = CS40L2X_ASP_DISABLED;
+	if (cs40l2x->asp_available) {
+		ret = cs40l2x_wseq_replace(cs40l2x, CS40L2X_SP_ENABLES, 0);
+		if (ret)
+			return ret;
+
+		ret = cs40l2x_wseq_replace(cs40l2x, CS40L2X_PLL_CLK_CTRL,
+				((1 << CS40L2X_PLL_REFCLK_EN_SHIFT)
+					& CS40L2X_PLL_REFCLK_EN_MASK) |
+				((CS40L2X_PLL_REFCLK_SEL_MCLK
+					<< CS40L2X_PLL_REFCLK_SEL_SHIFT)
+					& CS40L2X_PLL_REFCLK_SEL_MASK));
+		if (ret)
+			return ret;
+
+		cs40l2x->asp_enable = CS40L2X_ASP_DISABLED;
+	}
 
 	cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
 	cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
