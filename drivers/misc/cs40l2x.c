@@ -4022,14 +4022,7 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 	unsigned int val;
 	int ret;
 
-	if (cs40l2x->devid != CS40L2X_DEVID_L25A)
-		return;
-
 	mutex_lock(&cs40l2x->lock);
-
-	if (cs40l2x->vibe_mode == CS40L2X_VIBE_MODE_HAPTIC
-			&& cs40l2x->asp_enable == CS40L2X_ASP_DISABLED)
-		goto err_mutex;
 
 	ret = regmap_read(regmap, cs40l2x_dsp_reg(cs40l2x, "STATUS",
 			CS40L2X_XM_UNPACKED_TYPE, CS40L2X_ALGO_ID_VIBE), &val);
@@ -4097,8 +4090,31 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		}
 
 		cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
-		if (cs40l2x->vibe_state != CS40L2X_VIBE_STATE_RUNNING)
-			cs40l2x_wl_relax(cs40l2x);
+
+		if (cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE)
+			goto err_mutex;
+
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_wl_relax(cs40l2x);
+	} else {
+		/* haptic-mode teardown */
+		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED
+				|| cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE)
+			goto err_mutex;
+
+		if (cs40l2x->amp_gnd_stby) {
+			ret = regmap_write(regmap,
+					CS40L2X_SPK_FORCE_TST_1,
+					CS40L2X_FORCE_SPK_GND);
+			if (ret) {
+				dev_err(dev,
+					"Failed to ground amplifier outputs\n");
+				goto err_mutex;
+			}
+		}
+
+		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_wl_relax(cs40l2x);
 	}
 
 err_mutex:
@@ -4293,36 +4309,6 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
-		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
-			goto err_mutex;
-
-		ret = regmap_read(regmap,
-				cs40l2x_dsp_reg(cs40l2x, "STATUS",
-						CS40L2X_XM_UNPACKED_TYPE,
-						CS40L2X_ALGO_ID_VIBE),
-				&val);
-		if (ret) {
-			dev_err(dev, "Failed to capture playback status\n");
-			goto err_mutex;
-		}
-
-		if (val != CS40L2X_STATUS_IDLE)
-			goto err_mutex;
-
-		if (cs40l2x->amp_gnd_stby) {
-			ret = regmap_write(regmap,
-					CS40L2X_SPK_FORCE_TST_1,
-					CS40L2X_FORCE_SPK_GND);
-			if (ret) {
-				dev_err(dev,
-					"Failed to ground amplifier outputs\n");
-				goto err_mutex;
-			}
-		}
-
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
-		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
-			cs40l2x_wl_relax(cs40l2x);
 		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
