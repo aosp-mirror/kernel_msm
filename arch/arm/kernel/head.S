@@ -408,6 +408,13 @@ ARM_BE8(eor	r4, r4, r5)			@ without using a temp reg.
 	ldr	r12, [r10, #PROCINFO_INITFUNC]
 	add	r12, r12, r10			@ initialise processor
 						@ (return control reg)
+	movw	r10, #0x93E0
+	movt	r10, #0x0004
+.L8:
+	sub	r10, r10, #1
+	cmp	r10, #0
+	bne	.L8
+
 	ret	r12
 ENDPROC(secondary_startup)
 ENDPROC(secondary_startup_arm)
