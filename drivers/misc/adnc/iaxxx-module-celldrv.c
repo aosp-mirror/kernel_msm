@@ -67,6 +67,8 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		return -EINVAL;
 	}
 
+	memset(&sensor_stats, 0, sizeof(sensor_stats));
+
 	switch (cmd) {
 	case SCRIPT_LOAD:
 		if (copy_from_user(&script_info, (void __user *)arg,
@@ -274,6 +276,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		if (iaxxx_core_get_pwr_stats(module_dev_priv->parent,
 					&pwr_stats_count) < 0) {
 			pr_err("Error in reading power statistics\n");
+			mutex_unlock(&priv->module_lock);
 			return -EINVAL;
 		}
 		mutex_unlock(&priv->module_lock);
