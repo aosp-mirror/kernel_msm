@@ -122,6 +122,7 @@ struct hypx_fa_process {
 
 	uint32_t operation;
 	uint32_t profile_id;
+	uint32_t input_time_ms;
 
 	uint32_t image_dot_left_size;
 	uint32_t image_dot_right_size;
@@ -815,6 +816,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	hypx_data->is_secure_camera = is_secure_camera;
 	hypx_data->operation = data->operation;
 	hypx_data->profile_id = data->profile_id;
+	hypx_data->input_time_ms = data->input_time_ms;
 	hypx_data->citadel_input = data->citadel_input;
 	hypx_data->citadel_input2 = data->citadel_input2;
 	if (pass_images_to_el2) {
