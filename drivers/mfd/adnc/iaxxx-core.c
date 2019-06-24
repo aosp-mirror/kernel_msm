@@ -1407,7 +1407,7 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 		dev_info(priv->dev, "CM4 Core crashed\n");
 		priv->cm4_crashed = false;
 	} else {
-		ret = regmap_read(priv->regmap,
+		ret = regmap_read(priv->regmap_no_pm,
 				IAXXX_SRB_PROCESSOR_CRASH_STATUS_ADDR,
 				&core_crashed);
 		/* Crash status read fails, means CM4 core crashed */
