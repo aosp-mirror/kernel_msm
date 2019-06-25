@@ -102,7 +102,7 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 			&& evt->event_id == IAXXX_CRASH_EVENT_ID) {
 		dev_err(dev, "FW crash %s: src:0x%.04x, proc id:0x%.04X\n",
 			__func__, evt->event_src, evt->src_opaque);
-		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_EVENT);
+		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_EVENT, evt->src_opaque);
 		return ret;
 	}
 

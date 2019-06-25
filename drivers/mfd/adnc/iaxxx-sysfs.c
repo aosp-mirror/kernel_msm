@@ -549,7 +549,7 @@ static ssize_t iaxxx_simulate_fwcrash(struct device *dev,
 		return -EINVAL;
 	if (val != 1)
 		return -EINVAL;
-	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_EVENT);
+	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_SIMULATED, IAXXX_NO_PROC);
 	return count;
 }
 static DEVICE_ATTR(simulate_fwcrash, 0200, NULL,
