@@ -513,6 +513,11 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 			__func__, inst);
 		return -EINVAL;
 	}
+	if (inst->in_flush && inst->session_type == MSM_VIDC_DECODER &&
+				b->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		dprintk(VIDC_ERR, "%s: session in flush, discarding qbuf\n", __func__);
+		return -EINVAL;
+	}
 
 	for (i = 0; i < b->length; i++) {
 		b->m.planes[i].m.fd = b->m.planes[i].reserved[0];
