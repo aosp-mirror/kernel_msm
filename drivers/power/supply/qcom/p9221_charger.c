@@ -718,12 +718,6 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	del_timer(&charger->vrect_timer);
 
 	p9221_vote_defaults(charger);
-
-	if (charger->pdata->qien_gpio >= 0) {
-		gpio_set_value(charger->pdata->qien_gpio, 1);
-		msleep(2050);
-		gpio_set_value(charger->pdata->qien_gpio, 0);
-	}
 }
 
 static void p9221_tx_work(struct work_struct *work)
