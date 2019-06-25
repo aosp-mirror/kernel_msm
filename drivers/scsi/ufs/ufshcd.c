@@ -7852,7 +7852,8 @@ static int ufshcd_eh_device_reset_handler(struct scsi_cmnd *cmd)
 out:
 	hba->req_abort_count = 0;
 	if (!err) {
-		schedule_delayed_work(&hba->ufshpb_init_work,
+		if (CONFIG_SCSI_UFSHCD_HPB_ACTIVATE)
+			schedule_delayed_work(&hba->ufshpb_init_work,
 					msecs_to_jiffies(10));
 		err = SUCCESS;
 	} else {
@@ -9178,7 +9179,8 @@ reinit:
 			hba->clk_scaling.is_allowed = true;
 		}
 
-		schedule_delayed_work(&hba->ufshpb_init_work,
+		if (CONFIG_SCSI_UFSHCD_HPB_ACTIVATE)
+			schedule_delayed_work(&hba->ufshpb_init_work,
 						msecs_to_jiffies(0));
 
 		scsi_scan_host(hba->host);
