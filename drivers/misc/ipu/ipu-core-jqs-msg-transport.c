@@ -443,6 +443,21 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt_handler(
 		return IRQ_HANDLED;
 	}
 
+	if (!(atomic_read(&bus->state) & IPU_STATE_JQS_READY)) {
+		spin_unlock(&bus->irq_lock);
+		return IRQ_HANDLED;
+	}
+
+	if (q_ids & trans->free_queue_ids) {
+		dev_err(bus->parent_dev,
+			"%s: JQS received an interrupt for a free queue\n",
+			__func__);
+		ipu_bus_notify_fatal_error(bus);
+
+		spin_unlock(&bus->irq_lock);
+		return IRQ_HANDLED;
+	}
+
 	for (q_id = JQS_TRANSPORT_FIRST_APP_QUEUE_ID;
 			q_id <= JQS_TRANSPORT_MAX_QUEUE; q_id++) {
 		if ((1 << q_id) > q_ids)
@@ -450,14 +465,6 @@ irqreturn_t ipu_core_jqs_msg_transport_interrupt_handler(
 
 		if (!((1 << q_id) & q_ids))
 			continue;
-
-		if ((1 << q_id) & trans->free_queue_ids) {
-			dev_err(bus->parent_dev,
-				"%s: JQS received an interrupt for a free queue\n",
-				__func__);
-			ipu_bus_notify_fatal_error(bus);
-			break;
-		}
 
 		host_q = &trans->queues[q_id];
 
