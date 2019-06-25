@@ -42,6 +42,8 @@ struct bms_dev {
 	int				taper_control;
 	bool				fcc_stepper_enable;
 	u32				rradc_base;
+	int				chg_term_voltage;
+
 };
 
 struct bias_config {
@@ -80,6 +82,8 @@ struct bias_config {
 
 #define CHGR_FLOAT_VOLTAGE_BASE		3600000
 #define CHGR_CHARGE_CURRENT_STEP	50000
+
+#define CHG_TERM_VOLTAGE	4350
 
 enum sm8150_chg_status {
 	SM8150_INHIBIT_CHARGE	= 0,
@@ -606,6 +610,7 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 {
 	bool plugged, valid;
 	int rc, ret;
+	int vchrg = 0;
 	u8 stat;
 
 	rc = sm8150_rd8(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG, &stat);
@@ -647,7 +652,14 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 		break;
 	case SM8150_TERMINATE_CHARGE:
 	case SM8150_INHIBIT_CHARGE:
-		ret = POWER_SUPPLY_STATUS_FULL;
+		rc = sm8150_get_battery_voltage(bms, &vchrg);
+		if (rc == 0)
+			vchrg = (vchrg / 1000);
+
+		if (vchrg <= bms->chg_term_voltage)
+			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		else
+			ret = POWER_SUPPLY_STATUS_FULL;
 		break;
 	case SM8150_DISABLE_CHARGE:
 	case SM8150_PAUSE_CHARGE:
@@ -1068,6 +1080,11 @@ static int sm8150_parse_dt(struct bms_dev *bms)
 		sm8150_parse_dt_fg(bms, fg_node);
 	else
 		pr_err("cannot find qpnp,fg, rradc not available\n");
+
+	ret = of_property_read_u32(node, "google,chg-term-voltage",
+				   &bms->chg_term_voltage);
+	if (ret < 0)
+		bms->chg_term_voltage = CHG_TERM_VOLTAGE;
 
 	ret = of_property_read_string(node, "google,psy-name", &psy_name);
 	if (ret == 0)
