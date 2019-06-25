@@ -91,6 +91,9 @@ struct paintbox_jqs_msg_transport {
 
 	/* Bitmask of the available queue ids */
 	uint32_t free_queue_ids;
+
+	struct rw_semaphore active_reads_rwsem;
+	atomic_t shutdown_initiated;
 };
 
 #if IS_ENABLED(CONFIG_IPU_DEBUG)

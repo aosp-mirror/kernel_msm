@@ -30,6 +30,7 @@
 #include "ipu-regs.h"
 
 #define USER_READ_TIMEOUT_MS (300 * 1000)
+#define USER_READ_TIMEOUT_INTERVAL_MS (10)
 
 /*
  * The following pieces of data (as well as a couple of shared
@@ -387,6 +388,9 @@ int ipu_core_jqs_msg_transport_init(struct paintbox_bus *bus)
 	 * indicate data on one of the application queues.
 	 */
 	trans->free_queue_ids = ~(JQS_SYS_DBL_MSI0 | JQS_SYS_DBL_MSI1);
+
+	init_rwsem(&trans->active_reads_rwsem);
+
 	spin_unlock_irqrestore(&bus->irq_lock, flags);
 
 	return 0;
@@ -410,11 +414,16 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 	}
 	trans = bus->jqs_msg_transport;
 
+	atomic_set(&trans->shutdown_initiated, 1);
+	down_write(&trans->active_reads_rwsem);
+
 	spin_lock_irqsave(&bus->irq_lock, flags);
 	bus->jqs_msg_transport = NULL;
 	spin_unlock_irqrestore(&bus->irq_lock, flags);
 
 	ipu_core_free_shared_memory(bus, trans->shared_buf);
+
+	up_write(&trans->active_reads_rwsem);
 
 	kfree(trans);
 
@@ -579,6 +588,13 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 
 	trans = bus->jqs_msg_transport;
 
+	if (trans->free_queue_ids & (1 << q_id)) {
+		dev_err(bus->parent_dev,
+			"%s error queue %d is not allocated!", __func__, q_id);
+		mutex_unlock(&bus->transport_lock);
+		return;
+	}
+
 	host_q = &trans->queues[q_id];
 	waiter = &host_q->waiter;
 
@@ -652,9 +668,10 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	unsigned long flags;
 	struct paintbox_jqs_msg_transport *trans;
 	struct host_jqs_queue *host_q;
-	unsigned long timeout_ms = USER_READ_TIMEOUT_MS;
+	long timeout_ms = USER_READ_TIMEOUT_MS;
 	struct host_jqs_queue_waiter *waiter;
 	ssize_t ret;
+	struct rw_semaphore *active_reads_rwsem;
 
 	mutex_lock(&bus->transport_lock);
 
@@ -664,6 +681,9 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 		return PTR_ERR(trans);
 	}
 
+	active_reads_rwsem = &trans->active_reads_rwsem;
+	down_read(active_reads_rwsem);
+
 	host_q = &trans->queues[q_id];
 	waiter = &host_q->waiter;
 
@@ -671,12 +691,14 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	 * read then return a disconnect error.
 	 */
 	if (trans->free_queue_ids & (1 << q_id)) {
+		up_read(active_reads_rwsem);
 		mutex_unlock(&bus->transport_lock);
 		return -ECONNABORTED;
 	}
 
 	/* Two concurrent calls to read is not supported */
 	if (waiter->enabled) {
+		up_read(active_reads_rwsem);
 		mutex_unlock(&bus->transport_lock);
 		dev_err(bus->parent_dev, "%s: queue busy", __func__);
 		return -EBUSY;
@@ -707,9 +729,23 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 
 		mutex_unlock(&bus->transport_lock);
 
-		time_remaining = wait_for_completion_interruptible_timeout(
+		while (timeout_ms > 0) {
+			time_remaining =
+				wait_for_completion_interruptible_timeout(
 				&waiter->completion,
-				msecs_to_jiffies(timeout_ms));
+				msecs_to_jiffies(
+					USER_READ_TIMEOUT_INTERVAL_MS));
+
+			if (time_remaining != 0)
+				break;
+
+			if (atomic_read(&trans->shutdown_initiated)) {
+				up_read(active_reads_rwsem);
+				return -ENETDOWN;
+			}
+
+			timeout_ms -= USER_READ_TIMEOUT_INTERVAL_MS;
+		}
 
 		mutex_lock(&bus->transport_lock);
 
@@ -718,6 +754,7 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 			mutex_unlock(&bus->transport_lock);
 			dev_err(bus->parent_dev, "%s: JQS is not ready\n",
 					__func__);
+			up_read(active_reads_rwsem);
 			return PTR_ERR(trans);
 		}
 
@@ -742,7 +779,6 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 			break;
 		}
 
-		timeout_ms = jiffies_to_msecs(time_remaining);
 		reinit_completion(&waiter->completion);
 	}
 
@@ -750,6 +786,8 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 	waiter->enabled = false;
 	spin_unlock_irqrestore(&bus->irq_lock, flags);
 	memset(waiter, 0, sizeof(struct host_jqs_queue_waiter));
+
+	up_read(active_reads_rwsem);
 
 	mutex_unlock(&bus->transport_lock);
 
