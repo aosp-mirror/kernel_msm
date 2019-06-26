@@ -26,3 +26,7 @@
 &ibb_vreg {
 	qcom,aod-pd-control;
 };
+
+&oledb_vreg {
+	qcom,default-vout-override;
+};
