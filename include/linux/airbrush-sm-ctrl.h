@@ -606,7 +606,7 @@ struct ab_state_context {
 	 */
 	bool going_to_comp_ready;
 
-	bool el2_mode; /* Guarded by state_transitioning_lock */
+	int el2_mode; /* Guarded by state_transitioning_lock */
 	/* State we return to upon exit of el2 mode */
 	enum chip_state return_chip_substate_id;
 

@@ -1969,7 +1969,7 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	dev_warn(sc->dev, "begin emergency shutdown work\n");
 
 	/* Force reset el2_mode (b/122619299#comment10) */
-	sc->el2_mode = false;
+	sc->el2_mode = 0;
 
 	ab_cleanup_state_linkdown(sc);
 
@@ -2189,7 +2189,7 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 		mutex_unlock(&sc->mfd_lock);
 
 		if (!ret)
-			sc->el2_mode = true;
+			sc->el2_mode = 1;
 	} else {
 		ret = -EINVAL;
 		dev_warn(sc->dev, "Already in el2 mode\n");
@@ -2232,7 +2232,7 @@ int ab_sm_exit_el2(struct ab_state_context *sc)
 
 	/* Restore destination substate to pre-el2-mode value */
 	sc->dest_chip_substate_id = sc->return_chip_substate_id;
-	sc->el2_mode = false;
+	sc->el2_mode = 0;
 
 	reinit_completion(&sc->transition_comp);
 	complete_all(&sc->request_state_change_comp);
@@ -2584,6 +2584,7 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 	if (ret != -EINVAL)
 		return ret;
 #endif /* CONFIG_AIRBRUSH_SM_DEBUG_IOCTLS */
+	ret = 0;
 
 	switch (cmd) {
 	case AB_SM_MAPPED_ASYNC_NOTIFY:
@@ -2604,7 +2605,6 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		state = ab_sm_get_state(sess->sc);
 		if (copy_to_user((void __user *)arg, &state, sizeof(state)))
 			return -EFAULT;
-		ret = 0;
 		break;
 
 	case AB_SM_ENTER_EL2:
@@ -2889,7 +2889,7 @@ int ab_sm_init(struct platform_device *pdev)
 		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
 
 	ab_sm_ctx->cold_boot = true;
-	ab_sm_ctx->el2_mode = false;
+	ab_sm_ctx->el2_mode = 0;
 
 	/* initialize state stats */
 	ab_sm_state_stats_init(ab_sm_ctx);
