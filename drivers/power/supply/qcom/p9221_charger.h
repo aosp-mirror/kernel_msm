@@ -286,6 +286,7 @@ struct p9221_charger_data {
 	int				wlc_alignment_last;
 	u32				current_filtered;
 	u32				current_sample_cnt;
+	struct delayed_work		dcin_pon_work;
 };
 
 struct p9221_prop_reg_map_entry {

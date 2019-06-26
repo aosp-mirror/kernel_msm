@@ -37,6 +37,7 @@
 #define P9221_VRECT_TIMEOUT_MS		(2 * 1000)
 #define P9221_ALIGN_TIMEOUT_MS		100
 #define P9221_NOTIFIER_DELAY_MS		100
+#define P9221_DCIN_PON_DELAY_MS		250
 #define P9221R5_ILIM_MAX_UA		(1600 * 1000)
 #define P9221R5_OVER_CHECK_NUM		3
 
@@ -720,6 +721,13 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	del_timer(&charger->vrect_timer);
 
 	p9221_vote_defaults(charger);
+	if (charger->enabled &&
+	    charger->pdata->qien_gpio >= 0) {
+		gpio_set_value(charger->pdata->qien_gpio, 1);
+
+		mod_delayed_work(system_wq, &charger->dcin_pon_work,
+				 msecs_to_jiffies(P9221_DCIN_PON_DELAY_MS));
+	}
 }
 
 static void p9221_tx_work(struct work_struct *work)
@@ -745,6 +753,37 @@ static void p9221_vrect_timer_handler(unsigned long data)
 		"vrect: timeout online=%d", charger->online);
 
 	pm_relax(charger->dev);
+}
+
+static void p9221_dcin_pon_work(struct work_struct *work)
+{
+	int ret;
+	union power_supply_propval prop;
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, dcin_pon_work.work);
+
+	ret = power_supply_get_property(charger->dc_psy,
+					POWER_SUPPLY_PROP_DC_RESET, &prop);
+	if (ret < 0) {
+		dev_err(&charger->client->dev,
+			"Error getting charging status: %d\n", ret);
+		return;
+	}
+
+	if (prop.intval == 0) {
+		gpio_set_value(charger->pdata->qien_gpio, 0);
+	} else {
+		/* Signal DC_RESET when vout keeps on 1. */
+		ret = power_supply_set_property(charger->dc_psy,
+						POWER_SUPPLY_PROP_DC_RESET,
+						&prop);
+		if (ret < 0)
+			dev_err(&charger->client->dev,
+				"unable to set DC_RESET, ret=%d", ret);
+
+		schedule_delayed_work(&charger->dcin_pon_work,
+			msecs_to_jiffies(P9221_DCIN_TIMEOUT_MS));
+	}
 }
 
 static void p9221_dcin_work(struct work_struct *work)
@@ -1285,6 +1324,8 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 
 	/* NOTE: depends on _is_epp() which is not valid until DC_IN */
 	p9221_write_fod(charger);
+
+	cancel_delayed_work(&charger->dcin_pon_work);
 
 	/* Reset last alignment value when online */
 	charger->wlc_alignment_last = -1;
@@ -2822,6 +2863,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
 	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
 	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
+	INIT_DELAYED_WORK(&charger->dcin_pon_work, p9221_dcin_pon_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
 		   p9221_icl_ramp_alarm_cb);
 
@@ -2951,6 +2993,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->dcin_work);
 	cancel_delayed_work_sync(&charger->tx_work);
 	cancel_delayed_work_sync(&charger->icl_ramp_work);
+	cancel_delayed_work_sync(&charger->dcin_pon_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);
 	del_timer_sync(&charger->vrect_timer);
 	device_init_wakeup(charger->dev, false);

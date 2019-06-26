@@ -3008,6 +3008,28 @@ int smblib_get_prop_voltage_wls_output(struct smb_charger *chg,
 	return rc;
 }
 
+int smblib_get_prop_dc_in_pon(struct smb_charger *chg,
+				union power_supply_propval *val)
+{
+	int rc;
+	u8 stat;
+
+	if (chg->smb_version == PMI632_SUBTYPE) {
+		val->intval = 0;
+		return 0;
+	}
+
+	rc = smblib_read(chg, DCIN_BASE + INT_RT_STS_OFFSET, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read DCIN_RT_STS rc=%d\n", rc);
+		return rc;
+	}
+
+	val->intval = stat & DCIN_PON_RT_STS_BIT;
+
+	return val->intval ? 1 : 0;
+}
+
 int smblib_get_prop_dc_present(struct smb_charger *chg,
 				union power_supply_propval *val)
 {

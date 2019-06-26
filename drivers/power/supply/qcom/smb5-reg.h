@@ -342,6 +342,7 @@ enum {
 
 #define DCIN_LOAD_CFG_REG			(DCIN_BASE + 0x65)
 #define INPUT_MISS_POLL_EN_BIT			BIT(5)
+#define DCIN_PON_RT_STS_BIT			BIT(6)
 
 /********************************
  *  TYPEC Peripheral Registers  *
