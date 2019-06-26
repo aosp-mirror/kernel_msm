@@ -1623,7 +1623,7 @@ static int smb5_dc_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_voltage_wls_output(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_DC_RESET:
-		val->intval = 0;
+		val->intval = smblib_get_prop_dc_in_pon(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_AICL_DONE:
 		val->intval = chg->dcin_aicl_done;
@@ -1658,6 +1658,9 @@ static int smb5_dc_set_prop(struct power_supply *psy,
 		rc = smblib_set_prop_voltage_wls_output(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_DC_RESET:
+		mutex_lock(&chg->dc_reset_lock);
+		chg->dc_reset = false;
+		mutex_unlock(&chg->dc_reset_lock);
 		rc = smblib_set_prop_dc_reset(chg);
 		break;
 	default:
