@@ -53,6 +53,10 @@
 /* IBB_PD_CTL */
 #define ENABLE_PD_BIT			BIT(7)
 
+/* OLEDB */
+#define OLEDB_VOUT_PGM(chip)		(chip->oledb_base + 0x49)
+#define OLEDB_VOUT_DEFAULT(chip)	(chip->oledb_base + 0x4A)
+
 struct amoled_regulator {
 	struct regulator_desc	rdesc;
 	struct regulator_dev	*rdev;
@@ -66,6 +70,7 @@ struct oledb_regulator {
 
 	/* DT params */
 	bool			swire_control;
+	bool			vout_override;
 };
 
 struct ab_regulator {
@@ -93,6 +98,7 @@ struct qpnp_amoled {
 	struct ibb_regulator	ibb;
 	struct mutex		reg_lock;
 	struct work_struct	aod_work;
+	struct delayed_work	vout_work;
 	struct workqueue_struct *wq;
 
 	/* DT params */
@@ -452,6 +458,39 @@ error:
 		pr_err("Failed to configure for mode %d\n", mode);
 }
 
+static void qpnp_amoled_vout_override_work(struct work_struct *work)
+{
+	const struct delayed_work *dw = to_delayed_work(work);
+	struct qpnp_amoled *chip = container_of(dw, struct qpnp_amoled,
+						vout_work);
+	u8 default_vout, current_vout;
+	int rc;
+
+	rc = qpnp_amoled_read(chip, OLEDB_VOUT_DEFAULT(chip), &default_vout, 1);
+	if (rc) {
+		pr_warn("Unable to read default vout\n");
+		return;
+	}
+
+	rc = qpnp_amoled_read(chip, OLEDB_VOUT_PGM(chip), &current_vout, 1);
+	if (rc) {
+		pr_warn("Unable to read current vout\n");
+		return;
+	}
+
+	if (current_vout != default_vout) {
+		pr_warn("Current voltage (0x%X) doesn't match default (0x%X)\n",
+			current_vout, default_vout);
+
+		rc = qpnp_amoled_write(chip, OLEDB_VOUT_PGM(chip),
+				       &default_vout, 1);
+		if (rc)
+			pr_warn("Unable to program voltage\n");
+	} else {
+		pr_debug("Voltage check successful (0x%X)\n", current_vout);
+	}
+}
+
 static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 						unsigned int mode)
 {
@@ -475,6 +514,15 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 
 	if (last_mode == REGULATOR_MODE_IDLE || mode == REGULATOR_MODE_IDLE)
 		queue_work(chip->wq, &chip->aod_work);
+
+	if (chip->oledb.vout_override) {
+		cancel_delayed_work_sync(&chip->vout_work);
+		if (mode != REGULATOR_MODE_STANDBY) {
+			const unsigned int delay = msecs_to_jiffies(150);
+
+			queue_delayed_work(chip->wq, &chip->vout_work, delay);
+		}
+	}
 	return 0;
 }
 
@@ -715,6 +763,8 @@ static int qpnp_amoled_parse_dt(struct qpnp_amoled *chip)
 			chip->oledb.vreg.node = temp;
 			chip->oledb.swire_control = of_property_read_bool(temp,
 							"qcom,swire-control");
+			chip->oledb.vout_override = of_property_read_bool(temp,
+						"qcom,default-vout-override");
 			break;
 		case AB_PERIPH_TYPE:
 			chip->ab_base = base;
@@ -774,6 +824,7 @@ static int qpnp_amoled_regulator_probe(struct platform_device *pdev)
 
 	mutex_init(&chip->reg_lock);
 	INIT_WORK(&chip->aod_work, qpnp_amoled_aod_work);
+	INIT_DELAYED_WORK(&chip->vout_work, qpnp_amoled_vout_override_work);
 	chip->dev = &pdev->dev;
 
 	chip->regmap = dev_get_regmap(pdev->dev.parent, NULL);

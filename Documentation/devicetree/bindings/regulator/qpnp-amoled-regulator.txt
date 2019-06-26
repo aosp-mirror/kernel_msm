@@ -76,6 +76,14 @@ Subnode properties for AB regulator device.
 		    entry. If this is not specified, a default value of 100 ms
 		    is used.
 
+Subnode properties for OLEDB regulator device.
+
+- qcom,default-vout-override:
+	Usage:      optional
+	Value type: <empty>
+	Definition: A boolean property to specify that voltage override should
+		    happen after non-standby mode change.
+
 Example:
 
 pm8150a_amoled: oledb@e000 {
