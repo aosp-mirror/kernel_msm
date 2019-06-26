@@ -641,15 +641,29 @@ struct s6e3hc2_switch_data {
 	struct kthread_work gamma_work;
 };
 
+#define S6E3HC2_GAMMA_BAND_LEN 45
+#define S6E3HC2_GAMMA_BAND_G0_OFFSET 39
+
+/**
+* s6e3hc2_gamma_info - Information used to access gamma data on s6e3hc2.
+* @cmd: Command to use when writing/reading gamma from the DDIC.
+* @len: Total number of bytes to write/read from DDIC, including prefix_len.
+* @flash_offset: Address offset to use when reading from flash.
+* @par_offset: Global parameter offset command (see s6e3hc2 spec)
+* @needs_g0_clear: Some s6e3hc2 panels have incorrectly programmed gamma bands,
+*     specifically at gray 0 (i.e., black). This flag enables a workaround that
+*     makes sure gray 0 is black by clearing the corresponding R, G, B bytes.
+*/
 const struct s6e3hc2_gamma_info {
 	u8 cmd;
 	u32 len;
 	u32 flash_offset;
 	u8 par_offset;
+	bool needs_g0_clear;
 } s6e3hc2_gamma_tables[] = {
-	{ 0xC8, 135, 0x0000 },
-	{ 0xC9, 180, 0x0087 },
-	{ 0xB3,  45, 0x013B, 0x02 },
+	{ 0xC8, S6E3HC2_GAMMA_BAND_LEN * 3, 0x0000, 0x00, true },
+	{ 0xC9, S6E3HC2_GAMMA_BAND_LEN * 4, 0x0087, 0x00, true },
+	{ 0xB3, S6E3HC2_GAMMA_BAND_LEN,     0x013B, 0x02, false },
 };
 
 #define S6E3HC2_NUM_GAMMA_TABLES ARRAY_SIZE(s6e3hc2_gamma_tables)
@@ -834,6 +848,10 @@ static int s6e3hc2_gamma_read_flash(struct panel_switch_data *pdata,
 				 offset, tmp[0], tmp[1]);
 			buf[j] = tmp[1];
 		}
+
+		if (info->needs_g0_clear)
+			for (j = 0; j < info->len; j += S6E3HC2_GAMMA_BAND_LEN)
+				memset(buf + j + S6E3HC2_GAMMA_BAND_G0_OFFSET, 0, 3);
 	}
 
 	if (DSI_WRITE_CMD_BUF(dsi, pgm_dis) ||
