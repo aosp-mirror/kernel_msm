@@ -41,7 +41,7 @@ static int send_request_wait(struct qmi_handle *handle,
 		return err;
 	}
 
-	err = qmi_txn_wait(&txn, timeout_ms);
+	err = qmi_txn_wait(&txn, msecs_to_jiffies(timeout_ms));
 
 	return err;
 }
@@ -70,6 +70,8 @@ int tbn_request_bus(struct tbn_context *tbn)
 		return err;
 	}
 
+	dev_dbg(tbn->dev, "kernel requesting bus access from SLPI ... SUCCESS!\n");
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tbn_request_bus);
@@ -97,6 +99,8 @@ int tbn_release_bus(struct tbn_context *tbn)
 		dev_err(tbn->dev, "send request failed with: %d\n", err);
 		return err;
 	}
+
+	dev_dbg(tbn->dev, "kernel releasing bus access from SLPI ... SUCCESS!\n");
 
 	return 0;
 }
