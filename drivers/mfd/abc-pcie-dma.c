@@ -39,8 +39,10 @@
 #define DMA_CHANS_PER_READ_XFER 3
 #define DMA_CHANS_PER_WRITE_XFER 1
 
-/* ((size / 500 bytes to us) + setup time ) * timeout buffer multiplier*/
-#define SIZE_TO_US_TIMEOUT(sz) ((sz / 500 + 200) * 10)
+/* ((size / 500 bytes to us) + setup time ) * timeout buffer multiplier
+ * + 500 ms buffer
+ */
+#define SIZE_TO_US_TIMEOUT(sz) ((sz / 500 + 200) * 10 + 500000)
 static struct abc_pcie_dma abc_dma;
 
 static DEFINE_SPINLOCK(dma_spinlock);
