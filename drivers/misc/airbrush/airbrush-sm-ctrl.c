@@ -2021,6 +2021,7 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	 * this is not initiated by a state transition request.
 	 */
 	complete_all(&sc->notify_comp);
+	complete_all(&sc->shutdown_comp);
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	/* This work is responsible for marking cleanup as completed. */
@@ -2230,11 +2231,32 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	return ret;
 }
 
-int ab_sm_exit_el2(struct ab_state_context *sc)
+int ab_sm_exit_el2(struct ab_state_context *sc, u32 exit_flag)
 {
 	int ret;
 
 	mutex_lock(&sc->state_transitioning_lock);
+
+	if (exit_flag & AB_SM_FATAL_EL2_ERROR_FLAG) {
+		/* Check if we've already completed our shutdown work */
+		if (!sc->el2_mode &&
+				sc->curr_chip_substate_id == CHIP_STATE_OFF) {
+			mutex_unlock(&sc->state_transitioning_lock);
+			return 0;
+		}
+
+		reinit_completion(&sc->shutdown_comp);
+		mutex_unlock(&sc->state_transitioning_lock);
+		ret = wait_for_completion_timeout(&sc->shutdown_comp,
+				msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
+
+		if (ret == 0) {
+			dev_warn(sc->dev,
+				"Exit el2 handler timed out waiting for shutdown to complete. Exiting el2 normally.");
+		}
+
+		mutex_lock(&sc->state_transitioning_lock);
+	}
 
 	/* Ensure PCIe is accessible */
 	if (sc->el2_in_secure_context) {
@@ -2643,7 +2665,11 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 		break;
 
 	case AB_SM_EXIT_EL2:
-		ret = ab_sm_exit_el2(sc);
+		ret = ab_sm_exit_el2(sc, 0);
+		break;
+
+	case AB_SM_EXIT_EL2_WITH_FLAG:
+		ret = ab_sm_exit_el2(sc, arg);
 		break;
 
 	case AB_SM_GET_EL2_MODE:
@@ -2916,6 +2942,7 @@ int ab_sm_init(struct platform_device *pdev)
 	init_completion(&ab_sm_ctx->request_state_change_comp);
 	init_completion(&ab_sm_ctx->transition_comp);
 	init_completion(&ab_sm_ctx->notify_comp);
+	init_completion(&ab_sm_ctx->shutdown_comp);
 	kfifo_alloc(&ab_sm_ctx->state_change_reqs,
 		AB_KFIFO_ENTRY_SIZE * sizeof(struct ab_change_req), GFP_KERNEL);
 

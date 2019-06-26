@@ -463,6 +463,7 @@ struct ab_state_context {
 	struct completion request_state_change_comp;
 	struct completion transition_comp;
 	struct completion notify_comp;
+	struct completion shutdown_comp;
 
 	int change_ret;
 
@@ -685,7 +686,7 @@ enum ab_chip_id ab_get_raw_chip_id(struct ab_state_context *sc);
 const enum stat_state ab_chip_state_to_stat_state(enum chip_state id);
 
 int ab_sm_enter_el2(struct ab_state_context *sc);
-int ab_sm_exit_el2(struct ab_state_context *sc);
+int ab_sm_exit_el2(struct ab_state_context *sc, u32 exit_flag);
 
 void ab_enable_pgood(struct ab_state_context *ab_ctx);
 void ab_disable_pgood(struct ab_state_context *ab_ctx);

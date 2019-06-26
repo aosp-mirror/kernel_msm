@@ -18,17 +18,20 @@
 
 #include <linux/ioctl.h>
 
+#define AB_SM_FATAL_EL2_ERROR_FLAG	1
 
 #define AB_SM_IOCTL_MAGIC	'a'
 
-/*
+/* Enters secure state. Blocks until ready.
  * On success will return 0, otherwise will return error < 0.
  * -ETIMEDOUT: state change for thermal disabling timed out.
  * -EBUSY: already throttled to suspend due to system overheated.
  */
 #define AB_SM_ENTER_EL2		_IO(AB_SM_IOCTL_MAGIC, 3)
 
-/* On success will return 0, otherwise will return error < 0. */
+/* Exits secure state and blocks until cleanup is complete.
+ * On success will return 0, otherwise will return error < 0.
+ */
 #define AB_SM_EXIT_EL2		_IO(AB_SM_IOCTL_MAGIC, 4)
 
 /*
@@ -238,6 +241,16 @@
  * On success will return 0, otherwise will return error < 0.
  */
 #define AB_SM_ENABLE_THERMAL			_IOW(AB_SM_IOCTL_MAGIC, 27, int)
+
+/* Exits secure state and blocks until cleanup is complete.
+ * Parameter int:
+ *  Bitwise flag param used to notify ABSM of any issues
+ *  which occurred during EL2 mode.
+ *   Bit  [0]    - AB_SM_FATAL_EL2_ERROR_FLAG - A reset occurred during EL2
+ *   Bits [1:31] - Reserved
+ * On success will return 0, otherwise will return error < 0.
+ */
+#define AB_SM_EXIT_EL2_WITH_FLAG		_IOW(AB_SM_IOCTL_MAGIC, 28, int)
 
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0
