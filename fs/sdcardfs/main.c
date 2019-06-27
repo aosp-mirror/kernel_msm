@@ -264,7 +264,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 
 	pr_info("sdcardfs: dev_name -> %s\n", dev_name);
 	pr_info("sdcardfs: options -> %s\n", (char *)raw_data);
-	pr_info("sdcardfs: mnt -> %p\n", mnt);
+	pr_info("sdcardfs: mnt -> %pK\n", mnt);
 
 	/* parse lower path */
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
@@ -295,6 +295,13 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	atomic_inc(&lower_sb->s_active);
 	sdcardfs_set_lower_super(sb, lower_sb);
 
+	sb->s_stack_depth = lower_sb->s_stack_depth + 1;
+	if (sb->s_stack_depth > FILESYSTEM_MAX_STACK_DEPTH) {
+		pr_err("sdcardfs: maximum fs stacking depth exceeded\n");
+		err = -EINVAL;
+		goto out_sput;
+	}
+
 	/* inherit maxbytes from lower file system */
 	sb->s_maxbytes = lower_sb->s_maxbytes;
 
@@ -316,7 +323,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root) {
 		err = -ENOMEM;
-		goto out_iput;
+		goto out_sput;
 	}
 	d_set_d_op(sb->s_root, &sdcardfs_ci_dops);
 
@@ -361,8 +368,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	/* no longer needed: free_dentry_private_data(sb->s_root); */
 out_freeroot:
 	dput(sb->s_root);
-out_iput:
-	iput(inode);
+	sb->s_root = NULL;
 out_sput:
 	/* drop refs we took earlier */
 	atomic_dec(&lower_sb->s_active);
@@ -422,7 +428,7 @@ void sdcardfs_kill_sb(struct super_block *sb)
 {
 	struct sdcardfs_sb_info *sbi;
 
-	if (sb->s_magic == SDCARDFS_SUPER_MAGIC) {
+	if (sb->s_magic == SDCARDFS_SUPER_MAGIC && sb->s_fs_info) {
 		sbi = SDCARDFS_SB(sb);
 		mutex_lock(&sdcardfs_super_list_lock);
 		list_del(&sbi->list);
