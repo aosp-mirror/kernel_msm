@@ -4067,7 +4067,10 @@ static int fg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->cl.learned_cc_uah;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		rc = fg_get_charge_counter(chip, &pval->intval);
+		if (fg_irqs[MSOC_DELTA_IRQ].wakeable)
+			rc = fg_get_charge_counter(chip, &pval->intval);
+		else
+			rc = fg_get_charge_counter_shadow(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER_SHADOW:
 		rc = fg_get_charge_counter_shadow(chip, &pval->intval);
