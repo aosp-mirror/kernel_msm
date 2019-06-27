@@ -1048,6 +1048,7 @@ static int st21nfc_resume(struct device *device)
 {
 	struct i2c_client *client = to_i2c_client(device);
 	struct st21nfc_device *st21nfc_dev = i2c_get_clientdata(client);
+	int pidle;
 
 	if (device_may_wakeup(&client->dev) && st21nfc_dev->irq_wake_up) {
 		if (!disable_irq_wake(client->irq))
@@ -1055,13 +1056,14 @@ static int st21nfc_resume(struct device *device)
 	}
 
 	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {
-		if (st21nfc_dev->p_idle_last !=
-		    gpiod_get_value(st21nfc_dev->gpiod_pidle)) {
+		pidle = gpiod_get_value(st21nfc_dev->gpiod_pidle);
+		if((st21nfc_dev->p_idle_last != pidle) ||
+		   (st21nfc_dev->pw_current == ST21NFC_IDLE && pidle != 0) ||
+		   (st21nfc_dev->pw_current == ST21NFC_ACTIVE && pidle == 0)) {
 			queue_work(st21nfc_dev->st_p_wq,
 				   &(st21nfc_dev->st_p_work));
 		}
 	}
-
 	return 0;
 }
 
