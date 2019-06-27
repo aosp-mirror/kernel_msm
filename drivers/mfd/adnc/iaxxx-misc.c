@@ -272,6 +272,8 @@ static const char *iaxxx_misc_crash_err2str(int error)
 		return "crash when wait clear";
 	case IAXXX_FW_CRASH_UPDATE_BLOCK_REQ:
 		return "crash during update block req";
+	case IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF:
+		return "crash wrong buff params";
 	case IAXXX_FW_CRASH_RESUME:
 		return "crash during resume";
 	case IAXXX_FW_CRASH_SUSPEND:
