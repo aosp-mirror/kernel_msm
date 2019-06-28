@@ -264,14 +264,6 @@
 	xo-therm-step {
 		status = "disabled";
 	};
-
-	ibat-vhigh {
-		trips {
-			ibat-vhigh {
-				temperature = <4500>;
-			};
-		};
-	};
 };
 
 &pm660l_gpios {
