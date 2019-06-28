@@ -50,6 +50,7 @@
 #include "iaxxx-cdev.h"
 #include "iaxxx-build-info.h"
 #include "iaxxx-btp.h"
+#include "ia8508a-memory-map.h"
 
 #include "iaxxx-misc.h"
 
@@ -1097,6 +1098,7 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv,
 	int i;
 	int j = 0;
 	int ret;
+	int memdump_index;
 	uint32_t debuglog_reg_phyaddr =
 			iaxxx_conv_virtual_to_physical_register_address(
 				priv,
@@ -1132,6 +1134,20 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv,
 			crashlog_header[i].log_size = 0;
 		}
 	}
+
+	/* Reading SSP memory log addresses and size that is already read
+	 * before chip reset
+	 */
+	for (i = IAXXX_MEMDUMP_SSP_RAM0; i <= IAXXX_MEMDUMP_SSP_ROM0; i++) {
+		memdump_index = i - IAXXX_MEMDUMP_SSP_RAM0;
+		crashlog_header[i].log_type =
+			priv->crashlog->ssp_memdumps[memdump_index].log_type;
+		crashlog_header[i].log_addr =
+			priv->crashlog->ssp_memdumps[memdump_index].log_addr;
+		crashlog_header[i].log_size =
+			priv->crashlog->ssp_memdumps[memdump_index].log_size;
+	}
+
 	for (i = 0; i < IAXXX_MAX_LOG; i++)
 		dev_info(priv->dev, "addr 0x%x size 0x%x\n",
 				crashlog_header[i].log_addr,
@@ -1176,21 +1192,138 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 		/* If size of the log is 0 */
 		if (!log_size)
 			continue;
-		/* Read the logs */
-		ret = priv->bulk_read(priv->dev,
-			log_addr, priv->crashlog->log_buffer + data_written,
-			log_size / sizeof(uint32_t));
-		if (ret != log_size / sizeof(uint32_t)) {
-			dev_err(priv->dev, "Not able to read Debug logs %d\n",
+		/* Read the logs
+		 * If it is for SSP, read from buffer where SSP memory
+		 * is dumped into before chip reset.
+		 */
+		if ((i >= IAXXX_MEMDUMP_SSP_RAM0) &&
+			(i <= IAXXX_MEMDUMP_SSP_ROM0)) {
+
+			memcpy(priv->crashlog->log_buffer + data_written,
+				&priv->crashlog->ssp_log_buffer[log_addr],
+				log_size);
+
+		} else {
+			ret = priv->bulk_read(priv->dev,
+				log_addr,
+				priv->crashlog->log_buffer + data_written,
+				log_size / sizeof(uint32_t));
+			if (ret != log_size / sizeof(uint32_t)) {
+				dev_err(priv->dev,
+					"Not able to read Debug logs %d\n",
 					ret);
-			return ret;
+				return ret;
+			}
 		}
 		data_written += log_size;
 	}
 	dev_dbg(priv->dev, "Data written 0x%x\n", data_written);
 	return 0;
 }
+static int iaxxx_set_ssp_memdumps_data(struct iaxxx_priv *priv,
+				uint32_t log_type, uint32_t data_written)
+{
+	int ret = 0;
+	int memdump_index = 0;
+	uint32_t log_addr = 0;
+	uint32_t log_size = 0;
 
+	if (log_type == IAXXX_MEMDUMP_SSP_RAM0) {
+		memdump_index =
+			IAXXX_MEMDUMP_SSP_RAM0 - IAXXX_MEMDUMP_SSP_RAM0;
+		log_size =
+			IAXXX_SSP_DRAM0_SYS_END - IAXXX_SSP_DRAM0_SYS_START;
+
+		log_addr = IAXXX_SSP_DRAM0_SYS_START;
+	} else if (log_type == IAXXX_MEMDUMP_SSP_RAM1) {
+		memdump_index =
+			IAXXX_MEMDUMP_SSP_RAM1 - IAXXX_MEMDUMP_SSP_RAM0;
+		log_size =
+			IAXXX_SSP_DRAM1_SYS_END - IAXXX_SSP_DRAM1_SYS_START;
+
+		log_addr = IAXXX_SSP_DRAM1_SYS_START;
+	} else if (log_type == IAXXX_MEMDUMP_SSP_ROM0) {
+		memdump_index =
+			IAXXX_MEMDUMP_SSP_ROM0 - IAXXX_MEMDUMP_SSP_RAM0;
+		log_size =
+			IAXXX_SSP_DROM0_SYS_END - IAXXX_SSP_DROM0_SYS_START;
+
+		log_addr = IAXXX_SSP_DROM0_SYS_START;
+	} else {
+		dev_err(priv->dev, "Unknown log_type %u", log_type);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	ret =  priv->bulk_read(priv->dev, log_addr,
+			priv->crashlog->ssp_log_buffer + data_written,
+			log_size / sizeof(uint32_t));
+
+	if (ret != log_size / sizeof(uint32_t)) {
+		dev_err(priv->dev,
+			"Not able to read SSP DRAM0 dump %d\n", ret);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	priv->crashlog->ssp_memdumps[memdump_index].log_type =
+							log_type;
+	priv->crashlog->ssp_memdumps[memdump_index].log_addr =
+							data_written;
+	priv->crashlog->ssp_memdumps[memdump_index].log_size =
+							log_size;
+exit:
+	return ret;
+}
+static int iaxxx_dump_ssplogs(struct iaxxx_priv *priv)
+{
+	int ret;
+	uint32_t buf_size;
+	uint32_t data_written = 0;
+
+	priv->crashlog->ssp_log_size = 0;
+
+	buf_size = (IAXXX_SSP_DRAM0_SYS_END - IAXXX_SSP_DRAM0_SYS_START) +
+		(IAXXX_SSP_DRAM1_SYS_END - IAXXX_SSP_DRAM1_SYS_START) +
+		(IAXXX_SSP_DROM0_SYS_END - IAXXX_SSP_DROM0_SYS_START);
+
+	/* Allocate the memory */
+	if (!priv->crashlog->ssp_log_buffer)
+		priv->crashlog->ssp_log_buffer = kvzalloc(buf_size, GFP_KERNEL);
+	if (!priv->crashlog->ssp_log_buffer) {
+		dev_err(priv->dev, "%s Failed to allocate mem for SSP dump\n",
+				__func__);
+		return -ENOMEM;
+	}
+
+	ret = iaxxx_set_ssp_memdumps_data(priv,
+			IAXXX_MEMDUMP_SSP_RAM0, data_written);
+
+	if (ret < 0)
+		return ret;
+
+	data_written += ret * sizeof(uint32_t);
+
+	ret = iaxxx_set_ssp_memdumps_data(priv,
+			IAXXX_MEMDUMP_SSP_RAM1, data_written);
+
+	if (ret < 0)
+		return ret;
+
+	data_written += ret * sizeof(uint32_t);
+
+	ret = iaxxx_set_ssp_memdumps_data(priv,
+			IAXXX_MEMDUMP_SSP_ROM0, data_written);
+
+	if (ret < 0)
+		return ret;
+
+	data_written += ret * sizeof(uint32_t);
+
+	priv->crashlog->ssp_log_size = buf_size;
+	dev_dbg(priv->dev, "Data written 0x%x\n", data_written);
+	return 0;
+}
 
 /**
  * iaxxx_fw_update_work - worker thread to download firmware.
@@ -1425,11 +1558,15 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 			dev_info(priv->dev, "D4100S HMD core crashed\n");
 		else if (core_crashed == 1 << IAXXX_DMX_ID)
 			dev_info(priv->dev, "D4100S DMX Core Crashed\n");
+		else if (core_crashed == 1 << IAXXX_SSP_ID)
+			dev_info(priv->dev, "D4100S SSP Core Crashed\n");
 		else
 			dev_info(priv->dev, "D4100S Update block failed\n");
 	}
 
 	mutex_lock(&priv->crashdump_lock);
+	/* To do - dump ssp memory only in case of SSP crash. */
+	iaxxx_dump_ssplogs(priv);
 	iaxxx_reset_check_sbl_mode(priv);
 	iaxxx_dump_crashlogs(priv);
 	mutex_unlock(&priv->crashdump_lock);

@@ -1053,6 +1053,8 @@ static int iaxxx_spi_remove(struct spi_device *spi)
 		mutex_destroy(&spi_priv->spi_mutex);
 		iaxxx_device_exit(&spi_priv->priv);
 		devm_kfree(&spi->dev, spi_priv->priv.iaxxx_state);
+		kvfree(spi_priv->priv.crashlog->ssp_log_buffer);
+		spi_priv->priv.crashlog->ssp_log_buffer = NULL;
 		kvfree(spi_priv->priv.crashlog->log_buffer);
 		devm_kfree(&spi->dev, spi_priv->priv.crashlog);
 		devm_kfree(&spi->dev, spi_priv);

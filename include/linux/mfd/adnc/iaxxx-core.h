@@ -208,6 +208,9 @@ enum {
 	IAXXX_CRASHLOG_CM4,
 	IAXXX_CRASHLOG_HMD,
 	IAXXX_CRASHLOG_DMX,
+	IAXXX_MEMDUMP_SSP_RAM0,
+	IAXXX_MEMDUMP_SSP_RAM1,
+	IAXXX_MEMDUMP_SSP_ROM0,
 	IAXXX_MAX_LOG
 };
 
@@ -221,6 +224,12 @@ struct iaxxx_crashlog {
 	char *log_buffer;
 	uint32_t log_buffer_size;
 	uint32_t logs_read;
+
+	struct iaxxx_crashlog_header
+	ssp_memdumps[IAXXX_MEMDUMP_SSP_ROM0 - IAXXX_MEMDUMP_SSP_RAM0 + 1];
+
+	char *ssp_log_buffer;
+	uint32_t ssp_log_size;
 };
 
 /* iaxxx_misc hwinfo
