@@ -363,10 +363,8 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev,
 	return rc;
 }
 
-#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
 unsigned int lcd_reset_high;
 EXPORT_SYMBOL_GPL(lcd_reset_high);
-#endif
 static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 {
 	int ret = 0;
@@ -394,11 +392,12 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			pr_err("%s: unable to set dir for vdd gpio\n",
 					__func__);
 	}
-#ifdef CONFIG_LCD_RESET_HIGH_FOR_TOUCH_WAKE
-	if (!lcd_reset_high)
-#endif
+	if ((strstr(saved_command_line,"boe_rm6d010")!=NULL || strstr(saved_command_line,"auo_h139clx01")!=NULL)&&lcd_reset_high) {
+		pr_debug("keep lcd_reset_high for raydium_panel\n");
+	}else{
 	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
 		pr_debug("reset disable: pinctrl not enabled\n");
+	}
 
 	ret = msm_mdss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
