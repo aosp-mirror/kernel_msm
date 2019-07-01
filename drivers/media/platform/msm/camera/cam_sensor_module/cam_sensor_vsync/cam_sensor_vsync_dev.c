@@ -548,7 +548,17 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 
 	list_for_each_entry_safe(vsync_req, vsync_req_temp,
 			&ctx->pending_reqs, list) {
+		if (!vsync_req) {
+			CAM_ERR(CAM_SENSOR, "vsync_req is NULL");
+			continue;
+		}
+
 		frame_msg = &vsync_req->req_message.u.frame_msg;
+		if (!frame_msg) {
+			CAM_ERR(CAM_SENSOR, "frame_msg is NULL");
+			goto free_n_go;
+		}
+
 		cam_id = vsync_req->cam_id;
 		CAM_DBG(CAM_SENSOR,
 			"pending req cam_id %d, frame_id %d, sof %lld",
