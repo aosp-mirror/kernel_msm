@@ -4104,6 +4104,12 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
 		pval->intval = chip->g_isretailmode;
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		rc = -EINVAL;
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		rc = -EINVAL;
+		break;
 	default:
 		pr_err("unsupported property %d\n", psp);
 		rc = -EINVAL;
