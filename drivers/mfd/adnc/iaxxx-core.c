@@ -1762,6 +1762,9 @@ int iaxxx_core_suspend_rt(struct device *dev)
 	/* Chip suspend/optimal power switch happens here
 	 * and they shouldn't be done in case of fw_crash
 	 */
+
+	__pm_wakeup_event(&priv->ws, WAKEUP_TIMEOUT);
+
 	if (!test_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		rc = iaxxx_suspend_chip(priv);
 
@@ -1784,6 +1787,8 @@ int iaxxx_core_resume_rt(struct device *dev)
 		return 0;
 
 	/* Regmap access must be enabled before enable event interrupt */
+
+	__pm_wakeup_event(&priv->ws, WAKEUP_TIMEOUT);
 
 	rc = iaxxx_wakeup_chip(priv);
 	if  (rc) {
