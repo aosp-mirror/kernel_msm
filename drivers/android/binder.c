@@ -4982,7 +4982,6 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			proc->pid, current->pid, cmd, arg);*/
 
 	binder_selftest_alloc(&proc->alloc);
-	binder_alloc_check_for_corruption(&proc->alloc, __LINE__);
 
 	trace_binder_ioctl(cmd, arg);
 
@@ -5175,7 +5174,6 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 	mutex_lock(&proc->files_lock);
 	proc->files = get_files_struct(current);
 	mutex_unlock(&proc->files_lock);
-	binder_alloc_check_for_corruption(&proc->alloc, __LINE__);
 	return 0;
 
 err_bad_arg:

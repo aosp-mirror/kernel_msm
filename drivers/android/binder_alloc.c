@@ -693,7 +693,6 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	alloc->pages = kzalloc(sizeof(alloc->pages[0]) *
 				   ((vma->vm_end - vma->vm_start) / PAGE_SIZE),
 			       GFP_KERNEL);
-
 	if (alloc->pages == NULL) {
 		ret = -ENOMEM;
 		failure_string = "alloc page array";
@@ -1176,27 +1175,5 @@ void binder_alloc_copy_from_buffer(struct binder_alloc *alloc,
 {
 	binder_alloc_do_buffer_copy(alloc, false, buffer, buffer_offset,
 				    dest, bytes);
-}
-
-#define MIN_CORRUPTION_BUF_SIZE \
-	(PAGE_SIZE * 0x1c0 / sizeof(struct binder_lru_page))
-
-void binder_alloc_check_for_corruption(struct binder_alloc *alloc, int line)
-{
-	/*
-	 * This is instrumentation specifically to detect the
-	 * corruption of b/135345566 which always looks like
-	 * a mutex_init() was called to initialize a mutex
-	 * at offset 0x1a0 of the alloc->pages array. This
-	 * results in a crash when binder is cleaning up
-	 * that proc->alloc structure when the process
-	 * is exiting.
-	 */
-	uintptr_t *addr = (uintptr_t *)(((uintptr_t)&alloc->pages[0]) + 0x1a0);
-
-	if (!alloc->pages || alloc->buffer_size < MIN_CORRUPTION_BUF_SIZE)
-		return;
-
-	BUG_ON(!addr[0] && addr[1]);
 }
 
