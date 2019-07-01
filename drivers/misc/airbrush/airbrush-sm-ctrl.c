@@ -599,6 +599,7 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 	struct block_property *desired_state =
 		get_desired_state(blk, to_block_state_id);
 	struct block_property *last_state = blk->current_state;
+	int ret;
 
 	if (!desired_state)
 		return -EINVAL;
@@ -655,13 +656,18 @@ int blk_set_state(struct ab_state_context *sc, struct block *blk,
 		if (blk->name == BLK_FSYS)
 			ab_sm_start_ts(AB_SM_TS_PCIE_CB);
 
-		blk->set_state(last_state, desired_state,
+		ret = blk->set_state(last_state, desired_state,
 				   to_block_state_id, blk->data);
 
 		if (blk->name == DRAM)
 			ab_sm_record_ts(AB_SM_TS_DDR_CB);
 		if (blk->name == BLK_FSYS)
 			ab_sm_record_ts(AB_SM_TS_PCIE_CB);
+
+		if (ret) {
+			mutex_unlock(&sc->op_lock);
+			return ret;
+		}
 	}
 
 	/* PMU settings - Sleep */
