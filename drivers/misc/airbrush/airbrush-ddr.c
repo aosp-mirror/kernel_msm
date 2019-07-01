@@ -2887,7 +2887,8 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 
 	mutex_lock(&ddr_ctx->ddr_lock);
 
-	if (!ddr_ctx->pcie_link_ready) {
+	/* entering BLOCK_STATE_0 doesn't require PCIe access */
+	if (!ddr_ctx->pcie_link_ready && block_state_id != BLOCK_STATE_0) {
 		pr_err("%s: pcie link not ready\n", __func__);
 		mutex_unlock(&ddr_ctx->ddr_lock);
 		return -EINVAL;
