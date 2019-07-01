@@ -55,7 +55,7 @@
 #define CHECK_SEQUENCE
 
 #define PRODUCER_PRIO 15	/* Less than mdss_dsi_event */
-#define PRODUCER_WAIT_TIME_US 1000 /* 1ms interval */
+#define PRODUCER_WAIT_TIME_US 5000 /* 5ms interval */
 #define PRODUCER_MAX_WAIT_TIME_US 100000 /* 100ms interval */
 #define TNL_SRC_Q 0x00010000	/* For defining new tunnel id with Q format */
 
@@ -619,6 +619,10 @@ static int producer_thread(void *arg)
 				/* Restore timeout value */
 				wait_time_us = PRODUCER_WAIT_TIME_US;
 
+				/* This means in polling mode */
+				if (IAXXX_TUNNEL_THRESHOLD == 0)
+					continue;
+
 				/*
 				 * Interrupt is not triggerred if the
 				 * remaining data is bigger than threshold,
@@ -650,6 +654,9 @@ static int producer_thread(void *arg)
 					|| kthread_should_stop() ||
 					t_intf_priv->flags !=
 					tunnel_flags);
+				continue;
+			} else if (bytes == 0) {
+				usleep_range(wait_time_us, wait_time_us + 5);
 				continue;
 			}
 		}
@@ -1579,12 +1586,18 @@ static int iaxxx_notifier_cb(struct notifier_block *nb,
 			struct iaxxx_tunnel_data, crash_notifier);
 	int ret = 0;
 
+	if (priv == NULL) {
+		pr_err("No tunnel data found\n");
+		return -EINVAL;
+	}
+
 	switch (val) {
 	case IAXXX_EV_RECOVERY:
 		ret = iaxxx_tunnel_recovery(priv);
 		if (!ret)
 			clear_bit(IAXXX_TFLG_FW_CRASH,
 				&priv->tunnel_state);
+		priv->tunnel_first_attach = 0;
 		break;
 
 	case IAXXX_EV_CRASH:

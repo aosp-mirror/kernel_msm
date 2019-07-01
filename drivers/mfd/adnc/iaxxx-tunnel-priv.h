@@ -111,6 +111,8 @@ struct iaxxx_tunnel_data {
 	unsigned long tunnel_state;
 	wait_queue_head_t suspend_wq;
 	atomic_t kthread_suspend;
+	bool tunnel_first_attach;
+	struct iaxxx_tunnel_buff_params tunnel_first_attach_buff_params;
 };
 
 struct iaxxx_tunnel_client {

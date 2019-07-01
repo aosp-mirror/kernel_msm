@@ -95,6 +95,8 @@ int iaxxx_get_tunnel_buff_params(struct iaxxx_priv *priv,
 	int rc = 0;
 	struct device *dev = priv->dev;
 	uint32_t  reg_read[TUNNEL_REG_READ_SIZE];
+	bool dump_state = priv->dump_log;
+	struct iaxxx_tunnel_data *t_intf_priv = priv->tunnel_data;
 #ifdef TUNNEL_PROFILE
 	struct timespec read_start;
 	struct timespec read_end;
@@ -105,39 +107,73 @@ int iaxxx_get_tunnel_buff_params(struct iaxxx_priv *priv,
 	ia_profiling(&read_start);
 #endif
 
-	priv->dump_log = false;
-	rc = regmap_bulk_read(priv->regmap,
-			IAXXX_TNL_HDR_TNL_OUT_BUF_SIZE_ADDR,
-			reg_read, ARRAY_SIZE(reg_read));
-	priv->dump_log = true;
-	if (rc) {
-		dev_err(dev,
+	if (!t_intf_priv->tunnel_first_attach) {
+		priv->dump_log = false;
+		rc = regmap_bulk_read(priv->regmap,
+				IAXXX_TNL_HDR_TNL_OUT_BUF_SIZE_ADDR,
+				reg_read, ARRAY_SIZE(reg_read));
+		priv->dump_log = dump_state;
+		if (rc) {
+			dev_err(dev,
 			"Failed TNL_HDR_TNL_OUT_BUF_SIZE_ADDR, rc:%d\n", rc);
-		return rc;
-	}
+			return rc;
+		}
 
 #ifdef TUNNEL_PROFILE
-	ia_profiling(&read_end);
-	read_time = (timespec_sub(read_end, read_start));
-	dev_info(priv->dev, "Total read time = %lu.%03lu sec\n",
-			read_time.tv_sec, (read_time.tv_nsec)/1000000);
+		ia_profiling(&read_end);
+		read_time = (timespec_sub(read_end, read_start));
+		dev_info(priv->dev, "Total read time = %lu.%03lu sec\n",
+				read_time.tv_sec, (read_time.tv_nsec)/1000000);
 #endif
 
-	buff_param->buff_size = reg_read[0];
-	buff_param->buff_addr = reg_read[1];
-	buff_param->buff_head = reg_read[2];
-	buff_param->buff_tail = reg_read[3];
+		buff_param->buff_size = reg_read[0];
+		buff_param->buff_addr = reg_read[1];
+		buff_param->buff_head = reg_read[2];
+		buff_param->buff_tail = reg_read[3];
 
-	dev_dbg(priv->dev,
-		"bufSize: %u bufAddr: %x bufHead: %u bufTail: %u\n",
-		buff_param->buff_size, buff_param->buff_addr,
-		buff_param->buff_head, buff_param->buff_tail);
+		dev_dbg(priv->dev,
+			"bufSize: %u bufAddr: %x bufHead: %u bufTail: %u\n",
+			buff_param->buff_size, buff_param->buff_addr,
+			buff_param->buff_head, buff_param->buff_tail);
+
+		t_intf_priv->tunnel_first_attach_buff_params = *buff_param;
+		t_intf_priv->tunnel_first_attach = true;
+	} else {
+
+		*buff_param = t_intf_priv->tunnel_first_attach_buff_params;
+		priv->dump_log = false;
+		/* Reading only two registers - Tunnel Head and Tail pointers */
+		rc = regmap_bulk_read(priv->regmap,
+				IAXXX_TNL_HDR_TNL_OUT_BUF_HEAD_ADDR,
+				reg_read, 2);
+		priv->dump_log = dump_state;
+		if (rc) {
+			dev_err(dev,
+			"Failed TNL_HDR_TNL_OUT_BUF_SIZE_ADDR, rc:%d\n", rc);
+			return rc;
+		}
+
+#ifdef TUNNEL_PROFILE
+		ia_profiling(&read_end);
+		read_time = (timespec_sub(read_end, read_start));
+		dev_info(priv->dev, "Total read time = %lu.%03lu sec\n",
+				read_time.tv_sec, (read_time.tv_nsec)/1000000);
+#endif
+		buff_param->buff_head = reg_read[0];
+		buff_param->buff_tail = reg_read[1];
+
+		dev_dbg(priv->dev, "bufHead: %u bufTail: %u\n",
+			buff_param->buff_head, buff_param->buff_tail);
+	}
 
 	if (buff_param->buff_head > buff_param->buff_size ||
-			buff_param->buff_tail > buff_param->buff_size) {
+		buff_param->buff_tail > buff_param->buff_size ||
+		buff_param->buff_size == 0 || buff_param->buff_addr == 0) {
 		dev_err(priv->dev,
-			"wrong buffer head (%d) and tail (%d) values\n",
-			buff_param->buff_head, buff_param->buff_tail);
+			"wrong buf values head(%d) tail(%d) addr(0x%x) size(%d)\n",
+			buff_param->buff_head, buff_param->buff_tail,
+			buff_param->buff_addr, buff_param->buff_size);
+		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF);
 		return -EINVAL;
 	}
 
@@ -242,11 +278,6 @@ int iaxxx_tunnel_read_hw(struct iaxxx_priv *priv, void *readbuff,
 	/* keep current fw head offset for next FW head offset update*/
 	buff_head_prev = buff_param.buff_head;
 
-	if (buff_param.buff_size == 0 || buff_param.buff_addr == 0) {
-		dev_err(dev, "wrong buff params\n");
-		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF);
-		return -EINVAL;
-	}
 	while (buff_param.buff_head != buff_param.buff_tail
 				&& read_len < words_to_read) {
 
