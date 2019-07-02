@@ -27,6 +27,7 @@
 #include <linux/time.h>
 #include <linux/usb/pd.h>
 #include <linux/usb/tcpm.h>
+#include <linux/alarmtimer.h>
 #include "google_bms.h"
 #include "google_psy.h"
 #include "logbuffer.h"
@@ -138,7 +139,7 @@ struct chg_drv {
 	struct delayed_work chg_work;
 	struct work_struct chg_psy_work;
 	struct wakeup_source chg_ws;
-
+	struct alarm chg_wakeup_alarm;
 
 	/* */
 	struct chg_thermal_device thermal_devices[CHG_TERMAL_DEVICES_COUNT];
@@ -190,6 +191,17 @@ static void reschedule_chg_work(struct chg_drv *chg_drv)
 {
 	cancel_delayed_work_sync(&chg_drv->chg_work);
 	schedule_delayed_work(&chg_drv->chg_work, 0);
+}
+
+static enum alarmtimer_restart
+google_chg_alarm_handler(struct alarm *alarm, ktime_t time)
+{
+	struct chg_drv *chg_drv =
+	    container_of(alarm, struct chg_drv, chg_wakeup_alarm);
+
+	schedule_delayed_work(&chg_drv->chg_work, 0);
+
+	return ALARMTIMER_NORESTART;
 }
 
 static void chg_psy_work(struct work_struct *work)
@@ -1839,7 +1851,6 @@ static int msc_update_charger_cb(struct votable *votable,
 {
 	int rc = -EINVAL, update_interval, fv_uv, cc_max;
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
-	int success;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
 
@@ -1891,11 +1902,12 @@ static int msc_update_charger_cb(struct votable *votable,
 		update_interval = CHG_WORK_ERROR_RETRY_MS;
 
 msc_reschedule:
-	success = schedule_delayed_work(&chg_drv->chg_work,
-					msecs_to_jiffies(update_interval));
+	alarm_try_to_cancel(&chg_drv->chg_wakeup_alarm);
+	alarm_start_relative(&chg_drv->chg_wakeup_alarm,
+			     ms_to_ktime(update_interval));
 
-	pr_info("MSC_CHG fv_uv=%d, cc_max=%d, rerun=%d in %d ms (%d)\n",
-		fv_uv, cc_max, success, update_interval, rc);
+	pr_info("MSC_CHG fv_uv=%d, cc_max=%d, rerun in %d ms (%d)\n",
+		fv_uv, cc_max, update_interval, rc);
 
 msc_done:
 	__pm_relax(&chg_drv->chg_ws);
@@ -2486,6 +2498,9 @@ static int google_charger_probe(struct platform_device *pdev)
 	INIT_WORK(&chg_drv->chg_psy_work, chg_psy_work);
 	platform_set_drvdata(pdev, chg_drv);
 
+	alarm_init(&chg_drv->chg_wakeup_alarm, ALARM_BOOTTIME,
+		   google_chg_alarm_handler);
+
 	/* votables and chg_work need a wakeup source */
 	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
 
@@ -2538,6 +2553,8 @@ static int google_charger_remove(struct platform_device *pdev)
 			power_supply_put(chg_drv->tcpm_psy);
 
 		wakeup_source_trash(&chg_drv->chg_ws);
+
+		alarm_try_to_cancel(&chg_drv->chg_wakeup_alarm);
 
 		if (chg_drv->pps_data.log)
 			debugfs_logbuffer_unregister(chg_drv->pps_data.log);

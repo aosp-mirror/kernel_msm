@@ -138,6 +138,8 @@ struct batt_drv {
 	struct delayed_work init_work;
 	struct delayed_work batt_work;
 	struct wakeup_source batt_ws;
+	struct wakeup_source chg_taper_ws;
+	bool hold_chg_taper_ws;
 
 	/* TODO: b/111407333, will likely need to adjust SOC% on wakeup */
 	bool init_complete;
@@ -1210,6 +1212,15 @@ static int msc_logic_irdrop(struct batt_drv *batt_drv,
 			vtier, vbatt, batt_drv->fv_uv, *fv_uv);
 	}
 
+	if ((msc_state == MSC_RAISE) && !batt_drv->hold_chg_taper_ws) {
+		batt_drv->hold_chg_taper_ws = 1;
+		__pm_stay_awake(&batt_drv->chg_taper_ws);
+	} else if (((msc_state == MSC_TYPE) || (msc_state == MSC_FAST)) &&
+		 batt_drv->hold_chg_taper_ws) {
+		batt_drv->hold_chg_taper_ws = 0;
+		__pm_relax(&batt_drv->chg_taper_ws);
+	}
+
 	return msc_state;
 }
 
@@ -1378,6 +1389,14 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				      ibatt / 1000, temp,
 				      elap);
 
+	}
+
+	if (((msc_state == MSC_SEED) ||
+	    (msc_state == MSC_DSG) ||
+	    (msc_state == MSC_LAST)) &&
+	    (batt_drv->hold_chg_taper_ws)) {
+		batt_drv->hold_chg_taper_ws = 0;
+		__pm_relax(&batt_drv->chg_taper_ws);
 	}
 
 	batt_drv->msc_state = msc_state;
@@ -2632,6 +2651,7 @@ static void google_battery_init_work(struct work_struct *work)
 			ret);
 
 	wakeup_source_init(&batt_drv->batt_ws, gbatt_psy_desc.name);
+	wakeup_source_init(&batt_drv->chg_taper_ws, "Taper");
 
 	mutex_lock(&batt_drv->cc_data.lock);
 	ret = batt_cycle_count_load(&batt_drv->cc_data, batt_drv->ccbin_psy);
@@ -2803,6 +2823,7 @@ static int google_battery_remove(struct platform_device *pdev)
 		gbms_free_chg_profile(&batt_drv->chg_profile);
 
 		wakeup_source_trash(&batt_drv->batt_ws);
+		wakeup_source_trash(&batt_drv->chg_taper_ws);
 
 		if (batt_drv->log)
 			debugfs_logbuffer_unregister(batt_drv->log);
