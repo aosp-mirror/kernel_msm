@@ -1018,13 +1018,14 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		if (ret) {
 			pil_err(desc, "Failed to locate blob %s or blob is too big(rc:%d)\n",
 				fw_name, ret);
-			return ret;
+			goto out;
 		}
 
 		if (fw->size != seg->filesz) {
 			pil_err(desc, "Blob size %u doesn't match %lu\n",
 					ret, seg->filesz);
-			return -EPERM;
+			ret = -EPERM;
+			goto release_fw;
 		}
 	}
 
@@ -1039,7 +1040,8 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 		buf = desc->map_fw_mem(paddr, size, map_data);
 		if (!buf) {
 			pil_err(desc, "Failed to map memory\n");
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto release_fw;
 		}
 		pil_memset_io(buf, 0, size);
 
@@ -1056,6 +1058,10 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 								num, ret);
 	}
 
+release_fw:
+	if (fw)
+		release_firmware(fw);
+out:
 	return ret;
 }
 
