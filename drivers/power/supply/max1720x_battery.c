@@ -489,7 +489,7 @@ struct max1720x_chip {
 	int prev_charge_status;
 	char serial_number[25];
 	bool offmode_charger;
-	u32 convgcfg_hysteresis;
+	s32 convgcfg_hysteresis;
 	int nb_convgcfg;
 	int curr_convgcfg_idx;
 	s16 *temp_convgcfg;
@@ -1589,7 +1589,7 @@ static void max1720x_restore_battery_qh_capacity(struct max1720x_chip *chip)
 static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
 					     int temp)
 {
-	int idx = -1;
+	int idx = -1, hysteresis_temp;
 
 	if (chip->temp_convgcfg == NULL)
 		return;
@@ -1609,10 +1609,11 @@ static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
 	/* We want to switch to higher slot only if above temp + hysteresis
 	 * but when temperature drops, we want to change at the level
 	 */
+	hysteresis_temp = chip->temp_convgcfg[chip->curr_convgcfg_idx] +
+			  chip->convgcfg_hysteresis;
 	if ((idx != chip->curr_convgcfg_idx) &&
 	    (chip->curr_convgcfg_idx == -1 || idx < chip->curr_convgcfg_idx ||
-	     temp >= chip->temp_convgcfg[chip->curr_convgcfg_idx] +
-	     chip->convgcfg_hysteresis)) {
+	     temp >= hysteresis_temp)) {
 		REGMAP_WRITE(chip->regmap_nvram, MAX1720X_NCONVGCFG,
 			     chip->convgcfg_values[idx]);
 		chip->curr_convgcfg_idx = idx;
@@ -2880,10 +2881,15 @@ static int max1720x_handle_dt_nconvgcfg(struct max1720x_chip *chip)
 	if (!chip->nb_convgcfg)
 		return 0;
 
-	ret = of_property_read_u32(node, "maxim,nconvgcfg-temp-hysteresis",
+	ret = of_property_read_s32(node, "maxim,nconvgcfg-temp-hysteresis",
 				   &chip->convgcfg_hysteresis);
 	if (ret < 0)
 		chip->convgcfg_hysteresis = 10;
+	else if (chip->convgcfg_hysteresis < 0)
+			chip->convgcfg_hysteresis = 10;
+	if (ret == 0)
+		dev_info(chip->dev, "%s maxim,nconvgcfg-temp-hysteresis = %d\n",
+			 node->name, chip->convgcfg_hysteresis);
 
 	if (chip->nb_convgcfg != of_property_count_elems_of_size(node,
 						  "maxim,nconvgcfg-values",
