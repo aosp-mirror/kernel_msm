@@ -687,6 +687,7 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_VPH,
 	POWER_SUPPLY_PROP_OTG_FASTROLESWAP,
 	POWER_SUPPLY_PROP_THERM_ICL_LIMIT,
+	POWER_SUPPLY_PROP_DEAD_BATTERY,
 };
 
 static int smb5_usb_get_prop(struct power_supply *psy,
@@ -818,6 +819,9 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote(chg->usb_icl_votable,
 					      USB_PSY_VOTER);
 		break;
+	case POWER_SUPPLY_PROP_DEAD_BATTERY:
+		val->intval = chg->dead_battery ? 1 : 0;
+		break;
 	case POWER_SUPPLY_PROP_CONNECTOR_TYPE:
 		val->intval = chg->connector_type;
 		break;
@@ -934,8 +938,24 @@ static int smb5_usb_set_prop(struct power_supply *psy,
 		rc = smblib_set_prop_pd_voltage_min(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX:
-		rc = smblib_set_prop_sdp_current_max(chg, val);
+		chg->sdp_current_max = val->intval;
+		if (!(chg->dead_battery && val->intval <= USBIN_25MA))
+			rc = smblib_set_prop_sdp_current_max(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_DEAD_BATTERY: {
+
+		/* Dead battery can only be cleared. */
+		if (chg->dead_battery && val->intval == 0) {
+			union power_supply_propval temp;
+
+			temp.intval = chg->sdp_current_max;
+			rc = smblib_set_prop_sdp_current_max(chg, &temp);
+			chg->dead_battery = !!rc;
+		} else {
+			rc = -EINVAL;
+		}
+		break;
+	}
 	case POWER_SUPPLY_PROP_CONNECTOR_HEALTH:
 		chg->connector_health = val->intval;
 		power_supply_changed(chg->usb_psy);
@@ -987,6 +1007,7 @@ static int smb5_usb_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE:
 	case POWER_SUPPLY_PROP_THERM_ICL_LIMIT:
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
+	case POWER_SUPPLY_PROP_DEAD_BATTERY:
 		return 1;
 	default:
 		break;

@@ -103,6 +103,12 @@ enum print_reason {
 
 #define ROLE_REVERSAL_DELAY_MS		2000
 
+#define USBIN_25MA      25000
+#define USBIN_100MA     100000
+#define USBIN_150MA     150000
+#define USBIN_500MA     500000
+#define USBIN_900MA     900000
+
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
@@ -537,6 +543,8 @@ struct smb_charger {
 	int			dr_mode;
 	int			usbin_forced_max_uv;
 	int			init_thermal_ua;
+	int			sdp_current_max;
+	bool			dead_battery;
 
 	/* workaround flag */
 	u32			wa_flags;
