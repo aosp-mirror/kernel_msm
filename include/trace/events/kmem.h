@@ -376,7 +376,44 @@ TRACE_EVENT(ion_heap_grow,
 
 	TP_printk("heap_name=%s, len=%zu, total_allocated=%ld",
 		  __get_str(heap_name), __entry->len, __entry->total_allocated)
-	);
+);
+
+DECLARE_EVENT_CLASS(ion_buffer,
+
+	TP_PROTO(void *addr,
+		 size_t len),
+
+	TP_ARGS(addr, len),
+
+	TP_STRUCT__entry(
+		__field(void *, addr)
+		__field(size_t, len)
+	),
+
+	TP_fast_assign(
+		__entry->addr = addr;
+		__entry->len = len;
+	),
+
+	TP_printk("addr=%p, len=%zu",
+		  __entry->addr, __entry->len)
+);
+
+DEFINE_EVENT(ion_buffer, ion_buffer_create,
+
+	TP_PROTO(void *addr,
+		 size_t len),
+
+	TP_ARGS(addr, len)
+);
+
+DEFINE_EVENT(ion_buffer, ion_buffer_destroy,
+
+	TP_PROTO(void *addr,
+		 size_t len),
+
+	TP_ARGS(addr, len)
+);
 
 DECLARE_EVENT_CLASS(ion_alloc,
 
