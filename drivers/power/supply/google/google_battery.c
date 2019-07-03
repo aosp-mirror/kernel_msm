@@ -162,6 +162,8 @@ struct batt_drv {
 	int soh;
 	int fake_capacity;
 	int buck_enabled;
+	bool dead_battery;
+	int capacity_level;
 
 	/* temp outside the charge table */
 	int jeita_stop_charging;
@@ -375,13 +377,13 @@ static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
 	return qnum_toint(ssoc->ssoc_gdf);
 }
 
-static qnum_t ssoc_get_capacity_raw(struct batt_ssoc_state *ssoc)
+static qnum_t ssoc_get_capacity_raw(const struct batt_ssoc_state *ssoc)
 {
 	return ssoc->ssoc_rl;
 }
 
 /* reported to userspace: call while holding batt_lock */
-static int ssoc_get_capacity(struct batt_ssoc_state *ssoc)
+static int ssoc_get_capacity(const struct batt_ssoc_state *ssoc)
 {
 	const qnum_t raw = ssoc_get_capacity_raw(ssoc);
 	return qnum_roundint(raw, 0.005);
@@ -2066,7 +2068,50 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
-/* poll the battery, run SOC% etc, scheduled from psy_changed and from timer */
+/* could also use battery temperature, age */
+static bool gbatt_check_dead_battery(const struct batt_drv *batt_drv)
+{
+	return ssoc_get_capacity(&batt_drv->ssoc_state) == 0;
+}
+
+#define SSOC_LEVEL_FULL		SSOC_SPOOF
+#define SSOC_LEVEL_HIGH		80
+#define SSOC_LEVEL_NORMAL	30
+#define SSOC_LEVEL_LOW		0
+
+/* could also use battery temperature, age.
+ * NOTE: CRITICAL_LEVEL implies BATTERY_DEAD but BATTERY_DEAD doesn't imply
+ * CRITICAL.
+ */
+static int gbatt_get_capacity_level(const struct batt_drv *batt_drv,
+				    int fg_status)
+{
+	const int ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
+	int capacity_level;
+
+	if (ssoc >= SSOC_LEVEL_FULL) {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_FULL;
+	} else if (ssoc > SSOC_LEVEL_HIGH) {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_HIGH;
+	} else if (ssoc > SSOC_LEVEL_NORMAL) {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
+	} else if (ssoc > SSOC_LEVEL_LOW) {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_LOW;
+	} else if (!batt_drv->buck_enabled) {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
+	} else if (fg_status == POWER_SUPPLY_STATUS_DISCHARGING ||
+		   fg_status == POWER_SUPPLY_STATUS_UNKNOWN) {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
+	} else {
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_LOW;
+	}
+
+	return capacity_level;
+}
+
+/* poll the battery, run SOC%, dead battery, critical.
+ * scheduled from psy_changed and from timer
+ */
 static void google_battery_work(struct work_struct *work)
 {
 	struct batt_drv *batt_drv =
@@ -2091,17 +2136,34 @@ static void google_battery_work(struct work_struct *work)
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
 	} else {
-		int ssoc;
+		int ssoc, level;
+		bool changed = false;
 
 		/* handle charge/recharge */
 		batt_rl_update_status(batt_drv);
 
 		ssoc = ssoc_get_capacity(ssoc_state);
 		if (prev_ssoc != ssoc)
-			power_supply_changed(batt_drv->psy);
+			changed = true;
+
+		level = gbatt_get_capacity_level(batt_drv, fg_status);
+		if (level != batt_drv->capacity_level) {
+			batt_drv->capacity_level = level;
+			changed = true;
+		}
+
+		if (batt_drv->dead_battery) {
+			batt_drv->dead_battery =
+					gbatt_check_dead_battery(batt_drv);
+			if (!batt_drv->dead_battery)
+				changed = true;
+		}
 
 		/* fuel gauge triggered recharge logic. */
 		batt_drv->batt_full = (ssoc == SSOC_FULL);
+
+		if (changed)
+			power_supply_changed(batt_drv->psy);
 	}
 
 	/* TODO: poll other data here if needed */
@@ -2135,6 +2197,7 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
 	POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
 	POWER_SUPPLY_PROP_CHARGE_DONE,
@@ -2147,6 +2210,7 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_CYCLE_COUNTS,
+	POWER_SUPPLY_PROP_DEAD_BATTERY,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,		/* compat */
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,	/* compat */
 	POWER_SUPPLY_PROP_PRESENT,
@@ -2257,6 +2321,14 @@ static int gbatt_get_property(struct power_supply *psy,
 			val->intval = ssoc_get_capacity(ssoc_state);
 			mutex_unlock(&batt_drv->batt_lock);
 		}
+		break;
+
+	case POWER_SUPPLY_PROP_DEAD_BATTERY:
+		val->intval = batt_drv->dead_battery;
+		break;
+
+	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
+		val->intval = batt_drv->capacity_level;
 		break;
 
 	/* ng charging:
@@ -2493,6 +2565,8 @@ static void google_battery_init_work(struct work_struct *work)
 
 	batt_rl_reset(batt_drv);
 	batt_drv->buck_enabled = -1;
+	batt_drv->dead_battery = true; /* clear in batt_work() */
+	batt_drv->capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
 	batt_reset_chg_drv_state(batt_drv);
 
 	mutex_init(&batt_drv->chg_lock);

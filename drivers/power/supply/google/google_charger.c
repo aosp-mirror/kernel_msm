@@ -159,6 +159,7 @@ struct chg_drv {
 	struct votable	*dc_icl_votable;
 
 	bool batt_present;
+	bool dead_battery;
 	int batt_profile_fcc_ua;	/* max/default fcc */
 	int batt_profile_fv_uv;		/* max/default fv_uv */
 	int fv_uv;
@@ -953,6 +954,28 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv)
 	return update_interval;
 }
 
+/* true if still in dead battery */
+#define DEAD_BATTERY_DEADLINE_SEC	(45 * 60)
+
+static bool chg_update_dead_battery(const struct chg_drv *chg_drv)
+{
+	int dead = 0;
+	const time_t uptime = get_boot_sec();
+
+	if (uptime < DEAD_BATTERY_DEADLINE_SEC)
+		dead = GPSY_GET_PROP(chg_drv->bat_psy,
+				    POWER_SUPPLY_PROP_DEAD_BATTERY);
+	if (dead == 0) {
+		dead = GPSY_SET_PROP(chg_drv->usb_psy,
+				     POWER_SUPPLY_PROP_DEAD_BATTERY,
+				     0);
+		if (dead == 0)
+			pr_info("dead battery cleared uptime=%ld\n", uptime);
+	}
+
+	return (dead != 0);
+}
+
 /* No op on battery not present */
 static void chg_work(struct work_struct *work)
 {
@@ -983,6 +1006,9 @@ static void chg_work(struct work_struct *work)
 
 		pr_info("MSC_CHG battery present\n");
 	}
+
+	if (chg_drv->dead_battery)
+		chg_drv->dead_battery = chg_update_dead_battery(chg_drv);
 
 	/* cause msc_update_charger_cb to ignore updates */
 	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
@@ -2333,6 +2359,10 @@ static void google_charger_init_work(struct work_struct *work)
 	ret = chg_thermal_device_init(chg_drv);
 	if (ret < 0)
 		pr_err("Cannot register thermal devices, ret=%d\n", ret);
+
+	chg_drv->dead_battery = chg_update_dead_battery(chg_drv);
+	if (chg_drv->dead_battery)
+		pr_info("dead battery mode\n");
 
 	chg_init_state(chg_drv);
 	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
