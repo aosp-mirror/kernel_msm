@@ -2817,6 +2817,9 @@ static int cs35l41_handle_of_data(struct device *dev,
 	}
 	of_node_put(sub_node);
 
+	pdata->hibernate_enable = of_property_read_bool(np,
+					"cirrus,hibernate-enable");
+
 	return 0;
 }
 
@@ -3417,7 +3420,10 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 			goto err;
 		}
 
-		cs35l41->amp_hibernate = CS35L41_HIBERNATE_NOT_LOADED;
+		if (cs35l41->pdata.hibernate_enable)
+			cs35l41->amp_hibernate = CS35L41_HIBERNATE_NOT_LOADED;
+		else
+			cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
 
 		cs35l41->reset_cache.extclk_cfg = false;
 		cs35l41->reset_cache.asp_wl = -1;

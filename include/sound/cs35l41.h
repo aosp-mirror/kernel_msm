@@ -39,6 +39,7 @@ struct cs35l41_platform_data {
 	bool ng_enable;
 	bool tuning_has_prefix;
 	bool invert_pcm;
+	bool hibernate_enable;
 	int bst_ind;
 	int bst_vctrl;
 	int bst_ipk;
