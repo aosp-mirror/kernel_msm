@@ -1180,43 +1180,44 @@ static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 {
 	int i = 0;
 	int j = 0;
+	const unsigned int buff_size = 6 * (ts->tx_count + 1);
+	unsigned int buff_len = 0;
 	unsigned char *pStr = NULL;
-	unsigned char pTmp[16] = { 0 };
 
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
-	pStr = kzalloc(6 * (ts->tx_count + 1), GFP_KERNEL);
+	pStr = kzalloc(buff_size, GFP_KERNEL);
 	if (pStr == NULL)
 		return;
 
-	memset(pStr, 0x0, 6 * (ts->tx_count + 1));
-	snprintf(pTmp, sizeof(pTmp), "      TX");
-	strncat(pStr, pTmp, 6 * ts->tx_count);
+	buff_len += scnprintf(pStr + buff_len, buff_size - buff_len,
+				"      TX");
 
-	for (i = 0; i < ts->tx_count; i++) {
-		snprintf(pTmp, sizeof(pTmp), " %02d ", i);
-		strncat(pStr, pTmp, 6 * ts->tx_count);
-	}
+	for (i = 0; i < ts->tx_count; i++)
+		buff_len += scnprintf(pStr + buff_len, buff_size - buff_len,
+				" %02d ", i);
 
 	input_info(true, &ts->client->dev, "%s\n", pStr);
-	memset(pStr, 0x0, 6 * (ts->tx_count + 1));
-	snprintf(pTmp, sizeof(pTmp), " +");
-	strncat(pStr, pTmp, 6 * ts->tx_count);
+	buff_len = 0;
+	memset(pStr, 0x0, buff_size);
+	buff_len += scnprintf(pStr + buff_len, buff_size - buff_len, " +");
 
-	for (i = 0; i < ts->tx_count; i++) {
-		snprintf(pTmp, sizeof(pTmp), "----");
-		strncat(pStr, pTmp, 6 * ts->rx_count);
-	}
+	for (i = 0; i < ts->tx_count; i++)
+		buff_len += scnprintf(pStr + buff_len, buff_size - buff_len,
+				"----");
 
 	input_info(true, &ts->client->dev, "%s\n", pStr);
 
 	for (i = 0; i < ts->rx_count; i++) {
-		memset(pStr, 0x0, 6 * (ts->tx_count + 1));
-		snprintf(pTmp, sizeof(pTmp), "Rx%02d | ", i);
-		strncat(pStr, pTmp, 6 * ts->tx_count);
+		buff_len = 0;
+		memset(pStr, 0x0, buff_size);
+		buff_len += scnprintf(pStr + buff_len, buff_size - buff_len,
+				"Rx%02d | ", i);
 
 		for (j = 0; j < ts->tx_count; j++) {
-			snprintf(pTmp, sizeof(pTmp), " %3d", ts->pFrame[(j * ts->rx_count) + i]);
+			buff_len += scnprintf(pStr + buff_len,
+				buff_size - buff_len,
+				" %3d", ts->pFrame[(j * ts->rx_count) + i]);
 
 			if (i > 0) {
 				if (ts->pFrame[(j * ts->rx_count) + i] < *min)
@@ -1225,7 +1226,6 @@ static void sec_ts_print_frame(struct sec_ts_data *ts, short *min, short *max)
 				if (ts->pFrame[(j * ts->rx_count) + i] > *max)
 					*max = ts->pFrame[(j * ts->rx_count) + i];
 			}
-			strncat(pStr, pTmp, 6 * ts->rx_count);
 		}
 		input_info(true, &ts->client->dev, "%s\n", pStr);
 	}
