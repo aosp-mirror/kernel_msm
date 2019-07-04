@@ -620,8 +620,10 @@ void ipu_core_jqs_suspend_firmware(struct paintbox_bus *bus)
 /* The caller to this function must hold bus->jqs.lock */
 void ipu_core_jqs_shutdown_firmware(struct paintbox_bus *bus)
 {
-	if (bus->jqs.status == JQS_FW_STATUS_REQUESTED)
+	if (bus->jqs.status == JQS_FW_STATUS_REQUESTED) {
+		ipu_core_notify_firmware_down(bus);
 		return;
+	}
 
 	if (ipu_core_jqs_is_ready(bus))
 		ipu_core_jqs_send_shutdown_mode(bus, JQS_SHUTDOWN_MODE_HARD);
