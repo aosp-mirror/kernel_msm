@@ -1964,7 +1964,6 @@ static void iaxxx_mutex_init(struct iaxxx_priv *priv)
 	mutex_init(&priv->module_lock);
 	mutex_init(&priv->sensor_tunnel_dev_lock);
 	mutex_init(&priv->crashdump_lock);
-	mutex_init(&priv->pm_mutex);
 	mutex_init(&priv->iaxxx_state->plg_pkg_list_lock);
 	mutex_init(&priv->event_lock);
 	mutex_init(&priv->proc_on_off_lock);
@@ -1983,7 +1982,6 @@ static void iaxxx_mutex_destroy(struct iaxxx_priv *priv)
 	mutex_destroy(&priv->module_lock);
 	mutex_destroy(&priv->sensor_tunnel_dev_lock);
 	mutex_destroy(&priv->crashdump_lock);
-	mutex_destroy(&priv->pm_mutex);
 	mutex_destroy(&priv->iaxxx_state->plg_pkg_list_lock);
 	mutex_destroy(&priv->event_lock);
 	mutex_destroy(&priv->proc_on_off_lock);

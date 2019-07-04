@@ -113,12 +113,10 @@ int iaxxx_pm_get_sync(struct device *dev)
 		return 0;
 	}
 
-	if (mutex_trylock(&priv->pm_mutex))
-		ret = pm_runtime_get_sync(dev);
+	ret = pm_runtime_get_sync(dev);
 	if (ret < 0)
 		dev_err(dev, "%s() Fail. %d\n", __func__, ret);
 
-	mutex_unlock(&priv->pm_mutex);
 #endif
 	return ret;
 }
@@ -140,13 +138,10 @@ int iaxxx_pm_put_autosuspend(struct device *dev)
 		return 0;
 	}
 
-	if (mutex_trylock(&priv->pm_mutex)) {
-		pm_runtime_mark_last_busy(dev);
-		ret = pm_runtime_put_sync_autosuspend(dev);
-		if (ret && ret != -EBUSY)
-			dev_err(dev, "%s(): fail %d\n", __func__, ret);
-		mutex_unlock(&priv->pm_mutex);
-	}
+	pm_runtime_mark_last_busy(dev);
+	ret = pm_runtime_put_sync_autosuspend(dev);
+	if (ret && ret != -EBUSY)
+		dev_err(dev, "%s(): fail %d\n", __func__, ret);
 
 	if (ret == -EBUSY)
 		ret = 0;
