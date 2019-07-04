@@ -1318,15 +1318,84 @@ static int write_pkg_info(bool update, struct iaxxx_priv *priv, uint32_t pkg_id,
 	return rc;
 }
 
-static uint32_t get_physical_address(uint32_t addr,
-		uint32_t text, uint32_t data, struct pkg_bin_info bin_info)
+/* Based bin-info check if the address falls within text section */
+static bool is_text_section_addr(uint32_t addr, struct pkg_bin_info *bin_info)
+{
+	return ((addr >= bin_info->text_start_addr) &&
+		(addr <= bin_info->text_end_addr));
+}
+
+static uint32_t get_physical_address(uint32_t addr, uint32_t text,
+				uint32_t data, struct pkg_bin_info *bin_info)
 {
 	/* Calculate the physical address to write to */
-	if ((addr >= bin_info.text_start_addr)
-			&& (addr <= bin_info.text_end_addr))
-		return (text + (addr - bin_info.text_start_addr));
+	if (is_text_section_addr(addr, bin_info))
+		return (text + (addr - bin_info->text_start_addr));
 	else
-		return (data + (addr - bin_info.ro_data_start_addr));
+		return (data + (addr - bin_info->ro_data_start_addr));
+}
+
+/**
+ * iaxxx_download_section_with_rom_hole_handling -
+ * downloads a firmware text or data section using the function
+ * iaxxx_download_section. Additionally, it checks if the physical
+ * address where the section is written to falls in ROM-Hole.
+ * If so, handle the downloading by skipping ROM-Hole.
+ *
+ * @priv    : iaxxx private data
+ * @data    : the section data to be downloaded
+ * @section : pointer to the section data (section address, length, etc).
+ * @regmap  : regmap to use
+ * @rom_hole_skipped: return a boolean flag set if ROM-Hole is skipped
+ */
+static int iaxxx_download_section_with_rom_hole_handling(
+				struct iaxxx_priv *priv, const uint8_t *data,
+				const struct firmware_section_header *section,
+				struct regmap *regmap, bool btp,
+				bool *rom_hole_skipped)
+{
+	uint32_t phy_addr_range1, phy_size_range1;
+	uint32_t phy_addr_range2, phy_size_range2;
+	struct firmware_section_header file_section = *section;
+	int rc = 0;
+
+	*rom_hole_skipped = false;
+
+	/* Check for ROM-Hole in this section
+	 * If found split and download the section
+	 */
+	phy_addr_range1 = file_section.start_address;
+
+	rom_phy_address_range_check_and_update(
+		&phy_addr_range1, file_section.length * sizeof(uint32_t),
+		&phy_size_range1, &phy_addr_range2, &phy_size_range2);
+
+	dev_dbg(priv->dev, "%s ## addr1=%pK size1=%u addr2=%pK size2=%u\n",
+		__func__, phy_addr_range1, phy_size_range1, phy_addr_range2,
+		phy_size_range2);
+
+	/* If the start address has changed then
+	 * it means it was moved due to ROM-Hole.
+	 */
+	if (phy_addr_range1 != file_section.start_address)
+		*rom_hole_skipped = true;
+
+	file_section.start_address = phy_addr_range1;
+	file_section.length = phy_size_range1 / sizeof(uint32_t);
+
+	rc = iaxxx_download_section(priv, data, &file_section, regmap, btp);
+
+	/* If address has ROM-hole write data
+	 * after the hole
+	 */
+	if (phy_size_range2 != 0 && phy_addr_range2 != 0) {
+		file_section.start_address = phy_addr_range2;
+		file_section.length = phy_size_range2 / sizeof(uint32_t);
+		rc = iaxxx_download_section(priv, data + phy_size_range1,
+					&file_section, regmap, btp);
+		*rom_hole_skipped = true;
+	}
+	return rc;
 }
 
 static int iaxxx_download_pkg(struct iaxxx_priv *priv,
@@ -1348,8 +1417,10 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 	uint32_t data_phy_addr = 0;
 	uint8_t *buf_data;
 	struct pkg_mgmt_info pkg = {0};
-	uint32_t phy_addr_range1, phy_size_range1;
-	uint32_t phy_addr_range2, phy_size_range2;
+	bool rom_hole_skipped;
+	bool is_text_section;
+	bool text_sect_skipped_rom_hole = false;
+	bool data_sect_skipped_rom_hole = false;
 
 	dev_dbg(dev, "%s()\n", __func__);
 	/* File header */
@@ -1445,9 +1516,13 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			/* Include section header fields in the checksum */
 			CALC_FLETCHER16(file_section.length, sum1, sum2);
 			CALC_FLETCHER16(file_section.start_address, sum1, sum2);
+
+			is_text_section = is_text_section_addr(
+					file_section.start_address, &bin_info);
 			file_section.start_address =
 				get_physical_address(file_section.start_address,
-					text_phy_addr, data_phy_addr, bin_info);
+					text_phy_addr, data_phy_addr,
+					&bin_info);
 			dev_dbg(dev, "%s() Physical address %x\n",
 					__func__, file_section.start_address);
 			buf_data = kvzalloc(file_section.length *
@@ -1466,35 +1541,36 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 			for (j = 0 ; j < file_section.length; j++)
 				CALC_FLETCHER16(word_data[j], sum1, sum2);
 
-			phy_addr_range1 = file_section.start_address;
-
-			rom_phy_address_range_check_and_update(&phy_addr_range1,
-				file_section.length * sizeof(uint32_t),
-				&phy_size_range1, &phy_addr_range2,
-				&phy_size_range2);
-
-			dev_dbg(priv->dev,
-				"%s ## addr1=%x size1=%u addr2=%x size2=%u\n",
-				__func__, phy_addr_range1, phy_size_range1,
-				phy_addr_range2, phy_size_range2);
-
-			file_section.start_address = phy_addr_range1;
-			file_section.length =
-				phy_size_range1 / sizeof(uint32_t);
-
-			rc = iaxxx_download_section(priv, data, &file_section,
-					priv->regmap, true);
-
-			/* If address has hole write data after the hole */
-			if (phy_size_range2 != 0 && phy_addr_range2 != 0) {
-				file_section.start_address = phy_addr_range2;
-				file_section.length =
-					phy_size_range2 / sizeof(uint32_t);
-				rc = iaxxx_download_section(priv,
-					data + phy_size_range1, &file_section,
-					priv->regmap, true);
+			/* Check if ROM Hole has been skipped for the current
+			 * section. If so, adjust the start addresses
+			 * of subsequent sections by ROME-Hole size.
+			 */
+			if ((is_text_section && text_sect_skipped_rom_hole) ||
+				(!is_text_section &&
+						data_sect_skipped_rom_hole)) {
+				file_section.start_address += MAX_ADDR_ROM_SIZE;
+				rc = iaxxx_download_section(priv, data,
+						&file_section, priv->regmap,
+						true);
+			} else {
+				iaxxx_download_section_with_rom_hole_handling(
+						priv, data, &file_section,
+						priv->regmap, true,
+						&rom_hole_skipped);
+				/* Check if ROM-Hole has been skipped
+				 */
+				if (rom_hole_skipped) {
+					/* Set the flag after Rome-Hole so
+					 * next section can use it
+					 */
+					if (is_text_section)
+						text_sect_skipped_rom_hole =
+							true;
+					else
+						data_sect_skipped_rom_hole =
+							true;
+				}
 			}
-
 			data += file_section_bytes;
 			kvfree(buf_data);
 			buf_data = NULL;
@@ -1523,8 +1599,20 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 		if (!buf_data)
 			return -ENOMEM;
 
-		rc = iaxxx_download_section(priv, buf_data, &file_section,
-				priv->regmap, true);
+		/* If ROM-Hole has been skipped in one of the
+		 * data sections written already, adjust the
+		 * start address of BSS section.
+		 * If not, write BSS section with ROM-Hole
+		 * handling.
+		 */
+		if (data_sect_skipped_rom_hole) {
+			file_section.start_address += MAX_ADDR_ROM_SIZE;
+			rc = iaxxx_download_section(priv, buf_data,
+					&file_section, priv->regmap, true);
+		} else
+			iaxxx_download_section_with_rom_hole_handling(
+					priv, buf_data, &file_section,
+					priv->regmap, true, &rom_hole_skipped);
 		kvfree(buf_data);
 		buf_data = NULL;
 	}
