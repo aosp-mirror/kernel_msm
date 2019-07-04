@@ -90,7 +90,6 @@ ENTRY(stext)
 #endif
 	@ ensure svc mode and all interrupts masked
 	safe_svcmode_maskall r9
-
 	mrc	p15, 0, r9, c0, c0		@ get processor id
 	bl	__lookup_processor_type		@ r5=procinfo r9=cpuid
 	movs	r10, r5				@ invalid processor (r5=0)?
@@ -384,6 +383,7 @@ ENTRY(secondary_startup)
 #endif
 	safe_svcmode_maskall r9
 
+	bl      v7_invalidate_l1
 	mrc	p15, 0, r9, c0, c0		@ get processor id
 	bl	__lookup_processor_type
 	movs	r10, r5				@ invalid processor?
