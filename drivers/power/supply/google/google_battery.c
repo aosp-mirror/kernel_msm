@@ -1246,7 +1246,7 @@ static int batt_chg_stats_cstr(char *buff, int size,
 {
 	int i, j, len = 0;
 	static char *codes[] = { "n", "s", "d", "l", "v", "vo", "p", "f", "t",
-				"dl", "st", "r", "w", "rs", "n", "ny" };
+				"dl", "st", "tc", "r", "w", "rs", "n", "ny" };
 
 	if (verbose) {
 		const char *adapter_name =
@@ -1540,6 +1540,7 @@ static int msc_logic_irdrop(struct batt_drv *batt_drv,
 	const int chg_type = batt_drv->chg_state.f.chg_type;
 	const int utv_margin = profile->cv_range_accuracy;
 	const int otv_margin = profile->cv_otv_margin;
+	const int switch_cnt = profile->cv_tier_switch_cnt;
 
 	if ((vbatt - vtier) > otv_margin) {
 		/* OVER: vbatt over vtier for more than margin */
@@ -1665,6 +1666,17 @@ static int msc_logic_irdrop(struct batt_drv *batt_drv,
 		*update_interval = profile->cv_update_interval;
 
 		pr_info("MSC_STEADY vt=%d vb=%d fv_uv=%d margin=%d\n",
+			vtier, vbatt, *fv_uv,
+			profile->cv_range_accuracy);
+	} else if (batt_drv->checked_tier_switch_cnt >= (switch_cnt - 1)) {
+		/* TAPER_TIERCNTING: prepare to switch to next tier
+		 * so not allow to raise vfloat to prevent battery
+		 * voltage over than tier
+		 */
+		msc_state = MSC_TIERCNTING;
+		*update_interval = profile->cv_update_interval;
+
+		pr_info("MSC_TIERCNTING vt=%d vb=%d fv_uv=%d margin=%d\n",
 			vtier, vbatt, *fv_uv,
 			profile->cv_range_accuracy);
 	} else {
@@ -1926,10 +1938,15 @@ static int msc_logic(struct batt_drv *batt_drv)
 			msc_state = MSC_WAIT;
 			batt_drv->checked_cv_cnt -= 1;
 
-			pr_info("MSC_WAIT vt=%d vb=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d\n",
+			pr_info("MSC_WAIT vt=%d vb=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d t_cnt=%d\n",
 				vtier, vbatt, fv_uv, ibatt,
 				batt_drv->checked_cv_cnt,
-				batt_drv->checked_ov_cnt);
+				batt_drv->checked_ov_cnt,
+				batt_drv->checked_tier_switch_cnt);
+
+			if (-ibatt > cc_next_max)
+				batt_drv->checked_tier_switch_cnt = 0;
+
 		} else if (-ibatt > cc_next_max) {
 			/* current over next tier, reset tier switch count */
 			msc_state = MSC_RSTC;

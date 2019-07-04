@@ -96,6 +96,7 @@ enum gbms_msc_states_t {
 	MSC_TYPE,
 	MSC_DLY,	/* in taper */
 	MSC_STEADY,	/* in taper */
+	MSC_TIERCNTING, /* in taper */
 	MSC_RAISE,	/* in taper */
 	MSC_WAIT,	/* in taper */
 	MSC_RSTC,	/* in taper */
