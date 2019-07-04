@@ -101,7 +101,8 @@ endif
 
 dtb-$(CONFIG_QTI_GVM) += sa8155-vm.dtb \
 	sa8155-vm-lv.dtb \
-	sa6155p-vm.dtb
+	sa6155p-vm.dtb \
+	sa8195-vm.dtb
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SDMSHRIKE) += \
@@ -257,7 +258,10 @@ dtb-$(CONFIG_ARCH_SDXPRAIRIE) += sdxprairie-rumi.dtb \
 	sdxprairie-pcie-ep-mtp.dtb \
 	sdxprairie-cdp-256.dtb \
 	sdxprairie-mtp-256.dtb \
-	sdxprairie-mtp-aqc.dtb
+	sdxprairie-mtp-aqc.dtb \
+	sdxprairie-dsda-mtp.dtb \
+	sdxprairie-v2-cdp.dtb \
+	sdxprairie-v2-mtp.dtb
 
 ifeq ($(CONFIG_ARM64),y)
 always		:= $(dtb-y)

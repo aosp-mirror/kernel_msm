@@ -223,7 +223,7 @@ static struct ipa_ep_cfg mhip_dl_teth_ep_cfg = {
 		.hdr_payload_len_inc_padding = true,
 	},
 	.aggr = {
-		.aggr_en = IPA_BYPASS_AGGR, /* temporarily disabled */
+		.aggr_en = IPA_ENABLE_DEAGGR,
 		.aggr = IPA_QCMAP,
 		.aggr_byte_limit = TETH_AGGR_DL_BYTE_LIMIT,
 		.aggr_time_limit = TETH_AGGR_TIME_LIMIT,
@@ -297,6 +297,7 @@ struct ipa_mpm_dev_info {
 	struct ipa_mpm_iova_addr data;
 	u32 chdb_base;
 	u32 erdb_base;
+	bool is_cache_coherent;
 };
 
 struct ipa_mpm_event_props {
@@ -490,6 +491,12 @@ static dma_addr_t ipa_mpm_smmu_map(void *va_addr,
 	unsigned long carved_iova = roundup(cb->next_addr, IPA_MPM_PAGE_SIZE);
 	int ret = 0;
 
+	/* check cache coherent */
+	if (ipa_mpm_ctx->dev_info.is_cache_coherent)  {
+		IPA_MPM_DBG(" enable cache coherent\n");
+		prot |= IOMMU_CACHE;
+	}
+
 	if (carved_iova >= cb->va_end) {
 		IPA_MPM_ERR("running out of carved_iova %x\n", carved_iova);
 		ipa_assert();
@@ -538,6 +545,10 @@ static dma_addr_t ipa_mpm_smmu_map(void *va_addr,
 
 		pcie_smmu_domain = iommu_get_domain_for_dev(
 			ipa_mpm_ctx->mhi_parent_dev);
+		if (!pcie_smmu_domain) {
+			IPA_MPM_ERR("invalid pcie smmu domain\n");
+			ipa_assert();
+		}
 		ret = iommu_map(pcie_smmu_domain, iova_p, pa_p, size_p, prot);
 
 		if (ret) {
@@ -602,7 +613,12 @@ static void ipa_mpm_smmu_unmap(dma_addr_t carved_iova, int sz, int dir,
 			iova_p, pa_p, size_p);
 		pcie_smmu_domain = iommu_get_domain_for_dev(
 			ipa_mpm_ctx->mhi_parent_dev);
-		iommu_unmap(pcie_smmu_domain, iova_p, size_p);
+		if (pcie_smmu_domain) {
+			iommu_unmap(pcie_smmu_domain, iova_p, size_p);
+		} else {
+			IPA_MPM_ERR("invalid PCIE SMMU domain\n");
+			ipa_assert();
+		}
 		iommu_unmap(ipa_smmu_domain, iova_p, size_p);
 
 		cb->next_addr -= size_p;
@@ -633,6 +649,12 @@ static u32 ipa_mpm_smmu_map_doorbell(enum mhip_smmu_domain_type smmu_domain,
 	u32 iova = 0;
 	u64 offset = 0;
 
+	/* check cache coherent */
+	if (ipa_mpm_ctx->dev_info.is_cache_coherent)  {
+		IPA_MPM_DBG(" enable cache coherent\n");
+		prot |= IOMMU_CACHE;
+	}
+
 	if (carved_iova >= cb->va_end) {
 		IPA_MPM_ERR("running out of carved_iova %x\n", carved_iova);
 		ipa_assert();
@@ -646,6 +668,10 @@ static u32 ipa_mpm_smmu_map_doorbell(enum mhip_smmu_domain_type smmu_domain,
 					iova_p, pa_p, size_p);
 		if (smmu_domain == MHIP_SMMU_DOMAIN_IPA) {
 			ipa_smmu_domain = ipa3_get_smmu_domain();
+			if (!ipa_smmu_domain) {
+				IPA_MPM_ERR("invalid IPA smmu domain\n");
+				ipa_assert();
+			}
 			ret = ipa3_iommu_map(ipa_smmu_domain,
 				iova_p, pa_p, size_p, prot);
 			if (ret) {
@@ -656,8 +682,12 @@ static u32 ipa_mpm_smmu_map_doorbell(enum mhip_smmu_domain_type smmu_domain,
 		} else if (smmu_domain == MHIP_SMMU_DOMAIN_PCIE) {
 			pcie_smmu_domain = iommu_get_domain_for_dev(
 				ipa_mpm_ctx->mhi_parent_dev);
-			 ret = iommu_map(pcie_smmu_domain,
-				iova_p, pa_p, size_p, prot);
+			if (!pcie_smmu_domain) {
+				IPA_MPM_ERR("invalid IPA smmu domain\n");
+				ipa_assert();
+			}
+			ret = iommu_map(pcie_smmu_domain,
+					iova_p, pa_p, size_p, prot);
 			if (ret) {
 				IPA_MPM_ERR("PCIe doorbell mapping failed\n");
 				ipa_assert();
@@ -694,11 +724,21 @@ static void ipa_mpm_smmu_unmap_doorbell(enum mhip_smmu_domain_type smmu_domain,
 					iova_p, pa_p, size_p);
 		if (smmu_domain == MHIP_SMMU_DOMAIN_IPA) {
 			ipa_smmu_domain = ipa3_get_smmu_domain();
-			iommu_unmap(ipa_smmu_domain, iova_p, size_p);
+			if (ipa_smmu_domain) {
+				iommu_unmap(ipa_smmu_domain, iova_p, size_p);
+			} else {
+				IPA_MPM_ERR("invalid IPA smmu domain\n");
+				ipa_assert();
+			}
 		} else if (smmu_domain == MHIP_SMMU_DOMAIN_PCIE) {
 			pcie_smmu_domain = iommu_get_domain_for_dev(
 				ipa_mpm_ctx->mhi_parent_dev);
-			 iommu_unmap(pcie_smmu_domain, iova_p, size_p);
+			if (pcie_smmu_domain) {
+				iommu_unmap(pcie_smmu_domain, iova_p, size_p);
+			} else {
+				IPA_MPM_ERR("invalid PCIE smmu domain\n");
+				ipa_assert();
+			}
 			cb->next_addr -=  IPA_MPM_PAGE_SIZE;
 		}
 	}
@@ -1300,7 +1340,7 @@ static int ipa_mpm_vote_unvote_pcie_clk(enum ipa_mpm_clk_vote_type vote,
 
 	if (vote == CLK_ON) {
 		result = mhi_device_get_sync(
-			ipa_mpm_ctx->md[probe_id].mhi_dev);
+			ipa_mpm_ctx->md[probe_id].mhi_dev, MHI_VOTE_BUS);
 		if (result) {
 			IPA_MPM_ERR("mhi_sync_get failed for probe_id %d\n",
 				result, probe_id);
@@ -1316,9 +1356,10 @@ static int ipa_mpm_vote_unvote_pcie_clk(enum ipa_mpm_clk_vote_type vote,
 								== 0)) {
 			IPA_MPM_DBG("probe_id %d PCIE clock already devoted\n",
 				probe_id);
-			ipa_assert();
+			WARN_ON(1);
+			return 0;
 		}
-		mhi_device_put(ipa_mpm_ctx->md[probe_id].mhi_dev);
+		mhi_device_put(ipa_mpm_ctx->md[probe_id].mhi_dev, MHI_VOTE_BUS);
 		IPA_MPM_DBG("probe_id %d PCIE clock off\n", probe_id);
 		atomic_dec(&ipa_mpm_ctx->md[probe_id].clk_cnt.pcie_clk_cnt);
 		atomic_dec(&ipa_mpm_ctx->pcie_clk_total_cnt);
@@ -1351,7 +1392,8 @@ static void ipa_mpm_vote_unvote_ipa_clk(enum ipa_mpm_clk_vote_type vote,
 								== 0)) {
 			IPA_MPM_DBG("probe_id %d IPA clock count < 0\n",
 				probe_id);
-			ipa_assert();
+			WARN_ON(1);
+			return;
 		}
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL(ipa_mpm_mhip_chan_str[probe_id]);
 		IPA_MPM_DBG("probe_id %d IPA clock off\n", probe_id);
@@ -1760,7 +1802,7 @@ static int ipa_mpm_mhi_probe_cb(struct mhi_device *mhi_dev,
 
 	if (ipa_mpm_ctx->md[probe_id].init_complete) {
 		IPA_MPM_ERR("Probe initialization already done, returning\n");
-		return -EPERM;
+		return 0;
 	}
 
 	IPA_MPM_DBG("Received probe for id=%d\n", probe_id);
@@ -1917,7 +1959,17 @@ static int ipa_mpm_mhi_probe_cb(struct mhi_device *mhi_dev,
 	ret = mhi_prepare_for_transfer(ipa_mpm_ctx->md[probe_id].mhi_dev);
 	if (ret) {
 		IPA_MPM_ERR("mhi_prepare_for_transfer failed %d\n", ret);
-		goto fail_smmu;
+		WARN_ON(1);
+		/*
+		 * WA to handle prepare_for_tx failures.
+		 * Though prepare for transfer fails, indicate success
+		 * to MHI driver. remove_cb will be called eventually when
+		 * Device side comes from where pending cleanup happens.
+		 */
+		atomic_inc(&ipa_mpm_ctx->probe_cnt);
+		ipa_mpm_ctx->md[probe_id].init_complete = true;
+		IPA_MPM_FUNC_EXIT();
+		return 0;
 	}
 
 	/*
@@ -2233,10 +2285,7 @@ static void ipa_mpm_mhi_status_cb(struct mhi_device *mhi_dev,
 			IPA_MPM_DBG("Already out of lpm\n");
 		}
 		break;
-	case MHI_CB_EE_RDDM:
-	case MHI_CB_PENDING_DATA:
-	case MHI_CB_SYS_ERROR:
-	case MHI_CB_FATAL_ERROR:
+	default:
 		IPA_MPM_ERR("unexpected event %d\n", mhi_cb);
 		break;
 	}
@@ -2561,6 +2610,8 @@ static int ipa_mpm_populate_smmu_info(struct platform_device *pdev)
 		ipa_mpm_ctx->dev_info.ipa_smmu_enabled =
 		smmu_out.smmu_enable;
 
+	/* get cache_coherent enable or not */
+	ipa_mpm_ctx->dev_info.is_cache_coherent = ap_cb->is_cache_coherent;
 	if (of_property_read_u32_array(pdev->dev.of_node, "qcom,iova-mapping",
 		carved_iova_ap_mapping, 2)) {
 		IPA_MPM_ERR("failed to read of_node %s\n",

@@ -321,8 +321,6 @@ static int atl_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_pci_reg;
 	}
 
-	pci_set_master(pdev);
-
 	ndev = alloc_etherdev_mq(sizeof(struct atl_nic), atl_max_queues);
 	if (!ndev) {
 		ret = -ENOMEM;
@@ -349,6 +347,8 @@ static int atl_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	ret = atl_hwinit(nic, id->driver_data);
 	if (ret)
 		goto err_hwinit;
+
+	pci_set_master(pdev);
 
 	eth_platform_get_mac_address(&hw->pdev->dev, hw->mac_addr);
 	if (!is_valid_ether_addr(hw->mac_addr)) {
@@ -490,7 +490,10 @@ static int atl_suspend_common(struct device *dev, bool deep)
 			atl_dev_err("Enable WoL failed: %d\n", -ret);
 	}
 
+	pci_save_state(pdev);
 	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+
 	__clear_bit(ATL_ST_ENABLED, &nic->state);
 
 	rtnl_unlock();
@@ -516,6 +519,9 @@ static int atl_resume_common(struct device *dev, bool deep)
 
 	rtnl_lock();
 
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+
 	ret = pci_enable_device_mem(pdev);
 	if (ret)
 		goto exit;
@@ -537,6 +543,10 @@ static int atl_resume_common(struct device *dev, bool deep)
 	if (deep && atl_keep_link)
 		atl_link_up(nic);
 
+	if (ret)
+		goto exit;
+
+	ret = atl_fwd_resume_rings(nic);
 	if (ret)
 		goto exit;
 

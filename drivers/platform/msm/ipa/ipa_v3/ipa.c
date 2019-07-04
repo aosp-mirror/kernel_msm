@@ -213,7 +213,8 @@ int ipa3_active_clients_log_print_table(char *buf, int size)
 			"\nTotal active clients count: %d\n",
 			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
 
-	cnt += ipa_mpm_panic_handler(buf + cnt, size - cnt);
+	if (ipa3_is_mhip_offload_enabled())
+		cnt += ipa_mpm_panic_handler(buf + cnt, size - cnt);
 
 	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
 		flags);
@@ -2910,6 +2911,12 @@ static void ipa3_q6_avoid_holb(void)
 			ipahal_write_reg_n_fields(
 				IPA_ENDP_INIT_HOL_BLOCK_EN_n,
 				ep_idx, &ep_holb);
+
+			/* IPA4.5 issue requires HOLB_EN to be written twice */
+			if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5)
+				ipahal_write_reg_n_fields(
+					IPA_ENDP_INIT_HOL_BLOCK_EN_n,
+					ep_idx, &ep_holb);
 		}
 	}
 }
@@ -6142,7 +6149,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		struct platform_device *ipa_pdev)
 {
 	int result = 0;
-	int i;
+	int i, j;
 	struct ipa3_rt_tbl_set *rset;
 	struct ipa_active_client_logging_info log_info;
 	struct cdev *cdev;
@@ -6163,6 +6170,15 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->master_pdev = ipa_pdev;
 	for (i = 0; i < IPA_SMMU_CB_MAX; i++)
 		ipa3_ctx->s1_bypass_arr[i] = true;
+
+	/* initialize the gsi protocol info for uC debug stats */
+	for (i = 0; i < IPA_HW_PROTOCOL_MAX; i++) {
+		ipa3_ctx->gsi_info[i].protocol = i;
+		/* initialize all to be not started */
+		for (j = 0; j < MAX_CH_STATS_SUPPORTED; j++)
+			ipa3_ctx->gsi_info[i].ch_id_info[j].ch_id =
+				0xFF;
+	}
 
 	ipa3_ctx->ipa_wrapper_base = resource_p->ipa_mem_base;
 	ipa3_ctx->ipa_wrapper_size = resource_p->ipa_mem_size;
@@ -6792,7 +6808,7 @@ static int get_ipa_dts_pm_info(struct platform_device *pdev,
 
 		result = of_property_read_string_index(pdev->dev.of_node,
 			"qcom,scaling-exceptions",
-			i * ipa_drv_res->pm_init.threshold_size,
+			i * (ipa_drv_res->pm_init.threshold_size + 1),
 			&ex[i].usecase);
 		if (result) {
 			IPAERR("failed to read qcom,scaling-exceptions");
@@ -6805,7 +6821,8 @@ static int get_ipa_dts_pm_info(struct platform_device *pdev,
 			result = of_property_read_string_index(
 				pdev->dev.of_node,
 				"qcom,scaling-exceptions",
-				i * ipa_drv_res->pm_init.threshold_size + j + 1,
+				i * (ipa_drv_res->pm_init.threshold_size + 1)
+				+ j + 1,
 				&str);
 			if (result) {
 				IPAERR("failed to read qcom,scaling-exceptions"
@@ -7265,12 +7282,16 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 		/* assume this failure is because iommu driver is not ready */
 		return -EPROBE_DEFER;
 	}
+
+	cb->is_cache_coherent = of_property_read_bool(dev->of_node,
+							"dma-coherent");
 	cb->valid = true;
 
 	if (of_property_read_bool(dev->of_node, "qcom,smmu-s1-bypass") ||
 		ipa3_ctx->ipa_config_is_mhi) {
 		smmu_info.s1_bypass_arr[IPA_SMMU_CB_WLAN] = true;
 		ipa3_ctx->s1_bypass_arr[IPA_SMMU_CB_WLAN] = true;
+		cb->is_cache_coherent = false;
 
 		if (iommu_domain_set_attr(cb->iommu,
 					DOMAIN_ATTR_S1_BYPASS,
@@ -7402,6 +7423,8 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 		/* assume this failure is because iommu driver is not ready */
 		return -EPROBE_DEFER;
 	}
+	cb->is_cache_coherent = of_property_read_bool(dev->of_node,
+							"dma-coherent");
 	IPADBG("SMMU mapping created\n");
 	cb->valid = true;
 
@@ -7411,6 +7434,7 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 		ipa3_ctx->ipa_config_is_mhi) {
 		smmu_info.s1_bypass_arr[IPA_SMMU_CB_UC] = true;
 		ipa3_ctx->s1_bypass_arr[IPA_SMMU_CB_UC] = true;
+		cb->is_cache_coherent = false;
 
 		if (iommu_domain_set_attr(cb->mapping->domain,
 			DOMAIN_ATTR_S1_BYPASS,
@@ -7531,6 +7555,8 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 		}
 	}
 
+	cb->is_cache_coherent = of_property_read_bool(dev->of_node,
+							"dma-coherent");
 	cb->dev = dev;
 	cb->mapping = arm_iommu_create_mapping(dev->bus,
 					cb->va_start, cb->va_size);
@@ -7546,6 +7572,8 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 		"qcom,smmu-s1-bypass") || ipa3_ctx->ipa_config_is_mhi) {
 		smmu_info.s1_bypass_arr[IPA_SMMU_CB_AP] = true;
 		ipa3_ctx->s1_bypass_arr[IPA_SMMU_CB_AP] = true;
+		cb->is_cache_coherent = false;
+
 		if (iommu_domain_set_attr(cb->mapping->domain,
 				DOMAIN_ATTR_S1_BYPASS,
 				&bypass)) {
@@ -8018,6 +8046,7 @@ int ipa3_iommu_map(struct iommu_domain *domain,
 {
 	struct ipa_smmu_cb_ctx *ap_cb = ipa3_get_smmu_ctx(IPA_SMMU_CB_AP);
 	struct ipa_smmu_cb_ctx *uc_cb = ipa3_get_smmu_ctx(IPA_SMMU_CB_UC);
+	struct ipa_smmu_cb_ctx *wlan_cb = ipa3_get_smmu_ctx(IPA_SMMU_CB_WLAN);
 
 	IPADBG_LOW("domain =0x%pK iova 0x%lx\n", domain, iova);
 	IPADBG_LOW("paddr =0x%pa size 0x%x\n", &paddr, (u32)size);
@@ -8029,20 +8058,29 @@ int ipa3_iommu_map(struct iommu_domain *domain,
 			ipa_assert();
 			return -EFAULT;
 		}
+		if (ap_cb->is_cache_coherent)
+			prot |= IOMMU_CACHE;
 	} else if (domain == ipa3_get_wlan_smmu_domain()) {
 		/* wlan is one time map */
+		if (wlan_cb->is_cache_coherent)
+			prot |= IOMMU_CACHE;
 	} else if (domain == ipa3_get_uc_smmu_domain()) {
 		if (iova >= uc_cb->va_start && iova < uc_cb->va_end) {
 			IPAERR("iommu uC overlap addr 0x%lx\n", iova);
 			ipa_assert();
 			return -EFAULT;
 		}
+		if (uc_cb->is_cache_coherent)
+			prot |= IOMMU_CACHE;
 	} else {
 		IPAERR("Unexpected domain 0x%pK\n", domain);
 		ipa_assert();
 		return -EFAULT;
 	}
-
+	/*
+	 * IOMMU_CACHE is needed in prot to make the entries cachable
+	 * if cache coherency is enabled in dtsi.
+	 */
 	return iommu_map(domain, iova, paddr, size, prot);
 }
 

@@ -41,7 +41,7 @@ static int atl_fwd_get_frag(struct atl_fwd_ring *ring, int idx)
 
 	if (ops->alloc_buf) {
 		void *buf = ops->alloc_buf(dev, bufs->frag_size,
-			&daddr, GFP_KERNEL);
+			&daddr, GFP_KERNEL, ops);
 
 		if (!IS_ERR_OR_NULL(buf)) {
 			frag->buf = buf;
@@ -89,7 +89,7 @@ static void atl_fwd_free_bufs(struct atl_fwd_ring *ring)
 		dma_free_coherent(dev, ring_size * sizeof(dma_addr_t),
 			bufs->daddr_vec, bufs->daddr_vec_base);
 
-	if (bufs->vaddr_vec)
+	if (ring->flags & ATL_FWR_WANT_VIRT_BUF_VEC)
 		kfree(bufs->vaddr_vec);
 
 	for (i = 0; i < bufs->num_pages; i++) {
@@ -98,7 +98,7 @@ static void atl_fwd_free_bufs(struct atl_fwd_ring *ring)
 		if (ops->free_buf) {
 			if (frag->buf)
 				ops->free_buf(frag->buf, dev, frag_size,
-					frag->daddr);
+					frag->daddr, ops);
 			continue;
 		}
 
@@ -141,6 +141,7 @@ static int atl_fwd_alloc_bufs(struct atl_fwd_ring *ring, int order)
 		num_pages = 1;
 	} else {
 		int bufs_per_page;
+
 		frag_size = PAGE_SIZE << order;
 		bufs_per_page = frag_size / buf_size;
 		num_pages = ring_size / bufs_per_page +
@@ -305,7 +306,8 @@ void atl_fwd_release_ring(struct atl_fwd_ring *ring)
 	atl_fwd_free_bufs(ring);
 	if (ops->free_descs)
 		ops->free_descs(hwring->descs, dev,
-			hwring->size * sizeof(*hwring->descs), hwring->daddr);
+			hwring->size * sizeof(*hwring->descs), hwring->daddr,
+			ops);
 	else
 		atl_free_descs(nic, &ring->hw);
 	kfree(ring);
@@ -397,7 +399,8 @@ struct atl_fwd_ring *atl_fwd_request_ring(struct net_device *ndev,
 		dma_addr_t daddr;
 
 		descs = ops->alloc_descs(dev,
-			ring_size * sizeof(*hwring->descs), &daddr, GFP_KERNEL);
+			ring_size * sizeof(*hwring->descs), &daddr, GFP_KERNEL,
+			ops);
 		if (!IS_ERR_OR_NULL(descs)) {
 			hwring->descs = descs;
 			hwring->daddr = daddr;
@@ -435,7 +438,8 @@ struct atl_fwd_ring *atl_fwd_request_ring(struct net_device *ndev,
 free_descs:
 	if (ops->free_descs)
 		ops->free_descs(hwring->descs, dev,
-			hwring->size * sizeof(*hwring->descs), hwring->daddr);
+			hwring->size * sizeof(*hwring->descs), hwring->daddr,
+			ops);
 	else
 		atl_free_descs(nic, hwring);
 
@@ -447,6 +451,7 @@ EXPORT_SYMBOL(atl_fwd_request_ring);
 
 int atl_fwd_set_ring_intr_mod(struct atl_fwd_ring *ring, int min, int max)
 {
+	struct atl_nic *nic = ring->nic;
 	if (atl_fwd_ring_tx(ring) && ring->evt &&
 		ring->evt->flags & ATL_FWD_EVT_TXWB) {
 		struct atl_nic *nic = ring->nic;
@@ -456,11 +461,23 @@ int atl_fwd_set_ring_intr_mod(struct atl_fwd_ring *ring, int min, int max)
 		return -EINVAL;
 	}
 
-	if (min >= 0)
+	if (min >= 0) {
+		if (min > 511) {
+			atl_nic_err("%s: min delay out of range (0..511): %d\n",
+				__func__, min);
+			return -EINVAL;
+		}
 		ring->intr_mod_min = min;
+	}
 
-	if (max >= 0)
+	if (max >= 0) {
+		if (max > 1023) {
+			atl_nic_err("%s: max delay out of range (0..1023): %d\n",
+				__func__, max);
+			return -EINVAL;
+		}
 		ring->intr_mod_max = max;
+	}
 
 	atl_fwd_update_im(ring);
 	return 0;
@@ -576,12 +593,47 @@ void atl_fwd_release_event(struct atl_fwd_event *evt)
 }
 EXPORT_SYMBOL(atl_fwd_release_event);
 
-int atl_fwd_request_event(struct atl_fwd_event *evt)
+static int atl_fwd_init_event(struct atl_fwd_event *evt)
 {
 	struct atl_fwd_ring *ring = evt->ring;
 	int dir_tx = atl_fwd_ring_tx(ring);
 	struct atl_nic *nic = ring->nic;
 	struct atl_hw *hw = &nic->hw;
+	bool tx_wb = !!(evt->flags & ATL_FWD_EVT_TXWB);
+	int idx;
+	int ret;
+
+	if (tx_wb) {
+		struct atl_hw_ring *hwring = &ring->hw;
+
+		atl_write(hw, ATL_TX_RING_HEAD_WB_LSW(hwring),
+			  evt->tx_head_wrb);
+		atl_write(hw, ATL_TX_RING_HEAD_WB_MSW(hwring),
+			  upper_32_bits(evt->tx_head_wrb));
+		return 0;
+	}
+
+	idx = evt->idx;
+
+	ret = atl_fwd_set_msix_vec(nic, evt);
+	if (ret)
+		return ret;
+
+	atl_set_intr_bits(&nic->hw, ring->idx,
+			  dir_tx ? -1 : idx,
+			  dir_tx ? idx : -1);
+
+	atl_write_bit(hw, ATL_INTR_AUTO_CLEAR, idx, 1);
+	atl_write_bit(hw, ATL_INTR_AUTO_MASK, idx,
+		      !!(evt->flags & ATL_FWD_EVT_AUTOMASK));
+
+	return 0;
+}
+
+int atl_fwd_request_event(struct atl_fwd_event *evt)
+{
+	struct atl_fwd_ring *ring = evt->ring;
+	struct atl_nic *nic = ring->nic;
 	unsigned long *map = &nic->fwd.msi_map;
 	bool tx_wb = !!(evt->flags & ATL_FWD_EVT_TXWB);
 	int idx;
@@ -614,13 +666,9 @@ int atl_fwd_request_event(struct atl_fwd_event *evt)
 	ring->evt = evt;
 
 	if (tx_wb) {
-		struct atl_hw_ring *hwring = &ring->hw;
-
-		atl_write(hw, ATL_TX_RING_HEAD_WB_LSW(hwring),
-			evt->tx_head_wrb);
-		atl_write(hw, ATL_TX_RING_HEAD_WB_MSW(hwring),
-			upper_32_bits(evt->tx_head_wrb));
-		return 0;
+		ret = atl_fwd_init_event(evt);
+		if (ret)
+			goto fail;
 	}
 
 	idx = find_next_zero_bit(map, ATL_NUM_MSI_VECS, ATL_FWD_MSI_BASE);
@@ -632,19 +680,11 @@ int atl_fwd_request_event(struct atl_fwd_event *evt)
 
 	evt->idx = idx;
 
-	ret = atl_fwd_set_msix_vec(nic, evt);
+	ret = atl_fwd_init_event(evt);
 	if (ret)
 		goto fail;
 
 	__set_bit(idx, map);
-
-	atl_set_intr_bits(&nic->hw, ring->idx,
-		dir_tx ? -1 : idx,
-		dir_tx ? idx : -1);
-
-	atl_write_bit(hw, ATL_INTR_AUTO_CLEAR, idx, 1);
-	atl_write_bit(hw, ATL_INTR_AUTO_MASK, idx,
-		!!(evt->flags & ATL_FWD_EVT_AUTOMASK));
 
 	return 0;
 
@@ -664,10 +704,12 @@ int atl_fwd_enable_event(struct atl_fwd_event *evt)
 			return -EINVAL;
 
 		atl_write_bit(hw, ATL_TX_RING_CTL(&ring->hw), 28, 1);
+		ring->state |= ATL_FWR_ST_EVT_ENABLED;
 		return 0;
 	}
 
 	atl_intr_enable(hw, BIT(evt->idx));
+	ring->state |= ATL_FWR_ST_EVT_ENABLED;
 	return 0;
 }
 EXPORT_SYMBOL(atl_fwd_enable_event);
@@ -682,10 +724,12 @@ int atl_fwd_disable_event(struct atl_fwd_event *evt)
 			return -EINVAL;
 
 		atl_write_bit(hw, ATL_TX_RING_CTL(&ring->hw), 28, 0);
+		ring->state &= ~ATL_FWR_ST_EVT_ENABLED;
 		return 0;
 	}
 
 	atl_intr_disable(hw, BIT(evt->idx));
+	ring->state &= ~ATL_FWR_ST_EVT_ENABLED;
 	return 0;
 }
 EXPORT_SYMBOL(atl_fwd_disable_event);
@@ -703,4 +747,40 @@ int atl_fwd_transmit_skb(struct net_device *ndev, struct sk_buff *skb)
 	return dev_queue_xmit(skb);
 }
 EXPORT_SYMBOL(atl_fwd_transmit_skb);
+
+int atl_fwd_resume_rings(struct atl_nic *nic)
+{
+	struct atl_fwd_ring **rings = nic->fwd.rings[0];
+	int i;
+	int ret;
+
+	for (i = 0; i < ATL_NUM_FWD_RINGS * 2; i++) {
+		struct atl_fwd_ring *ring = rings[i];
+
+		if (!ring)
+			continue;
+
+		atl_fwd_init_ring(ring);
+
+		if (ring->evt) {
+			ret = atl_fwd_init_event(ring->evt);
+			if (ret)
+				return ret;
+
+			if (ring->state & ATL_FWR_ST_EVT_ENABLED) {
+				ret = atl_fwd_enable_event(ring->evt);
+				if (ret)
+					return ret;
+			}
+		}
+
+		if (ring->state & ATL_FWR_ST_ENABLED) {
+			ret = atl_fwd_enable_ring(ring);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
 

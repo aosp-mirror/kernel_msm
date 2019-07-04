@@ -969,7 +969,9 @@ int ufs_qcom_crytpo_engine_cfg_start(struct ufs_hba *hba, unsigned int task_tag)
 	int err = 0;
 
 	if (!host->ice.pdev ||
-	    !lrbp->cmd || lrbp->command_type != UTP_CMD_TYPE_SCSI)
+	    !lrbp->cmd ||
+		(lrbp->command_type != UTP_CMD_TYPE_SCSI &&
+		 lrbp->command_type != UTP_CMD_TYPE_UFS_STORAGE))
 		goto out;
 
 	err = ufs_qcom_ice_cfg_start(host, lrbp->cmd);
@@ -984,7 +986,8 @@ int ufs_qcom_crytpo_engine_cfg_end(struct ufs_hba *hba,
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int err = 0;
 
-	if (!host->ice.pdev || lrbp->command_type != UTP_CMD_TYPE_SCSI)
+	if (!host->ice.pdev || (lrbp->command_type != UTP_CMD_TYPE_SCSI &&
+		lrbp->command_type != UTP_CMD_TYPE_UFS_STORAGE))
 		goto out;
 
 	err = ufs_qcom_ice_cfg_end(host, req);
@@ -2882,6 +2885,9 @@ static const struct dev_pm_ops ufs_qcom_pm_ops = {
 	.runtime_suspend = ufshcd_pltfrm_runtime_suspend,
 	.runtime_resume  = ufshcd_pltfrm_runtime_resume,
 	.runtime_idle    = ufshcd_pltfrm_runtime_idle,
+	.freeze		= ufshcd_pltfrm_freeze,
+	.restore	= ufshcd_pltfrm_restore,
+	.thaw		= ufshcd_pltfrm_thaw,
 };
 
 static struct platform_driver ufs_qcom_pltform = {

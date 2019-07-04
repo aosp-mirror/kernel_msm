@@ -18,7 +18,7 @@
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
 
-#define ATL_VERSION "1.0.18"
+#define ATL_VERSION "1.0.19"
 
 struct atl_nic;
 
@@ -384,6 +384,11 @@ int atl_update_eth_stats(struct atl_nic *nic);
 void atl_adjust_eth_stats(struct atl_ether_stats *stats,
 	struct atl_ether_stats *base, bool add);
 void atl_fwd_release_rings(struct atl_nic *nic);
+#ifdef CONFIG_ATLFWD_FWD
+int atl_fwd_resume_rings(struct atl_nic *nic);
+#else
+static inline int atl_fwd_resume_rings(struct atl_nic *nic) { return 0; }
+#endif
 int atl_get_lpi_timer(struct atl_nic *nic, uint32_t *lpi_delay);
 int atl_mdio_hwsem_get(struct atl_hw *hw);
 void atl_mdio_hwsem_put(struct atl_hw *hw);
