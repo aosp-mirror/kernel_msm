@@ -853,6 +853,12 @@ unlock:
 	if (retry == MAX_RETRY) {
 		/* BG failed to resume. Trigger BG soft reset. */
 		pr_err("BG failed to resume\n");
+		pr_err("%s: gpio#95 value is: %d\n",
+				__func__, gpio_get_value(95));
+		pr_err("%s: gpio#97 value is: %d\n",
+				__func__, gpio_get_value(97));
+		panic("%s : Trigger panic on BG failed to resume\n",
+				__func__);
 		bg_soft_reset();
 		return -ETIMEDOUT;
 	}
