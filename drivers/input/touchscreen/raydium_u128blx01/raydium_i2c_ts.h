@@ -21,8 +21,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0010
-
+#define RAYDIUM_VER     0x0011
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
 /* IC timing control arguments */
@@ -122,7 +121,6 @@
 
 #define NEW_PALM			1
 
-#define ENABLE_ESD_CHECK		0
 /* Touch report */
 #define MAX_TOUCH_NUM                 2
 
@@ -160,6 +158,7 @@
 
 /* Gesture switch */
 #define GESTURE_EN
+#define ESD_SOLUTION_EN
 
 #define MSM_NEW_VER
 

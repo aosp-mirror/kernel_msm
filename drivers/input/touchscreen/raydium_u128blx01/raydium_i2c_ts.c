@@ -167,6 +167,9 @@ unsigned char g_u8_resetflag;
 char gc_test_flag;
 static int fw_type, fwindex, rad_fw_length;
 static int rad_init_length, rad_boot_length, rad_testfw_length;
+#ifdef ESD_SOLUTION_EN
+unsigned char g_u8_checkflag;
+#endif
 /******************************************************************************
  *  Name: raydium_variable_init
  *  Brief:
@@ -201,6 +204,9 @@ raydium_variable_init(void)
 	rad_init_length = 0;
 	rad_boot_length = 0;
 	rad_testfw_length = 0;
+#ifdef ESD_SOLUTION_EN
+	g_u8_checkflag = false;
+#endif
 }
 
 /******************************************************************************
@@ -3877,6 +3883,51 @@ raydium_release_sysfs(struct i2c_client *client)
 
 
 
+#ifdef ESD_SOLUTION_EN
+int raydium_esd_check(struct raydium_ts_data *ts)
+{
+	int i32_ret = 0;
+	unsigned char u8_esd_status[MAX_TCH_STATUS_PACKAGE_SIZE];
+
+	mutex_lock(&ts->lock);
+	if (u8_i2c_mode == PDA2_MODE) {
+		i32_ret = raydium_i2c_pda2_set_page(ts->client,
+				RAYDIUM_PDA2_PAGE_0);
+		if (i32_ret < 0)
+			goto exit;
+		/*read esd status*/
+		i32_ret = raydium_i2c_pda2_read(ts->client,
+				RAYDIUM_PDA2_TCH_RPT_STATUS_ADDR,
+				u8_esd_status, MAX_TCH_STATUS_PACKAGE_SIZE);
+		if (i32_ret < 0) {
+			pr_err("[touch]%s: failed to read data: %d\n",
+				__func__, __LINE__);
+			goto exit;
+		}
+
+		if (u8_esd_status[POS_FW_STATE] != 0x1A &&
+			u8_esd_status[POS_FW_STATE] != 0xAA) {
+			if (g_u8_resetflag == true) {
+				pr_err("[touch]%s -> filter abnormal irq\n"
+					, __func__);
+				goto exit;
+			}
+			pr_err("[touch]%s -> abnormal irq, FW state = 0x%x\n",
+			__func__, u8_esd_status[POS_FW_STATE]);
+			g_u8_resetflag = false;
+			i32_ret = -1;
+			goto exit;
+
+		}
+		g_u8_resetflag = false;
+	}
+exit:
+	mutex_unlock(&ts->lock);
+	pr_info("[touch] raydium_esd_check\n");
+	return i32_ret;
+}
+#endif
+
 
 
 static int
@@ -4063,6 +4114,7 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 			 __func__, ret);
 		goto exit_error;
 	}
+#ifdef ESD_SOLUTION_EN
 	if (tp_status[POS_FW_STATE] != 0x1A) {
 		if (g_u8_resetflag == true) {
 			dev_err(&data->client->dev,
@@ -4077,6 +4129,7 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 		ret = -1;
 		goto reset_error;
 	}
+#endif
 	g_u8_resetflag = false;
 	/* inform IC to prepare next report */
 	if (u8_seq_no == tp_status[POS_SEQ]) {
@@ -4123,6 +4176,7 @@ exit_error:
 
 reset_error:
 	mutex_unlock(&data->lock);
+#ifdef ESD_SOLUTION_EN
 	retry = 3;
 	while (retry != 0) {
 		ret = raydium_hw_reset_fun(data->client);
@@ -4132,6 +4186,7 @@ reset_error:
 		} else
 			break;
 	}
+#endif
 	return ret;
 }
 
@@ -4167,11 +4222,11 @@ raydium_work_handler(struct work_struct *work)
 		input_mt_report_pointer_emulation(
 					raydium_ts->input_dev, false);
 		input_sync(raydium_ts->input_dev);
+#ifdef ESD_SOLUTION_EN
+		g_u8_checkflag = true;
+#endif
 		g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
 		pr_info("[touch]display wake up with reset flag false\n");
-
-		if (u8_i2c_mode == PDA2_MODE)
-			raydium_read_touchdata(raydium_ts, tp_status, buf);
 	} else {
 		if (u8_i2c_mode == PDA2_MODE) {
 			ret = raydium_read_touchdata(
@@ -4286,20 +4341,6 @@ raydium_ts_interrupt(int irq, void *dev_id)
 			if (result == false) {
 				/*queue_work fail */
 				pr_err("[touch]queue_work fail.\n");
-			} else {
-				if (raydium_ts->blank != FB_BLANK_POWERDOWN) {
-					/* Clear interrupts */
-					mutex_lock(&raydium_ts->lock);
-					if (raydium_i2c_pda2_set_page
-					    (raydium_ts->client,
-					     RAYDIUM_PDA2_PAGE_0) < 0) {
-						dev_err(
-						&raydium_ts->client->dev,
-						"[touch]%s:failedToSetpage, reset\n",
-						__func__);
-					}
-					mutex_unlock(&raydium_ts->lock);
-				}
 			}
 		} else {
 			/*work pending */
@@ -4506,6 +4547,10 @@ raydium_ts_do_suspend(struct raydium_ts_data *ts)
 static void
 raydium_ts_do_resume(struct raydium_ts_data *ts)
 {
+#ifdef ESD_SOLUTION_EN
+	int i32_ret = 0;
+	unsigned char u8_retry = 0;
+#endif
 	if (ts->is_suspend == 0) {
 		pr_info("[touch]Already in resume state\n");
 		return;
@@ -4518,6 +4563,24 @@ raydium_ts_do_resume(struct raydium_ts_data *ts)
 		pr_info("[touch]Already in open state\n");
 		raydium_irq_control(ts, ENABLE);
 	}
+#ifdef ESD_SOLUTION_EN
+	if (g_u8_checkflag == true) {
+		i32_ret = raydium_esd_check(ts);
+		if (i32_ret < 0) {
+			u8_retry = 3;
+			while (u8_retry != 0) {
+				i32_ret = raydium_hw_reset_fun(ts->client);
+				if (i32_ret < 0) {
+					msleep(100);
+					u8_retry--;
+				} else
+					break;
+			}
+
+		}
+		g_u8_checkflag = false;
+	}
+#endif
 
 #ifdef GESTURE_EN
 	if (device_may_wakeup(&ts->client->dev)) {
