@@ -399,6 +399,10 @@ struct iaxxx_priv {
 	void *misc_priv;
 	/* iaxxx_misc hwinfo data */
 	struct hwinfo_type hwinfo;
+
+	/* workq to handle mclk on/off */
+	bool ext_clk_off_work_initialized;
+	struct delayed_work ext_clk_off_work;
 };
 
 enum update_block_options_t	{

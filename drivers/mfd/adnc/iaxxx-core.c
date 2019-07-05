@@ -497,6 +497,21 @@ static int iaxxx_config_regulators(struct iaxxx_priv *priv)
 	return 0;
 }
 
+static void iaxxx_ext_clk_off_work(struct work_struct *work)
+{
+	struct iaxxx_priv *priv = container_of(work, struct iaxxx_priv,
+						ext_clk_off_work.work);
+	struct device *dev = priv->dev;
+
+	dev_dbg(dev, "%s: mclk_en %d", __func__, priv->mclk_en);
+
+	if (priv->mclk_en) {
+		clk_disable_unprepare(priv->ext_clk);
+		priv->mclk_en = false;
+	}
+	dev_info(dev, "%s mclk_en %d is off\n", __func__, priv->mclk_en);
+}
+
 /**
  * iaxxx_ext_clk_ctl - external clock control callback function
  */
@@ -504,8 +519,17 @@ static int iaxxx_ext_clk_ctl(struct iaxxx_priv *priv, bool clock_en)
 {
 	int ret = 0;
 	struct device *dev = priv->dev;
+	int cancel = 0;
 
 	dev_dbg(dev, "%s: clock_en = %d\n", __func__, clock_en);
+
+	if (!priv->ext_clk_off_work_initialized) {
+		INIT_DELAYED_WORK(&priv->ext_clk_off_work,
+				iaxxx_ext_clk_off_work);
+		priv->ext_clk_off_work_initialized = true;
+	}
+
+	cancel = cancel_delayed_work_sync(&priv->ext_clk_off_work);
 
 	if (clock_en == priv->mclk_en)
 		return 0;
@@ -513,14 +537,17 @@ static int iaxxx_ext_clk_ctl(struct iaxxx_priv *priv, bool clock_en)
 	if (clock_en) {
 		clk_set_rate(priv->ext_clk, 19200000);
 		ret = clk_prepare_enable(priv->ext_clk);
+		if (ret == 0)
+			priv->mclk_en = clock_en;
+		/* Wait for Ext_CLK is enabled and stable */
+		usleep_range(20000, 20100);
 	} else {
-		clk_disable_unprepare(priv->ext_clk);
+		__pm_wakeup_event(&priv->ws, WAKEUP_TIMEOUT);
+		schedule_delayed_work(&priv->ext_clk_off_work, HZ * 3);
 	}
 
-	if (ret == 0)
-		priv->mclk_en = clock_en;
-
-	dev_info(dev, "%s: mclk_en %d\n", __func__, priv->mclk_en);
+	dev_info(dev, "%s: mclk_en %d, cancel %d\n", __func__, priv->mclk_en,
+		cancel);
 	return ret;
 }
 
