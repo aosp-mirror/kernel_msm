@@ -410,6 +410,24 @@ void mdss_dsi_raydium_panel_reset(struct mdss_panel_data *pdata,
 	}
 }
 
+void __mdss_dsi_idle_work(struct work_struct *work)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	struct delayed_work *dw = to_delayed_work(work);
+
+	ctrl = container_of(dw, struct mdss_dsi_ctrl_pdata, idle_work);
+	if (!ctrl) {
+		pr_err("%s: invalid ctrl data\n", __func__);
+		return;
+	}
+
+	pr_info("%s: start to send idle command\n", __func__);
+	mdss_dsi_cmds_send(ctrl, &ctrl->idle_on_cmds, CMD_REQ_COMMIT);
+
+	__pm_relax(&ctrl->idle_ws);
+	pr_info("%s: idle wake unlock\n", __func__);
+}
+
 #endif /*AUO_DSI_C */
 
 

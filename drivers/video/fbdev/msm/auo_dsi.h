@@ -25,6 +25,8 @@
 #include <linux/iopoll.h>
 #include <linux/kthread.h>
 
+#define IDLE_WAITING_MS 50
+
 enum {
 	ESD_NA = 0,
 	ESD_AUO_U128BLX
@@ -61,6 +63,8 @@ extern void __mdss_dsi_check_esd_work(struct work_struct *work);
 
 extern void mdss_dsi_raydium_panel_reset(struct mdss_panel_data *pdata,
 		int enable);
+
+extern void __mdss_dsi_idle_work(struct work_struct *work);
 
 #endif /*AUO_DSI_H */
 

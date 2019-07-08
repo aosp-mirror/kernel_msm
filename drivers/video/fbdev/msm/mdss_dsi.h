@@ -573,6 +573,10 @@ struct mdss_dsi_ctrl_pdata {
 	bool update_phy_timing; /* flag to recalculate PHY timings */
 
 	bool phy_power_off;
+
+	struct delayed_work idle_work;
+	struct wakeup_source idle_ws;
+
 	/* boost mode */
 	char read_back_param[1];
 	/*for Module/Driver ID*/
