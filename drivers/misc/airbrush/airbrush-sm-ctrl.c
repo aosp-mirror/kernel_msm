@@ -2000,6 +2000,11 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 		/* No need to emergency shutdown if already powered off */
 		dev_info(sc->dev, "already shutdown; skip emergency shutdown work\n");
 		mutex_unlock(&sc->state_transitioning_lock);
+
+		WARN_ON(atomic_cmpxchg(&sc->is_cleanup_in_progress,
+					AB_SM_CLEANUP_IN_PROGRESS,
+					AB_SM_CLEANUP_NOT_IN_PROGRESS) ==
+					AB_SM_CLEANUP_NOT_IN_PROGRESS);
 		return;
 	}
 
