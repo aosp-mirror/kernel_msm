@@ -89,6 +89,9 @@ struct batt_ssoc_state {
 	/* output of rate limiter */
 	qnum_t ssoc_rl;
 
+	/* connected or disconnected */
+	int buck_enabled;
+
 	/* recharge logic */
 	int rl_soc_threshold;
 	enum batt_rl_status rl_status;
@@ -163,7 +166,6 @@ struct batt_drv {
 	/* props */
 	int soh;
 	int fake_capacity;
-	int buck_enabled;
 	bool dead_battery;
 	int capacity_level;
 
@@ -368,7 +370,13 @@ static void ssoc_uicurve_dup(struct ssoc_uicurve *dst,
 /* TODO: b/111407333, apply rate limiter to UIC */
 static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 {
-	return ssoc->ssoc_uic;
+	qnum_t rl_val = ssoc->ssoc_uic;
+
+	/* do not increase when not connected */
+	if (ssoc->buck_enabled==0 && ssoc->ssoc_uic > ssoc->ssoc_rl)
+		rl_val = ssoc->ssoc_rl;
+
+	return rl_val;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -545,6 +553,8 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
 	if (capacity >= SSOC_FULL) {
 		/* consistent behavior when booting without adapter */
 		ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
+	} else if (capacity < SSOC_TRUE) {
+		/* no split */
 	} else if (capacity < SSOC_SPOOF) {
 		/* mark the initial point if under spoof */
 		ssoc_uicurve_splice(ssoc_state->ssoc_curve,
@@ -1442,7 +1452,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
 
-		if (batt_drv->buck_enabled == 0)
+		if (batt_drv->ssoc_state.buck_enabled == 0)
 			goto msc_logic_exit;
 
 		/* here on: disconnect */
@@ -1461,14 +1471,14 @@ static int msc_logic(struct batt_drv *batt_drv)
 		if (err < 0)
 			pr_err("Cannot set the BATT_CE_CTRL.\n");
 
-		batt_drv->buck_enabled = 0;
+		batt_drv->ssoc_state.buck_enabled = 0;
 		changed = true;
 
 		goto msc_logic_done;
 	}
 
 	/* here when connected to power supply */
-	if (!batt_drv->buck_enabled) {
+	if (batt_drv->ssoc_state.buck_enabled <= 0) {
 
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
 
@@ -1482,7 +1492,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 		if (err < 0)
 			pr_err("Cannot set the BATT_CE_CTRL.\n");
 
-		batt_drv->buck_enabled = 1;
+		batt_drv->ssoc_state.buck_enabled = 1;
 		changed = true;
 	}
 
@@ -1492,10 +1502,10 @@ static int msc_logic(struct batt_drv *batt_drv)
 	 */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
 		changed = batt_rl_enter(&batt_drv->ssoc_state,
-						BATT_RL_STATUS_DISCHARGE);
+					BATT_RL_STATUS_DISCHARGE);
 	} else if (batt_drv->batt_full) {
 		changed = batt_rl_enter(&batt_drv->ssoc_state,
-						BATT_RL_STATUS_RECHARGE);
+					BATT_RL_STATUS_RECHARGE);
 		if (changed)
 			batt_chg_stats_pub(batt_drv, "100%", false);
 
@@ -2116,8 +2126,11 @@ static int gbatt_get_capacity_level(const struct batt_drv *batt_drv,
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
 	} else if (ssoc > SSOC_LEVEL_LOW) {
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_LOW;
-	} else if (!batt_drv->buck_enabled) {
+	} else if (batt_drv->ssoc_state.buck_enabled == 0) {
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
+	} else if (batt_drv->ssoc_state.buck_enabled == -1) {
+		/* only at startup, this should not happen */
+		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
 	} else if (fg_status == POWER_SUPPLY_STATUS_DISCHARGING ||
 		   fg_status == POWER_SUPPLY_STATUS_UNKNOWN) {
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
@@ -2261,19 +2274,20 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 {
 	int err;
 
-	if (!batt_drv->buck_enabled) {
+	if (batt_drv->ssoc_state.buck_enabled == 0) {
 		val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 		return 0;
 	}
 
-	if (batt_drv->ssoc_state.rl_status != BATT_RL_STATUS_NONE) {
-		val->intval = POWER_SUPPLY_STATUS_FULL;
+	if (batt_drv->ssoc_state.buck_enabled == -1) {
+		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 		return 0;
 	}
 
 	if (!batt_drv->fg_psy)
 		return -EINVAL;
 
+	/* ->buck_enabled = 1, from here ownward device is connected */
 	err = power_supply_get_property(batt_drv->fg_psy,
 					POWER_SUPPLY_PROP_STATUS,
 					val);
@@ -2283,9 +2297,13 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 	if (val->intval == POWER_SUPPLY_STATUS_FULL) {
 		const int ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
 
-		/* ->buck_enabled = true, device is connected */
+		/* SSOC might fall under 100% due to sysload connected to a
+		 * weak charger. battery should not really report full in this
+		 * case BUT if it does we handle this here.
+		 * NOTE: Could also chek batt_drv->ssoc_state.rl_status
+		 */
 		if (ssoc != SSOC_FULL)
-			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 	} else if (val->intval == POWER_SUPPLY_STATUS_DISCHARGING) {
 		/* connected and discharging is NOT charging */
 		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
@@ -2583,9 +2601,9 @@ static void google_battery_init_work(struct work_struct *work)
 	int ret = 0;
 
 	batt_rl_reset(batt_drv);
-	batt_drv->buck_enabled = -1;
 	batt_drv->dead_battery = true; /* clear in batt_work() */
 	batt_drv->capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
+	batt_drv->ssoc_state.buck_enabled = -1;
 	batt_reset_chg_drv_state(batt_drv);
 
 	mutex_init(&batt_drv->chg_lock);
