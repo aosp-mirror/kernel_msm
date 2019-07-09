@@ -576,10 +576,10 @@
 			"cam_vaf", "cam_v_custom1", "cam_v_custom3",
 			"cam_v_custom4", "cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1050000
-			2800000 1800000 1350000 3237500 0>;
-		rgltr-max-voltage = <1800000 2800000 1050000
-			2800000 1800000 1350000 4100000 0>;
+		rgltr-min-voltage = <1800000 2800000 1100000
+			2800000 1850000 1350000 3237500 0>;
+		rgltr-max-voltage = <1800000 2800000 1100000
+			2800000 1850000 1350000 4100000 0>;
 		rgltr-load-current = <0 0 0 0 0 0 0 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -648,9 +648,9 @@
 		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
 			"cam_vaf", "cam_v_custom3", "cam_v_custom4", "cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1050000
+		rgltr-min-voltage = <1800000 2800000 1100000
 			2800000 1350000 3237500 0>;
-		rgltr-max-voltage = <1800000 2800000 1050000
+		rgltr-max-voltage = <1800000 2800000 1100000
 			2800000 1350000 4100000 0>;
 		rgltr-load-current = <0 0 0 0 0 0 0>;
 		gpio-no-mux = <0>;
@@ -702,10 +702,10 @@
 			"cam_vaf", "cam_v_custom1", "cam_v_custom2",
 			"cam_v_custom3", "cam_v_custom4", "cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1050000
-			2800000 1800000 2800000 1350000 3237500 0>;
-		rgltr-max-voltage = <1800000 2800000 1050000
-			2800000 1800000 2800000 1350000 4100000 0>;
+		rgltr-min-voltage = <1800000 2800000 1100000
+			2800000 1850000 2800000 1350000 3237500 0>;
+		rgltr-max-voltage = <1800000 2800000 1100000
+			2800000 1850000 2800000 1350000 4100000 0>;
 		rgltr-load-current = <0 0 0 0 0 0 0 0 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -755,9 +755,9 @@
 			"cam_vaf", "cam_v_custom2", "cam_v_custom3",
 			"cam_v_custom4", "cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1050000
+		rgltr-min-voltage = <1800000 2800000 1100000
 			2800000 2800000 1350000 3237500 0>;
-		rgltr-max-voltage = <1800000 2800000 1050000
+		rgltr-max-voltage = <1800000 2800000 1100000
 			2800000 2800000 1350000 4100000 0>;
 		rgltr-load-current = <0 0 0 0 0 0 0 0>;
 		gpio-no-mux = <0>;
