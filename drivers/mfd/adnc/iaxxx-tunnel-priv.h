@@ -20,6 +20,7 @@
 #include <linux/mfd/adnc/iaxxx-tunnel-registers.h>
 #include <linux/mfd/adnc/iaxxx-core.h>
 #include <linux/cdev.h>
+#include <linux/time.h>
 #include "iaxxx.h"
 #include "iaxxx-cdev.h"
 
@@ -97,6 +98,8 @@ struct iaxxx_tunnel_data {
 	atomic_t tunnel_ref_cnt[TNLMAX];
 	atomic_t tunnel_evt_cnt;
 	uint32_t tunnel_seq_no[TNLMAX];
+	struct timespec create[TNLMAX];
+	bool printed[TNLMAX];
 	int tunnels_active_count;
 	unsigned long tunnel_packet_no[TNLMAX];
 	unsigned long tunnel_total_packet_no;

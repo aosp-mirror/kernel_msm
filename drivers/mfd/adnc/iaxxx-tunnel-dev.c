@@ -58,6 +58,7 @@
 #define PRODUCER_WAIT_TIME_US 5000 /* 5ms interval */
 #define PRODUCER_MAX_WAIT_TIME_US 100000 /* 100ms interval */
 #define TNL_SRC_Q 0x00010000	/* For defining new tunnel id with Q format */
+#define IAXXX_TUNNEL_PRINT 300 /* 300 seconds */
 
 
 #define IAXXX_DEBUG_LAUNCH_DELAY 60000 /* 60 seconds */
@@ -514,6 +515,8 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 			if (!t_intf_priv->tunnels_active_count)
 				t_intf_priv->tunnel_first_attach = false;
 
+			t_intf_priv->create[id] = (struct timespec) {0};
+
 			iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, id);
 
 			atomic_set(&t_intf_priv->src_enable_id[id], 0);
@@ -556,6 +559,10 @@ static int producer_thread(void *arg)
 	unsigned long flags;
 	int wait_time_us = PRODUCER_WAIT_TIME_US;
 	struct device *dev = priv->dev;
+	struct timespec current_time;
+	struct timespec read_time;
+	struct iaxxx_tunnel_ep target_node;
+	int id;
 
 	while (1) {
 		/* Get a free contiguous buffer */
@@ -586,6 +593,44 @@ static int producer_thread(void *arg)
 		flags = t_intf_priv->flags;
 		if (flags != tunnel_flags)
 			adjust_tunnels(t_intf_priv, flags, &tunnel_flags);
+
+		if (t_intf_priv->tunnels_active_count > 0) {
+			getnstimeofday(&current_time);
+
+			for (id = 0; id < TNLMAX; id++) {
+				if (atomic_read(
+					&t_intf_priv->src_enable_id[id]) == 0)
+					continue;
+
+				if (!iaxxx_tunnel_src_list_find_endpoint_node(
+					t_intf_priv, id, &target_node))
+					continue;
+
+				read_time = timespec_sub(current_time,
+						t_intf_priv->create[id]);
+
+				if (read_time.tv_sec < IAXXX_TUNNEL_PRINT)
+					continue;
+
+				if (!(read_time.tv_sec % IAXXX_TUNNEL_PRINT)) {
+					if (t_intf_priv->printed[id])
+						t_intf_priv->printed[id] =
+									false;
+					continue;
+				}
+
+				if (t_intf_priv->printed[id])
+					continue;
+
+				pr_info("tnl %d, src %x read = %lu.%03lu sec\n",
+					id,
+					target_node.tnl_ep.tunlSrc & 0xffff,
+					read_time.tv_sec,
+					read_time.tv_nsec / 1000000);
+
+				t_intf_priv->printed[id] = true;
+			}
+		}
 
 		size = circ_get_free_buffer(circ, &buf);
 
@@ -948,6 +993,9 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 
 		/* Add tunnel endpoint to tunnel src list */
 		iaxxx_tunnel_src_list_add_endpoint(t_intf_priv, tnl_src_node);
+
+		getnstimeofday(&t_intf_priv->create[id]);
+		t_intf_priv->printed[id] = false;
 
 		atomic_set(&t_intf_priv->src_enable_id[id], 1);
 	}
