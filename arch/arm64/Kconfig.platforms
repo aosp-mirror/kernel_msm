@@ -324,4 +324,9 @@ config ARCH_ZYNQMP
 	help
 	  This enables support for Xilinx ZynqMP Family
 
+config BOARD_BRAMBLE
+	bool "Google Bramble Family"
+	depends on ARCH_QCOM
+	select ARCH_LITO
+
 endmenu
