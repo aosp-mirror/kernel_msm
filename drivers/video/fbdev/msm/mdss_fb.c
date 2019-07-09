@@ -2083,10 +2083,11 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		ret = mdss_fb_blank_unblank(mfd);
 
 		if (!pinfo->cont_splash_enabled) {
-			if (ctrl->check_model == ESD_AUO_U128BLX)
+			if (ctrl->check_model == ESD_AUO_U128BLX) {
 				cancel_delayed_work_sync(&ctrl->check_esd_work);
 
 				schedule_delayed_work(&ctrl->check_esd_work, 0);
+			}
 		}
 		break;
 	case BLANK_FLAG_ULP:
