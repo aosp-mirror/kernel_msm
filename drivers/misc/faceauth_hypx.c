@@ -63,6 +63,12 @@
 #define ERR_LOCK 7
 #define ERR_NOBUFFER 8
 #define ERR_NON_SECURE_MODE 9
+#define ERR_M0_BOOT 10
+#define ERR_BUSY_CLEANUP 11
+#define ERR_SIZE_MISMATCH 12
+#define ERR_BLOCKED_REQ 13
+#define ERR_UNSUPPORTED_REQ 14
+#define ERR_LINK_UNSTABLE 15
 
 struct hypx_mem_segment {
 	/* address of the segment begin */
@@ -179,17 +185,29 @@ struct hypx_fa_debug_data {
 static void parse_el2_return(int code)
 {
 	if (code == ERR_SECURE_CAM)
-		pr_err("EL2: Insecure path detected");
+		pr_err("faceauth: EL2: Insecure path detected");
 	else if (code == ERR_DMA)
-		pr_err("EL2: DMA transfter failed");
+		pr_err("faceauth: EL2: DMA transfter failed");
 	else if (code == ERR_LOCK)
-		pr_err("EL2: Region lock failed");
+		pr_err("faceauth: EL2: Region lock failed");
 	else if (code == ERR_NOBUFFER)
-		pr_err("EL2: No buffer for alloc/dealloc");
+		pr_err("faceauth: EL2: No buffer for alloc/dealloc");
 	else if (code == ERR_NON_SECURE_MODE)
-		pr_err("EL2: Not in secure mode");
+		pr_err("faceauth: EL2: Not in secure mode");
+	else if (code == ERR_M0_BOOT)
+		pr_err("faceauth: EL2: Failed to boot M0");
+	else if (code == ERR_BUSY_CLEANUP)
+		pr_err("faceauth: EL2: M0 cleanup in progress");
+	else if (code == ERR_SIZE_MISMATCH)
+		pr_err("faceauth: EL2: Input data size mismatch");
+	else if (code == ERR_BLOCKED_REQ)
+		pr_err("faceauth: EL2: Blocked EL2 request");
+	else if (code == ERR_UNSUPPORTED_REQ)
+		pr_err("faceauth: EL2: Unsupported EL2 request");
+	else if (code == ERR_LINK_UNSTABLE)
+		pr_err("faceauth: EL2: PCIe link down");
 	else
-		pr_err("EL2: Not defined return code: %d", code);
+		pr_err("faceauth: EL2: Undefined return code: %d", code);
 }
 
 static void hypx_free_blob_userbuf(struct faceauth_data *data)
@@ -737,8 +755,10 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 		goto exit1;
 	}
 	ret = desc.ret[0];
-	if (ret)
+	if (ret) {
 		parse_el2_return(ret);
+		goto exit1;
+	}
 
 	stop = jiffies + msecs_to_jiffies(CONTEXT_SWITCH_TIMEOUT_MS);
 	usleep_range(CONTEXT_SWITCH_TO_FACEAUTH_US,
