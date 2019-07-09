@@ -99,9 +99,19 @@ static int tas2557_i2c_bulkwrite_device(
 	unsigned int len)
 {
 	int ret = 0;
+	unsigned char *buf = NULL;
+	buf = kzalloc(len * sizeof(unsigned char), GFP_KERNEL);
+
+	if (!buf) {
+		dev_err(pTAS2557->dev, "%s: failed to allocate buf\n",
+			__func__);
+		return -ENOMEM;
+	}
+
+	memcpy(buf, pBuf, len * sizeof(unsigned char));
 
 	pTAS2557->client->addr = addr;
-	ret = regmap_bulk_write(pTAS2557->mpRegmap, reg, pBuf, len);
+	ret = regmap_bulk_write(pTAS2557->mpRegmap, reg, buf, len);
 	if (ret < 0) {
 		dev_err(pTAS2557->dev, "%s[0x%x] Error %d\n",
 			__func__, addr, ret);
@@ -118,6 +128,7 @@ static int tas2557_i2c_bulkwrite_device(
 		ret = len;
 	}
 
+	kfree(buf);
 	return ret;
 }
 
@@ -167,9 +178,17 @@ static int tas2557_i2c_bulkread_device(
 	unsigned int len)
 {
 	int ret = 0;
+	unsigned char *buf = NULL;
+	buf = kzalloc(len * sizeof(unsigned char), GFP_KERNEL);
+
+	if (!buf) {
+		dev_err(pTAS2557->dev, "%s: failed to allocate buf\n",
+			__func__);
+		return -ENOMEM;
+	}
 
 	pTAS2557->client->addr = addr;
-	ret = regmap_bulk_read(pTAS2557->mpRegmap, reg, p_value, len);
+	ret = regmap_bulk_read(pTAS2557->mpRegmap, reg, buf, len);
 
 	if (ret < 0) {
 		dev_err(pTAS2557->dev, "%s[0x%x] Error %d\n",
@@ -179,6 +198,7 @@ static int tas2557_i2c_bulkread_device(
 		else if (addr == pTAS2557->mnRAddr)
 			pTAS2557->mnErrCode |= ERROR_DEVB_I2C_COMM;
 	} else {
+		memcpy(p_value, buf, len * sizeof(unsigned char));
 		ret = len;
 		if (addr == pTAS2557->mnLAddr)
 			pTAS2557->mnErrCode &= ~ERROR_DEVA_I2C_COMM;
@@ -186,6 +206,7 @@ static int tas2557_i2c_bulkread_device(
 			pTAS2557->mnErrCode &= ~ERROR_DEVB_I2C_COMM;
 	}
 
+	kfree(buf);
 	return ret;
 }
 
