@@ -97,7 +97,7 @@ static int iaxxx_get_btp_size_addr(struct iaxxx_priv *priv,
 	}
 
 	dev_dbg(priv->dev, "BTP information Size 0x%x", *btp_size);
-	dev_dbg(priv->dev, "BTP addr 0x%x", *btp_addr);
+	dev_dbg(priv->dev, "BTP addr 0x%pK", *btp_addr);
 
 	if (!(*btp_size) || *btp_size > IAXXX_BTP_MAX_BLOCK_SIZE) {
 		dev_err(priv->dev, "Invalid BTP size 0x%x", *btp_size);
@@ -285,7 +285,7 @@ int iaxxx_btp_write(struct iaxxx_priv *priv, uint32_t phy_addr,
 	uint32_t phy_addr_range2, phy_size_range2;
 	uint32_t phy_addr_range1 = phy_addr;
 
-	dev_dbg(priv->dev, "%s addr=%x words=%u\n", __func__, phy_addr,
+	dev_dbg(priv->dev, "%s addr=%pK words=%u\n", __func__, phy_addr,
 			words);
 
 	mutex_lock(&priv->btp_lock);
@@ -301,7 +301,7 @@ int iaxxx_btp_write(struct iaxxx_priv *priv, uint32_t phy_addr,
 		words * sizeof(uint32_t), &phy_size_range1, &phy_addr_range2,
 		&phy_size_range2);
 
-	dev_dbg(priv->dev, "addr1=%x size1=%u addr2=%x size2=%u\n",
+	dev_dbg(priv->dev, "addr1=%pK size1=%u addr2=%pK size2=%u\n",
 			phy_addr_range1, phy_size_range1,
 			phy_addr_range2, phy_size_range2);
 
@@ -337,7 +337,7 @@ int iaxxx_btp_read(struct iaxxx_priv *priv, uint32_t phy_addr,
 	uint32_t phy_addr_range2, phy_size_range2;
 	uint32_t phy_addr_range1 = phy_addr;
 
-	dev_dbg(priv->dev, "%s addr=%x words=%u\n", __func__, phy_addr,
+	dev_dbg(priv->dev, "%s addr=%pK words=%u\n", __func__, phy_addr,
 			words);
 
 	mutex_lock(&priv->btp_lock);
@@ -353,7 +353,7 @@ int iaxxx_btp_read(struct iaxxx_priv *priv, uint32_t phy_addr,
 		words * sizeof(uint32_t), &phy_size_range1, &phy_addr_range2,
 		&phy_size_range2);
 
-	dev_dbg(priv->dev, "addr1=%x size1=%u addr2=%x size2=%u\n",
+	dev_dbg(priv->dev, "addr1=%pK size1=%u addr2=%pK size2=%u\n",
 			phy_addr_range1, phy_size_range1,
 			phy_addr_range2, phy_size_range2);
 

@@ -1281,12 +1281,12 @@ static int write_pkg_info(bool update, struct iaxxx_priv *priv, uint32_t pkg_id,
 	uint32_t block_id;
 
 	pkg_id &= IAXXX_PKG_ID_MASK;
-	dev_dbg(dev, "Text:start:0x%x end:0x%x\nRO data:start 0x%x end:0x%x\n",
+	dev_dbg(dev, "Text:start:0x%pK end:0x%pK RO data:start 0x%pK end:0x%pK",
 		bin_info.text_start_addr, bin_info.text_end_addr,
 		bin_info.ro_data_start_addr, bin_info.ro_data_end_addr);
-	dev_dbg(dev, "Data:start 0x%x end 0x%x\nBSS:start 0x%x end 0x%x\n",
-			bin_info.data_start_addr, bin_info.data_end_addr,
-			bin_info.bss_start_addr, bin_info.bss_end_addr);
+	dev_dbg(dev, "Data:start 0x%pK end 0x%pK BSS:start 0x%pK end 0x%pK",
+		bin_info.data_start_addr, bin_info.data_end_addr,
+		bin_info.bss_start_addr, bin_info.bss_end_addr);
 	if (update) {
 		pkg->req = 1 << IAXXX_PKG_MGMT_PKG_REQ_LOAD_POS;
 		pkg->proc_id = GEN_PKG_ID(pkg_id, bin_info.core_id);
@@ -1496,8 +1496,8 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 								__func__, rc);
 		return rc;
 	}
-	dev_dbg(dev, "%s() Text physical addr:0x%x Data physical addr 0x%x\n",
-					__func__, text_phy_addr, data_phy_addr);
+	dev_dbg(dev, "%s Text physical addr:0x%pK Data physical addr 0x%pK\n",
+		__func__, text_phy_addr, data_phy_addr);
 
 	data = fw->data + sizeof(header);
 	/* Download sections except binary info and checksum */
@@ -1507,7 +1507,7 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 		iaxxx_copy_le32_to_cpu
 			(&file_section, data, sizeof(file_section));
 		data += sizeof(file_section);
-		dev_dbg(dev, "%s() Section%d addr %x length %x\n", __func__, i,
+		dev_dbg(dev, "%s Section%d addr %pK length %x\n", __func__, i,
 			file_section.start_address, file_section.length);
 		if (file_section.start_address == IAXXX_BIN_INFO_SEC_ADDR)
 			data += sizeof(bin_info);
@@ -1523,8 +1523,8 @@ static int iaxxx_download_pkg(struct iaxxx_priv *priv,
 				get_physical_address(file_section.start_address,
 					text_phy_addr, data_phy_addr,
 					&bin_info);
-			dev_dbg(dev, "%s() Physical address %x\n",
-					__func__, file_section.start_address);
+			dev_dbg(dev, "%s Physical address %pK\n", __func__,
+				file_section.start_address);
 			buf_data = kvzalloc(file_section.length *
 						sizeof(uint32_t),
 						GFP_KERNEL);
