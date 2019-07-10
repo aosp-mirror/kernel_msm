@@ -2731,7 +2731,7 @@ static int s_show(struct seq_file *m, void *p)
 		v->addr, v->addr + v->size, v->size);
 
 	if (v->caller)
-		seq_printf(m, " dummy+0x0/0x0");
+		seq_printf(m, " %pS", v->caller);
 
 	if (v->nr_pages)
 		seq_printf(m, " pages=%d", v->nr_pages);
