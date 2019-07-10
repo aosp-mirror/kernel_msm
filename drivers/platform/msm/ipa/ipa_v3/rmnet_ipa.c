@@ -3128,7 +3128,7 @@ static int rmnet_ipa3_query_tethering_stats_wifi(
 
 	rc = ipa3_get_wlan_stats(sap_stats);
 	if (rc) {
-		IPAWANERR("can't get ipa3_get_wlan_stats\n");
+		IPAWANERR_RL("can't get ipa3_get_wlan_stats\n");
 		kfree(sap_stats);
 		return rc;
 	} else if (data == NULL) {
@@ -3461,7 +3461,7 @@ int rmnet_ipa3_query_tethering_stats(struct wan_ioctl_query_tether_stats *data,
 			return rc;
 		}
 	} else {
-		IPAWANDBG_LOW(" query modem-backhaul stats\n");
+		IPAWANDBG_LOW("query modem-backhaul stats\n");
 		rc = rmnet_ipa3_query_tethering_stats_modem(
 			data, false);
 		if (rc) {
@@ -3495,7 +3495,8 @@ int rmnet_ipa3_query_tethering_stats_all(
 		rc = rmnet_ipa3_query_tethering_stats_wifi(
 			&tether_stats, data->reset_stats);
 		if (rc) {
-			IPAWANERR("wlan WAN_IOC_QUERY_TETHER_STATS failed\n");
+			IPAWANERR_RL(
+				"wlan WAN_IOC_QUERY_TETHER_STATS failed\n");
 			return rc;
 		}
 		data->tx_bytes = tether_stats.ipv4_tx_bytes
@@ -3909,6 +3910,15 @@ int rmnet_ipa3_send_lan_client_msg(
 		IPAWANERR("Can't allocate memory for tether_info\n");
 		return -ENOMEM;
 	}
+
+	if (data->client_event != IPA_PER_CLIENT_STATS_CONNECT_EVENT &&
+		data->client_event != IPA_PER_CLIENT_STATS_DISCONNECT_EVENT) {
+		IPAWANERR("Wrong event given. Event:- %d\n",
+			data->client_event);
+		kfree(lan_client);
+		return -EINVAL;
+	}
+	data->lan_client.lanIface[IPA_RESOURCE_NAME_MAX-1] = '\0';
 	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
 	memcpy(lan_client, &data->lan_client,
 		sizeof(struct ipa_lan_client_msg));

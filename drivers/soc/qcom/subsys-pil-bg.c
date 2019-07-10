@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -271,6 +271,12 @@ static int bg_powerup(const struct subsys_desc *subsys)
 	struct pil_bg_data *bg_data = subsys_to_data(subsys);
 	int ret;
 
+	if (is_bg_running())
+	{
+		pr_debug("bg is already up\n");
+		return 0;
+	}
+
 	init_completion(&bg_data->err_ready);
 	if (!bg_data->qseecom_handle) {
 		ret = pil_load_bg_tzapp(bg_data);
@@ -303,6 +309,8 @@ static int bg_powerup(const struct subsys_desc *subsys)
 			"%s: BG PIL Boot failed\n", __func__);
 		return ret;
 	}
+	/* wait for msm_gpio_irq_handler to get invoked before enable irq */
+	usleep_range(5000, 6000);
 	enable_irq(bg_data->status_irq);
 	ret = wait_for_err_ready(bg_data);
 	if (ret) {

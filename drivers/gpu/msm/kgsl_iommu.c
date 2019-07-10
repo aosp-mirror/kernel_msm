@@ -2080,25 +2080,6 @@ static int kgsl_iommu_set_pt(struct kgsl_mmu *mmu, struct kgsl_pagetable *pt)
 	ttbr0 = kgsl_mmu_pagetable_get_ttbr0(pt);
 	contextidr = kgsl_mmu_pagetable_get_contextidr(pt);
 
-	/* memory barrier while setting TLBIALL register */
-	mb();
-	KGSL_IOMMU_SET_CTX_REG(ctx, TLBIALL, 1);
-	/*make sure TLBIALL write compeltes before we wait*/
-	mb();
-
-	KGSL_IOMMU_SET_CTX_REG(ctx, TLBSYNC, 0);
-
-	wait_for_flush = jiffies + msecs_to_jiffies(2000);
-	while (KGSL_IOMMU_GET_CTX_REG(ctx, TLBSTATUS) &
-		(KGSL_IOMMU_CTX_TLBSTATUS_SACTIVE)) {
-		if (time_after(jiffies, wait_for_flush)) {
-			KGSL_DRV_WARN(KGSL_MMU_DEVICE(mmu),
-			"Wait limit reached for IOMMU tlb flush\n");
-			break;
-		}
-		cpu_relax();
-	}
-
 	KGSL_IOMMU_SET_CTX_REG_Q(ctx, TTBR0, ttbr0);
 	KGSL_IOMMU_SET_CTX_REG(ctx, CONTEXTIDR, contextidr);
 

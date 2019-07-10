@@ -997,20 +997,6 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
 }
 
 #if defined(CONFIG_FB)
-static void fts_fb_notify_work_func(struct work_struct *work)
-{
-	struct fts_ts_data *fts_data =
-		container_of(work, struct fts_ts_data, fb_notify_work);
-
-	if (fts_data->fb_event == 0) {
-		/*suspend*/
-		fts_ts_suspend(&fts_data->client->dev);
-	} else {
-		/*resume*/
-		fts_ts_resume(&fts_data->client->dev);
-	}
-
-}
 /*****************************************************************************
  *  Name: fb_notifier_callback
  *  Brief:
@@ -1029,14 +1015,11 @@ static int fb_notifier_callback(struct notifier_block *self,
 	if (evdata && evdata->data && event == FB_EVENT_BLANK &&
 		fts_data && fts_data->client) {
 		blank = evdata->data;
-		if (*blank == FB_BLANK_UNBLANK) {
-			fts_data->fb_event = 1;
-			schedule_work(&fts_data->fb_notify_work);
-		} else if (*blank == FB_BLANK_POWERDOWN ||
-				*blank == FB_BLANK_VSYNC_SUSPEND){
-			fts_data->fb_event = 0;
-			schedule_work(&fts_data->fb_notify_work);
-		}
+		if (*blank == FB_BLANK_UNBLANK)
+			fts_ts_resume(&fts_data->client->dev);
+		else if (*blank == FB_BLANK_POWERDOWN ||
+				*blank == FB_BLANK_VSYNC_SUSPEND)
+			fts_ts_suspend(&fts_data->client->dev);
 	}
 
 	return 0;
@@ -1218,7 +1201,6 @@ static int fts_ts_probe(struct i2c_client *client,
 
 #if defined(CONFIG_FB)
 	data->fb_notif.notifier_call = fb_notifier_callback;
-	INIT_WORK(&data->fb_notify_work, fts_fb_notify_work_func);
 	err = fb_register_client(&data->fb_notif);
 	if (err)
 		FTS_ERROR("[FB]Unable to register fb_notifier: %d", err);
@@ -1279,7 +1261,6 @@ static int fts_ts_remove(struct i2c_client *client)
 #endif
 
 #if defined(CONFIG_FB)
-	flush_work(&data->fb_notify_work);
 	if (fb_unregister_client(&data->fb_notif))
 		FTS_ERROR("Error occurred while unregistering fb_notifier.");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)

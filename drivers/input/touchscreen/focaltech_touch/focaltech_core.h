@@ -162,8 +162,6 @@ struct fts_ts_data {
 	int irq_disable;
 
 #if defined(CONFIG_FB)
-	bool fb_event;
-	struct work_struct fb_notify_work;
 	struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
