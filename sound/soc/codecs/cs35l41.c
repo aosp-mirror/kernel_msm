@@ -315,6 +315,57 @@ static int cs35l41_ccm_reset_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cs35l41_hibernate_force_wake_get(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l41->hibernate_force_wake;
+
+	return 0;
+}
+
+static int cs35l41_hibernate_force_wake_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	bool valid_transition = cs35l41->hibernate_force_wake !=
+				ucontrol->value.integer.value[0];
+	unsigned int amp_active;
+
+	regmap_read(cs35l41->regmap, CS35L41_PWR_CTRL1, &amp_active);
+
+	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_AWAKE ||
+		(cs35l41->amp_hibernate == CS35L41_HIBERNATE_NOT_LOADED &&
+		 cs35l41->dsp.running)) {
+		cs35l41->hibernate_force_wake =
+					ucontrol->value.integer.value[0];
+		if (!cs35l41->hibernate_force_wake && valid_transition &&
+			!(amp_active & CS35L41_GLOBAL_EN_MASK)) {
+			/* return to standby */
+			queue_delayed_work(cs35l41->wq, &cs35l41->hb_work,
+					msecs_to_jiffies(100));
+		}
+	} else if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY) {
+		cs35l41->hibernate_force_wake =
+					ucontrol->value.integer.value[0];
+		if (cs35l41->hibernate_force_wake && valid_transition) {
+			/* wake from standby */
+			cancel_delayed_work(&cs35l41->hb_work);
+			mutex_lock(&cs35l41->hb_lock);
+			cs35l41_exit_hibernate(cs35l41);
+			mutex_unlock(&cs35l41->hb_lock);
+		}
+	}
+
+	return 0;
+}
 
 static const char *cs35l41_fast_switch_text[] = {
 	"fast_switch1.txt",
@@ -1259,6 +1310,9 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 			cs35l41_ccm_reset_get, cs35l41_ccm_reset_put),
 	SOC_SINGLE_EXT("Force Interrupt", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_force_int_get, cs35l41_force_int_put),
+	SOC_SINGLE_EXT("Hibernate Force Wake", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_hibernate_force_wake_get,
+			cs35l41_hibernate_force_wake_put),
 	SOC_SINGLE_EXT("Fast Use Case Switch Enable", SND_SOC_NOPM, 0, 1, 0,
 		    cs35l41_fast_switch_en_get, cs35l41_fast_switch_en_put),
 	SOC_SINGLE_EXT("Firmware Reload Tuning", SND_SOC_NOPM, 0, 1, 0,
@@ -1602,7 +1656,8 @@ static int cs35l41_hibernate(struct snd_soc_dapm_widget *w,
 	int ret = 0;
 
 	if (!cs35l41->dsp.running ||
-	     cs35l41->amp_hibernate == CS35L41_HIBERNATE_INCOMPATIBLE)
+	     cs35l41->amp_hibernate == CS35L41_HIBERNATE_INCOMPATIBLE ||
+	     cs35l41->hibernate_force_wake)
 		return 0;
 
 	switch (event) {
