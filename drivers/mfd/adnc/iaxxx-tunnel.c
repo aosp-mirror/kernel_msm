@@ -173,8 +173,7 @@ int iaxxx_get_tunnel_buff_params(struct iaxxx_priv *priv,
 			"wrong buf values head(%d) tail(%d) addr(0x%x) size(%d)\n",
 			buff_param->buff_head, buff_param->buff_tail,
 			buff_param->buff_addr, buff_param->buff_size);
-		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF,
-							IAXXX_NO_PROC);
+		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF);
 		return -EINVAL;
 	}
 

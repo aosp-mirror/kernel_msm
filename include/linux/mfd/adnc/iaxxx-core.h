@@ -27,7 +27,6 @@
 #include <linux/interrupt.h>
 #include <linux/mfd/adnc/iaxxx-system-identifiers.h>
 #include <linux/mfd/adnc/iaxxx-module.h>
-#include <linux/mfd/adnc/iaxxx-debug-intf.h>
 
 typedef int (*iaxxx_cb_func_ptr_t)(struct device *dev);
 typedef int (*iaxxx_cb_bc_func_ptr_t)(struct device *dev, u32 iaxxx_spi_speed);
@@ -92,11 +91,6 @@ struct workqueue_struct;
 #define DMX_IMEM_LCL_END	0x20800000
 #define DMX_IMEM_SYS_END	(DMX_IMEM_LCL_END + DMX_SYS_OFFSET)
 /**************** DMX PROCESSOR MEMORY END *****************/
-
-/* Max size of one-line buffer maintained for crash reason
- */
-#define IAXXX_CRASH_REASON_STR_MAX_SIZE 255
-
 
 /* Flags denoting various states of FW and events */
 enum {
@@ -217,7 +211,6 @@ enum {
 	IAXXX_MEMDUMP_SSP_RAM0,
 	IAXXX_MEMDUMP_SSP_RAM1,
 	IAXXX_MEMDUMP_SSP_ROM0,
-	IAXXX_CRASH_REASON_LOG,
 	IAXXX_MAX_LOG
 };
 
@@ -381,7 +374,6 @@ struct iaxxx_priv {
 
 	/* FW Crash info */
 	int fw_crash_reasons;
-	uint32_t fw_crash_proc_id;
 	int recovery_try_count;
 	int try_count;
 	bool in_suspend;

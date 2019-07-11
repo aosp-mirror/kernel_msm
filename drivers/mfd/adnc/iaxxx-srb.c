@@ -394,7 +394,7 @@ out:
 }
 
 static int iaxxx_check_update_block_err_and_recover(struct device *dev,
-		int rc, uint32_t status, uint32_t proc_id)
+						int rc, uint32_t status)
 {
 	uint32_t err = 0;
 
@@ -413,7 +413,7 @@ static int iaxxx_check_update_block_err_and_recover(struct device *dev,
 	} else
 		return rc;
 
-	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_UPDATE_BLOCK_REQ, proc_id);
+	iaxxx_fw_crash(dev, IAXXX_FW_CRASH_UPDATE_BLOCK_REQ);
 	return rc;
 }
 
@@ -644,8 +644,7 @@ int iaxxx_send_update_block_request(struct device *dev, uint32_t *status,
 			0, UPDATE_BLOCK_NO_OPTIONS,
 			status);
 
-	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status,
-			IAXXX_BLOCK_ID_TO_PROC_ID(id));
+	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status);
 
 	return rc;
 }
@@ -695,8 +694,7 @@ int iaxxx_send_update_block_request_with_options(struct device *dev,
 	rc = iaxxx_update_block_request(priv, block_id, host_id, regmap,
 					wait_time_in_ms, options, status);
 
-	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status,
-			IAXXX_BLOCK_ID_TO_PROC_ID(block_id));
+	rc = iaxxx_check_update_block_err_and_recover(dev, rc, *status);
 
 	return rc;
 }
@@ -717,8 +715,7 @@ int iaxxx_send_update_block_hostid(struct device *dev,
 					UPDATE_BLOCK_NO_OPTIONS,
 					&status);
 
-	rc = iaxxx_check_update_block_err_and_recover(dev, rc, status,
-			IAXXX_BLOCK_ID_TO_PROC_ID(block_id));
+	rc = iaxxx_check_update_block_err_and_recover(dev, rc, status);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_send_update_block_hostid);

@@ -259,6 +259,51 @@ static ssize_t iaxxx_misc_codec_state_show(struct device *dev,
 static DEVICE_ATTR(codec_state, 0440, iaxxx_misc_codec_state_show, NULL);
 
 /*
+ * To Do - use a better way to get error reasons.
+ */
+static const char *iaxxx_misc_crash_err2str(int error)
+{
+	switch (error) {
+	case IAXXX_FW_CRASH_EVENT:
+		return "crash event";
+	case IAXXX_FW_CRASH_ON_FLUSH_EVENTS:
+		return "crash event when flush events";
+	case IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR:
+		return "crash when wait clear";
+	case IAXXX_FW_CRASH_UPDATE_BLOCK_REQ:
+		return "crash during update block req";
+	case IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF:
+		return "crash wrong buff params";
+	case IAXXX_FW_CRASH_RESUME:
+		return "crash during resume";
+	case IAXXX_FW_CRASH_SUSPEND:
+		return "crash during suspend";
+	default:
+		pr_err("%s: unknown error %d", __func__, error);
+		return "unknown error";
+	}
+}
+/*
+ * crash_reason show function
+ */
+static ssize_t iaxxx_misc_crash_reason_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct iaxxx_misc_priv_type *misc_priv = dev_get_drvdata(dev);
+	struct iaxxx_priv *priv = misc_priv ? misc_priv->priv : NULL;
+	ssize_t ret = 0;
+
+	if (!priv)
+		return scnprintf(buf, PAGE_SIZE, "NULL pointer\n");
+
+	ret = scnprintf(buf, PAGE_SIZE, "%s",
+			iaxxx_misc_crash_err2str(priv->fw_crash_reasons));
+
+	return ret;
+}
+static DEVICE_ATTR(crash_reason, 0444, iaxxx_misc_crash_reason_show, NULL);
+
+/*
  * iaxxx misc notify callback
  * booted : IAXXX_EV_APP_MODE -> IAXXX_EV_STARTUP
  * crashed : IAXXX_EV_CRASH -> IAXXX_EV_APP_MODE -> IAXXX_EV_RECOVERY
@@ -327,6 +372,13 @@ int iaxxx_misc_init(struct iaxxx_priv *priv)
 		goto err_iaxxx_misc_file_codec_failed;
 	}
 
+	ret = device_create_file(misc_priv->dev, &dev_attr_crash_reason);
+	if (ret) {
+		dev_err(misc_priv->dev, "%s: failed to create crash_reason\n",
+			__func__);
+		goto err_iaxxx_misc_file_reason_failed;
+	}
+
 	ret = device_create_file(misc_priv->dev, &dev_attr_wdsp_stat);
 	if (ret) {
 		dev_err(misc_priv->dev, "%s: failed to create wdsp_stat\n",
@@ -360,6 +412,8 @@ err_iaxxx_misc_hwinfo_failed:
 err_iaxxx_misc_notifier_failed:
 err_iaxxx_misc_file_wdsp_failed:
 	device_remove_file(misc_priv->dev, &dev_attr_wdsp_stat);
+err_iaxxx_misc_file_reason_failed:
+	device_remove_file(misc_priv->dev, &dev_attr_crash_reason);
 err_iaxxx_misc_file_codec_failed:
 	device_remove_file(misc_priv->dev, &dev_attr_codec_state);
 misc_cdev_err:

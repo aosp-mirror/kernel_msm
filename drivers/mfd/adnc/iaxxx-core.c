@@ -146,66 +146,25 @@ static struct mfd_cell iaxxx_devices[] = {
 	},
 };
 
-
-const char *iaxxx_get_processor_name(uint32_t proc_id)
-{
-	switch (proc_id) {
-	case IAXXX_CM4_ID:
-		return "CM4";
-
-	case IAXXX_HMD_ID:
-		return "HMD";
-
-	case IAXXX_DMX_ID:
-		return "DMX";
-
-	case IAXXX_SSP_ID:
-		return "SSP";
-
-	default:
-		return "Invalid Proc-id";
-	}
-}
-
-/* Returns formatted crash error signature in the
- * error string, based on error and proc_id.
- */
-void iaxxx_crash_err2str(char *err_str, int err_str_maxsize,
-		int error, uint32_t proc_id)
+static const char *iaxxx_crash_err2str(int error)
 {
 	switch (error) {
 	case IAXXX_FW_CRASH_EVENT:
-		snprintf(err_str, err_str_maxsize,
-			"%s crash",
-			iaxxx_get_processor_name(proc_id));
-		break;
+		return "crash event";
+	case IAXXX_FW_CRASH_ON_FLUSH_EVENTS:
+		return "crash event when flush events";
+	case IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR:
+		return "crash when wait clear";
 	case IAXXX_FW_CRASH_UPDATE_BLOCK_REQ:
-		snprintf(err_str, err_str_maxsize,
-			"Update %s BLK timeout",
-			iaxxx_get_processor_name(proc_id));
-		break;
-
+		return "crash during update block req";
 	case IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF:
-		snprintf(err_str, err_str_maxsize,
-			"forced recovery after wrong tunnel buff params");
-		break;
+		return "crash wrong buff params";
 	case IAXXX_FW_CRASH_RESUME:
-		snprintf(err_str, err_str_maxsize,
-			"forced recovery after resume failure");
-		break;
+		return "crash during resume";
 	case IAXXX_FW_CRASH_SUSPEND:
-		snprintf(err_str, err_str_maxsize,
-			"forced recovery after suspend failure");
-		break;
-
-	case IAXXX_FW_CRASH_SIMULATED:
-		snprintf(err_str, err_str_maxsize,
-			"simulated crash for testing");
-		break;
+		return "crash during suspend";
 	default:
-		snprintf(err_str, err_str_maxsize,
-			"unknown error");
-		break;
+		return "unknown error";
 	}
 }
 
@@ -1216,13 +1175,6 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv,
 			priv->crashlog->ssp_memdumps[memdump_index].log_size;
 	}
 
-	/* Reading crash reason string */
-	if (i == IAXXX_CRASH_REASON_LOG) {
-		crashlog_header[i].log_type = i;
-		crashlog_header[i].log_addr = 0;
-		crashlog_header[i].log_size = IAXXX_CRASH_REASON_STR_MAX_SIZE;
-	}
-
 	for (i = 0; i < IAXXX_MAX_LOG; i++)
 		dev_info(priv->dev, "addr 0x%x size 0x%x\n",
 				crashlog_header[i].log_addr,
@@ -1278,11 +1230,6 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 				&priv->crashlog->ssp_log_buffer[log_addr],
 				log_size);
 
-		} else if (i == IAXXX_CRASH_REASON_LOG) {
-			iaxxx_crash_err2str(
-				priv->crashlog->log_buffer + data_written,
-				log_size, priv->fw_crash_reasons,
-				priv->fw_crash_proc_id);
 		} else {
 			ret = priv->bulk_read(priv->dev,
 				log_addr,
@@ -1702,14 +1649,12 @@ static void iaxxx_fw_update_test_work(struct work_struct *work)
 	complete_all(&priv->bootup_done);
 }
 
-int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons,
-		uint32_t proc_id)
+int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons)
 {
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
-
-	dev_err(priv->dev, "FW Crash occurred: reason:%d proc_id:%u\n",
-			reasons, proc_id);
+	dev_err(priv->dev, "FW Crash occurred, reasons %d (%s)\n",
+		reasons, iaxxx_crash_err2str(reasons));
 
 	if (priv->debug_fwcrash_handling_disable) {
 		dev_err(priv->dev, "FW Crash Handling Skipped!\n");
@@ -1722,13 +1667,7 @@ int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons,
 
 	clear_bit(IAXXX_FLG_FW_READY, &priv->flags);
 
-	/* The following 2 variables are accessed
-	 * only in this crash/recovery path, hence
-	 * protection of concurrency is not needed.
-	 */
 	priv->fw_crash_reasons = reasons;
-	priv->fw_crash_proc_id = proc_id;
-
 	iaxxx_work(priv, runtime_work);
 	return 0;
 }

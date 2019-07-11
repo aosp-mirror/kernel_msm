@@ -259,7 +259,7 @@ chip_woken_up:
 	return 0;
 
 chip_recovery:
-	iaxxx_fw_crash(priv->dev, IAXXX_FW_CRASH_RESUME, IAXXX_NO_PROC);
+	iaxxx_fw_crash(priv->dev, IAXXX_FW_CRASH_RESUME);
 	dev_err(priv->dev, "%s() fail\n", __func__);
 	return -EIO;
 }
@@ -515,7 +515,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 	return 0;
 
 chip_recovery:
-	iaxxx_fw_crash(priv->dev, IAXXX_FW_CRASH_SUSPEND, IAXXX_NO_PROC);
+	iaxxx_fw_crash(priv->dev, IAXXX_FW_CRASH_SUSPEND);
 	dev_err(priv->dev, "%s() fail\n", __func__);
 	return -EIO;
 }

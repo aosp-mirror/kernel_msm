@@ -92,12 +92,15 @@ enum {
 };
 
 enum iaxxx_fw_crash_reasons {
+	IAXXX_FW_RECOVERY_FAIL = 0,
+	IAXXX_FW_RECOVERY_SUCCESS = 1,
 	IAXXX_FW_CRASH_EVENT = 1,
-	IAXXX_FW_CRASH_UPDATE_BLOCK_REQ = 2,
-	IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF = 3,
-	IAXXX_FW_CRASH_RESUME = 4,
-	IAXXX_FW_CRASH_SUSPEND = 5,
-	IAXXX_FW_CRASH_SIMULATED = 6,
+	IAXXX_FW_CRASH_ON_FLUSH_EVENTS = 2,
+	IAXXX_FW_CRASH_REG_MAP_WAIT_CLEAR = 3,
+	IAXXX_FW_CRASH_UPDATE_BLOCK_REQ = 4,
+	IAXXX_FW_CRASH_TUNNEL_WRONG_BUFF = 5,
+	IAXXX_FW_CRASH_RESUME = 6,
+	IAXXX_FW_CRASH_SUSPEND = 7,
 };
 
 struct iaxxx_register_log {
@@ -174,8 +177,7 @@ int iaxxx_download_section(struct iaxxx_priv *priv, const uint8_t *data,
 				struct regmap *regmap, bool btp);
 
 void iaxxx_copy_le32_to_cpu(void *dst, const void *src, size_t nbytes);
-int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons,
-		uint32_t proc_id);
+int iaxxx_fw_crash(struct device *dev, enum iaxxx_fw_crash_reasons reasons);
 int iaxxx_get_version_str(struct iaxxx_priv *priv, uint32_t reg, char *verbuf,
 								uint32_t len);
 int iaxxx_abort_fw_recovery(struct iaxxx_priv *priv);
