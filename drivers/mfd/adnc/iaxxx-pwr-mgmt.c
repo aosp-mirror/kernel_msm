@@ -1359,23 +1359,6 @@ int iaxxx_core_get_pwr_stats(struct device *dev,
 	uint32_t pwr_stats_addr = 0;
 	uint32_t pwr_stats_size = 0;
 	int ret = 0;
-	uint32_t status = 0;
-
-	ret = regmap_update_bits(priv->regmap,
-				IAXXX_PWR_MGMT_PWR_MGMT_STATS_CTRL_ADDR,
-				IAXXX_PWR_MGMT_PWR_MGMT_STATS_CTRL_MASK_VAL,
-				IAXXX_PWR_MGMT_PWR_MGMT_STATS_CTRL_REQ_MASK);
-	if (ret) {
-		dev_err(priv->dev, "Failed to set Power Stats Ctrl Reg\n");
-		goto exit;
-	}
-
-	ret = iaxxx_send_update_block_request(priv->dev,
-						&status, IAXXX_BLOCK_0);
-	if (ret) {
-		dev_err(priv->dev, "Update block failed after pwr ctrl\n");
-		goto exit;
-	}
 
 	ret = regmap_read(priv->regmap,
 		IAXXX_PWR_MGMT_PWR_MGMT_STATS_PTR_ADDR, &pwr_stats_addr);
