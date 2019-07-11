@@ -414,6 +414,11 @@ static int sensor_tunnel_route_setup(struct iaxxx_priv *priv,
 			ret = -EIO;
 			goto exit;
 		}
+
+		regmap_update_bits(priv->regmap, IAXXX_CNR0_CIC_RX_HOS_ADDR,
+				(0x1 << pdmi_port[port_id]),
+				(0x0 << pdmi_port[port_id]));
+
 		if (port_id == PDM_PORTD) {
 			pr_info("%s disable port D\n", __func__);
 			regmap_update_bits(priv->regmap,

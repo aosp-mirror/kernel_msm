@@ -5349,14 +5349,18 @@ static int iaxxx_pdm_head_strm_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct iaxxx_codec_priv *iaxxx = snd_soc_codec_get_drvdata(codec);
 	u32 value = 0;
+	u32 mask = iaxxx->head_of_strm_all;
 
-	iaxxx->head_of_strm_all =  ucontrol->value.integer.value[0];
-	if (iaxxx->head_of_strm_all)
-		value = iaxxx->head_of_strm_all;
+	if (ucontrol->value.integer.value[0]) {
+		value = ucontrol->value.integer.value[0];
+		mask = ucontrol->value.integer.value[0];
+	}
 
 	/* CIC filter config */
 	snd_soc_update_bits(codec, IAXXX_CNR0_CIC_RX_HOS_ADDR,
-		IAXXX_CNR0_CIC_RX_HOS_WMASK_VAL, value);
+		mask, value);
+
+	iaxxx->head_of_strm_all = ucontrol->value.integer.value[0];
 
 	return 0;
 }
