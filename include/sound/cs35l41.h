@@ -106,6 +106,7 @@ struct cs35l41_private {
 	bool bus_spi;
 	bool fast_switch_en;
 	bool force_int;
+	bool hibernate_force_wake;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
 	/* Run-time mixer */
