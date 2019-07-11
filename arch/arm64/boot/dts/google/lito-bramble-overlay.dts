@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "lito-bramble.dtsi"
+
+/ {
+	model = "Google Inc. MSM sm7250 Bramble";
+	compatible = "qcom,lito-mtp", "qcom,lito", "qcom,mtp";
+	qcom,msm-id = <400 0x10000>;
+	qcom,board-id = <8 0>;
+};
