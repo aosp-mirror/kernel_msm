@@ -392,7 +392,7 @@ static int max77826_ldo_set_voltage(struct regulator_dev *rdev,
 	max77826_read_reg(max77826->i2c, reg, &val);
 	val = (val & mask) >> shift;
 
-	pr_debug("%s: id=%d, reg=0x%x,mask=0x%x, val=0x%x, new=0x%x\n",
+	pr_debug("%s: id=%d, reg=0x%x, mask=0x%x, val=0x%x, new=0x%x\n",
 		__func__, rdev_get_id(rdev), reg, mask, val, i);
 
 	ret = max77826_update_reg(max77826->i2c,
@@ -407,6 +407,19 @@ static int max77826_ldo_set_voltage(struct regulator_dev *rdev,
 	default:
 		break;
 	}
+
+	return ret;
+}
+
+static int max77826_bb_force_pwm(struct max77826_dev *max77826)
+{
+	int ret = 0;
+
+	/* Forced PWM on Buck-Boost */
+	ret = max77826_write_reg(max77826->i2c, MAX77826_REG_BB_CFG, 0x3A);
+	if (ret)
+		pr_err("%s: reg=0x%x, error=%d\n",
+			__func__, MAX77826_REG_BB_CFG, ret);
 
 	return ret;
 }
@@ -491,6 +504,7 @@ static int max77826_setup_regulators(struct max77826_dev *max77826,
 			goto error;
 		}
 	}
+	max77826_bb_force_pwm(max77826);
 	return 0;
 
 error:
