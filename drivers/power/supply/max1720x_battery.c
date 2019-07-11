@@ -2442,6 +2442,11 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 
 	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
 
+	if (storm && (fg_status & MAX1720X_STATUS_DSOCI)) {
+		pr_debug("Force power_supply_change in storm\n");
+		storm = false;
+	}
+
 	if (chip->psy && !storm)
 		power_supply_changed(chip->psy);
 
