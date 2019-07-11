@@ -1106,6 +1106,7 @@ static irqreturn_t sec_ts_isr(int irq, void *handle)
 	struct sec_ts_data *ts = (struct sec_ts_data *)handle;
 
 	ts->timestamp = ktime_get();
+	input_set_timestamp(ts->input_dev, ts->timestamp);
 
 	return IRQ_WAKE_THREAD;
 }
