@@ -701,7 +701,8 @@ struct sec_ts_data {
 	struct sec_ts_plat_data *plat_data;
 	struct sec_ts_coordinate coord[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
 
-	u64 timestamp; /* nanoseconds, acquired during hard interrupt */
+	ktime_t timestamp; /* time that the event was first received from the
+		touch IC, acquired during hard interrupt, in CLOCK_MONOTONIC */
 
 	struct timeval time_pressed[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
 	struct timeval time_released[MAX_SUPPORT_TOUCH_COUNT + MAX_SUPPORT_HOVER_COUNT];
