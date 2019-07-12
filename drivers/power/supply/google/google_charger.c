@@ -80,6 +80,10 @@
 #define PD_SNK_MAX_MA			3000
 #define PD_SNK_MAX_MA_9V		2200
 
+#define PDO_FIXED_FLAGS \
+	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
+
+
 #define CHG_TERM_LONG_DELAY_MS		300000	/* 5 min */
 #define CHG_TERM_SHORT_DELAY_MS		60000	/* 1 min */
 #define CHG_TERM_RETRY_MS		2000	/* 2 sec */
@@ -140,6 +144,7 @@ struct chg_termination {
 	struct alarm alarm;
 	int cc_full_ref;
 	int retry_cnt;
+	int usb_5v;
 };
 
 /* re-evaluate FCC when switching power supplies */
@@ -278,6 +283,22 @@ static char *psy_usbc_type_str[] = {
 	"PD", "PD_DRP", "PD_PPS", "BrickID"
 };
 
+/* */
+static int cgh_update_capability(struct power_supply *tcpm_psy, bool full)
+{
+	int ret;
+	struct tcpm_port *port = (struct tcpm_port *)
+				 power_supply_get_drvdata(tcpm_psy);
+	u32 pdo[2] = { PDO_FIXED(5000, PD_SNK_MAX_MA, PDO_FIXED_FLAGS),
+		       PDO_FIXED(PD_SNK_MAX_MV, PD_SNK_MAX_MA_9V, 0), };
+
+	ret = tcpm_update_sink_capabilities(port, pdo,
+					    (full) ? 1 : 2,
+					    OP_SNK_MW);
+
+	return ret;
+}
+
 /* called on google_charger_init_work() and on every disconnect */
 static inline void chg_init_state(struct chg_drv *chg_drv)
 {
@@ -316,6 +337,10 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 
 	if (chg_drv->chg_term.enable)
 		chg_reset_termination_data(chg_drv);
+	if (chg_drv->chg_term.usb_5v == 1) {
+		cgh_update_capability(chg_drv->tcpm_psy, false);
+		chg_drv->chg_term.usb_5v = 0;
+	}
 
 	/* TODO: handle interaction with PPS code */
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
@@ -602,8 +627,6 @@ static int pps_get_src_cap(struct pd_pps_data *pps,
 	return pps->nr_src_cap;
 }
 
-#define PDO_FIXED_FLAGS \
-	(PDO_FIXED_DUAL_ROLE | PDO_FIXED_DATA_SWAP | PDO_FIXED_USB_COMM)
 static int pps_update_capability(struct power_supply *tcpm_psy, u32 pps_cap)
 {
 	struct tcpm_port *port = (struct tcpm_port *)
@@ -1297,9 +1320,6 @@ update_charger:
 	} else {
 		int res;
 
-		pr_info("MSC_CHG disable_charging=%d update_interval=%d\n",
-			disable_charging, update_interval);
-
 		/* connected but needs to disable_charging */
 		res = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
 		if (res < 0)
@@ -1309,6 +1329,14 @@ update_charger:
 
 	}
 
+	/* tied to the charger: could tie to battery @ 100% instead */
+	if ((chg_drv->chg_term.usb_5v == 0) && chg_done) {
+		pr_info("MSC_CHG switch to 5V on full\n");
+		cgh_update_capability(chg_drv->tcpm_psy, true);
+		chg_drv->chg_term.usb_5v = 1;
+	}
+
+	/* WAR: battery overcharge on a weak adapter */
 	if (chg_drv->chg_term.enable && chg_done && (soc == 100))
 		chg_eval_chg_termination(&chg_drv->chg_term);
 
@@ -1412,6 +1440,16 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 
 	chg_drv->chg_term.enable =
 		of_property_read_bool(node, "google,chg-termination-enable");
+
+	/* fallback to 5V on charge termination */
+	chg_drv->chg_term.usb_5v =
+		of_property_read_bool(node, "google,chg-termination-5v");
+	if (!chg_drv->chg_term.usb_5v) {
+		chg_drv->chg_term.usb_5v = -1;
+	} else {
+		pr_info("renegotiate on full\n");
+		chg_drv->chg_term.usb_5v = 0;
+	}
 
 	pr_info("charging profile in the battery\n");
 
