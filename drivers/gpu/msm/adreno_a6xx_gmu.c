@@ -534,8 +534,8 @@ static int load_gmu_fw(struct kgsl_device *device)
 				tcm_addr += A6XX_GMU_CM3_DTCM_START;
 
 			for (j = 0; j < blk->size / sizeof(uint32_t); j++)
-				gmu_core_regwrite(device, tcm_addr + j,
-					fwptr[j]);
+				gmu_core_regwrite_no_barrier(device,
+					tcm_addr + j, fwptr[j]);
 		} else {
 			uint32_t offset = blk->addr - (uint32_t)md->gmuaddr;
 
