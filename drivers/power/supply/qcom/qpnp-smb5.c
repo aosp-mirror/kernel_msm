@@ -945,14 +945,24 @@ static int smb5_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_DEAD_BATTERY: {
 
 		/* Dead battery can only be cleared. */
-		if (chg->dead_battery && val->intval == 0) {
+		if (val->intval != 0)
+			rc = -EINVAL;
+
+		/*
+		 * USB Data stack masks vote unless connected to SDP port.
+		 * Enfore USB data stack limit only for SDP port.
+		 */
+		if (chg->dead_battery && (chg->typec_mode ==
+		    POWER_SUPPLY_TYPEC_SOURCE_DEFAULT || chg->connector_type ==
+		    POWER_SUPPLY_CONNECTOR_MICRO_USB) && chg->real_charger_type
+		    == POWER_SUPPLY_TYPE_USB) {
 			union power_supply_propval temp;
 
 			temp.intval = chg->sdp_current_max;
 			rc = smblib_set_prop_sdp_current_max(chg, &temp);
 			chg->dead_battery = !!rc;
 		} else {
-			rc = -EINVAL;
+			chg->dead_battery = false;
 		}
 		break;
 	}
