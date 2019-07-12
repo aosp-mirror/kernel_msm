@@ -56,7 +56,7 @@
 #define PHASE3 3
 #define PHASENUM 4
 
-#define MAX_RETRY_COUNT 10
+#define MAX_RETRY_COUNT 100
 
 #define PHASE_SELECT_REG 0x60
 #define PROXAVG_REG 0x63
