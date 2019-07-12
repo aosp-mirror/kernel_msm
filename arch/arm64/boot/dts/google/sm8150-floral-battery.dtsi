@@ -197,6 +197,7 @@
 		google,therm-wlc-overrides-fcc;
 
 		google,fv-max-uv = <4400000>;
+		google,chg-termination-5v;
 
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
