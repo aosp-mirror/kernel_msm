@@ -758,17 +758,6 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 
 	/* Adjust the IB based on the max speed of the slave.*/
 	rsc->ib = max_speed * DEFAULT_BUS_WIDTH;
-	if (mas->shared_se || mas->pinctrl_sleep_at_probe) {
-		struct se_geni_rsc *rsc;
-		int ret = 0;
-
-		rsc = &mas->spi_rsc;
-		ret = pinctrl_select_state(rsc->geni_pinctrl,
-						rsc->geni_gpio_active);
-		if (ret)
-			GENI_SE_ERR(mas->ipc, false, NULL,
-			"%s: Error %d pinctrl_select_state\n", __func__, ret);
-	}
 
 	ret = pm_runtime_get_sync(mas->dev);
 	if (ret < 0) {
@@ -785,6 +774,17 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 			GENI_SE_ERR(mas->ipc, false, NULL,
 				"resume usage count mismatch:%d", count);
 	}
+
+	if (mas->shared_se || mas->pinctrl_sleep_at_probe) {
+		int ret = 0;
+
+		ret = pinctrl_select_state(rsc->geni_pinctrl,
+						rsc->geni_gpio_active);
+		if (ret)
+			GENI_SE_ERR(mas->ipc, false, NULL,
+			"%s: Error %d pinctrl_select_state\n", __func__, ret);
+	}
+
 	if (unlikely(!mas->setup)) {
 		int proto = get_se_proto(mas->base);
 		unsigned int major;
