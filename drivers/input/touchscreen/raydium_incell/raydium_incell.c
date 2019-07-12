@@ -4188,22 +4188,6 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
 			result = queue_work(raydium_ts->workqueue, &raydium_ts->work);
 			if (result == false) { /*queue_work fail*/
 				printk(KERN_ERR "[touch]queue_work fail.\n");
-			} else {
-				if (raydium_ts->blank == FB_BLANK_POWERDOWN) {
-					if (g_u8_unlockflag != true) {
-						disable_irq_nosync(raydium_ts->irq);
-						raydium_ts->irq_enabled = false;
-					}
-				} else {
-					/* Clear interrupts*/
-					mutex_lock(&raydium_ts->lock);
-					if (raydium_i2c_pda2_set_page(raydium_ts->client, RAYDIUM_PDA2_PAGE_0) < 0) {
-						disable_irq_nosync(raydium_ts->irq);
-						raydium_ts->irq_enabled = false;
-						dev_err(&raydium_ts->client->dev, "[touch]%s: failed to set page\n", __func__);
-					}
-					mutex_unlock(&raydium_ts->lock);
-				}
 			}
 		} else { /*work pending*/
 			/* Clear interrupts*/
@@ -4325,7 +4309,7 @@ exit_error:
 static void raydium_ts_do_suspend(struct raydium_ts_data *ts)
 {
 	int i = 0;
-
+	g_u8_unlockflag = false;
 	if (ts->is_suspend == 1) {
 		printk(KERN_INFO "[touch]Already in suspend state\n");
 		return;
@@ -4362,6 +4346,7 @@ static void raydium_ts_do_suspend(struct raydium_ts_data *ts)
 }
 static void raydium_ts_do_resume(struct raydium_ts_data *ts)
 {
+	g_u8_unlockflag = false;
 	if (ts->is_suspend == 0) {
 		printk(KERN_INFO "[touch]Already in resume state\n");
 		return;
@@ -4389,7 +4374,6 @@ static void raydium_ts_do_resume(struct raydium_ts_data *ts)
 #endif
 
 	ts->is_suspend = 0;
-	g_u8_unlockflag = false;
 }
 
 static int raydium_ts_suspend(struct device *dev)
