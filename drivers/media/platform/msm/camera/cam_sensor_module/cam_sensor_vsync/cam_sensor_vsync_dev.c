@@ -472,6 +472,9 @@ static void cam_vsync_qmi_work(struct work_struct *work)
 		CAM_ERR(CAM_SENSOR, "Can't get camera id\n");
 		goto out;
 	}
+	/* Only rear wide/tele and front camera supported */
+	if (cam_id > 2)
+		goto out;
 
 	rc = cam_vsync_add_pending_req(msg, cam_id);
 	if (rc < 0) {
@@ -535,7 +538,7 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 				&result);
 
 	if (rc < 0) {
-		CAM_INFO(CAM_SENSOR,
+		CAM_DBG(CAM_SENSOR,
 				"failed to parse QMI indication\n");
 		return;
 	}
