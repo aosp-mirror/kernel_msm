@@ -66,6 +66,9 @@ struct bias_config {
 #define CHGR_CHARGING_ENABLE_CMD		0x1042
 #define CHARGING_ENABLE_CMD_BIT			BIT(0)
 
+#define CHGR_CHARGING_PAUSE_CMD			0x1043
+#define CHARGING_PAUSE_CMD_BIT			BIT(0)
+
 #define CHGR_FAST_CHARGE_CURRENT_SETTING	0x1061
 #define CHGR_FLOAT_VOLTAGE_SETTING		0x1070
 
@@ -612,27 +615,35 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 	bool plugged, valid;
 	int rc, ret;
 	int vchrg = 0;
-	u8 stat;
+	u8 pstat, stat1, stat2;
 
-	rc = sm8150_rd8(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG, &stat);
+	rc = sm8150_rd8(bms->pmic_regmap, DCDC_POWER_PATH_STATUS_REG, &pstat);
 	if (rc < 0)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 
-	valid = (stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
-	plugged = (stat & USE_DCIN_BIT) || (stat & USE_USBIN_BIT);
+	valid = (pstat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+	plugged = (pstat & USE_DCIN_BIT) || (pstat & USE_USBIN_BIT);
 
-	*dc_valid = valid && (stat & USE_DCIN_BIT);
-	*usb_valid = valid && (stat & USE_USBIN_BIT);
+	*dc_valid = valid && (pstat & USE_DCIN_BIT);
+	*usb_valid = valid && (pstat & USE_USBIN_BIT);
 
 	rc = sm8150_rd8(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_1_REG,
-			&stat);
+			&stat1);
 	if (rc < 0)
 		return POWER_SUPPLY_STATUS_UNKNOWN;
 
-	stat = stat & CHGR_BATTERY_CHARGER_STATUS_MASK;
+	rc = sm8150_rd8(bms->pmic_regmap, CHGR_BATTERY_CHARGER_STATUS_2_REG,
+			&stat2);
+	if (rc < 0)
+		return POWER_SUPPLY_STATUS_UNKNOWN;
+
+	pr_debug("pmic: pstat=%x stat1=%x stat2=%x\n",
+		pstat, stat1, stat2);
+
+	stat1 = stat1 & CHGR_BATTERY_CHARGER_STATUS_MASK;
 
 	if (!plugged) {
-		switch (stat) {
+		switch (stat1) {
 		case SM8150_TERMINATE_CHARGE:
 		case SM8150_INHIBIT_CHARGE:
 			ret = POWER_SUPPLY_STATUS_FULL;
@@ -644,26 +655,28 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 		return ret;
 	}
 
-	switch (stat) {
+	switch (stat1) {
 	case SM8150_TRICKLE_CHARGE:
 	case SM8150_PRE_CHARGE:
 	case SM8150_FULLON_CHARGE:
 	case SM8150_TAPER_CHARGE:
 		ret = POWER_SUPPLY_STATUS_CHARGING;
 		break;
-	case SM8150_TERMINATE_CHARGE:
+	/* pause on FCC=0, JEITA, USB/DC suspend or on INPUT UV/OV */
+	case SM8150_PAUSE_CHARGE:
 	case SM8150_INHIBIT_CHARGE:
+	case SM8150_TERMINATE_CHARGE:
+		/* flag full only at the correct voltage */
 		rc = sm8150_get_battery_voltage(bms, &vchrg);
 		if (rc == 0)
 			vchrg = (vchrg / 1000);
-
-		if (vchrg <= bms->chg_term_voltage)
+		if (vchrg < bms->chg_term_voltage)
 			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		else
 			ret = POWER_SUPPLY_STATUS_FULL;
 		break;
+	/* disabled disconnect */
 	case SM8150_DISABLE_CHARGE:
-	case SM8150_PAUSE_CHARGE:
 		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	default:
@@ -675,6 +688,8 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 		return ret;
 
 	if (valid) {
+		u8 stat;
+
 		rc = sm8150_rd8(bms->pmic_regmap,
 				CHGR_BATTERY_CHARGER_STATUS_5_REG,
 				&stat);
@@ -861,7 +876,6 @@ static int sm8150_psy_get_property(struct power_supply *psy,
 	return 0;
 }
 
-
 static int sm8150_charge_disable(struct bms_dev *bms, bool disable)
 {
 	const u8 val = disable ? 0 : CHARGING_ENABLE_CMD_BIT;
@@ -871,8 +885,23 @@ static int sm8150_charge_disable(struct bms_dev *bms, bool disable)
 				 CHGR_CHARGING_ENABLE_CMD,
 				 CHARGING_ENABLE_CMD_BIT, val);
 
-	pr_info("CHARGE_DISABLE : val=%d disable=%d (%d)\n",
-		val, disable, rc);
+	pr_info("CHARGE_DISABLE : disable=%d -> val=%d (%d)\n",
+		disable, val, rc);
+
+	return rc;
+}
+
+static int sm8150_charge_pause(struct bms_dev *bms, bool pause)
+{
+	const u8 val = pause ? CHARGING_PAUSE_CMD_BIT : 0;
+	int rc;
+
+	rc = sm8150_masked_write(bms->pmic_regmap,
+				 CHGR_CHARGING_PAUSE_CMD,
+				 CHARGING_PAUSE_CMD_BIT, val);
+
+	pr_info("CHARGE_PAUSE : pause=%d -> val=%d (%d)\n",
+		pause, val, rc);
 
 	return rc;
 }
@@ -899,18 +928,22 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 			val = ivalue / CHGR_CHARGE_CURRENT_STEP;
 		}
 
+		if (ivalue == 0)
+			rc = sm8150_charge_pause(bms, true);
+
 		rc = sm8150_write(bms->pmic_regmap,
 					CHGR_FAST_CHARGE_CURRENT_SETTING,
 					&val, 1);
+
 		/* NOTE FCC==0 must also set charge disable or the device will
 		 * not draw any current. Need to take care of this detail
 		 * in the platform driver to keep the charger code sane.
 		 */
-		if (rc == 0)
-			rc = sm8150_charge_disable(bms, val == 0);
+		if (ivalue != 0)
+			rc = sm8150_charge_pause(bms, false);
 
-		pr_info("CONSTANT_CHARGE_CURRENT_MAX : ivalue=%d, val=%d disable=%d (%d)\n",
-			ivalue, val, val == 0, rc);
+		pr_info("CONSTANT_CHARGE_CURRENT_MAX : ivalue=%d, val=%d pause=%d (%d)\n",
+			ivalue, val, ivalue == 0, rc);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:

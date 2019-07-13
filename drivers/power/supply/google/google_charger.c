@@ -13,6 +13,10 @@
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#ifdef CONFIG_PM_SLEEP
+#define SUPPORT_PM_SLEEP 1
+#endif
+
 
 #include <linux/kernel.h>
 #include <linux/printk.h>
@@ -43,7 +47,9 @@
 #define DEFAULT_CHARGE_STOP_LEVEL 100
 #define DEFAULT_CHARGE_START_LEVEL 0
 
+#define CHG_DRV_EAGAIN_RETRIES	3
 #define CHG_WORK_ERROR_RETRY_MS 1000
+
 
 #define CHG_DRV_CC_HW_TOLERANCE_MAX	250
 
@@ -56,6 +62,7 @@
 #define THERMAL_DAEMON_VOTER		"THERMAL_DAEMON_VOTER"
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
 #define MSC_CHG_VOTER			"msc_chg"
+#define MSC_CHG_FULL_VOTER		"msc_chg_full"
 #define CHG_PPS_VOTER			"pps_chg"
 #define MSC_USER_VOTER			"msc_user"
 #define MSC_USER_CHG_LEVEL_VOTER	"msc_user_chg_level"
@@ -186,6 +193,7 @@ struct chg_drv {
 	int chg_cc_tolerance;
 	int chg_mode;			/* debug */
 	bool stop_charging;		/* no power source */
+	int egain_retries;
 
 	/* retail */
 	int disable_charging;		/* from retail */
@@ -286,6 +294,7 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 	chg_drv->cc_max = -1;
 	vote(chg_drv->msc_fv_votable, MSC_CHG_VOTER, false, chg_drv->fv_uv);
 	vote(chg_drv->msc_fcc_votable, MSC_CHG_VOTER, false, chg_drv->cc_max);
+	chg_drv->egain_retries = 0;
 
 	/* PPS state */
 	chg_drv->pps_data.pd_online = TCPM_PSY_OFFLINE;
@@ -972,7 +981,9 @@ static int chg_work_batt_roundtrip(const union gbms_charger_state *chg_state,
 	rc = GPSY_SET_INT64_PROP(bat_psy,
 				 POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
 				 chg_state->v);
-	if (rc < 0) {
+	if (rc == -EAGAIN) {
+		return -EAGAIN;
+	} else if (rc < 0) {
 		pr_err("MSC_CHG error cannot set CHARGE_CHARGER_STATE rc=%d\n",
 		       rc);
 		return -EINVAL;
@@ -1000,7 +1011,7 @@ static int chg_work_batt_roundtrip(const union gbms_charger_state *chg_state,
 	return 0;
 }
 
-/* 0 stop charging, <0 error, positive keep going */
+/* 0 stop charging, positive keep going */
 static int chg_work_next_interval(const struct chg_drv *chg_drv,
 				  union gbms_charger_state *chg_state)
 {
@@ -1008,6 +1019,7 @@ static int chg_work_next_interval(const struct chg_drv *chg_drv,
 
 	switch (chg_state->f.chg_status) {
 	case POWER_SUPPLY_STATUS_FULL:
+		update_interval = 0;
 		break;
 	case POWER_SUPPLY_STATUS_CHARGING:
 		break;
@@ -1077,10 +1089,10 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv,
 	 * NOTE: could use cc_max<0 to enable/disable a safe charge current
 	 */
 
-	/* update_interval<=0 means stop charging */
+	/* update_interval <= 0 means stop charging */
 	update_interval = chg_work_next_interval(chg_drv, chg_state);
-	if (update_interval == 0)
-		return 0;
+	if (update_interval <= 0)
+		return update_interval;
 
 	if (chg_drv->tcpm_psy) {
 		int pps_ui;
@@ -1122,6 +1134,20 @@ static bool chg_update_dead_battery(const struct chg_drv *chg_drv)
 	return (dead != 0);
 }
 
+static int chg_work_read_soc(struct power_supply *bat_psy, int *soc)
+{
+	union power_supply_propval val;
+	int ret = 0;
+
+	ret = power_supply_get_property(bat_psy,
+					POWER_SUPPLY_PROP_CAPACITY,
+					&val);
+	if (ret == 0)
+		*soc = val.intval;
+
+	return ret;
+}
+
 /* No op on battery not present */
 static void chg_work(struct work_struct *work)
 {
@@ -1132,9 +1158,10 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	union gbms_ce_adapter_details ad = { .v = 0 };
 	union gbms_charger_state chg_state = { .v = 0 };
-	int soc, disable_charging, disable_pwrsrc;
+	int soc, disable_charging = 0, disable_pwrsrc = 0;
 	int usb_online, wlc_online = 0;
-	int update_interval;
+	int update_interval = -1;
+	bool chg_done = false;
 	int success, rc = 0;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
@@ -1167,6 +1194,8 @@ static void chg_work(struct work_struct *work)
 	if (usb_online  < 0 || wlc_online < 0) {
 		pr_err("MSC_CHG error reading usb=%d wlc=%d\n",
 						usb_online, wlc_online);
+
+		/* TODO: maybe disable charging when this happens? */
 		goto rerun_error;
 	} else if (!usb_online && !wlc_online) {
 
@@ -1179,8 +1208,8 @@ static void chg_work(struct work_struct *work)
 
 			chg_reset_state(chg_drv);
 		}
-		goto exit_chg_work;
 
+		goto exit_chg_work;
 	} else if (chg_drv->stop_charging) {
 		/* will re-enable charging after setting FCC,CC_MAX */
 
@@ -1188,11 +1217,25 @@ static void chg_work(struct work_struct *work)
 			(void)chg_therm_update_fcc(chg_drv);
 	}
 
-	soc = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CAPACITY, &rc);
-	if (rc < 0) {
-		pr_err("MSC_CHG cannot get capacity\n");
-		goto rerun_error;
+	/* retry for max CHG_DRV_EGAIN_RETRIES * CHG_WORK_ERROR_RETRY_MS on
+	 * -EGAIN (race on wake). Retry is silent until we exceed the
+	 * threshold, ->egain_retries is reset on every wakeup.
+	 * NOTE: -EGAIN after this should be flagged
+	 */
+	rc = chg_work_read_soc(bat_psy, &soc);
+	if (rc == -EAGAIN) {
+		chg_drv->egain_retries += 1;
+		if (chg_drv->egain_retries < CHG_DRV_EAGAIN_RETRIES)
+			goto rerun_error;
 	}
+
+	if (rc < 0) {
+		/* update_interval = -1, will reschedule */
+		pr_err("MSC_CHG cannot get capacity (%d)\n", rc);
+		goto update_charger;
+	}
+
+	chg_drv->egain_retries = 0;
 
 	/* fast drain to the stop level */
 	disable_charging = chg_work_is_charging_disabled(chg_drv, soc);
@@ -1228,12 +1271,15 @@ static void chg_work(struct work_struct *work)
 	/* make sure ->fv_uv and ->cc_max are always correct */
 	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
 	update_interval = chg_work_roundtrip(chg_drv, &chg_state);
+	if (update_interval >= 0)
+		chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
 
-	/* update_interval=0 when disconnected (check for races)
-	 * NOTE: can still have cc_max==0 from the roundtrip
+	/* update_interval=0 when disconnected or on EOC (check for races)
+	 * update_interval=-1 on an error (from roundtrip or reading soc)
+	 * NOTE: might have cc_max==0 from the roundtrip on JEITA
 	 */
+update_charger:
 	if (!disable_charging && update_interval > 0) {
-		bool chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
 
 		/* msc_update_charger_cb will write to charger and reschedule */
 		vote(chg_drv->msc_interval_votable,
@@ -1248,16 +1294,23 @@ static void chg_work(struct work_struct *work)
 			     MSC_CHG_VOTER, false, 0);
 			chg_drv->stop_charging = false;
 		}
-
-		if (chg_drv->chg_term.enable && chg_done && (soc == 100))
-			chg_eval_chg_termination(&chg_drv->chg_term);
-
 	} else {
+		int res;
+
+		pr_info("MSC_CHG disable_charging=%d update_interval=%d\n",
+			disable_charging, update_interval);
+
 		/* connected but needs to disable_charging */
-		rc = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
-		if (rc < 0)
+		res = chg_update_charger(chg_drv, chg_drv->fv_uv, 0);
+		if (res < 0)
+			pr_err("MSC_CHG cannot update charger (%d)\n", res);
+		if (res < 0 || rc < 0 || update_interval < 0)
 			goto rerun_error;
+
 	}
+
+	if (chg_drv->chg_term.enable && chg_done && (soc == 100))
+		chg_eval_chg_termination(&chg_drv->chg_term);
 
 	goto exit_chg_work;
 
@@ -1265,9 +1318,12 @@ rerun_error:
 	success = schedule_delayed_work(&chg_drv->chg_work,
 					CHG_WORK_ERROR_RETRY_MS);
 
-	/* no need to reschedule the pending after an error */
-	pr_err("MSC_CHG error rerun=%d in %d ms (%d)\n",
-		success, update_interval, rc);
+	/* no need to reschedule the pending after an error
+	 * NOTE: rc is the return code from battery properties
+	 */
+	if (rc != -EAGAIN)
+		pr_err("MSC_CHG error rerun=%d in %d ms (%d)\n",
+			success, CHG_WORK_ERROR_RETRY_MS, rc);
 
 exit_chg_work:
 	/* Route adapter details after the roundtrip since google_battery
@@ -1276,8 +1332,7 @@ exit_chg_work:
 	 * to zero. Fix the odd dependency when handling failure in setting
 	 * POWER_SUPPLY_PROP_ADAPTER_DETAILS.
 	 */
-	if (ad.v != chg_drv->adapter_details.v) {
-		int rc;
+	if (rc == 0 && ad.v != chg_drv->adapter_details.v) {
 
 		rc = GPSY_SET_PROP(chg_drv->bat_psy,
 				   POWER_SUPPLY_PROP_ADAPTER_DETAILS,
@@ -2727,6 +2782,30 @@ static int google_charger_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef SUPPORT_PM_SLEEP
+static int chg_pm_suspend(struct device *dev)
+{
+
+	return 0;
+}
+
+static int chg_pm_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct chg_drv *chg_drv = platform_get_drvdata(pdev);
+
+	chg_drv->egain_retries = 0;
+	reschedule_chg_work(chg_drv);
+
+	return 0;
+}
+
+static const struct dev_pm_ops chg_pm_ops = {
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(chg_pm_suspend, chg_pm_resume)
+};
+#endif
+
+
 static const struct of_device_id match_table[] = {
 	{.compatible = "google,charger"},
 	{},
@@ -2737,6 +2816,9 @@ static struct platform_driver charger_driver = {
 		   .name = "google,charger",
 		   .owner = THIS_MODULE,
 		   .of_match_table = match_table,
+#ifdef SUPPORT_PM_SLEEP
+		   .pm = &chg_pm_ops,
+#endif
 		   },
 	.probe = google_charger_probe,
 	.remove = google_charger_remove,

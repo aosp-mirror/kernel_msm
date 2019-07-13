@@ -15,10 +15,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #ifdef CONFIG_PM_SLEEP
-/* disabled for now, will need to keep track of sleep to potentially change
- * wake mask etc.
- * #define SUPPORT_PM_SLEEP
- */
+#define SUPPORT_PM_SLEEP 1
 #endif
 
 #include <linux/kernel.h>
@@ -247,8 +244,7 @@ static int psy_changed(struct notifier_block *nb,
 
 	if (action == PSY_EVENT_PROP_CHANGED &&
 	    (!strcmp(psy->desc->name, batt_drv->fg_psy_name))) {
-		cancel_delayed_work(&batt_drv->batt_work);
-		schedule_delayed_work(&batt_drv->batt_work, 0);
+		mod_delayed_work(system_wq, &batt_drv->batt_work, 0);
 	}
 
 	return NOTIFY_OK;
@@ -1524,9 +1520,12 @@ static int msc_logic(struct batt_drv *batt_drv)
 	}
 
 msc_logic_done:
-	/* set ->cc_max = 0 on RL and SW_JEITA */
-	if ((batt_drv->ssoc_state.rl_status == BATT_RL_STATUS_DISCHARGE) ||
-	    batt_drv->jeita_stop_charging)
+	/* set ->cc_max = 0 on RL and SW_JEITA, no vote on interval in RL_DSG */
+	if (batt_drv->ssoc_state.rl_status == BATT_RL_STATUS_DISCHARGE) {
+		batt_drv->msc_update_interval = -1;
+		batt_drv->cc_max = 0;
+	}
+	if (batt_drv->jeita_stop_charging)
 		batt_drv->cc_max = 0;
 
 	pr_info("%s fv_uv=%d cc_max=%d update_interval=%d\n",
@@ -1585,6 +1584,7 @@ msc_logic_done:
 			!batt_drv->disable_votes &&
 			(batt_drv->msc_update_interval != -1),
 			batt_drv->msc_update_interval);
+
 msc_logic_exit:
 
 	if (changed) {
@@ -2854,31 +2854,34 @@ static int google_battery_remove(struct platform_device *pdev)
 }
 
 #ifdef SUPPORT_PM_SLEEP
-static int google_battery_pm_suspend(struct device *dev)
+static int gbatt_pm_suspend(struct device *dev)
 {
-	struct max1720x_chip *chip = i2c_get_clientdata(client);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct batt_drv *batt_drv = platform_get_drvdata(pdev);
 
-	pm_runtime_get_sync(chip->dev);
-	chip->resume_complete = false;
-	pm_runtime_put_sync(chip->dev);
+	pm_runtime_get_sync(batt_drv->device);
+	batt_drv->resume_complete = false;
+	pm_runtime_put_sync(batt_drv->device);
 
 	return 0;
 }
 
-static int google_battery_pm_resume(struct device *dev)
+static int gbatt_pm_resume(struct device *dev)
 {
-	struct max1720x_chip *chip = i2c_get_clientdata(client);
+	struct platform_device *pdev = to_platform_device(dev);
+	struct batt_drv *batt_drv = platform_get_drvdata(pdev);
 
-	pm_runtime_get_sync(chip->dev);
-	chip->resume_complete = true;
-	pm_runtime_put_sync(chip->dev);
+	pm_runtime_get_sync(batt_drv->device);
+	batt_drv->resume_complete = true;
+	pm_runtime_put_sync(batt_drv->device);
+
+	mod_delayed_work(system_wq, &batt_drv->batt_work, 0);
 
 	return 0;
 }
 
-static const struct dev_pm_ops google_battery_pm_ops = {
-	SET_LATE_SYSTEM_SLEEP_PM_OPS(google_battery_pm_suspend,
-		google_battery_resume)
+static const struct dev_pm_ops gbatt_pm_ops = {
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(gbatt_pm_suspend, gbatt_pm_resume)
 };
 #endif
 
@@ -2896,9 +2899,9 @@ static struct platform_driver google_battery_driver = {
 		   .owner = THIS_MODULE,
 		   .of_match_table = google_charger_of_match,
 #ifdef SUPPORT_PM_SLEEP
-		   //.pm = google_battery_pm_ops,
+		   .pm = &gbatt_pm_ops,
 #endif
-		   //.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		   /* .probe_type = PROBE_PREFER_ASYNCHRONOUS, */
 		   },
 	.probe = google_battery_probe,
 	.remove = google_battery_remove,
