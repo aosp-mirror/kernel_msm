@@ -115,11 +115,9 @@ core-$(CONFIG_CRYPTO) += arch/arm64/crypto/
 libs-y		:= arch/arm64/lib/ $(libs-y)
 core-$(CONFIG_EFI_STUB) += $(objtree)/drivers/firmware/efi/libstub/lib.a
 
-ifeq ($(CONFIG_BUILD_ARM64_KERNEL_COMPRESSION_GZIP),y)
-KBUILD_IMAGE   := Image.gz
-else
-KBUILD_IMAGE   := Image
-endif
+suffix_$(CONFIG_KERNEL_GZIP) = gz
+suffix_$(CONFIG_KERNEL_LZ4)  = lz4
+KBUILD_IMAGE	:= Image.$(suffix_y)
 
 # Default target when executing plain make
 boot		:= arch/arm64/boot
