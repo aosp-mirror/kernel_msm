@@ -7,7 +7,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0015
+#define RAYDIUM_VER     0x0016
 
 /* IC timing control arguments */
 #define RAYDIUM_POWERON_DELAY_USEC    500
