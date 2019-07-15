@@ -1561,6 +1561,12 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 			__func__);
 		goto exit_fw_fail;
 	}
+
+	if (priv->pm_ws_enable) {
+		priv->pm_ws_enable = false;
+		__pm_relax(&priv->pm_ws);
+	}
+
 	iaxxx_pm_enable(priv);
 #endif
 
@@ -1841,17 +1847,16 @@ int iaxxx_core_suspend_rt(struct device *dev)
 
 	if (!iaxxx_is_firmware_ready(priv))
 		/* return -EBUSY; */
-		return 0;
+		goto exit;
 	if (!pm_runtime_enabled(dev) && !test_bit(IAXXX_FLG_FW_CRASH,
 		&priv->flags)) {
 		dev_err(dev, "RT suspend requested while PM is not enabled\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto exit;
 	}
 	/* Chip suspend/optimal power switch happens here
 	 * and they shouldn't be done in case of fw_crash
 	 */
-
-	__pm_wakeup_event(&priv->ws, WAKEUP_TIMEOUT);
 
 	if (!test_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
 		rc = iaxxx_suspend_chip(priv);
@@ -1859,30 +1864,37 @@ int iaxxx_core_suspend_rt(struct device *dev)
 	if  (rc) {
 		dev_err(dev, " Chip suspend failed in %s\n", __func__);
 		priv->in_suspend = 0;
-		return rc;
 	}
 
-	return 0;
+exit:
+	if (priv->pm_ws_enable) {
+		priv->pm_ws_enable = false;
+		__pm_relax(&priv->pm_ws);
+	}
+	return rc;
 }
 
 int iaxxx_core_resume_rt(struct device *dev)
 {
-	int rc;
+	int rc = 0;
 	struct iaxxx_priv *priv = to_iaxxx_priv(dev);
 
 	if (!iaxxx_is_firmware_ready(priv))
 		/*return -EBUSY;*/
-		return 0;
+		goto exit;
 
 	/* Regmap access must be enabled before enable event interrupt */
 
-	__pm_wakeup_event(&priv->ws, WAKEUP_TIMEOUT);
+	if (!priv->pm_ws_enable) {
+		priv->pm_ws_enable = true;
+		__pm_stay_awake(&priv->pm_ws);
+	}
 
 	rc = iaxxx_wakeup_chip(priv);
 	if  (rc) {
 		dev_err(dev, " Chip wakeup failed in %s\n", __func__);
 		priv->in_resume = 0;
-		return rc;
+		goto exit;
 	}
 
 	if (!pm_runtime_enabled(dev)) {
@@ -1893,7 +1905,12 @@ int iaxxx_core_resume_rt(struct device *dev)
 	}
 
 	priv->in_resume = 0;
-	return 0;
+exit:
+	if (rc && priv->pm_ws_enable) {
+		priv->pm_ws_enable = false;
+		__pm_relax(&priv->pm_ws);
+	}
+	return rc;
 }
 
 int iaxxx_core_dev_suspend(struct device *dev)
@@ -2108,6 +2125,8 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 	init_waitqueue_head(&priv->irq_wake);
 	atomic_set(&priv->pm_resume, IAXXX_DEV_RESUME);
 	wakeup_source_init(&priv->ws, "iaxxx-spi");
+	wakeup_source_init(&priv->pm_ws, "iaxxx-pm");
+	priv->pm_ws_enable = false;
 
 	priv->thread = kthread_run(kthread_worker_fn, &priv->worker,
 				   "iaxxx-core");
