@@ -617,6 +617,14 @@ void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 
 	ipu_core_free_shared_memory(bus, host_q->shared_buf_data);
 
+	/* Do not clear the waiter since there may be a reader thread that is
+	 * in the process of being released.  The waiter structure will be
+	 * cleared when the reader exits.
+	 */
+	host_q->shared_buf_data = NULL;
+	memset(&host_q->host_jqs_sys_cbuf, 0, sizeof(struct host_jqs_cbuf));
+	memset(&host_q->host_sys_jqs_cbuf, 0, sizeof(struct host_jqs_cbuf));
+
 	mutex_unlock(&bus->transport_lock);
 }
 
@@ -769,6 +777,14 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 			break;
 		}
 
+		/* If the queue has been freed during the wait period then exit
+		 * now.
+		 */
+		if (trans->free_queue_ids & (1 << q_id)) {
+			ret = -ECONNABORTED;
+			break;
+		}
+
 		if (time_remaining < 0) {
 			ret = time_remaining; /* -ERESTARTSYS */
 			break;
@@ -808,6 +824,14 @@ ssize_t ipu_core_jqs_msg_transport_user_write(struct paintbox_bus *bus,
 		mutex_unlock(&bus->transport_lock);
 		dev_err(bus->parent_dev, "%s: JQS is not ready\n", __func__);
 		return PTR_ERR(trans);
+	}
+
+	/* Verify that the queue is allocated. */
+	if (trans->free_queue_ids & (1 << q_id)) {
+		mutex_unlock(&bus->transport_lock);
+		dev_err(bus->parent_dev, "%s: write on unallocated queue%u\n",
+				__func__, q_id);
+		return -ECONNABORTED;
 	}
 
 	host_q = &trans->queues[q_id];
