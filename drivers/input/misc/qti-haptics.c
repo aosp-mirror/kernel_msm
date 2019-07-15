@@ -1305,7 +1305,7 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 			}
 		}
 
-		config->lra_auto_res_disable = of_property_read_bool(child_node,
+		config->lra_auto_res_disable = of_property_read_bool(node,
 				"qcom,lra-auto-resonance-disable");
 	}
 
