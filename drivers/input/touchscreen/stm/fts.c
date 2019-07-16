@@ -135,14 +135,7 @@ extern spinlock_t fts_int;
 static int fts_init_sensing(struct fts_ts_info *info);
 static int fts_mode_handler(struct fts_ts_info *info, int force);
 
-
 static int fts_chip_initialization(struct fts_ts_info *info, int init_type);
-
-static void fts_report_timestamp(struct fts_ts_info *info)
-{
-	input_event(info->input_dev, EV_MSC, MSC_TIMESTAMP,
-		info->timestamp / 1000);
-}
 
 /**
   * Release all the touches in the linux input subsystem
@@ -166,7 +159,6 @@ void release_all_touches(struct fts_ts_info *info)
 		input_report_abs(info->input_dev, ABS_MT_TRACKING_ID, -1);
 	}
 	input_report_key(info->input_dev, BTN_TOUCH, 0);
-	fts_report_timestamp(info);
 	input_sync(info->input_dev);
 	info->touch_id = 0;
 #ifdef STYLUS_MODE
@@ -1515,9 +1507,6 @@ static void touchsim_work(struct work_struct *work)
 	/* send the touch co-ordinates */
 	touchsim_report_contact_event(info->input_dev, TOUCHSIM_SLOT_ID,
 					touchsim->x, touchsim->y, 1);
-
-	input_event(info->input_dev, EV_MSC, MSC_TIMESTAMP,
-			timestamp_ns / 1000);
 
 	input_sync(info->input_dev);
 
@@ -3199,8 +3188,6 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	const unsigned char EVENTS_REMAINING_MASK = 0x1F;
 	unsigned char events_remaining = 0;
 	unsigned char *evt_data;
-	event_dispatch_handler_t event_handler;
-	bool processed_pointer_event = false;
 
 	/* It is possible that interrupts were disabled while the handler is
 	 * executing, before acquiring the mutex. If so, simply return.
@@ -3241,26 +3228,15 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 			eventId = evt_data[0] >> 4;
 
 			/* Ensure event ID is within bounds */
-			if (eventId < NUM_EVT_ID) {
-				event_handler =
-					info->event_dispatch_table[eventId];
-				processed_pointer_event =
-					event_handler(info, evt_data);
-			}
+			if (eventId < NUM_EVT_ID)
+				info->event_dispatch_table[eventId](info,
+					evt_data);
 		}
 	}
 
 	if (info->touch_id == 0)
 		input_report_key(info->input_dev, BTN_TOUCH, 0);
 
-	/*
-	 * Only report timestamp for pointer events and ignore events
-	 * like errors, status updates, etc.
-	 * Otherwise, we will generate events that only consist of timestamps.
-	 */
-	if (processed_pointer_event) {
-		fts_report_timestamp(info);
-	}
 	input_sync(info->input_dev);
 
 	heatmap_read(&info->v4l2, info->timestamp);
@@ -4499,7 +4475,6 @@ static int fts_probe(struct spi_device *client)
 	input_set_abs_params(info->input_dev, ABS_MT_DISTANCE, DISTANCE_MIN,
 			     DISTANCE_MAX, 0, 0);
 #endif
-	input_set_capability(info->input_dev, EV_MSC, MSC_TIMESTAMP);
 
 #ifdef GESTURE_MODE
 	input_set_capability(info->input_dev, EV_KEY, KEY_WAKEUP);

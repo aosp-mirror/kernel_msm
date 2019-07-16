@@ -1096,8 +1096,6 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 		remain_event_count--;
 	} while (remain_event_count >= 0);
 
-	input_event(ts->input_dev, EV_MSC, MSC_TIMESTAMP,
-		ts->timestamp / 1000);
 	input_sync(ts->input_dev);
 
 	heatmap_read(&ts->v4l2, ts->timestamp);
@@ -1785,8 +1783,6 @@ static void sec_ts_set_input_prop(struct sec_ts_data *ts, struct input_dev *dev,
 		input_set_abs_params(dev, ABS_MT_PRESSURE, 0,
 				     SEC_TS_PRESSURE_MAX, 0, 0);
 
-	input_set_capability(ts->input_dev, EV_MSC, MSC_TIMESTAMP);
-
 	if (propbit == INPUT_PROP_POINTER)
 		input_mt_init_slots(dev, MAX_SUPPORT_TOUCH_COUNT, INPUT_MT_POINTER);
 	else
@@ -2332,8 +2328,6 @@ void sec_ts_unlocked_release_all_finger(struct sec_ts_data *ts)
 	}
 
 	input_report_key(ts->input_dev, KEY_HOMEPAGE, 0);
-	input_event(ts->input_dev, EV_MSC, MSC_TIMESTAMP,
-		ts->timestamp / 1000);
 	input_sync(ts->input_dev);
 
 }
