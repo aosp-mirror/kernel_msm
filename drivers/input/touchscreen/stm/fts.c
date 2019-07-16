@@ -3228,10 +3228,9 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 			eventId = evt_data[0] >> 4;
 
 			/* Ensure event ID is within bounds */
-			if (eventId < NUM_EVT_ID) {
+			if (eventId < NUM_EVT_ID)
 				info->event_dispatch_table[eventId](info,
 					evt_data);
-			}
 		}
 	}
 
