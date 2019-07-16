@@ -88,11 +88,11 @@ void iaxxx_pm_enable(struct iaxxx_priv *priv)
 	ret = pm_runtime_set_active(priv->dev);
 	if (ret < 0)
 		dev_err(priv->dev, "pm_runtime_set_active fail %d\n", ret);
-	pm_runtime_enable(priv->dev);
 
 	pm_runtime_set_autosuspend_delay(priv->dev, IAXXX_PM_AUTOSUSPEND_DELAY);
-	pm_runtime_use_autosuspend(priv->dev);
 	pm_runtime_mark_last_busy(priv->dev);
+	pm_runtime_use_autosuspend(priv->dev);
+	pm_runtime_enable(priv->dev);
 #endif
 }
 
