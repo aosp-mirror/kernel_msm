@@ -18,6 +18,7 @@
 #define __GOOGLE_BMS_H_
 
 #include <linux/types.h>
+#include "qmath.h"
 
 struct device_node;
 
@@ -33,6 +34,8 @@ struct gbms_chg_profile {
 	s32 volt_limits[GBMS_CHG_VOLT_NB_LIMITS_MAX];
 	/* Array of constant current limits */
 	s32 *cccm_limits;
+	/* used to fill table  */
+	u32 capacity_ma;
 
 	/* behavior */
 	u32 fv_uv_margin_dpct;
@@ -119,35 +122,90 @@ struct gbms_ce_stats {
 	uint16_t	cc_out;
 };
 
+struct ttf_tier_stat {
+	int16_t soc_in;
+	int	cc_in;
+	int	cc_total;
+	time_t	avg_time;
+};
+
 struct gbms_ce_tier_stats {
-	uint8_t		voltage_tier_idx;
+	int8_t		temp_idx;
+	uint8_t		vtier_idx;
+
+	int16_t		soc_in;		/* 8.8 */
+	uint16_t	cc_in;
+	uint16_t	cc_total;
+
 	uint16_t	time_fast;
 	uint16_t	time_taper;
 	uint16_t	time_other;
-	int16_t		soc_in;
+
 	int16_t		temp_in;
 	int16_t		temp_min;
 	int16_t		temp_max;
+
 	int16_t		ibatt_min;
 	int16_t		ibatt_max;
+
 	uint16_t	icl_min;
 	uint16_t	icl_max;
-	uint16_t	cc_in;
 
 	int64_t		icl_sum;
 	int64_t		temp_sum;
 	int64_t		ibatt_sum;
 	uint32_t 	sample_count;
+
 	uint16_t 	msc_cnt[MSC_STATES_COUNT];
 	uint32_t 	msc_elap[MSC_STATES_COUNT];
 };
 
-#define GBMS_STATS_TIER_COUNT 3
+#define GBMS_STATS_TIER_COUNT	3
+#define GBMS_SOC_STATS_LEN	101
+
+/* time to full */
+
+/* collected in charging event */
+struct ttf_soc_stats {
+	int ti[GBMS_SOC_STATS_LEN];		/* charge tier at each soc */
+	int cc[GBMS_SOC_STATS_LEN];		/* coulomb count at each soc */
+	time_t elap[GBMS_SOC_STATS_LEN];	/* time spent at soc */
+};
+
+/* reference data for soc estimation  */
+struct ttf_adapter_stats {
+	u32 *soc_table;
+	u32 *elap_table;
+	int table_count;
+};
+
+/* updated when the device publish the charge stats
+ * NOTE: soc_stats and tier_stats are only valid for the given chg_profile
+ * since tier, coulumb count and elap time spent at each SOC depends on the
+ * maximum amout of current that can be pushed to the battery.
+ */
+struct batt_ttf_stats {
+	time_t ttf_fake;
+
+	struct ttf_soc_stats soc_ref;	/* gold: soc->elap,cc */
+	int ref_temp_idx;
+	int ref_watts;
+
+	struct ttf_soc_stats soc_stats; /* rolling */
+	struct ttf_tier_stat tier_stats[GBMS_STATS_TIER_COUNT];
+};
 
 struct gbms_charging_event {
 	union gbms_ce_adapter_details	adapter_details;
+
+	/* profile used for this charge event */
+	const struct gbms_chg_profile *chg_profile;
+	/* charge event and tier tracking */
 	struct gbms_ce_stats		charging_stats;
 	struct gbms_ce_tier_stats	tier_stats[GBMS_STATS_TIER_COUNT];
+	/* soc tracking for time to full */
+	struct ttf_soc_stats soc_stats;
+	int last_soc;
 
 	time_t first_update;
 	time_t last_update;
@@ -223,5 +281,47 @@ int gbms_cycle_count_cstr_bc(char *buff, size_t size,
 
 #define gbms_cycle_count_cstr(buff, size, cc)	\
 	gbms_cycle_count_cstr_bc(buff, size, cc, GBMS_CCBIN_BUCKET_COUNT)
+
+/*  */
+int ttf_soc_cstr(char *buff, int size, const struct ttf_soc_stats *soc_stats,
+		 int start, int end);
+
+int ttf_soc_estimate(time_t *res,
+		     const struct batt_ttf_stats *stats,
+		     const struct gbms_charging_event *ce_data,
+		     qnum_t soc, qnum_t last);
+
+void ttf_soc_init(struct ttf_soc_stats *dst);
+
+/*
+int ttf_tier_cstr(char *buff, int size,
+		  const struct batt_ttf_stats *stats,
+		  int start, int end);
+ */
+
+int ttf_tier_cstr(char *buff, int size, struct ttf_tier_stat *t_stat);
+
+int ttf_tier_estimate(time_t *res,
+		      const struct batt_ttf_stats *ttf_stats,
+		      int temp_idx, int vbatt_idx,
+		      int capacity, int full_capacity);
+
+/*  */
+int ttf_stats_init(struct batt_ttf_stats *stats,
+		   struct device *device,
+		   int capacity_ma);
+
+void ttf_stats_update(struct batt_ttf_stats *stats,
+	 	      struct gbms_charging_event *ce_data,
+		      bool force);
+
+int ttf_stats_cstr(char *buff, int size, const struct batt_ttf_stats *stats,
+		   bool verbose);
+
+int ttf_stats_sscan(struct batt_ttf_stats *stats,
+		    const char *buff, size_t size);
+
+struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
+				     const struct batt_ttf_stats *src);
 
 #endif  /* __GOOGLE_BMS_H_ */

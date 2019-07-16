@@ -28,6 +28,7 @@
 #include <linux/pm_wakeup.h>
 #include <linux/pmic-voter.h>
 #include <linux/thermal.h>
+#include <linux/slab.h>
 #include "google_bms.h"
 #include "google_psy.h"
 #include "qmath.h"
@@ -130,6 +131,7 @@ struct batt_res {
 	int res_temp_high;
 };
 
+/* battery driver state */
 struct batt_drv {
 	struct device *device;
 	struct power_supply *psy;
@@ -184,7 +186,6 @@ struct batt_drv {
 	/* MSC charging */
 	u32 battery_capacity;
 	struct gbms_chg_profile chg_profile;
-
 	union gbms_charger_state chg_state;
 
 	int temp_idx;
@@ -208,6 +209,9 @@ struct batt_drv {
 	struct mutex stats_lock;
 	struct gbms_charging_event ce_data;
 	struct gbms_charging_event ce_qual;
+
+	/* time to full */
+	struct batt_ttf_stats ttf_stats;
 
 	/* logging */
 	struct logbuffer *log;
@@ -297,7 +301,7 @@ static char *ssoc_uicurve_cstr(char *buff, size_t size,
 	int i, len = 0;
 
 	for (i = 0; i < UICURVE_MAX ; i++) {
-		len += snprintf(&buff[len], size - len,
+		len += scnprintf(&buff[len], size - len,
 				"[" QNUM_CSTR_FMT " " QNUM_CSTR_FMT "]",
 				qnum_toint(curve[i].real),
 				qnum_fracdgt(curve[i].real),
@@ -413,19 +417,19 @@ void dump_ssoc_state(struct batt_ssoc_state *ssoc_state, struct logbuffer *log)
 {
 	char buff[UICURVE_BUF_SZ] = { 0 };
 
-	snprintf(ssoc_state->ssoc_state_cstr,
-		 sizeof(ssoc_state->ssoc_state_cstr),
-		 "SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d",
-		 ssoc_get_capacity(ssoc_state),
-		 qnum_toint(ssoc_state->ssoc_gdf),
-		 qnum_fracdgt(ssoc_state->ssoc_gdf),
-		 qnum_toint(ssoc_state->ssoc_uic),
-		 qnum_fracdgt(ssoc_state->ssoc_uic),
-		 qnum_toint(ssoc_state->ssoc_rl),
-		 qnum_fracdgt(ssoc_state->ssoc_rl),
-		 ssoc_state->ssoc_curve_type,
-		 ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve),
-		 ssoc_state->rl_status);
+	scnprintf(ssoc_state->ssoc_state_cstr,
+		  sizeof(ssoc_state->ssoc_state_cstr),
+		  "SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d",
+		  ssoc_get_capacity(ssoc_state),
+		  qnum_toint(ssoc_state->ssoc_gdf),
+		  qnum_fracdgt(ssoc_state->ssoc_gdf),
+		  qnum_toint(ssoc_state->ssoc_uic),
+		  qnum_fracdgt(ssoc_state->ssoc_uic),
+		  qnum_toint(ssoc_state->ssoc_rl),
+		  qnum_fracdgt(ssoc_state->ssoc_rl),
+		  ssoc_state->ssoc_curve_type,
+		  ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve),
+		  ssoc_state->rl_status);
 
 	if (log) {
 		logbuffer_log(log, "%s", ssoc_state->ssoc_state_cstr);
@@ -612,21 +616,128 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
+static int batt_ttf_full_capacity(struct power_supply *fg_psy)
+{
+	union power_supply_propval val = { .intval = 0 };
+	int fe, err;
+
+	if (!fg_psy)
+		return -EINVAL;
+
+	err = power_supply_get_property(fg_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
+					&val);
+	if (err < 0)
+		fe = err;
+	else
+		fe = val.intval;
+
+	/* reference value */
+	err = power_supply_get_property(fg_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL,
+					&val);
+	if (err < 0)
+		err = power_supply_get_property(fg_psy,
+					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+					&val);
+	if (err < 0)
+		return -EIO;
+
+	/* TODO: sanity! bound fe to charge full/design */
+
+	return val.intval;
+}
+
+static int batt_ttf_capacity(struct power_supply *fg_psy)
+{
+	int err;
+	union power_supply_propval val = { .intval = 0 };
+
+	if (!fg_psy)
+		return -EINVAL;
+
+	err = power_supply_get_property(fg_psy,
+					POWER_SUPPLY_PROP_CHARGE_COUNTER,
+					&val);
+	if (err < 0)
+		return -EIO;
+
+	/* TODO: bound to ->battery_capacity */
+	return val.intval;
+}
+
+static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
+{
+	int rc, capacity, full_capacity;
+	time_t te, se, estimate = batt_drv->ttf_stats.ttf_fake;
+
+	if (batt_drv->ssoc_state.buck_enabled != 1)
+		return -EINVAL;
+
+	if (batt_drv->ttf_stats.ttf_fake != -1)
+		goto done;
+
+	/* these should really be cached */
+	full_capacity = batt_ttf_full_capacity(batt_drv->fg_psy);
+	if (full_capacity < 0)
+		return -EIO;
+
+	capacity = batt_ttf_capacity(batt_drv->fg_psy);
+	if (capacity < 0)
+		return -EIO;
+
+	if (capacity >= full_capacity) {
+		*res = 0;
+		return 0;
+	}
+
+	rc = ttf_tier_estimate(&te, &batt_drv->ttf_stats,
+			  batt_drv->temp_idx, batt_drv->vbatt_idx,
+			  capacity, full_capacity);
+	if (rc != 0)
+		te = -1;
+
+	rc = ttf_soc_estimate(&se, &batt_drv->ttf_stats,
+			      &batt_drv->ce_data,
+			      ssoc_get_capacity_raw(&batt_drv->ssoc_state),
+			      ssoc_point_full);
+	if (rc < 0)
+		se = -1;
+
+	pr_info("estimates: te=%ld, se=%ld\n", te, se);
+
+	estimate = se;
+	if (estimate == -1)
+		return -ERANGE;
+
+done:
+	*res = estimate;
+	return 0;
+}
+
+/* ------------------------------------------------------------------------- */
+
 #define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
 
-static void batt_chg_stats_init(struct gbms_charging_event *ce_data)
+static void batt_chg_stats_init(struct gbms_charging_event *ce_data,
+				const struct gbms_chg_profile *profile)
 {
 	int i;
 
 	memset(ce_data, 0, sizeof(*ce_data));
 
+	ce_data->chg_profile = profile;
 	ce_data->charging_stats.voltage_in = -1;
 	ce_data->charging_stats.ssoc_in = -1;
 	ce_data->charging_stats.voltage_out = -1;
 	ce_data->charging_stats.ssoc_out = -1;
 
+	ttf_soc_init(&ce_data->soc_stats);
+	ce_data->last_soc = -1;
+
 	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++) {
-		ce_data->tier_stats[i].voltage_tier_idx = i;
+		ce_data->tier_stats[i].temp_idx = -1;
+		ce_data->tier_stats[i].vtier_idx = i;
 		ce_data->tier_stats[i].soc_in = -1;
 	}
 
@@ -641,7 +752,7 @@ static void batt_chg_stats_start(struct batt_drv *batt_drv)
 
 	mutex_lock(&batt_drv->stats_lock);
 	ad.v = batt_drv->ce_data.adapter_details.v;
-	batt_chg_stats_init(ce_data);
+	batt_chg_stats_init(ce_data, &batt_drv->chg_profile);
 	batt_drv->ce_data.adapter_details.v = ad.v;
 
 	vin = GPSY_GET_PROP(batt_drv->fg_psy,
@@ -683,28 +794,74 @@ static void batt_chg_stats_tier(struct gbms_ce_tier_stats *tier,
 }
 
 /* call holding stats_lock */
-static void batt_chg_stats_update(struct batt_drv *batt_drv, int tier_idx,
+static void batt_chg_stats_soc_update(struct gbms_charging_event *ce_data,
+				      qnum_t soc, time_t elap, int tier_index,
+				      int cc)
+{
+	int index;
+	const int last_soc = ce_data->last_soc;
+
+	index = qnum_toint(soc);
+	if (index < 0)
+		index = 0;
+	if (index > 100)
+		index = 100;
+	if (index < last_soc)
+		return;
+
+	if (ce_data->soc_stats.elap[index] == 0) {
+		ce_data->soc_stats.ti[index] = tier_index;
+		ce_data->soc_stats.cc[index] = cc;
+	}
+
+	if (last_soc != -1)
+		ce_data->soc_stats.elap[last_soc] += elap;
+
+	ce_data->last_soc = index;
+}
+
+/* call holding stats_lock */
+static void batt_chg_stats_update(struct batt_drv *batt_drv,
+				  int temp_idx, int tier_idx,
 				  int ibatt_ma, int temp, time_t elap)
 {
+	int cc;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 	struct gbms_ce_tier_stats *tier =
 				&batt_drv->ce_data.tier_stats[tier_idx];
+
+	/* TODO: read at start of tier and update cc_total of previous */
+	cc = GPSY_GET_PROP(batt_drv->fg_psy,
+				POWER_SUPPLY_PROP_CHARGE_COUNTER);
+	if (cc < 0) {
+		pr_info("MSC_STAT cannot read cc=%d\n", cc);
+		return;
+	}
+	cc = cc / 1000;
+
+	/* book to previous soc unless discharging */
+	if (batt_drv->msc_state != MSC_DSG) {
+		qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
+
+		/* TODO: should I use ssoc instead? */
+		batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
+					  tier_idx, cc);
+	}
 
 	/* book to previous state */
 	batt_chg_stats_tier(tier, batt_drv->msc_state, elap);
 
 	if (tier->soc_in == -1) {
-		int soc_in, cc_in;
+		int soc_in;
 
 		soc_in = GPSY_GET_PROP(batt_drv->fg_psy,
 				       POWER_SUPPLY_PROP_CAPACITY_RAW);
-		cc_in = GPSY_GET_PROP(batt_drv->fg_psy,
-				      POWER_SUPPLY_PROP_CHARGE_COUNTER);
-		if (soc_in < 0 || cc_in < 0) {
-			pr_info("MSC_STAT cannot read soc_in=%d or cc_in=%d\n",
-				soc_in, cc_in);
+		if (soc_in < 0) {
+			pr_info("MSC_STAT cannot read soc_in=%d\n", soc_in);
 			return;
 		}
+
+		tier->temp_idx = temp_idx;
 
 		tier->temp_in = temp;
 		tier->temp_min = temp;
@@ -717,9 +874,14 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int tier_idx,
 		tier->icl_max = icl_settled;
 
 		tier->soc_in = soc_in;
-		tier->cc_in = cc_in / 1000;
+		tier->cc_in = cc;
+		tier->cc_total = 0;
 	} else {
 		const u8 flags = batt_drv->chg_state.f.flags;
+
+		/* crossed temperature tier */
+		if (temp_idx != tier->temp_idx)
+			tier->temp_idx = -1;
 
 		if (flags & GBMS_CS_FLAG_CC) {
 			tier->time_fast += elap;
@@ -751,6 +913,8 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int tier_idx,
 		if (ibatt_ma > tier->ibatt_max)
 			tier->ibatt_max = ibatt_ma;
 		tier->ibatt_sum += ibatt_ma * elap;
+
+		tier->cc_total = cc - tier->cc_in;
 	}
 
 	tier->sample_count += 1;
@@ -758,9 +922,9 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int tier_idx,
 
 /* Only the qualified copy gets the timestamp and the exit voltage.
  */
-static void batt_chg_stats_pub(struct batt_drv *batt_drv,
-			       char *reason,
-			       bool force)
+static bool batt_chg_stats_close(struct batt_drv *batt_drv,
+				 char *reason,
+				 bool force)
 {
 	bool publish;
 	const int vout = GPSY_GET_PROP(batt_drv->fg_psy,
@@ -768,15 +932,15 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 	const int cc_out = GPSY_GET_PROP(batt_drv->fg_psy,
 				POWER_SUPPLY_PROP_CHARGE_COUNTER);
 
-	mutex_lock(&batt_drv->stats_lock);
-
 	/* book last period to the current tier */
 	if (batt_drv->vbatt_idx != -1) {
 		const time_t now = get_boot_sec();
 		const time_t elap = now - batt_drv->ce_data.last_update;
 
-		batt_chg_stats_update(batt_drv, batt_drv->vbatt_idx,
+		batt_chg_stats_update(batt_drv,
+				      batt_drv->temp_idx, batt_drv->vbatt_idx,
 				      0, 0, elap);
+		batt_drv->ce_data.last_update = now;
 	}
 
 	/* record the closing in data (and qual) */
@@ -805,16 +969,45 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 			ce_qual->charging_stats.cc_out);
 	}
 
-	mutex_unlock(&batt_drv->stats_lock);
+	return publish;
+}
 
-	if (publish)
+static void batt_chg_stats_pub(struct batt_drv *batt_drv,
+			       char *reason,
+			       bool force)
+{
+	bool publish;
+
+	mutex_lock(&batt_drv->stats_lock);
+	publish = batt_chg_stats_close(batt_drv, reason, force);
+	if (publish) {
+		ttf_stats_update(&batt_drv->ttf_stats,
+				 &batt_drv->ce_qual, false);
+
 		kobject_uevent(&batt_drv->device->kobj, KOBJ_CHANGE);
+	}
+	mutex_unlock(&batt_drv->stats_lock);
 }
 
 
+static int batt_chg_stats_soc_next(const struct gbms_charging_event *ce_data,
+				   int i)
+{
+	int soc_next;
+
+	if (i == GBMS_STATS_TIER_COUNT -1)
+		return ce_data->last_soc;
+
+	soc_next = ce_data->tier_stats[i + 1].soc_in >> 8;
+	if (soc_next <= 0)
+		return ce_data->last_soc;
+
+	return soc_next;
+}
+
 static int batt_chg_stats_cstr(char *buff, int size,
-				const struct gbms_charging_event *ce_data,
-				bool verbose)
+			       const struct gbms_charging_event *ce_data,
+			       bool verbose)
 {
 	int i, j, len = 0;
 	static char *codes[] = { "n", "s", "d", "l", "v", "vo", "p", "f", "t",
@@ -824,16 +1017,16 @@ static int batt_chg_stats_cstr(char *buff, int size,
 		const char *adapter_name =
 			gbms_chg_ev_adapter_s(ce_data->adapter_details.ad_type);
 
-		len += snprintf(&buff[len], size - len, "A: %s,",
-			adapter_name);
+		len += scnprintf(&buff[len], size - len, "A: %s,",
+				adapter_name);
 	}
 
-	len += snprintf(&buff[len], size - len, "%d,%d,%d",
+	len += scnprintf(&buff[len], size - len, "%d,%d,%d",
 				ce_data->adapter_details.ad_type,
 				ce_data->adapter_details.ad_voltage * 100,
 				ce_data->adapter_details.ad_amperage * 100);
 
-	len += snprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu",
+	len += scnprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu",
 				(verbose) ?  "\nS: " : ", ",
 				ce_data->charging_stats.ssoc_in,
 				ce_data->charging_stats.voltage_in,
@@ -842,16 +1035,18 @@ static int batt_chg_stats_cstr(char *buff, int size,
 
 
 	if (verbose) {
-		len += snprintf(&buff[len], size - len, " %hu,%hu",
+		len += scnprintf(&buff[len], size - len, " %hu,%hu",
 				ce_data->charging_stats.cc_in,
 				ce_data->charging_stats.cc_out);
 
-		len += snprintf(&buff[len], size - len, " %ld,%ld",
+		len += scnprintf(&buff[len], size - len, " %ld,%ld",
 				ce_data->first_update,
 				ce_data->last_update);
 	}
 
 	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
+		const int soc_next = batt_chg_stats_soc_next(ce_data, i);
+		const int soc_in = ce_data->tier_stats[i].soc_in >> 8;
 		const long elap = ce_data->tier_stats[i].time_fast +
 				  ce_data->tier_stats[i].time_taper +
 				  ce_data->tier_stats[i].time_other;
@@ -859,13 +1054,13 @@ static int batt_chg_stats_cstr(char *buff, int size,
 		if (!elap)
 			continue;
 
-		len += snprintf(&buff[len], size - len, "\n%d%c ",
-			ce_data->tier_stats[i].voltage_tier_idx,
+		len += scnprintf(&buff[len], size - len, "\n%d%c ",
+			ce_data->tier_stats[i].vtier_idx,
 			(verbose) ? ':' : ',');
 
-		len += snprintf(&buff[len], size - len,
+		len += scnprintf(&buff[len], size - len,
 			"%d.%d,%d,%d, %d,%d,%d, %d,%ld,%d, %d,%ld,%d, %d,%ld,%d",
-				ce_data->tier_stats[i].soc_in >> 8,
+				soc_in,
 				ce_data->tier_stats[i].soc_in & 0xff,
 				ce_data->tier_stats[i].cc_in,
 				ce_data->tier_stats[i].temp_in,
@@ -886,28 +1081,36 @@ static int batt_chg_stats_cstr(char *buff, int size,
 			continue;
 
 		/* time spent in every multi step charging state */
-		len += snprintf(&buff[len], size - len, "\n%d:",
-				ce_data->tier_stats[i].voltage_tier_idx);
+		len += scnprintf(&buff[len], size - len, "\n%d:",
+				ce_data->tier_stats[i].vtier_idx);
 
 		for (j = 0; j < MSC_STATES_COUNT; j++)
-			len += snprintf(&buff[len], size - len, " %s=%d",
+			len += scnprintf(&buff[len], size - len, " %s=%d",
 				codes[j], ce_data->tier_stats[i].msc_elap[j]);
 
 		/* count spent in each step charging state */
-		len += snprintf(&buff[len], size - len, "\n%d:",
-				ce_data->tier_stats[i].voltage_tier_idx);
+		len += scnprintf(&buff[len], size - len, "\n%d:",
+				ce_data->tier_stats[i].vtier_idx);
 
 		for (j = 0; j < MSC_STATES_COUNT; j++)
-			len += snprintf(&buff[len], size - len, " %s=%d",
+			len += scnprintf(&buff[len], size - len, " %s=%d",
 				codes[j], ce_data->tier_stats[i].msc_cnt[j]);
+
+		if (soc_next) {
+			len += scnprintf(&buff[len], size - len, "\n");
+			len += ttf_soc_cstr(&buff[len], size - len,
+					&ce_data->soc_stats,
+					soc_in, soc_next);
+		}
 	}
 
-	len += snprintf(&buff[len], size - len, "\n");
+	len += scnprintf(&buff[len], size - len, "\n");
 
 	return len;
 }
 
 /* ------------------------------------------------------------------------- */
+
 static void batt_res_dump_logs(struct batt_res *rstate)
 {
 	pr_info("RES: req:%d, sample:%d[%d], filt_cnt:%d, res_avg:%d\n",
@@ -1265,7 +1468,6 @@ static int msc_pm_hold(int msc_state)
 	return pm_state;
 }
 
-
 /* TODO: this function is too long and need to be split (b/117897301) */
 static int msc_logic_internal(struct batt_drv *batt_drv)
 {
@@ -1440,7 +1642,7 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 			elap = 0;
 		}
 
-		batt_chg_stats_update(batt_drv, tier_idx,
+		batt_chg_stats_update(batt_drv, temp_idx, tier_idx,
 				      ibatt / 1000, temp,
 				      elap);
 
@@ -1502,6 +1704,8 @@ static int msc_logic(struct batt_drv *batt_drv)
 		batt_update_cycle_count(batt_drv);
 		batt_rl_reset(batt_drv);
 
+		/* this will trigger another capacity learning.
+		 * NOTE: could re-trigger ttf learning on a new estimate */
 		err = GPSY_SET_PROP(batt_drv->fg_psy,
 				    POWER_SUPPLY_PROP_BATT_CE_CTRL,
 				    false);
@@ -2041,7 +2245,7 @@ static ssize_t batt_ctl_chg_stats(struct device *dev,
 	switch (buf[0]) {
 	case 0:
 	case '0': /* invalidate current qual */
-		batt_chg_stats_init(&batt_drv->ce_qual);
+		batt_chg_stats_init(&batt_drv->ce_qual, &batt_drv->chg_profile);
 		break;
 	}
 	mutex_unlock(&batt_drv->stats_lock);
@@ -2078,14 +2282,15 @@ static ssize_t batt_show_chg_details(struct device *dev,
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *)
 					power_supply_get_drvdata(psy);
+	const bool qual_valid = (batt_drv->ce_qual.last_update -
+				batt_drv->ce_qual.first_update) != 0;
 	int len = 0;
 
 	mutex_lock(&batt_drv->stats_lock);
 
 	len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 				   &batt_drv->ce_data, true);
-
-	if (batt_drv->ce_qual.last_update - batt_drv->ce_qual.first_update)
+	if (qual_valid)
 		len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
 					   &batt_drv->ce_qual, true);
 
@@ -2097,26 +2302,165 @@ static ssize_t batt_show_chg_details(struct device *dev,
 static const DEVICE_ATTR(charge_details, 0444, batt_show_chg_details,
 					       NULL);
 
+/* tier and soc details */
+static ssize_t batt_show_ttf_details(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = (struct batt_drv *)
+					power_supply_get_drvdata(psy);
+	struct batt_ttf_stats *ttf_stats;
+	int i, len = 0;
+
+	if (!batt_drv->ssoc_state.buck_enabled)
+		return -ENODATA;
+
+	ttf_stats = kzalloc(sizeof(*ttf_stats), GFP_KERNEL);
+	if (!ttf_stats)
+		return -ENOMEM;
+
+	mutex_lock(&batt_drv->stats_lock);
+	/* update a private copy of ttf stats */
+	ttf_stats_update(ttf_stats_dup(ttf_stats, &batt_drv->ttf_stats),
+			 &batt_drv->ce_data, true);
+	mutex_unlock(&batt_drv->stats_lock);
+
+	/* interleave tier with SOC data */
+	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
+		int next_soc_in;
+
+		len += scnprintf(&buf[len], PAGE_SIZE - len, "%d: ", i);
+		len += ttf_tier_cstr(&buf[len], PAGE_SIZE - len,
+				     &ttf_stats->tier_stats[i]);
+		len += scnprintf(&buf[len], PAGE_SIZE - len, "\n");
+
+		/* continue only first */
+		if (ttf_stats->tier_stats[i].avg_time == 0)
+			continue;
+
+		if (i == GBMS_STATS_TIER_COUNT - 1) {
+			next_soc_in = -1;
+		} else {
+			next_soc_in = ttf_stats->tier_stats[i + 1].soc_in >> 8;
+			if (next_soc_in == 0)
+				next_soc_in = -1;
+		}
+
+		if (next_soc_in == -1)
+			next_soc_in = batt_drv->ce_data.last_soc - 1;
+
+		len += ttf_soc_cstr(&buf[len], PAGE_SIZE - len,
+				    &ttf_stats->soc_stats,
+				    ttf_stats->tier_stats[i].soc_in >> 8,
+				    next_soc_in);
+	}
+
+	kfree(ttf_stats);
+
+	return len;
+}
+
+static const DEVICE_ATTR(ttf_details, 0444, batt_show_ttf_details,
+					    NULL);
+
+/* house stats */
+static ssize_t batt_show_ttf_stats(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =(struct batt_drv *)
+					power_supply_get_drvdata(psy);
+	const int verbose = true;
+	int i, len = 0;
+
+	mutex_lock(&batt_drv->stats_lock);
+
+	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++)
+		len += ttf_tier_cstr(&buf[len], PAGE_SIZE,
+				     &batt_drv->ttf_stats.tier_stats[i]);
+
+	len += scnprintf(&buf[len], PAGE_SIZE - len, "\n");
+
+	if (verbose)
+		len += ttf_soc_cstr(&buf[len], PAGE_SIZE - len,
+				    &batt_drv->ttf_stats.soc_stats,
+				    0, 99);
+
+	mutex_unlock(&batt_drv->stats_lock);
+
+	return len;
+}
+
+/* userspace restore the TTF data with this */
+static ssize_t batt_ctl_ttf_stats(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	int res;
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =(struct batt_drv *)
+					power_supply_get_drvdata(psy);
+
+	if (count < 1)
+		return -ENODATA;
+	if (!batt_drv->ssoc_state.buck_enabled)
+		return -ENODATA;
+
+	mutex_lock(&batt_drv->stats_lock);
+	switch (buf[0]) {
+	case 'u':
+	case 'U': /* force update */
+		ttf_stats_update(&batt_drv->ttf_stats, &batt_drv->ce_data,
+				 (buf[0] == 'U'));
+		break;
+	default:
+		/* TODO: userspace restore of the data */
+		res = ttf_stats_sscan(&batt_drv->ttf_stats, buf, count);
+		if (res < 0)
+			count = res;
+		break;
+	}
+	mutex_unlock(&batt_drv->stats_lock);
+
+	return count;
+}
+
+static const DEVICE_ATTR(ttf_stats, 0664, batt_show_ttf_stats,
+					  batt_ctl_ttf_stats);
+
 static int batt_init_fs(struct batt_drv *batt_drv)
 {
 	struct dentry *de = NULL;
 	int ret;
 
+	/* stats */
 	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_charge_stats);
 	if (ret)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create charge_stats\n");
 
 	ret = device_create_file(&batt_drv->psy->dev,
-						&dev_attr_charge_stats_actual);
+				 &dev_attr_charge_stats_actual);
 	if (ret)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create charge_stats_actual\n");
 
-	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_charge_details);
+	ret = device_create_file(&batt_drv->psy->dev,
+				 &dev_attr_charge_details);
 	if (ret)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create charge_details\n");
+
+	/* time to full */
+	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_ttf_stats);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create ttf_stats\n");
+
+	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_ttf_details);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create ttf_details\n");
 
 #ifdef CONFIG_DEBUG_FS
 	de = debugfs_create_dir("google_battery", 0);
@@ -2563,6 +2907,21 @@ static int gbatt_get_property(struct power_supply *psy,
 		else
 			val->intval = batt_drv->res_state.resistance_avg;
 		break;
+
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG: {
+		time_t res;
+
+		/* API return value in seconds */
+		err = batt_ttf_estimate(&res, batt_drv);
+		if (err == 0)
+			val->intval = res / 60;
+		else if (!batt_drv->fg_psy)
+			err = -EINVAL;
+		else
+			err = power_supply_get_property(batt_drv->fg_psy,
+							psp, val);
+	} break;
+
 	/* TODO: "charger" will expose this but I'd rather use an API from
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
 	 * fg_psy doesn't look it up in google_battery
@@ -2655,6 +3014,16 @@ static int gbatt_set_property(struct power_supply *psy,
 					ret);
 		}
 		break;
+
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
+		if (val->intval <= 0)
+			batt_drv->ttf_stats.ttf_fake = -1;
+		else
+			batt_drv->ttf_stats.ttf_fake = val->intval;
+		pr_info("time_to_full = %ld\n", batt_drv->ttf_stats.ttf_fake);
+		if (batt_drv->psy)
+			power_supply_changed(batt_drv->psy);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -2680,6 +3049,7 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
 		return 1;
 	default:
 		break;
@@ -2716,8 +3086,6 @@ static void google_battery_init_work(struct work_struct *work)
 	mutex_init(&batt_drv->batt_lock);
 	mutex_init(&batt_drv->stats_lock);
 	mutex_init(&batt_drv->cc_data.lock);
-	batt_chg_stats_init(&batt_drv->ce_data);
-	batt_chg_stats_init(&batt_drv->ce_qual);
 
 	fg_psy = power_supply_get_by_name(batt_drv->fg_psy_name);
 	if (!fg_psy) {
@@ -2768,6 +3136,9 @@ static void google_battery_init_work(struct work_struct *work)
 		gbms_dump_chg_profile(&batt_drv->chg_profile);
 	}
 
+	batt_chg_stats_init(&batt_drv->ce_data, &batt_drv->chg_profile);
+	batt_chg_stats_init(&batt_drv->ce_qual, &batt_drv->chg_profile);
+
 	batt_drv->fg_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&batt_drv->fg_nb);
 	if (ret < 0)
@@ -2788,11 +3159,9 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_drv->fake_capacity = (batt_drv->batt_present) ? -EINVAL
 						: DEFAULT_BATT_FAKE_CAPACITY;
 
-	(void)batt_init_fs(batt_drv);
 
 
-	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
-
+	/* charge statistics */
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,chg-stats-qual-time",
 				   &batt_drv->ce_data.chg_sts_qual_time);
@@ -2806,6 +3175,12 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->ce_data.chg_sts_delta_soc =
 					DEFAULT_CHG_STATS_MIN_DELTA_SOC;
+
+	/* initialize time to full */
+	ret = ttf_stats_init(&batt_drv->ttf_stats, batt_drv->device,
+			     batt_drv->battery_capacity);
+	if (ret < 0)
+		pr_info("time to full not available\n");
 
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,update-interval",
@@ -2825,6 +3200,12 @@ static void google_battery_init_work(struct work_struct *work)
 				"google,disable-votes");
 	if (batt_drv->disable_votes)
 		pr_info("battery votes disabled\n");
+
+	/* google_resistance  */
+	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
+
+	/* debug */
+	(void)batt_init_fs(batt_drv);
 
 	pr_info("init_work done\n");
 
