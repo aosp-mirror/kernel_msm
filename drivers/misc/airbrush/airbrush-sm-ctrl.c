@@ -49,7 +49,7 @@ static struct ab_state_context *ab_sm_ctx;
 
 #define MAX_AON_FREQ 934000000
 
-#define AB_THROTTLE_TIMEOUT_MS	500
+#define AB_THROTTLE_TIMEOUT_MS	2000
 
 static int pmu_ipu_sleep_stub(void *ctx)      { return -ENODEV; }
 static int pmu_tpu_sleep_stub(void *ctx)      { return -ENODEV; }
