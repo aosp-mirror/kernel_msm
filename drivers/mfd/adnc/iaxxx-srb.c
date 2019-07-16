@@ -735,9 +735,9 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
 				__func__, rc);
 			return rc;
 		}
+		mutex_lock(&priv->update_block_lock);
 	}
 
-	mutex_lock(&priv->update_block_lock);
 	/* Make sure update block bit is in cleared state */
 	do {
 		rc = regmap_read(regmap,
@@ -758,10 +758,10 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
 		rc = -EBUSY;
 	}
 update_block_clr_check_err:
-	mutex_unlock(&priv->update_block_lock);
-	if (regmap == priv->regmap)
+	if (regmap == priv->regmap) {
 		iaxxx_pm_put_autosuspend(priv->dev);
-
+		mutex_unlock(&priv->update_block_lock);
+	}
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_poll_update_block_req_bit_clr);

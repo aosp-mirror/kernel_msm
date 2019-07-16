@@ -51,12 +51,13 @@ int iaxxx_set_mpll_source_no_pm(struct iaxxx_priv *priv, int source);
 int iaxxx_set_apll_source(struct iaxxx_priv *priv, int source);
 int iaxxx_get_max_spi_speed(struct device *dev, uint32_t *max_spi_speed);
 int iaxxx_set_osc_trim_period(struct iaxxx_priv *priv, int period);
-int iaxxx_set_proc_hw_sleep_ctrl(struct iaxxx_priv *priv);
+int iaxxx_set_mem_pwr_ctrl(struct iaxxx_priv *priv,
+			uint32_t proc_id, uint32_t mem_state,
+			struct regmap *regmap);
 int iaxxx_set_proc_mem_on_off_ctrl(struct iaxxx_priv *priv, uint32_t value);
-int iaxxx_power_down_core_mem_in_retn(
-	struct iaxxx_priv *priv, uint32_t proc_id);
-int iaxxx_power_up_core_mem_on(
-	struct iaxxx_priv *priv, uint32_t proc_id);
+int iaxxx_set_proc_pwr_ctrl(struct iaxxx_priv *priv,
+			uint32_t proc_id, uint32_t proc_state,
+			struct regmap *regmap);
 int iaxxx_power_down_core_mem(
 	struct iaxxx_priv *priv, uint32_t proc_id);
 int iaxxx_power_up_core_mem(
