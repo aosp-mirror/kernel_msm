@@ -142,6 +142,11 @@
 	};
 };
 
+/* Override TZ removed memory region 0x5500000 -> 0x3F00000 */
+&removed_regions {
+	reg = <0x0 0x86200000 0x0 0x3F00000>;
+};
+
 /* Override TZ App (secapp) memory region 0x2200000 -> 0x2800000 */
 
 &qcom_seecom {
