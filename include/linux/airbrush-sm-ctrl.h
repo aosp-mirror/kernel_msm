@@ -609,8 +609,14 @@ struct ab_state_context {
 	bool throttle_nocomp_waiting;
 	/* True if we are transitioning to a compute ready situation
 	 * False if we are leaving a compute ready situation
+	 * Guarded by throttle_ready_lock
 	 */
 	bool going_to_comp_ready;
+	/* True if DRAM data survived throughout a nocompute phase
+	 * False if DRAM data was cleared
+	 * Guarded by throttle_ready_lock
+	 */
+	bool dram_survived_no_comp;
 
 	int el2_mode; /* Guarded by state_transitioning_lock */
 	/* State we return to upon exit of el2 mode */

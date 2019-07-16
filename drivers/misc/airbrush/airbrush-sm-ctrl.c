@@ -1210,6 +1210,7 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	dev_err(sc->dev, "AB PMIC off\n");
 
 	sc->curr_chip_substate_id = CHIP_STATE_OFF;
+	dev_info(sc->dev, "AB shutdown to state %d\n", CHIP_STATE_OFF);
 }
 
 /* Attempt to shutdown Airbrush and notify a PCIe linkdown
@@ -1469,6 +1470,9 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		if (sc->ddrcke_iso_clamp_wr)
 			ab_gpio_disable_ddr_iso(sc);
 	}
+
+	if (to_chip_substate_id == CHIP_STATE_OFF)
+		sc->dram_survived_no_comp = false;
 
 	ab_sm_start_ts(AB_SM_TS_PMIC_OFF);
 	ab_pmic_off(sc);
@@ -1979,6 +1983,8 @@ static void __ab_sm_schedule_shutdown_work(struct ab_state_context *sc,
 
 }
 
+static void __throttle_nocompute_notify(struct ab_state_context *sc);
+
 static void ab_sm_shutdown_work(struct work_struct *data)
 {
 	struct ab_state_context *sc =
@@ -1995,6 +2001,12 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 		AB_SM_CLEANUP_NOT_IN_PROGRESS);
 
 	mutex_lock(&sc->state_transitioning_lock);
+	mutex_lock(&sc->throttle_ready_lock);
+	sc->going_to_comp_ready = false;
+	sc->dram_survived_no_comp = false;
+	/* Inform userspace AB is being shut down */
+	__throttle_nocompute_notify(sc);
+
 	prev_state = sc->curr_chip_substate_id;
 	if (prev_state == CHIP_STATE_OFF) {
 		/* No need to emergency shutdown if already powered off */
@@ -2033,6 +2045,13 @@ static void ab_sm_shutdown_work(struct work_struct *data)
 	 */
 	complete_all(&sc->notify_comp);
 	complete_all(&sc->shutdown_comp);
+
+	mutex_lock(&sc->throttle_ready_lock);
+	sc->going_to_comp_ready = true;
+	sc->dram_survived_no_comp = false;
+	/* Inform userspace AB is available but DRAM contents were wiped */
+	__throttle_nocompute_notify(sc);
+
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	/* This work is responsible for marking cleanup as completed. */
@@ -2324,6 +2343,9 @@ static inline void __complete_throttle_nocompute_ready(
 	complete_all(&sc->throttle_nocompute_ready);
 }
 
+/* Called must hold sc->throttle_ready_lock
+ * This method releases sc->throttle_ready_lock
+ */
 static void __throttle_nocompute_notify(struct ab_state_context *sc)
 {
 	unsigned long ret;
@@ -2357,7 +2379,7 @@ static void __throttle_nocompute_notify(struct ab_state_context *sc)
 }
 
 static int __throttle_nocompute_wait_for_user(struct ab_state_context *sc,
-		int *comp_ready)
+		int *status)
 {
 	int ret;
 
@@ -2403,7 +2425,15 @@ static int __throttle_nocompute_wait_for_user(struct ab_state_context *sc,
 		}
 	}
 
-	*comp_ready = sc->going_to_comp_ready;
+	/* dram_survived_no_comp is a "don't care" if going_to_comp_ready
+	 * is 0, but set it to 0 to be safe with ABM.
+	 */
+	if (!sc->going_to_comp_ready)
+		*status = 0;
+	else
+		*status = AB_SM_COMPUTE_READY_MASK |
+			(sc->dram_survived_no_comp ?
+			 AB_SM_DRAM_INTACT_MASK : 0);
 	mutex_unlock(&sc->throttle_ready_lock);
 
 	return ret;
@@ -2729,6 +2759,7 @@ static void ab_sm_thermal_throttle_state_updated(
 	if (throttle_state_id == THROTTLE_NOCOMPUTE &&
 			sc->throttle_state_id != THROTTLE_NOCOMPUTE) {
 		sc->going_to_comp_ready = false;
+		sc->dram_survived_no_comp = true;
 		__throttle_nocompute_notify(sc);
 		sc->throttle_state_id = throttle_state_id;
 	} else if (throttle_state_id != THROTTLE_NOCOMPUTE &&

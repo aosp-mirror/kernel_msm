@@ -18,7 +18,9 @@
 
 #include <linux/ioctl.h>
 
-#define AB_SM_FATAL_EL2_ERROR_FLAG	1
+#define AB_SM_FATAL_EL2_ERROR_FLAG	0x01
+#define AB_SM_COMPUTE_READY_MASK	0x01
+#define AB_SM_DRAM_INTACT_MASK		0x02
 
 #define AB_SM_IOCTL_MAGIC	'a'
 
@@ -208,13 +210,18 @@
  * event.
  *
  * Parameter int*:
- *  On return if parameter is set to 0, caller is expected to
- *  prepare for a no-compute scenario, and then call back into
- *  this ioctl. The throttle event will wait until all listeners
- *  call back into this ioctl, or a timeout occurs.
- *  On return if parameter is set to 1, the no-compute scenario
- *  is over and normal operation can continue. Caller is expected to
- *  call back into this ioctl to signal it has received the message.
+ *  Bit [0:0] (compute_ready): On return if bit is set to 0,
+ *     caller is expected to prepare for a no-compute scenario,
+ *     and then call back into this ioctl. The throttle event will
+ *     wait until all listeners call back into this ioctl, or a timeout occurs.
+ *     On return if bit is set to 1, the no-compute scenario
+ *     is over and normal operation can continue. Caller is expected to
+ *     call back into this ioctl to signal it has received the message.
+ *  Bit [1:1] (dram_intact): On return if compute_ready is set to 1, this
+ *     bit signals whether the DRAM remained valid during the compute-not-ready
+ *     state. If dram_intact bit is set to 1, DRAM data is still valid.
+ *     Otherwise, DRAM data was lost.
+ *     This bit should be ignored if compute_ready bit is 0.
  */
 #define AB_SM_COMPUTE_READY_NOTIFY	_IOR(AB_SM_IOCTL_MAGIC, 25, int *)
 
