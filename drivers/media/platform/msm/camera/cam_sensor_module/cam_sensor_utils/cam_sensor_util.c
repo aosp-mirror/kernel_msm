@@ -873,7 +873,8 @@ int cam_sensor_util_request_gpio_table(
 				 * apply new gpios, outout a error message
 				 * for driver bringup debug
 				 */
-				CAM_ERR(CAM_SENSOR, "gpio %d:%s request fails",
+				CAM_WARN(CAM_SENSOR,
+					"gpio %d:%s request fails (OK for dual camera)",
 					gpio_tbl[i].gpio, gpio_tbl[i].label);
 			}
 		}
@@ -1633,7 +1634,8 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 			ctrl->pinctrl_info.pinctrl,
 			ctrl->pinctrl_info.gpio_state_active);
 		if (ret)
-			CAM_ERR(CAM_SENSOR, "cannot set pin to active state");
+			CAM_WARN(CAM_SENSOR,
+				"cannot set pin to active state (OK for dual camera)");
 	}
 
 	ret = cam_res_mgr_shared_pinctrl_select_state(true);
