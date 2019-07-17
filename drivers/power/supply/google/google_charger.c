@@ -74,7 +74,7 @@
 #define PPS_KEEP_ALIVE_MAX		3
 #define PPS_CC_TOLERANCE_PCT_DEFAULT	5
 #define PPS_CC_TOLERANCE_PCT_MAX	10
-#define OP_SNK_MW			7600
+#define OP_SNK_MW			2500	/* WA for b/135074866 */
 #define PD_SNK_MAX_MV			9000
 #define PD_SNK_MIN_MV			5000
 #define PD_SNK_MAX_MA			3000
