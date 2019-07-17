@@ -49,12 +49,6 @@
 };
 
 &reserved_memory {
-	easel_mem: easel_mem@9f800000 {
-		compatible = "removed-dma-pool";
-		reg = <0 0x9f800000 0 0x2000000>;
-		label = "easel_mem";
-	};
-
 	debug_info: debug_info@0 {
 		compatible = "removed-dma-pool";
 		no-map;
