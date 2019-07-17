@@ -681,11 +681,30 @@ static unsigned long get_state_after_dpms(struct dsi_backlight_config *bl,
 	return state;
 }
 
+static int dsi_backlight_update_regulator(struct dsi_backlight_config *bl,
+					  unsigned int state)
+{
+	int rc = 0;
+
+	if (bl->lab_vreg) {
+		const unsigned int mode = regulator_mode_from_state(state);
+		const unsigned int last_mode =
+				regulator_mode_from_state(bl->last_state);
+
+		if (last_mode != mode) {
+			pr_debug("set lab vreg mode: 0x%0x\n", mode);
+			rc = regulator_set_mode(bl->lab_vreg, mode);
+		}
+	}
+
+	return rc;
+}
+
 int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 {
 	struct backlight_device *bd = bl->bl_device;
 	unsigned long state;
-	unsigned int last_mode, mode;
+	int rc = 0;
 
 	if (!bd)
 		return 0;
@@ -695,19 +714,15 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 	mutex_lock(&bd->ops_lock);
 	state = get_state_after_dpms(bl, power_mode);
 
-	if (bl->lab_vreg) {
-		last_mode = regulator_mode_from_state(bl->last_state);
-		mode = regulator_mode_from_state(state);
-
-		if (last_mode != mode) {
-			pr_debug("set lab vreg mode: 0x%0x\n", mode);
-			regulator_set_mode(bl->lab_vreg, mode);
-		}
+	if (is_lp_mode(state)) {
+		rc = dsi_backlight_update_regulator(bl, state);
+		if (rc)
+			pr_warn("Error updating regulator state: 0x%x (%d)\n",
+				state, rc);
 	}
-
 	mutex_unlock(&bd->ops_lock);
 
-	return 0;
+	return rc;
 }
 
 int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
@@ -722,6 +737,14 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 
 	mutex_lock(&bd->ops_lock);
 	state = get_state_after_dpms(bl, power_mode);
+
+	if (!is_lp_mode(state)) {
+		const int rc = dsi_backlight_update_regulator(bl, state);
+
+		if (rc)
+			pr_warn("Error updating regulator state: 0x%x (%d)\n",
+				state, rc);
+	}
 
 	bd->props.power = state & BL_CORE_FBBLANK ? FB_BLANK_POWERDOWN :
 			FB_BLANK_UNBLANK;
