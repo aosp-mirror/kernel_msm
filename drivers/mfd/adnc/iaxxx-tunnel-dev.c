@@ -511,6 +511,9 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 			else
 				pr_err("decrementing tunnel active count exceeded\n");
 
+			if (!t_intf_priv->tunnels_active_count)
+				t_intf_priv->tunnel_first_attach = false;
+
 			iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, id);
 
 			atomic_set(&t_intf_priv->src_enable_id[id], 0);
