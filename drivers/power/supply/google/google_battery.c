@@ -138,8 +138,8 @@ struct batt_drv {
 	struct delayed_work init_work;
 	struct delayed_work batt_work;
 	struct wakeup_source batt_ws;
-	struct wakeup_source chg_taper_ws;
-	bool hold_chg_taper_ws;
+	struct wakeup_source taper_ws;
+	bool hold_taper_ws;
 
 	/* TODO: b/111407333, will likely need to adjust SOC% on wakeup */
 	bool init_complete;
@@ -1025,6 +1025,12 @@ static void batt_res_work(struct batt_drv *batt_drv)
 /* should not reset rl state */
 static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 {
+	/* the wake assertion will be released on disconnect and on SW JEITA */
+	if (batt_drv->hold_taper_ws) {
+		batt_drv->hold_taper_ws = false;
+		__pm_relax(&batt_drv->taper_ws);
+	}
+
 	/* algo */
 	batt_drv->temp_idx = -1;
 	batt_drv->vbatt_idx = -1;
@@ -1218,17 +1224,31 @@ static int msc_logic_irdrop(struct batt_drv *batt_drv,
 			vtier, vbatt, batt_drv->fv_uv, *fv_uv);
 	}
 
-	if ((msc_state == MSC_RAISE) && !batt_drv->hold_chg_taper_ws) {
-		batt_drv->hold_chg_taper_ws = 1;
-		__pm_stay_awake(&batt_drv->chg_taper_ws);
-	} else if (((msc_state == MSC_TYPE) || (msc_state == MSC_FAST)) &&
-		 batt_drv->hold_chg_taper_ws) {
-		batt_drv->hold_chg_taper_ws = 0;
-		__pm_relax(&batt_drv->chg_taper_ws);
-	}
-
 	return msc_state;
 }
+
+static int msc_pm_hold(int msc_state)
+{
+	int pm_state = -1;
+
+	switch (msc_state) {
+	case MSC_RAISE:
+	case MSC_VOVER:
+	case MSC_PULLBACK:
+		pm_state = 1; /* __pm_stay_awake */
+		break;
+	case MSC_SEED:
+	case MSC_DSG:
+	case MSC_VSWITCH:
+	case MSC_NEXT:
+	case MSC_LAST:
+		pm_state = 0;  /* pm_relax */
+		break;
+	}
+
+	return pm_state;
+}
+
 
 /* TODO: this function is too long and need to be split (b/117897301) */
 static int msc_logic_internal(struct batt_drv *batt_drv)
@@ -1247,7 +1267,9 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 	if (ioerr < 0)
 		return -EIO;
 
-	/* driver state is (was) reset when we hit the SW jeita limit */
+	/* driver state is (was) reset when we hit the SW jeita limit.
+	 * NOTE: resetting driver state will release the wake assertion
+	 */
 	sw_jeita = msc_logic_soft_jeita(batt_drv, temp);
 	if (sw_jeita) {
 		/* reset batt_drv->jeita_stop_charging to -1 */
@@ -1328,11 +1350,18 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 					     vbatt, ibatt, temp_idx,
 					     &vbatt_idx, &fv_uv,
 					     &update_interval);
+
+		if (msc_pm_hold(msc_state) == 1 && !batt_drv->hold_taper_ws) {
+			__pm_stay_awake(&batt_drv->taper_ws);
+			batt_drv->hold_taper_ws = true;
+		}
+
 		mutex_lock(&batt_drv->stats_lock);
 		batt_chg_stats_tier(&batt_drv->ce_data.tier_stats[tier_idx],
 				    batt_drv->msc_irdrop_state, elap);
 		batt_drv->msc_irdrop_state = msc_state;
 		mutex_unlock(&batt_drv->stats_lock);
+
 
 		/* Basic multi step charging: switch to next tier when ibatt
 		 * is under next tier cc_max.
@@ -1373,6 +1402,11 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 
 	}
 
+	if (msc_pm_hold(msc_state) == 0 && batt_drv->hold_taper_ws) {
+		batt_drv->hold_taper_ws = false;
+		__pm_relax(&batt_drv->taper_ws);
+	}
+
 	/* need a new fv_uv only on a new voltage tier.  */
 	if (vbatt_idx != batt_drv->vbatt_idx) {
 		fv_uv = profile->volt_limits[vbatt_idx];
@@ -1395,14 +1429,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 				      ibatt / 1000, temp,
 				      elap);
 
-	}
-
-	if (((msc_state == MSC_SEED) ||
-	    (msc_state == MSC_DSG) ||
-	    (msc_state == MSC_LAST)) &&
-	    (batt_drv->hold_chg_taper_ws)) {
-		batt_drv->hold_chg_taper_ws = 0;
-		__pm_relax(&batt_drv->chg_taper_ws);
 	}
 
 	batt_drv->msc_state = msc_state;
@@ -2604,6 +2630,7 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_drv->dead_battery = true; /* clear in batt_work() */
 	batt_drv->capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
 	batt_drv->ssoc_state.buck_enabled = -1;
+	batt_drv->hold_taper_ws = false;
 	batt_reset_chg_drv_state(batt_drv);
 
 	mutex_init(&batt_drv->chg_lock);
@@ -2669,7 +2696,7 @@ static void google_battery_init_work(struct work_struct *work)
 			ret);
 
 	wakeup_source_init(&batt_drv->batt_ws, gbatt_psy_desc.name);
-	wakeup_source_init(&batt_drv->chg_taper_ws, "Taper");
+	wakeup_source_init(&batt_drv->taper_ws, "Taper");
 
 	mutex_lock(&batt_drv->cc_data.lock);
 	ret = batt_cycle_count_load(&batt_drv->cc_data, batt_drv->ccbin_psy);
@@ -2841,7 +2868,7 @@ static int google_battery_remove(struct platform_device *pdev)
 		gbms_free_chg_profile(&batt_drv->chg_profile);
 
 		wakeup_source_trash(&batt_drv->batt_ws);
-		wakeup_source_trash(&batt_drv->chg_taper_ws);
+		wakeup_source_trash(&batt_drv->taper_ws);
 
 		if (batt_drv->log)
 			debugfs_logbuffer_unregister(batt_drv->log);
