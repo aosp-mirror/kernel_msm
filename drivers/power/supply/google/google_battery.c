@@ -38,6 +38,8 @@
 #endif
 
 #define BATT_DELAY_INIT_MS		250
+#define BATT_WORK_FAST_RETRY_CNT	30
+#define BATT_WORK_FAST_RETRY_MS		1000
 #define BATT_WORK_ERROR_RETRY_MS	1000
 
 #define DEFAULT_BATT_FAKE_CAPACITY		50
@@ -137,8 +139,11 @@ struct batt_drv {
 
 	struct delayed_work init_work;
 	struct delayed_work batt_work;
+
+	struct wakeup_source msc_ws;
 	struct wakeup_source batt_ws;
 	struct wakeup_source taper_ws;
+	struct wakeup_source poll_ws;
 	bool hold_taper_ws;
 
 	/* TODO: b/111407333, will likely need to adjust SOC% on wakeup */
@@ -150,6 +155,8 @@ struct batt_drv {
 	struct mutex chg_lock;
 
 	/* battery work */
+	int fg_status;
+	int batt_fast_update_cnt;
 	u32 batt_update_interval;
 	/* triger for recharge logic next update from charger */
 	bool batt_full;
@@ -1031,6 +1038,9 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 		__pm_relax(&batt_drv->taper_ws);
 	}
 
+	/* polling */
+	batt_drv->batt_fast_update_cnt = 0;
+	batt_drv->fg_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	/* algo */
 	batt_drv->temp_idx = -1;
 	batt_drv->vbatt_idx = -1;
@@ -1362,7 +1372,6 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		batt_drv->msc_irdrop_state = msc_state;
 		mutex_unlock(&batt_drv->stats_lock);
 
-
 		/* Basic multi step charging: switch to next tier when ibatt
 		 * is under next tier cc_max.
 		 */
@@ -1462,7 +1471,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 	if (!batt_drv->chg_profile.cccm_limits)
 		return -EINVAL;
 
-	__pm_stay_awake(&batt_drv->batt_ws);
+	__pm_stay_awake(&batt_drv->msc_ws);
 
 	pr_info("MSC_DIN chg_state=%lx f=0x%x chg_s=%s chg_t=%s vchg=%d icl=%d\n",
 		(unsigned long)chg_state->v,
@@ -1513,6 +1522,12 @@ static int msc_logic(struct batt_drv *batt_drv)
 				    true);
 		if (err < 0)
 			pr_err("Cannot set the BATT_CE_CTRL.\n");
+
+		/* released in battery_work() */
+		__pm_stay_awake(&batt_drv->poll_ws);
+		batt_drv->batt_fast_update_cnt = BATT_WORK_FAST_RETRY_CNT;
+		mod_delayed_work(system_wq, &batt_drv->batt_work,
+			BATT_WORK_FAST_RETRY_MS);
 
 		batt_drv->ssoc_state.buck_enabled = 1;
 		changed = true;
@@ -1619,7 +1634,7 @@ msc_logic_exit:
 			power_supply_changed(batt_drv->psy);
 	}
 
-	__pm_relax(&batt_drv->batt_ws);
+	__pm_relax(&batt_drv->msc_ws);
 	return err;
 }
 
@@ -2178,65 +2193,91 @@ static void google_battery_work(struct work_struct *work)
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int update_interval = batt_drv->batt_update_interval;
 	const int prev_ssoc = ssoc_get_capacity(ssoc_state);
+	bool notify_psy_changed = false;
 	int fg_status, ret;
 
 	pr_debug("battery work item\n");
 
 	__pm_stay_awake(&batt_drv->batt_ws);
 
-	mutex_lock(&batt_drv->chg_lock);
 	fg_status = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS, &ret);
 	if (ret < 0)
 		goto reschedule;
 
+	if (fg_status != batt_drv->fg_status)
+		notify_psy_changed = true;
+	batt_drv->fg_status = fg_status;
+
+	/* chg_lock protect msc_logic */
+	mutex_lock(&batt_drv->chg_lock);
+	/* batt_lock protect SSOC code etc. */
 	mutex_lock(&batt_drv->batt_lock);
+
 	ret = ssoc_work(ssoc_state, fg_psy);
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
 	} else {
 		int ssoc, level;
-		bool changed = false;
 
 		/* handle charge/recharge */
 		batt_rl_update_status(batt_drv);
 
 		ssoc = ssoc_get_capacity(ssoc_state);
 		if (prev_ssoc != ssoc)
-			changed = true;
+			notify_psy_changed = true;
 
 		level = gbatt_get_capacity_level(batt_drv, fg_status);
 		if (level != batt_drv->capacity_level) {
 			batt_drv->capacity_level = level;
-			changed = true;
+			notify_psy_changed = true;
 		}
 
 		if (batt_drv->dead_battery) {
 			batt_drv->dead_battery =
 					gbatt_check_dead_battery(batt_drv);
 			if (!batt_drv->dead_battery)
-				changed = true;
+				notify_psy_changed = true;
 		}
 
 		/* fuel gauge triggered recharge logic. */
 		batt_drv->batt_full = (ssoc == SSOC_FULL);
-
-		if (changed)
-			power_supply_changed(batt_drv->psy);
 	}
 
 	/* TODO: poll other data here if needed */
 
 	mutex_unlock(&batt_drv->batt_lock);
 
-reschedule:
-	mutex_unlock(&batt_drv->chg_lock);
+	/* wait for timeout or state equal to CHARGING, FULL or UNKNOWN
+	 * (which will likely not happen) even on ssoc error. msc_logic
+	 * hold poll_ws wakelock during this time.
+	 */
+	if (batt_drv->batt_fast_update_cnt) {
+
+		if (fg_status != POWER_SUPPLY_STATUS_DISCHARGING &&
+		    fg_status != POWER_SUPPLY_STATUS_NOT_CHARGING) {
+			batt_drv->batt_fast_update_cnt = 0;
+		} else {
+			update_interval = BATT_WORK_FAST_RETRY_MS;
+			batt_drv->batt_fast_update_cnt -= 1;
+		}
+	}
+
+	/* acquired in msc_logic */
+	if (batt_drv->batt_fast_update_cnt == 0)
+		__pm_relax(&batt_drv->poll_ws);
 
 	if (batt_drv->res_state.estimate_requested)
 		batt_res_work(batt_drv);
 
+	mutex_unlock(&batt_drv->chg_lock);
 
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
 	dump_ssoc_state(ssoc_state, batt_drv->log);
+
+	if (notify_psy_changed)
+		power_supply_changed(batt_drv->psy);
+
+reschedule:
 
 	if (update_interval) {
 		pr_debug("rerun battery work in %d ms\n", update_interval);
@@ -2697,6 +2738,8 @@ static void google_battery_init_work(struct work_struct *work)
 
 	wakeup_source_init(&batt_drv->batt_ws, gbatt_psy_desc.name);
 	wakeup_source_init(&batt_drv->taper_ws, "Taper");
+	wakeup_source_init(&batt_drv->poll_ws, "Poll");
+	wakeup_source_init(&batt_drv->msc_ws, "MSC");
 
 	mutex_lock(&batt_drv->cc_data.lock);
 	ret = batt_cycle_count_load(&batt_drv->cc_data, batt_drv->ccbin_psy);
@@ -2867,8 +2910,10 @@ static int google_battery_remove(struct platform_device *pdev)
 
 		gbms_free_chg_profile(&batt_drv->chg_profile);
 
+		wakeup_source_trash(&batt_drv->msc_ws);
 		wakeup_source_trash(&batt_drv->batt_ws);
 		wakeup_source_trash(&batt_drv->taper_ws);
+		wakeup_source_trash(&batt_drv->poll_ws);
 
 		if (batt_drv->log)
 			debugfs_logbuffer_unregister(batt_drv->log);
