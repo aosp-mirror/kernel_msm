@@ -523,6 +523,13 @@ static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 
 	remaining = fw_size;
 
+	mnh_sm_dev->image_loaded = FW_IMAGE_NONE;
+
+	/*
+	 * 1. Prepare for buffer A
+	 * 2. Wait for buffer B to complete
+	 * 3. Start transferring buffer A; repeat
+	 */
 	while (remaining > 0) {
 		buf = mnh_sm_dev->firmware_buf[buf_index];
 		buf_size = mnh_sm_dev->firmware_buf_size[buf_index];
@@ -531,7 +538,7 @@ static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 
 		memcpy(buf, fw_data + sent, size);
 
-		if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
+		if (mnh_sm_dev->image_loaded != FW_IMAGE_NONE) {
 			err = mnh_firmware_waitdownloaded();
 			mnh_unmap_mem(dma_blk.src_addr, size, DMA_TO_DEVICE);
 			if (err)
@@ -561,7 +568,7 @@ static int mnh_transfer_firmware(size_t fw_size, const uint8_t *fw_data,
 			 sent, remaining);
 	}
 
-	if (mnh_sm_dev->image_loaded == FW_IMAGE_DOWNLOADING) {
+	if (mnh_sm_dev->image_loaded != FW_IMAGE_NONE) {
 		err = mnh_firmware_waitdownloaded();
 		mnh_unmap_mem(dma_blk.src_addr, size, DMA_TO_DEVICE);
 	}
