@@ -4737,6 +4737,7 @@ static int port_overheat_probe_cc_status_locked(struct smb_charger *chg,
 {
 	int rc = 0;
 	u8 stat;
+	bool debounce_done = false;
 
 	rc = smblib_set_prop_typec_power_role_locked(
 					chg, POWER_SUPPLY_TYPEC_PR_SINK);
@@ -4752,15 +4753,25 @@ static int port_overheat_probe_cc_status_locked(struct smb_charger *chg,
 		smblib_err(chg, "Couldn't read Type-C status 4 rc=%d\n", rc);
 		return rc;
 	}
+	smblib_err(chg, "Type-C status 4 :%x\n", stat);
 
+	if ((stat & TYPEC_VBUS_STATUS_BIT) &&
+	   !(stat & TYPEC_DEBOUNCE_DONE_STATUS_BIT))
+		goto done;
+
+	debounce_done = true;
 	*attached = stat & CC_ATTACHED_BIT ? true : false;
 
+done:
 	rc = smblib_set_prop_typec_power_role_locked(
 					chg, POWER_SUPPLY_TYPEC_PR_NONE);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't disable type-c block rc=%d\n", rc);
 		return rc;
 	}
+
+	if (!debounce_done)
+		return -EAGAIN;
 
 	return 0;
 }
