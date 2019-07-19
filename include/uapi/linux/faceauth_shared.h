@@ -165,6 +165,7 @@ typedef enum _faceauth_input_commands {
 	COMMAND_MIGRATE,
 	// EL2 should filter this command so it can't be sent from userspace
 	COMMAND_EXIT_DIRTY,
+	COMMAND_VERIFY_HAT,
 
 	COMMAND_COUNT,
 	/* used to extend enum size to 4 bytes */

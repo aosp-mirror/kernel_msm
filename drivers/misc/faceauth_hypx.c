@@ -897,7 +897,8 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 	     data->operation == COMMAND_VALIDATE ||
 	     data->operation == COMMAND_SET_FEATURE ||
 	     data->operation == COMMAND_CLR_FEATURE ||
-	     data->operation == COMMAND_RESET_LOCKOUT)) {
+	     data->operation == COMMAND_RESET_LOCKOUT ||
+	     data->operation == COMMAND_VERIFY_HAT)) {
 		hypx_create_blob_userbuf(dev, &citadel_token,
 					 data->citadel_token,
 					 data->citadel_token_size);
