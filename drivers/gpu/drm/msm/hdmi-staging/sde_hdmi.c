@@ -1934,6 +1934,7 @@ struct drm_msm_ext_panel_hdr_metadata *hdr_meta)
 	u32 const version = 0x01;
 	u32 const length = 0x1a;
 	u32 const descriptor_id = 0x00;
+	u8 checksum;
 	struct hdmi *hdmi;
 	struct drm_connector *connector;
 
@@ -1950,11 +1951,33 @@ struct drm_msm_ext_panel_hdr_metadata *hdr_meta)
 		return;
 	}
 
+	/* Setup the line number to send the packet on */
+	packet_control = hdmi_read(hdmi, HDMI_GEN_PKT_CTRL);
+	packet_control |= BIT(16);
+	hdmi_write(hdmi, HDMI_GEN_PKT_CTRL, packet_control);
+
+	/* Setup the packet to be sent every frame */
+	packet_control = hdmi_read(hdmi, HDMI_GEN_PKT_CTRL);
+	packet_control |= BIT(1);
+	hdmi_write(hdmi, HDMI_GEN_PKT_CTRL, packet_control);
+
 	/* Setup Packet header and payload */
 	packet_header = type_code | (version << 8) | (length << 16);
 	hdmi_write(hdmi, HDMI_GENERIC0_HDR, packet_header);
 
-	packet_payload = (hdr_meta->eotf << 8);
+	/**
+	 * Checksum is not a mandatory field for
+	 * the HDR infoframe as per CEA-861-3 specification.
+	 * However some HDMI sinks still expect a
+	 * valid checksum to be included as part of
+	 * the infoframe. Hence compute and add
+	 * the checksum to improve sink interoperability
+	 * for our HDR solution on HDMI.
+	 */
+	checksum = sde_hdmi_hdr_set_chksum(hdr_meta);
+
+	packet_payload = (hdr_meta->eotf << 8) | checksum;
+
 	if (connector->hdr_metadata_type_one) {
 		packet_payload |= (descriptor_id << 16)
 			| (HDMI_GET_LSB(hdr_meta->display_primaries_x[0])
@@ -2008,14 +2031,20 @@ struct drm_msm_ext_panel_hdr_metadata *hdr_meta)
 	hdmi_write(hdmi, HDMI_GENERIC0_6, packet_payload);
 
 enable_packet_control:
-	/*
-	 * GENERIC0_LINE | GENERIC0_CONT | GENERIC0_SEND
-	 * Setup HDMI TX generic packet control
-	 * Enable this packet to transmit every frame
-	 * Enable HDMI TX engine to transmit Generic packet 1
-	 */
+
+	/* Flush the contents to the register */
 	packet_control = hdmi_read(hdmi, HDMI_GEN_PKT_CTRL);
-	packet_control |= BIT(0) | BIT(1) | BIT(2) | BIT(16);
+	packet_control |= BIT(2);
+	hdmi_write(hdmi, HDMI_GEN_PKT_CTRL, packet_control);
+
+	/* Clear the flush bit of the register */
+	packet_control = hdmi_read(hdmi, HDMI_GEN_PKT_CTRL);
+	packet_control &= ~BIT(2);
+	hdmi_write(hdmi, HDMI_GEN_PKT_CTRL, packet_control);
+
+	/* Start sending the packets*/
+	packet_control = hdmi_read(hdmi, HDMI_GEN_PKT_CTRL);
+	packet_control |= BIT(0);
 	hdmi_write(hdmi, HDMI_GEN_PKT_CTRL, packet_control);
 }
 
