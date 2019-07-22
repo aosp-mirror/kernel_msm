@@ -732,15 +732,16 @@ qdf_nbuf_alloc_debug(qdf_device_t osdev, qdf_size_t size, int reserve,
 static inline void qdf_nbuf_free_debug(qdf_nbuf_t net_buf,
 				       uint8_t *file_name, uint32_t line_num)
 {
+	if (qdf_unlikely(!net_buf))
+		return;
+
 	if (qdf_nbuf_is_tso(net_buf) &&
 			qdf_nbuf_get_users(net_buf) > 1)
 		goto free_buf;
 
 	/* Remove SKB from internal QDF tracking table */
-	if (qdf_likely(net_buf)) {
-		qdf_netbuf_free_debug_add(net_buf, file_name, line_num);
-		qdf_net_buf_debug_delete_node(net_buf);
-	}
+	qdf_netbuf_free_debug_add(net_buf, file_name, line_num);
+	qdf_net_buf_debug_delete_node(net_buf);
 
 free_buf:
 	__qdf_nbuf_free(net_buf);
@@ -827,7 +828,8 @@ qdf_nbuf_alloc(qdf_device_t osdev,
 
 static inline void qdf_nbuf_free(qdf_nbuf_t buf)
 {
-	__qdf_nbuf_free(buf);
+	if (qdf_likely(buf))
+		__qdf_nbuf_free(buf);
 }
 
 /**
