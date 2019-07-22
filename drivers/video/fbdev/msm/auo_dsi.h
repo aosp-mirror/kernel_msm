@@ -25,7 +25,7 @@
 #include <linux/iopoll.h>
 #include <linux/kthread.h>
 
-#define IDLE_WAITING_MS 50
+#define IDLE_WAITING_MS 250
 
 enum {
 	ESD_NA = 0,
