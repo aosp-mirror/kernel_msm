@@ -5339,6 +5339,22 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ENABLE_UINT_TEST_FRAMEWORK_DEFAULT,
 		     CFG_ENABLE_UNIT_TEST_FRAMEWORK_MIN,
 		     CFG_ENABLE_UNIT_TEST_FRAMEWORK_MAX),
+
+	REG_VARIABLE(CFG_ROAM_PREAUTH_RETRY_COUNT_NAME,
+		     WLAN_PARAM_Integer,
+		     struct hdd_config, roam_preauth_retry_count,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_ROAM_PREAUTH_RETRY_COUNT_DEFAULT,
+		     CFG_ROAM_PREAUTH_RETRY_COUNT_MIN,
+		     CFG_ROAM_PREAUTH_RETRY_COUNT_MAX),
+
+	REG_VARIABLE(CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_NAME,
+		     WLAN_PARAM_Integer,
+		     struct hdd_config, roam_preauth_no_ack_timeout,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_DEFAULT,
+		     CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_MIN,
+		     CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_MAX),
 };
 
 /**
@@ -7155,6 +7171,12 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] value = [0x%x]",
 		  CFG_ENABLE_UNIT_TEST_FRAMEWORK_NAME,
 		  pHddCtx->config->is_unit_test_framework_enabled);
+	hdd_debug("Name = [%s] Value = [%u]",
+		  CFG_ROAM_PREAUTH_RETRY_COUNT_NAME,
+		  pHddCtx->config->roam_preauth_retry_count);
+	hdd_debug("Name = [%s] Value = [%u]",
+		  CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_NAME,
+		  pHddCtx->config->roam_preauth_no_ack_timeout);
 }
 
 /**
@@ -9643,6 +9665,10 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 		pHddCtx->config->roam_bad_rssi_thresh_offset_2g;
 	smeConfig->csrConfig.ho_delay_for_rx =
 		pHddCtx->config->ho_delay_for_rx;
+	smeConfig->csrConfig.roam_preauth_no_ack_timeout =
+		pHddCtx->config->roam_preauth_no_ack_timeout;
+	smeConfig->csrConfig.roam_preauth_retry_count =
+		pHddCtx->config->roam_preauth_retry_count;
 	smeConfig->csrConfig.min_delay_btw_roam_scans =
 		pHddCtx->config->min_delay_btw_roam_scans;
 	smeConfig->csrConfig.roam_trigger_reason_bitmask =

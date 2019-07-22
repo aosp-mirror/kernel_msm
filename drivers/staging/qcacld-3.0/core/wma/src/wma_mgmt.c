@@ -103,6 +103,12 @@ static void wma_send_bcn_buf_ll(tp_wma_handle wma,
 		WMA_LOGE("%s: Invalid beacon buffer", __func__);
 		return;
 	}
+
+	if (!param_buf->tim_info || !param_buf->p2p_noa_info) {
+		WMA_LOGE("%s: Invalid tim info or p2p noa info", __func__);
+		return;
+	}
+
 	if (WMI_UNIFIED_NOA_ATTR_NUM_DESC_GET(p2p_noa_info) >
 			WMI_P2P_MAX_NOA_DESCRIPTORS) {
 		WMA_LOGE("%s: Too many descriptors %d", __func__,
@@ -2895,11 +2901,11 @@ void wma_process_update_opmode(tp_wma_handle wma_handle,
 			update_vht_opmode->dot11_mode);
 
 	wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-			WMI_PEER_PHYMODE, chan_mode,
+			WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
 			update_vht_opmode->smesessionId);
 
 	wma_set_peer_param(wma_handle, update_vht_opmode->peer_mac,
-			WMI_PEER_CHWIDTH, update_vht_opmode->opMode,
+			WMI_PEER_PHYMODE, chan_mode,
 			update_vht_opmode->smesessionId);
 }
 
