@@ -197,7 +197,7 @@ struct chg_drv {
 	int cc_max;
 	int chg_cc_tolerance;
 	int chg_mode;			/* debug */
-	bool stop_charging;		/* no power source */
+	int stop_charging;		/* no power source */
 	int egain_retries;
 
 	/* retail */
@@ -302,9 +302,6 @@ static int cgh_update_capability(struct power_supply *tcpm_psy, bool full)
 /* called on google_charger_init_work() and on every disconnect */
 static inline void chg_init_state(struct chg_drv *chg_drv)
 {
-	/* no power supply */
-	chg_drv->stop_charging = true;
-
 	/* reset retail state */
 	chg_drv->disable_charging = -1;
 	chg_drv->disable_pwrsrc = -1;
@@ -1222,18 +1219,18 @@ static void chg_work(struct work_struct *work)
 		goto rerun_error;
 	} else if (!usb_online && !wlc_online) {
 
-		if (!chg_drv->stop_charging) {
+		if (chg_drv->stop_charging != 1) {
 			pr_info("MSC_CHG no power source, disabling charging\n");
 
 			vote(chg_drv->msc_chg_disable_votable,
 			     MSC_CHG_VOTER, true, 0);
-			chg_drv->stop_charging = true;
 
 			chg_reset_state(chg_drv);
+			chg_drv->stop_charging = 1;
 		}
 
 		goto exit_chg_work;
-	} else if (chg_drv->stop_charging) {
+	} else if (chg_drv->stop_charging != 0) {
 		/* will re-enable charging after setting FCC,CC_MAX */
 
 		if (chg_drv->therm_wlc_override_fcc)
@@ -1309,13 +1306,13 @@ update_charger:
 			MSC_CHG_VOTER, true,
 			update_interval);
 
-		if (chg_drv->stop_charging) {
+		if (chg_drv->stop_charging != 0) {
 			pr_info("MSC_CHG power source usb=%d wlc=%d, enabling charging\n",
 				usb_online, wlc_online);
 
 			vote(chg_drv->msc_chg_disable_votable,
 			     MSC_CHG_VOTER, false, 0);
-			chg_drv->stop_charging = false;
+			chg_drv->stop_charging = 0;
 		}
 	} else {
 		int res;
@@ -2613,6 +2610,7 @@ static void google_charger_init_work(struct work_struct *work)
 		pr_info("dead battery mode\n");
 
 	chg_init_state(chg_drv);
+	chg_drv->stop_charging = -1;
 	chg_drv->charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
 	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
 
