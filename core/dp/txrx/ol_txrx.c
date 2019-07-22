@@ -3428,10 +3428,7 @@ void peer_unmap_timer_handler(void *data)
 		 peer->mac_addr.raw[4], peer->mac_addr.raw[5]);
 	if (!cds_is_driver_recovering() && !cds_is_fw_down()) {
 		wma_peer_debug_dump();
-		if (cds_is_self_recovery_enabled())
-			cds_trigger_recovery(CDS_PEER_UNMAP_TIMEDOUT);
-		else
-			QDF_BUG(0);
+		cds_trigger_recovery(CDS_PEER_UNMAP_TIMEDOUT);
 	} else {
 		WMA_LOGE("%s: Recovery is in progress, ignore!", __func__);
 	}

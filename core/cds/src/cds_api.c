@@ -818,6 +818,9 @@ QDF_STATUS cds_disable(v_CONTEXT_t cds_context)
 	QDF_STATUS qdf_status;
 	void *handle;
 
+	if (gp_cds_sched_context)
+		cds_sched_flush_mc_mqs(gp_cds_sched_context);
+
 	qdf_status = wma_stop(cds_context, HAL_STOP_TYPE_RF_KILL);
 
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
@@ -894,6 +897,10 @@ QDF_STATUS cds_post_disable(void)
 		cds_err("Failed to get txrx pdev!");
 		return QDF_STATUS_E_INVAL;
 	}
+
+	/* Clean up all MC thread message queues */
+	if (gp_cds_sched_context)
+		cds_sched_flush_mc_mqs(gp_cds_sched_context);
 
 	/*
 	 * With new state machine changes cds_close can be invoked without
@@ -1848,8 +1855,24 @@ static void cds_trigger_recovery_work(void *param)
 	struct qdf_runtime_lock recovery_lock;
 	qdf_device_t qdf_ctx;
 
-	if (cds_is_driver_recovering() || cds_is_driver_in_bad_state()) {
+	if (cds_is_driver_recovering()) {
 		cds_err("Recovery in progress; ignoring recovery trigger");
+		return;
+	}
+
+	if (cds_is_driver_in_bad_state()) {
+		cds_err("Driver is in bad state; ignoring recovery trigger");
+		return;
+	}
+
+	if (cds_is_fw_down()) {
+		cds_err("firmware is down; ignoring recovery trigger");
+		return;
+	}
+
+	if (!cds_is_self_recovery_enabled()) {
+		cds_err("Recovery is not enabled");
+		QDF_BUG(0);
 		return;
 	}
 
