@@ -256,10 +256,45 @@ static int max77826_ldo_is_enabled(struct regulator_dev *rdev)
 	return (val & mask) == pattern;
 }
 
+static int max77826_bb_enable_force_pwm(struct max77826_dev *max77826)
+{
+	int ret = 0;
+
+	/* Forced PWM on Buck-Boost */
+	ret = max77826_write_reg(max77826->i2c, MAX77826_REG_BB_CFG, 0x3A);
+	if (ret)
+		pr_err("%s: reg=0x%x, error=%d\n",
+			__func__, MAX77826_REG_BB_CFG, ret);
+
+	return ret;
+}
+
+static int max77826_bb_enable_skip_mode(struct max77826_dev *max77826)
+{
+	int ret = 0;
+
+	/* Reset to high skip mode on Buck-Boost */
+	ret = max77826_write_reg(max77826->i2c, MAX77826_REG_BB_CFG, 0x3C);
+	if (ret)
+		pr_err("%s: reg=0x%x, error=%d\n",
+			__func__, MAX77826_REG_BB_CFG, ret);
+
+	return ret;
+}
+
 static int max77826_ldo_enable(struct regulator_dev *rdev)
 {
 	struct max77826_dev *max77826 = rdev_get_drvdata(rdev);
 	int ret = 0, reg = 0, mask = 0, pattern = 0;
+	unsigned int rid;
+
+	rid = rdev_get_id(rdev);
+	if (rid == MAX77826_LDO1 || rid == MAX77826_LDO11) {
+		/* LDO1 or LDO11 enable means camera is power up.
+		 * Enbale PWM mode
+		 */
+		max77826_bb_enable_force_pwm(max77826);
+	}
 
 	ret = max77826_get_op_register(rdev, &reg, &mask, &pattern);
 	if (ret) {
@@ -277,6 +312,16 @@ static int max77826_ldo_disable(struct regulator_dev *rdev)
 {
 	struct max77826_dev *max77826 = rdev_get_drvdata(rdev);
 	int ret = 0, reg = 0, mask = 0, pattern = 0;
+	unsigned int rid;
+
+	rid = rdev_get_id(rdev);
+	if (rid == MAX77826_LDO1 || rid == MAX77826_LDO11) {
+		/* LDO1 or LDO11 disable means camera is power off.
+		 * But vd6281 might still power up, set to high skip
+		 * mode to avoid power consumption
+		 */
+		max77826_bb_enable_skip_mode(max77826);
+	}
 
 	ret = max77826_get_op_register(rdev, &reg, &mask, &pattern);
 	if (ret) {
@@ -411,19 +456,6 @@ static int max77826_ldo_set_voltage(struct regulator_dev *rdev,
 	return ret;
 }
 
-static int max77826_bb_force_pwm(struct max77826_dev *max77826)
-{
-	int ret = 0;
-
-	/* Forced PWM on Buck-Boost */
-	ret = max77826_write_reg(max77826->i2c, MAX77826_REG_BB_CFG, 0x3A);
-	if (ret)
-		pr_err("%s: reg=0x%x, error=%d\n",
-			__func__, MAX77826_REG_BB_CFG, ret);
-
-	return ret;
-}
-
 static struct regulator_ops max77826_ldo_ops = {
 	.is_enabled = max77826_ldo_is_enabled,
 	.enable = max77826_ldo_enable,
@@ -504,7 +536,6 @@ static int max77826_setup_regulators(struct max77826_dev *max77826,
 			goto error;
 		}
 	}
-	max77826_bb_force_pwm(max77826);
 	return 0;
 
 error:
