@@ -816,6 +816,14 @@ static int mnh_pwr_get_resources(void)
 	return 0;
 }
 
+bool mnh_pwr_is_vbat_okay(void)
+{
+	return bcm15602_is_vbat_above_threshold(
+			regulator_get_drvdata(mnh_pwr->asr_supply),
+			MNH_PWR_VBAT_SAFE_THRESHOLD_UV);
+}
+EXPORT_SYMBOL(mnh_pwr_is_vbat_okay);
+
 int mnh_pwr_set_state(enum mnh_pwr_state system_state)
 {
 	int ret = 0;

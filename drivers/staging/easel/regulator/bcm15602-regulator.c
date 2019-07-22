@@ -536,6 +536,25 @@ read_hk_cleanup:
 }
 EXPORT_SYMBOL_GPL(bcm15602_read_hk_slot);
 
+bool bcm15602_is_vbat_above_threshold(struct bcm15602_chip *ddata,
+				      int threshold_us)
+{
+	u16 chan_data = 0;
+	int vbat_uv;
+	int ret;
+
+	ret = bcm15602_read_adc_chan(ddata, BCM15602_ADC_VBAT, &chan_data);
+	vbat_uv = chan_data * BCM15602_ADC_SCALE_VBAT;
+	dev_dbg(ddata->dev, "VBAT = %d uv, ret = %d\n", vbat_uv, ret);
+
+	/* if ADC goes wrong, PMIC is probably in a bad or standby state */
+	if (ret)
+		return false;
+
+	return vbat_uv > threshold_us;
+}
+EXPORT_SYMBOL_GPL(bcm15602_is_vbat_above_threshold);
+
 /* reset the watchdog timer */
 static void bcm15602_clear_wdt(struct bcm15602_chip *ddata)
 {

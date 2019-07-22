@@ -22,6 +22,9 @@
 #include <linux/device.h>
 #include <linux/gpio.h>
 #include <linux/platform_device.h>
+#include <linux/bcm15602-consumer.h>
+
+#define MNH_PWR_VBAT_SAFE_THRESHOLD_UV 3600000
 
 enum mnh_pwr_state {
 	MNH_PWR_S0 = 0, /* active mode */
@@ -33,5 +36,7 @@ enum mnh_pwr_state {
 int mnh_pwr_set_state(enum mnh_pwr_state system_state);
 enum mnh_pwr_state mnh_pwr_get_state(void);
 int mnh_pwr_init(struct platform_device *pdev, struct device *dev);
+
+bool mnh_pwr_is_vbat_okay(void);
 
 #endif /* __MNH_PWR_H__ */
