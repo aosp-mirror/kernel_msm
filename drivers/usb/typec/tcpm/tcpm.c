@@ -5397,7 +5397,6 @@ int tcpm_update_sink_capabilities(struct tcpm_port *port, const u32 *pdo,
 	mutex_lock(&port->lock);
 	port->nr_snk_pdo = tcpm_copy_pdos(port->snk_pdo, pdo, nr_pdo);
 	port->operating_snk_mw = operating_snk_mw;
-	port->update_sink_caps = true;
 
 	switch (port->state) {
 	case SNK_NEGOTIATE_CAPABILITIES:
@@ -5407,8 +5406,12 @@ int tcpm_update_sink_capabilities(struct tcpm_port *port, const u32 *pdo,
 	case SNK_TRANSITION_SINK_VBUS:
 		if (port->pps_data.active)
 			port->upcoming_state = SNK_NEGOTIATE_PPS_CAPABILITIES;
-		else
+		else if (port->pd_capable)
 			port->upcoming_state = SNK_NEGOTIATE_CAPABILITIES;
+		else
+			break;
+
+		port->update_sink_caps = true;
 
 		ret = tcpm_ams_start(port, POWER_NEGOTIATION);
 		if (ret == -EAGAIN) {
