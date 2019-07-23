@@ -305,7 +305,7 @@ static void *ab_dram_dma_buf_kmap(struct dma_buf *dmabuf, unsigned long offset)
 static int ab_dram_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 {
 	/* TODO: Implement if needed */
-	pr_err("mmap not implemented.\n");
+	pr_err_ratelimited("mmap not implemented.\n");
 	return -ENOTTY;
 }
 
