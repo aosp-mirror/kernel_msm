@@ -1267,7 +1267,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		return -EINVAL;
 	}
 
-	dev_info(sc->dev, "AB state changing to %d\n", to_chip_substate_id);
 	/* Mark as new state early in case rollback is needed */
 	sc->curr_chip_substate_id = to_chip_substate_id;
 	ab_sm_start_ts(AB_SM_TS_FULL);
@@ -1492,7 +1491,6 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 	mutex_unlock(&sc->async_fifo_lock);
 
-	dev_info(sc->dev, "AB state changed to %d\n", to_chip_substate_id);
 	ab_sm_print_ts(sc);
 
 	dev_dbg(sc->dev, "IPU clk -> %s %lluHz",
