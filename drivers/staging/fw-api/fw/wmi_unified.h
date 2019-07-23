@@ -1147,6 +1147,7 @@ typedef enum {
     WMI_NDP_INITIATOR_REQ_CMDID,
     WMI_NDP_RESPONDER_REQ_CMDID,
     WMI_NDP_END_REQ_CMDID,
+    WMI_NDP_CMDID,
 
     /** WMI commands related to HW data filtering **/
     WMI_HW_DATA_FILTER_CMDID = WMI_CMD_GRP_START_ID(WMI_GRP_HW_DATA_FILTER),
@@ -1734,6 +1735,7 @@ typedef enum {
     WMI_NDP_END_INDICATION_EVENTID,
     WMI_WLAN_COEX_BT_ACTIVITY_EVENTID,
     WMI_NDL_SCHEDULE_UPDATE_EVENTID,
+    WMI_NDP_EVENTID,
 
     /** WMI events related to motion detection */
     WMI_MOTION_DET_HOST_EVENTID = WMI_EVT_GRP_START_ID(WMI_GRP_MOTION_DET),
@@ -2854,6 +2856,20 @@ typedef struct {
     #define WMI_RSRC_CFG_FLAG_TX_ACK_RSSI_S 18
     #define WMI_RSRC_CFG_FLAG_TX_ACK_RSSI_M 0x40000
 
+    /*
+     * If HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN is set, the host will not
+     * include the HTC header length in the payload length for all HTT_H2T
+     * messages.
+     * Otherwise, only when sending HTT_H2T_MSG_TYPE_TX_FRM message,
+     * payload length includes HTC header length. Other HTT_H2T messages'
+     * payload length does not include HTC header length.
+     * The host will only set this HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN flag
+     * if the target has set the WMI_SERVICE_HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN
+     * flag to indicate its support for this option.
+     */
+    #define WMI_RSRC_CFG_FLAG_HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN_S 19
+    #define WMI_RSRC_CFG_FLAG_HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN_M 0x80000
+
     A_UINT32 flag1;
 
     /** @brief smart_ant_cap - Smart Antenna capabilities information
@@ -3087,6 +3103,10 @@ typedef struct {
 #define WMI_RSRC_CFG_FLAG_TX_ACK_RSSI_GET(word32) \
     WMI_RSRC_CFG_FLAG_GET((word32), TX_ACK_RSSI)
 
+#define WMI_RSRC_CFG_FLAG_HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN_SET(word32, value) \
+    WMI_RSRC_CFG_FLAG_SET((word32), HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN, (value))
+#define WMI_RSRC_CFG_FLAG_HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN_GET(word32) \
+    WMI_RSRC_CFG_FLAG_GET((word32), HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN)
 
 typedef struct {
     A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_init_cmd_fixed_param */
@@ -4566,6 +4586,14 @@ typedef struct {
     A_UINT32 rx_nss_5g;
     /* number of chains to use for 11a transmissions. Valid only in 5 GHz */
     A_UINT32 num_tx_chains_a;
+    /* If non-zero then use only one chain for TX when connection tx_nss is 1 in 2.4 GHz */
+    A_UINT32 disable_tx_mrc_2g;
+    /* If non-zero then use only one chain for RX when connection rx_nss is 1 in 2.4 GHz */
+    A_UINT32 disable_rx_mrc_2g;
+    /* If non-zero then use only one chain for TX when connection tx_nss is 1 in 5 GHz */
+    A_UINT32 disable_tx_mrc_5g;
+    /* If non-zero then use only one chain for RX when connection rx_nss is 1 in 5 GHz */
+    A_UINT32 disable_rx_mrc_5g;
 } wmi_vdev_chainmask_config_cmd_fixed_param;
 
 /*
@@ -12686,6 +12714,12 @@ typedef struct {
     A_UINT32 interval_low; /* interval for keeping low voltage, unit: ms */
     A_UINT32 interval_high; /* interval for keeping high voltage, unit: ms */
     A_UINT32 repeat_cnt; /* repeat times for pulse (0xffffffff means forever) */
+    A_UINT32 init_state; /* Sense of the GPIO pin used for host wakeups.
+                          * If init_state is 0, a low --> high transition
+                          * causes a host wakeup interrupt.
+                          * If init_state is 1, a high --> low transition
+                          * causes a host wakeup interrrupt.
+                          */
 } WMI_WOW_HOSTWAKEUP_GPIO_PIN_PATTERN_CONFIG_CMD_fixed_param;
 
 #define MAX_SUPPORTED_ACTION_CATEGORY           256
@@ -16284,7 +16318,9 @@ typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_nan_host_config_param */
     A_UINT32 nan_2g_disc_disable:1; /** This bit when set to 1 indicate NAN 2G discovery should be disabled */
     A_UINT32 nan_5g_disc_disable:1; /** This bit when set to 1 indicate NAN 5G discovery should be disabled */
-} wmi_nan_host_config_param;
+    A_UINT32 reserved:30;
+} wmi_nan_host_config_param_PROTOTYPE;
+#define wmi_nan_host_config_param wmi_nan_host_config_param_PROTOTYPE
 
 typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_nan_event_hdr */
@@ -16295,6 +16331,15 @@ typedef struct {
 *     A_UINT8 data[]; <-- length in byte given by field data_len.
 */
 } wmi_nan_event_hdr;
+
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_nan_event_info */
+    A_UINT32 mac_id; /* MAC ID associated with NAN primary discovery channel; Valid only for NAN enable resp message identified by NAN_MSG_ID_ENABLE_RSP */
+    A_UINT32 status:1; /** This bit when set to 0 indicates status is successful; Valid only for NAN enable resp message identified by NAN_MSG_ID_ENABLE_RSP */
+    A_UINT32 reserved:31;
+} wmi_nan_event_info_PROTOTYPE;
+
+#define wmi_nan_event_info wmi_nan_event_info_PROTOTYPE
 
 /**
  * Event to indicate NAN discovery interface created
@@ -16407,6 +16452,22 @@ typedef struct {
 } wmi_ndp_transport_ip_param;
 
 #define wmi_ndp_channel_cfg wmi_ndp_channel_cfg_PROTOTYPE
+
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_ndp_channel_info */
+    A_UINT32 mac_id; /* mac_id associated with ndp channel at same index */
+} wmi_ndp_channel_info_PROTOTYPE;
+
+#define wmi_ndp_channel_info wmi_ndp_channel_info_PROTOTYPE
+
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_ndp_event_param */
+    A_UINT32 vdev_id; /* NDI VDEV ID */
+    A_UINT32 ndp_termination_in_progress:1; /** This bit when set to 1 indicates to termination of all NDPs associated with NDI vdev ID is started */
+    A_UINT32 reserved:31;
+} wmi_ndp_event_param_PROTOTYPE;
+
+#define wmi_ndp_event_param wmi_ndp_event_param_PROTOTYPE
 
 /**
  * NDP Initiator requesting a data session
@@ -16529,6 +16590,15 @@ typedef struct {
 
 #define wmi_ndp_end_req wmi_ndp_end_req_PROTOTYPE
 
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_ndp_cmd_param */
+    A_UINT32 vdev_id; /* NDI VDEV ID */
+    A_UINT32 ndp_disable:1; /** This bit when set to 1 indicates to terminate all NDPs associated with NDI vdev ID */
+    A_UINT32 reserved:31;
+} wmi_ndp_cmd_param_PROTOTYPE;
+
+#define wmi_ndp_cmd_param wmi_ndp_cmd_param_PROTOTYPE
+
 /**
  * NDP End request
  */
@@ -16625,6 +16695,7 @@ typedef struct {
 } wmi_ndp_responder_rsp_event_fixed_param_PROTOTYPE;
 
 #define wmi_ndp_responder_rsp_event_fixed_param wmi_ndp_responder_rsp_event_fixed_param_PROTOTYPE
+
 /**
  * Active ndp instance id
  */
@@ -22472,6 +22543,7 @@ static INLINE A_UINT8 *wmi_id_to_name(A_UINT32 wmi_command)
         WMI_RETURN_STRING(WMI_HPCS_PULSE_START_CMDID);
         WMI_RETURN_STRING(WMI_VDEV_CHAINMASK_CONFIG_CMDID);
         WMI_RETURN_STRING(WMI_VDEV_BCN_OFFLOAD_QUIET_CONFIG_CMDID);
+        WMI_RETURN_STRING(WMI_NDP_CMDID);
     }
 
     return "Invalid WMI cmd";

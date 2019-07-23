@@ -2734,6 +2734,10 @@ QDF_STATUS csr_change_default_config_param(tpAniSirGlobal pMac,
 			pParam->nSelect5GHzMargin;
 		pMac->roam.configParam.ho_delay_for_rx =
 			pParam->ho_delay_for_rx;
+		pMac->roam.configParam.roam_preauth_retry_count =
+			pParam->roam_preauth_retry_count;
+		pMac->roam.configParam.roam_preauth_no_ack_timeout =
+			pParam->roam_preauth_no_ack_timeout;
 		pMac->roam.configParam.min_delay_btw_roam_scans =
 			pParam->min_delay_btw_roam_scans;
 		pMac->roam.configParam.roam_trigger_reason_bitmask =
@@ -3069,6 +3073,9 @@ QDF_STATUS csr_get_config_param(tpAniSirGlobal pMac, tCsrConfigParam *pParam)
 	pParam->max_amsdu_num = cfg_params->max_amsdu_num;
 	pParam->nSelect5GHzMargin = cfg_params->nSelect5GHzMargin;
 	pParam->ho_delay_for_rx = cfg_params->ho_delay_for_rx;
+	pParam->roam_preauth_no_ack_timeout =
+		cfg_params->roam_preauth_no_ack_timeout;
+	pParam->roam_preauth_retry_count = cfg_params->roam_preauth_retry_count;
 	pParam->min_delay_btw_roam_scans = cfg_params->min_delay_btw_roam_scans;
 	pParam->roam_trigger_reason_bitmask =
 			cfg_params->roam_trigger_reason_bitmask;
@@ -14191,6 +14198,7 @@ static void csr_roam_update_connected_profile_from_new_bss(tpAniSirGlobal pMac,
 	}
 }
 
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
 void csr_get_pmk_info(tpAniSirGlobal mac_ctx, uint8_t session_id,
 			  tPmkidCacheInfo *pmk_cache)
 {
@@ -14209,7 +14217,7 @@ void csr_get_pmk_info(tpAniSirGlobal mac_ctx, uint8_t session_id,
 					sizeof(session->psk_pmk));
 	pmk_cache->pmk_len = session->pmk_len;
 }
-#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+
 QDF_STATUS csr_roam_set_psk_pmk(tpAniSirGlobal pMac, uint32_t sessionId,
 				uint8_t *pPSK_PMK, size_t pmk_len)
 {
@@ -18160,6 +18168,40 @@ QDF_STATUS csr_roam_set_key_mgmt_offload(tpAniSirGlobal mac_ctx,
 }
 
 /**
+ * csr_update_roam_scan_ese_params() - Update ESE related params in RSO request
+ * @req_buf: Roam Scan Offload Request buffer
+ * @session: Current Roam Session
+ *
+ * This API will set the KRK and BTK required in case of Auth Type is CCKM.
+ * It will also clear the PMK Len as CCKM PMK Caching is not supported
+ *
+ * Return: None
+ */
+#ifdef FEATURE_WLAN_ESE
+static
+void csr_update_roam_scan_ese_params(tSirRoamOffloadScanReq *req_buf,
+				     tCsrRoamSession *session)
+{
+	if (csr_is_auth_type_ese(req_buf->ConnectedNetwork.authentication)) {
+		qdf_mem_copy(req_buf->KRK, session->eseCckmInfo.krk,
+			     SIR_KRK_KEY_LEN);
+		qdf_mem_copy(req_buf->BTK, session->eseCckmInfo.btk,
+			     SIR_BTK_KEY_LEN);
+		req_buf->pmkid_modes.fw_okc = 0;
+		req_buf->pmkid_modes.fw_pmksa_cache = 0;
+		req_buf->pmk_len = 0;
+		qdf_mem_zero(&req_buf->PSK_PMK[0], sizeof(req_buf->PSK_PMK));
+	}
+}
+#else
+static inline
+void csr_update_roam_scan_ese_params(tSirRoamOffloadScanReq *req_buf,
+				     tCsrRoamSession *session)
+{
+}
+#endif
+
+/**
  * csr_update_roam_scan_offload_request() - updates req msg with roam offload
  * paramters
  * @pMac:          mac global context
@@ -18184,6 +18226,10 @@ csr_update_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 	req_buf->RoamRssiCatGap = mac_ctx->roam.configParam.bCatRssiOffset;
 	req_buf->Select5GHzMargin = mac_ctx->roam.configParam.nSelect5GHzMargin;
 	req_buf->ho_delay_for_rx = mac_ctx->roam.configParam.ho_delay_for_rx;
+	req_buf->roam_preauth_retry_count =
+		mac_ctx->roam.configParam.roam_preauth_retry_count;
+	req_buf->roam_preauth_no_ack_timeout =
+		mac_ctx->roam.configParam.roam_preauth_no_ack_timeout;
 	req_buf->min_delay_btw_roam_scans =
 			mac_ctx->roam.configParam.min_delay_btw_roam_scans;
 	req_buf->roam_trigger_reason_bitmask =
@@ -18199,14 +18245,9 @@ csr_update_roam_scan_offload_request(tpAniSirGlobal mac_ctx,
 		req_buf->ReassocFailureTimeout =
 			DEFAULT_REASSOC_FAILURE_TIMEOUT;
 	}
-#ifdef FEATURE_WLAN_ESE
-	if (csr_is_auth_type_ese(req_buf->ConnectedNetwork.authentication)) {
-		qdf_mem_copy(req_buf->KRK, session->eseCckmInfo.krk,
-			     SIR_KRK_KEY_LEN);
-		qdf_mem_copy(req_buf->BTK, session->eseCckmInfo.btk,
-			     SIR_BTK_KEY_LEN);
-	}
-#endif
+
+	csr_update_roam_scan_ese_params(req_buf, session);
+
 	req_buf->AcUapsd.acbe_uapsd = SIR_UAPSD_GET(ACBE, session->uapsd_mask);
 	req_buf->AcUapsd.acbk_uapsd = SIR_UAPSD_GET(ACBK, session->uapsd_mask);
 	req_buf->AcUapsd.acvi_uapsd = SIR_UAPSD_GET(ACVI, session->uapsd_mask);
@@ -21626,6 +21667,8 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 	sme_QosAssocInfo assoc_info;
 	tpAddBssParams add_bss_params;
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tPmkidCacheInfo pmkid_cache;
+	uint32_t pmkid_index;
 	uint16_t len;
 #ifdef FEATURE_WLAN_MCC_TO_SCC_SWITCH
 	tSirSmeHTProfile *src_profile = NULL;
@@ -21774,6 +21817,40 @@ static QDF_STATUS csr_process_roam_sync_callback(tpAniSirGlobal mac_ctx,
 				FL("LFR3:Don't start waitforkey timer"));
 		csr_roam_substate_change(mac_ctx,
 				eCSR_ROAM_SUBSTATE_NONE, session_id);
+		/*
+		 * If authStatus is AUTHENTICATED, then we have done successful
+		 * 4 way handshake in FW using the cached PMKID.
+		 * However, the session->psk_pmk has the PMK of the older AP
+		 * as set_key is not received from supplicant.
+		 * When any RSO command is sent for the current AP, the older
+		 * AP's PMK is sent to the FW which leads to incorrect PMK and
+		 * leads to 4 way handshake failure when roaming happens to
+		 * this AP again.
+		 * Check if a PMK cache exists for the roamed AP and update
+		 * it into the session pmk.
+		 */
+		qdf_mem_zero(&pmkid_cache, sizeof(pmkid_cache));
+		qdf_copy_macaddr(&pmkid_cache.BSSID,
+				 &session->connectedProfile.bssid);
+		sme_debug("Trying to find PMKID for "QDF_MAC_ADDRESS_STR,
+			  QDF_MAC_ADDR_ARRAY(pmkid_cache.BSSID.bytes));
+		if (csr_lookup_pmkid_using_bssid(mac_ctx, session,
+						 &pmkid_cache,
+						 &pmkid_index)) {
+			session->pmk_len =
+				session->PmkidCacheInfo[pmkid_index].pmk_len;
+			qdf_mem_zero(session->psk_pmk,
+				     sizeof(session->psk_pmk));
+			qdf_mem_copy(session->psk_pmk,
+				     session->PmkidCacheInfo[pmkid_index].pmk,
+				     session->pmk_len);
+			sme_debug("pmkid found for "QDF_MAC_ADDRESS_STR" at %d len %d",
+				  QDF_MAC_ADDR_ARRAY(pmkid_cache.BSSID.bytes),
+				  pmkid_index, (uint32_t)session->pmk_len);
+		} else {
+			sme_debug("PMKID Not found in cache for "QDF_MAC_ADDRESS_STR,
+				  QDF_MAC_ADDR_ARRAY(pmkid_cache.BSSID.bytes));
+		}
 	} else {
 		roam_info->fAuthRequired = true;
 		csr_roam_substate_change(mac_ctx,
