@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, 2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -453,6 +453,9 @@ void sap_update_unsafe_channel_list(ptSapContext pSapCtx)
 				    unsafe_channel_list,
 				     &unsafe_channel_count,
 				     sizeof(unsafe_channel_list));
+
+	unsafe_channel_count = QDF_MIN(unsafe_channel_count,
+				       (uint16_t)NUM_CHANNELS);
 
 	for (i = 0; i < unsafe_channel_count; i++) {
 		for (j = 0; j < NUM_CHANNELS; j++) {

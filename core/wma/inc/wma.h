@@ -2354,7 +2354,7 @@ QDF_STATUS wma_set_rssi_monitoring(tp_wma_handle wma,
 					struct rssi_monitor_req *req);
 
 QDF_STATUS wma_send_pdev_set_pcl_cmd(tp_wma_handle wma_handle,
-		struct wmi_pcl_chan_weights *msg);
+		struct set_pcl_req *msg);
 
 QDF_STATUS wma_send_pdev_set_hw_mode_cmd(tp_wma_handle wma_handle,
 		struct sir_hw_mode *msg);
@@ -2706,5 +2706,13 @@ QDF_STATUS wma_config_bmiss_bcnt_params(uint32_t vdev_id, uint32_t first_cnt,
  */
 QDF_STATUS wma_send_action_oui(WMA_HANDLE handle,
 			       struct wmi_action_oui *action_oui);
+
+/**
+ * chanmode_to_chanwidth() - get channel width through channel mode
+ * @chanmode:   channel phy mode
+ *
+ * Return: channel width
+ */
+wmi_channel_width chanmode_to_chanwidth(WLAN_PHY_MODE chanmode);
 
 #endif
