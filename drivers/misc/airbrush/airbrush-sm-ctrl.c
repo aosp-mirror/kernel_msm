@@ -2731,6 +2731,16 @@ static long ab_sm_misc_ioctl(struct file *fp, unsigned int cmd,
 			return -EFAULT;
 		break;
 
+	case AB_SM_GET_THERMAL_LEVEL:
+		{
+			/* Copy enum to int to guarantee size. */
+			int throttle_state_id = sc->throttle_state_id;
+			if (copy_to_user((void __user *)arg,
+					&throttle_state_id, sizeof(int)))
+				return -EFAULT;
+		}
+		break;
+
 	default:
 		dev_err(sc->dev,
 			"%s: Unknown ioctl cmd 0x%X\n", __func__, cmd);

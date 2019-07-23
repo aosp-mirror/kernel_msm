@@ -259,6 +259,18 @@
  */
 #define AB_SM_EXIT_EL2_WITH_FLAG		_IOW(AB_SM_IOCTL_MAGIC, 28, int)
 
+/* Get the current thermal (aka throttle) level.
+ * Parameter int *:
+ *   Filled in with current thermal level, which is a value
+ *   ranging from 0 - 4.
+ *   Level 0: No throttling is present
+ *   Level 1: Minimum throttle level, IPU/TPU clocks reduced
+ *   Level 2: Medium throttle level, IPU/TPU clocks reduced further
+ *   Level 3: High throttle level, IPU/TPU clocks reduced further
+ *   Level 4: Maximum throttle level, IPU/TPU blocks off, AB placed in S100
+ */
+#define AB_SM_GET_THERMAL_LEVEL		_IOR(AB_SM_IOCTL_MAGIC, 29, int *)
+
 #define AB_CHIP_ID_UNKNOWN	-1
 #define AB_CHIP_ID_A0		0
 #define AB_CHIP_ID_B0		1
