@@ -1267,6 +1267,7 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		return -EINVAL;
 	}
 
+	dev_dbg(sc->dev, "AB state changing to %d\n", to_chip_substate_id);
 	/* Mark as new state early in case rollback is needed */
 	sc->curr_chip_substate_id = to_chip_substate_id;
 	ab_sm_start_ts(AB_SM_TS_FULL);
@@ -1491,6 +1492,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	}
 	mutex_unlock(&sc->async_fifo_lock);
 
+	dev_info_ratelimited(sc->dev,
+		"AB state changed to %d\n", to_chip_substate_id);
 	ab_sm_print_ts(sc);
 
 	dev_dbg(sc->dev, "IPU clk -> %s %lluHz",
@@ -1604,7 +1607,11 @@ static int _ab_sm_set_state(struct ab_state_context *sc,
 			&sc->transition_comp,
 			msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
 	if (ret == 0) {
-		dev_info(sc->dev, "State change timed out\n");
+		mutex_lock(&sc->state_transitioning_lock);
+		dev_info(sc->dev, "State change timed out (%d -> %d)\n",
+				sc->curr_chip_substate_id,
+				sc->dest_chip_substate_id);
+		mutex_unlock(&sc->state_transitioning_lock);
 		ret = -EAGAIN;
 	} else {
 		/* completion finished before timeout */
