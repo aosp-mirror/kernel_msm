@@ -120,11 +120,13 @@ struct paintbox_jqs {
 	uint32_t message_version;
 	uint32_t command_version;
 
-	/* runtime_requested ensures the firmware is only enabled after clock
-	 * rate changes indicate the hardware is ready and theruntime has
-	 * requested the jqs started
+	int client_count;
+
+	/* In the event of a requested reset the driver will need to prevent a
+	 * suspend of the JQS firmware from going through.  Once the reset
+	 * process has completed the client will need to cold boot the JQS.
 	 */
-	bool runtime_requested;
+	bool reset_in_progress;
 
 	/* pm_recovery_requested is set/read in suspend/resume contexts */
 	bool pm_recovery_requested;

@@ -163,6 +163,9 @@ struct device *ipu_get_ipu_device(struct device *dev);
 struct device *ipu_get_dma_device(struct device *dev);
 struct dentry *ipu_get_debug_root(struct device *dev);
 
+void ipu_add_client(struct device *dev);
+void ipu_remove_client(struct device *dev);
+
 /* Returns true if the JQS is ready, false if it is not. */
 bool ipu_is_jqs_ready(struct device *dev);
 

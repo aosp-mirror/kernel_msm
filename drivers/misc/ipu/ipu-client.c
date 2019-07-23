@@ -52,6 +52,8 @@ int ipu_jqs_get(struct paintbox_data *pb)
 {
 	int ret;
 
+	ipu_add_client(pb->dev);
+
 	ret = pm_runtime_get_sync(pb->dev);
 	if (ret < 0) {
 		pm_runtime_put_noidle(pb->dev);
@@ -69,6 +71,8 @@ int ipu_jqs_get(struct paintbox_data *pb)
 /* Caller must hold pb->lock */
 int ipu_jqs_put(struct paintbox_data *pb)
 {
+	ipu_remove_client(pb->dev);
+
 	pm_runtime_mark_last_busy(pb->dev);
 	return pm_runtime_put_autosuspend(pb->dev);
 }

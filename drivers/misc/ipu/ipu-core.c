@@ -482,13 +482,41 @@ void ipu_request_reset(struct device *dev)
 	struct paintbox_bus *bus = pb_dev->bus;
 
 	dev_err(bus->parent_dev, "%s: Reset requested\n", __func__);
-	/* we never want to call ipu_core_jqs_stop once we are in this
-	 * situation
+
+	/* If a reset is requested then we do not want ipu_core_jqs_stop to
+	 * initiate an orderly shutdown.  Set the reset_in_progress until the
+	 * reset has been completed.
 	 */
 	mutex_lock(&bus->jqs.lock);
-	bus->jqs.runtime_requested = false;
+	bus->jqs.reset_in_progress = true;
 	mutex_unlock(&bus->jqs.lock);
+
 	ipu_bus_notify_fatal_error(bus);
+}
+
+void ipu_add_client(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	mutex_lock(&bus->jqs.lock);
+
+	bus->jqs.client_count++;
+
+	mutex_unlock(&bus->jqs.lock);
+}
+
+void ipu_remove_client(struct device *dev)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+	struct paintbox_bus *bus = pb_dev->bus;
+
+	mutex_lock(&bus->jqs.lock);
+
+	if (--bus->jqs.client_count < 0)
+		bus->jqs.client_count = 0;
+
+	mutex_unlock(&bus->jqs.lock);
 }
 
 int ipu_bus_initialize(struct device *parent_dev,
