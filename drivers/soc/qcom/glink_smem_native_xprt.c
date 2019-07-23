@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -444,6 +444,9 @@ static int fifo_read(struct edge_info *einfo, void *_data, int len)
 	uint32_t fifo_size = einfo->rx_fifo_size;
 	uint32_t n;
 
+	if (read_index >= fifo_size || write_index >= fifo_size)
+		return 0;
+
 	while (len) {
 		ptr = einfo->rx_fifo + read_index;
 		if (read_index <= write_index)
@@ -486,6 +489,9 @@ static uint32_t fifo_write_body(struct edge_info *einfo, const void *_data,
 	uint32_t read_index = einfo->tx_ch_desc->read_index;
 	uint32_t fifo_size = einfo->tx_fifo_size;
 	uint32_t n;
+
+	if (read_index >= fifo_size || *write_index >= fifo_size)
+		return 0;
 
 	while (len) {
 		ptr = einfo->tx_fifo + *write_index;
@@ -534,8 +540,6 @@ static int fifo_write(struct edge_info *einfo, const void *data, int len)
 	uint32_t write_index = einfo->tx_ch_desc->write_index;
 
 	len = fifo_write_body(einfo, data, len, &write_index);
-	if (unlikely(len < 0))
-		return len;
 
 	/* All data writes need to be flushed to memory before the write index
 	 * is updated. This protects against a race condition where the remote
@@ -577,8 +581,6 @@ static int fifo_write_complex(struct edge_info *einfo,
 	len1 = fifo_write_body(einfo, data1, len1, &write_index);
 	len2 = fifo_write_body(einfo, data2, len2, &write_index);
 	len3 = fifo_write_body(einfo, data3, len3, &write_index);
-	if (unlikely(len3 < 0))
-		return len3;
 
 	/* All data writes need to be flushed to memory before the write index
 	 * is updated. This protects against a race condition where the remote

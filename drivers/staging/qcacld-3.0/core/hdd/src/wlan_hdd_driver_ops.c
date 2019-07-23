@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -378,10 +378,14 @@ static int wlan_hdd_probe(struct device *dev, void *bdev, const struct hif_bus_i
 	if (ret)
 		goto err_hdd_deinit;
 
-
-	if (reinit) {
-		cds_set_recovery_in_progress(false);
-	} else {
+	/*
+	 * Recovery in progress flag will be set if SSR triggered.
+	 * If SSR is triggered during Load time, this flag will be set
+	 * so reset of this flag should be done in both the cases,
+	 * during load time and during re-init
+	 */
+	cds_set_recovery_in_progress(false);
+	if (!reinit) {
 		cds_set_load_in_progress(false);
 		cds_set_driver_loaded(true);
 		hdd_start_complete(0);
@@ -405,10 +409,9 @@ err_hdd_deinit:
 	    re_init_fail_cnt >= SSR_MAX_FAIL_CNT)
 		QDF_BUG(0);
 
-	if (reinit) {
+	cds_set_recovery_in_progress(false);
+	if (reinit)
 		cds_set_driver_in_bad_state(true);
-		cds_set_recovery_in_progress(false);
-	}
 	else
 		cds_set_load_in_progress(false);
 
