@@ -5317,6 +5317,13 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_TX_SCH_DELAY_MIN,
 		     CFG_TX_SCH_DELAY_MAX),
 
+	REG_VARIABLE(CFG_BTM_ENABLE_NAME, WLAN_PARAM_HexInteger,
+		     struct hdd_config, btm_offload_config,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_BTM_ENABLE_DEFAULT,
+		     CFG_BTM_ENABLE_MIN,
+		     CFG_BTM_ENABLE_MAX),
+
 	REG_VARIABLE(CFG_FORCE_RSNE_OVERRIDE_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, force_rsne_override,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -5331,6 +5338,35 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ROAM_FORCE_RSSI_TRIGGER_DEFAULT,
 		     CFG_ROAM_FORCE_RSSI_TRIGGER_MIN,
 		     CFG_ROAM_FORCE_RSSI_TRIGGER_MAX),
+
+	REG_VARIABLE(CFG_BTM_SOLICITED_TIMEOUT, WLAN_PARAM_Integer,
+				 struct hdd_config, btm_solicited_timeout,
+				 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+				 CFG_BTM_SOLICITED_TIMEOUT_DEFAULT,
+				 CFG_BTM_SOLICITED_TIMEOUT_MIN,
+				 CFG_BTM_SOLICITED_TIMEOUT_MAX),
+
+	REG_VARIABLE(CFG_BTM_MAX_ATTEMPT_CNT, WLAN_PARAM_Integer,
+			 struct hdd_config, btm_max_attempt_cnt,
+				 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+				 CFG_BTM_MAX_ATTEMPT_CNT_DEFAULT,
+				 CFG_BTM_MAX_ATTEMPT_CNT_MIN,
+				 CFG_BTM_MAX_ATTEMPT_CNT_MAX),
+
+	REG_VARIABLE(CFG_BTM_STICKY_TIME, WLAN_PARAM_Integer,
+				 struct hdd_config, btm_sticky_time,
+				 VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+				 CFG_BTM_STICKY_TIME_DEFAULT,
+				 CFG_BTM_STICKY_TIME_MIN,
+				 CFG_BTM_STICKY_TIME_MAX),
+
+	REG_VARIABLE(CFG_BTM_QUERY_BITMASK_NAME,
+		     WLAN_PARAM_HexInteger, struct hdd_config,
+		     btm_query_bitmask,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_BTM_QUERY_BITMASK_DEFAULT,
+		     CFG_BTM_QUERY_BITMASK_MIN,
+		     CFG_BTM_QUERY_BITMASK_MAX),
 
 	REG_VARIABLE(CFG_ENABLE_UNIT_TEST_FRAMEWORK_NAME,
 		     WLAN_PARAM_Integer,
@@ -5355,6 +5391,14 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_DEFAULT,
 		     CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_MIN,
 		     CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_MAX),
+
+	REG_VARIABLE(CFG_NTH_BEACON_REPORTING_OFFLOAD_NAME,
+		     WLAN_PARAM_Integer,
+		     struct hdd_config, beacon_reporting,
+		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
+		     CFG_NTH_BEACON_REPORTING_OFFLOAD_DEFAULT,
+		     CFG_NTH_BEACON_REPORTING_OFFLOAD_MIN,
+		     CFG_NTH_BEACON_REPORTING_OFFLOAD_MAX),
 };
 
 /**
@@ -7177,6 +7221,21 @@ void hdd_cfg_print(hdd_context_t *pHddCtx)
 	hdd_debug("Name = [%s] Value = [%u]",
 		  CFG_ROAM_PREAUTH_NO_ACK_TIMEOUT_NAME,
 		  pHddCtx->config->roam_preauth_no_ack_timeout);
+	hdd_debug("Name = [%s] value = [0x%x]",
+			  CFG_BTM_ENABLE_NAME,
+			  pHddCtx->config->btm_offload_config);
+	hdd_debug("Name = [btm_solicited_timeout] value = [0x%x]",
+			  pHddCtx->config->btm_solicited_timeout);
+	hdd_debug("Name = [btm_max_attempt_cnt] value = [0x%x]",
+			  pHddCtx->config->btm_max_attempt_cnt);
+	hdd_debug("Name = [btm_sticky_time] value = [0x%x]",
+			  pHddCtx->config->btm_sticky_time);
+
+	hdd_debug("Name = [btm_query_bitmask] value = [0x%x]",
+		  pHddCtx->config->btm_query_bitmask);
+	hdd_debug("Name = [%s] value = [%u]",
+		  CFG_NTH_BEACON_REPORTING_OFFLOAD_NAME,
+		  pHddCtx->config->beacon_reporting);
 }
 
 /**
@@ -9756,6 +9815,16 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 			pHddCtx->config->num_11b_tx_chains;
 	smeConfig->csrConfig.num_11ag_tx_chains =
 			pHddCtx->config->num_11ag_tx_chains;
+	smeConfig->csrConfig.btm_offload_config =
+			pHddCtx->config->btm_offload_config;
+	smeConfig->csrConfig.btm_solicited_timeout =
+					pHddCtx->config->btm_solicited_timeout;
+	smeConfig->csrConfig.btm_max_attempt_cnt =
+					pHddCtx->config->btm_max_attempt_cnt;
+	smeConfig->csrConfig.btm_sticky_time =
+					pHddCtx->config->btm_sticky_time;
+	smeConfig->csrConfig.btm_query_bitmask =
+			pHddCtx->config->btm_query_bitmask;
 
 	hdd_update_bss_score_params(pHddCtx->config,
 			&smeConfig->csrConfig.bss_score_params);

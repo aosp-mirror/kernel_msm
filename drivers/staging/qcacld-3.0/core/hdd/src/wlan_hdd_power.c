@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -2417,6 +2417,11 @@ static int __wlan_hdd_cfg80211_get_txpower(struct wiphy *wiphy,
 	/* Validate adapter sessionId */
 	if (wlan_hdd_validate_session_id(adapter->sessionId)) {
 		hdd_err("invalid session id: %d", adapter->sessionId);
+		return -EINVAL;
+	}
+
+	if (sta_ctx->hdd_ReassocScenario) {
+		hdd_debug("Roaming is in progress, rej this req");
 		return -EINVAL;
 	}
 
