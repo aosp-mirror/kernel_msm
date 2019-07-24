@@ -221,8 +221,27 @@ PREPACK struct htt_tx_ppdu_stats_info {
      * If bit 2 is set, tx_retry_bytes is valid
      * ...
      * If bit 14 is set, tx_duration is valid
+     * If bit 15 is set, all of ack_rssi_chain are valid,
+     *     for each validation of chain, need to check value in field
+     * If bit 16 is set, tx_timestamp is valid
+     * If bit 16 is set, sa_ant_matrix is valid
+     * If bit 17 is set, tid is valid
      */
     A_UINT32 valid_bitmap;
+    A_UINT32 ext_valid_bitmap; /* reserved for future extension valid bitmap */
+    /* ack rssi for each chain */
+    A_UINT32 ack_rssi_chain0:   8, /* Units: dB w.r.t noise floor, RSSI of Ack of all active chains. Value of 0x80 indicates invalid.*/
+             ack_rssi_chain1:   8, /* same as above */
+             ack_rssi_chain2:   8, /* same as above */
+             ack_rssi_chain3:   8; /* same as above */
+    A_UINT32 ack_rssi_chain4:   8, /* same as above */
+             ack_rssi_chain5:   8, /* same as above */
+             ack_rssi_chain6:   8, /* same as above */
+             ack_rssi_chain7:   8; /* same as above */
+    A_UINT32 tx_timestamp; /* HW assigned timestamp with microsecond unit */
+    A_UINT32 sa_ant_matrix:     8, /* This sa_ant_matrix provides a bitmask of the antennas used while frame transmit */
+             tid:               8,
+             reserved_1:       16;
 } POSTPACK;
 
 typedef struct {
@@ -234,15 +253,39 @@ typedef struct {
      * tx_ppdu_stats_info is variable length, with length =
      *     number_of_ppdu_stats * sizeof (struct htt_tx_ppdu_stats_info)
      */
-    A_UINT32 tx_ppdu_stats_info[1/*number_of_ppdu_stats*/];
+    struct htt_tx_ppdu_stats_info tx_ppdu_stats_info[1/*number_of_ppdu_stats*/];
 } htt_ppdu_stats_usr_common_array_tlv_v;
 
-typedef struct {
-    htt_tlv_hdr_t tlv_hdr;
+#define HTT_PPDU_STATS_SCH_CMD_TLV_HDR_STRUCT \
+    struct { \
+        htt_tlv_hdr_t tlv_hdr; \
+        /* Refer bmi_msg.h */ \
+        A_UINT32 target_type; \
+    }
 
-    /* Refer bmi_msg.h */
-    A_UINT32 target_type;
-    A_UINT32 hw[1]; /* Variable length, refer to struct scheduler_cmd_status */
+typedef HTT_PPDU_STATS_SCH_CMD_TLV_HDR_STRUCT htt_ppdu_stats_sch_cmd_tlv_hdr_t;
+
+typedef struct {
+    /*
+     * Use a union to allow the HW-independent header portion of this struct
+     * to be accessed either within a hdr struct, or directly within the
+     * htt_ppdu_stats_sch_cmd_tlv_v struct.
+     * For example, the target_type field can be accessed either as
+     *     htt_ppdu_stats_sch_cmd_tlv_v.target_type
+     * or
+     *     htt_ppdu_stats_sch_cmd_tlv_v.hdr.target_type
+     */
+    union {
+        htt_ppdu_stats_sch_cmd_tlv_hdr_t hdr;
+        HTT_PPDU_STATS_SCH_CMD_TLV_HDR_STRUCT;
+    };
+    /*
+     * The hw portion of this struct contains a scheduler_command_status
+     * struct, whose definition is different for different target HW types.
+     * The target_type field within the header can, if set correctly,
+     * clarify which definition of scheduler_command_status is being used.
+     */
+    A_UINT32 hw[1];
 } htt_ppdu_stats_sch_cmd_tlv_v;
 
 #define HTT_PPDU_STATS_COMMON_TLV_SCH_CMDID_M     0x0000ffff
@@ -369,15 +412,16 @@ enum HTT_PPDU_STATS_BW {
 typedef enum HTT_PPDU_STATS_BW HTT_PPDU_STATS_BW;
 
 enum HTT_PPDU_STATS_SEQ_TYPE {
-    HTT_SEQTYPE_SU              = 0,
-    HTT_SEQTYPE_AC_MU_MIMO      = 1,
-    HTT_SEQTYPE_AX_MU_MIMO      = 2,
-    HTT_SEQTYPE_MU_OFDMA        = 3,
-    HTT_SEQTYPE_UL_TRIG         = 4,
-    HTT_SEQTYPE_BURST_BCN       = 5,
-    HTT_SEQTYPE_UL_BSR_RESP     = 6,
-    HTT_SEQTYPE_UL_BSR_TRIG     = 7,
-    HTT_SEQTYPE_UL_RESP         = 8,
+    HTT_SEQTYPE_UNSPECIFIED     = 0,
+    HTT_SEQTYPE_SU              = 1,
+    HTT_SEQTYPE_AC_MU_MIMO      = 2,
+    HTT_SEQTYPE_AX_MU_MIMO      = 3,
+    HTT_SEQTYPE_MU_OFDMA        = 4,
+    HTT_SEQTYPE_UL_TRIG         = 5,
+    HTT_SEQTYPE_BURST_BCN       = 6,
+    HTT_SEQTYPE_UL_BSR_RESP     = 7,
+    HTT_SEQTYPE_UL_BSR_TRIG     = 8,
+    HTT_SEQTYPE_UL_RESP         = 9,
 };
 typedef enum HTT_PPDU_STATS_SEQ_TYPE HTT_PPDU_STATS_SEQ_TYPE;
 
@@ -680,6 +724,36 @@ typedef struct {
         };
     };
 
+    /*
+     * Data fields containing the physical address info of a MSDU buffer
+     * as well as the owner and a SW cookie info that can be used by the host
+     * to look up the virtual address of the MSDU buffer.
+     * These fields are only valid if is_buffer_addr_info_valid is set to 1.
+     */
+     A_UINT32 buffer_paddr_31_0       : 32;
+     A_UINT32 buffer_paddr_39_32      :  8,
+              return_buffer_manager   :  3,
+              sw_buffer_cookie        : 21;
+
+    /*
+     * host_opaque_cookie : Host can send upto 2 bytes of opaque
+     * cookie in TCL_DATA_CMD and FW will replay this back in
+     * HTT PPDU stats. Valid only if sent to FW through
+     * exception mechanism.
+     *
+     * is_standalone : This msdu was sent as a single MSDU/MPDU
+     * PPDU as indicated by host via TCL_DATA_CMD using
+     * the send_as_standalone bit.
+     *
+     * is_buffer_addr_info_valid : This will be set whenever a MSDU is sent as
+     * a singleton (single-MSDU PPDU) for FW use-cases or as indicated by host
+     * via send_as_standalone in TCL_DATA_CMD.
+     */
+    A_UINT32 host_opaque_cookie:        16,
+             is_host_opaque_valid:       1,
+             is_standalone:              1,
+             is_buffer_addr_info_valid:  1,
+             reserved1:                 13;
 } htt_ppdu_stats_user_common_tlv;
 
 #define HTT_PPDU_STATS_USER_RATE_TLV_TID_NUM_M     0x000000ff
@@ -775,6 +849,104 @@ typedef struct {
      do { \
          HTT_CHECK_SET_VAL(HTT_PPDU_STATS_USER_RATE_TLV_RESP_TYPE_VALID, _val); \
          ((_var) |= ((_val) << HTT_PPDU_STATS_USER_RATE_TLV_RESP_TYPE_VALID_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_BUF_ADDR_39_32_M     0x000000ff
+#define HTT_PPDU_STATS_BUF_ADDR_39_32_S              0
+
+#define HTT_PPDU_STATS_BUF_ADDR_39_32__GET(_var) \
+    (((_var) & HTT_PPDU_STATS_BUF_ADDR_39_32_M) >> \
+    HTT_PPDU_STATS_BUF_ADDR_39_32_S)
+
+#define HTT_PPDU_STATS_BUF_ADDR_39_32_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_BUF_ADDR_39_32, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_BUF_ADDR_39_32_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_RETURN_BUF_MANAGER_M     0x00000700
+#define HTT_PPDU_STATS_RETURN_BUF_MANAGER_S              8
+
+#define HTT_PPDU_STATS_RETURN_BUF_MANAGER_GET(_var) \
+    (((_var) & HTT_PPDU_STATS_RETURN_BUF_MANAGER_M) >> \
+    HTT_PPDU_STATS_RETURN_BUF_MANAGER_S)
+
+#define HTT_PPDU_STATS_RETURN_BUF_MANAGER_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_RETURN_BUF_MANAGER, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_RETURN_BUF_MANAGER_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_SW_BUFFER_COOKIE_M     0xfffff800
+#define HTT_PPDU_STATS_SW_BUFFER_COOKIE_S             11
+
+#define HTT_PPDU_STATS_SW_BUFFER_COOKIE_GET(_var) \
+    (((_var) & HTT_PPDU_STATS_SW_BUFFER_COOKIE_M) >> \
+    HTT_PPDU_STATS_SW_BUFFER_COOKIE_S)
+
+#define HTT_PPDU_STATS_SW_BUFFER_COOKIE_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_SW_BUFFER_COOKIE, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_SW_BUFFER_COOKIE_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_HOST_OPAQUE_COOKIE_M     0x0000FFFF
+#define HTT_PPDU_STATS_HOST_OPAQUE_COOKIE_S              0
+
+#define HTT_PPDU_STATS_HOST_OPAQUE_COOKIE_GET(_var) \
+    (((_var) & HTT_PPDU_STATS_HOST_OPAQUE_COOKIE_M) >> \
+    HTT_PPDU_STATS_HOST_OPAQUE_COOKIE_S)
+
+#define HTT_PPDU_STAT_HOST_OPAQUE_COOKIE_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_HOST_OPAQUE_COOKIE, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_HOST_OPAQUE_COOKIE_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_IS_OPAQUE_VALID_M        0x00010000
+#define HTT_PPDU_STATS_IS_OPAQUE_VALID_S                16
+
+#define HTT_PPDU_STATS_IS_OPAQUE_VALID_GET(_var) \
+    (((_var) & HTT_PPDU_STATS_IS_OPAQUE_VALID_M) >> \
+    HTT_PPDU_STATS_IS_OPAQUE_VALID_S)
+
+#define HTT_PPDU_STATS_IS_OPAQUE_VALID_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_IS_OPAQUE_VALID, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_IS_OPAQUE_VALID_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_IS_STANDALONE_M          0x00020000
+#define HTT_PPDU_STATS_IS_STANDALONE_S                  17
+
+#define HTT_PPDU_STATS_IS_STANDALONE_GET(_var) \
+    (((_var) & HTT_PPDU_STATS_IS_STANDALONE_M) >> \
+    HTT_PPDU_STATS_IS_OPAQUE_VALID_S)
+
+#define HTT_PPDU_STATS_IS_STANDALONE_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_IS_STANDALONE, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_IS_STANDALONE_S)); \
+     } while (0)
+
+
+#define HTT_PPDU_STATS_IS_BUFF_INFO_VALID_M          0x000400000
+#define HTT_PPDU_STATS_IS_BUFF_INFO_VALID_S                   18
+
+#define HTT_PPDU_STATS_IS_BUFF_INFO_VALID_GET(_var) \
+    (((_var) & HTT_PPDU_STATS_IS_BUFF_INFO_VALID_M) >> \
+    HTT_PPDU_STATS_IS_BUFF_INFO_VALID_S)
+
+#define HTT_PPDU_STATS_IS_BUFF_INFO_VALID_SET(_var, _val) \
+     do { \
+         HTT_CHECK_SET_VAL(HTT_PPDU_STATS_IS_BUFF_INFO_VALID, _val); \
+         ((_var) |= ((_val) << HTT_PPDU_STATS_IS_BUFF_INFO_VALID_S)); \
      } while (0)
 
 enum HTT_PPDU_STATS_PPDU_TYPE {
