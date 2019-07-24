@@ -1284,7 +1284,7 @@ static void hdd_send_association_event(struct net_device *dev,
 			}
 		}
 #endif
-		pr_info("wlan: " MAC_ADDRESS_STR " connected to "
+		hdd_info("wlan: " MAC_ADDRESS_STR " connected to "
 			MAC_ADDRESS_STR "\n",
 			MAC_ADDR_ARRAY(pAdapter->macAddressCurrent.bytes),
 			MAC_ADDR_ARRAY(wrqu.ap_addr.sa_data));
@@ -2506,6 +2506,16 @@ static QDF_STATUS hdd_association_completion_handler(hdd_adapter_t *pAdapter,
 
 		/* Indicate 'connect' status to user space */
 		hdd_send_association_event(dev, pRoamInfo);
+
+		/* Send beacon reporting offload command to FW */
+		if (pHddCtx->config->beacon_reporting) {
+			qdf_status = hdd_set_nth_beacon_offload
+					(pAdapter,
+					 pHddCtx->config->beacon_reporting);
+
+			if (QDF_IS_STATUS_ERROR(qdf_status))
+				hdd_err("Failed to set nth beacon reporting");
+		}
 
 		if (cds_is_mcc_in_24G()) {
 			if (pHddCtx->miracast_value)

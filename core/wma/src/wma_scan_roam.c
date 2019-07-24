@@ -1939,6 +1939,46 @@ QDF_STATUS wma_send_offload_11k_params(WMA_HANDLE handle,
 }
 
 /**
+ * wma_roam_scan_btm_offload() - Send BTM offload config
+ * @wma_handle: wma handle
+ * @roam_req: roam request parameters
+ *
+ * This function is used to send BTM offload config to fw
+ *
+ * Return: QDF status
+ */
+static QDF_STATUS wma_roam_scan_btm_offload(tp_wma_handle wma_handle,
+					    tSirRoamOffloadScanReq *roam_req)
+{
+	struct wmi_btm_config *params;
+	QDF_STATUS status;
+
+	if (!wma_is_vdev_valid(roam_req->sessionId)) {
+		WMA_LOGE("vdev id:%d is not active", roam_req->sessionId);
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	params = qdf_mem_malloc(sizeof(struct wmi_btm_config));
+	if (!params) {
+		WMA_LOGE("Memory alloc failed for btm params");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	params->vdev_id = roam_req->sessionId;
+	params->btm_offload_config = roam_req->btm_offload_config;
+	params->btm_solicited_timeout = roam_req->btm_solicited_timeout;
+	params->btm_max_attempt_cnt = roam_req->btm_max_attempt_cnt;
+	params->btm_sticky_time = roam_req->btm_sticky_time;
+	WMA_LOGD("%s: Sending BTM offload to FW for vdev %u btm_offload_config %u",
+		__func__, params->vdev_id, params->btm_offload_config);
+	params->btm_query_bitmask = roam_req->btm_query_bitmask;
+	status = wmi_unified_send_btm_config(wma_handle->wmi_handle, params);
+	qdf_mem_free(params);
+
+	return status;
+}
+
+/**
  * wma_process_roaming_config() - process roam request
  * @wma_handle: wma handle
  * @roam_req: roam request parameters
@@ -2066,6 +2106,12 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 			break;
 		}
 
+		qdf_status = wma_roam_scan_btm_offload(wma_handle, roam_req);
+		if (qdf_status != QDF_STATUS_SUCCESS) {
+			WMA_LOGE("Sending BTM config to fw failed");
+			break;
+		}
+
 		/*
 		 * Send 11k offload enable to FW as part of RSO Start
 		 */
@@ -2120,6 +2166,13 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 					 qdf_status);
 				break;
 			}
+		}
+
+		/* Send BTM config as disabled during RSO Stop */
+		qdf_status = wma_roam_scan_btm_offload(wma_handle, roam_req);
+		if (qdf_status != QDF_STATUS_SUCCESS) {
+			WMA_LOGE(FL("Sending BTM config to fw failed"));
+			break;
 		}
 
 		wma_handle->suitable_ap_hb_failure = false;
@@ -2872,7 +2925,7 @@ int wma_roam_synch_event_handler(void *handle, uint8_t *event,
 				__func__);
 		goto cleanup_label;
 	}
-	WMA_LOGI("LFR3: Received WMA_ROAM_OFFLOAD_SYNCH_IND");
+	WMA_LOGD("LFR3: Received WMA_ROAM_OFFLOAD_SYNCH_IND");
 
 	/*
 	 * All below length fields are unsigned and hence positive numbers.
@@ -5089,6 +5142,17 @@ static int wma_group_num_bss_to_scan_id(const u_int8_t *cmd_param_info,
 	t_cached_result = cached_result;
 	t_scan_id_grp = &t_cached_result->result[0];
 
+	if ((t_cached_result->num_scan_ids *
+	     QDF_MIN(t_scan_id_grp->num_results,
+		     param_buf->num_bssid_list)) > param_buf->num_bssid_list) {
+		WMA_LOGE("%s:num_scan_ids %d, num_results %d num_bssid_list %d",
+			 __func__,
+			 t_cached_result->num_scan_ids,
+			 t_scan_id_grp->num_results,
+			 param_buf->num_bssid_list);
+		return -EINVAL;
+	}
+
 	WMA_LOGD("%s: num_scan_ids:%d", __func__,
 			t_cached_result->num_scan_ids);
 	for (i = 0; i < t_cached_result->num_scan_ids; i++) {
@@ -6723,6 +6787,31 @@ void wma_roam_better_ap_handler(tp_wma_handle wma, uint32_t vdev_id)
 }
 
 /**
+ * wma_handle_btm_disassoc_imminent_msg() - Send del sta msg to lim on receiving
+ * BTM request from AP with disassoc imminent reason
+ * @wma_handle: wma handle
+ * @vdev_id: vdev id
+ *
+ * Return: None
+ */
+static void wma_handle_btm_disassoc_imminent_msg(tp_wma_handle wma_handle,
+						 uint32_t vdev_id)
+{
+	tpDeleteStaContext del_sta_ctx;
+
+	del_sta_ctx =
+		(tDeleteStaContext *)qdf_mem_malloc(sizeof(tDeleteStaContext));
+	if (!del_sta_ctx) {
+		WMA_LOGE("Memory alloc failed for del sta context");
+		return;
+	}
+	del_sta_ctx->vdev_id = vdev_id;
+	del_sta_ctx->reasonCode = HAL_DEL_STA_REASON_CODE_BTM_DISASSOC_IMMINENT;
+	wma_send_msg(wma_handle, SIR_LIM_DELETE_STA_CONTEXT_IND,
+		     (void *)del_sta_ctx, 0);
+}
+
+/**
  * wma_roam_event_callback() - roam event callback
  * @handle: wma handle
  * @event_buf: event buffer
@@ -6766,6 +6855,18 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 		wmi_event->vdev_id, QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));
 
 	switch (wmi_event->reason) {
+	case WMI_ROAM_REASON_BTM:
+		/*
+		 * This event is received from firmware if firmware is unable to
+		 * find candidate AP after roam scan and BTM request from AP
+		 * has disassoc imminent bit set.
+		 */
+		WMA_LOGD("Kickout due to btm request");
+		wma_sta_kickout_event(HOST_STA_KICKOUT_REASON_BTM,
+				      wmi_event->vdev_id, NULL);
+		wma_handle_btm_disassoc_imminent_msg(wma_handle,
+						   wmi_event->vdev_id);
+		break;
 	case WMI_ROAM_REASON_BMISS:
 		WMA_LOGD("Beacon Miss for vdevid %x", wmi_event->vdev_id);
 		wma_beacon_miss_handler(wma_handle, wmi_event->vdev_id,
