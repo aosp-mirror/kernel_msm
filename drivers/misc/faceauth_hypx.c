@@ -69,6 +69,7 @@
 #define ERR_BLOCKED_REQ 13
 #define ERR_UNSUPPORTED_REQ 14
 #define ERR_LINK_UNSTABLE 15
+#define ERR_OUT_OF_BOUND 16
 
 struct hypx_mem_segment {
 	/* address of the segment begin */
@@ -182,7 +183,7 @@ struct hypx_fa_debug_data {
 	uint32_t calibration_size;
 } __packed;
 
-static void parse_el2_return(int code)
+static int parse_el2_return(int code)
 {
 	if (code == ERR_SECURE_CAM)
 		pr_err("faceauth: EL2: Insecure path detected");
@@ -206,8 +207,11 @@ static void parse_el2_return(int code)
 		pr_err("faceauth: EL2: Unsupported EL2 request");
 	else if (code == ERR_LINK_UNSTABLE)
 		pr_err("faceauth: EL2: PCIe link down");
+	else if (code == ERR_OUT_OF_BOUND)
+		pr_err("faceauth: EL2: DMA buffer out of boundary");
 	else
 		pr_err("faceauth: EL2: Undefined return code: %d", code);
+	return -EINVAL;
 }
 
 static void hypx_free_blob_userbuf(struct faceauth_data *data)
@@ -756,7 +760,7 @@ int el2_faceauth_init(struct device *dev, struct faceauth_init_data *data,
 	}
 	ret = desc.ret[0];
 	if (ret) {
-		parse_el2_return(ret);
+		ret = parse_el2_return(ret);
 		goto exit1;
 	}
 
@@ -805,7 +809,7 @@ int el2_faceauth_cleanup(struct device *dev)
 				    jiffies_to_usecs(jiffies - save_trace));
 	ret = desc.ret[0];
 	if (ret)
-		parse_el2_return(ret);
+		ret = parse_el2_return(ret);
 
 	return ret;
 }
@@ -927,7 +931,7 @@ int el2_faceauth_process(struct device *dev, struct faceauth_start_data *data,
 
 	ret = desc.ret[0];
 	if (ret)
-		parse_el2_return(ret);
+		ret = parse_el2_return(ret);
 
 	trace_faceauth_el2_duration(HYPX_SMC_FUNC_PROCESS & 0xFF,
 				    jiffies_to_usecs(jiffies - save_trace));
@@ -1017,7 +1021,7 @@ int el2_faceauth_get_process_result(struct device *dev,
 
 	ret = desc.ret[0];
 	if (ret) {
-		parse_el2_return(ret);
+		ret = parse_el2_return(ret);
 		goto exit2;
 	}
 
@@ -1099,7 +1103,7 @@ int el2_faceauth_gather_debug_log(struct device *dev,
 
 	ret = desc.ret[0];
 	if (ret) {
-		parse_el2_return(ret);
+		ret = parse_el2_return(ret);
 		goto exit1;
 	}
 
@@ -1215,7 +1219,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 	ret = desc.ret[0];
 	if (ret) {
-		parse_el2_return(ret);
+		ret = parse_el2_return(ret);
 		goto exit;
 	}
 
@@ -1357,7 +1361,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 		ret = desc.ret[0];
 		if (ret) {
-			parse_el2_return(ret);
+			ret = parse_el2_return(ret);
 			goto exit;
 		}
 
