@@ -447,6 +447,8 @@ struct host_event_wlan_ssr_shutdown {
  * reason unspecified
  * @HOST_STA_KICKOUT_REASON_KEEP_ALIVE: Indicate sta is disconnected
  * because of keep alive
+ * @HOST_STA_KICKOUT_REASON_BTM: BTM request from AP with disassoc imminent
+ * reason
  *
  * This enum contains the event subtype
  */
@@ -455,6 +457,7 @@ enum host_sta_kickout_events {
 	HOST_STA_KICKOUT_REASON_XRETRY,
 	HOST_STA_KICKOUT_REASON_UNSPECIFIED,
 	HOST_STA_KICKOUT_REASON_KEEP_ALIVE,
+	HOST_STA_KICKOUT_REASON_BTM,
 };
 
 /*-------------------------------------------------------------------------

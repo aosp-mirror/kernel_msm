@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3346,7 +3346,7 @@ int ol_txrx_peer_unref_delete(ol_txrx_peer_handle peer,
 		qdf_mem_free(peer);
 	} else {
 		qdf_spin_unlock_bh(&pdev->peer_ref_mutex);
-		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO_HIGH,
+		QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 			  "[%s][%d]: ref delete peer %pK peer->ref_cnt = %d",
 			  fname, line, peer, rc);
 	}
@@ -3465,7 +3465,7 @@ void ol_txrx_peer_detach(ol_txrx_peer_handle peer, bool start_peer_unmap_timer)
 	/* debug print to dump rx reorder state */
 	/* htt_rx_reorder_log_print(vdev->pdev->htt_pdev); */
 
-	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_TXRX, QDF_TRACE_LEVEL_DEBUG,
 		   "%s:peer %pK (%02x:%02x:%02x:%02x:%02x:%02x)",
 		   __func__, peer,
 		   peer->mac_addr.raw[0], peer->mac_addr.raw[1],
