@@ -25,6 +25,11 @@ enum {
 	MPLL_CLK_10000,     /*!< 10 MHz  */
 	MPLL_CLK_15000,     /*!< 15 MHz  */
 	MPLL_CLK_30000,     /*!< 30 MHz  */
+	MPLL_CLK_35000,     /*!< 35 MHz  */
+	MPLL_CLK_40000,     /*!< 40 MHz  */
+	MPLL_CLK_45000,     /*!< 45 MHz  */
+	MPLL_CLK_50000,     /*!< 50 MHz  */
+	MPLL_CLK_55000,     /*!< 55 MHz  */
 	MPLL_CLK_60000,     /*!< 60 MHz  */
 	MPLL_CLK_80000,     /*!< 80 MHz  */
 	MPLL_CLK_120000,    /*!< 120 MHz */
