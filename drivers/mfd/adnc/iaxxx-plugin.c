@@ -1272,6 +1272,25 @@ set_event_err:
 }
 EXPORT_SYMBOL(iaxxx_core_set_event);
 
+/* Function to write multiple registers from a buffer pointer */
+static int iaxxx_regmap_multireg_write(struct device *dev, struct regmap *map,
+				unsigned int base_reg, const void *val,
+				size_t word_count)
+{
+	int i, rc = 0;
+	uint32_t *buffer = (uint32_t *) val;
+
+	for (i = 0; i < word_count; i++) {
+		rc = regmap_write(map, base_reg + i * sizeof(uint32_t),
+				buffer[i]);
+		if (rc) {
+			dev_err(dev, "%s() regmap write error\n", __func__);
+			return rc;
+		}
+	}
+	return rc;
+}
+
 static int write_pkg_info(bool update, struct iaxxx_priv *priv, uint32_t pkg_id,
 		struct pkg_bin_info bin_info, struct pkg_mgmt_info *pkg)
 {
@@ -1300,13 +1319,46 @@ static int write_pkg_info(bool update, struct iaxxx_priv *priv, uint32_t pkg_id,
 		pkg->data_size = bin_info.bss_end_addr -
 			bin_info.ro_data_start_addr;
 		pkg->entry_pt = bin_info.entry_point;
-	} else
-		pkg->req = 1;
-	/* Write Package Binary information */
-	rc = regmap_bulk_write(priv->regmap, IAXXX_PKG_MGMT_PKG_REQ_ADDR, pkg,
-					sizeof(struct pkg_mgmt_info) >> 2);
+		/* When writing this block of registers, the
+		 * IAXXX_PKG_MGMT_PKG_REQ_ADDR with the guard-bit need to
+		 * be written as last after writing all the info.
+		 * So the register write is done here from skipping
+		 * the first register.
+		 * Also the last register in Package Management Block is
+		 * a Read-only Error status register which doesn't need to
+		 * be written.
+		 * Note: The advantage of iaxxx_regmap_multireg_write allow
+		 * every regmap_write could be logged in regdump.
+		 */
+		rc = iaxxx_regmap_multireg_write(dev, priv->regmap,
+			IAXXX_PKG_MGMT_PKG_PROC_ID_ADDR, &pkg->proc_id,
+			(sizeof(struct pkg_mgmt_info) / sizeof(uint32_t)) - 2);
+		if (rc) {
+			dev_err(dev, "Pkg info write fail %s()\n", __func__);
+			return rc;
+		}
+	} else {
+		/* Only Package-Id/Proc-id needs to be written
+		 * when registering the Package
+		 */
+		rc = regmap_write(priv->regmap,
+				IAXXX_PKG_MGMT_PKG_PROC_ID_ADDR,
+				pkg->proc_id);
+		if (rc) {
+			dev_err(dev, "Pkg-id/Proc_id write fail %s()\n",
+				__func__);
+			return rc;
+		}
+		pkg->req = 1 << IAXXX_PKG_MGMT_PKG_REQ_REGISTER_POS;
+	}
+
+	/* This guard bit should be set to trigger the intended operation
+	 * in the subsequent Update block call.
+	 */
+	rc = regmap_write(priv->regmap, IAXXX_PKG_MGMT_PKG_REQ_ADDR,
+			pkg->req);
 	if (rc) {
-		dev_err(dev, "Pkg info write fail %s()\n", __func__);
+		dev_err(dev, "Pkg info req-bit write fail %s()\n", __func__);
 		return rc;
 	}
 	block_id = IAXXX_PROC_ID_TO_BLOCK_ID(bin_info.core_id);
