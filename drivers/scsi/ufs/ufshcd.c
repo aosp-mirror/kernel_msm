@@ -994,6 +994,19 @@ static void ufshcd_print_clk_freqs(struct ufs_hba *hba)
 	}
 }
 
+void ufshcd_print_phy_state(struct ufs_hba *hba)
+{
+	if (!(hba->ufshcd_dbg_print & UFSHCD_DBG_PRINT_UIC_ERR_HIST_EN))
+		return;
+
+	ufs_qcom_print_phy_state(hba);
+}
+
+bool ufshcd_check_phy_state(struct ufs_hba *hba)
+{
+	return ufs_qcom_check_phy_state(hba);
+}
+
 static void ufshcd_print_uic_err_hist(struct ufs_hba *hba,
 		struct ufs_uic_err_reg_hist *err_hist, char *err_name)
 {
@@ -7159,6 +7172,17 @@ static void ufshcd_err_handler(struct work_struct *work)
 	bool clks_enabled = false;
 
 	hba = container_of(work, struct ufs_hba, eh_work);
+
+	if (hba->auto_h8_err) {
+		dev_err(hba->dev, "%s: Auto Hibern8 error saved_err 0x%x saved_uic_err 0x%x",
+			__func__, hba->saved_err, hba->saved_uic_err);
+		ufshcd_print_host_state(hba);
+		ufshcd_print_phy_state(hba);
+		ufshcd_print_pwr_info(hba);
+		ufshcd_print_host_regs(hba);
+		ufshcd_print_cmd_log(hba);
+		BUG_ON(ufshcd_check_phy_state(hba));
+	}
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	if (hba->extcon) {

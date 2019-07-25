@@ -833,6 +833,34 @@ void ufs_qcom_phy_dump_regs(struct ufs_qcom_phy *phy, int offset,
 }
 EXPORT_SYMBOL(ufs_qcom_phy_dump_regs);
 
+
+void ufs_qcom_phy_print_phy_state(struct phy *generic_phy)
+{
+	struct ufs_qcom_phy *ufs_qcom_phy = get_ufs_qcom_phy(generic_phy);
+
+	dev_err(ufs_qcom_phy->dev, "phy->is_iface_clk_enabled = %x\n",
+		ufs_qcom_phy->is_iface_clk_enabled);
+	dev_err(ufs_qcom_phy->dev, "phy->is_ref_clk_enabled = %x\n",
+		ufs_qcom_phy->is_ref_clk_enabled);
+	dev_err(ufs_qcom_phy->dev, "phy->is_dev_ref_clk_enabled = %x\n",
+		ufs_qcom_phy->is_dev_ref_clk_enabled);
+	dev_err(ufs_qcom_phy->dev, "phy->is_powered_on = %x\n",
+		ufs_qcom_phy->is_powered_on);
+	dev_err(ufs_qcom_phy->dev, "phy->vdda_pll.enabled = %x\n",
+		ufs_qcom_phy->vdda_pll.enabled);
+	dev_err(ufs_qcom_phy->dev, "phy->vdda_phy.enabled = %x\n",
+		ufs_qcom_phy->vdda_phy.enabled);
+}
+EXPORT_SYMBOL(ufs_qcom_phy_print_phy_state);
+
+bool ufs_qcom_phy_ref_clk_enabled(struct phy *generic_phy)
+{
+	struct ufs_qcom_phy *ufs_qcom_phy = get_ufs_qcom_phy(generic_phy);
+
+	return ufs_qcom_phy->is_ref_clk_enabled;
+}
+EXPORT_SYMBOL(ufs_qcom_phy_ref_clk_enabled);
+
 void ufs_qcom_phy_dbg_register_dump(struct phy *generic_phy)
 {
 	struct ufs_qcom_phy *ufs_qcom_phy = get_ufs_qcom_phy(generic_phy);

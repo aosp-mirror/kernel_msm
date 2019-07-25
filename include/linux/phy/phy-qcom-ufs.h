@@ -41,5 +41,7 @@ void ufs_qcom_phy_save_controller_version(struct phy *phy,
 const char *ufs_qcom_phy_name(struct phy *phy);
 int ufs_qcom_phy_configure_lpm(struct phy *generic_phy, bool enable);
 void ufs_qcom_phy_dbg_register_dump(struct phy *generic_phy);
+void ufs_qcom_phy_print_phy_state(struct phy *generic_phy);
+bool ufs_qcom_phy_ref_clk_enabled(struct phy *generic_phy);
 
 #endif /* PHY_QCOM_UFS_H_ */

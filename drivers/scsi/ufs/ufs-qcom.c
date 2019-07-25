@@ -2769,6 +2769,22 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba, bool no_sleep)
 	ufs_qcom_ice_print_regs(host);
 }
 
+void ufs_qcom_print_phy_state(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+
+	ufs_qcom_phy_print_phy_state(phy);
+}
+
+bool ufs_qcom_check_phy_state(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct phy *phy = host->generic_phy;
+
+	return host->is_phy_pwr_on && !ufs_qcom_phy_ref_clk_enabled(phy);
+}
+
 /**
  * struct ufs_hba_qcom_vops - UFS QCOM specific variant operations
  *
