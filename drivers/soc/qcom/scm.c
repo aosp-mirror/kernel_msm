@@ -38,6 +38,7 @@
 #define SCM_EBUSY		-55
 #define SCM_V2_EBUSY		-12
 
+static atomic_t scm_call_count = ATOMIC_INIT(0);
 static DEFINE_MUTEX(scm_lock);
 
 /*
@@ -118,6 +119,7 @@ static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 	register u64 r5 asm("x5") = x5;
 	register u64 r6 asm("x6") = 0;
 
+	atomic_inc(&scm_call_count);
 	ATRACE_BEGIN(__func__);
 	do {
 		asm volatile(
@@ -147,6 +149,7 @@ static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 			  "x14", "x15", "x16", "x17");
 	} while (r0 == SCM_INTERRUPTED);
 	ATRACE_END();
+	atomic_dec(&scm_call_count);
 
 	if (ret1)
 		*ret1 = r1;
@@ -169,6 +172,7 @@ static int __scm_call_armv8_32(u32 w0, u32 w1, u32 w2, u32 w3, u32 w4, u32 w5,
 	register u32 r5 asm("w5") = w5;
 	register u32 r6 asm("w6") = 0;
 
+	atomic_inc(&scm_call_count);
 	ATRACE_BEGIN(__func__);
 	do {
 		asm volatile(
@@ -199,6 +203,7 @@ static int __scm_call_armv8_32(u32 w0, u32 w1, u32 w2, u32 w3, u32 w4, u32 w5,
 
 	} while (r0 == SCM_INTERRUPTED);
 	ATRACE_END();
+	atomic_dec(&scm_call_count);
 
 	if (ret1)
 		*ret1 = r1;
@@ -224,6 +229,7 @@ static int __scm_call_armv8_32(u32 w0, u32 w1, u32 w2, u32 w3, u32 w4, u32 w5,
 	register u32 r6 asm("r6") = 0;
 
 	ATRACE_BEGIN(__func__);
+	atomic_inc(&scm_call_count);
 	do {
 		asm volatile(
 			__asmeq("%0", R0_STR)
@@ -251,6 +257,7 @@ static int __scm_call_armv8_32(u32 w0, u32 w1, u32 w2, u32 w3, u32 w4, u32 w5,
 
 	} while (r0 == SCM_INTERRUPTED);
 	ATRACE_END();
+	atomic_dec(&scm_call_count);
 
 	if (ret1)
 		*ret1 = r1;
@@ -721,3 +728,8 @@ inline int scm_enable_mem_protection(void)
 }
 #endif
 EXPORT_SYMBOL(scm_enable_mem_protection);
+
+bool under_scm_call(void)
+{
+	return atomic_read(&scm_call_count);
+}
