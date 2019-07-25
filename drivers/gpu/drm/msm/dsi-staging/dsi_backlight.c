@@ -645,7 +645,7 @@ static int dsi_backlight_register(struct dsi_backlight_config *bl)
 	if (sysfs_create_groups(&bl->bl_device->dev.kobj, bl_device_groups))
 		pr_warn("unable to create device groups\n");
 
-	reg = regulator_get(panel->parent, "lab");
+	reg = regulator_get_optional(panel->parent, "lab");
 	if (!PTR_ERR_OR_ZERO(reg)) {
 		pr_info("LAB regulator found\n");
 		panel->bl_config.lab_vreg = reg;
