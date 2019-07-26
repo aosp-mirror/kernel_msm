@@ -21,6 +21,10 @@
 #define SECURE_CAMERA_DATA                      (1ULL << 2) //bit 2
 /* Keep temporary feature bits in the top part of the field */
 
+#define MAX_CACHE_ENROLLMENT 1536
+
+/* TODO (masterwilliams) change max enrollments to 21
+ * once it is changed in citadel */
 #define MAX_ENROLLMENT 20
 #define MAX_NUM_USERS 4
 
@@ -59,11 +63,15 @@
 #define ERROR_CITADEL_TIMEOUT -49
 #define ERROR_CITADEL_CACHE_FULL -50
 #define ERROR_CITADEL_CACHE_INVALID_INDEX -51
-#define ERROR_CITADEL_CACHE_INVALID_PROFILE -52 /* deprecated */
+#define ERROR_CITADEL_INVALID_PROFILE -52
 #define ERROR_CITADEL_EARLY_FAIL -53
 #define ERROR_CITADEL_SESSION_ID -54
 #define ERROR_CITADEL_CRC -55
 #define ERROR_CITADEL_UNSUPPORTED -56
+#define ERROR_INTERNAL_CITADEL_CHALLENGE_EXPIRED -57
+#define ERROR_INTERNAL_CITADEL_WIPED_USER -58
+#define ERROR_INTERNAL_CITADEL_INVALID_FACENET -59
+#define ERROR_INTERNAL_CITADEL_INVALID_DEPTHID -60
 
 #define ERROR_DEPTH_IPU_TIMEOUT -64
 #define ERROR_SKIN_INVALID_LAYER_SIZE -65
@@ -86,6 +94,10 @@
 #define ERROR_UNSUPPORTED_COMMAND -81
 
 #define ERROR_FW_DRIVER_SYNC_ERROR -84
+#define ERROR_UNEXPECTED_COMMAND -85
+
+// TODO: disable migrate until fully supported
+#define CMD_IS_VALID(cmd) ((cmd) < COMMAND_COUNT && (cmd) != COMMAND_MIGRATE)
 
 /* Any change to the WorkloadStatus should also be accompanied by a change to
  * WORKLOAD_STATUS_STRINGS in defines.h.

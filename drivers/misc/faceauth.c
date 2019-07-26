@@ -50,9 +50,6 @@
 #define M0_ENROLL_POLLING_INTERVAL_US 6000
 #define M0_POLLING_INTERVAL_US 100000
 
-/* Citadel */
-#define MAX_CACHE_SIZE 512
-
 struct faceauth_data {
 	/*
 	 * M0 Verbosity Level Encoding
@@ -211,7 +208,7 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 
 		/* Check completion flag */
 		pr_info("Waiting for completion.\n");
-		if(start_step_data.operation == COMMAND_ENROLL){
+		if (start_step_data.operation == COMMAND_ENROLL) {
 			polling_pause = M0_ENROLL_POLLING_PAUSE_US;
 			polling_interval = M0_ENROLL_POLLING_INTERVAL_US;
 		}
@@ -384,7 +381,8 @@ static int process_cache_flush_idxs(int16_t *flush_idxs, uint32_t flush_size)
 	}
 
 	for (i = 0; i < flush_size; ++i) {
-		if (flush_idxs[i] < 0 || flush_idxs[i] >= MAX_CACHE_SIZE) {
+		if (flush_idxs[i] < 0
+		    || flush_idxs[i] >= MAX_CACHE_ENROLLMENT) {
 			pr_err("Wrong cache flush index\n");
 			return -EINVAL;
 		}
