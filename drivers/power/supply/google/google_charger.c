@@ -100,9 +100,15 @@ enum tcpm_psy_online_states {
 	TCPM_PSY_PROG_ONLINE,
 };
 
+enum pd_pps_stage {
+	PPS_NONE = 0,
+	PPS_AVAILABLE,
+	PPS_ACTIVE,
+	PPS_DISABLED,
+};
+
 struct pd_pps_data {
-	bool pps_avail;
-	bool pps_active;
+	unsigned int stage;
 	int pd_online;
 	time_t last_update;
 	unsigned int keep_alive_cnt;
@@ -316,8 +322,7 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 
 	/* PPS state */
 	chg_drv->pps_data.pd_online = TCPM_PSY_OFFLINE;
-	chg_drv->pps_data.pps_avail = false;
-	chg_drv->pps_data.pps_active = false;
+	chg_drv->pps_data.stage = PPS_NONE;
 	chg_drv->pps_data.chg_flags = 0;
 	chg_drv->pps_data.keep_alive_cnt = 0;
 	chg_drv->pps_data.nr_src_cap = 0;
@@ -563,7 +568,8 @@ static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 #define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
 
 /* false when not present or error (either way don't run) */
-static bool pps_is_avail(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
+static unsigned int pps_is_avail(struct pd_pps_data *pps,
+				 struct power_supply *tcpm_psy)
 {
 	pps->max_uv = GPSY_GET_PROP(tcpm_psy,
 					POWER_SUPPLY_PROP_VOLTAGE_MAX);
@@ -577,7 +583,7 @@ static bool pps_is_avail(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 					POWER_SUPPLY_PROP_CURRENT_NOW);
 	if (pps->max_uv < 0 || pps->min_uv < 0 || pps->max_ua < 0 ||
 		pps->out_uv < 0 || pps->op_ua < 0)
-		return false;
+		return PPS_NONE;
 
 	/* TODO: lower the loglevel after the development stage */
 	logbuffer_log(pps->log,
@@ -591,7 +597,7 @@ static bool pps_is_avail(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 	/* FIXME: set interval to PD_T_PPS_TIMEOUT here may cause
 	 * timeout
 	 */
-	return true;
+	return PPS_AVAILABLE;
 }
 
 
@@ -651,15 +657,16 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 {
 	int pd_online, usbc_type;
 
-	/* 2) pps->pd_online == TCPM_PSY_PROG_ONLINE && !pps_avail
-	 *  If the source really support PPS (set in 1): set pps_avail
-	 *  and reschedule after PD_T_PPS_TIMEOUT
+	/* 2) pps->pd_online == TCPM_PSY_PROG_ONLINE && stage == PPS_NONE
+	 *  If the source really support PPS (set in 1): set stage to
+	 *  PPS_AVAILABLE and reschedule after PD_T_PPS_TIMEOUT
 	 */
-	if (pps->pd_online == TCPM_PSY_PROG_ONLINE && !pps->pps_avail) {
+	if (pps->pd_online == TCPM_PSY_PROG_ONLINE &&
+	    pps->stage == PPS_NONE) {
 		int rc;
 
-		pps->pps_avail = pps_is_avail(pps, tcpm_psy);
-		if (pps->pps_avail) {
+		pps->stage = pps_is_avail(pps, tcpm_psy);
+		if (pps->stage == PPS_AVAILABLE) {
 			rc = pps_ping(pps, tcpm_psy);
 			if (rc < 0) {
 				pps->pd_online = TCPM_PSY_FIXED_ONLINE;
@@ -684,23 +691,22 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 	if (pd_online < 0)
 		return 0;
 
-	/* 3) pd_online == TCPM_PSY_PROG_ONLINE == pps->pd_online && pps_avail
-	 * pps_is active now, we are done here. pd_online will change to
+	/* 3) pd_online == TCPM_PSY_PROG_ONLINE == pps->pd_online
+	 * pps is active now, we are done here. pd_online will change to
 	 * if pd_online is !TCPM_PSY_PROG_ONLINE go back to 1) OR exit.
 	 */
-	pps->pps_active = (pd_online == pps->pd_online) &&
-			  (pd_online == TCPM_PSY_PROG_ONLINE) &&
-			  pps->pps_avail;
-	if (pps->pps_active)
+	pps->stage = (pd_online == pps->pd_online) &&
+		     (pd_online == TCPM_PSY_PROG_ONLINE) &&
+		     (pps->stage == PPS_AVAILABLE || pps->stage == PPS_ACTIVE) ?
+		     PPS_ACTIVE : PPS_NONE;
+	if (pps->stage == PPS_ACTIVE)
 		return 0;
 
-	/* 1) !pps_avail && !pps_active && pps->pd_online!=TCPM_PSY_PROG_ONLINE
+	/* 1) stage == PPS_NONE && pps->pd_online!=TCPM_PSY_PROG_ONLINE
 	 *  If usbc_type is POWER_SUPPLY_USB_TYPE_PD_PPS and pd_online is
 	 *  TCPM_PSY_FIXED_ONLINE, enable PSPS (set POWER_SUPPLY_PROP_ONLINE to
 	 *  TCPM_PSY_PROG_ONLINE and reschedule in PD_T_PPS_TIMEOUT.
 	 */
-	pps->pps_avail = false;
-
 	usbc_type = GPSY_GET_PROP(tcpm_psy, POWER_SUPPLY_PROP_USB_TYPE);
 	if (pd_online == TCPM_PSY_FIXED_ONLINE &&
 	    usbc_type == POWER_SUPPLY_USB_TYPE_PD_PPS) {
@@ -718,6 +724,7 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 		if (rc == -EOPNOTSUPP) {
 			/* pps_update_interval==0 disable the vote */
 			logbuffer_log(pps->log,"PPS not supported");
+			pps->stage = PPS_DISABLED;
 		} else if (rc != 0) {
 			logbuffer_log(pps->log,
 				      "failed to set PROP_ONLINE, rc = %d",
@@ -1114,7 +1121,7 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv,
 	if (update_interval <= 0)
 		return update_interval;
 
-	if (chg_drv->tcpm_psy) {
+	if (chg_drv->tcpm_psy && chg_drv->pps_data.stage != PPS_DISABLED) {
 		int pps_ui;
 
 		pps_ui = pps_work(&chg_drv->pps_data, chg_drv->tcpm_psy);
@@ -1987,7 +1994,7 @@ static int pps_switch_profile(struct chg_drv *chg_drv, bool more_pwr)
 
 	if (ret == 0) {
 		pps->keep_alive_cnt = 0;
-		pps->pps_avail = false;
+		pps->stage = PPS_NONE;
 	}
 
 	return ret;
@@ -2109,7 +2116,7 @@ static int msc_update_charger_cb(struct votable *votable,
 		goto msc_reschedule;
 	}
 
-	if (chg_drv->pps_data.pps_avail && chg_drv->pps_data.pps_active) {
+	if (chg_drv->pps_data.stage == PPS_ACTIVE) {
 		int pps_update_interval = update_interval;
 		struct pd_pps_data *pps = &chg_drv->pps_data;
 
