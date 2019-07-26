@@ -138,6 +138,7 @@ struct usbpd {
 	struct logbuffer *log;
 
 	bool pd_disabled;
+	struct completion tx_complete;
 };
 
 static u8 always_enable_data;
@@ -1434,6 +1435,7 @@ static void pd_transmit_handler(struct work_struct *work)
 		status = TCPC_TX_FAILED;
 
 	tcpm_pd_transmit_complete(pd->tcpm_port, status);
+	complete(&pd->tx_complete);
 
 	if (signal)
 		logbuffer_log(pd->log,
@@ -1844,6 +1846,7 @@ static void set_in_hard_reset_locked(struct tcpc_dev *dev, bool status)
 static void pd_phy_shutdown(struct usbpd *pd)
 {
 	int rc = 0;
+	bool tx_done = false;
 
 	flush_delayed_work(&pd->ext_vbus_work);
 	mutex_lock(&pd->lock);
@@ -1852,7 +1855,18 @@ static void pd_phy_shutdown(struct usbpd *pd)
 	if (pd->pd_capable && pd->vbus_present) {
 		set_in_hard_reset_locked(&pd->tcpc_dev, true);
 		tcpm_set_current_limit(&pd->tcpc_dev, 0, 5000);
-		tcpm_pd_transmit(&pd->tcpc_dev, TCPC_TX_HARD_RESET, NULL);
+		reinit_completion(&pd->tx_complete);
+		if (!tcpm_pd_transmit(&pd->tcpc_dev, TCPC_TX_HARD_RESET,
+				      NULL)) {
+			if (wait_for_completion_timeout(&pd->tx_complete,
+			    msecs_to_jiffies(PD_T_TCPC_TX_TIMEOUT))) {
+				tx_done = true;
+				dev_info(&pd->dev, "HARD RESET tx complete\n");
+			}
+		}
+
+		if (!tx_done)
+			dev_err(&pd->dev, "HARD RESET tx failed\n");
 	}
 	pd->pd_disabled = true;
 
@@ -2242,6 +2256,7 @@ struct usbpd *usbpd_create(struct device *parent)
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
 
 	pd->suspend_supported = true;
+	init_completion(&pd->tx_complete);
 
 	return pd;
 
