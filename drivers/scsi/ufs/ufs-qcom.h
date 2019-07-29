@@ -412,4 +412,6 @@ static inline bool ufs_qcom_cap_svs2(struct ufs_qcom_host *host)
 	return !!(host->caps & UFS_QCOM_CAP_SVS2);
 }
 
+void ufs_qcom_print_phy_state(struct ufs_hba *hba);
+
 #endif /* UFS_QCOM_H_ */

@@ -867,6 +867,7 @@ struct ufs_hba {
 	u32 saved_ce_err;
 	bool silence_err_logs;
 	bool force_host_reset;
+	bool h8_err;
 
 	/* Device management request data */
 	struct ufs_dev_cmd dev_cmd;
