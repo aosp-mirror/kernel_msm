@@ -6535,6 +6535,12 @@ static irqreturn_t ufshcd_uic_cmd_compl(struct ufs_hba *hba, u32 intr_status)
 				__func__, (intr_status & UIC_HIBERNATE_ENTER) ?
 				"Enter" : "Exit",
 				intr_status, ufshcd_get_upmcrs(hba));
+			if (intr_status & UIC_HIBERNATE_ENTER)
+				ufshcd_update_error_stats(hba,
+							UFS_ERR_AUTOH8_ENTER);
+			else
+				ufshcd_update_error_stats(hba,
+							UFS_ERR_AUTOH8_EXIT);
 			/*
 			 * It is possible to see auto-h8 errors during card
 			 * removal, so set this flag and let the error handler
