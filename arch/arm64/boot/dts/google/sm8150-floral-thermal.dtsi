@@ -546,7 +546,7 @@
 
 	bcl-virt-extreme {
 		num_sensors = <3>;
-		coefficients = <(-3000) 400 (-10000)>;
+		coefficients = <(-3200) 400 (-10000)>;
 		sensor-names = "pm8150b-vbat-lvl0", "bcl-cycle", "battery";
 	};
 
