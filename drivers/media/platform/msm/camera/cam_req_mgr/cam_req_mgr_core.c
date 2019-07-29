@@ -831,19 +831,21 @@ static int __cam_req_mgr_check_sync_for_mslave(
 					return -EINVAL;
 				}
 
-				rc = __cam_req_mgr_check_link_is_ready(
+				if (sync_q->slot[sync_slot_idx].status !=
+					 CRM_SLOT_STATUS_REQ_APPLIED) {
+					rc = __cam_req_mgr_check_link_is_ready(
 					sync_link,
 					sync_slot_idx, true);
-				if (rc &&
-					(sync_q->slot[sync_slot_idx].status !=
-					 CRM_SLOT_STATUS_REQ_APPLIED)) {
-					CAM_DBG(CAM_CRM,
-						"Req: %lld not ready on [slave] link: %x, rc=%d",
-						sync_req_id,
-						sync_link->link_hdl, rc);
-					link->sync_link_sof_skip_cnt =
-						link->sync_links_num;
-					return rc;
+					if (rc) {
+						CAM_DBG(CAM_CRM,
+							"Req: %lld not ready on [slave] link: %x, rc=%d",
+							sync_req_id,
+							sync_link->link_hdl,
+							rc);
+						link->sync_link_sof_skip_cnt =
+							link->sync_links_num;
+						return rc;
+					}
 				}
 			}
 		}
