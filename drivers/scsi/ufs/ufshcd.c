@@ -824,7 +824,9 @@ static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 	entry->lba = lba;
 	entry->transfer_len = transfer_len;
 	entry->idn = idn;
-	entry->doorbell = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
+	if (strcmp(cmd_type, "clk-gating"))
+		entry->doorbell =
+			ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	entry->tag = tag;
 	entry->tstamp = ktime_get();
 	entry->outstanding_reqs = hba->outstanding_reqs;
@@ -853,6 +855,11 @@ static void ufshcd_dme_cmd_log(struct ufs_hba *hba, char *str, u8 cmd_id)
 static void ufshcd_custom_cmd_log(struct ufs_hba *hba, char *str)
 {
 	ufshcd_cmd_log(hba, str, "custom", 0, 0, 0);
+}
+
+static void ufshcd_clk_gating_cmd_log(struct ufs_hba *hba, char *str)
+{
+	ufshcd_cmd_log(hba, str, "clk-gating", 0, 0, 0);
 }
 
 static void ufshcd_print_cmd_log(struct ufs_hba *hba)
@@ -915,6 +922,10 @@ static void ufshcd_dme_cmd_log(struct ufs_hba *hba, char *str, u8 cmd_id)
 }
 
 static void ufshcd_custom_cmd_log(struct ufs_hba *hba, char *str)
+{
+}
+
+static void ufshcd_clk_gating_cmd_log(struct ufs_hba *hba, char *str)
 {
 }
 
@@ -5471,6 +5482,7 @@ static int __ufshcd_uic_hibern8_enter(struct ufs_hba *hba)
 		ufshcd_update_error_stats(hba, UFS_ERR_HIBERN8_ENTER);
 		dev_err(hba->dev, "%s: hibern8 enter failed. ret = %d\n",
 			__func__, ret);
+		ufshcd_custom_cmd_log(hba, "h8-enter-failed");
 
 		/*
 		 * If link recovery fails then return error code (-ENOLINK)
@@ -5490,6 +5502,7 @@ static int __ufshcd_uic_hibern8_enter(struct ufs_hba *hba)
 								POST_CHANGE);
 		dev_dbg(hba->dev, "%s: Hibern8 Enter at %lld us", __func__,
 			ktime_to_us(ktime_get()));
+		ufshcd_custom_cmd_log(hba, "h8-enter");
 	}
 
 	return ret;
@@ -5531,6 +5544,7 @@ int ufshcd_uic_hibern8_exit(struct ufs_hba *hba)
 		ufshcd_update_error_stats(hba, UFS_ERR_HIBERN8_EXIT);
 		dev_err(hba->dev, "%s: hibern8 exit failed. ret = %d\n",
 			__func__, ret);
+		ufshcd_custom_cmd_log(hba, "h8-Exit-Failed");
 		ret = ufshcd_link_recovery(hba);
 		/* Unable to recover the link, so no point proceeding */
 		if (ret)
@@ -5542,6 +5556,7 @@ int ufshcd_uic_hibern8_exit(struct ufs_hba *hba)
 			ktime_to_us(ktime_get()));
 		hba->ufs_stats.last_hibern8_exit_tstamp = ktime_get();
 		hba->ufs_stats.hibern8_exit_cnt++;
+		ufshcd_custom_cmd_log(hba, "h8-Exit");
 	}
 
 	return ret;
@@ -7185,6 +7200,8 @@ static void ufshcd_err_handler(struct work_struct *work)
 	}
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
+	ufshcd_custom_cmd_log(hba, "ErrorHandler-Enter");
+
 	if (hba->extcon) {
 		if (ufshcd_is_card_online(hba)) {
 			spin_unlock_irqrestore(hba->host->host_lock, flags);
@@ -7380,6 +7397,7 @@ skip_err_handling:
 		hba->ufs_stats.clk_rel.ctx = ERR_HNDLR_WORK;
 	}
 out:
+	ufshcd_custom_cmd_log(hba, "ErrorHandler-Exit");
 	ufshcd_clear_eh_in_progress(hba);
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 }
@@ -8103,6 +8121,7 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	ufshcd_hba_stop(hba, false);
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	ufshcd_custom_cmd_log(hba, "host-reset-restore");
 
 	/* scale up clocks to max frequency before full reinitialization */
 	ufshcd_set_clk_freq(hba, true);
@@ -8140,6 +8159,7 @@ static int ufshcd_detect_device(struct ufs_hba *hba)
 {
 	int err = 0;
 
+	ufshcd_custom_cmd_log(hba, "detect-device");
 	err = ufshcd_vops_full_reset(hba);
 	if (err)
 		dev_warn(hba->dev, "%s: full reset returned %d\n",
@@ -8168,6 +8188,8 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	unsigned long flags;
 	int retries = MAX_HOST_RESET_RETRIES;
 
+	ufshcd_custom_cmd_log(hba, "Reset-and-Restore-Enter");
+
 	ufshcd_enable_irq(hba);
 
 	do {
@@ -8189,6 +8211,7 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	ufshcd_transfer_req_compl(hba);
 	ufshcd_tmc_handler(hba);
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	ufshcd_custom_cmd_log(hba, "Reset-and-Restore-Exit");
 
 	return err;
 }
@@ -10034,10 +10057,16 @@ out:
 		ufshcd_vops_update_sec_cfg(hba, true);
 	}
 
-	if (clk_state_changed)
+	if (clk_state_changed) {
 		trace_ufshcd_profile_clk_gating(dev_name(hba->dev),
 			(on ? "on" : "off"),
 			ktime_to_us(ktime_sub(ktime_get(), start)), ret);
+		if (on)
+			ufshcd_clk_gating_cmd_log(hba, "CLKS-UNGATED");
+		else
+			ufshcd_clk_gating_cmd_log(hba, "CLKS-GATED");
+
+	}
 	return ret;
 }
 
