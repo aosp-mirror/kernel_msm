@@ -87,6 +87,41 @@ static inline void sde_atrace_mode_fps(const struct panel_switch_data *pdata,
 	sde_atrace('C', pdata->thread, "FPS", mode->timing.refresh_rate);
 }
 
+ssize_t panel_dsi_write_buf(struct dsi_panel *panel,
+			    const void *data, size_t len, bool send_last)
+{
+	const struct mipi_dsi_device *dsi = &panel->mipi_device;
+	const struct mipi_dsi_host_ops *ops = panel->host->ops;
+	struct mipi_dsi_msg msg = {
+		.channel = dsi->channel,
+		.tx_buf = data,
+		.tx_len = len,
+		.flags = 0,
+	};
+
+	switch (len) {
+	case 0:
+		return -EINVAL;
+
+	case 1:
+		msg.type = MIPI_DSI_DCS_SHORT_WRITE;
+		break;
+
+	case 2:
+		msg.type = MIPI_DSI_DCS_SHORT_WRITE_PARAM;
+		break;
+
+	default:
+		msg.type = MIPI_DSI_DCS_LONG_WRITE;
+		break;
+	}
+
+	if (send_last)
+		msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+
+	return ops->transfer(panel->host, &msg);
+}
+
 static void panel_handle_te(struct dsi_display_te_listener *tl)
 {
 	struct panel_switch_data *pdata;
@@ -644,6 +679,24 @@ struct s6e3hc2_switch_data {
 #define S6E3HC2_GAMMA_BAND_LEN 45
 #define S6E3HC2_GAMMA_BAND_G0_OFFSET 39
 
+enum s6e3hc2_gamma_flags {
+	/*
+	 * Some s6e3hc2 panels have incorrectly programmed gamma bands,
+	 * specifically at gray 0 (i.e., black). This flag enables a
+	 * workaround that makes sure gray 0 is black by clearing the
+	 * corresponding R, G, B bytes.
+	 */
+	GAMMA_NEEDS_G0_CLEAR		= BIT(0),
+
+	/*
+	 * Allow sending gamma tables in groups by setting this flag the
+	 * gamma set will be sent together with the next set on the list.
+	 *
+	 * Order of commands matter when using this flag
+	 */
+	GAMMA_CMD_GROUP_WITH_NEXT	= BIT(1),
+};
+
 /**
  * s6e3hc2_gamma_info - Information used to access gamma data on s6e3hc2.
  * @cmd: Command to use when writing/reading gamma from the DDIC.
@@ -651,20 +704,20 @@ struct s6e3hc2_switch_data {
  * @prefix_len: Number of bytes that precede gamma data when writing/reading
  *     from the DDIC. This is a subset of len.
  * @flash_offset: Address offset to use when reading from flash.
- * @needs_g0_clear: Some s6e3hc2 panels have incorrectly programmed gamma bands,
- *     specifically at gray 0 (i.e., black). This flag enables a workaround that
- *     makes sure gray 0 is black by clearing the corresponding R, G, B bytes.
  */
 const struct s6e3hc2_gamma_info {
 	u8 cmd;
 	u32 len;
 	u32 prefix_len;
 	u32 flash_offset;
-	bool needs_g0_clear;
+	u32 flags;
 } s6e3hc2_gamma_tables[] = {
-	{ 0xC8, S6E3HC2_GAMMA_BAND_LEN * 3, 0, 0x0000, true },
-	{ 0xC9, S6E3HC2_GAMMA_BAND_LEN * 4, 0, 0x0087, true },
-	{ 0xB3, 2 + S6E3HC2_GAMMA_BAND_LEN, 2, 0x013B, false },
+	/* order of commands matter due to use of cmds grouping */
+	{ 0xC8, S6E3HC2_GAMMA_BAND_LEN * 3, 0, 0x0000,
+		GAMMA_NEEDS_G0_CLEAR },
+	{ 0xC9, S6E3HC2_GAMMA_BAND_LEN * 4, 0, 0x0087,
+		GAMMA_NEEDS_G0_CLEAR | GAMMA_CMD_GROUP_WITH_NEXT },
+	{ 0xB3, 2 + S6E3HC2_GAMMA_BAND_LEN, 2, 0x013B, 0 },
 };
 
 #define S6E3HC2_NUM_GAMMA_TABLES ARRAY_SIZE(s6e3hc2_gamma_tables)
@@ -684,7 +737,6 @@ struct s6e3hc2_panel_data {
 static void s6e3hc2_gamma_update(struct panel_switch_data *pdata,
 				 const struct dsi_display_mode *mode)
 {
-	struct mipi_dsi_device *dsi = &pdata->panel->mipi_device;
 	struct s6e3hc2_switch_data *sdata;
 	struct s6e3hc2_panel_data *priv_data;
 	int i;
@@ -701,14 +753,19 @@ static void s6e3hc2_gamma_update(struct panel_switch_data *pdata,
 		return;
 
 	for (i = 0; i < S6E3HC2_NUM_GAMMA_TABLES; i++) {
+		const struct s6e3hc2_gamma_info *info =
+				&s6e3hc2_gamma_tables[i];
 		/* extra byte for the dsi command */
-		const size_t len = s6e3hc2_gamma_tables[i].len + 1;
+		const size_t len = info->len + 1;
 		const void *data = priv_data->gamma_data[i];
+		const bool send_last =
+				!(info->flags & GAMMA_CMD_GROUP_WITH_NEXT);
 
 		if (WARN(!data, "Gamma table #%d not read\n", i))
 			continue;
 
-		if (IS_ERR_VALUE(mipi_dsi_dcs_write_buffer(dsi, data, len)))
+		if (IS_ERR_VALUE(panel_dsi_write_buf(pdata->panel, data, len,
+					send_last)))
 			pr_warn("failed sending gamma cmd 0x%02x\n",
 				s6e3hc2_gamma_tables[i].cmd);
 	}
@@ -836,7 +893,7 @@ static int s6e3hc2_gamma_read_flash(struct panel_switch_data *pdata,
 			buf[j] = tmp[1];
 		}
 
-		if (info->needs_g0_clear)
+		if (info->flags & GAMMA_NEEDS_G0_CLEAR)
 			for (j = info->prefix_len; j < info->len;
 				j += S6E3HC2_GAMMA_BAND_LEN)
 				memset(buf + j + S6E3HC2_GAMMA_BAND_G0_OFFSET, 0, 3);
@@ -1245,10 +1302,11 @@ struct s6e3hc2_wrctrl_data {
 	u32 refresh_rate;
 };
 
-static int s6e3hc2_write_ctrld_reg(struct mipi_dsi_device *dsi,
-	const struct s6e3hc2_wrctrl_data *data)
+static int s6e3hc2_write_ctrld_reg(struct dsi_panel *panel,
+	const struct s6e3hc2_wrctrl_data *data, bool send_last)
 {
 	u8 wrctrl_reg = S6E3HC2_WRCTRLD_BCTRL_BIT;
+	u8 payload[2] = { MIPI_DCS_WRITE_CONTROL_DISPLAY, 0 };
 
 	if (data->hbm_enable)
 		wrctrl_reg |= S6E3HC2_WRCTRLD_HBM_BIT;
@@ -1262,14 +1320,15 @@ static int s6e3hc2_write_ctrld_reg(struct mipi_dsi_device *dsi,
 	pr_debug("hbm_enable: %d dimming_active: %d refresh_rate: %d hz\n",
 		data->hbm_enable, data->dimming_active, data->refresh_rate);
 
-	return mipi_dsi_dcs_write(dsi, MIPI_DCS_WRITE_CONTROL_DISPLAY,
-		&wrctrl_reg, sizeof(wrctrl_reg));
+	payload[1] = wrctrl_reg;
+
+	return panel_dsi_write_buf(panel, &payload, sizeof(payload), send_last);
 }
 
 static int s6e3hc2_switch_mode_update(struct dsi_panel *panel,
-				      const struct dsi_display_mode *mode)
+				      const struct dsi_display_mode *mode,
+				      bool send_last)
 {
-	struct mipi_dsi_device *dsi = &panel->mipi_device;
 	const struct hbm_data *hbm = panel->bl_config.hbm;
 	struct s6e3hc2_wrctrl_data data = {0};
 
@@ -1283,14 +1342,14 @@ static int s6e3hc2_switch_mode_update(struct dsi_panel *panel,
 	data.dimming_active = panel->bl_config.hbm->dimming_active;
 	data.refresh_rate = mode->timing.refresh_rate;
 
-	return s6e3hc2_write_ctrld_reg(dsi, &data);
+	return s6e3hc2_write_ctrld_reg(panel, &data, send_last);
 }
 
 static int s6e3hc2_update_hbm(struct dsi_panel *panel)
 {
 	const struct panel_switch_data *pdata = panel->private_data;
 
-	return s6e3hc2_switch_mode_update(panel, pdata->display_mode);
+	return s6e3hc2_switch_mode_update(panel, pdata->display_mode, true);
 }
 
 static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
@@ -1307,7 +1366,7 @@ static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 	if (DSI_WRITE_CMD_BUF(dsi, unlock_cmd))
 		return;
 
-	s6e3hc2_switch_mode_update(panel, mode);
+	s6e3hc2_switch_mode_update(panel, mode, false);
 	s6e3hc2_gamma_update(pdata, mode);
 
 	DSI_WRITE_CMD_BUF(dsi, lock_cmd);
