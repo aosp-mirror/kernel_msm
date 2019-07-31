@@ -176,4 +176,6 @@ bool ipu_is_iommu_active(struct device *dev);
  */
 void ipu_request_reset(struct device *dev);
 
+int ipu_core_jqs_start(struct device *dev);
+
 #endif /* __IPU_CORE_H__ */

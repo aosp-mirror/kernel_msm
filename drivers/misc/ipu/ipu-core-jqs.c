@@ -750,7 +750,7 @@ static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
 }
 
 /* Called for runtime pm */
-static int ipu_core_jqs_start(struct device *dev)
+int ipu_core_jqs_start(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 	struct paintbox_bus *bus = pb_dev->bus;

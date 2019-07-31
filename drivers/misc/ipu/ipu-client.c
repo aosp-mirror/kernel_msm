@@ -54,6 +54,12 @@ int ipu_jqs_get(struct paintbox_data *pb)
 
 	ipu_add_client(pb->dev);
 
+	ret = ipu_core_jqs_start(pb->dev);
+	if (ret < 0) {
+		ipu_remove_client(pb->dev);
+		return ret;
+	}
+
 	ret = pm_runtime_get_sync(pb->dev);
 	if (ret < 0) {
 		pm_runtime_put_noidle(pb->dev);
