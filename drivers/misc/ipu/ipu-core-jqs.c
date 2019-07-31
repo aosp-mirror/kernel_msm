@@ -620,12 +620,6 @@ void ipu_core_jqs_suspend_firmware(struct paintbox_bus *bus)
 /* The caller to this function must hold bus->jqs.lock */
 void ipu_core_jqs_shutdown_firmware(struct paintbox_bus *bus)
 {
-	/* JQS reset will be complete after this function has returned and the
-	 * bus->jqs.lock has been released. At that point the client and request
-	 * a cold boot of the JQS.
-	 */
-	bus->jqs.reset_in_progress = false;
-
 	if (bus->jqs.status == JQS_FW_STATUS_REQUESTED) {
 		ipu_core_notify_firmware_down(bus);
 		return;
@@ -761,27 +755,12 @@ static int ipu_core_jqs_start(struct device *dev)
 
 	mutex_lock(&bus->jqs.lock);
 
-	/* Check to make sure there are IPU clients before enabling the
-	 * firmware.  The start() hook can be invoked as part of device power
-	 * management, as well as, runtime power management.
-	 */
-	if (bus->jqs.client_count == 0) {
-		mutex_unlock(&bus->jqs.lock);
-		return -ENETDOWN;
-	}
-
-	if (bus->jqs.reset_in_progress) {
-		mutex_unlock(&bus->jqs.lock);
-		dev_err(bus->parent_dev, "%s: reset in progress\n", __func__);
-		return -ENETDOWN;
-	}
-
 	if (WARN_ON(!ipu_core_is_ready(bus) ||
 			!ipu_core_jqs_is_clock_ready(bus))) {
 		mutex_unlock(&bus->jqs.lock);
 		return -ENETDOWN;
 	}
-
+	bus->jqs.runtime_requested = true;
 	ret = ipu_core_jqs_enable_firmware(bus);
 
 	mutex_unlock(&bus->jqs.lock);
@@ -800,8 +779,10 @@ static int ipu_core_jqs_stop(struct device *dev)
 
 	mutex_lock(&bus->jqs.lock);
 
-	if (!bus->jqs.reset_in_progress)
+	if (bus->jqs.runtime_requested)
 		ipu_core_jqs_disable_firmware_requested(bus);
+
+	bus->jqs.runtime_requested = false;
 
 	mutex_unlock(&bus->jqs.lock);
 
@@ -816,8 +797,7 @@ void ipu_core_jqs_resume_firmware(struct paintbox_bus *bus,
 
 	bus->jqs.clock_rate_hz = ipu_clock_rate_hz;
 
-	if (bus->jqs.client_count == 0 || bus->jqs.reset_in_progress ||
-			!ipu_core_is_ready(bus) ||
+	if (!bus->jqs.runtime_requested || !ipu_core_is_ready(bus) ||
 			!ipu_core_jqs_is_clock_ready(bus))
 		return;
 
