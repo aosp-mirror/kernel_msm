@@ -46,16 +46,19 @@ static int send_request_wait(struct qmi_handle *handle,
 	return err;
 }
 
-int tbn_request_bus(struct tbn_context *tbn)
+static void tbn_request_work(struct work_struct *work)
 {
 	int err = 0;
 	struct tbn_kernel_request_bus_v01 req;
 	struct tbn_ssc_release_bus_v01 rsp;
+	struct tbn_context *tbn;
 
-	dev_info(tbn->dev, "kernel requesting bus access from SLPI\n");
+	tbn = container_of(work, struct tbn_context, request_work);
 
 	if (!tbn || !tbn->connected)
-		return -EINVAL;
+		return;
+
+	dev_info(tbn->dev, "kernel requesting bus access from SLPI\n");
 
 	mutex_lock(&tbn->service_lock);
 	err = send_request_wait(&tbn->qmi_handle,
@@ -65,27 +68,43 @@ int tbn_request_bus(struct tbn_context *tbn)
 				tbn_ssc_release_bus_v01_ei, &rsp,
 				TBN_REQUEST_BUS_TIMEOUT_MS);
 	mutex_unlock(&tbn->service_lock);
-	if (err < 0) {
+	complete_all(&tbn->bus_requested);
+	if (err < 0)
 		dev_err(tbn->dev, "send request failed with: %d\n", err);
-		return err;
+	else
+		dev_dbg(tbn->dev, "kernel requesting bus access from SLPI ... SUCCESS!\n");
+}
+
+int tbn_request_bus(struct tbn_context *tbn)
+{
+	if (!tbn || !tbn->connected)
+		return 0;
+
+	if (mutex_is_locked(&tbn->service_lock))
+		dev_err(tbn->dev, "wait for a response on qmi transaction!\n");
+	else {
+		reinit_completion(&tbn->bus_requested);
+		queue_work(tbn->qmi_wq, &tbn->request_work);
+		wait_for_completion_timeout(&tbn->bus_requested,
+			msecs_to_jiffies(TBN_REQUEST_BUS_TIMEOUT_MS));
 	}
-
-	dev_dbg(tbn->dev, "kernel requesting bus access from SLPI ... SUCCESS!\n");
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tbn_request_bus);
 
-int tbn_release_bus(struct tbn_context *tbn)
+static void tbn_release_work(struct work_struct *work)
 {
 	int err = 0;
 	struct tbn_kernel_release_bus_v01 req;
 	struct tbn_ssc_acquire_bus_v01 rsp;
+	struct tbn_context *tbn;
 
-	dev_info(tbn->dev, "kernel releasing bus access from SLPI\n");
+	tbn = container_of(work, struct tbn_context, release_work);
 
 	if (!tbn || !tbn->connected)
-		return -EINVAL;
+		return;
+
+	dev_info(tbn->dev, "kernel releasing bus access from SLPI\n");
 
 	mutex_lock(&tbn->service_lock);
 	err = send_request_wait(&tbn->qmi_handle,
@@ -95,13 +114,26 @@ int tbn_release_bus(struct tbn_context *tbn)
 				tbn_ssc_acquire_bus_v01_ei, &rsp,
 				TBN_RELEASE_BUS_TIMEOUT_MS);
 	mutex_unlock(&tbn->service_lock);
-	if (err < 0) {
+	complete_all(&tbn->bus_released);
+	if (err < 0)
 		dev_err(tbn->dev, "send request failed with: %d\n", err);
-		return err;
+	else
+		dev_dbg(tbn->dev, "kernel releasing bus access from SLPI ... SUCCESS!\n");
+}
+
+int tbn_release_bus(struct tbn_context *tbn)
+{
+	if (!tbn || !tbn->connected)
+		return 0;
+
+	if (mutex_is_locked(&tbn->service_lock))
+		dev_err(tbn->dev, "wait for a response on qmi transaction!\n");
+	else {
+		reinit_completion(&tbn->bus_released);
+		queue_work(tbn->qmi_wq, &tbn->release_work);
+		wait_for_completion_timeout(&tbn->bus_released,
+			msecs_to_jiffies(TBN_RELEASE_BUS_TIMEOUT_MS));
 	}
-
-	dev_dbg(tbn->dev, "kernel releasing bus access from SLPI ... SUCCESS!\n");
-
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tbn_release_bus);
@@ -173,10 +205,25 @@ struct tbn_context *tbn_init(struct device *dev)
 		goto fail_register_server_event_notifier;
 	}
 
+	tbn->qmi_wq = alloc_workqueue("tbn-qmi-wq", WQ_UNBOUND |
+					 WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
+	if (!tbn->qmi_wq) {
+		dev_err(tbn->dev, "failed to alloc qmi_wq\n");
+		goto fail_allocate_qmi_wq;
+	}
+
+	INIT_WORK(&tbn->request_work, tbn_request_work);
+	INIT_WORK(&tbn->release_work, tbn_release_work);
+	init_completion(&tbn->bus_requested);
+	init_completion(&tbn->bus_released);
+	complete_all(&tbn->bus_requested);
+	complete_all(&tbn->bus_released);
+
 	dev_info(tbn->dev, "bus negotiator initialized: %p\n", tbn);
 
 	return tbn;
 
+fail_allocate_qmi_wq:
 fail_register_server_event_notifier:
 	qmi_handle_release(&tbn->qmi_handle);
 	kfree(tbn);
@@ -192,6 +239,7 @@ void tbn_cleanup(struct tbn_context *tbn)
 	if (!tbn)
 		return;
 
+	destroy_workqueue(tbn->qmi_wq);
 	qmi_handle_release(&tbn->qmi_handle);
 
 	kfree(tbn);
