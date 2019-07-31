@@ -2,7 +2,7 @@ ARCH=arm64
 BRANCH=android-msm-sunfish-4.14
 CROSS_COMPILE=aarch64-linux-android-
 CROSS_COMPILE_ARM32=arm-linux-androideabi-
-DEFCONFIG=vendor/sdmsteppe_defconfig
+DEFCONFIG=sunfish_defconfig
 EXTRA_CMDS=''
 CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r353983c/bin/
 LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-r353983c/lib64:$LD_LIBRARY_PATH
@@ -18,8 +18,8 @@ DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/libufdt/ufdt_ap
 export DTC_OVERLAY_TEST_EXT
 FILES="
 arch/arm64/boot/dtbo.img
+arch/arm64/boot/Image.lz4-dtb
 arch/arm64/boot/Image.lz4
-arch/arm64/boot/dts/google/qcom-base/sm6150.dtb
 vmlinux
 System.map
 .config
