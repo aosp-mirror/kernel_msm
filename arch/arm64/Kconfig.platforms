@@ -332,4 +332,9 @@ config ARCH_ZYNQMP
 	help
 	  This enables support for Xilinx ZynqMP Family
 
+config BOARD_SUNFISH
+	bool "Google Sunfish Family"
+	depends on ARCH_QCOM
+	select ARCH_SM6150
+
 endmenu
