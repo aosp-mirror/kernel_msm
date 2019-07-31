@@ -748,6 +748,9 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 				break;
 
 			if (atomic_read(&trans->shutdown_initiated)) {
+				spin_lock_irqsave(&bus->irq_lock, flags);
+				waiter->enabled = false;
+				spin_unlock_irqrestore(&bus->irq_lock, flags);
 				up_read(active_reads_rwsem);
 				return -ENETDOWN;
 			}
@@ -759,6 +762,11 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 
 		trans = ipu_core_get_jqs_transport(bus);
 		if (IS_ERR(trans)) {
+			if(bus->jqs_msg_transport) {
+				spin_lock_irqsave(&bus->irq_lock, flags);
+				waiter->enabled = false;
+				spin_unlock_irqrestore(&bus->irq_lock, flags);
+			}
 			mutex_unlock(&bus->transport_lock);
 			dev_err(bus->parent_dev, "%s: JQS is not ready\n",
 					__func__);
