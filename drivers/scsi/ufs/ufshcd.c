@@ -370,8 +370,6 @@ static void ufshcd_update_uic_error_cnt(struct ufs_hba *hba, u32 reg, int type)
 /* IOCTL opcode for command - ufs set device read only */
 #define UFS_IOCTL_BLKROSET      BLKROSET
 
-#define UFSHCD_DEFAULT_LANES_PER_DIRECTION		2
-
 /* for manual gc */
 #define UFSHCD_MANUAL_GC_HOLD_HIBERN8		2000	/* 2 seconds */
 
@@ -2647,7 +2645,8 @@ int ufshcd_copy_query_response(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	memcpy(&query_res->upiu_res, &lrbp->ucd_rsp_ptr->qr, QUERY_OSF_SIZE);
 
 	/* Get the descriptor */
-	if (lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_READ_DESC) {
+	if (hba->dev_cmd.query.descriptor &&
+	    lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_READ_DESC) {
 		u8 *descp = (u8 *)lrbp->ucd_rsp_ptr +
 				GENERAL_UPIU_REQUEST_SIZE;
 		u16 resp_len;
@@ -11269,20 +11268,6 @@ static void ufshcd_clkscaling_init_sysfs(struct ufs_hba *hba)
 		dev_err(hba->dev, "Failed to create sysfs for clkscale_enable\n");
 }
 
-static void ufshcd_init_lanes_per_dir(struct ufs_hba *hba)
-{
-	struct device *dev = hba->dev;
-	int ret;
-
-	ret = of_property_read_u32(dev->of_node, "lanes-per-direction",
-		&hba->lanes_per_direction);
-	if (ret) {
-		dev_dbg(hba->dev,
-			"%s: failed to read lanes-per-direction, ret=%d\n",
-			__func__, ret);
-		hba->lanes_per_direction = UFSHCD_DEFAULT_LANES_PER_DIRECTION;
-	}
-}
 /**
  * ufshcd_init - Driver initialization routine
  * @hba: per-adapter instance
@@ -11305,8 +11290,6 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 
 	hba->mmio_base = mmio_base;
 	hba->irq = irq;
-
-	ufshcd_init_lanes_per_dir(hba);
 
 	/* Set descriptor lengths to specification defaults */
 	ufshcd_def_desc_sizes(hba);
