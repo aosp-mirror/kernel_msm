@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2017 Google, Inc.
+ * Copyright (C) 2019 Google, Inc.
  * modified from kernel/gcov/gcc_4_7.c
  *
  * This software is licensed under the terms of the GNU General Public
@@ -52,8 +53,6 @@
 #include <linux/vmalloc.h>
 #include "gcov.h"
 
-#define GCOV_TAG_FUNCTION_LENGTH	3
-
 typedef void (*llvm_gcov_callback)(void);
 
 struct gcov_info {
@@ -86,10 +85,9 @@ static LIST_HEAD(clang_gcov_list);
 void llvm_gcov_init(llvm_gcov_callback writeout, llvm_gcov_callback flush)
 {
 	struct gcov_info *info = kzalloc(sizeof(*info), GFP_KERNEL);
-	if (!info) {
-		pr_warn_ratelimited("failed to allocate gcov info\n");
+
+	if (!info)
 		return;
-	}
 
 	INIT_LIST_HEAD(&info->head);
 	INIT_LIST_HEAD(&info->functions);
@@ -120,11 +118,9 @@ void llvm_gcda_emit_function(u32 ident, const char *function_name,
 		u32 func_checksum, u8 use_extra_checksum, u32 cfg_checksum)
 {
 	struct gcov_fn_info *info = kzalloc(sizeof(*info), GFP_KERNEL);
-	if (!info) {
-		pr_warn_ratelimited("failed to allocate gcov function info for %s\n",
-				function_name ?: "UNKNOWN");
+
+	if (!info)
 		return;
-	}
 
 	INIT_LIST_HEAD(&info->head);
 	info->ident = ident;
@@ -209,8 +205,20 @@ void gcov_info_link(struct gcov_info *info)
  */
 void gcov_info_unlink(struct gcov_info *prev, struct gcov_info *info)
 {
-	if (prev)
-		list_del(&prev->head);
+	/* Generic code unlinks while iterating. */
+	__list_del_entry(&info->head);
+}
+
+/**
+ * gcov_info_within_module - check if a profiling data set belongs to a module
+ * @info: profiling data set
+ * @mod: module
+ *
+ * Returns true if profiling data belongs module, false otherwise.
+ */
+bool gcov_info_within_module(struct gcov_info *info, struct module *mod)
+{
+	return within_module((unsigned long)info->filename, mod);
 }
 
 /* Symbolic links to be created for each profiling data file. */
@@ -241,7 +249,29 @@ void gcov_info_reset(struct gcov_info *info)
  */
 int gcov_info_is_compatible(struct gcov_info *info1, struct gcov_info *info2)
 {
-	return (info1->checksum == info2->checksum);
+	struct gcov_fn_info *fn_ptr1 = list_first_entry_or_null(
+			&info1->functions, struct gcov_fn_info, head);
+	struct gcov_fn_info *fn_ptr2 = list_first_entry_or_null(
+			&info2->functions, struct gcov_fn_info, head);
+
+	if (info1->checksum != info2->checksum)
+		return false;
+	if (!fn_ptr1)
+		return fn_ptr1 == fn_ptr2;
+	while (!list_is_last(&fn_ptr1->head, &info1->functions) &&
+		!list_is_last(&fn_ptr2->head, &info2->functions)) {
+		if (fn_ptr1->checksum != fn_ptr2->checksum)
+			return false;
+		if (fn_ptr1->use_extra_checksum != fn_ptr2->use_extra_checksum)
+			return false;
+		if (fn_ptr1->use_extra_checksum &&
+			fn_ptr1->cfg_checksum != fn_ptr2->cfg_checksum)
+			return false;
+		fn_ptr1 = list_next_entry(fn_ptr1, head);
+		fn_ptr2 = list_next_entry(fn_ptr2, head);
+	}
+	return list_is_last(&fn_ptr1->head, &info1->functions) &&
+		list_is_last(&fn_ptr2->head, &info2->functions);
 }
 
 /**
@@ -259,16 +289,15 @@ void gcov_info_add(struct gcov_info *dst, struct gcov_info *src)
 
 	list_for_each_entry(dfn_ptr, &dst->functions, head) {
 		u32 i;
+
 		for (i = 0; i < sfn_ptr->num_counters; i++)
 			dfn_ptr->counters[i] += sfn_ptr->counters[i];
-
-		if (!list_is_last(&sfn_ptr->head, &src->functions))
-			sfn_ptr = list_next_entry(sfn_ptr, head);
 	}
 }
 
 static struct gcov_fn_info *gcov_fn_info_dup(struct gcov_fn_info *fn)
 {
+	size_t cv_size; /* counter values size */
 	struct gcov_fn_info *fn_dup = kmemdup(fn, sizeof(*fn),
 			GFP_KERNEL);
 	if (!fn_dup)
@@ -279,11 +308,11 @@ static struct gcov_fn_info *gcov_fn_info_dup(struct gcov_fn_info *fn)
 	if (!fn_dup->function_name)
 		goto err_name;
 
-	fn_dup->counters = kmemdup(fn->counters,
-			fn->num_counters * sizeof(fn->counters[0]),
-			GFP_KERNEL);
+	cv_size = fn->num_counters * sizeof(fn->counters[0]);
+	fn_dup->counters = vmalloc(cv_size);
 	if (!fn_dup->counters)
 		goto err_counters;
+	memcpy(fn_dup->counters, fn->counters, cv_size);
 
 	return fn_dup;
 
@@ -303,7 +332,7 @@ err_name:
 struct gcov_info *gcov_info_dup(struct gcov_info *info)
 {
 	struct gcov_info *dup;
-	struct gcov_fn_info *fn, *tmp;
+	struct gcov_fn_info *fn;
 
 	dup = kmemdup(info, sizeof(*dup), GFP_KERNEL);
 	if (!dup)
@@ -311,9 +340,12 @@ struct gcov_info *gcov_info_dup(struct gcov_info *info)
 	INIT_LIST_HEAD(&dup->head);
 	INIT_LIST_HEAD(&dup->functions);
 	dup->filename = kstrdup(info->filename, GFP_KERNEL);
+	if (!dup->filename)
+		goto err;
 
-	list_for_each_entry_safe(fn, tmp, &info->functions, head) {
+	list_for_each_entry(fn, &info->functions, head) {
 		struct gcov_fn_info *fn_dup = gcov_fn_info_dup(fn);
+
 		if (!fn_dup)
 			goto err;
 		list_add_tail(&fn_dup->head, &dup->functions);
@@ -336,7 +368,7 @@ void gcov_info_free(struct gcov_info *info)
 
 	list_for_each_entry_safe(fn, tmp, &info->functions, head) {
 		kfree(fn->function_name);
-		kfree(fn->counters);
+		vfree(fn->counters);
 		list_del(&fn->head);
 		kfree(fn);
 	}
@@ -429,6 +461,7 @@ static size_t convert_to_gcda(char *buffer, struct gcov_info *info)
 	list_for_each_entry(fi_ptr, &info->functions, head) {
 		u32 i;
 		u32 len = 2;
+
 		if (fi_ptr->use_extra_checksum)
 			len++;
 
