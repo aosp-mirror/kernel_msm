@@ -2457,10 +2457,17 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 	if (p9221_dc_reset_needed(charger, irq_src)) {
 		union power_supply_propval val = {.intval = 1};
 
-		/* Signal DC_RESET when wireless removal is sensed. */
-		res = power_supply_set_property(charger->dc_psy,
+		if (!charger->dc_psy)
+			charger->dc_psy = power_supply_get_by_name("dc");
+		if (charger->dc_psy) {
+			/* Signal DC_RESET when wireless removal is sensed. */
+			res = power_supply_set_property(charger->dc_psy,
 						POWER_SUPPLY_PROP_DC_RESET,
 						&val);
+		} else {
+			res = -ENODEV;
+		}
+
 		if (res < 0)
 			dev_err(&charger->client->dev,
 				"unable to set DC_RESET, ret=%d",
