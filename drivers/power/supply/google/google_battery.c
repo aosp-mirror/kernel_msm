@@ -176,6 +176,7 @@ struct batt_drv {
 	int fake_capacity;
 	bool dead_battery;
 	int capacity_level;
+	bool chg_done;
 
 	/* temp outside the charge table */
 	int jeita_stop_charging;
@@ -1045,6 +1046,7 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 	/* polling */
 	batt_drv->batt_fast_update_cnt = 0;
 	batt_drv->fg_status = POWER_SUPPLY_STATUS_UNKNOWN;
+	batt_drv->chg_done = false;
 	/* algo */
 	batt_drv->temp_idx = -1;
 	batt_drv->vbatt_idx = -1;
@@ -1544,6 +1546,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0) {
 		changed = batt_rl_enter(&batt_drv->ssoc_state,
 					BATT_RL_STATUS_DISCHARGE);
+		batt_drv->chg_done = true;
 	} else if (batt_drv->batt_full) {
 		changed = batt_rl_enter(&batt_drv->ssoc_state,
 					BATT_RL_STATUS_RECHARGE);
@@ -2230,6 +2233,10 @@ static void google_battery_work(struct work_struct *work)
 		if (prev_ssoc != ssoc)
 			notify_psy_changed = true;
 
+		/* TODO(b/138860602): clear ->chg_done to enforce the
+		 * same behavior during the transition 99 -> 100 -> Full
+		 */
+
 		level = gbatt_get_capacity_level(batt_drv, fg_status);
 		if (level != batt_drv->capacity_level) {
 			batt_drv->capacity_level = level;
@@ -2345,15 +2352,20 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_RESISTANCE_AVG,
 };
 
-/* . status is DISCHARGING when not connected.
- * . FULL when in recharge logic or GG report full and SSOC is @ 100% (possibly
- *   just when 100%).
+/* status is:
+ * . _UNKNOWN during init
+ * . _DISCHARGING when not connected
+ * when connected to a power supply status is
+ * . _FULL (until disconnect) after the charger flags DONE if SSOC=100%
+ * . _CHARGING if FG reports _FULL but SSOC < 100% (should not happen)
+ * . _CHARGING if FG reports _NOT_CHARGING
+ * . _NOT_CHARGING if FG report _DISCHARGING
  * . same as FG state otherwise
  */
 static int gbatt_get_status(struct batt_drv *batt_drv,
 			    union power_supply_propval *val)
 {
-	int err;
+	int err, ssoc;
 
 	if (batt_drv->ssoc_state.buck_enabled == 0) {
 		val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
@@ -2365,10 +2377,18 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 		return 0;
 	}
 
+	/* ->buck_enabled = 1, from here ownward device is connected */
 	if (!batt_drv->fg_psy)
 		return -EINVAL;
 
-	/* ->buck_enabled = 1, from here ownward device is connected */
+	ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
+
+	/* FULL when the charger said so and SSOC == 100% */
+	if (batt_drv->chg_done && ssoc == SSOC_FULL) {
+		val->intval = POWER_SUPPLY_STATUS_FULL;
+		return 0;
+	}
+
 	err = power_supply_get_property(batt_drv->fg_psy,
 					POWER_SUPPLY_PROP_STATUS,
 					val);
@@ -2376,15 +2396,20 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 		return err;
 
 	if (val->intval == POWER_SUPPLY_STATUS_FULL) {
-		const int ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
 
-		/* SSOC might fall under 100% due to sysload connected to a
-		 * weak charger. battery should not really report full in this
-		 * case BUT if it does we handle this here.
-		 * NOTE: Could also chek batt_drv->ssoc_state.rl_status
+		/* not full unless the charger says so */
+		if (!batt_drv->chg_done)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+
+		/* NOTE: FG driver could flag FULL before GDF is at 100% when
+		 * gauge is not tuned or when capacity estimates are wrong.
 		 */
 		if (ssoc != SSOC_FULL)
-			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+
+	} else if (val->intval == POWER_SUPPLY_STATUS_NOT_CHARGING) {
+		/* smooth transition between charging and full */
+		val->intval = POWER_SUPPLY_STATUS_CHARGING;
 	} else if (val->intval == POWER_SUPPLY_STATUS_DISCHARGING) {
 		/* connected and discharging is NOT charging */
 		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
@@ -2484,8 +2509,7 @@ static int gbatt_get_property(struct power_supply *psy,
 	 */
 	case POWER_SUPPLY_PROP_CHARGE_DONE:
 		mutex_lock(&batt_drv->chg_lock);
-		val->intval = (ssoc_state->rl_status ==
-					BATT_RL_STATUS_DISCHARGE);
+		val->intval = batt_drv->chg_done;
 		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	/* POWER_SUPPLY_PROP_CHARGE_TYPE comes from the charger so using the
