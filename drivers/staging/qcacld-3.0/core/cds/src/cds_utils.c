@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -625,7 +625,7 @@ void cds_copy_hlp_info(struct qdf_mac_addr *input_dst_mac,
 		       uint8_t *output_hlp_data)
 {
 	if (!input_hlp_data_len) {
-		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
+		QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_DEBUG,
 			  "Input HLP data len zero\n");
 		return;
 	}

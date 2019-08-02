@@ -1206,6 +1206,8 @@ QDF_STATUS (*send_offload_11k_cmd)(wmi_unified_t wmi_handle,
 
 QDF_STATUS (*send_invoke_neighbor_report_cmd)(wmi_unified_t wmi_handle,
 		struct wmi_invoke_neighbor_report_params *params);
+QDF_STATUS (*send_btm_config)(wmi_unified_t wmi_handle,
+			      struct wmi_btm_config *params);
 };
 
 struct target_abi_version {

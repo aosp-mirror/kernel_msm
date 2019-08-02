@@ -613,6 +613,8 @@ typedef struct tagCsrConfig {
 	uint8_t max_amsdu_num;
 	uint8_t nSelect5GHzMargin;
 	uint32_t ho_delay_for_rx;
+	uint32_t roam_preauth_retry_count;
+	uint32_t roam_preauth_no_ack_timeout;
 	uint32_t min_delay_btw_roam_scans;
 	uint32_t roam_trigger_reason_bitmask;
 	uint8_t isCoalesingInIBSSAllowed;
@@ -682,6 +684,11 @@ typedef struct tagCsrConfig {
 	uint32_t offload_11k_enable_bitmask;
 	struct csr_neighbor_report_offload_params neighbor_report_offload;
 	bool roam_force_rssi_trigger;
+	uint32_t btm_offload_config;
+	uint32_t btm_solicited_timeout;
+	uint32_t btm_max_attempt_cnt;
+	uint32_t btm_sticky_time;
+	uint32_t btm_query_bitmask;
 } tCsrConfig;
 
 typedef struct tagCsrChannelPowerInfo {

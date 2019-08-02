@@ -4420,6 +4420,7 @@ QDF_STATUS sme_roam_del_pmkid_from_cache(tHalHandle hHal, uint8_t sessionId,
 	return status;
 }
 
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
 void sme_get_pmk_info(tHalHandle hal, uint8_t session_id,
 			   tPmkidCacheInfo *pmk_cache)
 {
@@ -4432,6 +4433,13 @@ void sme_get_pmk_info(tHalHandle hal, uint8_t session_id,
 		sme_release_global_lock(&mac_ctx->sme);
 	}
 }
+#else
+static inline
+void sme_get_pmk_info(tHalHandle hal, uint8_t session_id,
+			tPmkidCacheInfo *pmk_cache)
+{}
+#endif
+
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * sme_roam_set_psk_pmk() - A wrapper function to request CSR to save PSK/PMK
@@ -15828,6 +15836,22 @@ QDF_STATUS sme_set_rssi_monitoring(tHalHandle hal,
 	return status;
 }
 
+static tSirRFBand sme_get_connected_roaming_vdev_band(tpAniSirGlobal mac_ctx)
+{
+	tSirRFBand band = SIR_BAND_UNKNOWN;
+	tCsrRoamSession *session;
+	uint8_t session_id, channel;
+
+	session_id = csr_get_roam_enabled_sta_sessionid(mac_ctx);
+	if (session_id != CSR_SESSION_ID_INVALID) {
+		session = CSR_GET_SESSION(mac_ctx, session_id);
+		channel = session->connectedProfile.operationChannel;
+		band = get_rf_band(channel);
+	}
+
+	return band;
+}
+
 /**
  * sme_pdev_set_pcl() - Send WMI_PDEV_SET_PCL_CMDID to the WMA
  * @hal: Handle returned by macOpen
@@ -15843,23 +15867,29 @@ QDF_STATUS sme_pdev_set_pcl(tHalHandle hal,
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal mac   = PMAC_STRUCT(hal);
 	cds_msg_t cds_message;
-	struct wmi_pcl_chan_weights *req_msg;
-	uint32_t len, i;
+	struct set_pcl_req *req_msg;
+	uint32_t i;
 
-	len = sizeof(*req_msg);
 
-	req_msg = qdf_mem_malloc(len);
+	req_msg = qdf_mem_malloc(sizeof(*req_msg));
+
 	if (!req_msg) {
 		sme_err("qdf_mem_malloc failed");
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	for (i = 0; i < msg.pcl_len; i++) {
-		req_msg->pcl_list[i] =  msg.pcl_list[i];
-		req_msg->weight_list[i] =  msg.weight_list[i];
+	req_msg->band = SIR_BAND_UNKNOWN;
+	if (CSR_IS_ROAM_INTRA_BAND_ENABLED(mac)) {
+		req_msg->band = sme_get_connected_roaming_vdev_band(mac);
+		sme_debug("Connected STA band %d", req_msg->band);
 	}
 
-	req_msg->pcl_len = msg.pcl_len;
+	for (i = 0; i < msg.pcl_len; i++) {
+		req_msg->chan_weights.pcl_list[i] =  msg.pcl_list[i];
+		req_msg->chan_weights.weight_list[i] =  msg.weight_list[i];
+	}
+
+	req_msg->chan_weights.pcl_len = msg.pcl_len;
 
 	status = sme_acquire_global_lock(&mac->sme);
 	if (status != QDF_STATUS_SUCCESS) {
@@ -18948,6 +18978,7 @@ bool sme_is_sta_key_exchange_in_progress(tHalHandle hal, uint8_t session_id)
 	return CSR_IS_WAIT_FOR_KEY(mac_ctx, session_id);
 }
 
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
 QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
 			    const tSirMacAddr bssid, int channel,
 			    uint8_t vdev_id, const tSirMacAddr connected_bssid)
@@ -19014,6 +19045,7 @@ QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
 
 	return status;
 }
+#endif
 
 bool sme_validate_channel_list(tHalHandle hal,
 				      uint8_t *chan_list,

@@ -4562,6 +4562,8 @@ QDF_STATUS send_roam_scan_offload_mode_cmd_tlv(wmi_unified_t wmi_handle,
 
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 	int auth_mode = roam_req->auth_mode;
+	roam_offload_param *req_offload_params =
+		&roam_req->roam_offload_params;
 	wmi_roam_offload_tlv_param *roam_offload_params;
 	wmi_roam_11i_offload_tlv_param *roam_offload_11i;
 	wmi_roam_11r_offload_tlv_param *roam_offload_11r;
@@ -4684,31 +4686,31 @@ QDF_STATUS send_roam_scan_offload_mode_cmd_tlv(wmi_unified_t wmi_handle,
 		roam_offload_params->select_5g_margin =
 			roam_req->select_5ghz_margin;
 		roam_offload_params->handoff_delay_for_rx =
-			roam_req->roam_offload_params.ho_delay_for_rx;
+			req_offload_params->ho_delay_for_rx;
+		roam_offload_params->max_mlme_sw_retries =
+			req_offload_params->roam_preauth_retry_count;
+		roam_offload_params->no_ack_timeout =
+			req_offload_params->roam_preauth_no_ack_timeout;
 		roam_offload_params->reassoc_failure_timeout =
 			roam_req->reassoc_failure_timeout;
 
 		/* Fill the capabilities */
 		roam_offload_params->capability =
-				roam_req->roam_offload_params.capability;
+				req_offload_params->capability;
 		roam_offload_params->ht_caps_info =
-				roam_req->roam_offload_params.ht_caps_info;
+				req_offload_params->ht_caps_info;
 		roam_offload_params->ampdu_param =
-				roam_req->roam_offload_params.ampdu_param;
+				req_offload_params->ampdu_param;
 		roam_offload_params->ht_ext_cap =
-				roam_req->roam_offload_params.ht_ext_cap;
-		roam_offload_params->ht_txbf =
-				roam_req->roam_offload_params.ht_txbf;
-		roam_offload_params->asel_cap =
-				roam_req->roam_offload_params.asel_cap;
-		roam_offload_params->qos_caps =
-				roam_req->roam_offload_params.qos_caps;
+				req_offload_params->ht_ext_cap;
+		roam_offload_params->ht_txbf = req_offload_params->ht_txbf;
+		roam_offload_params->asel_cap = req_offload_params->asel_cap;
+		roam_offload_params->qos_caps = req_offload_params->qos_caps;
 		roam_offload_params->qos_enabled =
-				roam_req->roam_offload_params.qos_enabled;
-		roam_offload_params->wmm_caps =
-				roam_req->roam_offload_params.wmm_caps;
+				req_offload_params->qos_enabled;
+		roam_offload_params->wmm_caps = req_offload_params->wmm_caps;
 		qdf_mem_copy((uint8_t *)roam_offload_params->mcsset,
-				(uint8_t *)roam_req->roam_offload_params.mcsset,
+				(uint8_t *)req_offload_params->mcsset,
 				ROAM_OFFLOAD_NUM_MCS_SET);
 
 		buf_ptr += sizeof(wmi_roam_offload_tlv_param);
@@ -10386,8 +10388,10 @@ QDF_STATUS send_log_supported_evt_cmd_tlv(wmi_unified_t wmi_handle,
 			__func__, num_of_diag_events_logs);
 
 	/* Free any previous allocation */
-	if (wmi_handle->events_logs_list)
+	if (wmi_handle->events_logs_list) {
 		qdf_mem_free(wmi_handle->events_logs_list);
+		wmi_handle->events_logs_list = NULL;
+	}
 
 	if (num_of_diag_events_logs >
 		(WMI_SVC_MSG_MAX_SIZE / sizeof(uint32_t))) {
@@ -12567,6 +12571,12 @@ static host_mem_req *extract_host_mem_req_tlv(wmi_unified_t wmi_handle,
 		return NULL;
 	}
 
+	if (ev->num_mem_reqs > param_buf->num_mem_reqs) {
+		WMI_LOGE("Invalid num_mem_reqs %d:%d",
+			 ev->num_mem_reqs, param_buf->num_mem_reqs);
+		return NULL;
+	}
+
 	*num_entries = ev->num_mem_reqs;
 
 	return (host_mem_req *)param_buf->mem_reqs;
@@ -13109,6 +13119,7 @@ static QDF_STATUS extract_all_stats_counts_tlv(wmi_unified_t wmi_handle,
 {
 	WMI_UPDATE_STATS_EVENTID_param_tlvs *param_buf;
 	wmi_stats_event_fixed_param *ev;
+	uint64_t min_data_len;
 
 	param_buf = (WMI_UPDATE_STATS_EVENTID_param_tlvs *) evt_buf;
 
@@ -13116,6 +13127,11 @@ static QDF_STATUS extract_all_stats_counts_tlv(wmi_unified_t wmi_handle,
 	if (!ev) {
 		WMI_LOGE("%s: Failed to alloc memory", __func__);
 		return QDF_STATUS_E_FAILURE;
+	}
+
+	if (param_buf->num_data > WMI_SVC_MSG_MAX_SIZE - sizeof(*ev)) {
+		WMI_LOGE("num_data : %u is invalid", param_buf->num_data);
+		return QDF_STATUS_E_FAULT;
 	}
 
 	switch (ev->stats_id) {
@@ -13147,6 +13163,26 @@ static QDF_STATUS extract_all_stats_counts_tlv(wmi_unified_t wmi_handle,
 		stats_param->stats_id = 0;
 		break;
 
+	}
+
+	/* ev->num_*_stats may cause uint32_t overflow, so use uint64_t
+	 * to save total length calculated
+	 */
+	min_data_len =
+		(((uint64_t)ev->num_pdev_stats) * sizeof(wmi_pdev_stats)) +
+		(((uint64_t)ev->num_vdev_stats) * sizeof(wmi_vdev_stats)) +
+		(((uint64_t)ev->num_peer_stats) * sizeof(wmi_peer_stats)) +
+		(((uint64_t)ev->num_bcnflt_stats) *
+		 sizeof(wmi_bcnfilter_stats_t)) +
+		(((uint64_t)ev->num_chan_stats) * sizeof(wmi_chan_stats)) +
+		(((uint64_t)ev->num_mib_stats) * sizeof(wmi_mib_stats)) +
+		(((uint64_t)ev->num_bcn_stats) * sizeof(wmi_bcn_stats)) +
+		(((uint64_t)ev->num_peer_extd_stats) *
+		 sizeof(wmi_peer_extd_stats));
+	if (param_buf->num_data != min_data_len) {
+		WMI_LOGE("data len: %u isn't same as calculated: %llu",
+			 param_buf->num_data, min_data_len);
+		return QDF_STATUS_E_FAULT;
 	}
 
 	stats_param->num_pdev_stats = ev->num_pdev_stats;
@@ -14285,6 +14321,49 @@ static QDF_STATUS send_invoke_neighbor_report_cmd_tlv(wmi_unified_t wmi_handle,
 	return status;
 }
 
+/*
+ * send_btm_config_cmd_tlv() - Send wmi cmd for BTM config
+ * @wmi_handle: wmi handle
+ * @params: pointer to wmi_btm_config
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS send_btm_config_cmd_tlv(wmi_unified_t wmi_handle,
+					  struct wmi_btm_config *params)
+{
+
+	wmi_btm_config_fixed_param *cmd;
+	wmi_buf_t buf;
+	uint32_t len;
+
+	len = sizeof(*cmd);
+	buf = wmi_buf_alloc(wmi_handle, len);
+	if (!buf) {
+		qdf_print("%s:wmi_buf_alloc failed\n", __func__);
+		return QDF_STATUS_E_NOMEM;
+	}
+
+	cmd = (wmi_btm_config_fixed_param *)wmi_buf_data(buf);
+	WMITLV_SET_HDR(&cmd->tlv_header,
+		       WMITLV_TAG_STRUC_wmi_btm_config_fixed_param,
+		       WMITLV_GET_STRUCT_TLVLEN(wmi_btm_config_fixed_param));
+	cmd->vdev_id = params->vdev_id;
+	cmd->flags = params->btm_offload_config;
+	cmd->max_attempt_cnt = params->btm_max_attempt_cnt;
+	cmd->solicited_timeout_ms = params->btm_solicited_timeout;
+	cmd->stick_time_seconds = params->btm_sticky_time;
+	cmd->btm_bitmap = params->btm_query_bitmask;
+
+	if (wmi_unified_cmd_send(wmi_handle, buf, len,
+	    WMI_ROAM_BTM_CONFIG_CMDID)) {
+		WMI_LOGE("%s: failed to send WMI_ROAM_BTM_CONFIG_CMDID",
+			 __func__);
+		wmi_buf_free(buf);
+		return QDF_STATUS_E_FAILURE;
+	}
+	return QDF_STATUS_SUCCESS;
+}
+
 struct wmi_ops tlv_ops =  {
 	.send_vdev_create_cmd = send_vdev_create_cmd_tlv,
 	.send_vdev_delete_cmd = send_vdev_delete_cmd_tlv,
@@ -14572,6 +14651,7 @@ struct wmi_ops tlv_ops =  {
 #endif
 	.send_offload_11k_cmd = send_offload_11k_cmd_tlv,
 	.send_invoke_neighbor_report_cmd = send_invoke_neighbor_report_cmd_tlv,
+	.send_btm_config = send_btm_config_cmd_tlv,
 };
 
 #ifdef WMI_TLV_AND_NON_TLV_SUPPORT

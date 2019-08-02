@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1805,6 +1805,9 @@ typedef struct {
 	/* since this is 4 byte aligned, we don't declare it as tlv array */
 	uint32_t mcsset[WMI_HOST_ROAM_OFFLOAD_NUM_MCS_SET >> 2];
 	uint32_t ho_delay_for_rx;
+	uint32_t roam_preauth_retry_count;
+	uint32_t roam_preauth_no_ack_timeout;
+	uint32_t btm_offload_config;
 } roam_offload_param;
 
 #define WMI_FILS_MAX_RRK_LENGTH 64
@@ -7484,6 +7487,23 @@ struct wmi_hw_filter_req_params {
 	bool enable;
 	uint8_t mode_bitmap;
 	struct qdf_mac_addr bssid;
+};
+/**
+ * struct wmi_btm_config - BSS Transition Management offload params
+ * @vdev_id: VDEV on which the parameters should be applied
+ * @btm_offload_config: BTM config
+ * @btm_solicited_timeout: Timeout value for waiting BTM request
+ * @btm_max_attempt_cnt: Maximum attempt for sending BTM query to ESS
+ * @btm_sticky_time: Stick time after roaming to new AP by BTM
+ * @btm_query_bitmask: roam trigger reasons to trigger BTM Query
+ */
+struct wmi_btm_config {
+	uint8_t vdev_id;
+	uint32_t btm_offload_config;
+	uint32_t btm_solicited_timeout;
+	uint32_t btm_max_attempt_cnt;
+	uint32_t btm_sticky_time;
+	uint32_t btm_query_bitmask;
 };
 
 #endif /* _WMI_UNIFIED_PARAM_H_ */

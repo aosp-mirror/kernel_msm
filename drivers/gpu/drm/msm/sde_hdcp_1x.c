@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1310,10 +1310,6 @@ static int sde_hdcp_1x_authentication_part2(struct sde_hdcp_1x *hdcp)
 	}
 
 	do {
-		rc = sde_hdcp_1x_transfer_v_h(hdcp);
-		if (rc)
-			goto error;
-
 		/*
 		 * Do not proceed further if no device connected
 		 * If no downstream devices are attached to the repeater
@@ -1324,6 +1320,10 @@ static int sde_hdcp_1x_authentication_part2(struct sde_hdcp_1x *hdcp)
 			rc = -EINVAL;
 			goto error;
 		}
+
+		rc = sde_hdcp_1x_transfer_v_h(hdcp);
+		if (rc)
+			goto error;
 
 		rc = sde_hdcp_1x_write_ksv_fifo(hdcp);
 	} while (--v_retry && rc);
@@ -1359,6 +1359,9 @@ static void sde_hdcp_1x_notify_topology(void)
 
 static void sde_hdcp_1x_update_auth_status(struct sde_hdcp_1x *hdcp)
 {
+	if (sde_hdcp_1x_state(HDCP_STATE_AUTH_FAIL))
+		hdcp->init_data.avmute_sink(hdcp->init_data.cb_data);
+
 	if (sde_hdcp_1x_state(HDCP_STATE_AUTHENTICATED)) {
 		sde_hdcp_1x_cache_topology(hdcp);
 		sde_hdcp_1x_notify_topology();
@@ -1853,7 +1856,8 @@ void *sde_hdcp_1x_init(struct sde_hdcp_init_data *init_data)
 
 	if (!init_data || !init_data->core_io || !init_data->qfprom_io ||
 		!init_data->mutex || !init_data->notify_status ||
-		!init_data->workq || !init_data->cb_data) {
+		!init_data->workq || !init_data->cb_data ||
+		!init_data->avmute_sink) {
 		pr_err("invalid input\n");
 		goto error;
 	}

@@ -447,6 +447,8 @@ struct host_event_wlan_ssr_shutdown {
  * reason unspecified
  * @HOST_STA_KICKOUT_REASON_KEEP_ALIVE: Indicate sta is disconnected
  * because of keep alive
+ * @HOST_STA_KICKOUT_REASON_BTM: BTM request from AP with disassoc imminent
+ * reason
  *
  * This enum contains the event subtype
  */
@@ -455,6 +457,7 @@ enum host_sta_kickout_events {
 	HOST_STA_KICKOUT_REASON_XRETRY,
 	HOST_STA_KICKOUT_REASON_UNSPECIFIED,
 	HOST_STA_KICKOUT_REASON_KEEP_ALIVE,
+	HOST_STA_KICKOUT_REASON_BTM,
 };
 
 /*-------------------------------------------------------------------------
@@ -624,6 +627,7 @@ enum wifi_connectivity_events {
  * @WIFI_POWER_EVENT_WAKELOCK_MGMT_TX: MGMT Tx wake lock
  * @WIFI_POWER_EVENT_WAKELOCK_CONNECT: connection in progress
  * @WIFI_POWER_EVENT_WAKELOCK_MONITOR_MODE: Montitor mode wakelock
+ * @WIFI_POWER_EVENT_WAKELOCK_IFACE_CHANGE_TIMER: iface change timer running
  *
  * Indicates the reason for which the wakelock was taken/released
  */
@@ -650,6 +654,7 @@ enum wake_lock_reason {
 	WIFI_POWER_EVENT_WAKELOCK_MGMT_TX,
 	WIFI_POWER_EVENT_WAKELOCK_CONNECT,
 	WIFI_POWER_EVENT_WAKELOCK_MONITOR_MODE,
+	WIFI_POWER_EVENT_WAKELOCK_IFACE_CHANGE_TIMER,
 };
 
 #ifdef __cplusplus

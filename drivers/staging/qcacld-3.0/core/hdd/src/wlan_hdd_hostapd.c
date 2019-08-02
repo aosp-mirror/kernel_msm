@@ -7976,6 +7976,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	tsap_Config_t *pConfig;
 	beacon_data_t *pBeacon = NULL;
 	struct ieee80211_mgmt *pMgmt_frame;
+	struct ieee80211_mgmt mgmt;
 	uint8_t *pIe = NULL;
 	uint16_t capab_info;
 	eCsrAuthType RSNAuthType;
@@ -7996,6 +7997,7 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	enum dfs_mode mode;
 	bool disable_fw_tdls_state = false;
 	uint8_t ignore_cac = 0;
+	uint8_t beacon_fixed_len;
 	hdd_adapter_t *sta_adapter;
 
 	ENTER();
@@ -8068,7 +8070,8 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	clear_bit(ACS_IN_PROGRESS, &pHddCtx->g_event_flags);
 
 	/* Mark the indoor channel (passive) to disable */
-	if (iniConfig->disable_indoor_channel) {
+	if (iniConfig->disable_indoor_channel &&
+			pHostapdAdapter->device_mode == QDF_SAP_MODE) {
 		hdd_update_indoor_channel(pHddCtx, true);
 		if (QDF_IS_STATUS_ERROR(
 		    sme_update_channel_list(pHddCtx->hHal))) {
@@ -8097,6 +8100,21 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	pConfig = &pHostapdAdapter->sessionCtx.ap.sapConfig;
 
 	pBeacon = pHostapdAdapter->sessionCtx.ap.beacon;
+
+	/*
+	 * beacon_fixed_len is the fixed length of beacon
+	 * frame which includes only mac header length and
+	 * beacon manadatory fields like timestamp,
+	 * beacon_int and capab_info.
+	 * (From the reference of struct ieee80211_mgmt)
+	 */
+	beacon_fixed_len = sizeof(mgmt) - sizeof(mgmt.u) +
+			   sizeof(mgmt.u.beacon);
+	if (pBeacon->head_len < beacon_fixed_len) {
+		hdd_err("Invalid beacon head len");
+		ret = -EINVAL;
+		goto error;
+	}
 
 	pMgmt_frame = (struct ieee80211_mgmt *)pBeacon->head;
 
@@ -8417,12 +8435,21 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 	if (!pHddCtx->config->force_sap_acs &&
 	    !(ssid && qdf_str_len(PRE_CAC_SSID) == ssid_len &&
 	      (0 == qdf_mem_cmp(ssid, PRE_CAC_SSID, ssid_len)))) {
+		uint16_t beacon_data_len;
+
+		beacon_data_len = pBeacon->head_len - beacon_fixed_len;
 		pIe = wlan_hdd_cfg80211_get_ie_ptr(
 				&pMgmt_frame->u.beacon.variable[0],
-				pBeacon->head_len, WLAN_EID_SUPP_RATES);
+				beacon_data_len, WLAN_EID_SUPP_RATES);
 
 		if (pIe != NULL) {
 			pIe++;
+			if (pIe[0] > SIR_MAC_RATESET_EID_MAX) {
+				hdd_err("Invalid supported rates %d",
+					pIe[0]);
+				ret = -EINVAL;
+				goto error;
+			}
 			pConfig->supported_rates.numRates = pIe[0];
 			pIe++;
 			for (i = 0;
@@ -8439,6 +8466,12 @@ int wlan_hdd_cfg80211_start_bss(hdd_adapter_t *pHostapdAdapter,
 				WLAN_EID_EXT_SUPP_RATES);
 		if (pIe != NULL) {
 			pIe++;
+			if (pIe[0] > SIR_MAC_RATESET_EID_MAX) {
+				hdd_err("Invalid supported rates %d",
+					pIe[0]);
+				ret = -EINVAL;
+				goto error;
+			}
 			pConfig->extended_rates.numRates = pIe[0];
 			pIe++;
 			for (i = 0; i < pConfig->extended_rates.numRates; i++) {
@@ -8658,7 +8691,8 @@ error:
 	if (pHostapdAdapter->device_mode == QDF_SAP_MODE)
 		wlan_hdd_restore_channels(pHddCtx);
 	/* Revert the indoor to passive marking if START BSS fails */
-	if (iniConfig->disable_indoor_channel) {
+	if (iniConfig->disable_indoor_channel &&
+			pHostapdAdapter->device_mode == QDF_SAP_MODE) {
 		hdd_update_indoor_channel(pHddCtx, false);
 		sme_update_channel_list(pHddCtx->hHal);
 	}

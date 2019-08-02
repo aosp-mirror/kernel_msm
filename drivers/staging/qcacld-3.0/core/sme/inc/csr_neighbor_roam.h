@@ -361,6 +361,19 @@ QDF_STATUS csr_update_fils_config(tpAniSirGlobal mac, uint8_t session_id,
 				  tCsrRoamProfile *src_profile);
 #endif
 
+/**
+ * csr_get_roam_enabled_sta_sessionid() - get the session id of the sta on which
+ * roaming is enabled.
+ * @mac_ctx:  pointer to global mac structure
+ *
+ * The function check if any sta is present and has roaming enabled and return
+ * the session id of the sta with roaming enabled else if roaming is not enabled
+ * on any STA return CSR_SESSION_ID_INVALID
+ *
+ * Return: session id of STA on which roaming is enabled
+ */
+uint8_t csr_get_roam_enabled_sta_sessionid(tpAniSirGlobal mac_ctx);
+
 QDF_STATUS csr_neighbor_roam_handoff_req_hdlr(tpAniSirGlobal pMac, void *pMsg);
 QDF_STATUS csr_neighbor_roam_proceed_with_handoff_req(tpAniSirGlobal pMac,
 		uint8_t sessionId);

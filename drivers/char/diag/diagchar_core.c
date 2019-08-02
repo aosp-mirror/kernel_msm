@@ -588,8 +588,8 @@ static int diag_remove_client_entry(struct file *file)
 static int diagchar_close(struct inode *inode, struct file *file)
 {
 	int ret;
-	DIAG_LOG(DIAG_DEBUG_USERSPACE, "diag: process exit %s\n",
-		current->comm);
+	DIAG_LOG(DIAG_DEBUG_USERSPACE, "diag: %s process exit with pid = %d\n",
+		current->comm, current->tgid);
 	ret = diag_remove_client_entry(file);
 	mutex_lock(&driver->diag_maskclear_mutex);
 	driver->mask_clear = 0;
@@ -1715,15 +1715,18 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 			return -EINVAL;
 		}
 
+		mutex_lock(&driver->md_session_lock);
 		if (driver->md_session_map[peripheral] &&
 			(MD_PERIPHERAL_MASK(peripheral) &
 			diag_mux->mux_mask)) {
 			DIAG_LOG(DIAG_DEBUG_USERSPACE,
 			"diag_fr: User PD is already logging onto active peripheral logging\n");
 			i = upd - UPD_WLAN;
+			mutex_unlock(&driver->md_session_lock);
 			driver->pd_session_clear[i] = 0;
 			return -EINVAL;
 		}
+		mutex_unlock(&driver->md_session_lock);
 		peripheral_mask =
 			diag_translate_mask(param->pd_mask);
 		param->peripheral_mask = peripheral_mask;
@@ -1894,9 +1897,10 @@ static int diag_ioctl_lsm_deinit(void)
 		mutex_unlock(&driver->diagchar_mutex);
 		return -EINVAL;
 	}
-
-	driver->data_ready[i] |= DEINIT_TYPE;
-	atomic_inc(&driver->data_ready_notif[i]);
+	if (!(driver->data_ready[i] & DEINIT_TYPE)) {
+		driver->data_ready[i] |= DEINIT_TYPE;
+		atomic_inc(&driver->data_ready_notif[i]);
+	}
 	mutex_unlock(&driver->diagchar_mutex);
 	wake_up_interruptible(&driver->wait_q);
 
@@ -3069,6 +3073,8 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 	int exit_stat = 0;
 	int write_len = 0;
 	struct diag_md_session_t *session_info = NULL;
+	struct pid *pid_struct = NULL;
+	struct task_struct *task_s = NULL;
 
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
@@ -3276,8 +3282,19 @@ exit:
 		list_for_each_safe(start, temp, &driver->dci_client_list) {
 			entry = list_entry(start, struct diag_dci_client_tbl,
 									track);
-			if (entry->client->tgid != current->tgid)
+			pid_struct = find_get_pid(entry->tgid);
+			if (!pid_struct)
 				continue;
+			task_s = get_pid_task(pid_struct, PIDTYPE_PID);
+			if (!task_s) {
+				DIAG_LOG(DIAG_DEBUG_DCI,
+				"diag: valid task doesn't exist for pid = %d\n",
+				entry->tgid);
+				continue;
+			}
+			if (task_s == entry->client)
+				if (entry->client->tgid != current->tgid)
+					continue;
 			if (!entry->in_service)
 				continue;
 			if (copy_to_user(buf + ret, &data_type, sizeof(int))) {
