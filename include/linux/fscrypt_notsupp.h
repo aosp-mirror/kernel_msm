@@ -184,6 +184,7 @@ static inline int fscrypt_zeroout_range(const struct inode *inode, pgoff_t lblk,
 }
 
 /* hooks.c */
+
 static inline int fscrypt_file_open(struct inode *inode, struct file *filp)
 {
 	if (IS_ENCRYPTED(inode))
