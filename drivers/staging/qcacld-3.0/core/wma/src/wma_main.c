@@ -2797,6 +2797,10 @@ QDF_STATUS wma_open(void *cds_context,
 					   WMI_ROAM_SYNCH_EVENTID,
 					   wma_roam_synch_event_handler,
 					   WMA_RX_SERIALIZER_CTX);
+	wmi_unified_register_event_handler(wma_handle->wmi_handle,
+				   WMI_ROAM_SYNCH_FRAME_EVENTID,
+				   wma_roam_synch_frame_event_handler,
+				   WMA_RX_SERIALIZER_CTX);
 #endif /* WLAN_FEATURE_ROAM_OFFLOAD */
 	wmi_unified_register_event_handler(wma_handle->wmi_handle,
 				WMI_RSSI_BREACH_EVENTID,
@@ -3147,8 +3151,7 @@ static int wma_pdev_set_hw_mode_resp_evt_handler(void *handle,
 		pdev_id = vdev_mac_entry[i].pdev_id;
 		if (pdev_id == WMI_PDEV_ID_SOC) {
 			WMA_LOGE("%s: soc level id received for mac id)",
-				__func__);
-			QDF_BUG(0);
+				 __func__);
 			goto fail;
 		}
 		if (vdev_id >= wma->max_bssid) {
@@ -3240,8 +3243,7 @@ void wma_process_pdev_hw_mode_trans_ind(void *handle,
 
 		if (pdev_id == WMI_PDEV_ID_SOC) {
 			WMA_LOGE("%s: soc level id received for mac id)",
-					__func__);
-			QDF_BUG(0);
+				 __func__);
 			return;
 		}
 		if (vdev_id >= wma->max_bssid) {
@@ -3852,6 +3854,30 @@ QDF_STATUS wma_wmi_service_close(void *cds_ctx)
 			qdf_mem_free(wma_handle->
 				     interfaces[i].action_frame_filter);
 			wma_handle->interfaces[i].action_frame_filter = NULL;
+		}
+
+		if (wma_handle->interfaces[i].roam_synch_frame_ind.
+		    bcn_probe_rsp) {
+			qdf_mem_free(wma_handle->interfaces[i].
+			      roam_synch_frame_ind.bcn_probe_rsp);
+			wma_handle->interfaces[i].roam_synch_frame_ind.
+				     bcn_probe_rsp = NULL;
+		}
+
+		if (wma_handle->interfaces[i].roam_synch_frame_ind.
+		    reassoc_req) {
+			qdf_mem_free(wma_handle->interfaces[i].
+				     roam_synch_frame_ind.reassoc_req);
+			wma_handle->interfaces[i].roam_synch_frame_ind.
+				     reassoc_req = NULL;
+		}
+
+		if (wma_handle->interfaces[i].roam_synch_frame_ind.
+		    reassoc_rsp) {
+			qdf_mem_free(wma_handle->interfaces[i].
+				     roam_synch_frame_ind.reassoc_rsp);
+			wma_handle->interfaces[i].roam_synch_frame_ind.
+				     reassoc_rsp = NULL;
 		}
 
 		wma_vdev_deinit(&wma_handle->interfaces[i]);
@@ -7954,7 +7980,7 @@ QDF_STATUS wma_mc_process_msg(void *cds_context, cds_msg_t *msg)
 		break;
 	case SIR_HAL_PDEV_SET_PCL_TO_FW:
 		wma_send_pdev_set_pcl_cmd(wma_handle,
-				(struct wmi_pcl_chan_weights *)msg->bodyptr);
+				(struct set_pcl_req *)msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	case SIR_HAL_PDEV_SET_HW_MODE:
@@ -8264,7 +8290,7 @@ static wmi_pcl_chan_weight wma_map_pcl_weights(uint32_t pcl_weight)
  * Return: Success if the cmd is sent successfully to the firmware
  */
 QDF_STATUS wma_send_pdev_set_pcl_cmd(tp_wma_handle wma_handle,
-				struct wmi_pcl_chan_weights *msg)
+				struct set_pcl_req *msg)
 {
 	uint32_t i;
 	QDF_STATUS status;
@@ -8276,20 +8302,22 @@ QDF_STATUS wma_send_pdev_set_pcl_cmd(tp_wma_handle wma_handle,
 	}
 
 	for (i = 0; i < wma_handle->saved_chan.num_channels; i++) {
-		msg->saved_chan_list[i] =
+		msg->chan_weights.saved_chan_list[i] =
 			wma_handle->saved_chan.channel_list[i];
 	}
 
-	msg->saved_num_chan = wma_handle->saved_chan.num_channels;
-	status = cds_get_valid_chan_weights((struct sir_pcl_chan_weights *)msg,
-					CDS_STA_MODE);
+	msg->chan_weights.saved_num_chan = wma_handle->saved_chan.num_channels;
+	status = cds_get_valid_chan_weights(
+			(struct sir_pcl_chan_weights *)&msg->chan_weights,
+			CDS_STA_MODE);
 
-	for (i = 0; i < msg->saved_num_chan; i++) {
-		msg->weighed_valid_list[i] =
-			wma_map_pcl_weights(msg->weighed_valid_list[i]);
+	for (i = 0; i < msg->chan_weights.saved_num_chan; i++) {
+		msg->chan_weights.weighed_valid_list[i] =
+			wma_map_pcl_weights(msg->chan_weights.
+					    weighed_valid_list[i]);
 		WMA_LOGD("%s: chan:%d weight[%d]=%d", __func__,
-			 msg->saved_chan_list[i], i,
-			 msg->weighed_valid_list[i]);
+			 msg->chan_weights.saved_chan_list[i], i,
+			 msg->chan_weights.weighed_valid_list[i]);
 	}
 
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
@@ -8297,7 +8325,8 @@ QDF_STATUS wma_send_pdev_set_pcl_cmd(tp_wma_handle wma_handle,
 		return status;
 	}
 
-	if (wmi_unified_pdev_set_pcl_cmd(wma_handle->wmi_handle, msg))
+	if (wmi_unified_pdev_set_pcl_cmd(wma_handle->wmi_handle,
+					 &msg->chan_weights))
 		return QDF_STATUS_E_FAILURE;
 
 	return QDF_STATUS_SUCCESS;

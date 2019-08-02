@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1498,7 +1498,7 @@ QDF_STATUS hdd_wlan_shutdown(void)
 
 	qdf_mc_timer_stop(&pHddCtx->tdls_source_timer);
 
-	hdd_bus_bandwidth_destroy(pHddCtx);
+	hdd_bus_bw_compute_timer_stop(pHddCtx);
 
 	hdd_wlan_stop_modules(pHddCtx, false);
 
@@ -1614,9 +1614,6 @@ QDF_STATUS hdd_wlan_re_init(void)
 
 	if (pHddCtx->config->enable_dp_trace)
 		hdd_dp_trace_init(pHddCtx->config);
-
-	hdd_bus_bandwidth_init(pHddCtx);
-
 
 	ret = hdd_wlan_start_modules(pHddCtx, pAdapter, true);
 	if (ret) {
@@ -2420,6 +2417,11 @@ static int __wlan_hdd_cfg80211_get_txpower(struct wiphy *wiphy,
 	/* Validate adapter sessionId */
 	if (wlan_hdd_validate_session_id(adapter->sessionId)) {
 		hdd_err("invalid session id: %d", adapter->sessionId);
+		return -EINVAL;
+	}
+
+	if (sta_ctx->hdd_ReassocScenario) {
+		hdd_debug("Roaming is in progress, rej this req");
 		return -EINVAL;
 	}
 

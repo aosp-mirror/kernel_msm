@@ -896,6 +896,8 @@ struct hdd_station_ctx {
 	/* Connection information*/
 	connection_info_t conn_info;
 
+	connection_info_t cache_conn_info;
+
 	roaming_info_t roam_info;
 
 	int ft_carrier_on;
@@ -1942,10 +1944,7 @@ struct hdd_context_s {
 #ifdef MSM_PLATFORM
 	/* DDR bus bandwidth compute timer
 	 */
-	qdf_timer_t bus_bw_timer;
-	bool bus_bw_timer_running;
-	qdf_spinlock_t bus_bw_timer_lock;
-	struct work_struct bus_bw_work;
+	qdf_mc_timer_t bus_bw_timer;
 	int cur_vote_level;
 	spinlock_t bus_bw_lock;
 	int cur_rx_level;
@@ -2312,7 +2311,6 @@ int hdd_bus_bandwidth_init(hdd_context_t *hdd_ctx);
  */
 void hdd_bus_bandwidth_destroy(hdd_context_t *hdd_ctx);
 #else
-
 void hdd_bus_bw_compute_timer_start(hdd_context_t *hdd_ctx)
 {
 	return;
@@ -2927,4 +2925,12 @@ void wlan_hdd_free_cache_channels(hdd_context_t *hdd_ctx);
  */
 void hdd_get_nud_stats_cb(void *data, struct rsp_stats *rsp, void *context);
 
+/**
+ * hdd_set_nth_beacon_offload() - Send the nth beacon offload command to FW
+ * @adapter: HDD adapter
+ * @value: Value of n, for which the nth beacon will be forwarded by the FW
+ *
+ * Return: QDF_STATUS_SUCCESS on success and failure status on failure
+ */
+QDF_STATUS hdd_set_nth_beacon_offload(hdd_adapter_t *adapter, uint16_t value);
 #endif /* end #if !defined(WLAN_HDD_MAIN_H) */

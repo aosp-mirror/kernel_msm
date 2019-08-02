@@ -626,6 +626,14 @@ config MSM_ADSPRPC
 	  applications DSP processor. Say M if you want to enable this
 	  module.
 
+config MSM_ADSPRPC_SECURE_ENABLE
+	bool "ADSP RPC Secure Channel enable"
+	depends on MSM_ADSPRPC
+	help
+	  Enables a Secure channel communication. if flag set to "y", ADSP/SLPI
+	  is secure and CDSP is non secure and if flag is "n" all DSPs are non
+	  secure nodes.
+
 config MSM_RDBG
 	tristate "QTI Remote debug driver"
 	help

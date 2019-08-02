@@ -3663,7 +3663,8 @@ static int32_t hdd_add_tx_bitrate(struct sk_buff *skb,
 	if (!nla_attr)
 		goto fail;
 	/* cfg80211_calculate_bitrate will return 0 for mcs >= 32 */
-	bitrate = cfg80211_calculate_bitrate(&hdd_sta_ctx->conn_info.txrate);
+	bitrate = cfg80211_calculate_bitrate(&hdd_sta_ctx->
+						cache_conn_info.txrate);
 
 	/* report 16-bit bitrate only if we can */
 	bitrate_compat = bitrate < (1UL << 16) ? bitrate : 0;
@@ -3678,7 +3679,7 @@ static int32_t hdd_add_tx_bitrate(struct sk_buff *skb,
 		goto fail;
 	}
 	if (nla_put_u8(skb, NL80211_RATE_INFO_VHT_NSS,
-		       hdd_sta_ctx->conn_info.txrate.nss)) {
+		       hdd_sta_ctx->cache_conn_info.txrate.nss)) {
 		hdd_err("put fail");
 		goto fail;
 	}
@@ -3705,7 +3706,7 @@ static int32_t hdd_add_sta_info(struct sk_buff *skb,
 	if (!nla_attr)
 		goto fail;
 	if (nla_put_u8(skb, NL80211_STA_INFO_SIGNAL,
-		       (hdd_sta_ctx->conn_info.signal + 100))) {
+		       (hdd_sta_ctx->cache_conn_info.signal + 100))) {
 		hdd_err("put fail");
 		goto fail;
 	}
@@ -3735,9 +3736,9 @@ static int32_t hdd_add_survey_info(struct sk_buff *skb,
 	if (!nla_attr)
 		goto fail;
 	if (nla_put_u32(skb, NL80211_SURVEY_INFO_FREQUENCY,
-			hdd_sta_ctx->conn_info.freq) ||
+			hdd_sta_ctx->cache_conn_info.freq) ||
 	    nla_put_u8(skb, NL80211_SURVEY_INFO_NOISE,
-		       (hdd_sta_ctx->conn_info.noise + 100))) {
+		       (hdd_sta_ctx->cache_conn_info.noise + 100))) {
 		hdd_err("put fail");
 		goto fail;
 	}
@@ -3766,13 +3767,13 @@ hdd_add_link_standard_info(struct sk_buff *skb,
 		goto fail;
 	if (nla_put(skb,
 		    NL80211_ATTR_SSID,
-		    hdd_sta_ctx->conn_info.SSID.SSID.length,
-		    hdd_sta_ctx->conn_info.SSID.SSID.ssId)) {
+		    hdd_sta_ctx->cache_conn_info.SSID.SSID.length,
+		    hdd_sta_ctx->cache_conn_info.SSID.SSID.ssId)) {
 		hdd_err("put fail");
 		goto fail;
 	}
 	if (nla_put(skb, NL80211_ATTR_MAC, QDF_MAC_ADDR_SIZE,
-		    hdd_sta_ctx->conn_info.bssId.bytes)) {
+		    hdd_sta_ctx->cache_conn_info.bssId.bytes)) {
 		goto fail;
 	}
 	if (hdd_add_survey_info(skb, hdd_sta_ctx, NL80211_ATTR_SURVEY_INFO))
@@ -3802,17 +3803,17 @@ hdd_add_ap_standard_info(struct sk_buff *skb,
 	nla_attr = nla_nest_start(skb, idx);
 	if (!nla_attr)
 		goto fail;
-	if (hdd_sta_ctx->conn_info.conn_flag.vht_present)
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.vht_present)
 		if (nla_put(skb, NL80211_ATTR_VHT_CAPABILITY,
-			    sizeof(hdd_sta_ctx->conn_info.vht_caps),
-			    &hdd_sta_ctx->conn_info.vht_caps)) {
+			    sizeof(hdd_sta_ctx->cache_conn_info.vht_caps),
+			    &hdd_sta_ctx->cache_conn_info.vht_caps)) {
 			hdd_err("put fail");
 			goto fail;
 		}
-	if (hdd_sta_ctx->conn_info.conn_flag.ht_present)
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.ht_present)
 		if (nla_put(skb, NL80211_ATTR_HT_CAPABILITY,
-			    sizeof(hdd_sta_ctx->conn_info.ht_caps),
-			    &hdd_sta_ctx->conn_info.ht_caps)) {
+			    sizeof(hdd_sta_ctx->cache_conn_info.ht_caps),
+			    &hdd_sta_ctx->cache_conn_info.ht_caps)) {
 			hdd_err("put fail");
 			goto fail;
 		}
@@ -3840,30 +3841,32 @@ static int hdd_get_station_info(hdd_context_t *hdd_ctx,
 	hdd_sta_ctx = WLAN_HDD_GET_STATION_CTX_PTR(adapter);
 
 	nl_buf_len = NLMSG_HDRLEN;
-	nl_buf_len += sizeof(hdd_sta_ctx->conn_info.SSID.SSID.length) +
+	nl_buf_len += sizeof(hdd_sta_ctx->cache_conn_info.SSID.SSID.length) +
 		      QDF_MAC_ADDR_SIZE +
-		      sizeof(hdd_sta_ctx->conn_info.freq) +
-		      sizeof(hdd_sta_ctx->conn_info.noise) +
-		      sizeof(hdd_sta_ctx->conn_info.signal) +
+		      sizeof(hdd_sta_ctx->cache_conn_info.freq) +
+		      sizeof(hdd_sta_ctx->cache_conn_info.noise) +
+		      sizeof(hdd_sta_ctx->cache_conn_info.signal) +
 		      (sizeof(uint32_t) * 2) +
-		      sizeof(hdd_sta_ctx->conn_info.txrate.nss) +
-		      sizeof(hdd_sta_ctx->conn_info.roam_count) +
-		      sizeof(hdd_sta_ctx->conn_info.authType) +
-		      sizeof(hdd_sta_ctx->conn_info.dot11Mode);
-	if (hdd_sta_ctx->conn_info.conn_flag.vht_present)
-		nl_buf_len += sizeof(hdd_sta_ctx->conn_info.vht_caps);
-	if (hdd_sta_ctx->conn_info.conn_flag.ht_present)
-		nl_buf_len += sizeof(hdd_sta_ctx->conn_info.ht_caps);
-	if (hdd_sta_ctx->conn_info.conn_flag.hs20_present) {
-		tmp_hs20 = (uint8_t *)&(hdd_sta_ctx->conn_info.hs20vendor_ie);
-		nl_buf_len += (sizeof(hdd_sta_ctx->conn_info.hs20vendor_ie) -
-			       1);
+		      sizeof(hdd_sta_ctx->cache_conn_info.txrate.nss) +
+		      sizeof(hdd_sta_ctx->cache_conn_info.roam_count) +
+		      sizeof(hdd_sta_ctx->cache_conn_info.authType) +
+		      sizeof(hdd_sta_ctx->cache_conn_info.dot11Mode);
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.vht_present)
+		nl_buf_len += sizeof(hdd_sta_ctx->cache_conn_info.vht_caps);
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.ht_present)
+		nl_buf_len += sizeof(hdd_sta_ctx->cache_conn_info.ht_caps);
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.hs20_present) {
+		tmp_hs20 = (uint8_t *)&(hdd_sta_ctx->
+						cache_conn_info.hs20vendor_ie);
+		nl_buf_len += (sizeof(hdd_sta_ctx->
+					cache_conn_info.hs20vendor_ie) - 1);
 	}
-	if (hdd_sta_ctx->conn_info.conn_flag.ht_op_present)
-		nl_buf_len += sizeof(hdd_sta_ctx->conn_info.ht_operation);
-	if (hdd_sta_ctx->conn_info.conn_flag.vht_op_present)
-		nl_buf_len += sizeof(hdd_sta_ctx->conn_info.vht_operation);
-
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.ht_op_present)
+		nl_buf_len += sizeof(hdd_sta_ctx->
+						cache_conn_info.ht_operation);
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.vht_op_present)
+		nl_buf_len += sizeof(hdd_sta_ctx->
+						cache_conn_info.vht_operation);
 
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(hdd_ctx->wiphy, nl_buf_len);
 	if (!skb) {
@@ -3882,33 +3885,35 @@ static int hdd_get_station_info(hdd_context_t *hdd_ctx,
 		goto fail;
 	}
 	if (nla_put_u32(skb, INFO_ROAM_COUNT,
-			hdd_sta_ctx->conn_info.roam_count) ||
+			hdd_sta_ctx->cache_conn_info.roam_count) ||
 	    nla_put_u32(skb, INFO_AKM,
 			hdd_convert_auth_type(
-			hdd_sta_ctx->conn_info.authType)) ||
+			hdd_sta_ctx->cache_conn_info.authType)) ||
 	    nla_put_u32(skb, WLAN802_11_MODE,
 			hdd_convert_dot11mode(
-			hdd_sta_ctx->conn_info.dot11Mode))) {
+			hdd_sta_ctx->cache_conn_info.dot11Mode))) {
 		hdd_err("put fail");
 		goto fail;
 	}
-	if (hdd_sta_ctx->conn_info.conn_flag.ht_op_present)
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.ht_op_present)
 		if (nla_put(skb, HT_OPERATION,
-			    (sizeof(hdd_sta_ctx->conn_info.ht_operation)),
-			    &hdd_sta_ctx->conn_info.ht_operation)) {
+			    (sizeof(hdd_sta_ctx->cache_conn_info.ht_operation)),
+			    &hdd_sta_ctx->cache_conn_info.ht_operation)) {
 			hdd_err("put fail");
 			goto fail;
 		}
-	if (hdd_sta_ctx->conn_info.conn_flag.vht_op_present)
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.vht_op_present)
 		if (nla_put(skb, VHT_OPERATION,
-			    (sizeof(hdd_sta_ctx->conn_info.vht_operation)),
-			    &hdd_sta_ctx->conn_info.vht_operation)) {
+			    (sizeof(hdd_sta_ctx->
+					cache_conn_info.vht_operation)),
+			    &hdd_sta_ctx->cache_conn_info.vht_operation)) {
 			hdd_err("put fail");
 			goto fail;
 		}
-	if (hdd_sta_ctx->conn_info.conn_flag.hs20_present)
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.hs20_present)
 		if (nla_put(skb, AP_INFO_HS20_INDICATION,
-			    (sizeof(hdd_sta_ctx->conn_info.hs20vendor_ie) - 1),
+			    (sizeof(hdd_sta_ctx->cache_conn_info.hs20vendor_ie)
+			     - 1),
 			    tmp_hs20 + 1)) {
 			hdd_err("put fail");
 			goto fail;
@@ -4768,6 +4773,40 @@ hdd_cfg80211_get_station_cmd(struct wiphy *wiphy,
 #undef REMOTE_PAD
 #endif
 
+/**
+ * hdd_get_roam_reason() - convert wmi roam reason to
+ * enum qca_roam_reason
+ * @roam_scan_trigger: wmi roam scan trigger ID
+ *
+ * Return: Meaningful qca_roam_reason from enum WMI_ROAM_TRIGGER_REASON_ID
+ */
+static enum qca_roam_reason hdd_get_roam_reason(uint32_t roam_scan_trigger)
+{
+	switch (roam_scan_trigger) {
+	case WMI_ROAM_TRIGGER_REASON_PER:
+		return QCA_ROAM_REASON_PER;
+	case WMI_ROAM_TRIGGER_REASON_BMISS:
+		return QCA_ROAM_REASON_BEACON_MISS;
+	case WMI_ROAM_TRIGGER_REASON_LOW_RSSI:
+	case WMI_ROAM_TRIGGER_REASON_BACKGROUND:
+		return QCA_ROAM_REASON_POOR_RSSI;
+	case WMI_ROAM_TRIGGER_REASON_HIGH_RSSI:
+		return QCA_ROAM_REASON_BETTER_RSSI;
+	case WMI_ROAM_TRIGGER_REASON_DENSE:
+		return QCA_ROAM_REASON_CONGESTION;
+	case WMI_ROAM_TRIGGER_REASON_FORCED:
+		return QCA_ROAM_REASON_USER_TRIGGER;
+	case WMI_ROAM_TRIGGER_REASON_BTM:
+		return QCA_ROAM_REASON_BTM;
+	case WMI_ROAM_TRIGGER_REASON_BSS_LOAD:
+		return QCA_ROAM_REASON_BSS_LOAD;
+	default:
+		return QCA_ROAM_REASON_UNKNOWN;
+	}
+
+	return QCA_ROAM_REASON_UNKNOWN;
+}
+
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * __wlan_hdd_cfg80211_keymgmt_set_key() - Store the Keys in the driver session
@@ -5213,6 +5252,7 @@ int wlan_hdd_send_roam_auth_event(hdd_adapter_t *adapter, uint8_t *bssid,
 	eCsrAuthType auth_type;
 	uint32_t fils_params_len;
 	int status;
+	enum qca_roam_reason hdd_roam_reason;
 
 	ENTER();
 
@@ -5288,6 +5328,15 @@ int wlan_hdd_send_roam_auth_event(hdd_adapter_t *adapter, uint8_t *bssid,
 			roam_info_ptr->kek_len, roam_info_ptr->kek)) {
 			hdd_err("nla put fail, kek_len %d",
 				roam_info_ptr->kek_len);
+			goto nla_put_failure;
+		}
+
+		hdd_roam_reason =
+			hdd_get_roam_reason(roam_info_ptr->roam_reason);
+
+		if (nla_put_u8(skb, QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_REASON,
+			       hdd_roam_reason)) {
+			hdd_err("roam reason send failure");
 			goto nla_put_failure;
 		}
 
@@ -10516,7 +10565,7 @@ qca_wlan_vendor_set_nud_stats[STATS_SET_MAX + 1] = {
 const struct nla_policy
 qca_wlan_vendor_set_connectivity_check_stats[CONNECTIVITY_STATS_SET_MAX + 1] = {
 	[STATS_PKT_INFO_TYPE] = {.type = NLA_U32 },
-	[STATS_DNS_DOMAIN_NAME] = {.type = NLA_BINARY,
+	[STATS_DNS_DOMAIN_NAME] = {.type = NLA_NUL_STRING,
 					.len = DNS_DOMAIN_NAME_MAX_LEN },
 	[STATS_SRC_PORT] = {.type = NLA_U32 },
 	[STATS_DEST_PORT] = {.type = NLA_U32 },
@@ -10556,10 +10605,16 @@ static inline uint8_t *hdd_dns_unmake_name_query(uint8_t *name)
  *
  * Return: Byte following constructed DNS name
  */
-static uint8_t *hdd_dns_make_name_query(const uint8_t *string, uint8_t *buf)
+static uint8_t *hdd_dns_make_name_query(const uint8_t *string,
+					uint8_t *buf, uint8_t len)
 {
 	uint8_t *length_byte = buf++;
 	uint8_t c;
+
+	if (string[len - 1]) {
+		hdd_debug("DNS name is not null terminated");
+		return NULL;
+	}
 
 	while ((c = *(string++))) {
 		if (c == '.') {
@@ -10649,8 +10704,12 @@ static int hdd_set_clear_connectivity_check_stats_info(
 					adapter->track_dns_domain_len =
 						nla_len(tb2[
 							STATS_DNS_DOMAIN_NAME]);
-					hdd_dns_make_name_query(domain_name,
-							adapter->dns_payload);
+					if (!hdd_dns_make_name_query(
+						domain_name,
+						adapter->dns_payload,
+						adapter->track_dns_domain_len))
+						adapter->track_dns_domain_len =
+							0;
 					/* DNStracking isn't supported in FW. */
 					arp_stats_params->pkt_type_bitmap &=
 						~CONNECTIVITY_CHECK_SET_DNS;
@@ -11035,7 +11094,7 @@ static int __wlan_hdd_cfg80211_set_nud_stats(struct wiphy *wiphy,
 		}
 	}
 
-	QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_INFO,
+	QDF_TRACE(QDF_MODULE_ID_HDD, QDF_TRACE_LEVEL_DEBUG,
 		  "%s STATS_SET_START Received flag %d!!", __func__,
 		  arp_stats_params.flag);
 
@@ -18794,13 +18853,7 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 						pAdapter->aStaInfo[i].
 							macAddrSTA.bytes,
 						QDF_MAC_ADDR_SIZE);
-					if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-						hdd_ipa_wlan_evt(pAdapter,
-						    pAdapter->aStaInfo[i].
-						    ucSTAId,
-						    HDD_IPA_CLIENT_DISCONNECT,
-						    mac);
-					}
+
 					hdd_debug("Delete STA with MAC::"
 						  MAC_ADDRESS_STR,
 					       MAC_ADDR_ARRAY(mac));
@@ -18839,11 +18892,6 @@ int __wlan_hdd_cfg80211_del_station(struct wiphy *wiphy,
 					  MAC_ADDRESS_STR,
 				       MAC_ADDR_ARRAY(mac));
 				return -ENOENT;
-			}
-
-			if (hdd_ipa_uc_is_enabled(pHddCtx)) {
-				hdd_ipa_wlan_evt(pAdapter, staId,
-					HDD_IPA_CLIENT_DISCONNECT, mac);
 			}
 
 			if (pAdapter->aStaInfo[staId].isDeauthInProgress ==

@@ -1,4 +1,5 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2016, 2018-2019, The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -737,6 +738,10 @@ ssize_t audio_in_read(struct file *file,
 				}
 				bytes_to_copy =
 					(size + audio->out_frame_info[idx][1]);
+				if (bytes_to_copy == 0) {
+					rc = 0;
+					break;
+				}
 				/* Number of frames information copied */
 				buf += sizeof(unsigned char);
 				count -= sizeof(unsigned char);
@@ -770,8 +775,10 @@ ssize_t audio_in_read(struct file *file,
 
 	pr_debug("%s:session id %d: read: %zd bytes\n", __func__,
 			audio->ac->session, (buf-start));
-	if (buf > start)
-		return buf - start;
+	if (!rc) {
+		if (buf > start)
+			return buf - start;
+	}
 	return rc;
 }
 
@@ -879,8 +886,7 @@ ssize_t audio_in_write(struct file *file,
 						__func__, audio->ac->session);
 			}
 		}
-		xfer = (count > (audio->pcm_cfg.buffer_size)) ?
-				(audio->pcm_cfg.buffer_size) : count;
+		xfer = (count > size) ? size : count;
 
 		if (copy_from_user(cpy_ptr, buf, xfer)) {
 			rc = -EFAULT;
