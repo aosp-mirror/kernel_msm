@@ -29,6 +29,32 @@
 
 static struct cam_isp_dev g_isp_dev;
 
+static void cam_isp_dev_stop_all_dev(
+	struct cam_node *node
+)
+{
+	int i = 0;
+	struct cam_hw_stop_args         stop_args;
+	struct cam_isp_stop_args        stop_isp;
+	struct cam_isp_context          *ctx_isp;
+	struct cam_context *ctx;
+
+	stop_isp.stop_only = false;
+	stop_isp.hw_stop_cmd = CAM_ISP_HW_STOP_IMMEDIATELY;
+
+	for (i = 0; i < node->ctx_size; i++) {
+		ctx = &(node->ctx_list[i]);
+		ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv;
+
+		stop_args.ctxt_to_hw_map =  ctx_isp->hw_ctx;
+		stop_args.args = (void *)(&stop_isp);
+		node->hw_mgr_intf.hw_stop(
+			node->hw_mgr_intf.hw_mgr_priv,
+			&stop_args);
+	}
+}
+
 static void cam_isp_dev_iommu_fault_handler(
 	struct iommu_domain *domain, struct device *dev, unsigned long iova,
 	int flags, void *token, uint32_t buf_info)
@@ -42,6 +68,7 @@ static void cam_isp_dev_iommu_fault_handler(
 	}
 
 	node = (struct cam_node *)token;
+	cam_isp_dev_stop_all_dev(node);
 
 	for (i = 0; i < node->ctx_size; i++)
 		cam_context_dump_pf_info(&(node->ctx_list[i]), iova,
