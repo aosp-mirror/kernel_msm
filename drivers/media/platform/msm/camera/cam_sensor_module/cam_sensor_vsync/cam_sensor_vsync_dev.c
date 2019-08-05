@@ -549,6 +549,7 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 			result.timestamp_sof,
 			result.timestamp_vsync);
 
+	mutex_lock(&ctx->list_lock);
 	list_for_each_entry_safe(vsync_req, vsync_req_temp,
 			&ctx->pending_reqs, list) {
 		if (!vsync_req) {
@@ -595,13 +596,12 @@ static void vsync_event_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 				"Error in notifying the vsync time for req id:%lld",
 				frame_msg->request_id);
 free_n_go:
-			/* remove from list */
-			mutex_lock(&ctx->list_lock);
-			list_del_init(&vsync_req->list);
-			mutex_unlock(&ctx->list_lock);
-			/* free memory */
-			kfree(vsync_req);
+		/* remove from list */
+		list_del_init(&vsync_req->list);
+		/* free memory */
+		kfree(vsync_req);
 	}
+	mutex_unlock(&ctx->list_lock);
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(cam_vsync_qmi_fops,
