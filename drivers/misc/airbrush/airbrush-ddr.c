@@ -2342,6 +2342,7 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 static int __ab_ddr_wait_for_m0_ddr_init(struct ab_ddr_context *ddr_ctx)
 {
 	unsigned long timeout;
+	uint32_t ddr_train_status;
 
 	timeout = jiffies + AB_DDR_INIT_TIMEOUT;
 	while ((!(ddr_reg_rd(ddr_ctx, REG_DDR_TRAIN_STATUS) &
@@ -2350,9 +2351,11 @@ static int __ab_ddr_wait_for_m0_ddr_init(struct ab_ddr_context *ddr_ctx)
 		ddr_usleep(DDR_POLL_USLEEP_MIN);
 
 	/* check for the ddr training failure condition */
-	if (ddr_reg_rd(ddr_ctx, REG_DDR_TRAIN_STATUS) & DDR_TRAIN_FAIL) {
-		pr_err("%s: DDR Training failed during M0 boot\n",
-		       __func__);
+	ddr_train_status = ddr_reg_rd(ddr_ctx, REG_DDR_TRAIN_STATUS);
+	if ((ddr_train_status & DDR_TRAIN_FAIL) ||
+			!(ddr_train_status & DDR_TRAIN_COMPLETE)) {
+		pr_err("%s: DDR Training failed during M0 boot. Status: 0x%x\n",
+				__func__, ddr_train_status);
 		return -EIO;
 	}
 
@@ -3092,6 +3095,16 @@ static int32_t ab_ddr_init(void *ctx)
 		 */
 		ddr_ctx->ddr_train_sram_location =
 				ddr_reg_rd(ddr_ctx, SYSREG_REG_TRN_ADDR);
+
+		/* Check the ddr training data is saved to SRAM and the valid
+		 * SRAM location is updated to SYSREG_REG_TRN_ADDR by bootrom.
+		 */
+		if (!ddr_ctx->ddr_train_sram_location) {
+			ret = -EFAULT;
+			pr_err("error!! ddr train data location not updated\n");
+			goto ddr_init_done;
+		}
+
 		ddr_copy_train_results_from_sram(ddr_ctx);
 		ab_sm_record_ts(AB_SM_TS_DDR_M0_INIT_INTERNAL);
 	} else {
