@@ -36,6 +36,7 @@ struct faceauth_init_data {
 } __attribute__((packed));
 
 #define FACEAUTH_MAX_CACHE_FLUSH_SIZE 20
+#define FACEAUTH_AUX_DATA_SIZE 32
 
 /* This struct is written by userspace and read by kernel */
 struct faceauth_start_data {
@@ -84,6 +85,8 @@ struct faceauth_start_data {
 	__u32 citadel_input2;
 	__u32 citadel_output1;
 	__u32 citadel_output2;
+
+	__u32 aux_data[FACEAUTH_AUX_DATA_SIZE];
 
 } __attribute__((packed));
 

@@ -158,6 +158,7 @@ struct hypx_fa_process_results {
 	uint64_t citadel_token; /* PHY addr */
 	uint64_t deferred_autocal; /* PHY addr */
 	uint32_t deferred_autocal_size;
+	uint32_t aux_data[FACEAUTH_AUX_DATA_SIZE];
 } __packed;
 
 struct hypx_fa_debug_data {
@@ -1036,6 +1037,9 @@ int el2_faceauth_get_process_result(struct device *dev,
 	data->fw_version = hypx_data->fw_version;
 	data->error_code = hypx_data->error_code;
 	data->ab_exception_number = hypx_data->exception_number;
+	memcpy(data->aux_data, hypx_data->aux_data,
+	       sizeof(hypx_data->aux_data));
+
 
 	if (hypx_data->citadel_token) {
 		ret = hypx_copy_from_blob_userbuf(dev, &citadel_token,
