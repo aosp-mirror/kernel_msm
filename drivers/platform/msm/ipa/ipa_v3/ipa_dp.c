@@ -1216,7 +1216,7 @@ static int ipa_setup_coal_def_pipe(struct ipa_sys_connect_params *sys_in,
 {
 	struct ipa3_ep_context *ep;
 	int result = -EINVAL;
-	int ipa_ep_idx;
+	int ipa_ep_idx, i;
 
 	ipa_ep_idx = ipa3_get_ep_mapping(sys_in->client);
 
@@ -1299,6 +1299,9 @@ static int ipa_setup_coal_def_pipe(struct ipa_sys_connect_params *sys_in,
 
 	ep->sys->repl = ep_coalescing->sys->repl;
 	ipa3_replenish_rx_cache(ep->sys);
+
+	for (i = 0; i < GSI_VEID_MAX; i++)
+		INIT_LIST_HEAD(&ep->sys->pending_pkts[i]);
 
 	ipa3_ctx->skip_ep_cfg_shadow[ipa_ep_idx] = ep->skip_ep_cfg;
 
@@ -1640,8 +1643,8 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	sys = ipa3_ctx->ep[src_ep_idx].sys;
 
 	if (!sys || !sys->ep->valid) {
-		IPAERR_RL("pipe not valid\n");
-		goto fail_gen;
+		IPAERR_RL("pipe %d not valid\n", src_ep_idx);
+		goto fail_pipe_not_valid;
 	}
 
 	num_frags = skb_shinfo(skb)->nr_frags;
@@ -1809,6 +1812,8 @@ fail_mem:
 		kfree(desc);
 fail_gen:
 	return -EFAULT;
+fail_pipe_not_valid:
+	return -EPIPE;
 }
 
 static void ipa3_wq_handle_rx(struct work_struct *work)
@@ -2401,6 +2406,7 @@ static void ipa3_cleanup_rx(struct ipa3_sys_context *sys)
 	 * provided to gsi
 	 */
 
+	spin_lock_bh(&sys->spinlock);
 	list_for_each_entry_safe(rx_pkt, r,
 				 &sys->rcycl_list, link) {
 		list_del(&rx_pkt->link);
@@ -2409,6 +2415,7 @@ static void ipa3_cleanup_rx(struct ipa3_sys_context *sys)
 		sys->free_skb(rx_pkt->data.skb);
 		kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache, rx_pkt);
 	}
+	spin_unlock_bh(&sys->spinlock);
 
 	if (sys->repl) {
 		head = atomic_read(&sys->repl->head_idx);

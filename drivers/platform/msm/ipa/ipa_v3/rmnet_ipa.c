@@ -691,6 +691,41 @@ int ipa3_copy_ul_filter_rule_to_ipa(struct ipa_install_fltr_rule_req_msg_v01
 			}
 		}
 	}
+
+	if (rule_req->ul_firewall_indices_list_valid) {
+		IPAWANDBG("Receive ul_firewall_indices_list_len = (%d)",
+			rule_req->ul_firewall_indices_list_len);
+
+		if (rule_req->ul_firewall_indices_list_len >
+			rmnet_ipa3_ctx->num_q6_rules) {
+			IPAWANERR("UL rule indices are not valid: (%d/%d)\n",
+					rule_req->xlat_filter_indices_list_len,
+					rmnet_ipa3_ctx->num_q6_rules);
+			goto failure;
+		}
+
+		ipa3_qmi_ctx->ul_firewall_indices_list_valid = 1;
+		ipa3_qmi_ctx->ul_firewall_indices_list_len =
+			rule_req->ul_firewall_indices_list_len;
+
+		for (i = 0; i < rule_req->ul_firewall_indices_list_len; i++) {
+			ipa3_qmi_ctx->ul_firewall_indices_list[i] =
+				rule_req->ul_firewall_indices_list[i];
+		}
+
+		for (i = 0; i < rule_req->ul_firewall_indices_list_len; i++) {
+			if (rule_req->ul_firewall_indices_list[i]
+				>= rmnet_ipa3_ctx->num_q6_rules) {
+				IPAWANERR("UL rule idx is wrong: %d\n",
+					rule_req->ul_firewall_indices_list[i]);
+				goto failure;
+			} else {
+				ipa3_qmi_ctx->q6_ul_filter_rule
+				[rule_req->ul_firewall_indices_list[i]]
+				.replicate_needed = 1;
+			}
+		}
+	}
 	goto success;
 
 failure:
@@ -1284,7 +1319,7 @@ send:
 		dev_kfree_skb_any(skb);
 		dev->stats.tx_dropped++;
 		spin_unlock_irqrestore(&wwan_ptr->lock, flags);
-		return -EFAULT;
+		return NETDEV_TX_OK;
 	}
 	/* IPA_RM checking end */
 
@@ -1294,6 +1329,14 @@ send:
 	 */
 	ret = ipa3_tx_dp(IPA_CLIENT_APPS_WAN_PROD, skb, NULL);
 	if (ret) {
+		if (ret == -EPIPE) {
+			IPAWANERR_RL("[%s] fatal: pipe is not valid\n",
+				dev->name);
+			dev_kfree_skb_any(skb);
+			dev->stats.tx_dropped++;
+			spin_unlock_irqrestore(&wwan_ptr->lock, flags);
+			return NETDEV_TX_OK;
+		}
 		ret = NETDEV_TX_BUSY;
 		goto out;
 	}
@@ -2161,16 +2204,39 @@ static int rmnet_ipa_send_coalesce_notification(uint8_t qmap_id,
 
 int ipa3_wwan_set_modem_state(struct wan_ioctl_notify_wan_state *state)
 {
+	uint32_t bw_mbps = 0;
+	int ret = 0;
+
 	if (!state)
 		return -EINVAL;
 
 	if (!ipa_pm_is_used())
 		return 0;
 
-	if (state->up)
-		return ipa_pm_activate_sync(rmnet_ipa3_ctx->q6_teth_pm_hdl);
-	else
-		return ipa_pm_deactivate_sync(rmnet_ipa3_ctx->q6_teth_pm_hdl);
+	if (state->up) {
+		if (rmnet_ipa3_ctx->ipa_config_is_apq) {
+			bw_mbps = 5200;
+			ret = ipa3_vote_for_bus_bw(&bw_mbps);
+			if (ret) {
+				IPAERR("Failed to vote for bus BW (%u)\n",
+							bw_mbps);
+				return ret;
+			}
+		}
+		ret = ipa_pm_activate_sync(rmnet_ipa3_ctx->q6_teth_pm_hdl);
+	} else {
+		if (rmnet_ipa3_ctx->ipa_config_is_apq) {
+			bw_mbps = 0;
+			ret = ipa3_vote_for_bus_bw(&bw_mbps);
+			if (ret) {
+				IPAERR("Failed to vote for bus BW (%u)\n",
+							bw_mbps);
+				return ret;
+			}
+		}
+		ret = ipa_pm_deactivate_sync(rmnet_ipa3_ctx->q6_teth_pm_hdl);
+	}
+	return ret;
 }
 
 /**
@@ -2219,18 +2285,10 @@ int ipa3_wwan_set_modem_perf_profile(int throughput)
 {
 	struct ipa_rm_perf_profile profile;
 	int ret;
-	int tether_bridge_handle = 0;
 
 	IPAWANDBG("throughput: %d\n", throughput);
 
 	if (ipa3_ctx->use_ipa_pm) {
-		/* query rmnet-tethering handle */
-		tether_bridge_handle = ipa3_teth_bridge_get_pm_hdl();
-		if (tether_bridge_handle > 0) {
-			/* only update with valid handle*/
-			ret = ipa_pm_set_throughput(tether_bridge_handle,
-			throughput);
-		}
 		/* for TETH MODEM on softap/rndis */
 		ret = ipa_pm_set_throughput(rmnet_ipa3_ctx->q6_teth_pm_hdl,
 			throughput);
@@ -2803,6 +2861,7 @@ static int ipa3_wwan_remove(struct platform_device *pdev)
 	if (ipa3_rmnet_res.ipa_napi_enable)
 		netif_napi_del(&(rmnet_ipa3_ctx->wwan_priv->napi));
 	mutex_unlock(&rmnet_ipa3_ctx->pipe_handle_guard);
+	IPAWANINFO("rmnet_ipa unregister_netdev\n");
 	unregister_netdev(IPA_NETDEV());
 	if (ipa3_ctx->use_ipa_pm)
 		ipa3_wwan_deregister_netdev_pm_client();
@@ -3014,7 +3073,8 @@ static int ipa3_lcl_mdm_ssr_notifier_cb(struct notifier_block *this,
 		ipa_stop_polling_stats();
 		if (atomic_read(&rmnet_ipa3_ctx->is_initialized))
 			platform_driver_unregister(&rmnet_ipa_driver);
-		imp_handle_modem_shutdown();
+		if (ipa3_ctx->ipa_mhi_proxy)
+			imp_handle_modem_shutdown();
 		if (atomic_read(&rmnet_ipa3_ctx->is_ssr) &&
 			ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0)
 			ipa3_q6_post_shutdown_cleanup();
@@ -3764,13 +3824,13 @@ static int rmnet_ipa3_query_tethering_stats_hw(
 	con_stats->client[index].num_ipv6_bytes);
 
 	/* update the wlan UL stats */
-	data->ipv4_tx_packets =
+	data->ipv4_tx_packets +=
 		con_stats->client[index].num_ipv4_pkts;
-	data->ipv6_tx_packets =
+	data->ipv6_tx_packets +=
 		con_stats->client[index].num_ipv6_pkts;
-	data->ipv4_tx_bytes =
+	data->ipv4_tx_bytes +=
 		con_stats->client[index].num_ipv4_bytes;
-	data->ipv6_tx_bytes =
+	data->ipv6_tx_bytes +=
 		con_stats->client[index].num_ipv6_bytes;
 
 	/* wlan UL stats on cv2 */
@@ -4041,8 +4101,8 @@ void ipa3_q6_handshake_complete(bool ssr_bootup)
 		 */
 		rmnet_ipa_get_network_stats_and_update();
 	}
-
-	imp_handle_modem_ready();
+	if (ipa3_ctx->ipa_mhi_proxy)
+		imp_handle_modem_ready();
 }
 
 static inline bool rmnet_ipa3_check_any_client_inited

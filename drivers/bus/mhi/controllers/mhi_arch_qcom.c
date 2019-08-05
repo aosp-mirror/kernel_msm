@@ -24,6 +24,7 @@
 #include <linux/msm_pcie.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/mhi.h>
 #include "mhi_qcom.h"
 
@@ -35,18 +36,22 @@ struct arch_info {
 	u32 bus_client;
 	struct msm_pcie_register_event pcie_reg_event;
 	struct pci_saved_state *pcie_state;
-	struct pci_saved_state *ref_pcie_state;
 	struct dma_iommu_mapping *mapping;
 	async_cookie_t cookie;
 	void *boot_ipc_log;
+	void *tsync_ipc_log;
 	struct mhi_device *boot_dev;
 	struct mhi_link_info current_link_info;
 	struct work_struct bw_scale_work;
+	struct notifier_block pm_notifier;
+	struct completion pm_completion;
 };
 
 /* ipc log markings */
 #define DLOG "Dev->Host: "
 #define HLOG "Host: "
+
+#define MHI_TSYNC_LOG_PAGES (10)
 
 #ifdef CONFIG_MHI_DEBUG
 
@@ -59,6 +64,38 @@ enum MHI_DEBUG_LEVEL  mhi_ipc_log_lvl = MHI_MSG_LVL_VERBOSE;
 enum MHI_DEBUG_LEVEL  mhi_ipc_log_lvl = MHI_MSG_LVL_ERROR;
 
 #endif
+
+static int mhi_arch_pm_notifier(struct notifier_block *nb,
+				unsigned long event, void *unused)
+{
+	struct arch_info *arch_info =
+		container_of(nb, struct arch_info, pm_notifier);
+
+	switch (event) {
+	case PM_SUSPEND_PREPARE:
+		reinit_completion(&arch_info->pm_completion);
+		break;
+
+	case PM_POST_SUSPEND:
+		complete_all(&arch_info->pm_completion);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static void mhi_arch_timesync_log(struct mhi_controller *mhi_cntrl,
+				  u64 remote_time)
+{
+	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
+	struct arch_info *arch_info = mhi_dev->arch_info;
+
+	if (remote_time != U64_MAX)
+		ipc_log_string(arch_info->tsync_ipc_log, "%6u.%06lu 0x%llx",
+			       REMOTE_TICKS_TO_SEC(remote_time),
+			       REMOTE_TIME_REMAINDER_US(remote_time),
+			       remote_time);
+}
 
 static int mhi_arch_set_bus_request(struct mhi_controller *mhi_cntrl, int index)
 {
@@ -108,7 +145,6 @@ static int mhi_arch_esoc_ops_power_on(void *priv, unsigned int flags)
 	struct mhi_controller *mhi_cntrl = priv;
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	struct pci_dev *pci_dev = mhi_dev->pci_dev;
-	struct arch_info *arch_info = mhi_dev->arch_info;
 	int ret;
 
 	mutex_lock(&mhi_cntrl->pm_mutex);
@@ -138,7 +174,6 @@ static int mhi_arch_esoc_ops_power_on(void *priv, unsigned int flags)
 		MHI_ERR("Failed to resume pcie bus ret %d\n", ret);
 		return ret;
 	}
-	pci_load_saved_state(pci_dev, arch_info->ref_pcie_state);
 
 	return mhi_pci_probe(pci_dev, NULL);
 }
@@ -165,17 +200,33 @@ static void mhi_arch_esoc_ops_power_off(void *priv, unsigned int flags)
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	bool mdm_state = (flags & ESOC_HOOK_MDM_CRASH);
 	struct arch_info *arch_info = mhi_dev->arch_info;
+	struct pci_dev *pci_dev = mhi_dev->pci_dev;
 
 	MHI_LOG("Enter: mdm_crashed:%d\n", mdm_state);
+
+	/*
+	 * Abort system suspend if system is preparing to go to suspend
+	 * by grabbing wake source.
+	 * If system is suspended, wait for pm notifier callback to notify
+	 * that resume has occurred with PM_POST_SUSPEND event.
+	 */
+	pm_stay_awake(&mhi_cntrl->mhi_dev->dev);
+	wait_for_completion(&arch_info->pm_completion);
+
+	/* if link is in drv suspend, wake it up */
+	pm_runtime_get_sync(&pci_dev->dev);
 
 	mutex_lock(&mhi_cntrl->pm_mutex);
 	if (!mhi_dev->powered_on) {
 		MHI_LOG("Not in active state\n");
 		mutex_unlock(&mhi_cntrl->pm_mutex);
+		pm_runtime_put_noidle(&pci_dev->dev);
 		return;
 	}
 	mhi_dev->powered_on = false;
 	mutex_unlock(&mhi_cntrl->pm_mutex);
+
+	pm_runtime_put_noidle(&pci_dev->dev);
 
 	MHI_LOG("Triggering shutdown process\n");
 	mhi_power_down(mhi_cntrl, !mdm_state);
@@ -189,6 +240,20 @@ static void mhi_arch_esoc_ops_power_off(void *priv, unsigned int flags)
 
 	mhi_arch_iommu_deinit(mhi_cntrl);
 	mhi_arch_pcie_deinit(mhi_cntrl);
+
+	pm_relax(&mhi_cntrl->mhi_dev->dev);
+}
+
+static void mhi_arch_esoc_ops_mdm_error(void *priv)
+{
+	struct mhi_controller *mhi_cntrl = priv;
+
+	MHI_LOG("Enter: mdm asserted\n");
+
+	/* transition MHI state into error state */
+	mhi_control_error(mhi_cntrl);
+
+	MHI_LOG("Exit\n");
 }
 
 static void mhi_bl_dl_cb(struct mhi_device *mhi_device,
@@ -243,9 +308,6 @@ static void mhi_boot_monitor(void *data, async_cookie_t cookie)
 		boot_dev = arch_info->boot_dev;
 		if (boot_dev)
 			mhi_unprepare_from_transfer(boot_dev);
-
-		/* enable link inactivity timer to start auto suspend */
-		msm_pcie_l1ss_timeout_enable(mhi_dev->pci_dev);
 
 		pm_runtime_allow(&mhi_dev->pci_dev->dev);
 	}
@@ -397,6 +459,14 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 							    node, 0);
 		mhi_cntrl->log_lvl = mhi_ipc_log_lvl;
 
+		snprintf(node, sizeof(node), "mhi_tsync_%04x_%02u.%02u.%02u",
+			 mhi_cntrl->dev_id, mhi_cntrl->domain, mhi_cntrl->bus,
+			 mhi_cntrl->slot);
+		arch_info->tsync_ipc_log = ipc_log_context_create(
+					   MHI_TSYNC_LOG_PAGES, node, 0);
+		if (arch_info->tsync_ipc_log)
+			mhi_cntrl->tsync_log = mhi_arch_timesync_log;
+
 		/* register for bus scale if defined */
 		arch_info->msm_bus_pdata = msm_bus_cl_get_pdata_from_dev(
 							&mhi_dev->pci_dev->dev);
@@ -420,6 +490,18 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 		if (ret)
 			MHI_LOG("Failed to reg. for link up notification\n");
 
+		init_completion(&arch_info->pm_completion);
+
+		/* register PM notifier to get post resume events */
+		arch_info->pm_notifier.notifier_call = mhi_arch_pm_notifier;
+		register_pm_notifier(&arch_info->pm_notifier);
+
+		/*
+		 * Mark as completed at initial boot-up to allow ESOC power on
+		 * callback to proceed if system has not gone to suspend
+		 */
+		complete_all(&arch_info->pm_completion);
+
 		arch_info->esoc_client = devm_register_esoc_client(
 						&mhi_dev->pci_dev->dev, "mdm");
 		if (IS_ERR_OR_NULL(arch_info->esoc_client)) {
@@ -435,6 +517,8 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 				mhi_arch_esoc_ops_power_on;
 			esoc_ops->esoc_link_power_off =
 				mhi_arch_esoc_ops_power_off;
+			esoc_ops->esoc_link_mdm_crash =
+				mhi_arch_esoc_ops_mdm_error;
 
 			ret = esoc_register_client_hook(arch_info->esoc_client,
 							esoc_ops);
@@ -442,9 +526,6 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 				MHI_ERR("Failed to register esoc ops\n");
 		}
 
-		/* save reference state for pcie config space */
-		arch_info->ref_pcie_state = pci_store_saved_state(
-							mhi_dev->pci_dev);
 		/*
 		 * MHI host driver has full autonomy to manage power state.
 		 * Disable all automatic power collapse features
