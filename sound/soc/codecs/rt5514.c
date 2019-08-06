@@ -34,34 +34,39 @@
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 #include "rt5514-spi.h"
 #endif
+#define RESET_CMD_DELAY 2000
 
 static const struct reg_sequence rt5514_i2c_patch[] = {
-	{0x1800101c, 0x00000000},
-	{0x18001100, 0x0000031f},
-	{0x18001104, 0x00000007},
-	{0x18001108, 0x00000000},
-	{0x1800110c, 0x00000000},
-	{0x18001110, 0x00000000},
-	{0x18001114, 0x00000001},
-	{0x18001118, 0x00000000},
-	{0x18002f08, 0x00000006},
-	{0x18002f00, 0x00055149},
-	{0x18002f00, 0x0005514b},
-	{0x18002f00, 0x00055149},
-	{0xfafafafa, 0x00000001},
-	{0x18002f10, 0x00000001},
-	{0x18002f10, 0x00000000},
-	{0x18002f10, 0x00000001},
-	{0xfafafafa, 0x00000001},
-	{0x18002000, 0x000010ec},
-	{0xfafafafa, 0x00000000},
+	{0xfafafafa, 0x00000001, RESET_CMD_DELAY},
+	{0x18002000, 0x000010ec, RESET_CMD_DELAY},
+	{0xfafafafa, 0x00000001, RESET_CMD_DELAY},
+	{0x18002004, 0x00808f81, RESET_CMD_DELAY},
+	{0xfafafafa, 0x00000001, RESET_CMD_DELAY},
+	{0x18002008, 0x00770000, RESET_CMD_DELAY},
+	{0xfafafafa, 0x00000001, RESET_CMD_DELAY},
+	{0x18002f08, 0x00000006, RESET_CMD_DELAY},
+	{0xfafafafa, 0x00000001, RESET_CMD_DELAY},
+	{0x18002f10, 0x00000000, RESET_CMD_DELAY},
+	{0xfafafafa, 0x00000001, RESET_CMD_DELAY},
+	{0x18002f10, 0x00000001, RESET_CMD_DELAY},
+	{0xfafafafa, 0x00000000, RESET_CMD_DELAY},
+	{0x18001100, 0x0000031f, RESET_CMD_DELAY},
+	{0x18001104, 0x00000007, RESET_CMD_DELAY},
+	{0x18001108, 0x00000000, RESET_CMD_DELAY},
+	{0x1800110c, 0x00000000, RESET_CMD_DELAY},
+	{0x18001110, 0x00000000, RESET_CMD_DELAY},
+	{0x18001114, 0x00000000, RESET_CMD_DELAY},
+	{0x18001118, 0x00000000, RESET_CMD_DELAY},
+	{0x1800111c, 0x00000000, RESET_CMD_DELAY},
+	{0x18002000, 0x000010ec, RESET_CMD_DELAY},
+	{0x18001044, 0x00000000, RESET_CMD_DELAY},
 };
 
 static const struct reg_sequence rt5514_patch[] = {
 	{RT5514_DIG_IO_CTRL,		0x00000040},
 	{RT5514_CLK_CTRL1,		0x38020041},
 	{RT5514_SRC_CTRL,		0x44000eee},
-	{RT5514_ANA_CTRL_LDO10,		0x00028604},
+	{RT5514_ANA_CTRL_LDO10,		0x00028704},
 	{RT5514_ANA_CTRL_ADCFED,	0x00000800},
 	{RT5514_ASRC_IN_CTRL1,		0x00000003},
 	{RT5514_DOWNFILTER0_CTRL3,	0x10000342},
@@ -89,14 +94,13 @@ static const struct reg_default rt5514_reg[] = {
 	{RT5514_PLL3_CALIB_CTRL5,	0x40220012},
 	{RT5514_DELAY_BUF_CTRL1,	0x7fff006a},
 	{RT5514_DELAY_BUF_CTRL3,	0x00000000},
-	{RT5514_ASRC_IN_CTRL1,		0x00000003},
 	{RT5514_DOWNFILTER0_CTRL1,	0x00020c2f},
 	{RT5514_DOWNFILTER0_CTRL2,	0x00020c2f},
 	{RT5514_DOWNFILTER0_CTRL3,	0x10000342},
 	{RT5514_DOWNFILTER1_CTRL1,	0x00020c2f},
 	{RT5514_DOWNFILTER1_CTRL2,	0x00020c2f},
 	{RT5514_DOWNFILTER1_CTRL3,	0x10000342},
-	{RT5514_ANA_CTRL_LDO10,		0x00028604},
+	{RT5514_ANA_CTRL_LDO10,		0x00028704},
 	{RT5514_ANA_CTRL_LDO18_16,	0x02000345},
 	{RT5514_ANA_CTRL_ADC12,		0x0000a2a8},
 	{RT5514_ANA_CTRL_ADC21,		0x00001180},
@@ -123,7 +127,7 @@ static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 	/* Reset */
 	regmap_write(rt5514->i2c_regmap, 0x18002000, 0x000010ec);
 	/* LDO_I_limit */
-	regmap_write(rt5514->i2c_regmap, 0x18002200, 0x00028604);
+	regmap_write(rt5514->i2c_regmap, 0x18002200, 0x00028704);
 	/* I2C bypass enable */
 	regmap_write(rt5514->i2c_regmap, 0xfafafafa, 0x00000001);
 	/* mini-core reset */
@@ -150,6 +154,14 @@ static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 static bool rt5514_volatile_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
+	case 0x1100:
+	case 0x1104:
+	case 0x1108:
+	case 0x110c:
+	case 0x1110:
+	case 0x1114:
+	case 0x1118:
+	case 0x111c:
 	case RT5514_VENDOR_ID1:
 	case RT5514_VENDOR_ID2:
 		return true;
@@ -162,6 +174,14 @@ static bool rt5514_volatile_register(struct device *dev, unsigned int reg)
 static bool rt5514_readable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
+	case 0x1100:
+	case 0x1104:
+	case 0x1108:
+	case 0x110c:
+	case 0x1110:
+	case 0x1114:
+	case 0x1118:
+	case 0x111c:
 	case RT5514_RESET:
 	case RT5514_PWR_ANA1:
 	case RT5514_PWR_ANA2:
@@ -182,7 +202,6 @@ static bool rt5514_readable_register(struct device *dev, unsigned int reg)
 	case RT5514_PLL3_CALIB_CTRL5:
 	case RT5514_DELAY_BUF_CTRL1:
 	case RT5514_DELAY_BUF_CTRL3:
-	case RT5514_ASRC_IN_CTRL1:
 	case RT5514_DOWNFILTER0_CTRL1:
 	case RT5514_DOWNFILTER0_CTRL2:
 	case RT5514_DOWNFILTER0_CTRL3:
@@ -220,6 +239,14 @@ static bool rt5514_i2c_readable_register(struct device *dev,
 	unsigned int reg)
 {
 	switch (reg) {
+	case RT5514_DSP_MAPPING | 0x1100:
+	case RT5514_DSP_MAPPING | 0x1104:
+	case RT5514_DSP_MAPPING | 0x1108:
+	case RT5514_DSP_MAPPING | 0x110c:
+	case RT5514_DSP_MAPPING | 0x1110:
+	case RT5514_DSP_MAPPING | 0x1114:
+	case RT5514_DSP_MAPPING | 0x1118:
+	case RT5514_DSP_MAPPING | 0x111c:
 	case RT5514_DSP_MAPPING | RT5514_RESET:
 	case RT5514_DSP_MAPPING | RT5514_PWR_ANA1:
 	case RT5514_DSP_MAPPING | RT5514_PWR_ANA2:
@@ -240,7 +267,6 @@ static bool rt5514_i2c_readable_register(struct device *dev,
 	case RT5514_DSP_MAPPING | RT5514_PLL3_CALIB_CTRL5:
 	case RT5514_DSP_MAPPING | RT5514_DELAY_BUF_CTRL1:
 	case RT5514_DSP_MAPPING | RT5514_DELAY_BUF_CTRL3:
-	case RT5514_DSP_MAPPING | RT5514_ASRC_IN_CTRL1:
 	case RT5514_DSP_MAPPING | RT5514_DOWNFILTER0_CTRL1:
 	case RT5514_DSP_MAPPING | RT5514_DOWNFILTER0_CTRL2:
 	case RT5514_DSP_MAPPING | RT5514_DOWNFILTER0_CTRL3:
@@ -965,37 +991,10 @@ static int rt5514_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
 {
 	struct snd_soc_component *component = dai->component;
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
-	unsigned int val = 0, val2 = 0;
+	unsigned int val = 0;
 
 	if (rx_mask || tx_mask)
 		val |= RT5514_TDM_MODE;
-
-	switch (tx_mask) {
-	case 0x3:
-		val2 |= RT5514_TDM_DOCKING_MODE | RT5514_TDM_DOCKING_VALID_CH2 |
-			RT5514_TDM_DOCKING_START_SLOT0;
-		break;
-
-	case 0x30:
-		val2 |= RT5514_TDM_DOCKING_MODE | RT5514_TDM_DOCKING_VALID_CH2 |
-			RT5514_TDM_DOCKING_START_SLOT4;
-		break;
-
-	case 0xf:
-		val2 |= RT5514_TDM_DOCKING_MODE | RT5514_TDM_DOCKING_VALID_CH4 |
-			RT5514_TDM_DOCKING_START_SLOT0;
-		break;
-
-	case 0xf0:
-		val2 |= RT5514_TDM_DOCKING_MODE | RT5514_TDM_DOCKING_VALID_CH4 |
-			RT5514_TDM_DOCKING_START_SLOT4;
-		break;
-
-	default:
-		break;
-	}
-
-
 
 	switch (slots) {
 	case 4:
@@ -1041,10 +1040,6 @@ static int rt5514_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
 		RT5514_TDMSLOT_SEL_RX_MASK | RT5514_TDMSLOT_SEL_TX_MASK |
 		RT5514_CH_LEN_RX_MASK | RT5514_CH_LEN_TX_MASK |
 		RT5514_TDM_MODE2, val);
-
-	regmap_update_bits(rt5514->regmap, RT5514_I2S_CTRL2,
-		RT5514_TDM_DOCKING_MODE | RT5514_TDM_DOCKING_VALID_CH_MASK |
-		RT5514_TDM_DOCKING_START_MASK, val2);
 
 	return 0;
 }
@@ -1165,6 +1160,7 @@ static struct snd_soc_dai_driver rt5514_dai[] = {
 };
 
 static const struct snd_soc_component_driver soc_component_dev_rt5514 = {
+	.name			= "rt5514",
 	.probe			= rt5514_probe,
 	.set_bias_level		= rt5514_set_bias_level,
 	.controls		= rt5514_snd_controls,
@@ -1314,6 +1310,8 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 				    ARRAY_SIZE(rt5514_patch));
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
+
+	dev_info(&i2c->dev, "Register rt5514 success\n");
 
 	return devm_snd_soc_register_component(&i2c->dev,
 			&soc_component_dev_rt5514,

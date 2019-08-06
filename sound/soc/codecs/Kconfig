@@ -822,10 +822,10 @@ config SND_SOC_RT1305
 	tristate
 
 config SND_SOC_RT5514
-	tristate
+	tristate "Realtek RT5514 CODEC"
 
 config SND_SOC_RT5514_SPI
-	tristate
+	tristate "Realtek RT5514 CODEC SPI"
 
 config SND_SOC_RT5514_SPI_BUILTIN
 	bool # force RT5514_SPI to be built-in to avoid link errors

@@ -456,6 +456,8 @@ static int rt5514_spi_probe(struct spi_device *spi)
 		return ret;
 	}
 
+	dev_info(&spi->dev, "Register rt5514 spi success\n");
+
 	return 0;
 }
 
