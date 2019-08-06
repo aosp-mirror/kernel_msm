@@ -195,6 +195,28 @@ static struct cs40l2x_private *cs40l2x_get_private(struct device *dev)
 #endif /* CONFIG_ANDROID_TIMED_OUTPUT */
 }
 
+static void cs40l2x_sysfs_notify(struct cs40l2x_private *cs40l2x,
+		const char *attr)
+{
+	struct kobject *kobj;
+
+#ifdef CONFIG_ANDROID_TIMED_OUTPUT
+	kobj = &cs40l2x->timed_dev.dev->kobj;
+#else
+	kobj = &cs40l2x->dev->kobj;
+#endif /* CONFIG_ANDROID_TIMED_OUTPUT */
+
+	sysfs_notify(kobj, NULL, attr);
+}
+
+static void cs40l2x_set_state(struct cs40l2x_private *cs40l2x, bool state)
+{
+	if (cs40l2x->vibe_state != state) {
+		cs40l2x->vibe_state = state;
+		cs40l2x_sysfs_notify(cs40l2x, "vibe_state");
+	}
+}
+
 static ssize_t cs40l2x_cp_trigger_index_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -3827,6 +3849,16 @@ err_mutex:
 	return ret;
 }
 
+static ssize_t cs40l2x_vibe_state_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct cs40l2x_private *cs40l2x = cs40l2x_get_private(dev);
+
+	flush_workqueue(cs40l2x->vibe_workqueue);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", cs40l2x->vibe_state);
+}
+
 static DEVICE_ATTR(cp_trigger_index, 0660, cs40l2x_cp_trigger_index_show,
 		cs40l2x_cp_trigger_index_store);
 static DEVICE_ATTR(cp_trigger_queue, 0660, cs40l2x_cp_trigger_queue_show,
@@ -3933,6 +3965,7 @@ static DEVICE_ATTR(clab_enable, 0660, cs40l2x_clab_enable_show,
 		cs40l2x_clab_enable_store);
 static DEVICE_ATTR(clab_peak, 0660, cs40l2x_clab_peak_show,
 		cs40l2x_clab_peak_store);
+static DEVICE_ATTR(vibe_state, 0660, cs40l2x_vibe_state_show, NULL);
 
 static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_cp_trigger_index.attr,
@@ -3990,6 +4023,7 @@ static struct attribute *cs40l2x_dev_attrs[] = {
 	&dev_attr_wt_date.attr,
 	&dev_attr_clab_enable.attr,
 	&dev_attr_clab_peak.attr,
+	&dev_attr_vibe_state.attr,
 	NULL,
 };
 
@@ -4068,6 +4102,9 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 
 		if (val == CS40L2X_I2S_ENABLED)
 			goto err_mutex;
+
+		if (cs40l2x->pbq_state == CS40L2X_PBQ_STATE_IDLE)
+			cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 
 		ret = cs40l2x_user_ctrl_exec(cs40l2x, CS40L2X_USER_CTRL_PLAY,
 				0, NULL);
@@ -4167,7 +4204,7 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 		if (ret)
 			return ret;
 
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
 			cs40l2x_wl_relax(cs40l2x);
 		break;
@@ -4184,7 +4221,7 @@ static int cs40l2x_pbq_cancel(struct cs40l2x_private *cs40l2x)
 		if (cs40l2x->event_control & CS40L2X_EVENT_END_ENABLED)
 			break;
 
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
 			cs40l2x_wl_relax(cs40l2x);
 		break;
@@ -4309,6 +4346,7 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
@@ -4664,7 +4702,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				&& cs40l2x->vibe_state
 					!= CS40L2X_VIBE_STATE_RUNNING)
 			cs40l2x_wl_apply(cs40l2x);
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_RUNNING;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_RUNNING);
 		break;
 
 	case CS40L2X_INDEX_CLICK_MIN ... CS40L2X_INDEX_CLICK_MAX:
@@ -4675,7 +4713,7 @@ static void cs40l2x_vibe_start_worker(struct work_struct *work)
 				&& cs40l2x->vibe_state
 					!= CS40L2X_VIBE_STATE_RUNNING)
 			cs40l2x_wl_apply(cs40l2x);
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_RUNNING;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_RUNNING);
 		break;
 	}
 
@@ -4876,7 +4914,7 @@ err_relax:
 		goto err_mutex;
 
 	if (ret) {
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
 			cs40l2x_wl_relax(cs40l2x);
 	}
@@ -4922,7 +4960,7 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
 			break;
 
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		if (cs40l2x->vibe_mode != CS40L2X_VIBE_MODE_AUDIO)
 			cs40l2x_wl_relax(cs40l2x);
 		break;
@@ -4957,7 +4995,7 @@ static void cs40l2x_vibe_stop_worker(struct work_struct *work)
 		if (cs40l2x->vibe_state == CS40L2X_VIBE_STATE_STOPPED)
 			break;
 
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		cs40l2x_wl_relax(cs40l2x);
 		break;
 
