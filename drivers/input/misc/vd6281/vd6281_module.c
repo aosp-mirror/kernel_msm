@@ -674,6 +674,7 @@ static int vd6281_open(struct inode *inode, struct file *file)
 
 static int vd6281_release(struct inode *inode, struct file *file)
 {
+	vd6281_power_down(ctrl);
 	return 0;
 }
 
