@@ -13,5 +13,5 @@
 	model = "Google Inc. MSM sm7250 Bramble";
 	compatible = "qcom,lito-mtp", "qcom,lito", "qcom,mtp";
 	qcom,msm-id = <400 0x10000>;
-	qcom,board-id = <8 0>;
+	qcom,board-id = <0x000a0005 0>;
 };
