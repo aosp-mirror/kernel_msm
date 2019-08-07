@@ -489,7 +489,7 @@ static int ovh_probe(struct platform_device *pdev)
 	vote(ovh_info->disable_power_role_switch,
 	     USB_OVERHEAT_MITIGATION_VOTER, false, 0);
 
-	ovh_info->overheat_ws = wakeup_source_register("overheat_mitigation");
+	ovh_info->overheat_ws = wakeup_source_register(NULL, "overheat_mitigation");
 	if (!ovh_info->overheat_ws) {
 		dev_err(ovh_info->dev, "%s: failed to get wakeup source\n",
 				__func__);

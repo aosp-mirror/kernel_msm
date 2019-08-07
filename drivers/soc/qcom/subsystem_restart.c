@@ -1897,7 +1897,7 @@ struct subsys_device *subsys_register(struct subsys_desc *desc)
 	subsys->early_notify = subsys_get_early_notif_info(desc->name);
 
 	snprintf(subsys->wlname, sizeof(subsys->wlname), "ssr(%s)", desc->name);
-	subsys->ssr_wlock = wakeup_source_register(subsys->wlname);
+	subsys->ssr_wlock = wakeup_source_register(NULL, subsys->wlname);
 	if (!subsys->ssr_wlock) {
 		pr_err("%s: failed to register wakeup source\n", __func__);
 		kfree(subsys);

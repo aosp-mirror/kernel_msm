@@ -2786,7 +2786,7 @@ static int google_charger_probe(struct platform_device *pdev)
 		   google_chg_alarm_handler);
 
 	/* votables and chg_work need a wakeup source */
-	chg_drv->chg_ws = wakeup_source_register("google-charger");
+	chg_drv->chg_ws = wakeup_source_register(NULL, "google-charger");
 	if (!chg_drv->chg_ws) {
 		pr_err("Failed to register wakeup source\n");
 		return -ENODEV;

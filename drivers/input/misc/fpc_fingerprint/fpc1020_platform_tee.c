@@ -566,7 +566,7 @@ static int fpc1020_probe(struct platform_device *pdev)
 	/* Request that the interrupt should be wakeable */
 	enable_irq_wake(gpio_to_irq(fpc1020->irq_gpio));
 
-	fpc1020->ttw_ws = wakeup_source_register("fpc_ttw_ws");
+	fpc1020->ttw_ws = wakeup_source_register(NULL, "fpc_ttw_ws");
 	if (!fpc1020->ttw_ws) {
 		dev_err(dev, "failed to register wakeup source\n");
 		rc = -ENODEV;

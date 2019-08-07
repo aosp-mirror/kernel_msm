@@ -395,7 +395,7 @@ int gpio_event_matrix_func(struct gpio_event_input_devs *input_devs,
 
 		hrtimer_init(&kp->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		kp->timer.function = gpio_keypad_timer_func;
-		kp->wake_src = wakeup_source_register("gpio_kp");
+		kp->wake_src = wakeup_source_register(NULL, "gpio_kp");
 		if (!kp->wake_src) {
 			pr_err("gpiomatrix: failed to register wakeup source\n");
 			err = -ENODEV;

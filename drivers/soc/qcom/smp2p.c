@@ -649,7 +649,7 @@ static int qcom_smp2p_probe(struct platform_device *pdev)
 		}
 	}
 
-	smp2p->ws = wakeup_source_register("smp2p");
+	smp2p->ws = wakeup_source_register(NULL, "smp2p");
 	if (!smp2p->ws) {
 		dev_err(&pdev->dev, "failed to register wakeup source\n");
 		goto unwind_interfaces;

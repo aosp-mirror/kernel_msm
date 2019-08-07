@@ -6893,7 +6893,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	}
 
 	/* Create a wakeup source. */
-	ipa3_ctx->w_lock = wakeup_source_register("IPA_WS");
+	ipa3_ctx->w_lock = wakeup_source_register(NULL, "IPA_WS");
 	if (!ipa3_ctx->w_lock) {
 		IPAERR("IPA wakeup source registration failed\n");
 		result = -ENODEV;

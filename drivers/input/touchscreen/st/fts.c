@@ -4710,7 +4710,7 @@ static int fts_probe_internal(struct i2c_client *client,
 	INIT_DELAYED_WORK(&info->fwu_work, fts_fw_update_auto);
 
 	logError(0, "%s SET Event Handler:\n", tag);
-	info->wakeup_source = wakeup_source_register("fts_tp");
+	info->wakeup_source = wakeup_source_register(NULL, "fts_tp");
 	if (!info->wakeup_source) {
 		logError(1, "%s ERROR: Failed to register wakeup source\n",
 				tag);

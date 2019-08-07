@@ -2768,7 +2768,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		}
 	}
 
-	dev_port->geni_wake = wakeup_source_register(dev_name(&pdev->dev));
+	dev_port->geni_wake = wakeup_source_register(&pdev->dev, dev_name(&pdev->dev));
 	if (!dev_port->geni_wake) {
 		dev_err(&pdev->dev, "Failed to register wakeup source!\n");
 		ret = -ENODEV;

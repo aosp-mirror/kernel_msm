@@ -130,7 +130,7 @@ int ipa_rm_inactivity_timer_init(enum ipa_rm_resource_name resource_name,
 	ipa_rm_it_handles[resource_name].work_in_progress = false;
 	name = ipa_rm_it_handles[resource_name].w_lock_name;
 	snprintf(name, MAX_WS_NAME, "IPA_RM%d\n", resource_name);
-	ipa_rm_it_handles[resource_name].w_lock = wakeup_source_register(name);
+	ipa_rm_it_handles[resource_name].w_lock = wakeup_source_register(NULL, name);
 	if (!ipa_rm_it_handles[resource_name].w_lock) {
 		IPA_RM_ERR("failed to register wakeup source\n");
 		return -ENODEV;

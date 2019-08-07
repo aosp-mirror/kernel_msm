@@ -3914,7 +3914,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	debugfs_file = debugfs_create_file(fl->debug_buf, 0644, debugfs_root,
 						fl, &debugfs_fops);
 
-	fl->wake_source = wakeup_source_register(fl->debug_buf);
+	fl->wake_source = wakeup_source_register(NULL, fl->debug_buf);
 	if (IS_ERR_OR_NULL(fl->wake_source)) {
 		pr_err("adsprpc: Error: %s: %s: wakeup_source_register failed with err %ld\n",
 			current->comm, __func__, PTR_ERR(fl->wake_source));
@@ -4988,7 +4988,7 @@ static int __init fastrpc_device_init(void)
 	}
 	me->rpmsg_register = 1;
 
-	me->wake_source = wakeup_source_register("adsprpc");
+	me->wake_source = wakeup_source_register(NULL, "adsprpc");
 	VERIFY(err, !IS_ERR_OR_NULL(me->wake_source));
 	if (err) {
 		pr_err("adsprpc: Error: %s: wakeup_source_register failed with err %d\n",

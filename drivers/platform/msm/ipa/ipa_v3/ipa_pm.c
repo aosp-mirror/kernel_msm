@@ -756,7 +756,7 @@ int ipa_pm_register(struct ipa_pm_register_params *params, u32 *hdl)
 	client->group = params->group;
 	client->hdl = *hdl;
 	client->skip_clk_vote = params->skip_clk_vote;
-	client->wlock = wakeup_source_register(client->name);
+	client->wlock = wakeup_source_register(NULL, client->name);
 	if (!client->wlock) {
 		IPA_PM_ERR("failed to register wakeup source\n");
 		return -ENODEV;

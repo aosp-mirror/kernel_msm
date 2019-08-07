@@ -213,8 +213,8 @@ static int keycombo_probe(struct platform_device *pdev)
 		state->key_up_fn = pdata->key_up_fn;
 	INIT_WORK(&state->key_up_work, do_key_up);
 
-	state->combo_held_wake_source = wakeup_source_register("key combo");
-	state->combo_up_wake_source = wakeup_source_register("key combo up");
+	state->combo_held_wake_source = wakeup_source_register(NULL, "key combo");
+	state->combo_up_wake_source = wakeup_source_register(NULL, "key combo up");
 	if (!state->combo_up_wake_source || !state->combo_held_wake_source) {
 		pr_err("%s: failed to register wakeup source\n", __func__);
 		goto err_ws_register;

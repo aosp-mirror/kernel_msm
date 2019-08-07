@@ -3861,10 +3861,10 @@ static void google_battery_init_work(struct work_struct *work)
 		pr_err("cannot register power supply notifer, ret=%d\n",
 			ret);
 
-	batt_drv->batt_ws = wakeup_source_register(gbatt_psy_desc.name);
-	batt_drv->taper_ws = wakeup_source_register("Taper");
-	batt_drv->poll_ws = wakeup_source_register("Poll");
-	batt_drv->msc_ws = wakeup_source_register("MSC");
+	batt_drv->batt_ws = wakeup_source_register(NULL, gbatt_psy_desc.name);
+	batt_drv->taper_ws = wakeup_source_register(NULL, "Taper");
+	batt_drv->poll_ws = wakeup_source_register(NULL, "Poll");
+	batt_drv->msc_ws = wakeup_source_register(NULL, "MSC");
 	if (!batt_drv->batt_ws || !batt_drv->taper_ws ||
 			!batt_drv->poll_ws || !batt_drv->msc_ws)
 		pr_err("failed to register wakeup sources\n");

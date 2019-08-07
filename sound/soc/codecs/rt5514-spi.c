@@ -1335,7 +1335,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	rt5514_spi = spi;
 	mutex_init(&spi_lock);
 	mutex_init(&switch_lock);
-	rt5514_spi_ws = wakeup_source_register("rt5514-spi");
+	rt5514_spi_ws = wakeup_source_register(NULL, "rt5514-spi");
 	if (!rt5514_spi_ws) {
 		dev_err(&spi->dev, "Failed to register wakeup source\n");
 		return -ENODEV;

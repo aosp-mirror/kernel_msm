@@ -70,7 +70,7 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 		dev_err(dev, "%s: power state notif error %d\n", __func__, ret);
 		return ret;
 	}
-	g_notify_ws = wakeup_source_register("smp2p-sleepstate");
+	g_notify_ws = wakeup_source_register(NULL, "smp2p-sleepstate");
 	if (!g_notify_ws) {
 		dev_err(dev, "%s: failed to get wakeup source\n", __func__);
 		ret = -ENODEV;

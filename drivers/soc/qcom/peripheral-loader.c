@@ -1553,7 +1553,7 @@ int pil_desc_init(struct pil_desc *desc)
 	}
 
 	snprintf(priv->wname, sizeof(priv->wname), "pil-%s", desc->name);
-	priv->ws = wakeup_source_register(priv->wname);
+	priv->ws = wakeup_source_register(NULL, priv->wname);
 	if (!priv->ws) {
 		pr_err("%s: failed to register wakeup source\n", __func__);
 		goto err_parse_dt;

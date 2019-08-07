@@ -3080,7 +3080,7 @@ static int msm_tspp_probe(struct platform_device *pdev)
 	for (i = 0; i < TSPP_TSIF_INSTANCES; i++)
 		tsif_debugfs_init(&device->tsif[i], i);
 
-	device->ws = wakeup_source_register(dev_name(&pdev->dev));
+	device->ws = wakeup_source_register(&pdev->dev, dev_name(&pdev->dev));
 	if (!device->ws) {
 		pr_err("%s: failed to register wakeup source\n", __func__);
 		rc = -ENODEV;
