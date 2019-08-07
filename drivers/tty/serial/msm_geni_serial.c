@@ -165,7 +165,7 @@ struct msm_geni_serial_port {
 	int loopback;
 	int wakeup_irq;
 	unsigned char wakeup_byte;
-	struct wakeup_source geni_wake;
+	struct wakeup_source *geni_wake;
 	void *ipc_log_tx;
 	void *ipc_log_rx;
 	void *ipc_log_pwr;
@@ -1678,7 +1678,7 @@ static irqreturn_t msm_geni_wakeup_isr(int isr, void *dev)
 					__func__, port->wakeup_byte);
 		port->edge_count = 0;
 		tty_flip_buffer_push(tty->port);
-		__pm_wakeup_event(&port->geni_wake, WAKEBYTE_TIMEOUT_MSEC);
+		__pm_wakeup_event(port->geni_wake, WAKEBYTE_TIMEOUT_MSEC);
 	} else if (port->edge_count < 2) {
 		port->edge_count++;
 	}
@@ -2768,7 +2768,13 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		}
 	}
 
-	wakeup_source_init(&dev_port->geni_wake, dev_name(&pdev->dev));
+	dev_port->geni_wake = wakeup_source_register(dev_name(&pdev->dev));
+	if (!dev_port->geni_wake) {
+		dev_err(&pdev->dev, "Failed to register wakeup source!\n");
+		ret = -ENODEV;
+		goto exit_geni_serial_probe;
+	}
+
 	dev_port->tx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
 	dev_port->rx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
 	dev_port->tx_fifo_width = DEF_FIFO_WIDTH_BITS;
@@ -2819,8 +2825,7 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	struct uart_driver *drv =
 			(struct uart_driver *)port->uport.private_data;
 
-	wakeup_source_remove(&port->geni_wake);
-	__pm_relax(&port->geni_wake);
+	wakeup_source_unregister(port->geni_wake);
 	uart_remove_one_port(drv, &port->uport);
 	if (port->rx_dma) {
 		dma_free_coherent(port->wrapper_dev, DMA_RX_BUF_SIZE,
@@ -2862,7 +2867,7 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 		enable_irq(port->wakeup_irq);
 	}
 	IPC_LOG_MSG(port->ipc_log_pwr, "%s:\n", __func__);
-	__pm_relax(&port->geni_wake);
+	__pm_relax(port->geni_wake);
 exit_runtime_suspend:
 	return ret;
 }
@@ -2877,8 +2882,8 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	 * Do an unconditional relax followed by a stay awake in case the
 	 * wake source is activated by the wakeup isr.
 	 */
-	__pm_relax(&port->geni_wake);
-	__pm_stay_awake(&port->geni_wake);
+	__pm_relax(port->geni_wake);
+	__pm_stay_awake(port->geni_wake);
 	if (port->wakeup_irq > 0)
 		disable_irq(port->wakeup_irq);
 	/*
@@ -2890,7 +2895,7 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	ret = se_geni_resources_on(&port->serial_rsc);
 	if (ret) {
 		dev_err(dev, "%s: Error ret %d\n", __func__, ret);
-		__pm_relax(&port->geni_wake);
+		__pm_relax(port->geni_wake);
 		goto exit_runtime_resume;
 	}
 	start_rx_sequencer(&port->uport);

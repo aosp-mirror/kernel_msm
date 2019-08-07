@@ -149,7 +149,7 @@ struct ipa_pm_client {
 	struct work_struct activate_work;
 	struct delayed_work deactivate_work;
 	struct completion complete;
-	struct wakeup_source wlock;
+	struct wakeup_source *wlock;
 };
 
 /*
@@ -399,7 +399,7 @@ static void activate_work_func(struct work_struct *work)
 	if (!client->skip_clk_vote) {
 		IPA_ACTIVE_CLIENTS_INC_SPECIAL(client->name);
 		if (client->group == IPA_PM_GROUP_APPS)
-			__pm_stay_awake(&client->wlock);
+			__pm_stay_awake(client->wlock);
 	}
 
 	spin_lock_irqsave(&client->state_lock, flags);
@@ -421,7 +421,7 @@ static void activate_work_func(struct work_struct *work)
 		if (!client->skip_clk_vote) {
 			IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
 			if (client->group == IPA_PM_GROUP_APPS)
-				__pm_relax(&client->wlock);
+				__pm_relax(client->wlock);
 		}
 
 		IPA_PM_DBG_STATE(client->hdl, client->name, client->state);
@@ -480,7 +480,7 @@ static void delayed_deferred_deactivate_work_func(struct work_struct *work)
 		if (!client->skip_clk_vote) {
 			IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
 			if (client->group == IPA_PM_GROUP_APPS)
-				__pm_relax(&client->wlock);
+				__pm_relax(client->wlock);
 		}
 
 		deactivate_client(client->hdl);
@@ -706,7 +706,6 @@ EXPORT_SYMBOL_GPL(ipa_pm_destroy);
 int ipa_pm_register(struct ipa_pm_register_params *params, u32 *hdl)
 {
 	struct ipa_pm_client *client;
-	struct wakeup_source *wlock;
 	int elem;
 
 	if (ipa_pm_ctx == NULL) {
@@ -757,8 +756,11 @@ int ipa_pm_register(struct ipa_pm_register_params *params, u32 *hdl)
 	client->group = params->group;
 	client->hdl = *hdl;
 	client->skip_clk_vote = params->skip_clk_vote;
-	wlock = &client->wlock;
-	wakeup_source_init(wlock, client->name);
+	client->wlock = wakeup_source_register(client->name);
+	if (!client->wlock) {
+		IPA_PM_ERR("failed to register wakeup source\n");
+		return -ENODEV;
+	}
 
 	init_completion(&client->complete);
 
@@ -825,8 +827,7 @@ int ipa_pm_deregister(u32 hdl)
 		if (ipa_pm_ctx->clients_by_pipe[i] == ipa_pm_ctx->clients[hdl])
 			ipa_pm_ctx->clients_by_pipe[i] = NULL;
 	}
-	wakeup_source_remove(&client->wlock);
-	__pm_relax(&client->wlock);
+	wakeup_source_unregister(client->wlock);
 	kfree(client);
 	ipa_pm_ctx->clients[hdl] = NULL;
 
@@ -947,7 +948,7 @@ static int ipa_pm_activate_helper(struct ipa_pm_client *client, bool sync)
 	if (result == 0) {
 		client->state = IPA_PM_ACTIVATED;
 		if (client->group == IPA_PM_GROUP_APPS)
-			__pm_stay_awake(&client->wlock);
+			__pm_stay_awake(client->wlock);
 		spin_unlock_irqrestore(&client->state_lock, flags);
 		activate_client(client->hdl);
 		if (sync)
@@ -1130,7 +1131,7 @@ int ipa_pm_deactivate_all_deferred(void)
 			if (!client->skip_clk_vote) {
 				IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
 				if (client->group == IPA_PM_GROUP_APPS)
-					__pm_relax(&client->wlock);
+					__pm_relax(client->wlock);
 			}
 			deactivate_client(client->hdl);
 		} else /* if activated or deactivated, we do nothing */
@@ -1186,7 +1187,7 @@ int ipa_pm_deactivate_sync(u32 hdl)
 	if (!client->skip_clk_vote) {
 		IPA_ACTIVE_CLIENTS_DEC_SPECIAL(client->name);
 		if (client->group == IPA_PM_GROUP_APPS)
-			__pm_relax(&client->wlock);
+			__pm_relax(client->wlock);
 	}
 
 	spin_lock_irqsave(&client->state_lock, flags);

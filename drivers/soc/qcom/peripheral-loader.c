@@ -131,7 +131,7 @@ struct pil_seg {
  */
 struct pil_priv {
 	struct delayed_work proxy;
-	struct wakeup_source ws;
+	struct wakeup_source *ws;
 	char wname[32];
 	struct pil_desc *desc;
 	int num_segs;
@@ -578,7 +578,7 @@ static void __pil_proxy_unvote(struct pil_priv *priv)
 
 	desc->ops->proxy_unvote(desc);
 	notify_proxy_unvote(desc->dev);
-	__pm_relax(&priv->ws);
+	__pm_relax(priv->ws);
 	module_put(desc->owner);
 
 }
@@ -597,10 +597,10 @@ static int pil_proxy_vote(struct pil_desc *desc)
 	struct pil_priv *priv = desc->priv;
 
 	if (desc->ops->proxy_vote) {
-		__pm_stay_awake(&priv->ws);
+		__pm_stay_awake(priv->ws);
 		ret = desc->ops->proxy_vote(desc);
 		if (ret)
-			__pm_relax(&priv->ws);
+			__pm_relax(priv->ws);
 	}
 
 	if (desc->proxy_unvote_irq)
@@ -1553,7 +1553,11 @@ int pil_desc_init(struct pil_desc *desc)
 	}
 
 	snprintf(priv->wname, sizeof(priv->wname), "pil-%s", desc->name);
-	wakeup_source_init(&priv->ws, priv->wname);
+	priv->ws = wakeup_source_register(priv->wname);
+	if (!priv->ws) {
+		pr_err("%s: failed to register wakeup source\n", __func__);
+		goto err_parse_dt;
+	}
 	INIT_DELAYED_WORK(&priv->proxy, pil_proxy_unvote_work);
 	INIT_LIST_HEAD(&priv->segs);
 
@@ -1589,8 +1593,7 @@ void pil_desc_release(struct pil_desc *desc)
 	if (priv) {
 		ida_simple_remove(&pil_ida, priv->id);
 		flush_delayed_work(&priv->proxy);
-		wakeup_source_remove(&priv->ws);
-		__pm_relax(&priv->ws);
+		wakeup_source_unregister(priv->ws);
 	}
 	desc->priv = NULL;
 	kfree(priv);

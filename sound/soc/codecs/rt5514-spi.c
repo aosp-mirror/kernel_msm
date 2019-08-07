@@ -51,7 +51,7 @@ EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
 static struct mutex switch_lock;
-static struct wakeup_source rt5514_spi_ws;
+static struct wakeup_source *rt5514_spi_ws;
 static u32 spi_switch_mask;
 static int handshake_gpio, handshake_ack_irq;
 struct completion switch_ack;
@@ -1185,7 +1185,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	struct spi_transfer x[3];
 
 	mutex_lock(&spi_lock);
-	__pm_stay_awake(&rt5514_spi_ws);
+	__pm_stay_awake(rt5514_spi_ws);
 
 	write_buf = kzalloc(8, GFP_DMA | GFP_KERNEL);
 	read_buf = kzalloc(RT5514_SPI_BUF_LEN, GFP_DMA | GFP_KERNEL);
@@ -1222,7 +1222,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 		if (status) {
 			kfree(read_buf);
 			kfree(write_buf);
-			__pm_relax(&rt5514_spi_ws);
+			__pm_relax(rt5514_spi_ws);
 			mutex_unlock(&spi_lock);
 			return false;
 		}
@@ -1255,7 +1255,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	kfree(read_buf);
 	kfree(write_buf);
 
-	__pm_relax(&rt5514_spi_ws);
+	__pm_relax(rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
 
 	return true;
@@ -1283,7 +1283,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 		return -ENOMEM;
 
 	mutex_lock(&spi_lock);
-	__pm_stay_awake(&rt5514_spi_ws);
+	__pm_stay_awake(rt5514_spi_ws);
 
 	while (offset < len) {
 		if (offset + RT5514_SPI_BUF_LEN <= len)
@@ -1320,7 +1320,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 
 	kfree(write_buf);
 
-	__pm_relax(&rt5514_spi_ws);
+	__pm_relax(rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
 
 	return 0;
@@ -1335,7 +1335,11 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	rt5514_spi = spi;
 	mutex_init(&spi_lock);
 	mutex_init(&switch_lock);
-	wakeup_source_init(&rt5514_spi_ws, "rt5514-spi");
+	rt5514_spi_ws = wakeup_source_register("rt5514-spi");
+	if (!rt5514_spi_ws) {
+		dev_err(&spi->dev, "Failed to register wakeup source\n");
+		return -ENODEV;
+	}
 
 	ret = devm_snd_soc_register_component(&spi->dev,
 					      &rt5514_spi_component,
@@ -1343,6 +1347,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 					      ARRAY_SIZE(rt5514_spi_dai));
 	if (ret < 0) {
 		dev_err(&spi->dev, "Failed to register component.\n");
+		wakeup_source_unregister(rt5514_spi_ws);
 		return ret;
 	}
 
@@ -1396,6 +1401,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	return 0;
 
 no_handshake:
+	wakeup_source_unregister(rt5514_spi_ws);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_IRQ, 1);
 	dev_info(&spi->dev, " rt5514-spi init success without handshake\n");
 

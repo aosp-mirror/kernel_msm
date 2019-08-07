@@ -461,7 +461,7 @@ struct tspp_device {
 	unsigned int bam_irq;
 	unsigned long bam_handle;
 	struct sps_bam_props bam_props;
-	struct wakeup_source ws;
+	struct wakeup_source *ws;
 	spinlock_t spinlock;
 	struct tasklet_struct tlet;
 	struct tspp_tsif_device tsif[TSPP_TSIF_INSTANCES];
@@ -1641,7 +1641,7 @@ int tspp_open_channel(u32 dev, u32 channel_id)
 			}
 		}
 
-		__pm_stay_awake(&pdev->ws);
+		__pm_stay_awake(pdev->ws);
 	}
 
 	/* mark it as used */
@@ -1832,7 +1832,7 @@ int tspp_close_channel(u32 dev, u32 channel_id)
 		sps_deregister_bam_device(pdev->bam_handle);
 		pdev->bam_handle = SPS_DEV_HANDLE_INVALID;
 
-		__pm_relax(&pdev->ws);
+		__pm_relax(pdev->ws);
 		tspp_clock_stop(pdev);
 	}
 
@@ -3080,7 +3080,12 @@ static int msm_tspp_probe(struct platform_device *pdev)
 	for (i = 0; i < TSPP_TSIF_INSTANCES; i++)
 		tsif_debugfs_init(&device->tsif[i], i);
 
-	wakeup_source_init(&device->ws, dev_name(&pdev->dev));
+	device->ws = wakeup_source_register(dev_name(&pdev->dev));
+	if (!device->ws) {
+		pr_err("%s: failed to register wakeup source\n", __func__);
+		rc = -ENODEV;
+		goto err_wakeup_source;
+	}
 
 	/* set up pointers to ram-based 'registers' */
 	device->filters[0] = device->base + TSPP_PID_FILTER_TABLE0;
@@ -3135,6 +3140,8 @@ static int msm_tspp_probe(struct platform_device *pdev)
 	return 0;
 
 err_clock:
+	wakeup_source_unregister(device->ws);
+err_wakeup_source:
 	tspp_debugfs_exit(device);
 	for (i = 0; i < TSPP_TSIF_INSTANCES; i++)
 		tsif_debugfs_exit(&device->tsif[i]);
@@ -3192,8 +3199,7 @@ static int msm_tspp_remove(struct platform_device *pdev)
 	if (device->tsif_bus_client)
 		msm_bus_scale_unregister_client(device->tsif_bus_client);
 
-	wakeup_source_remove(&device->ws);
-	__pm_relax(&device->ws);
+	wakeup_source_unregister(device->ws);
 	if (device->req_irqs)
 		msm_tspp_free_irqs(device);
 

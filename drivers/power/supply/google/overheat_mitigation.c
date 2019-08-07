@@ -53,7 +53,7 @@ struct overheat_info {
 	struct votable             *disable_power_role_switch;
 	struct notifier_block      psy_nb;
 	struct delayed_work        port_overheat_work;
-	struct wakeup_source	   overheat_ws;
+	struct wakeup_source	   *overheat_ws;
 	struct overheat_event_stats stats;
 	struct thermal_cooling_device *cooling_dev;
 
@@ -360,7 +360,7 @@ static void port_overheat_work(struct work_struct *work)
 
 	// Take a wake lock to ensure we poll the temp regularly
 	if (!ovh_info->overheat_work_running)
-		__pm_stay_awake(&ovh_info->overheat_ws);
+		__pm_stay_awake(ovh_info->overheat_ws);
 	ovh_info->overheat_work_running = true;
 
 	if (get_usb_port_temp(ovh_info) < 0)
@@ -385,7 +385,7 @@ static void port_overheat_work(struct work_struct *work)
 		goto rerun;
 	// Do not run again, USB port isn't overheated
 	ovh_info->overheat_work_running = false;
-	__pm_relax(&ovh_info->overheat_ws);
+	__pm_relax(ovh_info->overheat_ws);
 	return;
 
 rerun:
@@ -489,7 +489,12 @@ static int ovh_probe(struct platform_device *pdev)
 	vote(ovh_info->disable_power_role_switch,
 	     USB_OVERHEAT_MITIGATION_VOTER, false, 0);
 
-	wakeup_source_init(&ovh_info->overheat_ws, "overheat_mitigation");
+	ovh_info->overheat_ws = wakeup_source_register("overheat_mitigation");
+	if (!ovh_info->overheat_ws) {
+		dev_err(ovh_info->dev, "%s: failed to get wakeup source\n",
+				__func__);
+		return -ENODEV;
+	}
 	INIT_DELAYED_WORK(&ovh_info->port_overheat_work, port_overheat_work);
 
 	// register power supply change notifier to update usb metric data
@@ -529,8 +534,7 @@ static int ovh_remove(struct platform_device *pdev)
 	if (ovh_info) {
 		power_supply_unreg_notifier(&ovh_info->psy_nb);
 		sysfs_remove_group(&ovh_info->dev->kobj, &ovh_attr_group);
-		wakeup_source_remove(&ovh_info->overheat_ws);
-		__pm_relax(&ovh_info->overheat_ws);
+		wakeup_source_unregister(ovh_info->overheat_ws);
 	}
 	return 0;
 }
