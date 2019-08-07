@@ -1594,7 +1594,11 @@ static int wm_adsp_create_control(struct wm_adsp *dsp,
 		goto err_ctl;
 	}
 	ctl->subname_len = subname_len;
-	ctl->subname = kmemdup(subname, strlen(subname) + 1, GFP_KERNEL);
+	if (subname)
+		ctl->subname = kmemdup(subname, strlen(subname) + 1,
+				       GFP_KERNEL);
+	else
+		ctl->subname = NULL;
 	if (!ctl->subname) {
 		ret = -ENOMEM;
 		goto err_ctl;
