@@ -9737,22 +9737,21 @@ static int ufshcd_config_vreg(struct device *dev,
 	name = vreg->name;
 
 	if (regulator_count_voltages(reg) > 0) {
-		if (vreg->min_uV && vreg->max_uV) {
-			min_uV = on ? vreg->min_uV : 0;
-			if (vreg->low_voltage_sup && !vreg->low_voltage_active)
-				min_uV = vreg->max_uV;
-			ret = regulator_set_voltage(reg, min_uV, vreg->max_uV);
-			if (ret) {
-				dev_err(dev,
-					"%s: %s set voltage failed, err=%d\n",
-					__func__, name, ret);
-				goto out;
-			}
-		}
 		uA_load = on ? vreg->max_uA : 0;
 		ret = ufshcd_config_vreg_load(dev, vreg, uA_load);
 		if (ret)
 			goto out;
+
+		min_uV = on ? vreg->min_uV : 0;
+		if (vreg->low_voltage_sup && !vreg->low_voltage_active)
+			min_uV = vreg->max_uV;
+
+		ret = regulator_set_voltage(reg, min_uV, vreg->max_uV);
+		if (ret) {
+			dev_err(dev, "%s: %s set voltage failed, err=%d\n",
+					__func__, name, ret);
+			goto out;
+		}
 	}
 out:
 	return ret;
