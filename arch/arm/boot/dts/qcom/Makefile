@@ -293,7 +293,8 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8952-qrd-skum.dtb \
        msm8952-mtp.dtb
 
 dtb-$(CONFIG_ARCH_MSM8909) += catfish.dtb \
-	catshark.dtb
+	catshark.dtb \
+	catfish_1g_ddr.dtb
 
 ifeq ($(CONFIG_ARM64),y)
 always          := $(dtb-y)
