@@ -7909,6 +7909,13 @@ static int __wlan_hdd_cfg80211_do_acs(struct wiphy *wiphy,
 	if (0 != status)
 		return status;
 
+	if (!((adapter->device_mode == WLAN_HDD_SOFTAP) ||
+	    (adapter->device_mode == WLAN_HDD_P2P_GO))) {
+		hddLog(VOS_TRACE_LEVEL_ERROR, FL("Invalid device mode %d"),
+		       adapter->device_mode);
+		return -EINVAL;
+	}
+
 	sap_config = &adapter->sessionCtx.ap.sapConfig;
 	vos_mem_zero(&sap_config->acs_cfg, sizeof(struct sap_acs_cfg));
 
@@ -12080,6 +12087,11 @@ static void wlan_hdd_check_11gmode(u8 *pIe, u8* require_ht, u8* require_vht,
                      u8* pCheckRatesfor11g, eCsrPhyMode* pSapHw_mode)
 {
     u8 i, num_rates = pIe[0];
+
+    if (num_rates > SIR_MAC_RATESET_EID_MAX) {
+        hddLog(VOS_TRACE_LEVEL_ERROR, "Invalid supported rates %d", num_rates);
+        return;
+    }
 
     pIe += 1;
     for ( i = 0; i < num_rates; i++)

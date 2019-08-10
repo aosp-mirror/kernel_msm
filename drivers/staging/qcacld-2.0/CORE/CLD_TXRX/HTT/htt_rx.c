@@ -233,6 +233,13 @@ htt_rx_ring_fill_n(struct htt_pdev_t *pdev, int num)
     struct htt_host_rx_desc_base *rx_desc;
 
     idx = *(pdev->rx_ring.alloc_idx.vaddr);
+
+    if ((idx < 0) || (idx > pdev->rx_ring.size_mask) ||
+        (num > pdev->rx_ring.size))  {
+        adf_os_print("%s:rx refill failed!\n", __func__);
+        return;
+    }
+
     while (num > 0) {
         u_int32_t paddr;
         adf_nbuf_t rx_netbuf;
