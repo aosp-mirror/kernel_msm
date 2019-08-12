@@ -619,7 +619,9 @@ void thermal_zone_device_update(struct thermal_zone_device *tz,
 {
 	int count;
 
-	if (atomic_read(&in_suspend))
+	if (atomic_read(&in_suspend) &&
+			(!tz->ops->is_wakeable ||
+			 !(tz->ops->is_wakeable(tz))))
 		return;
 
 	if (!tz->ops->get_temp)
