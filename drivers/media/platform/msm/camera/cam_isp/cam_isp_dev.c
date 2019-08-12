@@ -30,8 +30,7 @@
 static struct cam_isp_dev g_isp_dev;
 
 static void cam_isp_dev_stop_all_dev(
-	struct cam_node *node
-)
+	struct cam_node *node)
 {
 	int i = 0;
 	struct cam_hw_stop_args         stop_args;

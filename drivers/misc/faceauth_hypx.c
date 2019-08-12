@@ -1219,7 +1219,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 	ret = desc.ret[0];
 	if (ret) {
-		ret = parse_el2_return(ret);
+		err = parse_el2_return(ret);
 		goto exit;
 	}
 
@@ -1361,7 +1361,7 @@ int el2_gather_debug_data(struct device *dev, void *destination_buffer,
 
 		ret = desc.ret[0];
 		if (ret) {
-			ret = parse_el2_return(ret);
+			err = parse_el2_return(ret);
 			goto exit;
 		}
 
