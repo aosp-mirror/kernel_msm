@@ -14,4 +14,27 @@
 	compatible = "qcom,lito-mtp", "qcom,lito", "qcom,mtp";
 	qcom,msm-id = <400 0x10000>;
 	qcom,board-id = <0x000a0005 0>;
+	firmware {
+	       android {
+                       compatible = "android,firmware";
+                       android_fstab: fstab {
+			       compatible = "android,fstab";
+		               vbmeta {
+		                       compatible = "android,vbmeta";
+		                       parts = "vbmeta,boot,system,vendor,dtbo,product";
+		               };
+			       vendor {
+	       		               dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/vendor";
+	       		       };
+	       		       product {
+	       		               compatible = "android,product";
+	       		               dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/product";
+	       		               type = "ext4";
+	       		               mnt_flags = "ro";
+	       		               fsmgr_flags = "wait,slotselect,avb";
+	       		       };
+	       		};
+
+	       };
+	};
 };
