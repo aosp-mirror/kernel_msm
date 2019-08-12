@@ -1211,6 +1211,8 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	ab_prep_pmic_settings(sc, map);
 
 	dev_err(sc->dev, "Cleaning AB state\n");
+	sc->dest_chip_substate_id = CHIP_STATE_OFF;
+
 	blk_set_ipu_tpu_states(sc,
 			&(sc->blocks[BLK_IPU]), map->ipu_block_state_id,
 			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id,
@@ -2256,6 +2258,7 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	mutex_lock(&sc->state_transitioning_lock);
 	sc->return_chip_substate_id = sc->dest_chip_substate_id;
 	sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	/* Wait for state change to SECURE_APP state */
@@ -2269,6 +2272,11 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	}
 
 	mutex_lock(&sc->state_transitioning_lock);
+	ret = sc->change_ret;
+	if (ret) {
+		mutex_unlock(&sc->state_transitioning_lock);
+		return ret;
+	}
 
 	/* Ensure PCIe is accessible */
 	if (sc->el2_in_secure_context) {
