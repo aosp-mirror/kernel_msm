@@ -98,6 +98,20 @@ config EXT4_FS_SECURITY
 	  If you are not using a security module that requires using
 	  extended attributes for file security labels, say N.
 
+config EXT4_ENCRYPTION
+	bool "Ext4 Encryption"
+	depends on EXT4_FS
+	select FS_ENCRYPTION
+	help
+	  This kconfig symbol is deprecated; now it just selects
+	  FS_ENCRYPTION.  Use CONFIG_FS_ENCRYPTION=y in new config
+	  files
+
+config EXT4_FS_ENCRYPTION
+	bool
+	default y
+	depends on EXT4_ENCRYPTION
+
 config EXT4_DEBUG
 	bool "EXT4 debugging support"
 	depends on EXT4_FS
