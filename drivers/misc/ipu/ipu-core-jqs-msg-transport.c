@@ -762,7 +762,7 @@ ssize_t ipu_core_jqs_msg_transport_user_read(struct paintbox_bus *bus,
 
 		trans = ipu_core_get_jqs_transport(bus);
 		if (IS_ERR(trans)) {
-			if(bus->jqs_msg_transport) {
+			if (bus->jqs_msg_transport) {
 				spin_lock_irqsave(&bus->irq_lock, flags);
 				waiter->enabled = false;
 				spin_unlock_irqrestore(&bus->irq_lock, flags);
@@ -1037,7 +1037,7 @@ ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 	timeout = wait_for_completion_timeout(&waiter->completion, timeout);
 
 	/* A message error has higher priority than a timeout error. */
-	if (waiter->ret)
+	if (waiter->ret < 0)
 		ret = waiter->ret;
 	else if (timeout == 0)
 		ret = -ETIMEDOUT;
@@ -1046,6 +1046,8 @@ ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 
 	trans = ipu_core_get_jqs_transport(bus);
 	if (IS_ERR(trans)) {
+		if (bus->jqs_msg_transport)
+			waiter->enabled = false;
 		mutex_unlock(&bus->transport_lock);
 		return PTR_ERR(trans);
 	}

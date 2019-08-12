@@ -1899,6 +1899,7 @@ static enum silego_self_test_result_type silego_self_test(
 	struct led_laser_ctrl_t *ctrl)
 {
 	int rc, retry;
+	uint32_t data;
 	enum silego_self_test_result_type result = SILEGO_TEST_FAILED;
 
 	mutex_lock(&ctrl->cam_sensor_mutex);
@@ -1950,6 +1951,14 @@ static enum silego_self_test_result_type silego_self_test(
 		dev_err(ctrl->soc_info.dev, "i2c write failed: %d", rc);
 		goto release_resource;
 	}
+
+	if (lm36011_read_data(ctrl, ENABLE_REG, &data) < 0)
+		dev_warn(ctrl->soc_info.dev, "fail to read back reg 0x%x",
+			ENABLE_REG);
+	else
+		dev_info(ctrl->soc_info.dev,
+			"laser driver mode has been set to 0x%x", data);
+
 
 	/* wait for torch reach to 5 ms pulse width */
 	usleep_range(5000, 10000);
