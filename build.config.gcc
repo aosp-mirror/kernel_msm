@@ -13,5 +13,5 @@ function update_gcc_config() {
     -d CFI_CLANG \
     -d SHADOW_CALL_STACK
   (cd ${OUT_DIR} && \
-    make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+   make ${CC_LD_ARG} O=${OUT_DIR} olddefconfig)
 }

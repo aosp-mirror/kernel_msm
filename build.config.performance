@@ -68,5 +68,5 @@ function update_perf_config() {
 
 
   (cd ${OUT_DIR} && \
-    make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+   make ${CC_LD_ARG} O=${OUT_DIR} olddefconfig)
 }
