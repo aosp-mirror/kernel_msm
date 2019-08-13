@@ -16,5 +16,5 @@ function update_kasan_config() {
          -d CONFIG_KERNEL_LZ4 \
 	 -d CONFIG_RANDOMIZE_BASE
     (cd ${OUT_DIR} && \
-     make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+     make ${CC_LD_ARG} O=${OUT_DIR} olddefconfig)
 }
