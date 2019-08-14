@@ -17,7 +17,6 @@
 #include <linux/firmware.h>
 #include <linux/ipu-core.h>
 #include <linux/ipu-jqs-messages.h>
-#include <linux/pm_domain.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
@@ -694,62 +693,6 @@ void ipu_core_jqs_disable_firmware_fatal_error(struct paintbox_bus *bus)
 	ipu_core_jqs_disable_firmware(bus);
 }
 
-/* Called for runtime pm and for device pm */
-static int ipu_core_jqs_power_on(struct generic_pm_domain *genpd)
-{
-	struct paintbox_bus *bus;
-
-	bus = container_of(genpd, struct paintbox_bus, gpd);
-	if (WARN_ON(!bus))
-		return -EINVAL;
-
-	/* Runtime PM will call the power_on hook before invoking the start hook
-	 * so in the runtime pm case this will be a nop and the JQS will be
-	 * powered up in the start hook.
-	 *
-	 * Device PM will call the power on hook when resuming from device
-	 * suspend.  If the JQS was running when the device went into suspend
-	 * (This should not normally happen) then we will need to invoke the
-	 * recovery path on resume.
-	 */
-	if (bus->jqs.pm_recovery_requested) {
-		bus->jqs.pm_recovery_requested = false;
-		atomic_andnot(IPU_STATE_JQS_READY, &bus->state);
-		queue_work(system_wq, &bus->recovery_work);
-	}
-
-	return 0;
-}
-
-/* Called for runtime pm and for device pm */
-static int ipu_core_jqs_power_off(struct generic_pm_domain *genpd)
-{
-	struct paintbox_bus *bus;
-
-	bus = container_of(genpd, struct paintbox_bus, gpd);
-	if (WARN_ON(!bus))
-		return -EINVAL;
-
-	/* Runtime PM will call the stop hook before calling the power off hook
-	 * so the JQS should already be powered down when the power_off is
-	 * invoked in that path.
-	 *
-	 * Device PM will call the power off hook when going into device
-	 * suspend.  The IPU client will hold a wakelock so the JQS should not
-	 * be running when the power off hook is invoked by DPM.  If the JQS
-	 * is running when DPM calls power off then we will treat it like a
-	 * fatal JQS error on the resume and invoke the recovery path.
-	 */
-	if (WARN_ON((bus->jqs.status == JQS_FW_STATUS_RUNNING) ||
-			(bus->jqs.status == JQS_FW_STATUS_SUSPENDED))) {
-		bus->jqs.pm_recovery_requested = true;
-		ipu_core_jqs_power_disable(bus);
-	}
-
-	return 0;
-}
-
-/* Called for runtime pm */
 int ipu_core_jqs_start(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
@@ -789,8 +732,7 @@ int ipu_core_jqs_start(struct device *dev)
 	return ret;
 }
 
-/* Called for runtime pm */
-static int ipu_core_jqs_stop(struct device *dev)
+int ipu_core_jqs_power_down(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 	struct paintbox_bus *bus = pb_dev->bus;
@@ -799,6 +741,17 @@ static int ipu_core_jqs_stop(struct device *dev)
 			__func__);
 
 	mutex_lock(&bus->jqs.lock);
+
+	/* Check to make sure there are no IPU clients before disabling the
+	 * firmware.
+	 */
+	if (bus->jqs.client_count > 0) {
+		dev_err(bus->parent_dev,
+			"%s: tried to stop jqs while clients are active\n",
+			__func__);
+		mutex_unlock(&bus->jqs.lock);
+		return -EINPROGRESS;
+	}
 
 	if (!bus->jqs.reset_in_progress)
 		ipu_core_jqs_disable_firmware_requested(bus);
@@ -838,23 +791,6 @@ int ipu_core_jqs_init(struct paintbox_bus *bus)
 
 	mutex_init(&bus->jqs.lock);
 
-	bus->gpd.name = "ipu_jqs";
-	bus->gpd.dev_ops.start = ipu_core_jqs_start;
-	bus->gpd.dev_ops.stop = ipu_core_jqs_stop;
-	bus->gpd.power_off = ipu_core_jqs_power_off;
-	bus->gpd.power_on = ipu_core_jqs_power_on;
-
-	/* Create a generic power down for managing JQS power through runtime
-	 * power management.
-	 */
-	ret = pm_genpd_init(&bus->gpd, NULL, true /* is_off */);
-	if (ret < 0) {
-		dev_err(bus->parent_dev,
-				"%s: unable to create power domain for IPU JQS, ret %d\n",
-				__func__, ret);
-		return ret;
-	}
-
 	/* Try to load the pre-load the firmware if it is available. */
 	ret = ipu_core_jqs_load_firmware(bus);
 	if (ret < 0)
@@ -889,8 +825,6 @@ int ipu_core_jqs_init(struct paintbox_bus *bus)
 
 void ipu_core_jqs_remove(struct paintbox_bus *bus)
 {
-	int ret;
-
 	mutex_lock(&bus->jqs.lock);
 
 	ipu_core_jqs_disable_firmware_requested(bus);
@@ -900,12 +834,6 @@ void ipu_core_jqs_remove(struct paintbox_bus *bus)
 	mutex_unlock(&bus->jqs.lock);
 
 	ipu_core_jqs_remove_sysfs(bus->parent_dev);
-
-	ret = pm_genpd_remove(&bus->gpd);
-	if (ret < 0)
-		dev_err(bus->parent_dev,
-				"%s: unable to remove power down for IPU JQS, ret %d\n",
-				__func__, ret);
 
 	mutex_destroy(&bus->jqs.lock);
 }
