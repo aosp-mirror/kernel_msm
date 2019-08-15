@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "lito-redfin.dtsi"
+
+/ {
+	model = "Google Inc. MSM sm7250 Redfin";
+	compatible = "qcom,lito-mtp", "qcom,lito", "qcom,mtp";
+	qcom,msm-id = <400 0x10000>;
+	qcom,board-id = <0x000b0005 0>;
+	firmware {
+	       android {
+                       compatible = "android,firmware";
+                       android_fstab: fstab {
+			       compatible = "android,fstab";
+		               vbmeta {
+		                       compatible = "android,vbmeta";
+		                       parts = "vbmeta,boot,system,vendor,dtbo,product";
+		               };
+			       vendor {
+	       		               dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/vendor";
+	       		       };
+	       		       product {
+	       		               compatible = "android,product";
+	       		               dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/product";
+	       		               type = "ext4";
+	       		               mnt_flags = "ro";
+	       		               fsmgr_flags = "wait,slotselect,avb";
+	       		       };
+	       		};
+
+	       };
+	};
+};
