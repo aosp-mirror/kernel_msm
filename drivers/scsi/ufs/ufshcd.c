@@ -7221,7 +7221,6 @@ static void ufshcd_err_handler(struct work_struct *work)
 		ufshcd_print_pwr_info(hba);
 		ufshcd_print_host_regs(hba);
 		ufshcd_print_cmd_log(hba);
-		BUG_ON(ufshcd_check_phy_state(hba));
 	}
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -8214,6 +8213,9 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 	int retries = MAX_HOST_RESET_RETRIES;
 
 	ufshcd_custom_cmd_log(hba, "Reset-and-Restore-Enter");
+
+	/* should turn on clocks, just in case */
+	ufshcd_enable_clocks(hba);
 
 	ufshcd_enable_irq(hba);
 
@@ -11198,6 +11200,9 @@ manual_gc_show(struct device *dev, struct device_attribute *attr, char *buf)
 	if (hba->manual_gc.state == MANUAL_GC_DISABLE)
 		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
 
+	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
+		return -EBUSY;
+
 	pm_runtime_get_sync(hba->dev);
 
 	down_read(&hba->query_lock);
@@ -11232,6 +11237,9 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 
 	if (value >= MANUAL_GC_MAX)
 		return -EINVAL;
+
+	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
+		return -EBUSY;
 
 	if (value == MANUAL_GC_DISABLE || value == MANUAL_GC_ENABLE) {
 		hba->manual_gc.state = value;
@@ -11418,6 +11426,9 @@ static ssize_t health_attr_show(struct device *dev,
 	u8 desc_buf[hba->desc_size.health_desc];
 	u32 value;
 	int err;
+
+	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
+		return -EBUSY;
 
 	pm_runtime_get_sync(hba->dev);
 	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
