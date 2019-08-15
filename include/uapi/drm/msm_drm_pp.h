@@ -205,40 +205,34 @@ struct drm_msm_3d_gamut {
 	struct drm_msm_3d_col col[GAMUT_3D_TBL_NUM][GAMUT_3D_MODE17_TBL_SZ];
 };
 
+#define PGC_TBL_NUM 3
 #define PGC_TBL_LEN 512
 #define PGC_8B_ROUND (1 << 0)
 /**
  * struct drm_msm_pgc_lut - pgc lut feature structure
  * @flags: flags for the featue values can be:
  *         - PGC_8B_ROUND
- * @c0: color0 component lut
- * @c1: color1 component lut
- * @c2: color2 component lut
+ * @c: array of color component lut
  */
 struct drm_msm_pgc_lut {
 	__u64 flags;
-	__u32 c0[PGC_TBL_LEN];
-	__u32 c1[PGC_TBL_LEN];
-	__u32 c2[PGC_TBL_LEN];
+	__u32 c[PGC_TBL_NUM][PGC_TBL_LEN];
 };
 
+#define IGC_TBL_NUM 3
 #define IGC_TBL_LEN 256
 #define IGC_DITHER_ENABLE (1 << 0)
 /**
  * struct drm_msm_igc_lut - igc lut feature structure
  * @flags: flags for the feature customization, values can be:
  *             - IGC_DITHER_ENABLE: Enable dither functionality
- * @c0: color0 component lut
- * @c1: color1 component lut
- * @c2: color2 component lut
+ * @c: array of color component lut
  * @strength: dither strength, considered valid when IGC_DITHER_ENABLE
  *            is set in flags. Strength value based on source bit width.
  */
 struct drm_msm_igc_lut {
 	__u64 flags;
-	__u32 c0[IGC_TBL_LEN];
-	__u32 c1[IGC_TBL_LEN];
-	__u32 c2[IGC_TBL_LEN];
+	__u32 c[IGC_TBL_NUM][IGC_TBL_LEN];
 	__u32 strength;
 };
 

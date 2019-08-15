@@ -622,7 +622,7 @@ void reg_dmav1_setup_dspp_gcv18(struct sde_hw_dspp *ctx, void *cfg)
 		REG_DMA_SETUP_OPS(dma_write_cfg,
 			ctx->cap->sblk->gc.base + GC_C0_OFF +
 			(i * sizeof(u32) * 2),
-			lut_cfg->c0 + (ARRAY_SIZE(lut_cfg->c0) * i),
+			lut_cfg->c[i],
 			PGC_TBL_LEN * sizeof(u32),
 			REG_BLK_WRITE_INC, 0, 0);
 		rc = dma_ops->setup_payload(&dma_write_cfg);
@@ -743,7 +743,7 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 	for (i = 0; i < IGC_TBL_NUM; i++) {
-		addr = lut_cfg->c0 + (i * ARRAY_SIZE(lut_cfg->c0));
+		addr = lut_cfg->c[i];
 		offset = IGC_C0_OFF + (i * sizeof(u32));
 
 		for (j = 0; j < IGC_TBL_LEN; j++) {

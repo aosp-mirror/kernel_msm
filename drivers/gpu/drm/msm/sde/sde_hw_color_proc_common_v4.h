@@ -37,7 +37,6 @@ enum {
 #define GC_TBL_NUM 3
 #define GC_LUT_SWAP_OFF 0x1c
 
-#define IGC_TBL_NUM 3
 #define IGC_DITHER_OFF 0x7e0
 #define IGC_OPMODE_OFF 0x0
 #define IGC_C0_OFF 0x0

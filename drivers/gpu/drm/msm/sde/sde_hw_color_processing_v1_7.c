@@ -141,7 +141,6 @@
 #define PGC_C0_INDEX_OFF 0x8
 #define PGC_8B_ROUND_EN BIT(1)
 #define PGC_EN BIT(0)
-#define PGC_TBL_NUM 3
 #define PGC_LUT_SWAP_OFF 0x1c
 
 
@@ -898,9 +897,9 @@ void sde_setup_dspp_gc_v1_7(struct sde_hw_dspp *ctx, void *cfg)
 	c2_off = c1_off + (sizeof(u32) * 2);
 
 	for (i = 0; i < PGC_TBL_LEN; i++) {
-		SDE_REG_WRITE(&ctx->hw, c0_off, payload->c0[i]);
-		SDE_REG_WRITE(&ctx->hw, c1_off, payload->c1[i]);
-		SDE_REG_WRITE(&ctx->hw, c2_off, payload->c2[i]);
+		SDE_REG_WRITE(&ctx->hw, c0_off, payload->c[0][i]);
+		SDE_REG_WRITE(&ctx->hw, c1_off, payload->c[1][i]);
+		SDE_REG_WRITE(&ctx->hw, c2_off, payload->c[2][i]);
 	}
 	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->gc.base + PGC_LUT_SWAP_OFF,
 			BIT(0));

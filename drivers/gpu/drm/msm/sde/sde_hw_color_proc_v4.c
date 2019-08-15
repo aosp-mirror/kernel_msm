@@ -145,7 +145,7 @@ void sde_setup_dspp_igcv3(struct sde_hw_dspp *ctx, void *cfg)
 	lut_cfg = hw_cfg->payload;
 
 	for (i = 0; i < IGC_TBL_NUM; i++) {
-		addr = lut_cfg->c0 + (i * ARRAY_SIZE(lut_cfg->c0));
+		addr = lut_cfg->c[i];
 		offset = IGC_C0_OFF + (i * sizeof(u32));
 
 		for (j = 0; j < IGC_TBL_LEN; j++) {
