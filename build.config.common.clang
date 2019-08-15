@@ -1,3 +1,0 @@
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
-CC=clang
-CLANG_TRIPLE=aarch64-linux-gnu-
