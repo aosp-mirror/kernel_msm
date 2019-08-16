@@ -935,12 +935,26 @@ static int sm8150_psy_set_property(struct power_supply *psy,
 					CHGR_FAST_CHARGE_CURRENT_SETTING,
 					&val, 1);
 
-		/* NOTE FCC==0 must also set charge disable or the device will
-		 * not draw any current. Need to take care of this detail
+		/* NOTE FCC==0 will cause the device to not draw any current
+		 * from USB (QC#04128172). Need to take care of this detail
 		 * in the platform driver to keep the charger code sane.
 		 */
-		if (ivalue != 0)
-			rc = sm8150_charge_pause(bms, false);
+		if (ivalue != 0) {
+			u8 paused;
+
+			rc = sm8150_read(bms->pmic_regmap,
+					 CHGR_CHARGING_PAUSE_CMD,
+					 &paused, 1);
+			if (rc == 0 && (paused & CHARGING_PAUSE_CMD_BIT)) {
+				rc = sm8150_charge_pause(bms, false);
+
+				/* make sure charging restart */
+				if (rc == 0)
+					rc = sm8150_charge_disable(bms, true);
+				if (rc == 0)
+					rc = sm8150_charge_disable(bms, false);
+			}
+		}
 
 		pr_info("CONSTANT_CHARGE_CURRENT_MAX : ivalue=%d, val=%d pause=%d (%d)\n",
 			ivalue, val, ivalue == 0, rc);
