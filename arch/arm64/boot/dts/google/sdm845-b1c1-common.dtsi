@@ -196,14 +196,6 @@
 	status = "ok";
 };
 
-&qcom_ion {
-	qcom,ion-heap@30 {
-		reg = <30>;
-		memory-region = <&easel_mem>;
-		qcom,ion-heap-type = "CARVEOUT";
-	};
-};
-
 &thermal_zones {
 	vbat_too_low {
 		trips {
