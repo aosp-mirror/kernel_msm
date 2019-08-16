@@ -665,11 +665,11 @@ int core_ctl_set_boost(bool boost)
 
 	if (boost_state_changed) {
 		index = 0;
-		for_each_cluster(cluster, index)
+		for_each_cluster(cluster, index) {
 			apply_need(cluster);
+			trace_core_ctl_set_boost(cluster->boost, index, ret);
+		}
 	}
-
-	trace_core_ctl_set_boost(cluster->boost, ret);
 
 	return ret;
 }
