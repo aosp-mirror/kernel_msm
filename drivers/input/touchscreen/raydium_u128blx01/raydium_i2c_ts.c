@@ -3934,7 +3934,7 @@ static int
 raydium_touch_report(struct raydium_ts_data *raydium_ts,
 		      unsigned char *buf, unsigned char u8_points_amount)
 {
-	unsigned char i, j, offset, u8_point_id;
+	unsigned char i, j, offset = 0, u8_point_id;
 	signed short s16_x, s16_y, s16_pressure, s16_wx, s16_wy;
 	/* number of touch points */
 	unsigned char u8_touch_count = 0;
