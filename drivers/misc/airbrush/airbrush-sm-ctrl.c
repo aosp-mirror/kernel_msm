@@ -451,6 +451,33 @@ static inline bool is_partially_active(u32 state_id)
 			state_id != CHIP_STATE_SECURE_APP);
 }
 
+/* We want to avoid multiple IPU freq changes
+ * since testing has shown that that can lead
+ * to watchdog errors. So go to the state that
+ * matches the final freq
+ */
+static inline int find_matching_state(u32 state_id)
+{
+	switch (state_id) {
+	case CHIP_STATE_501:
+	case CHIP_STATE_801:
+		return CHIP_STATE_401;
+	case CHIP_STATE_502:
+	case CHIP_STATE_802:
+		return CHIP_STATE_402;
+	case CHIP_STATE_503:
+	case CHIP_STATE_803:
+		return CHIP_STATE_403;
+	case CHIP_STATE_504:
+	case CHIP_STATE_804:
+		return CHIP_STATE_404;
+	case CHIP_STATE_505:
+	case CHIP_STATE_805:
+		return CHIP_STATE_405;
+	default:
+		return CHIP_STATE_400;
+	}
+}
 static inline bool is_sleep(u32 state_id)
 {
 	return ((state_id >= CHIP_STATE_SLEEP &&
@@ -1184,6 +1211,8 @@ static void __ab_cleanup_state(struct ab_state_context *sc,
 	ab_prep_pmic_settings(sc, map);
 
 	dev_err(sc->dev, "Cleaning AB state\n");
+	sc->dest_chip_substate_id = CHIP_STATE_OFF;
+
 	blk_set_ipu_tpu_states(sc,
 			&(sc->blocks[BLK_IPU]), map->ipu_block_state_id,
 			&(sc->blocks[BLK_TPU]), map->tpu_block_state_id,
@@ -1280,7 +1309,8 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 		 * ab_pmic_on
 		 */
 		if (is_partially_active(to_chip_substate_id)) {
-			active_map = ab_sm_get_block_map(sc, CHIP_STATE_400);
+			active_map = ab_sm_get_block_map(sc,
+				find_matching_state(to_chip_substate_id));
 			ab_prep_pmic_settings(sc, active_map);
 		} else {
 			ab_prep_pmic_settings(sc, dest_map);
@@ -2228,6 +2258,7 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	mutex_lock(&sc->state_transitioning_lock);
 	sc->return_chip_substate_id = sc->dest_chip_substate_id;
 	sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	/* Wait for state change to SECURE_APP state */
@@ -2241,6 +2272,11 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	}
 
 	mutex_lock(&sc->state_transitioning_lock);
+	ret = sc->change_ret;
+	if (ret) {
+		mutex_unlock(&sc->state_transitioning_lock);
+		return ret;
+	}
 
 	/* Ensure PCIe is accessible */
 	if (sc->el2_in_secure_context) {
