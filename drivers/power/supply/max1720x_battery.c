@@ -2136,7 +2136,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		err = batt_ce_full_estimate(&chip->cap_estimate);
 		if (err < 0)
 			return -ENODATA;
-		val->intval = err;
+		val->intval = err * 100000;
 		break;
 	case POWER_SUPPLY_PROP_RES_FILTER_COUNT:
 		err = batt_res_registers(chip, true, SEL_RES_FILTER_COUNT,
