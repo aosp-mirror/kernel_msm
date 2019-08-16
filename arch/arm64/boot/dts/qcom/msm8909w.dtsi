@@ -134,6 +134,7 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x51>;
 		thermal-governor = "step_wise";
+		wake-capable-sensor;
 		trips {
 			cpu_freq_trip: cpu-freq-trip {
 				temperature = <40000>;

@@ -48,6 +48,7 @@
 		polling-delay = <0>;
 		thermal-governor = "user_space";
 		thermal-sensors = <&tsens0 0>;
+		wake-capable-sensor;
 		trips {
 			active-config0 {
 				temperature = <125000>;
@@ -62,6 +63,7 @@
 		polling-delay = <0>;
 		thermal-governor = "user_space";
 		thermal-sensors = <&tsens0 1>;
+		wake-capable-sensor;
 		trips {
 			active-config0 {
 				temperature = <125000>;
@@ -76,6 +78,7 @@
 		polling-delay = <0>;
 		thermal-governor = "user_space";
 		thermal-sensors = <&tsens0 2>;
+		wake-capable-sensor;
 		trips {
 			active-config0 {
 				temperature = <125000>;
@@ -90,6 +93,7 @@
 		polling-delay = <0>;
 		thermal-governor = "user_space";
 		thermal-sensors = <&tsens0 3>;
+		wake-capable-sensor;
 		trips {
 			active-config0 {
 				temperature = <125000>;
@@ -104,6 +108,7 @@
 		polling-delay = <0>;
 		thermal-governor = "user_space";
 		thermal-sensors = <&tsens0 4>;
+		wake-capable-sensor;
 		trips {
 			active-config0 {
 				temperature = <125000>;
@@ -117,6 +122,7 @@
 		polling-delay-passive = <250>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 0>;
+		wake-capable-sensor;
 		thermal-governor = "step_wise";
 		trips {
 			pop_trip: pop-trip {
@@ -157,6 +163,7 @@
 		polling-delay-passive = <250>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 2>;
+		wake-capable-sensor;
 		thermal-governor = "step_wise";
 		trips {
 			gpu_step_trip: gpu-step-trip {
@@ -179,6 +186,7 @@
 		polling-delay-passive = <65>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 3>;
+		wake-capable-sensor;
 		thermal-governor = "step_wise";
 		trips {
 			cpu0_2_step_trip: cpu0-2-step-trip {
@@ -219,6 +227,7 @@
 		polling-delay-passive = <65>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 4>;
+		wake-capable-sensor;
 		thermal-governor = "step_wise";
 		trips {
 			cpu1_3_step_trip: cpu1-3-step-trip {
@@ -259,6 +268,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_floor";
 		thermal-sensors = <&tsens0 0>;
+		wake-capable-sensor;
 		tracks-low;
 		trips {
 			mdm_trip: mdm-trip {
@@ -303,6 +313,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_floor";
 		thermal-sensors = <&tsens0 1>;
+		wake-capable-sensor;
 		tracks-low;
 		trips {
 			camera_trip: camera-trip {
@@ -347,6 +358,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_floor";
 		thermal-sensors = <&tsens0 2>;
+		wake-capable-sensor;
 		tracks-low;
 		trips {
 			gpu_trip: gpu-trip {
@@ -391,6 +403,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_floor";
 		thermal-sensors = <&tsens0 3>;
+		wake-capable-sensor;
 		tracks-low;
 		trips {
 			cpu0_2_trip: cpu0-2-trip {
@@ -435,6 +448,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_floor";
 		thermal-sensors = <&tsens0 4>;
+		wake-capable-sensor;
 		tracks-low;
 		trips {
 			cpu1_3_trip: cpu1-3-trip {
