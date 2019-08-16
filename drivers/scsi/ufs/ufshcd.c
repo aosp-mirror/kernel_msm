@@ -2668,6 +2668,13 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 	if (!ufshcd_is_clkgating_allowed(hba))
 		return;
 
+	/*
+	 * Disable hibern8 during clk gating if
+	 * auto hibern8 is supported
+	 */
+	if (ufshcd_is_auto_hibern8_supported(hba))
+		hba->caps &= ~UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
+
 	INIT_WORK(&gating->gate_work, ufshcd_gate_work);
 	INIT_WORK(&gating->ungate_work, ufshcd_ungate_work);
 	/*
@@ -8166,6 +8173,9 @@ static int ufshcd_reset_and_restore(struct ufs_hba *hba)
 
 	ufshcd_custom_cmd_log(hba, "Reset-and-Restore-Enter");
 
+	/* should turn on clocks, just in case */
+	ufshcd_enable_clocks(hba);
+
 	ufshcd_enable_irq(hba);
 
 	do {
@@ -11149,6 +11159,9 @@ manual_gc_show(struct device *dev, struct device_attribute *attr, char *buf)
 	if (hba->manual_gc.state == MANUAL_GC_DISABLE)
 		return scnprintf(buf, PAGE_SIZE, "%s", "disabled\n");
 
+	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
+		return -EBUSY;
+
 	pm_runtime_get_sync(hba->dev);
 
 	down_read(&hba->query_lock);
@@ -11183,6 +11196,9 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 
 	if (value >= MANUAL_GC_MAX)
 		return -EINVAL;
+
+	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
+		return -EBUSY;
 
 	if (value == MANUAL_GC_DISABLE || value == MANUAL_GC_ENABLE) {
 		hba->manual_gc.state = value;
@@ -11369,6 +11385,9 @@ static ssize_t health_attr_show(struct device *dev,
 	u8 desc_buf[hba->desc_size.health_desc];
 	u32 value;
 	int err;
+
+	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
+		return -EBUSY;
 
 	pm_runtime_get_sync(hba->dev);
 	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
