@@ -1894,6 +1894,8 @@ static int msc_logic(struct batt_drv *batt_drv)
 			batt_drv->checked_cv_cnt,
 			batt_drv->checked_ov_cnt);
 	} else if (batt_drv->vbatt_idx == profile->volt_nb_limits - 1) {
+		const int chg_type = batt_drv->chg_state.f.chg_type;
+
 		/* will not adjust charger voltage only in the configured
 		 * last tier.
 		 * NOTE: might not be the "real" last tier since can I have
@@ -1901,9 +1903,17 @@ static int msc_logic(struct batt_drv *batt_drv)
 		 * NOTE: should I use a voltage limit instead?
 		 */
 
-		msc_state = MSC_LAST;
+		if (chg_type == POWER_SUPPLY_CHARGE_TYPE_FAST) {
+			msc_state = MSC_FAST;
+		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
+			msc_state = MSC_TYPE;
+		} else {
+			msc_state = MSC_LAST;
+		}
+
 		pr_info("MSC_LAST vbatt=%d ibatt=%d fv_uv=%d\n",
 			vbatt, ibatt, fv_uv);
+
 	} else {
 		const int tier_idx = batt_drv->vbatt_idx;
 		const int vtier = profile->volt_limits[vbatt_idx];
