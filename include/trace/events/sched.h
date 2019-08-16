@@ -1091,17 +1091,20 @@ TRACE_EVENT(core_ctl_set_busy,
 
 TRACE_EVENT(core_ctl_set_boost,
 
-	TP_PROTO(u32 refcount, s32 ret),
-	TP_ARGS(refcount, ret),
+	TP_PROTO(u32 refcount, u32 index, s32 ret),
+	TP_ARGS(refcount, index, ret),
 	TP_STRUCT__entry(
 		__field(u32, refcount)
+		__field(u32, index)
 		__field(s32, ret)
 	),
 	TP_fast_assign(
 		__entry->refcount = refcount;
+		__entry->index = index;
 		__entry->ret = ret;
 	),
-	TP_printk("refcount=%u, ret=%d", __entry->refcount, __entry->ret)
+	TP_printk("refcount=%u, idx=%u, ret=%d", __entry->refcount,
+		  __entry->index, __entry->ret)
 );
 
 TRACE_EVENT(core_ctl_update_nr_need,
