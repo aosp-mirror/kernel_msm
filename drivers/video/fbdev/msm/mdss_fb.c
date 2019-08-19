@@ -46,6 +46,9 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/dma-buf.h>
+#ifdef CONFIG_LCD_HBM_FEATURE
+#include "mdss_dsi.h"
+#endif
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
 #define CREATE_TRACE_POINTS
@@ -905,6 +908,70 @@ static ssize_t mdss_fb_get_persist_mode(struct device *dev,
 	return ret;
 }
 
+#ifdef CONFIG_LCD_HBM_FEATURE
+static int enter_hbm_send_cmd;
+static ssize_t mdss_fb_set_hbm(struct device *dev,
+	struct device_attribute *attr,const char *buf,size_t len)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct mdss_panel_data *pdata;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	int rc = 0;
+	int param = 0;
+
+	rc = kstrtoint(buf, 10, &param);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	pdata = dev_get_platdata(&mfd->pdev->dev);
+	if (!pdata) {
+		pr_err("no panel connected!\n");
+		return len;
+	}
+	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata, panel_data);
+	if(!ctrl) {
+		pr_info("not available\n");
+		return len;
+	}
+
+	pr_err("%s:set_hbm_cmd: %d %d\n",__func__, __LINE__, param);
+
+	switch(param){
+	case 0x1: //hbm on
+		if(!enter_hbm_send_cmd){
+			enter_hbm_send_cmd=1;
+			if (ctrl->hbm_on_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl,
+					&ctrl->hbm_on_cmds,CMD_REQ_COMMIT);
+			}
+			msleep(5000); //5s
+			if (ctrl->hbm_off_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl,
+					&ctrl->hbm_off_cmds,CMD_REQ_COMMIT);
+			}
+			msleep(55000); //55s
+			enter_hbm_send_cmd=0;
+		}
+		break;
+	case 0x2: //hbm off
+		if (ctrl->hbm_off_cmds.cmd_cnt){
+			mdss_dsi_panel_cmds_send(ctrl,
+				&ctrl->hbm_off_cmds,CMD_REQ_COMMIT);
+		}
+		break;
+	default:
+		pr_err("hbm has not send cmds: %d\n", param);
+		break;
+	}
+	printk(" %s: hbm over\n", __func__);
+	return len;
+
+}
+#endif
+
 static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -931,6 +998,9 @@ static DEVICE_ATTR(measured_fps, 0664,
 	mdss_fb_get_fps_info, NULL);
 static DEVICE_ATTR(msm_fb_persist_mode, 0644,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
+#ifdef CONFIG_LCD_HBM_FEATURE
+static DEVICE_ATTR(msm_fb_hbm, 0644, NULL, mdss_fb_set_hbm);
+#endif
 static DEVICE_ATTR(idle_power_collapse, 0444, mdss_fb_idle_pc_notify, NULL);
 
 static struct attribute *mdss_fb_attrs[] = {
@@ -946,6 +1016,9 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_dfps_mode.attr,
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
+#ifdef CONFIG_LCD_HBM_FEATURE
+	&dev_attr_msm_fb_hbm.attr,
+#endif
 	&dev_attr_idle_power_collapse.attr,
 	NULL,
 };

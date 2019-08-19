@@ -144,4 +144,11 @@ config FB_MSM_MDSS_FRC_DEBUG
 	statistics and check whether its output pattern matches expected
 	cadence.
 
+config LCD_HBM_FEATURE
+	bool "LCD HBM FEATURE"
+	default n
+	help
+		Say Y here if you want to enable High Brightness mode.
+		If unsure, say N.
+
 endif
