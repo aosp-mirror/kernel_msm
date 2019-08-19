@@ -40,7 +40,7 @@
 #define AB_MAX_TRANSITION_TIME_MS	\
 	(10000 + (150 * CONFIG_AB_DDR_SANITY_SZ_MBYTES))
 #else
-#define AB_MAX_TRANSITION_TIME_MS	10000
+#define AB_MAX_TRANSITION_TIME_MS	1000
 #endif
 #define AB_KFIFO_ENTRY_SIZE	32
 #define to_chip_substate_category(chip_substate_id) ((chip_substate_id) / 100)
@@ -1247,6 +1247,12 @@ static int ab_sm_update_chip_state(struct ab_state_context *sc)
 	if (sc->el2_mode || sc->el2_in_secure_context) {
 		dev_err(sc->dev, "Cannot change state while in EL2 mode\n");
 		return -ENODEV;
+	}
+
+	if (atomic_read(&sc->is_cleanup_in_progress) ==
+		AB_SM_CLEANUP_IN_PROGRESS) {
+		dev_err(sc->dev, "Cleanup in progress, ignore state change request\n");
+		return -EAGAIN;
 	}
 
 	to_chip_substate_id = ab_sm_throttled_chip_substate_id(
