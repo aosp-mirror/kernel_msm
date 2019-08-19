@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,21 +22,21 @@
 #include <linux/platform_device.h>
 #include <soc/qcom/glink.h>
 #include <linux/input.h>
+#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/regulator/consumer.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
-
 #include "bgrsb.h"
 
 #define BGRSB_GLINK_INTENT_SIZE 0x04
 #define BGRSB_MSG_SIZE 0x08
 #define TIMEOUT_MS 2000
 
-#define BGRSB_LDO15_VTG_MIN_UV_DEFAULT 3300000
-#define BGRSB_LDO15_VTG_MAX_UV_DEFAULT 3300000
+#define BGRSB_LDO15_VTG_MIN_UV 3000000
+#define BGRSB_LDO15_VTG_MAX_UV 3000000
 
 #define BGRSB_LDO11_VTG_MIN_UV 1800000
 #define BGRSB_LDO11_VTG_MAX_UV 1800000
@@ -49,15 +49,13 @@
 #define BGRSB_POWER_DISABLE 0
 #define BGRSB_GLINK_POWER_ENABLE 6
 #define BGRSB_GLINK_POWER_DISABLE 7
+#define BGRSB_IN_TWM 8
+#define BGRSB_OUT_TWM 9
 
 
 struct bgrsb_regulator {
 	struct regulator *regldo11;
 	struct regulator *regldo15;
-
-	/* VLD voltage config; optimal values can vary per RSB component */
-	uint32_t ldo15_vmax;
-	uint32_t ldo15_vmin;
 };
 
 enum ldo_task {
@@ -73,7 +71,6 @@ enum bgrsb_state {
 	BGRSB_STATE_INIT,
 	BGRSB_STATE_LDO11_ENABLED,
 	BGRSB_STATE_RSB_CONFIGURED,
-	BGRSB_STATE_LDO15_ENABLED,
 	BGRSB_STATE_RSB_ENABLED
 };
 
@@ -141,10 +138,13 @@ struct bgrsb_priv {
 	bool is_calibrd;
 
 	bool is_cnfgrd;
+	bool blk_rsb_cmnds;
+	bool pending_enable;
 };
 
 static void *bgrsb_drv;
 static int bgrsb_enable(struct bgrsb_priv *dev, bool enable);
+static bool is_in_twm;
 
 int bgrsb_send_input(struct event *evnt)
 {
@@ -328,13 +328,6 @@ static int bgrsb_init_regulators(struct device *pdev)
 	struct regulator *reg15;
 	struct bgrsb_priv *dev = dev_get_drvdata(pdev);
 
-	char *reg15_vmax_node = "vtg-ldo2-max";
-	char *reg15_vmin_node = "vtg-ldo2-min";
-
-	int rc;
-	u32 reg15_vmax;
-	u32 reg15_vmin;
-
 	reg11 = regulator_get(pdev, "vdd-ldo1");
 	if (IS_ERR_OR_NULL(reg11)) {
 		pr_err("Unable to get regulator for LDO-11\n");
@@ -349,22 +342,6 @@ static int bgrsb_init_regulators(struct device *pdev)
 
 	dev->rgltr.regldo11 = reg11;
 	dev->rgltr.regldo15 = reg15;
-
-
-	rc = of_property_read_u32(pdev->of_node, reg15_vmax_node,
-			&reg15_vmax);
-	if (rc) {
-		reg15_vmax = BGRSB_LDO15_VTG_MAX_UV_DEFAULT;
-	}
-
-	rc = of_property_read_u32(pdev->of_node, reg15_vmin_node,
-			&reg15_vmin);
-	if (rc) {
-		reg15_vmin = BGRSB_LDO15_VTG_MIN_UV_DEFAULT;
-	}
-
-	dev->rgltr.ldo15_vmax = reg15_vmax;
-	dev->rgltr.ldo15_vmin = reg15_vmin;
 
 	return 0;
 }
@@ -390,7 +367,7 @@ static int bgrsb_ldo_work(struct bgrsb_priv *dev, enum ldo_task ldo_action)
 
 	case BGRSB_ENABLE_LDO15:
 		ret = regulator_set_voltage(dev->rgltr.regldo15,
-				dev->rgltr.ldo15_vmin, dev->rgltr.ldo15_vmax);
+				BGRSB_LDO15_VTG_MIN_UV, BGRSB_LDO15_VTG_MAX_UV);
 		if (ret) {
 			pr_err("Failed to request LDO-15 voltage.\n");
 			goto err_ret;
@@ -430,6 +407,8 @@ static void bgrsb_bgdown_work(struct work_struct *work)
 	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
 								bg_down_work);
 
+	mutex_lock(&dev->rsb_state_mutex);
+
 	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
 		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) == 0)
 			dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
@@ -445,12 +424,15 @@ static void bgrsb_bgdown_work(struct work_struct *work)
 	}
 
 	dev->is_cnfgrd = false;
+	dev->blk_rsb_cmnds = false;
 	pr_info("RSB current state is : %d\n", dev->bgrsb_current_state);
 
 	if (dev->bgrsb_current_state == BGRSB_STATE_INIT) {
 		if (dev->is_calibrd)
 			dev->calibration_needed = true;
 	}
+
+	mutex_unlock(&dev->rsb_state_mutex);
 }
 
 static void bgrsb_glink_bgdown_work(struct work_struct *work)
@@ -459,17 +441,19 @@ static void bgrsb_glink_bgdown_work(struct work_struct *work)
 	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
 							rsb_glink_down_work);
 
+	mutex_lock(&dev->rsb_state_mutex);
+
 	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
 
 		rc = bgrsb_enable(dev, false);
 		if (rc != 0) {
 			pr_err("Failed to send disable command to BG\n");
-			return;
+			goto unlock;
 		}
 
 		if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO15) != 0) {
 			pr_err("Failed to un-vote LDO-15\n");
-			return;
+			goto unlock;
 		}
 
 		dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
@@ -484,11 +468,16 @@ static void bgrsb_glink_bgdown_work(struct work_struct *work)
 	}
 
 	dev->is_cnfgrd = false;
+	if (is_in_twm)
+		dev->blk_rsb_cmnds = true;
 
 	if (dev->handle)
 		glink_close(dev->handle);
 	dev->handle = NULL;
 	pr_debug("BG Glink Close connection\n");
+
+unlock:
+	mutex_unlock(&dev->rsb_state_mutex);
 }
 
 static int bgrsb_tx_msg(struct bgrsb_priv *dev, void  *msg, size_t len)
@@ -579,6 +568,7 @@ static void bgrsb_bgup_work(struct work_struct *work)
 	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
 								bg_up_work);
 
+	mutex_lock(&dev->rsb_state_mutex);
 	if (bgrsb_ldo_work(dev, BGRSB_ENABLE_LDO11) == 0) {
 
 		rc = wait_event_timeout(dev->link_state_wait,
@@ -586,20 +576,24 @@ static void bgrsb_bgup_work(struct work_struct *work)
 					msecs_to_jiffies(TIMEOUT_MS));
 		if (rc == 0) {
 			pr_err("Glink channel connection time out\n");
-			return;
+			goto unlock;
 		}
 		rc = bgrsb_configr_rsb(dev, true);
 		if (rc != 0) {
 			pr_err("BG failed to configure RSB %d\n", rc);
 			if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO11) == 0)
 				dev->bgrsb_current_state = BGRSB_STATE_INIT;
-			return;
+			goto unlock;
 		}
 
 		dev->is_cnfgrd = true;
 		dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
 		pr_debug("RSB Cofigured\n");
+		if(dev->pending_enable)
+			queue_work(dev->bgrsb_wq, &dev->rsb_up_work);
 	}
+unlock:
+	mutex_unlock(&dev->rsb_state_mutex);
 }
 
 static void bgrsb_glink_bgup_work(struct work_struct *work)
@@ -608,6 +602,7 @@ static void bgrsb_glink_bgup_work(struct work_struct *work)
 	struct bgrsb_priv *dev = container_of(work, struct bgrsb_priv,
 							rsb_glink_up_work);
 
+	mutex_lock(&dev->rsb_state_mutex);
 	if (bgrsb_ldo_work(dev, BGRSB_ENABLE_LDO11) == 0) {
 
 		INIT_WORK(&dev->glink_work, bgrsb_glink_open_work);
@@ -618,19 +613,25 @@ static void bgrsb_glink_bgup_work(struct work_struct *work)
 						msecs_to_jiffies(TIMEOUT_MS));
 		if (rc == 0) {
 			pr_err("Glink channel connection time out\n");
-			return;
+			goto unlock;
 		}
 		rc = bgrsb_configr_rsb(dev, true);
 		if (rc != 0) {
 			pr_err("BG Glink failed to configure RSB %d\n", rc);
 			if (bgrsb_ldo_work(dev, BGRSB_DISABLE_LDO11) == 0)
 				dev->bgrsb_current_state = BGRSB_STATE_INIT;
-			return;
+			goto unlock;
 		}
 		dev->is_cnfgrd = true;
 		dev->bgrsb_current_state = BGRSB_STATE_RSB_CONFIGURED;
 		pr_debug("Glink RSB Cofigured\n");
+
+		if(dev->pending_enable)
+			queue_work(dev->bgrsb_wq, &dev->rsb_up_work);
 	}
+
+unlock:
+	mutex_unlock(&dev->rsb_state_mutex);
 }
 
 /**
@@ -646,6 +647,8 @@ static int ssr_bgrsb_cb(struct notifier_block *this,
 
 	switch (opcode) {
 	case SUBSYS_BEFORE_SHUTDOWN:
+		if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED)
+			dev->pending_enable = true;
 		queue_work(dev->bgrsb_wq, &dev->bg_down_work);
 		break;
 	case SUBSYS_AFTER_POWERUP:
@@ -690,8 +693,13 @@ static void bgrsb_enable_rsb(struct work_struct *work)
 								rsb_up_work);
 
 	mutex_lock(&dev->rsb_state_mutex);
+	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
+		pr_debug("RSB is already enabled\n");
+		goto unlock;
+	}
 	if (dev->bgrsb_current_state != BGRSB_STATE_RSB_CONFIGURED) {
 		pr_err("BG is not yet configured for RSB\n");
+		dev->pending_enable = true;
 		goto unlock;
 	}
 
@@ -706,6 +714,7 @@ static void bgrsb_enable_rsb(struct work_struct *work)
 		}
 	}
 	dev->bgrsb_current_state = BGRSB_STATE_RSB_ENABLED;
+	dev->pending_enable = false;
 	pr_debug("RSB Enabled\n");
 
 	if (dev->calibration_needed) {
@@ -724,6 +733,7 @@ static void bgrsb_disable_rsb(struct work_struct *work)
 								rsb_down_work);
 
 	mutex_lock(&dev->rsb_state_mutex);
+	dev->pending_enable = false;
 	if (dev->bgrsb_current_state == BGRSB_STATE_RSB_ENABLED) {
 
 		rc = bgrsb_enable(dev, false);
@@ -751,9 +761,11 @@ static void bgrsb_calibration(struct work_struct *work)
 			container_of(work, struct bgrsb_priv,
 							rsb_calibration_work);
 
+	mutex_lock(&dev->rsb_state_mutex);
+
 	if (!dev->is_cnfgrd) {
 		pr_err("RSB is not configured\n");
-		return;
+		goto unlock;
 	}
 
 	req.cmd_id = 0x03;
@@ -762,7 +774,7 @@ static void bgrsb_calibration(struct work_struct *work)
 	rc = bgrsb_tx_msg(dev, &req, 5);
 	if (rc != 0) {
 		pr_err("Failed to send resolution value to BG\n");
-		return;
+		goto unlock;
 	}
 
 	req.cmd_id = 0x04;
@@ -771,10 +783,13 @@ static void bgrsb_calibration(struct work_struct *work)
 	rc = bgrsb_tx_msg(dev, &req, 5);
 	if (rc != 0) {
 		pr_err("Failed to send interval value to BG\n");
-		return;
+		goto unlock;
 	}
 	dev->is_calibrd = true;
 	pr_debug("RSB Calibbered\n");
+
+unlock:
+	mutex_unlock(&dev->rsb_state_mutex);
 }
 
 static void bgrsb_buttn_configration(struct work_struct *work)
@@ -785,9 +800,10 @@ static void bgrsb_buttn_configration(struct work_struct *work)
 			container_of(work, struct bgrsb_priv,
 							bttn_configr_work);
 
+	mutex_lock(&dev->rsb_state_mutex);
 	if (!dev->is_cnfgrd) {
 		pr_err("RSB is not configured\n");
-		return;
+		goto unlock;
 	}
 
 	req.cmd_id = 0x05;
@@ -796,11 +812,36 @@ static void bgrsb_buttn_configration(struct work_struct *work)
 	rc = bgrsb_tx_msg(dev, &req, 5);
 	if (rc != 0) {
 		pr_err("Failed to send button configuration cmnd to BG\n");
-		return;
+		goto unlock;
 	}
 
 	dev->bttn_configs = 0;
 	pr_debug("Button configured\n");
+
+unlock:
+	mutex_unlock(&dev->rsb_state_mutex);
+}
+
+static int bgrsb_handle_cmd_in_ssr(struct bgrsb_priv *dev, char *str)
+{
+	long val;
+	int ret;
+	char *tmp;
+
+	tmp = strsep(&str, ":");
+	if (!tmp)
+		return -EINVAL;
+
+	ret = kstrtol(tmp, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	if(val == BGRSB_POWER_ENABLE)
+		dev->pending_enable = true;
+	else if(val == BGRSB_POWER_DISABLE)
+		dev->pending_enable = false;
+
+	return 0;
 }
 
 static int split_bg_work(struct bgrsb_priv *dev, char *str)
@@ -859,16 +900,19 @@ static int split_bg_work(struct bgrsb_priv *dev, char *str)
 		dev->bttn_configs = (uint8_t)val;
 		queue_work(dev->bgrsb_wq, &dev->bttn_configr_work);
 		break;
+	case BGRSB_IN_TWM:
+		is_in_twm = true;
 	case BGRSB_GLINK_POWER_DISABLE:
 		queue_work(dev->bgrsb_wq, &dev->rsb_glink_down_work);
 		break;
+	case BGRSB_OUT_TWM:
+		is_in_twm = false;
 	case BGRSB_GLINK_POWER_ENABLE:
 		queue_work(dev->bgrsb_wq, &dev->rsb_glink_up_work);
 		break;
 	}
 	return 0;
 }
-
 static int store_enable(struct device *pdev, struct device_attribute *attr,
 		const char *buff, size_t count)
 {
@@ -876,13 +920,25 @@ static int store_enable(struct device *pdev, struct device_attribute *attr,
 	struct bgrsb_priv *dev = dev_get_drvdata(pdev);
 	char *arr = kstrdup(buff, GFP_KERNEL);
 
-	if (dev->is_cnfgrd == false || !arr)
+	if (!arr)
+		return -ENOMEM;
+
+	if (dev->blk_rsb_cmnds) {
+		pr_err("Device is in TWM state\n");
+		kfree(arr);
+		return count;
+	}
+
+	if (!dev->is_cnfgrd) {
+		bgrsb_handle_cmd_in_ssr(dev, arr);
+		kfree(arr);
 		return -ENOMEDIUM;
+	}
 
 	rc = split_bg_work(dev, arr);
 	if (rc != 0)
 		pr_err("Not able to process request\n");
-
+	kfree(arr);
 	return count;
 }
 

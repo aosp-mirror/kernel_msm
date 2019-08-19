@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -857,6 +857,12 @@ unlock:
 	if (retry == MAX_RETRY) {
 		/* BG failed to resume. Trigger BG soft reset. */
 		pr_err("BG failed to resume\n");
+		pr_err("%s: gpio#95 value is: %d\n",
+				__func__, gpio_get_value(95));
+		pr_err("%s: gpio#97 value is: %d\n",
+				__func__, gpio_get_value(97));
+		panic("%s : Trigger panic on BG failed to resume\n",
+				__func__);
 		bg_soft_reset();
 		return -ETIMEDOUT;
 	}
