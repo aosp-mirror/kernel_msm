@@ -2252,6 +2252,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 			host->dev_ref_clk_en_mask = BIT(5);
 		}
 	}
+	/* use binary power_count to avoid race condition of phy on/off */
+	host->generic_phy->is_binary_power_count = true;
 
 	/* update phy revision information before calling phy_init() */
 	ufs_qcom_phy_save_controller_version(host->generic_phy,
