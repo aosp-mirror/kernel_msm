@@ -121,11 +121,4 @@ config SMB1390_CHARGE_PUMP_PSY
 	  SMB1390 is a div2 charge pump capable of delivering 6A charge current
 	  with very high efficiency.
 
-config CHARGER_P9221
-	tristate "IDT P9221 wireless power receiver driver"
-	depends on I2C
-	help
-	  This driver provides support for the IDT P9221 wireless
-	  power receiver.
-
 endmenu

@@ -21,7 +21,7 @@ config GOOGLE_CHARGER
 	help
 	  Say Y here to choose the Google Multi Step Charging control.
 	  The driver implements a multi CC-CV steps charging using battery
-	  temperature and voltage to set the charger's constant charging
+	  temperature and voltage to set the charger constant charging
 	  current and float voltage.
 
 config GOOGLE_BATTERY
@@ -46,3 +46,10 @@ config GOOGLE_LOGBUFFER
 	  debugfs.
 
 endif	# GOOGLE_BMS
+
+config CHARGER_P9221
+	tristate "IDT P9221 wireless power receiver driver"
+	depends on I2C
+	help
+	  This driver provides support for the IDT P9221 wireless
+	  power receiver.

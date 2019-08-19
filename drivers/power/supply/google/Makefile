@@ -4,3 +4,4 @@ obj-$(CONFIG_GOOGLE_BMS)	+= google_bms.o
 obj-$(CONFIG_USB_OVERHEAT_MITIGATION)	+= overheat_mitigation.o
 obj-$(CONFIG_ARCH_SM8150)    	+= sm8150_bms.o
 obj-$(CONFIG_GOOGLE_LOGBUFFER)		+= logbuffer.o
+obj-$(CONFIG_CHARGER_P9221)	+= p9221_charger.o
