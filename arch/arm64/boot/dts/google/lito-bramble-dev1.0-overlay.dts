@@ -8,6 +8,7 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "lito-bramble.dtsi"
+#include "sm7250-bramble-display.dtsi"
 
 / {
 	model = "Google Inc. MSM sm7250 Bramble";
