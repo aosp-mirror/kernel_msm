@@ -767,12 +767,50 @@ static int tunneling_attach_client(struct iaxxx_tunnel_data *tunnel_data,
 	return 0;
 }
 
+static int iaxxx_client_detach_tunnels(struct iaxxx_tunnel_client *client)
+{
+	struct iaxxx_tunnel_data *t_intf_priv =
+			(struct iaxxx_tunnel_data *)client->tunnel_data;
+	struct iaxxx_tunnel_ep tnl_node;
+	uint32_t id;
+	uint32_t client_tid = client->tid_flag;
+
+	if (!client_tid)
+		return 0;
+
+	mutex_lock(&t_intf_priv->tunnel_dev_lock);
+
+	while (client_tid) {
+		id = ffs(client_tid) - 1;
+		client_tid &= ~(1 << id);
+
+		if (!iaxxx_tunnel_src_list_find_endpoint_node(t_intf_priv, id,
+					&tnl_node)) {
+			dev_err(t_intf_priv->priv->dev,
+				"Tunnel %d not found in src_list\n", id);
+			continue;
+		}
+		if (!atomic_read(&t_intf_priv->tunnel_ref_cnt[id]))
+			continue;
+
+		if (atomic_dec_return(&t_intf_priv->tunnel_ref_cnt[id]) == 0) {
+			clear_bit(id, &t_intf_priv->flags);
+			if (tnl_node.tnl_ep.tunlMode == TNL_SYNC_MODE)
+				clear_bit(id, &t_intf_priv->flags_sync_mode);
+		}
+	}
+	client->tid_flag = 0;
+	mutex_unlock(&t_intf_priv->tunnel_dev_lock);
+	return 0;
+}
+
 /*
  * Detach a client from tunnel stream
  */
 static int tunneling_detach_client(struct iaxxx_tunnel_data *tunnel_data,
 			struct iaxxx_tunnel_client *client)
 {
+	iaxxx_client_detach_tunnels(client);
 	spin_lock(&tunnel_data->lock);
 	list_del_rcu(&client->node);
 	tunnel_data->client_no--;
