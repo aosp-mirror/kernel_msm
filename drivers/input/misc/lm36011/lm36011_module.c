@@ -1916,7 +1916,7 @@ static enum silego_self_test_result_type silego_self_test(
 	rc = lm36011_power_up(ctrl);
 	if (rc < 0) {
 		dev_err(ctrl->soc_info.dev, "power up failed: %d", rc);
-		goto out;
+		goto power_down;
 	}
 
 	/* Prepare safety ic IRQ */
@@ -1986,6 +1986,7 @@ release_resource:
 	}
 	mutex_unlock(&lm36011_mutex);
 
+power_down:
 	rc = lm36011_power_down(ctrl);
 	if (rc < 0)
 		dev_err(ctrl->soc_info.dev, "power up failed: %d", rc);
