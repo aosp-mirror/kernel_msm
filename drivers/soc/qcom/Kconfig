@@ -904,3 +904,10 @@ config QCOM_HYP_CORE_CTL
 	  CPUs can be assigned to the other guest OS by the hypervisor.
 	  An offline CPU is considered as a reserved CPU since this OS can't use
 	  it.
+
+config MODEMSMEM
+	bool "Modem SMEM driver"
+	default N
+	---help---
+	Enable to pass device information and other data to shared memory for
+	the modem subsystem
