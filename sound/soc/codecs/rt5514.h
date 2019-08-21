@@ -167,18 +167,6 @@
 #define RT5514_I2S_DL_24			(0x2 << 0)
 #define RT5514_I2S_DL_8				(0x3 << 0)
 
-/* RT5514_I2S_CTRL2 (0x2014) */
-#define RT5514_TDM_DOCKING_MODE			(0x1 << 31)
-#define RT5514_TDM_DOCKING_MODE_SFT		31
-#define RT5514_TDM_DOCKING_VALID_CH_MASK	(0x1 << 29)
-#define RT5514_TDM_DOCKING_VALID_CH_SFT		29
-#define RT5514_TDM_DOCKING_VALID_CH2		(0x0 << 29)
-#define RT5514_TDM_DOCKING_VALID_CH4		(0x1 << 29)
-#define RT5514_TDM_DOCKING_START_MASK		(0x1 << 28)
-#define RT5514_TDM_DOCKING_START_SFT		28
-#define RT5514_TDM_DOCKING_START_SLOT0		(0x0 << 28)
-#define RT5514_TDM_DOCKING_START_SLOT4		(0x1 << 28)
-
 /* RT5514_DIG_SOURCE_CTRL (0x20a4) */
 #define RT5514_AD1_DMIC_INPUT_SEL		(0x1 << 1)
 #define RT5514_AD1_DMIC_INPUT_SEL_SFT		1
@@ -257,6 +245,8 @@
 
 #define RT5514_FIRMWARE1	"rt5514_dsp_fw1.bin"
 #define RT5514_FIRMWARE2	"rt5514_dsp_fw2.bin"
+#define RT5514_FIRMWARE3	"rt5514_dsp_fw3.bin"
+#define RT5514_FIRMWARE4	"rt5514_dsp_fw4.bin"
 
 /* System Clock Source */
 enum {
@@ -270,11 +260,28 @@ enum {
 	RT5514_PLL1_S_BCLK,
 };
 
+enum {
+	RT5514_DSP_WOV_BOTH,
+	RT5514_DSP_WOV_HOTWORD,
+	RT5514_DSP_WOV_MUSDET,
+	RT5514_DSP_WOV_NON,
+};
+
+enum {
+	RT5514_DSP_FUNC_WOV,
+	RT5514_DSP_FUNC_WOV_SENSOR,
+	RT5514_DSP_FUNC_WOV_I2S,
+	RT5514_DSP_FUNC_WOV_I2S_SENSOR,
+	RT5514_DSP_FUNC_SUSPEND,
+	RT5514_DSP_FUNC_I2S,
+};
+
+
 struct rt5514_priv {
 	struct rt5514_platform_data pdata;
 	struct snd_soc_component *component;
 	struct regmap *i2c_regmap, *regmap;
-	struct clk *mclk, *dsp_calib_clk;
+	struct clk *mclk;
 	int sysclk;
 	int sysclk_src;
 	int lrck;
@@ -282,8 +289,12 @@ struct rt5514_priv {
 	int pll_src;
 	int pll_in;
 	int pll_out;
-	int dsp_enabled;
-	unsigned int pll3_cal_value;
+	int dsp_enabled, dsp_enabled_last, dsp_test;
+	int dsp_adc_enabled;
+	u8 *hotword_model_buf, *musdet_model_buf;
+	unsigned int hotword_model_len, musdet_model_len;
 };
+
+int rt5514_set_gpio(int gpio, bool output);
 
 #endif /* __RT5514_H__ */
