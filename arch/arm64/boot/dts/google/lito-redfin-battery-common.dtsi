@@ -10,6 +10,4 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
-#include "lito-bramble-common.dtsi"
-#include "lito-bramble-battery.dtsi"
+#include "lito-google-battery.dtsi"

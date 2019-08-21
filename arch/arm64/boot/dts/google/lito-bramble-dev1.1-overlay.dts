@@ -10,8 +10,8 @@
 #include "lito-google-display-dev.dtsi"
 
 / {
-	model = "Google Inc. MSM sm7250 Bramble DEV";
+	model = "Google Inc. MSM sm7250 Bramble DEV 1.1";
 	compatible = "google,bramble-sm7250", "qcom,sm7250";
 	qcom,msm-id = <400 0x10000>;
-	qcom,board-id = <0x0a0005 0>;
+	qcom,board-id = <0x0a0105 0>;
 };

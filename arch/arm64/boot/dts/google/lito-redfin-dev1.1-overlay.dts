@@ -6,12 +6,12 @@
 /dts-v1/;
 /plugin/;
 
-#include "lito-bramble-dev.dtsi"
+#include "lito-redfin-dev.dtsi"
 #include "lito-google-display-dev.dtsi"
 
 / {
-	model = "Google Inc. MSM sm7250 Bramble DEV";
-	compatible = "google,bramble-sm7250", "qcom,sm7250";
+	model = "Google Inc. MSM sm7250 Redfin DEV 1.1";
+	compatible = "google,redfin-sm7250", "qcom,sm7250";
 	qcom,msm-id = <400 0x10000>;
-	qcom,board-id = <0x0a0005 0>;
+	qcom,board-id = <0x0B0105 0>;
 };
