@@ -33,6 +33,8 @@
 #define MIN_SLEEP_USEC 3000
 #define MAX_SLEEP_USEC 6000
 
+u8 chip_id[3];
+
 enum slg51000_regulators {
 	SLG51000_REGULATOR_LDO1 = 0,
 	SLG51000_REGULATOR_LDO2,
@@ -463,6 +465,46 @@ static void slg51000_clear_fault_log(struct slg51000 *chip)
 		dev_dbg(chip->dev, "Fault log: FLT_POR\n");
 }
 
+static int read_chip_id(struct slg51000 *chip)
+{
+	int ret;
+
+	if (chip == NULL) {
+		pr_err("[%s] Invalid arguments\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = regmap_bulk_read(chip->regmap, SLG51000_SYSCTL_PATN_ID_B0,
+				chip_id, 3);
+	if (ret < 0) {
+		dev_err(chip->dev,
+			"Failed to read chip id registers(%d)\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static ssize_t chip_id_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	if (buf == NULL)
+		return -EINVAL;
+
+	return snprintf(buf, PAGE_SIZE, "0x%02x%02x%02x\n",
+			chip_id[2], chip_id[1], chip_id[0]);
+}
+static DEVICE_ATTR_RO(chip_id);
+
+static struct attribute *attrs[] = {
+	&dev_attr_chip_id.attr,
+	NULL,
+};
+
+static struct attribute_group attr_group = {
+	.attrs = attrs,
+};
+
 static int slg51000_i2c_probe(struct i2c_client *client,
 			      const struct i2c_device_id *id)
 {
@@ -554,6 +596,18 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		}
 	} else {
 		dev_warn(dev, "No IRQ configured\n");
+	}
+
+	ret = read_chip_id(chip);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to read chip id(%d)\n", ret);
+		return ret;
+	}
+
+	ret = sysfs_create_group(&dev->kobj, &attr_group);
+	if (ret) {
+		dev_err(dev, "Failed to create attribute group: %d\n", ret);
+		return ret;
 	}
 
 	return ret;
