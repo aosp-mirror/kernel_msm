@@ -819,7 +819,7 @@ static void p9221_dcin_work(struct work_struct *work)
 static void p9221_align_work(struct work_struct *work)
 {
 	int res, align_buckets, i;
-	u16 mfg, status_reg = 0;
+	u16 status_reg = 0;
 	u16 current_now, current_filter_sample;
 	u32 wlc_freq, current_scaling;
 	struct p9221_charger_data *charger = container_of(work,
@@ -840,22 +840,6 @@ static void p9221_align_work(struct work_struct *work)
 
 	if (!(status_reg & P9221R5_STAT_VOUTCHANGED))
 		return;
-
-	if (!p9221_is_epp(charger))
-		return;
-
-	res = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG, &mfg);
-	if (res < 0) {
-		dev_err(&charger->client->dev,
-			"cannot read MFG_CODE (%d)\n", res);
-		return;
-	}
-
-	if (mfg != WLC_MFG_GOOGLE) {
-		logbuffer_log(charger->log,
-			      "align: not google wlc mfg: 0x%x", mfg);
-		return;
-	}
 
 	if (charger->pdata->wlc_alignment_scalar == 0)
 		goto no_scaling;
@@ -1300,6 +1284,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 {
 	int ret;
 	u8 cid = 5;
+	u16 mfg;
 
 	dev_info(&charger->client->dev, "Set online\n");
 
@@ -1326,6 +1311,22 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	p9221_write_fod(charger);
 
 	cancel_delayed_work(&charger->dcin_pon_work);
+
+	if (!p9221_is_epp(charger))
+		return;
+
+	ret = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG, &mfg);
+	if (ret < 0) {
+		dev_err(&charger->client->dev,
+			"cannot read MFG_CODE (%d)\n", ret);
+		return;
+	}
+
+	if (mfg != WLC_MFG_GOOGLE) {
+		logbuffer_log(charger->log,
+			      "align: not google wlc mfg: 0x%x", mfg);
+		return;
+	}
 
 	/* Reset last alignment value when online */
 	charger->wlc_alignment_last = -1;
