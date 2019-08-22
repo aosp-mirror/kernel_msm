@@ -28,5 +28,8 @@ System.map
 EXT_MODULES="
 private/msm-google-modules/wlan/qcacld-3.0
 "
+UNSTRIPPED_MODULES="
+wlan.ko
+"
 IN_KERNEL_MODULES=1
 STOP_SHIP_TRACEPRINTK=1
