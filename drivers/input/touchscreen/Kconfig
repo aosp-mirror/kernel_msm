@@ -1339,6 +1339,13 @@ config TOUCHSCREEN_ST
 
 source "drivers/input/touchscreen/st/Kconfig"
 
+config TOUCHSCREEN_HEATMAP
+	tristate "Heatmap support for touchscreen"
+	select VIDEOBUF2_VMALLOC
+	help
+	  Do not explicitly select this option. The drivers that utilize
+	  this module must select this in their Kconfig.
+
 config TOUCHSCREEN_SYNAPTICS_DSX
 	bool "Synaptics DSX Touchscreen Driver"
 	depends on TOUCHSCREEN_SYNAPTICS_DSX_v27!=y
