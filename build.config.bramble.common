@@ -27,6 +27,7 @@ System.map
 "
 EXT_MODULES="
 private/msm-google-modules/wlan/qcacld-3.0
+private/msm-google-modules/touch/fts
 "
 UNSTRIPPED_MODULES="
 wlan.ko
