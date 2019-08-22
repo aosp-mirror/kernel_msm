@@ -735,7 +735,7 @@ static void psy_changed_handler(struct work_struct *work)
 		      get_typec_cc_orientation_name(typec_cc_orientation),
 		      get_typec_cc_status_name(cc1),
 		      get_typec_cc_status_name(cc2),
-		      pd->external_vbus_update ? "Y" : "N",
+		      pd->ext_vbus_reg ? "Y" : "N",
 		      wireless_online ? "Y" : "N");
 
 	mutex_lock(&pd->lock);
