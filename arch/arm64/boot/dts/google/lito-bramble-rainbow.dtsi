@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/*
+ * Copyright (c) 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,10 +12,16 @@
  * GNU General Public License for more details.
  */
 
-#include "lito-redbull-common.dtsi"
-#include "lito-bramble-audio.dtsi"
-#include "lito-bramble-camera-sensor.dtsi"
-#include "lito-bramble-display.dtsi"
-#include "lito-bramble-thermal.dtsi"
-#include "lito-bramble-usb.dtsi"
-#include "lito-bramble-rainbow.dtsi"
+&qupv3_se11_i2c {
+	/* VD6281 */
+	status = "ok";
+	qcom,clk-freq-out = <1000000>;
+	vd6281: vd6281@20 {
+		compatible = "st,vd6281";
+		reg = <0x20>;
+		vdd-supply = <&pm8150_l17>;
+		vio-supply = <&slg51000_ldo7>;
+		regulator-names = "vdd";
+		status = "ok";
+	};
+};
