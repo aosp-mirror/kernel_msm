@@ -144,6 +144,12 @@ config HID_ASUS
 	- EeeBook X205TA
 	- VivoBook E200HA
 
+config HID_ASUS_GAMEPAD
+	tristate "Asus Gamepad"
+	depends on HID
+	---help---
+	Support for Asus Gamepad joystick.
+
 config HID_AUREAL
 	tristate "Aureal"
 	depends on HID
