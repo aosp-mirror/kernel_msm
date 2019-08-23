@@ -12,4 +12,4 @@
  */
 
 #include "lito-bramble.dtsi"
-//#include "lito-google-display-dev.dtsi"
+//#include "lito-redbull-display-dev.dtsi"

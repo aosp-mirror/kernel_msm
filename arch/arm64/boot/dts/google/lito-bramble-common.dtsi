@@ -11,9 +11,9 @@
  * GNU General Public License for more details.
  */
 
+#include "lito-redbull-common.dtsi"
 #include "lito-bramble-audio.dtsi"
 #include "lito-bramble-camera-sensor.dtsi"
 #include "lito-bramble-display.dtsi"
 #include "lito-bramble-thermal.dtsi"
 #include "lito-bramble-usb.dtsi"
-#include "lito-google-common.dtsi"

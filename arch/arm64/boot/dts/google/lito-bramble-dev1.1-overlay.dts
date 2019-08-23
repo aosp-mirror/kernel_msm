@@ -7,7 +7,7 @@
 /plugin/;
 
 #include "lito-bramble-dev.dtsi"
-#include "lito-google-display-dev.dtsi"
+#include "lito-redbull-display-dev.dtsi"
 
 / {
 	model = "Google Inc. MSM sm7250 Bramble DEV 1.1";

@@ -12,4 +12,4 @@
 * GNU General Public License for more details.
 */
 
-#include "lito-google-led-laser.dtsi"
+#include "lito-redbull-led-laser.dtsi"
