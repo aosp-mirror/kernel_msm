@@ -186,6 +186,48 @@ static const struct regmap_config slg51000_regmap_config = {
 	.volatile_table = &slg51000_volatile_table,
 };
 
+static int slg51000_regmap_read(struct regmap *map, unsigned int reg,
+			      unsigned int *val)
+{
+	int ret, retry = 0;
+
+	if (map == NULL || val == NULL)
+		return -EINVAL;
+
+	do {
+		ret = regmap_read(map, reg, val);
+		if (ret >= 0)
+			break;
+		retry++;
+		pr_err("%s: i2c read error=%d, retry count: %d\n",
+			__func__, ret, retry);
+		usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
+	} while (retry < MAX_RETRY);
+
+	return ret;
+}
+
+static int slg51000_regmap_bulk_read(struct regmap *map, unsigned int reg,
+				   void *val, size_t val_count)
+{
+	int ret, retry = 0;
+
+	if (map == NULL || val == NULL)
+		return -EINVAL;
+
+	do {
+		ret = regmap_bulk_read(map, reg, val, val_count);
+		if (ret >= 0)
+			break;
+		retry++;
+		pr_err("%s: i2c read error=%d, retry count: %d\n",
+			__func__, ret, retry);
+		usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
+	} while (retry < MAX_RETRY);
+
+	return ret;
+}
+
 static int slg51000_get_status(struct regulator_dev *rdev)
 {
 	struct slg51000 *chip = rdev_get_drvdata(rdev);
@@ -202,7 +244,7 @@ static int slg51000_get_status(struct regulator_dev *rdev)
 	if (!ret)
 		return REGULATOR_STATUS_OFF;
 
-	ret = regmap_read(chip->regmap, es_reg[id].sreg, &status);
+	ret = slg51000_regmap_read(chip->regmap, es_reg[id].sreg, &status);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to read status register(%d)\n",
 			ret);
@@ -290,7 +332,7 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 	struct regulator_desc *rdesc;
 	unsigned int reg, val;
 	u8 vsel_range[2];
-	int id, ret = 0, retry = 0;
+	int id, ret = 0;
 	const unsigned int min_regs[SLG51000_MAX_REGULATORS] = {
 		SLG51000_LDO1_MINV, SLG51000_LDO2_MINV, SLG51000_LDO3_MINV,
 		SLG51000_LDO4_MINV, SLG51000_LDO5_MINV, SLG51000_LDO6_MINV,
@@ -304,17 +346,8 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 		config.dev = chip->dev;
 		config.driver_data = chip;
 
-		retry = 0;
-		do {
-			ret = regmap_bulk_read(chip->regmap, min_regs[id],
+		ret = slg51000_regmap_bulk_read(chip->regmap, min_regs[id],
 						vsel_range, 2);
-			if (ret >= 0)
-				break;
-
-			dev_err(chip->dev, "Failed to read the MIN register\n");
-			retry++;
-			usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
-		} while (retry < MAX_RETRY);
 
 		switch (id) {
 		case SLG51000_REGULATOR_LDO5:
@@ -324,16 +357,7 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 			else
 				reg = SLG51000_LDO6_TRIM2;
 
-			retry = 0;
-			do {
-				ret = regmap_read(chip->regmap, reg, &val);
-				if (ret >= 0)
-					break;
-
-				dev_err(chip->dev, "Failed to read LDO mode register\n");
-				retry++;
-				usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
-			} while (retry < MAX_RETRY);
+			ret = slg51000_regmap_read(chip->regmap, reg, &val);
 
 			if (val & SLG51000_SEL_BYP_MODE_MASK) {
 				rdesc->ops = &slg51000_switch_ops;
@@ -378,7 +402,8 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 
 	/* Read event[R0], status[R1] and mask[R2] register */
 	for (i = 0; i < SLG51000_MAX_EVT_REGISTER; i++) {
-		ret = regmap_bulk_read(regmap, es_reg[i].ereg, evt[i], REG_MAX);
+		ret = slg51000_regmap_bulk_read(regmap, es_reg[i].ereg,
+						evt[i], REG_MAX);
 		if (ret < 0) {
 			dev_err(chip->dev,
 				"Failed to read event registers(%d)\n", ret);
@@ -386,14 +411,14 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 		}
 	}
 
-	ret = regmap_read(regmap, SLG51000_OTP_EVENT, &evt_otp);
+	ret = slg51000_regmap_read(regmap, SLG51000_OTP_EVENT, &evt_otp);
 	if (ret < 0) {
 		dev_err(chip->dev,
 			"Failed to read otp event registers(%d)\n", ret);
 		return IRQ_NONE;
 	}
 
-	ret = regmap_read(regmap, SLG51000_OTP_IRQ_MASK, &mask_otp);
+	ret = slg51000_regmap_read(regmap, SLG51000_OTP_IRQ_MASK, &mask_otp);
 	if (ret < 0) {
 		dev_err(chip->dev,
 			"Failed to read otp mask register(%d)\n", ret);
@@ -449,7 +474,8 @@ static void slg51000_clear_fault_log(struct slg51000 *chip)
 	unsigned int val = 0;
 	int ret = 0;
 
-	ret = regmap_read(chip->regmap, SLG51000_SYSCTL_FAULT_LOG1, &val);
+	ret = slg51000_regmap_read(chip->regmap,
+					SLG51000_SYSCTL_FAULT_LOG1, &val);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to read Fault log register\n");
 		return;
@@ -474,8 +500,9 @@ static int read_chip_id(struct slg51000 *chip)
 		return -EINVAL;
 	}
 
-	ret = regmap_bulk_read(chip->regmap, SLG51000_SYSCTL_PATN_ID_B0,
-				chip_id, 3);
+	ret = slg51000_regmap_bulk_read(chip->regmap,
+					SLG51000_SYSCTL_PATN_ID_B0,
+					chip_id, 3);
 	if (ret < 0) {
 		dev_err(chip->dev,
 			"Failed to read chip id registers(%d)\n", ret);
