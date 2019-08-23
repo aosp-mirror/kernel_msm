@@ -248,30 +248,6 @@
 	qcom,cl-feedback-on;
 };
 
-&qupv3_se7_i2c {
-	#address-cells = <1>;
-	#size-cells = <0>;
-	status = "ok";
-
-	st_fts@49 {
-		compatible = "st,fts";
-		reg = <0x49>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <9 0x2008>;
-		vdd-supply = <&pm8150_s4>;
-		avdd-supply = <&pm8150_l13>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		st,irq-gpio = <&tlmm 9 0x2008>;
-		st,reset-gpio = <&tlmm 8 0x00>;
-		st,regulator_dvdd = "vdd";
-		st,regulator_avdd = "avdd";
-		st,x-flip = <1>;
-		st,y-flip = <1>;
-	};
-};
-
 &dsi_sw43404_amoled_video {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
@@ -304,29 +280,6 @@
 
 &sde_dsi {
 	qcom,dsi-default-panel = <&dsi_sw43404_amoled_video>;
-};
-
-&qupv3_se0_i2c {
-	status = "ok";
-	qcom,clk-freq-out = <1000000>;
-	#address-cells = <1>;
-	#size-cells = <0>;
-	nq@28 {
-		compatible = "qcom,nq-nci";
-		reg = <0x28>;
-		qcom,nq-irq = <&tlmm 34 0x00>;
-		qcom,nq-ven = <&tlmm 12 0x00>;
-		qcom,nq-firm = <&tlmm 35 0x00>;
-		qcom,nq-clkreq = <&tlmm 31 0x00>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <34 0>;
-		interrupt-names = "nfc_irq";
-		pinctrl-names = "nfc_active", "nfc_suspend";
-		pinctrl-0 = <&nfc_int_active &nfc_enable_active
-				&nfc_clk_req_active>;
-		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
-				&nfc_clk_req_suspend>;
-	};
 };
 
 &android_vbmeta {
