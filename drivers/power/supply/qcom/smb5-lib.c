@@ -4613,7 +4613,7 @@ int smblib_set_prop_pd_active(struct smb_charger *chg,
 		 * It is guaranteed that pd_active is set prior to
 		 * pd_current_max
 		 */
-		vote(chg->usb_icl_votable, PD_VOTER, true, USBIN_100MA);
+		vote(chg->usb_icl_votable, PD_VOTER, true, /*USBIN_100MA*/ 0);
 		vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
 
