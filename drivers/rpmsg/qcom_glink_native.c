@@ -116,6 +116,7 @@ struct glink_core_rx_intent {
  * @rx_pipe:	pipe object for receive FIFO
  * @tx_pipe:	pipe object for transmit FIFO
  * @irq:	IRQ for signaling incoming events
+ * @irq_name:	name registered for IRQ
  * @kworker:	kworker to handle rx_done work
  * @task:	kthread running @kworker
  * @rx_work:	worker for handling received control messages
@@ -140,6 +141,7 @@ struct qcom_glink {
 	struct qcom_glink_pipe *tx_pipe;
 
 	int irq;
+	const char *irq_name;
 
 	struct kthread_worker kworker;
 	struct task_struct *task;
@@ -1912,11 +1914,14 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 					   struct qcom_glink_pipe *tx,
 					   bool intentless)
 {
+	static const char *unknown_irq = "unknown";
+	static const char *irq_prefix = "glink-native-";
 	struct qcom_glink *glink;
 	u32 *arr;
 	int size;
 	int irq;
 	int ret;
+	const char *irq_src;
 
 	glink = devm_kzalloc(dev, sizeof(*glink), GFP_KERNEL);
 	if (!glink)
@@ -1945,6 +1950,15 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	if (ret < 0)
 		glink->name = dev->of_node->name;
 
+	irq_src = glink->name;
+	if (irq_src == NULL)
+		irq_src = unknown_irq;
+	size = strlen(irq_prefix) + strlen(irq_src) + 1;
+	glink->irq_name = devm_kzalloc(dev, size, GFP_KERNEL);
+	if (!glink->irq_name)
+		return ERR_PTR(-ENOMEM);
+	snprintf((char *)glink->irq_name, size, "%s%s", irq_prefix, irq_src);
+
 	glink->mbox_client.dev = dev;
 	glink->mbox_client.knows_txdone = true;
 	glink->mbox_chan = mbox_request_channel(&glink->mbox_client, 0);
@@ -1972,7 +1986,7 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	ret = devm_request_irq(dev, irq,
 			       qcom_glink_native_intr,
 			       IRQF_SHARED,
-			       "glink-native", glink);
+			       glink->irq_name, glink);
 	if (ret) {
 		dev_err(dev, "failed to request IRQ\n");
 		goto unregister;
