@@ -1974,7 +1974,6 @@ int ab_sm_disable_pcie(struct ab_state_context *ab_ctx)
 static void __ab_sm_schedule_shutdown_work(struct ab_state_context *sc,
 					   const char *reason)
 {
-
 	if (atomic_cmpxchg(&sc->is_cleanup_in_progress,
 			   AB_SM_CLEANUP_NOT_IN_PROGRESS,
 			   AB_SM_CLEANUP_IN_PROGRESS) ==
@@ -1986,8 +1985,6 @@ static void __ab_sm_schedule_shutdown_work(struct ab_state_context *sc,
 	sc->asv_info.last_volt = 0; /* reset cache of last voltage */
 	dev_info(sc->dev, "schedule shutdown work for reason: %s\n", reason);
 	schedule_work(&sc->shutdown_work);
-	sysfs_notify(&sc->dev->kobj, NULL, "error_event");
-
 }
 
 static void __throttle_nocompute_notify(struct ab_state_context *sc);
