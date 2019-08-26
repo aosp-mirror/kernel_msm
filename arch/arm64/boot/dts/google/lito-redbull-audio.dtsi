@@ -12,3 +12,256 @@
  */
 
 #include "qcom-base/lito-audio-overlay.dtsi"
+
+&lito_snd {
+	qcom,audio-routing =
+		"AMIC1", "MIC BIAS1",
+		"MIC BIAS1", "Analog Mic1",
+		"AMIC2", "MIC BIAS2",
+		"MIC BIAS2", "Analog Mic2",
+		"AMIC3", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic3",
+		"AMIC4", "MIC BIAS3",
+		"MIC BIAS3", "Analog Mic4",
+		"AMIC5", "MIC BIAS4",
+		"MIC BIAS4", "Analog Mic5",
+		"TX DMIC0", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic0",
+		"TX DMIC1", "MIC BIAS3",
+		"MIC BIAS3", "Digital Mic1",
+		"TX DMIC2", "MIC BIAS1",
+		"MIC BIAS1", "Digital Mic2",
+		"TX DMIC3", "MIC BIAS1",
+		"MIC BIAS1", "Digital Mic3",
+		"TX DMIC4", "MIC BIAS4",
+		"MIC BIAS4", "Digital Mic4",
+		"TX DMIC5", "MIC BIAS4",
+		"MIC BIAS4", "Digital Mic5",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
+		"IN3_AUX", "AUX_OUT",
+		"TX SWR_ADC0", "ADC1_OUTPUT",
+		"TX SWR_ADC1", "ADC2_OUTPUT",
+		"TX SWR_ADC2", "ADC3_OUTPUT",
+		"TX SWR_ADC3", "ADC4_OUTPUT",
+		"TX SWR_DMIC0", "DMIC1_OUTPUT",
+		"TX SWR_DMIC1", "DMIC2_OUTPUT",
+		"TX SWR_DMIC2", "DMIC3_OUTPUT",
+		"TX SWR_DMIC3", "DMIC4_OUTPUT",
+		"TX SWR_DMIC4", "DMIC5_OUTPUT",
+		"TX SWR_DMIC5", "DMIC6_OUTPUT",
+		"TX SWR_DMIC6", "DMIC7_OUTPUT",
+		"TX SWR_DMIC7", "DMIC8_OUTPUT",
+		"WSA SRC0_INP", "SRC0",
+		"WSA_TX DEC0_INP", "TX DEC0 MUX",
+		"WSA_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC0_INP", "TX DEC0 MUX",
+		"RX_TX DEC1_INP", "TX DEC1 MUX",
+		"RX_TX DEC2_INP", "TX DEC2 MUX",
+		"RX_TX DEC3_INP", "TX DEC3 MUX",
+		"SpkrLeft IN", "WSA_SPK1 OUT",
+		"SpkrRight IN", "WSA_SPK2 OUT",
+		"VA_AIF1 CAP", "VA_SWR_CLK",
+		"VA_AIF2 CAP", "VA_SWR_CLK",
+		"VA_AIF3 CAP", "VA_SWR_CLK",
+		"VA DMIC0", "MIC BIAS3",
+		"VA DMIC1", "MIC BIAS3",
+		"VA DMIC2", "MIC BIAS1",
+		"VA DMIC3", "MIC BIAS1",
+		"VA DMIC4", "MIC BIAS4",
+		"VA DMIC5", "MIC BIAS4",
+		"VA SWR_ADC0", "ADC1_OUTPUT",
+		"VA SWR_ADC1", "ADC2_OUTPUT",
+		"VA SWR_ADC2", "ADC3_OUTPUT",
+		"VA SWR_ADC3", "ADC4_OUTPUT",
+		"VA SWR_MIC0", "DMIC1_OUTPUT",
+		"VA SWR_MIC1", "DMIC2_OUTPUT",
+		"VA SWR_MIC2", "DMIC3_OUTPUT",
+		"VA SWR_MIC3", "DMIC4_OUTPUT",
+		"VA SWR_MIC4", "DMIC5_OUTPUT",
+		"VA SWR_MIC5", "DMIC6_OUTPUT",
+		"VA SWR_MIC6", "DMIC7_OUTPUT",
+		"VA SWR_MIC7", "DMIC8_OUTPUT",
+		"Stereo1 DMIC Mux", "Audio LDO Mic1",
+		"Stereo2 DMIC Mux", "Audio LDO Mic2",
+		"DSP_IN1", "Audio LDO Mic1",
+		"DSP_IN1", "Audio LDO Mic2",
+		"DSP_IN2", "Audio LDO Mic1",
+		"DSP_IN2", "Audio LDO Mic2";
+	audio_ldo1-gpios = <&pm7250b_gpios 6 0>;
+	audio_ldo2-gpios = <&pm8150l_gpios 6 0>;
+};
+
+&qupv3_se7_i2c {
+	status = "ok";
+	rt5514: audio-codec@57 {
+		compatible = "realtek,rt5514";
+		reg = <0x57>;
+	};
+};
+
+&tlmm {
+	pri_tdm {
+		pri_tdm_sleep: pri_tdm_sleep {
+			mux {
+				pins = "gpio49";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio49";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;         /* PULL DOWN */
+				input-enable;
+			};
+		};
+
+		pri_tdm_active: pri_tdm_active {
+			mux {
+				pins = "gpio49";
+				function = "pri_mi2s";
+			};
+
+			config {
+				pins = "gpio49";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable;           /* NO PULL */
+			};
+		};
+	};
+
+	pri_tdm_ws {
+		pri_tdm_ws_sleep: pri_tdm_ws_sleep {
+			mux {
+				pins = "gpio50";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio50";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;         /* PULL DOWN */
+				input-enable;
+			};
+		};
+
+		pri_tdm_ws_active: pri_tdm_ws_active {
+			mux {
+				pins = "gpio50";
+				function = "pri_mi2s_ws";
+			};
+
+			config {
+				pins = "gpio50";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable;           /* NO PULL */
+			};
+		};
+	};
+
+	pri_tdm_dout {
+		pri_tdm_dout_sleep: pri_tdm_dout_sleep {
+			mux {
+				pins = "gpio52";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio52";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;         /* PULL DOWN */
+				input-enable;
+			};
+		};
+
+		pri_tdm_dout_active: pri_tdm_dout_active {
+			mux {
+				pins = "gpio52";
+				function = "pri_mi2s";
+			};
+
+			config {
+				pins = "gpio52";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable;           /* NO PULL */
+			};
+		};
+	};
+
+	pri_tdm_din {
+		pri_tdm_din_sleep: pri_tdm_din_sleep {
+			mux {
+				pins = "gpio51";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio51";
+				drive-strength = <2>;   /* 2 mA */
+				bias-pull-down;         /* PULL DOWN */
+				input-enable;
+			};
+		};
+
+		pri_tdm_din_active: pri_tdm_din_active {
+			mux {
+				pins = "gpio51";
+				function = "pri_mi2s";
+			};
+
+			config {
+				pins = "gpio51";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable;           /* NO PULL */
+			};
+		};
+	};
+
+	rt5514_pin {
+		rt5514_irq: rt5514_irq {
+			mux {
+				pins = "gpio65";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio65";
+				drive-strength = <2>;
+				pull-down;
+				input-enable;
+			};
+		};
+	};
+};
+
+&tdm_pri_tx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <0>;
+};
+
+&dai_pri_tdm_tx_0 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&pri_tdm_active &pri_tdm_ws_active
+		&pri_tdm_dout_active &pri_tdm_din_active>;
+	pinctrl-1 = <&pri_tdm_sleep &pri_tdm_ws_sleep
+		&pri_tdm_dout_sleep &pri_tdm_din_sleep>;
+};
+
+&qupv3_se4_spi {
+	status = "ok";
+	mnh-spi@0 {
+		compatible = "realtek,rt5514";
+		reg = <0>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <65 0>;
+		irq-gpio = <&tlmm 65 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rt5514_irq>;
+		spi-max-frequency = <10000000>;
+		spi-cpol;
+		spi-cpha;
+		realtek,hotword-ignore-ms = <1000>;
+		realtek,musdet-ignore-ms = <2000>;
+	};
+};
