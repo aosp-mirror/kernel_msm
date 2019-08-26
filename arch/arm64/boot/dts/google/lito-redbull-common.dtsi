@@ -64,6 +64,13 @@
 		qcom,batt-id-range-pct = <15>;
 		#include "qcom-base/qg-batterydata-alium-3600mah.dtsi"
 	};
+
+	keydebug {
+		compatible = "keydebug";
+		key_down_delay = <7000>;
+		keys_down = <116>;
+		dbg_fn_delay = <2500>;
+	};
 };
 
 &usb_qmp_dp_phy {
