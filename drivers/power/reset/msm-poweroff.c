@@ -17,6 +17,10 @@
 #include <linux/delay.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/of_address.h>
+#include <linux/kdebug.h>
+#include <linux/notifier.h>
+#include <linux/kallsyms.h>
+#include <linux/io.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -40,6 +44,11 @@
 #define SCM_DLOAD_CMD			0x10
 #define SCM_DLOAD_MINIDUMP		0X20
 #define SCM_DLOAD_BOTHDUMPS	(SCM_DLOAD_MINIDUMP | SCM_DLOAD_FULLDUMP)
+#define MAX_SZ_DIAG_ERR_MSG		100
+
+struct reboot_params {
+	u8 msg[0];
+};
 
 #define DL_MODE_PROP "qcom,msm-imem-download_mode"
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
@@ -50,6 +59,8 @@
 
 static int restart_mode;
 static void *restart_reason, *dload_type_addr;
+static struct reboot_params *reboot_params;
+static size_t rst_msg_size;
 static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
@@ -119,6 +130,34 @@ static int dload_set(const char *val, const struct kernel_param *kp);
 module_param_call(download_mode, dload_set, param_get_int,
 			&download_mode, 0644);
 
+static struct die_args *tombstone;
+
+static inline void set_restart_msg(const char *msg)
+{
+	if (!reboot_params || rst_msg_size == 0)
+		return;
+
+	pr_info("%s: set restart msg = `%s'\r\n", __func__, msg?:"<null>");
+	memset_io(reboot_params->msg, 0, rst_msg_size);
+	memcpy_toio(reboot_params->msg, msg,
+			min(strlen(msg), rst_msg_size - 1));
+}
+
+int die_notify(struct notifier_block *self,
+				       unsigned long val, void *data)
+{
+	static struct die_args args;
+
+	memcpy(&args, data, sizeof(args));
+	tombstone = &args;
+	pr_debug("saving oops: %pK\n", (void *) tombstone);
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block die_nb = {
+	.notifier_call = die_notify,
+};
+
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 			       char *buf);
 static ssize_t attr_store(struct kobject *kobj, struct attribute *attr,
@@ -135,6 +174,35 @@ static struct kobj_type reset_ktype = {
 static int panic_prep_restart(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
+	char kernel_panic_msg[MAX_SZ_DIAG_ERR_MSG] = "Kernel Panic";
+
+	if (rst_msg_size <= 0)
+		goto out;
+
+	if (tombstone) { /* tamper the panic message for Oops */
+		char pc_symn[KSYM_NAME_LEN] = "<unknown>";
+		char lr_symn[KSYM_NAME_LEN] = "<unknown>";
+
+#if defined(CONFIG_ARM)
+		sprint_symbol(pc_symn, tombstone->regs->ARM_pc);
+		sprint_symbol(lr_symn, tombstone->regs->ARM_lr);
+#elif defined(CONFIG_ARM64)
+		sprint_symbol(pc_symn, tombstone->regs->pc);
+		sprint_symbol(lr_symn, tombstone->regs->regs[30]);
+#endif
+
+		snprintf(kernel_panic_msg, rst_msg_size - 1,
+				"KP: %s PC:%s LR:%s",
+				current->comm, pc_symn, lr_symn);
+
+	} else {
+		snprintf(kernel_panic_msg, rst_msg_size - 1,
+				"KP: %s", (char *)ptr);
+	}
+
+	set_restart_msg(kernel_panic_msg);
+
+out:
 	in_panic = 1;
 	return NOTIFY_DONE;
 }
@@ -287,6 +355,7 @@ static void setup_dload_mode_support(void)
 	if (scm_is_call_available(SCM_SVC_BOOT, SCM_DLOAD_CMD) > 0)
 		scm_dload_supported = true;
 
+	register_die_notifier(&die_nb);
 	atomic_notifier_chain_register(&panic_notifier_list, &panic_blk);
 
 	dload_mode_addr = map_prop_mem(DL_MODE_PROP);
@@ -603,12 +672,52 @@ static void do_msm_poweroff(void)
 	pr_err("Powering off has failed\n");
 }
 
+int restart_handler_init(void)
+{
+	struct device_node *np;
+	struct resource res;
+	u32 rst_info_size = 0;
+
+	np = of_find_compatible_node(NULL, NULL,
+				"msm-imem-rst_info");
+	if (!np) {
+		pr_err("unable to find DT imem rst info node\n");
+		return -ENOENT;
+	} else {
+		reboot_params = of_iomap(np, 0);
+		if (!reboot_params) {
+			pr_err("unable to map imem rst info offset\n");
+			return -ENOMEM;
+		}
+
+		of_address_to_resource(np, 0, &res);
+		rst_info_size = resource_size(&res);
+		if (rst_info_size == 0) {
+			pr_err("%s: Failed to find info_size.\n", __func__);
+			iounmap(reboot_params);
+			return -EINVAL;
+		}
+	}
+
+	rst_msg_size = (size_t) rst_info_size -
+		       offsetof(struct reboot_params, msg);
+	rst_msg_size = min(rst_msg_size, (size_t)MAX_SZ_DIAG_ERR_MSG);
+
+	set_restart_msg("Unknown");
+	pr_debug("%s: default message is set\n", __func__);
+	return 0;
+}
+
 static int msm_restart_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct resource *mem;
 	struct device_node *np;
 	int ret = 0;
+
+
+	if (restart_handler_init() < 0)
+		pr_err("restart_handler_init failure\n");
 
 	setup_dload_mode_support();
 
