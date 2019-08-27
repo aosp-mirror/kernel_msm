@@ -1365,6 +1365,12 @@ rerun_error:
 		pr_err("MSC_CHG error rerun=%d in %d ms (%d)\n",
 			success, CHG_WORK_ERROR_RETRY_MS, rc);
 
+	/* If stay_awake is false, we are safe to ping the adapter */
+	if (!chg_drv->pps_data.stay_awake &&
+	    chg_drv->pps_data.stage == PPS_ACTIVE)
+		pps_ping(&chg_drv->pps_data, chg_drv->tcpm_psy);
+
+	return;
 exit_chg_work:
 	/* Route adapter details after the roundtrip since google_battery
 	 * might overwrite the value when it starts a new cycle.
