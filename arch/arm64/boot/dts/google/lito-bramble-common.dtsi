@@ -17,4 +17,3 @@
 #include "lito-bramble-display.dtsi"
 #include "lito-bramble-thermal.dtsi"
 #include "lito-bramble-usb.dtsi"
-#include "lito-bramble-rainbow.dtsi"

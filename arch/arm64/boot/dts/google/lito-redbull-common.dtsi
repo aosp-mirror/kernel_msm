@@ -29,6 +29,7 @@
 #include "lito-redbull-thermal.dtsi"
 #include "lito-redbull-touch.dtsi"
 #include "lito-redbull-usb.dtsi"
+#include "lito-redbull-rainbow.dtsi"
 
 &soc {
 	gpio_keys {
