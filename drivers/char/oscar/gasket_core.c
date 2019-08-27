@@ -1009,13 +1009,14 @@ static int gasket_mmap_coherent(struct gasket_dev *gasket_dev,
 	}
 
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-
-	ret = remap_pfn_range(vma, vma->vm_start,
-			      (gasket_dev->coherent_buffer.phys_base) >>
-			      PAGE_SHIFT, requested_length, vma->vm_page_prot);
+	vma->vm_pgoff = 0;
+	ret = dma_mmap_coherent(gasket_dev->dma_dev, vma,
+				gasket_dev->coherent_buffer.virt_base,
+				gasket_dev->coherent_buffer.phys_base,
+				requested_length);
 	if (ret) {
-		dev_err(gasket_dev->dev, "Error remapping PFN range err=%d.\n",
-			ret);
+		dev_err(gasket_dev->dev,
+			"Error mmapping coherent buffer err=%d.\n", ret);
 		trace_gasket_mmap_exit(ret);
 		return ret;
 	}
