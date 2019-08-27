@@ -43,6 +43,12 @@
  */
 
 &reserved_memory {
+	debug_info: debug_info@B09A1000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB09A1000 0 0x20000>;
+	};
+
 	ramoops@B09C1000 {
 		compatible = "ramoops";
 		reg = <0 0xB09C1000 0 0x400000>;

@@ -77,6 +77,13 @@
 		};
 	};
 
+	bootloader_log {
+		compatible = "qcom,bldr_log";
+		reg = <0xB09A1000 0xB400>, <0xB09AC400 0xB400>;
+		reg-names = "bl_log", "bl_old_log";
+		memory-region = <&debug_info>;
+	};
+
 	qmp_dp_phy_core_supply: qmp_dp_phy_core_supply {
 		compatible = "regulator-fixed";
 		regulator-name = "core_supply";
