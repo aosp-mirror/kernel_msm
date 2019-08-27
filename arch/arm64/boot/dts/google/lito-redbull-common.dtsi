@@ -14,11 +14,11 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include "qcom-base/lito-pmic-overlay.dtsi"
-#include "qcom-base/lito-camera-sensor-mtp.dtsi"
 #include "qcom-base/lito-thermal-overlay.dtsi"
 
 #include "lito-redbull-audio.dtsi"
 #include "lito-redbull-camera-pmic.dtsi"
+#include "lito-redbull-camera-sensor.dtsi"
 #include "lito-redbull-display.dtsi"
 #include "lito-redbull-memory.dtsi"
 #include "lito-redbull-nfc.dtsi"
