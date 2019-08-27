@@ -203,6 +203,7 @@
 		google,chg-cc-tolerance = <25>;
 
 		google,pps-cc-tolerance-pct = <5>;
+		google,pps-awake;
 	};
 
 	google_wlc_charger: google,wlc_charger {
