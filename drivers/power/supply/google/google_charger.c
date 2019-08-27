@@ -108,6 +108,8 @@ enum pd_pps_stage {
 };
 
 struct pd_pps_data {
+	struct wakeup_source pps_ws;
+	bool stay_awake;
 	unsigned int stage;
 	int pd_online;
 	time_t last_update;
@@ -333,6 +335,8 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 	tcpm_put_partner_src_caps(&chg_drv->pps_data.src_caps);
 #endif
 	chg_drv->pps_data.src_caps = NULL;
+	if (chg_drv->pps_data.stay_awake)
+		__pm_relax(&chg_drv->pps_data.pps_ws);
 }
 
 /* NOTE: doesn't reset chg_drv->adapter_details.v = 0 see chg_work() */
@@ -682,6 +686,9 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 				return 0;
 			}
 
+			if (pps->stay_awake)
+				__pm_stay_awake(&pps->pps_ws);
+
 			pps->last_update = get_boot_sec();
 			rc = pps_get_src_cap(pps, tcpm_psy);
 			if (rc < 0)
@@ -734,6 +741,8 @@ static int pps_work(struct pd_pps_data *pps, struct power_supply *tcpm_psy)
 			/* pps_update_interval==0 disable the vote */
 			logbuffer_log(pps->log,"PPS not supported");
 			pps->stage = PPS_DISABLED;
+			if (pps->stay_awake)
+				__pm_relax(&pps->pps_ws);
 		} else if (rc != 0) {
 			logbuffer_log(pps->log,
 				      "failed to set PROP_ONLINE, rc = %d",
@@ -833,6 +842,8 @@ static int pps_update_adapter(struct chg_drv *chg_drv,
 		pps->pd_online = TCPM_PSY_FIXED_ONLINE;
 		pps->keep_alive_cnt = 0;
 		logbuffer_log(pps->log,"PPS deactivated while updating");
+		if (pps->stay_awake)
+			__pm_relax(&pps->pps_ws);
 	}
 
 	return ret;
@@ -1463,6 +1474,16 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 		pr_info("renegotiate on full\n");
 		chg_drv->chg_term.usb_5v = 0;
 	}
+
+	/* The port needs to ping or update the PPS adapter every 10 seconds
+	 * (maximum). However, Qualcomm PD phy returns error when system is
+	 * waking up. To prevent the timeout when system is resumed from
+	 * suspend, hold a wakelock while PPS is active.
+	 *
+	 * Remove this wakeup source once we fix the Qualcomm PD phy issue.
+	 */
+	chg_drv->pps_data.stay_awake =
+		of_property_read_bool(node, "google,pps-awake");
 
 	pr_info("charging profile in the battery\n");
 
@@ -2770,6 +2791,9 @@ static int google_charger_probe(struct platform_device *pdev)
 	/* votables and chg_work need a wakeup source */
 	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
 
+	/* pps may need a wakeup source */
+	wakeup_source_init(&chg_drv->pps_data.pps_ws, "google-pps");
+
 	/* create the votables before talking to google_battery */
 	ret = chg_create_votables(chg_drv);
 	if (ret < 0)
@@ -2824,6 +2848,7 @@ static int google_charger_remove(struct platform_device *pdev)
 			power_supply_put(chg_drv->tcpm_psy);
 
 		wakeup_source_trash(&chg_drv->chg_ws);
+		wakeup_source_trash(&chg_drv->pps_data.pps_ws);
 
 		alarm_try_to_cancel(&chg_drv->chg_wakeup_alarm);
 
