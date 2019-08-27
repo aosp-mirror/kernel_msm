@@ -50,6 +50,33 @@
 		};
 	};
 
+	qcom,msm-imem@146ab000 {
+		uuid_info@cf0 {
+			compatible = "msm-imem-uuid_info";
+			reg = <0xcf0 64>;
+		};
+
+		rst_info@d30 {
+			compatible = "msm-imem-rst_info";
+			reg = <0xd30 100>;
+		};
+
+		bldr_info@d94 {
+			compatible = "msm-imem-bldr_info";
+			reg = <0xd94 256>;
+		};
+
+		kernel_info@e94 {
+			compatible = "msm-imem-kernel_info";
+			reg = <0xe94 256>;
+		};
+
+		gplatform_data@f94 {
+			compatible = "msm-imem-gplatform_data";
+			reg = <0xf94 8>;
+		};
+	};
+
 	qmp_dp_phy_core_supply: qmp_dp_phy_core_supply {
 		compatible = "regulator-fixed";
 		regulator-name = "core_supply";
