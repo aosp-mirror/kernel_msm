@@ -103,16 +103,22 @@ static void *bg_com_drv;
 static uint32_t g_slav_status_reg;
 
 /* BGCOM client callbacks set-up */
+
+#ifdef CONFIG_MSM_BGRSB
 static void send_input_events(struct work_struct *work);
+#endif
 static struct list_head cb_head = LIST_HEAD_INIT(cb_head);
 static struct list_head pr_lst_hd = LIST_HEAD_INIT(pr_lst_hd);
+#ifdef CONFIG_MSM_BGRSB
 static DEFINE_SPINLOCK(lst_setup_lock);
+#endif
 static enum bgcom_spi_state spi_state;
 
 
 static struct workqueue_struct *wq;
+#ifdef CONFIG_MSM_BGRSB
 static DECLARE_WORK(input_work, send_input_events);
-
+#endif
 static struct mutex bg_resume_mutex;
 
 static atomic_t  bg_is_spi_active;
@@ -133,7 +139,7 @@ static void augmnt_fifo(uint8_t *data, int pos)
 {
 	data[pos] = '\0';
 }
-
+#ifdef CONFIG_MSM_BGRSB
 static void send_input_events(struct work_struct *work)
 {
 	struct list_head *temp;
@@ -155,7 +161,7 @@ static void send_input_events(struct work_struct *work)
 		kfree(node);
 	}
 }
-
+#endif
 int bgcom_set_spi_state(enum bgcom_spi_state state)
 {
 	struct bg_spi_priv *bg_spi = container_of(bg_com_drv,
@@ -299,13 +305,16 @@ EXPORT_SYMBOL(bgcom_bgdown_handler);
 static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 {
 	uint16_t p_len;
+#ifdef CONFIG_MSM_BGRSB
 	uint8_t sub_id;
 	uint32_t evnt_tm;
+#endif
 	uint16_t event_id;
 	void *evnt_data;
+#ifdef CONFIG_MSM_BGRSB
 	struct event *evnt;
 	struct event_list *data_list;
-
+#endif
 	while (*data != '\0') {
 
 		event_id = *((uint16_t *) data);
@@ -314,6 +323,7 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 		data = data + HED_EVENT_SIZE_LEN;
 
 		if (event_id == 0xFFFE) {
+#ifdef CONFIG_MSM_BGRSB
 
 			sub_id = *data;
 			evnt_tm = *((uint32_t *)(data+1));
@@ -329,6 +339,7 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 			spin_lock(&lst_setup_lock);
 			list_add_tail(&data_list->list, &pr_lst_hd);
 			spin_unlock(&lst_setup_lock);
+#endif
 		} else if (event_id == 0x0001) {
 			evnt_data = kmalloc(p_len, GFP_KERNEL);
 			if (evnt_data != NULL) {
@@ -342,8 +353,11 @@ static void parse_fifo(uint8_t *data, union bgcom_event_data_type *event_data)
 		}
 		data = data + p_len;
 	}
+
+#ifdef CONFIG_MSM_BGRSB
 	if (!list_empty(&pr_lst_hd))
 		queue_work(wq, &input_work);
+#endif
 }
 
 static void send_back_notification(uint32_t slav_status_reg,

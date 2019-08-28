@@ -134,14 +134,18 @@ int dsi_auo_read_id_code(struct mdss_dsi_ctrl_pdata *ctrl)
 {
 	if (g_auo_pre_init != AUO_PANEL_PRE_INIT) {
 		g_auo_pre_init = AUO_PANEL_PRE_INIT;
-
+		/* For AUO U128BLX  and H128BLXcontroller
+		*  Not supported read id_code, initialize to 0
+		*/
+#if defined(CONFIG_TOUCHSCREEN_RM_TS_U128BLX01) || \
+	defined(CONFIG_TOUCHSCREEN_RM_TS_H120BLX01)
+		ctrl->id3_code[0] = 0;
+#else
 		/* For AUO 390p: H120BLX01.0 controller
 		*  Supported command read id_code
 		*/
-
-#ifndef CONFIG_TOUCHSCREEN_RM_TS_U128BLX01
 		mdss_dsi_raydium_cmd_read(ctrl, 0x01, 0x19, NULL,
-				ctrl->read_back_param, 1);
+					ctrl->read_back_param, 1);
 		pr_err("%s: read_back_param[0] = 0x%02x\n", __func__,
 				ctrl->read_back_param[0]);
 		mdss_dsi_raydium_cmd_read(ctrl, 0x00, 0xDC, NULL,
@@ -150,11 +154,6 @@ int dsi_auo_read_id_code(struct mdss_dsi_ctrl_pdata *ctrl)
 				ctrl->id3_code[0]);
 		/* switch back to original page */
 		mdss_dsi_switch_page(ctrl, 0x00);
-#else
-		/* For AUO 416p: U128BLX controller
-		 * Not supported read id_code, initialize to 0
-		 */
-		ctrl->id3_code[0] = 0;
 #endif
 	}
 	return 0;
@@ -165,6 +164,7 @@ extern  int mdss_dsi_parse_dcs_cmds(struct device_node *np,
 int mdss_dsi_raydium_parse_dt(struct device_node *np,
 		struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
+#ifdef CONFIG_TOUCHSCREEN_RM_TS_U128BLX01
 	pr_err("%s: parse hbm\n", __func__);
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm0_on_cmds,
 		"qcom,mdss-dsi-hbm0-on-command", NULL);
@@ -172,7 +172,7 @@ int mdss_dsi_raydium_parse_dt(struct device_node *np,
 		"qcom,mdss-dsi-hbm1-on-command", NULL);
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_off_cmds,
 		"qcom,mdss-dsi-hbm-off-command", NULL);
-
+#endif
 	return 0;
 }
 

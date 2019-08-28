@@ -22,16 +22,9 @@ dtb-$(CONFIG_ARCH_MDM9650) += mdm9650-nand-mtp.dtb \
 
 dtb-$(CONFIG_ARCH_MDM9607) += mdm9607-mtp.dtb \
 	mdm9607-ttp.dtb
-
 targets += dtbs
 
-8x09_dtb = msm8909w-darter
-ifeq ($(CONFIG_BUILD_TRIGGERFISH),y)
-	8x09_dtb = msm8909w-triggerfish
-endif
-include $(srctree)/arch/arm/boot/dts//8x09/$(8x09_dtb)/Makefile
-$(obj)/%.dtb: $(src)/../../../../arm/boot/dts/8x09/$(8x09_dtb)/%.dts FORCE
-	$(call if_changed_dep,dtc)
-	@echo "$< $@"
+-include $(srctree)/arch/arm/boot/dts/fossil/8x09/Makefile
+
 dtbs: $(addprefix $(obj)/,$(dtb-y))
 clean-files := *.dtb

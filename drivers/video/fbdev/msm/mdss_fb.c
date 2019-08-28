@@ -934,7 +934,8 @@ static DEVICE_ATTR(msm_fb_persist_mode, 0644,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, 0444, mdss_fb_idle_pc_notify, NULL);
 
-#ifdef TARGET_HAVE_AUO_HBM_MODE
+#if defined (TARGET_HAVE_AUO_HBM_MODE) && \
+	defined (CONFIG_TOUCHSCREEN_RM_TS_U128BLX01)
 static DEVICE_ATTR(msm_fb_boost_mode, 0644,
 		mdss_fb_get_boost_mode, mdss_fb_set_boost_mode);
 #endif
@@ -952,7 +953,8 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
-#ifdef TARGET_HAVE_AUO_HBM_MODE
+#if defined (TARGET_HAVE_AUO_HBM_MODE) && \
+	defined (CONFIG_TOUCHSCREEN_RM_TS_U128BLX01)
 	&dev_attr_msm_fb_boost_mode.attr,
 #endif
 	NULL,

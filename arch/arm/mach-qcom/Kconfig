@@ -294,4 +294,10 @@ config BUILD_TRIGGERFISH
 	help
 	Add support for the fossil triggerfish, default value is Darter
 
+config BUILD_SOLE
+	bool "Fossil Sole"
+	default n
+	help
+	Add support for the fossil sole
+
 endif
