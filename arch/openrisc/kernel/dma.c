@@ -19,6 +19,7 @@
  * the only thing implemented properly.  The rest need looking into...
  */
 
+#include <linux/pagewalk.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-debug.h>
 #include <linux/export.h>
