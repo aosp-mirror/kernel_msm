@@ -82,7 +82,7 @@ struct ipu_adapter_ab_mfd_data {
 };
 
 /* Paintbox IO virtual address space bounds */
-#define PAINTBOX_IOVA_START		0x100000000
+#define PAINTBOX_IOVA_START		0x200000000
 #define PAINTBOX_IOVA_SIZE		0x400000000
 
 /* TODO(b/115433779):  Figure out if there is a way to get this information from

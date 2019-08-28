@@ -87,7 +87,19 @@ static int ipu_buffer_map_dma_buf(struct paintbox_data *pb,
 	if (IS_ERR(buffer->dma_buf))
 		return PTR_ERR(buffer->dma_buf);
 
+#if IS_ENABLED(CONFIG_MFD_ABC_PCIE_SMMU_IOVA)
+	/* in case of sMMU with virtual addresses local buffers should be mapped
+	 * using the sMMU and not the IPU-IOMMU
+	 */
+	if (!is_ab_dram_dma_buf(buffer->dma_buf))
+		buffer->attach = dma_buf_attach(buffer->dma_buf,
+			pb->dev->parent->parent);
+	else
+		buffer->attach = dma_buf_attach(buffer->dma_buf, pb->dev);
+#else
 	buffer->attach = dma_buf_attach(buffer->dma_buf, pb->dev);
+#endif
+
 	if (IS_ERR(buffer->attach)) {
 		ret = PTR_ERR(buffer->attach);
 		dev_err(pb->dev, "%s: failed to attach dma_buf, err %d\n",
@@ -271,14 +283,25 @@ static void ipu_buffer_unmap_and_release_buffer(struct paintbox_data *pb,
 	ipu_buffer_release_buffer(session, buffer);
 }
 
-static void ipu_buffer_consolidate_mmu_sg_list(struct paintbox_buffer *buffer)
+static int ipu_buffer_consolidate_mmu_sg_list(struct paintbox_data *pb,
+	struct paintbox_buffer *buffer)
 {
 	int i;
 	size_t total_size = 0;
 	struct scatterlist *s;
+	int ret = 0;
+	dma_addr_t start_address = buffer->sg_table->sgl->dma_address;
 
 	for_each_sg(buffer->sg_table->sgl, s,
 			buffer->sg_table->nents, i) {
+		if (s->dma_length > 0 &&
+				total_size + start_address != s->dma_address) {
+			dev_err(pb->dev,
+				"%s unable to consolidate sg list for nent %d",
+				__func__, i);
+			ret = -EFAULT;
+			break;
+		}
 		total_size += s->dma_length;
 		if (i > 0) {
 			s->dma_length = 0;
@@ -286,6 +309,7 @@ static void ipu_buffer_consolidate_mmu_sg_list(struct paintbox_buffer *buffer)
 		}
 	}
 	buffer->sg_table->sgl->dma_length = total_size;
+	return ret;
 }
 
 static bool ipu_buffer_check_valid_32b_buffer(struct paintbox_data *pb,
@@ -325,6 +349,7 @@ static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 {
 	struct paintbox_buffer *buffer;
 	int ret;
+	bool ipu_iommu_mapped = false;
 
 	if (WARN_ON(!entry))
 		return -EINVAL;
@@ -354,21 +379,21 @@ static int ipu_buffer_dma_buf_process_registration(struct paintbox_data *pb,
 			ret = ipu_buffer_map_iommu(pb, session, buffer);
 			if (ret < 0)
 				goto unmap_dma_buf;
-		}
-		ipu_buffer_consolidate_mmu_sg_list(buffer);
-	} else {
-		if (buffer->sg_table->nents > 1) {
-			dev_err(pb->dev, "%s: dma_buf is non-contiguous when iommu is not present",
-					__func__);
-			ret = -EFAULT;
-			goto unmap_dma_buf;
+			ipu_iommu_mapped = true;
 		}
 	}
+
+	ret = ipu_buffer_consolidate_mmu_sg_list(pb, buffer);
+	if (ret < 0)
+		goto unmap_ipu_iommu;
 
 	entry->buffer_id = buffer->buffer_id;
 
 	return 0;
 
+unmap_ipu_iommu:
+	if (ipu_iommu_mapped)
+		ipu_buffer_unmap_iommu(pb, session, buffer);
 unmap_dma_buf:
 	ipu_buffer_unmap_dma_buf(pb, session, buffer);
 release_buffer:

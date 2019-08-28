@@ -41,6 +41,15 @@
 #define FSYS_MINOR_NUMBER 2
 #define ABC_DMA_MAX_CHAN 8
 
+#if IS_ENABLED(CONFIG_MFD_ABC_PCIE_SMMU_IOVA)
+#define ABC_PCIE_SMMU_BASE	0x80000000ll /* Device address range base */
+#define ABC_PCIE_SMMU_SIZE	0x80000000ll /* Device address range size */
+#else
+/* Following taken from msm_11ad.c */
+#define ABC_PCIE_SMMU_BASE	0x10000000 /* Device address range base */
+#define ABC_PCIE_SMMU_SIZE	0x40000000 /* Device address range size */
+#endif
+
 /* Interrupt (MSI) from ABC to AP */
 enum abc_msi_msg_t {
 	ABC_MSI_0_TMU_AON,

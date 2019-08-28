@@ -1059,15 +1059,13 @@ static void abc_pcie_smmu_detach(struct device *dev)
 static int abc_pcie_smmu_setup(struct device *dev, struct abc_pcie_devdata *abc)
 {
 	int atomic_ctx = 1;
-	int bypass_enable = 1;
 	int ret;
-
-/* Following taken from msm_11ad.c */
-#define SMMU_BASE	0x10000000 /* Device address range base */
-#define SMMU_SIZE	0x40000000 /* Device address range size */
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE_SMMU_IOVA)
+	int bypass_enable = 1;
+#endif
 
 	abc->iommu_mapping = arm_iommu_create_mapping(&platform_bus_type,
-			SMMU_BASE, SMMU_SIZE);
+			ABC_PCIE_SMMU_BASE, ABC_PCIE_SMMU_SIZE);
 	if (IS_ERR_OR_NULL(abc->iommu_mapping)) {
 		ret = PTR_ERR(abc->iommu_mapping) ?: -ENODEV;
 		abc->iommu_mapping = NULL;
@@ -1084,6 +1082,7 @@ static int abc_pcie_smmu_setup(struct device *dev, struct abc_pcie_devdata *abc)
 		goto release_mapping;
 	}
 
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE_SMMU_IOVA)
 	ret = iommu_domain_set_attr(abc->iommu_mapping->domain,
 			DOMAIN_ATTR_S1_BYPASS, &bypass_enable);
 	if (ret < 0) {
@@ -1091,6 +1090,7 @@ static int abc_pcie_smmu_setup(struct device *dev, struct abc_pcie_devdata *abc)
 				__func__, ret);
 		goto release_mapping;
 	}
+#endif
 
 	ret = abc_pcie_smmu_attach(dev);
 	if (ret)

@@ -1843,5 +1843,15 @@ config MULTIPLE_BAR_MAP_FOR_ABC_SFR
 	help
 	 Needed for vendor PCIe host setup.
 
+config MFD_ABC_PCIE_SMMU_IOVA
+	bool "Enable AB sMMU virtual addresses"
+	depends on MFD_ABC_PCIE
+	default n
+	help
+	 sMMU will use virtual addresses instead of bypass mode.
+	 This mode should be enabled whenever the main system memory
+	 address range is larger then 6GB.
+
+
 endmenu
 endif

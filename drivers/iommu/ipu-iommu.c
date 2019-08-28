@@ -60,6 +60,8 @@ static struct ipu_iommu_internal_data {
 #define MMU_SYNC_MAX_ATTEMPTS 3
 
 #define MMU_FLUSH_ADDRESS_RSHIFT 12
+#define MMU_DEFAULT_LEAF_PROP (IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE | \
+	IOMMU_MMIO | IOMMU_USE_UPSTREAM_HINT | IOMMU_USE_LLC_NWA)
 
 static inline struct ipu_domain *to_ipu_domain(
 		struct iommu_domain *dom)
@@ -466,6 +468,9 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 	struct io_pgtable_cfg pgtbl_cfg;
 	struct device *iommu_dev;
 	bool map_start = false;
+#if IS_ENABLED(CONFIG_MFD_ABC_PCIE_SMMU_IOVA)
+	dma_addr_t addr;
+#endif
 
 	iommu_dev = ipu_get_iommu_device(dev);
 	if (!iommu_dev)
@@ -516,10 +521,36 @@ static int ipu_iommu_create_page_table(struct iommu_domain *domain,
 	/* identity map first Gb - due to iommu hw bug
 	 * TODO(b/123649740)
 	 */
-	if (map_start && ipu_iommu_map(domain, 0 /*iova*/,
-		0 /*paddr*/, IPU_IOMMU_IDENTITY_MAP_SIZE, 0xd7)) {
-		dev_err(dev, "%s failed to identity map first Gb\n", __func__);
-		return -ENOMEM;
+	if (map_start) {
+		if (ipu_iommu_map(domain, 0 /*iova*/,
+				0 /*paddr*/, IPU_IOMMU_IDENTITY_MAP_SIZE,
+				MMU_DEFAULT_LEAF_PROP)) {
+			dev_err(dev,
+				"%s failed to identity map first Gb\n",
+				__func__);
+			return -ENOMEM;
+		}
+#if IS_ENABLED(CONFIG_MFD_ABC_PCIE_SMMU_IOVA)
+		/* if AP sMMU is enabled it will take care of virtual
+		 * addresses and address protection for buffers on the host
+		 * IPU IOMMU will act as a passthrough and will only be used
+		 * for buffers residing in AB memory
+		 * update 1 GB at a time so each GB will only result in a single
+		 * entry update
+		 */
+		for (addr = ABC_PCIE_SMMU_BASE;
+				addr < ABC_PCIE_SMMU_BASE + ABC_PCIE_SMMU_SIZE;
+				addr += SZ_1G) {
+			if (ipu_iommu_map(domain, addr /*iova*/,
+					addr /*paddr*/, SZ_1G,
+					MMU_DEFAULT_LEAF_PROP)) {
+				dev_err(dev,
+					"%s failed to identity map sMMU address %#llx\n",
+					__func__, addr);
+				return -ENOMEM;
+			}
+		}
+#endif
 	}
 
 	return 0;
