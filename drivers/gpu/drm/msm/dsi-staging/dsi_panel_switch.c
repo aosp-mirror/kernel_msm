@@ -538,7 +538,7 @@ static ssize_t sysfs_idle_mode_store(struct device *dev,
 		return -EINVAL;
 
 	pdata = display->panel->private_data;
-	if (count > 1) {
+	if (count > 1 && strncmp(buf, "none", 4)) {
 		char *modestr = kstrndup(buf, count, GFP_KERNEL);
 
 		/* remove any trailing lf at end of sysfs input */
