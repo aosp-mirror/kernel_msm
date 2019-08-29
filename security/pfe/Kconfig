@@ -4,6 +4,7 @@ menu "Qualcomm Technologies, Inc Per File Encryption security device drivers"
 config PFT
 	bool "Per-File-Tagger driver"
 	depends on SECURITY
+	depends on BROKEN
 	default n
 	help
 		This driver is used for tagging enterprise files.
@@ -16,6 +17,7 @@ config PFK
 	bool "Per-File-Key driver"
 	depends on SECURITY
 	depends on SECURITY_SELINUX
+	depends on BROKEN
 	default n
 	help
 		This driver is used for storing eCryptfs information
