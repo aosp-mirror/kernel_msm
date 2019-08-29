@@ -45,7 +45,11 @@
 #endif /*end of CONFIG_FB */
 
 #include "raydium_i2c_ts.h"
-#include "rad_fw_image.h"
+#if defined(CONFIG_TOUCHSCREEN_RM_TS_U128BLX01)
+#include "rad_fw_u128blx01.h"
+#elif defined(CONFIG_TOUCHSCREEN_RM_TS_H120BLX01)
+#include "rad_fw_h120blx01.h"
+#endif
 
 /* Attribute length should be PAGE_SIZE */
 #define ATR_MAX_SIZE 512
