@@ -103,6 +103,8 @@
 	audio_ldo1-gpios = <&pm7250b_gpios 6 0>;
 	audio_ldo2-gpios = <&pm8150l_gpios 6 0>;
 
+	qcom,quin-mi2s-gpios = <&cdc_quin_mi2s_gpios>;
+
 	qcom,wsa-max-devs = <0>;
 	/delete-property/ qcom,wsa-devs;
 
@@ -192,6 +194,15 @@
 		pinctrl-1 = <&wcd938x_lpi_reset_sleep>;
 		qcom,lpi-gpios;
 	};
+	cdc_quin_mi2s_gpios: msm_cdc_pinctrl_quin {
+		compatible = "qcom,msm-cdc-pinctrl";
+		pinctrl-names = "aud_active", "aud_sleep";
+		pinctrl-0 = <&lpi_i2s1_sck_active &lpi_i2s1_ws_active
+			     &lpi_i2s1_sd0_active &lpi_i2s1_sd1_active>;
+		pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
+			     &lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
+		qcom,lpi-gpios;
+        };
 };
 
 &soc {
@@ -416,4 +427,106 @@
 
 &wsa881x_0214 {
 	status = "disabled";
+};
+
+&tdm_quin_rx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <0>;
+
+};
+
+&pm7250b_gpios {
+	irq_pin_top_default: irq_pin_top_default {
+		pins = "gpio5";
+		function = "normal";
+		bias-pull-down;
+		qcom,drive-strength = <2>;
+
+	};
+
+	irq_pin_bottom_default: irq_pin_bottom_default {
+		pins = "gpio8";
+		function = "normal";
+		bias-pull-down;
+		qcom,drive-strength = <2>;
+	};
+};
+
+&pm8150l_gpios {
+	reset_pin_top_default: reset_pin_top_default {
+		pins = "gpio11";
+		function = "normal";
+		output-high;
+		qcom,drive-strength = <2>;
+	};
+
+	reset_pin_bottom_default: reset_pin_bottom_default {
+		pins = "gpio10";
+		function = "normal";
+		output-high;
+		qcom,drive-strength = <2>;
+	};
+};
+
+&qupv3_se9_i2c {
+	status= "ok";
+	qcom,clk-freq-out = <1000000>;
+
+	cs35l41_l: cs35l41@40 {
+		#sound-dai-cells = <1>;
+		compatible = "cirrus,cs35l41";
+		reg = <0x40>;
+
+		reset-gpios = <&pm8150l_gpios 11 0>;
+
+		interrupt-parent = <&spmi_bus>;
+		interrupts = <0x2 0xc4 0x0 IRQ_TYPE_LEVEL_HIGH>;
+		irq-gpio = <&pm7250b_gpios 5 0>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&reset_pin_top_default &irq_pin_top_default>;
+
+		cirrus,boost-peak-milliamp = <3700>;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-cap-microfarad = <15>;
+
+		cirrus,left-channel-amp;
+
+		cirrus,gpio-config2 {
+			cirrus,gpio-src-select = <0x5>;
+			cirrus,gpio-output-enable;
+		};
+	};
+
+	cs35l41_r: cs35l41@41 {
+		#sound-dai-cells = <1>;
+		compatible = "cirrus,cs35l41";
+		reg = <0x41>;
+
+		reset-gpios = <&pm8150l_gpios 10 0>;
+
+		interrupt-parent = <&spmi_bus>;
+		interrupts = <0x2 0xc7 0x0 IRQ_TYPE_LEVEL_HIGH>;
+		irq-gpio = <&pm7250b_gpios 8 0>;
+
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&reset_pin_bottom_default &irq_pin_bottom_default>;
+
+		cirrus,boost-peak-milliamp = <3700>;
+		cirrus,boost-ind-nanohenry = <1000>;
+		cirrus,boost-cap-microfarad = <15>;
+
+		cirrus,right-channel-amp;
+
+		cirrus,gpio-config2 {
+			cirrus,gpio-src-select = <0x5>;
+			cirrus,gpio-output-enable;
+		};
+	};
+};
+
+&cs35l41_r {
+	sound-name-prefix = "R";
 };
