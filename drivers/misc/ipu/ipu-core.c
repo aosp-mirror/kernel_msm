@@ -316,21 +316,12 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 
 	dev_set_name(&pb_dev->dev, name);
 
-	/* Add the new device to the IPU JQS power domain */
-	ret = pm_genpd_add_device(&bus->gpd, &pb_dev->dev);
-	if (ret < 0) {
-		dev_err(bus->parent_dev,
-				"failed to add device %s to %s power domain, ret %d\n",
-				name, bus->gpd.name, ret);
-		goto put_device;
-	}
-
 	ret = device_add(&pb_dev->dev);
 	if (ret < 0) {
 		dev_err(bus->parent_dev,
 				"failed to register device %s, ret %d\n",
 				name, ret);
-		goto remove_from_power_domain;
+		goto put_device;
 	}
 
 	bus->devices[type] = pb_dev;
@@ -355,8 +346,6 @@ int ipu_bus_device_register(struct paintbox_bus *bus, const char *name,
 
 	return 0;
 
-remove_from_power_domain:
-	pm_genpd_remove_device(&bus->gpd, &pb_dev->dev);
 put_device:
 	put_device(&pb_dev->dev);
 	kfree(pb_dev);
@@ -506,17 +495,20 @@ void ipu_add_client(struct device *dev)
 	mutex_unlock(&bus->jqs.lock);
 }
 
-void ipu_remove_client(struct device *dev)
+int ipu_remove_client(struct device *dev)
 {
 	struct paintbox_device *pb_dev = to_paintbox_device(dev);
 	struct paintbox_bus *bus = pb_dev->bus;
+	int ret;
 
 	mutex_lock(&bus->jqs.lock);
 
 	if (--bus->jqs.client_count < 0)
 		bus->jqs.client_count = 0;
-
+	ret = bus->jqs.client_count;
 	mutex_unlock(&bus->jqs.lock);
+
+	return ret;
 }
 
 int ipu_bus_initialize(struct device *parent_dev,
@@ -568,8 +560,6 @@ void ipu_bus_deinitialize(struct paintbox_bus *bus)
 			continue;
 
 		bus->devices[i] = NULL;
-
-		pm_genpd_remove_device(&bus->gpd, &pb_dev->dev);
 
 		device_unregister(&pb_dev->dev);
 	}

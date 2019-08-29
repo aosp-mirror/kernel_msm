@@ -32,9 +32,11 @@
  */
 #pragma pack(1)
 struct bldr_log_header {
-	__u32 magic;
-	__u32 offset;
-	__u32 rotate_flag;
+	unsigned int magic;
+	unsigned int offset;
+	unsigned int rotate_flag;
+	unsigned int buf_size;
+	char         *buf_start;
 };
 #pragma pack()
 
@@ -76,13 +78,13 @@ static void bldr_log_parser(const char *bldr_log, char *bldr_log_buf,
 		bldr_log_buf_ptr += bldr_log_bottom_size;
 
 		/* Top half part  */
-		bldr_log_top_size = header->offset - sizeof(*header);
+		bldr_log_top_size = header->offset;
 		memcpy(bldr_log_buf_ptr, bldr_log + sizeof(*header),
 			bldr_log_top_size);
 
 		*bldr_log_buf_size = bldr_log_bottom_size + bldr_log_top_size;
 	} else {
-		*bldr_log_buf_size = header->offset - sizeof(*header);
+		*bldr_log_buf_size = header->offset;
 
 		memcpy(bldr_log_buf, bldr_log + sizeof(*header),
 			*bldr_log_buf_size);

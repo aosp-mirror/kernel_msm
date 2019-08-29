@@ -21,7 +21,6 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/pm_runtime.h>
 #include <linux/pm_wakeup.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -60,27 +59,15 @@ int ipu_jqs_get(struct paintbox_data *pb)
 		return ret;
 	}
 
-	ret = pm_runtime_get_sync(pb->dev);
-	if (ret < 0) {
-		pm_runtime_put_noidle(pb->dev);
-
-		/* A pm_runtime_get_sync() failure will leave the device in the
-		 * suspended state but we need to call pm_runtime_set_suspended
-		 * to clear the power.runtime_error field.
-		 */
-		pm_runtime_set_suspended(pb->dev);
-	}
-
 	return ret;
 }
 
 /* Caller must hold pb->lock */
 int ipu_jqs_put(struct paintbox_data *pb)
 {
-	ipu_remove_client(pb->dev);
-
-	pm_runtime_mark_last_busy(pb->dev);
-	return pm_runtime_put_autosuspend(pb->dev);
+	if (ipu_remove_client(pb->dev) == 0)
+		return ipu_core_jqs_power_down(pb->dev);
+	return 0;
 }
 
 /*
@@ -506,19 +493,6 @@ static int ipu_client_probe(struct device *dev)
 
 	device_init_wakeup(pb->dev, true);
 
-	ret = dev_pm_qos_add_request(dev, &pb->pm_qos,
-			DEV_PM_QOS_RESUME_LATENCY, JQS_STARTUP_LATENCY_US);
-	if (ret < 0) {
-		dev_err(pb->dev, "%s: Unable to configure pm qos, ret %d\n",
-				__func__, ret);
-		return ret;
-	}
-
-	pm_runtime_set_suspended(pb->dev);
-	pm_runtime_set_autosuspend_delay(pb->dev, JQS_AUTO_SUSPEND_TIMEOUT_MS);
-	pm_runtime_use_autosuspend(pb->dev);
-	pm_runtime_enable(pb->dev);
-
 	return 0;
 }
 
@@ -532,11 +506,6 @@ void ipu_client_request_reset(struct paintbox_data *pb)
 static int ipu_client_remove(struct device *dev)
 {
 	struct paintbox_data *pb = dev_get_drvdata(dev);
-
-	pm_runtime_disable(pb->dev);
-
-	if (dev_pm_qos_request_active(&pb->pm_qos))
-		dev_pm_qos_remove_request(&pb->pm_qos);
 
 	misc_deregister(&pb->misc_device);
 	ipu_aon_debug_remove(pb);
