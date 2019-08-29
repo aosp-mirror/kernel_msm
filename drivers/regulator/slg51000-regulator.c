@@ -82,6 +82,7 @@ static const struct regmap_range slg51000_writeable_ranges[] = {
 	regmap_reg_range(SLG51000_LDO2_IRQ_MASK, SLG51000_LDO2_IRQ_MASK),
 	regmap_reg_range(SLG51000_LDO3_VSEL, SLG51000_LDO3_VSEL),
 	regmap_reg_range(SLG51000_LDO3_MINV, SLG51000_LDO3_MAXV),
+	regmap_reg_range(SLG51000_LDO3_CONF1, SLG51000_LDO3_CONF1),
 	regmap_reg_range(SLG51000_LDO3_IRQ_MASK, SLG51000_LDO3_IRQ_MASK),
 	regmap_reg_range(SLG51000_LDO4_VSEL, SLG51000_LDO4_VSEL),
 	regmap_reg_range(SLG51000_LDO4_MINV, SLG51000_LDO4_MAXV),
@@ -96,6 +97,7 @@ static const struct regmap_range slg51000_writeable_ranges[] = {
 	regmap_reg_range(SLG51000_LDO7_MINV, SLG51000_LDO7_MAXV),
 	regmap_reg_range(SLG51000_LDO7_IRQ_MASK, SLG51000_LDO7_IRQ_MASK),
 	regmap_reg_range(SLG51000_OTP_IRQ_MASK, SLG51000_OTP_IRQ_MASK),
+	regmap_reg_range(SLG51000_SW_TEST_MODE_1, SLG51000_SW_TEST_MODE_4),
 };
 
 static const struct regmap_range slg51000_readable_ranges[] = {
@@ -221,6 +223,48 @@ static int slg51000_regmap_bulk_read(struct regmap *map, unsigned int reg,
 			break;
 		retry++;
 		pr_err("%s: i2c read error=%d, retry count: %d\n",
+			__func__, ret, retry);
+		usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
+	} while (retry < MAX_RETRY);
+
+	return ret;
+}
+
+static int slg51000_regmap_write(struct regmap *map, unsigned int reg,
+			       unsigned int val)
+{
+	int ret, retry = 0;
+
+	if (map == NULL)
+		return -EINVAL;
+
+	do {
+		ret = regmap_write(map, reg, val);
+		if (ret >= 0)
+			break;
+		retry++;
+		pr_err("%s: i2c write error=%d, retry count: %d\n",
+			__func__, ret, retry);
+		usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
+	} while (retry < MAX_RETRY);
+
+	return ret;
+}
+
+static int slg51000_regmap_bulk_write(struct regmap *map, unsigned int reg,
+				    const void *val, size_t val_count)
+{
+	int ret, retry = 0;
+
+	if (map == NULL || val == NULL)
+		return -EINVAL;
+
+	do {
+		ret = regmap_bulk_write(map, reg, val, val_count);
+		if (ret >= 0)
+			break;
+		retry++;
+		pr_err("%s: i2c write error=%d, retry count: %d\n",
 			__func__, ret, retry);
 		usleep_range(MIN_SLEEP_USEC, MAX_SLEEP_USEC);
 	} while (retry < MAX_RETRY);
@@ -389,6 +433,36 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 	}
 
 	return 0;
+}
+
+static int slg51000_config_tuning(struct slg51000 *chip)
+{
+	int ret;
+	const u8 sw_test_mode_vals[] = {
+		SLG51000_SW_TEST_MODE_1_ON, SLG51000_SW_TEST_MODE_2_ON,
+		SLG51000_SW_TEST_MODE_3_ON, SLG51000_SW_TEST_MODE_4_ON,
+	};
+
+	if (chip == NULL) {
+		pr_err("[%s] Invalid arguments\n", __func__);
+		return -EINVAL;
+	}
+
+	// set software test mode
+	ret = slg51000_regmap_bulk_write(chip->regmap, SLG51000_SW_TEST_MODE_1,
+			sw_test_mode_vals, ARRAY_SIZE(sw_test_mode_vals));
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to set software test mode\n");
+		return ret;
+	}
+
+	ret = slg51000_regmap_write(chip->regmap, SLG51000_LDO3_CONF1, 0x28);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to set LDO3_CONF1\n");
+		return ret;
+	}
+
+	return ret;
 }
 
 static irqreturn_t slg51000_irq_handler(int irq, void *data)
@@ -605,6 +679,12 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 	ret = slg51000_regulator_init(chip);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to init regulator(%d)\n", ret);
+		return ret;
+	}
+
+	ret = slg51000_config_tuning(chip);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to config tuning(%d)\n", ret);
 		return ret;
 	}
 
