@@ -262,12 +262,8 @@ static int ap314aq_set_phthres(struct i2c_client *client, int val)
 /* reset p sensor pthreshold include calibration data */
 static int ap314aq_set_ps_thres(struct i2c_client *client)
 {
-    int bias, n2f, value_l, value_h;
+    int value_l, value_h;
 
-    bias = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_BIAS_PATH);
-    n2f = ap314aq_read_cal_data(AP314AQ_CLAIBRATION_N2F_PATH);
-    LDBG("bias = %d, n2f = %d, THRESHOLD_LOW = %d, THRESHOLD_HIGH= %d\n",
-		bias, n2f, AP314AQ_PS_THRESHOLD_LOW, AP314AQ_PS_THRESHOLD_HIGH);
 #if 0
     if (n2f > 0 && n2f < AP314AQ_PS_THRESHOLD_LOW){
 	value_l = n2f/AP314AQ_PS_CAL_GAIN;
