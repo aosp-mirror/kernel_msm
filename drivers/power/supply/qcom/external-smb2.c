@@ -231,6 +231,13 @@ void ext_smblib_usb_plugin(struct smb_charger *chg, bool enable)
 	}
 }
 
+void ext_smblib_usbicl_restart(struct smb_charger *chg)
+{
+	cancel_delayed_work(&chg->usbicl_rerun_work);
+	usbicl_rerun_time = AICL_RERUN_TIME_3S;
+	schedule_delayed_work(&chg->usbicl_rerun_work, msecs_to_jiffies(3000));
+}
+
 int ext_smb2_fake_charger_icon(struct smb_charger *chg)
 {
 	if (!chg->external_smb2)

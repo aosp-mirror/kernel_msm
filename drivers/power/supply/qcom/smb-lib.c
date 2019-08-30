@@ -4681,6 +4681,7 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 				 */
 				schedule_delayed_work(&chg->bb_removal_work,
 				msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
+				ext_smblib_usbicl_restart(chg);
 			}
 		}
 	}

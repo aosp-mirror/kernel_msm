@@ -7,4 +7,4 @@ void ext_smb2_init_hw(struct smb_charger *chg);
 int ext_smblib_input_current_limit(struct smb_charger *chg,
 				struct smb_chg_param *param, int val_u);
 void ext_smblib_power_ok(struct smb_charger *chg);
-
+void ext_smblib_usbicl_restart(struct smb_charger *chg);
