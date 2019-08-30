@@ -1271,6 +1271,8 @@ static int smblib_hvdcp_enable_vote_callback(struct votable *votable,
 	if (!hvdcp_enable)
 		val = HVDCP_EN_BIT;
 
+	ext_smb2_force_disable_hvdcp(chg, &val);
+
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
 				 HVDCP_EN_BIT | HVDCP_AUTH_ALG_EN_CFG_BIT,
 				 val);

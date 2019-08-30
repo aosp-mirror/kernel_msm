@@ -410,3 +410,9 @@ void ext_smblib_power_ok(struct smb_charger *chg)
 							chg->wpc_vote_current);
 }
 
+void ext_smb2_force_disable_hvdcp(struct smb_charger *chg, u8 *val)
+{
+	if (!chg->external_smb2)
+		return;
+	*val = 0;
+}
