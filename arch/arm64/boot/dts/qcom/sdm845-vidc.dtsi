@@ -111,7 +111,7 @@
 			iommus =
 				<&apps_smmu 0x10a3 0x8>;
 			buffer-types = <0x106>;
-			virtual-addr-pool = <0x25800000 0x25800000>;
+			virtual-addr-pool = <0x25800000 0x6f800000>;
 			qcom,secure-context-bank;
 		};
 
