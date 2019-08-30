@@ -12,3 +12,17 @@
  */
 
 #include "lito-bramble-battery-common.dtsi"
+&soc {
+	bramble_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
+		#include "qg-batterydata-alium-10k-3600mah.dtsi"
+	};
+};
+
+&pm7250b_charger {
+	qcom,battery-data = <&bramble_batterydata>;
+};
+
+&pm7250b_qg {
+	qcom,battery-data = <&bramble_batterydata>;
+};
