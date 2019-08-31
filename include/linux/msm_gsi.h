@@ -1226,7 +1226,7 @@ int gsi_read_channel_scratch(unsigned long chan_hdl,
  * @Return gsi_status
  */
 int gsi_update_mhi_channel_scratch(unsigned long chan_hdl,
-		struct __packed gsi_mhi_channel_scratch mscr);
+		struct gsi_mhi_channel_scratch mscr);
 
 /**
  * gsi_start_channel - Peripheral should call this function to
@@ -1671,7 +1671,7 @@ static inline int gsi_read_channel_scratch(unsigned long chan_hdl,
 }
 
 static inline int gsi_update_mhi_channel_scratch(unsigned long chan_hdl,
-		struct __packed gsi_mhi_channel_scratch mscr)
+		struct gsi_mhi_channel_scratch mscr)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
