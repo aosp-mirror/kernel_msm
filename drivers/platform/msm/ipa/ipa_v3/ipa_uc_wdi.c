@@ -2833,7 +2833,7 @@ int ipa3_write_qmapid_gsi_wdi_pipe(u32 clnt_hdl, u8 qmap_id)
 {
 	int result = 0;
 	struct ipa3_ep_context *ep;
-	union __packed gsi_wdi_channel_scratch3_reg gsi_scratch;
+	union gsi_wdi_channel_scratch3_reg gsi_scratch;
 
 	memset(&gsi_scratch, 0, sizeof(gsi_scratch));
 	ep = &ipa3_ctx->ep[clnt_hdl];
