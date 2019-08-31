@@ -28,11 +28,9 @@
 
 /* Header structure defined in LK */
 struct bldr_log_header {
-	unsigned int magic;
-	unsigned int offset;
-	unsigned int rotate_flag;
-	unsigned int buf_size;
-	char         *buf_start;
+	__u32 magic;
+	__u32 offset;
+	__u32 rotate_flag;
 };
 
 static char *bl_last_log_buf, *bl_cur_log_buf;
@@ -73,13 +71,13 @@ static void bldr_log_parser(const char *bldr_log, char *bldr_log_buf,
 		bldr_log_buf_ptr += bldr_log_bottom_size;
 
 		/* Top half part  */
-		bldr_log_top_size = header->offset;
+		bldr_log_top_size = header->offset - sizeof(*header);
 		memcpy(bldr_log_buf_ptr, bldr_log + sizeof(*header),
 			bldr_log_top_size);
 
 		*bldr_log_buf_size = bldr_log_bottom_size + bldr_log_top_size;
 	} else {
-		*bldr_log_buf_size = header->offset;
+		*bldr_log_buf_size = header->offset - sizeof(*header);
 
 		memcpy(bldr_log_buf, bldr_log + sizeof(*header),
 			*bldr_log_buf_size);
