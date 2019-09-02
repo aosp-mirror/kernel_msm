@@ -105,15 +105,13 @@ static int _copy_sysprop_from_user(struct cvp_kmd_arg *kp,
 	if (get_user(k->prop_num, &u->prop_num))
 		return -EFAULT;
 
-	if (k->prop_num != 1) {
-		dprintk(CVP_ERR, "Only one prop allowed\n");
+	if (k->prop_num < 1 || k->prop_num > 32) {
+		dprintk(CVP_ERR, "Num of prop out of range %d\n", k->prop_num);
 		return -EFAULT;
 	}
 
-	if (get_user(k->prop_data.prop_type, &u->prop_data.prop_type))
-		return -EFAULT;
-
-	return 0;
+	return _copy_pkt_from_user(kp, up,
+		(k->prop_num*((sizeof(struct cvp_kmd_sys_property)>>2)+1)));
 }
 
 static int _copy_pkt_to_user(struct cvp_kmd_arg *kp,
@@ -188,6 +186,11 @@ static void _set_deprecate_bitmask(struct cvp_kmd_arg *kp,
 		set_bit(DME_BIT_OFFSET, &inst->deprecate_bitmask);
 		break;
 	}
+	case CVP_KMD_HFI_FD_FRAME_CMD:
+	{
+		set_bit(FD_BIT_OFFSET, &inst->deprecate_bitmask);
+		break;
+	}
 	default:
 		break;
 	}
@@ -206,7 +209,7 @@ static void print_hfi_short(struct cvp_kmd_arg __user *up)
 			get_user(words[4], &pkt->pkt_data[1]))
 		dprintk(CVP_ERR, "Failed to print ioctl cmd\n");
 
-	dprintk(CVP_DBG, "IOCTL cmd type %d, offset %d, num %d, pkt %d %d\n",
+	dprintk(CVP_DBG, "IOCTL cmd type %#x, offset %d, num %d, pkt %d %#x\n",
 			words[0], words[1], words[2], words[3], words[4]);
 }
 
@@ -353,6 +356,7 @@ static int convert_from_user(struct cvp_kmd_arg *kp,
 	case CVP_KMD_HFI_DME_CONFIG_CMD:
 	case CVP_KMD_HFI_DME_FRAME_CMD:
 	case CVP_KMD_HFI_PERSIST_CMD:
+	case CVP_KMD_HFI_FD_FRAME_CMD:
 	{
 		if (_get_pkt_hdr_from_user(up, &pkt_hdr)) {
 			dprintk(CVP_ERR, "Invalid syscall: %x, %x, %x\n",
@@ -407,6 +411,14 @@ static int convert_from_user(struct cvp_kmd_arg *kp,
 	{
 		if (_copy_sysprop_from_user(kp, up)) {
 			dprintk(CVP_ERR, "Failed to get sysprop from user\n");
+			return -EFAULT;
+		}
+		break;
+	}
+	case CVP_KMD_SET_SYS_PROPERTY:
+	{
+		if (_copy_sysprop_from_user(kp, up)) {
+			dprintk(CVP_ERR, "Failed to set sysprop from user\n");
 			return -EFAULT;
 		}
 		break;
@@ -541,6 +553,7 @@ static int convert_to_user(struct cvp_kmd_arg *kp, unsigned long arg)
 	case CVP_KMD_HFI_DME_FRAME_CMD_RESPONSE:
 	case CVP_KMD_HFI_PERSIST_CMD:
 	case CVP_KMD_HFI_PERSIST_CMD_RESPONSE:
+	case CVP_KMD_HFI_FD_FRAME_CMD:
 	{
 		if (_get_pkt_hdr_from_user(up, &pkt_hdr))
 			return -EFAULT;
@@ -579,6 +592,8 @@ static int convert_to_user(struct cvp_kmd_arg *kp, unsigned long arg)
 		}
 		break;
 	}
+	case CVP_KMD_SET_SYS_PROPERTY:
+		break;
 	default:
 		dprintk(CVP_ERR, "%s: unknown cmd type 0x%x\n",
 			__func__, kp->type);
@@ -600,10 +615,6 @@ static long cvp_ioctl(struct msm_cvp_inst *inst,
 		return -EINVAL;
 	}
 
-	/* Only handle VIDIOC_CVP_CMD as of now */
-	if (cmd != VIDIOC_CVP_CMD)
-		return 0;
-
 	memset(&karg, 0, sizeof(struct cvp_kmd_arg));
 
 	if (convert_from_user(&karg, arg, inst)) {
@@ -614,8 +625,8 @@ static long cvp_ioctl(struct msm_cvp_inst *inst,
 
 	rc = msm_cvp_private((void *)inst, cmd, &karg);
 	if (rc) {
-		dprintk(CVP_ERR, "%s: failed cmd type %x\n",
-			__func__, karg.type);
+		dprintk(CVP_ERR, "%s: failed cmd type %x %d\n",
+			__func__, karg.type, rc);
 		return rc;
 	}
 

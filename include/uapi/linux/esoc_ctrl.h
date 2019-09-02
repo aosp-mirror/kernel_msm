@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  */
 #ifndef _UAPI_ESOC_CTRL_H_
 #define _UAPI_ESOC_CTRL_H_
@@ -28,10 +28,23 @@ struct esoc_link_data {
 #define ESOC_REG_REQ_ENG	_IO(ESOC_CODE, 7)
 #define ESOC_REG_CMD_ENG	_IO(ESOC_CODE, 8)
 #define ESOC_GET_LINK_ID	_IOWR(ESOC_CODE, 9, struct esoc_link_data)
+#define ESOC_SET_BOOT_FAIL_ACT	_IOW(ESOC_CODE, 10, unsigned int)
+#define ESOC_SET_N_PON_TRIES	_IOW(ESOC_CODE, 11, unsigned int)
 
 #define ESOC_REQ_SEND_SHUTDOWN	ESOC_REQ_SEND_SHUTDOWN
 #define ESOC_REQ_CRASH_SHUTDOWN ESOC_REQ_CRASH_SHUTDOWN
 #define ESOC_PON_RETRY		ESOC_PON_RETRY
+#define ESOC_BOOT_FAIL_ACTION
+
+enum esoc_boot_fail_action {
+	BOOT_FAIL_ACTION_RETRY,
+	BOOT_FAIL_ACTION_COLD_RESET,
+	BOOT_FAIL_ACTION_SHUTDOWN,
+	BOOT_FAIL_ACTION_PANIC,
+	BOOT_FAIL_ACTION_NOP,
+	BOOT_FAIL_ACTION_S3_RESET,
+	BOOT_FAIL_ACTION_LAST,
+};
 
 enum esoc_evt {
 	ESOC_RUN_STATE = 0x1,
@@ -44,6 +57,7 @@ enum esoc_evt {
 	ESOC_CMD_ENG_OFF,
 	ESOC_INVALID_STATE,
 	ESOC_RETRY_PON_EVT,
+	ESOC_BOOT_STATE,
 };
 
 enum esoc_cmd {

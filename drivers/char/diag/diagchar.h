@@ -75,7 +75,7 @@
 #define DIAG_CON_UPD_WLAN		(0x1000) /*Bit mask for WLAN PD*/
 #define DIAG_CON_UPD_AUDIO		(0x2000) /*Bit mask for AUDIO PD*/
 #define DIAG_CON_UPD_SENSORS	(0x4000) /*Bit mask for SENSORS PD*/
-
+#define DIAG_CON_UPD_CHARGER	(0x8000) /* Bit mask for CHARGER PD */
 #define DIAG_CON_NONE		(0x0000)	/* Bit mask for No SS*/
 #define DIAG_CON_ALL		(DIAG_CON_APSS | DIAG_CON_MPSS \
 				| DIAG_CON_LPASS | DIAG_CON_WCNSS \
@@ -83,7 +83,8 @@
 				| DIAG_CON_CDSP | DIAG_CON_NPU)
 #define DIAG_CON_UPD_ALL	(DIAG_CON_UPD_WLAN \
 				| DIAG_CON_UPD_AUDIO \
-				| DIAG_CON_UPD_SENSORS)
+				| DIAG_CON_UPD_SENSORS \
+				| DIAG_CON_UPD_CHARGER)
 
 #define DIAG_STM_MODEM	0x01
 #define DIAG_STM_LPASS	0x02
@@ -140,6 +141,7 @@
 #define DIAG_GET_TIME_API	0x21B
 #define DIAG_SET_TIME_API	0x21C
 #define DIAG_GET_DIAG_ID	0x222
+#define DIAG_HW_ACCEL_CMD	0x224
 #define DIAG_FEATURE_QUERY	0x225
 #define DIAG_SWITCH_COMMAND	0x081B
 #define DIAG_BUFFERING_MODE	0x080C
@@ -240,9 +242,10 @@
 #define UPD_WLAN		8
 #define UPD_AUDIO		9
 #define UPD_SENSORS		10
-#define NUM_UPD			3
+#define UPD_CHARGER		11
+#define NUM_UPD			4
 
-#define MAX_PERIPHERAL_UPD			2
+#define MAX_PERIPHERAL_UPD			3
 /* Number of sessions possible in Memory Device Mode. +1 for Apps data */
 #define NUM_MD_SESSIONS		(NUM_PERIPHERALS \
 					+ NUM_UPD + 1)
@@ -261,6 +264,9 @@ do {						\
 
 #define DIAGIDV2_STATUS(f_index)	\
 	driver->diagid_v2_status[f_index]
+
+#define P_FMASK_DIAGID_V2(peripheral)	\
+	driver->feature[peripheral].diagid_v2_feature_mask
 
 /*
  * Number of stm processors includes all the peripherals and
@@ -774,7 +780,7 @@ struct diagchar_dev {
 	int dci_tag;
 	int dci_client_id[MAX_DCI_CLIENTS];
 	struct mutex dci_mutex;
-	struct mutex rpmsginfo_mutex[NUM_PERIPHERALS];
+	spinlock_t rpmsginfo_lock[NUM_PERIPHERALS];
 	int num_dci_client;
 	unsigned char *apps_dci_buf;
 	int dci_state;
@@ -891,6 +897,7 @@ struct diagchar_dev {
 	uint8_t uses_time_api;
 	uint32_t diagid_v2_feature[DIAGID_V2_FEATURE_COUNT];
 	uint32_t diagid_v2_status[DIAGID_V2_FEATURE_COUNT];
+	uint32_t diag_hw_accel[DIAGID_V2_FEATURE_COUNT];
 };
 
 extern struct diagchar_dev *driver;
@@ -930,10 +937,12 @@ uint8_t diag_search_diagid_by_pd(uint8_t pd_val,
 void diag_record_stats(int type, int flag);
 
 struct diag_md_session_t *diag_md_session_get_pid(int pid);
-int diag_map_hw_accel_type_ver(uint8_t hw_accel_type, uint8_t hw_accel_ver);
 struct diag_md_session_t *diag_md_session_get_peripheral(int dev_id,
 							uint8_t peripheral);
 int diag_md_session_match_pid_peripheral(int proc, int pid,
 					uint8_t peripheral);
+int diag_map_hw_accel_type_ver(uint8_t hw_accel_type, uint8_t hw_accel_ver);
+void diag_map_index_to_hw_accel(uint8_t index, uint8_t *hw_accel_type,
+			uint8_t *hw_accel_ver);
 
 #endif

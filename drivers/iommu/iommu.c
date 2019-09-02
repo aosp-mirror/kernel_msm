@@ -214,18 +214,21 @@ static int iommu_insert_resv_region(struct iommu_resv_region *new,
 			pos = pos->next;
 		} else if ((start >= a) && (end <= b)) {
 			if (new->type == type)
-				goto done;
+				return 0;
 			else
 				pos = pos->next;
 		} else {
 			if (new->type == type) {
 				phys_addr_t new_start = min(a, start);
 				phys_addr_t new_end = max(b, end);
+				int ret;
 
 				list_del(&entry->list);
 				entry->start = new_start;
 				entry->length = new_end - new_start + 1;
-				iommu_insert_resv_region(entry, regions);
+				ret = iommu_insert_resv_region(entry, regions);
+				kfree(entry);
+				return ret;
 			} else {
 				pos = pos->next;
 			}
@@ -238,7 +241,6 @@ insert:
 		return -ENOMEM;
 
 	list_add_tail(&region->list, pos);
-done:
 	return 0;
 }
 
@@ -1930,31 +1932,6 @@ void iommu_trigger_fault(struct iommu_domain *domain, unsigned long flags)
 	if (domain->ops->trigger_fault)
 		domain->ops->trigger_fault(domain, flags);
 }
-
-/**
- * iommu_reg_read() - read an IOMMU register
- *
- * Reads the IOMMU register at the given offset.
- */
-unsigned long iommu_reg_read(struct iommu_domain *domain, unsigned long offset)
-{
-	if (domain->ops->reg_read)
-		return domain->ops->reg_read(domain, offset);
-	return 0;
-}
-
-/**
- * iommu_reg_write() - write an IOMMU register
- *
- * Writes the given value to the IOMMU register at the given offset.
- */
-void iommu_reg_write(struct iommu_domain *domain, unsigned long offset,
-		     unsigned long val)
-{
-	if (domain->ops->reg_write)
-		domain->ops->reg_write(domain, offset, val);
-}
-
 
 struct iommu_resv_region *iommu_alloc_resv_region(phys_addr_t start,
 						  size_t length, int prot,

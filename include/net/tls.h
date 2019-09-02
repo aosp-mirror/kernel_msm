@@ -161,6 +161,10 @@ enum {
 	TLS_PENDING_CLOSED_RECORD
 };
 
+enum tls_context_flags {
+	TLS_RX_SYNC_RUNNING = 0,
+};
+
 struct cipher_context {
 	u16 prepend_size;
 	u16 tag_size;
@@ -230,6 +234,7 @@ struct tls_offload_context_rx {
 	(ALIGN(sizeof(struct tls_offload_context_rx), sizeof(void *)) + \
 	 TLS_DRIVER_STATE_SIZE)
 
+void tls_ctx_free(struct tls_context *ctx);
 int wait_on_pending_writer(struct sock *sk, long *timeo);
 int tls_sk_query(struct sock *sk, int optname, char __user *optval,
 		int __user *optlen);
@@ -317,7 +322,7 @@ tls_validate_xmit_skb(struct sock *sk, struct net_device *dev,
 static inline bool tls_is_sk_tx_device_offloaded(struct sock *sk)
 {
 #ifdef CONFIG_SOCK_VALIDATE_XMIT
-	return sk_fullsock(sk) &
+	return sk_fullsock(sk) &&
 	       (smp_load_acquire(&sk->sk_validate_xmit_skb) ==
 	       &tls_validate_xmit_skb);
 #else

@@ -29,7 +29,6 @@ static enum cvp_status hfi_map_err_status(u32 hfi_err)
 
 	switch (hfi_err) {
 	case HFI_ERR_NONE:
-	case HFI_ERR_SESSION_SAME_STATE_OPERATION:
 		cvp_err = CVP_ERR_NONE;
 		break;
 	case HFI_ERR_SYS_FATAL:
@@ -70,54 +69,11 @@ static enum cvp_status hfi_map_err_status(u32 hfi_err)
 	case HFI_ERR_SESSION_INCORRECT_STATE_OPERATION:
 		cvp_err = CVP_ERR_BAD_STATE;
 		break;
-	case HFI_ERR_SESSION_STREAM_CORRUPT:
-	case HFI_ERR_SESSION_STREAM_CORRUPT_OUTPUT_STALLED:
-		cvp_err = CVP_ERR_BITSTREAM_ERR;
-		break;
-	case HFI_ERR_SESSION_SYNC_FRAME_NOT_DETECTED:
-		cvp_err = CVP_ERR_IFRAME_EXPECTED;
-		break;
-	case HFI_ERR_SESSION_START_CODE_NOT_FOUND:
-		cvp_err = CVP_ERR_START_CODE_NOT_FOUND;
-		break;
-	case HFI_ERR_SESSION_EMPTY_BUFFER_DONE_OUTPUT_PENDING:
 	default:
 		cvp_err = CVP_ERR_FAIL;
 		break;
 	}
 	return cvp_err;
-}
-
-static int hfi_process_evt_release_buffer_ref(u32 device_id,
-		struct cvp_hfi_msg_event_notify_packet *pkt,
-		struct msm_cvp_cb_info *info)
-{
-	struct msm_cvp_cb_event event_notify = {0};
-	struct cvp_hfi_msg_release_buffer_ref_event_packet *data;
-
-	dprintk(CVP_DBG,
-			"RECEIVED: EVENT_NOTIFY - release_buffer_reference\n");
-	if (sizeof(struct cvp_hfi_msg_event_notify_packet)
-		> pkt->size) {
-		dprintk(CVP_ERR,
-				"hal_process_session_init_done: bad_pkt_size\n");
-		return -E2BIG;
-	}
-
-	data = (struct cvp_hfi_msg_release_buffer_ref_event_packet *)
-				pkt->rg_ext_event_data;
-
-	event_notify.device_id = device_id;
-	event_notify.session_id = (void *)(uintptr_t)pkt->session_id;
-	event_notify.status = CVP_ERR_NONE;
-	event_notify.hal_event_type = HAL_EVENT_RELEASE_BUFFER_REFERENCE;
-	event_notify.packet_buffer = data->packet_buffer;
-	event_notify.extra_data_buffer = data->extra_data_buffer;
-
-	info->response_type = HAL_SESSION_EVENT_CHANGE;
-	info->response.event = event_notify;
-
-	return 0;
 }
 
 static int hfi_process_sys_error(u32 device_id,
@@ -158,7 +114,7 @@ static int hfi_process_session_error(u32 device_id,
 		dprintk(CVP_ERR,
 			"%s: session %x data1 %#x, data2 %#x\n", __func__,
 			pkt->session_id, pkt->event_data1, pkt->event_data2);
-		info->response_type = HAL_SESSION_ERROR;
+		info->response_type = HAL_RESPONSE_UNUSED;
 		break;
 	}
 
@@ -181,22 +137,12 @@ static int hfi_process_event_notify(u32 device_id,
 		dprintk(CVP_ERR, "HFI_EVENT_SYS_ERROR: %d, %#x\n",
 			pkt->event_data1, pkt->event_data2);
 		return hfi_process_sys_error(device_id, pkt, info);
+
 	case HFI_EVENT_SESSION_ERROR:
 		dprintk(CVP_INFO, "HFI_EVENT_SESSION_ERROR[%#x]\n",
 				pkt->session_id);
 		return hfi_process_session_error(device_id, pkt, info);
 
-	case HFI_EVENT_SESSION_SEQUENCE_CHANGED:
-		dprintk(CVP_WARN, "HFI_EVENT_SESSION_SEQUENCE_CHANGED [%#x]\n",
-			pkt->session_id);
-		return 0;
-
-	case HFI_EVENT_RELEASE_BUFFER_REFERENCE:
-		dprintk(CVP_INFO, "HFI_EVENT_RELEASE_BUFFER_REFERENCE[%#x]\n",
-			pkt->session_id);
-		return hfi_process_evt_release_buffer_ref(device_id, pkt, info);
-
-	case HFI_EVENT_SESSION_PROPERTY_CHANGED:
 	default:
 		*info = (struct msm_cvp_cb_info) {
 			.response_type =  HAL_RESPONSE_UNUSED,
@@ -445,6 +391,9 @@ static int hfi_process_session_cvp_operation_config(u32 device_id,
 	if (pkt->packet_type == HFI_MSG_SESSION_CVP_SET_PERSIST_BUFFERS)
 		signal = get_signal_from_pkt_type(
 				HFI_CMD_SESSION_CVP_SET_PERSIST_BUFFERS);
+	else if (pkt->packet_type == HFI_MSG_SESSION_CVP_SET_MODEL_BUFFERS)
+		signal = get_signal_from_pkt_type(
+				HFI_CMD_SESSION_CVP_SET_MODEL_BUFFERS);
 	else
 		signal = get_signal_from_pkt_type(conf_id);
 
@@ -471,20 +420,32 @@ static struct msm_cvp_inst *cvp_get_inst_from_id(struct msm_cvp_core *core,
 {
 	struct msm_cvp_inst *inst = NULL;
 	bool match = false;
+	int count = 0;
 
 	if (!core || !session_id)
 		return NULL;
 
-	mutex_lock(&core->lock);
-	list_for_each_entry(inst, &core->instances, list) {
-		if (hash32_ptr(inst->session) == session_id) {
-			match = true;
-			break;
+retry:
+	if (mutex_trylock(&core->lock)) {
+		list_for_each_entry(inst, &core->instances, list) {
+			if (hash32_ptr(inst->session) == session_id) {
+				match = true;
+				break;
+			}
 		}
-	}
 
-	inst = match ? inst : NULL;
-	mutex_unlock(&core->lock);
+		inst = match ? inst : NULL;
+		mutex_unlock(&core->lock);
+	} else {
+		if (core->state == CVP_CORE_UNINIT)
+			return NULL;
+		usleep_range(100, 200);
+		count++;
+		if (count < 1000)
+			goto retry;
+		else
+			dprintk(CVP_ERR, "timeout locking core mutex\n");
+	}
 
 	return inst;
 
@@ -518,7 +479,8 @@ static int hfi_process_session_cvp_msg(u32 device_id,
 	if (inst->deprecate_bitmask) {
 		if (pkt->packet_type == HFI_MSG_SESSION_CVP_DFS
 			|| pkt->packet_type == HFI_MSG_SESSION_CVP_DME
-			|| pkt->packet_type == HFI_MSG_SESSION_CVP_ICA)
+			|| pkt->packet_type == HFI_MSG_SESSION_CVP_ICA
+			|| pkt->packet_type == HFI_MSG_SESSION_CVP_FD)
 			return _deprecated_hfi_msg_process(device_id,
 				pkt, info, inst);
 
@@ -616,6 +578,34 @@ static int hfi_process_session_cvp_ica(u32 device_id,
 	return 0;
 }
 
+static int hfi_process_session_cvp_fd(u32 device_id,
+	struct cvp_hfi_msg_session_hdr *pkt,
+	struct msm_cvp_cb_info *info)
+{
+	struct msm_cvp_cb_cmd_done cmd_done = {0};
+
+	if (!pkt) {
+		dprintk(CVP_ERR, "%s: invalid param\n", __func__);
+		return -EINVAL;
+	} else if (pkt->size < get_msg_size()) {
+		dprintk(CVP_ERR, "%s: bad_pkt_size %d\n", __func__, pkt->size);
+		return -E2BIG;
+	}
+
+	cmd_done.device_id = device_id;
+	cmd_done.session_id = (void *)(uintptr_t)get_msg_session_id(pkt);
+	cmd_done.status = hfi_map_err_status(get_msg_errorcode(pkt));
+	cmd_done.size = 0;
+
+	dprintk(CVP_DBG,
+		"%s: device_id=%d cmd_done.status=%d sessionid=%#x\n",
+		__func__, device_id, cmd_done.status, cmd_done.session_id);
+	info->response_type = HAL_SESSION_FD_FRAME_CMD_DONE;
+	info->response.cmd = cmd_done;
+
+	return 0;
+}
+
 static int _deprecated_hfi_msg_process(u32 device_id,
 	struct cvp_hfi_msg_session_hdr *pkt,
 	struct msm_cvp_cb_info *info,
@@ -639,6 +629,12 @@ static int _deprecated_hfi_msg_process(u32 device_id,
 			return hfi_process_session_cvp_ica(
 				device_id, (void *)pkt, info);
 
+	if (pkt->packet_type == HFI_MSG_SESSION_CVP_FD)
+		if (test_and_clear_bit(FD_BIT_OFFSET,
+				&inst->deprecate_bitmask))
+			return hfi_process_session_cvp_fd(
+				device_id, (void *)pkt, info);
+
 	dprintk(CVP_ERR, "Deprecatd MSG doesn't match bitmask %x %lx\n",
 			pkt->packet_type, inst->deprecate_bitmask);
 	return -EINVAL;
@@ -652,7 +648,7 @@ static void hfi_process_sys_get_prop_image_version(
 	u8 *smem_table_ptr;
 	char version[256];
 	const u32 version_string_size = 128;
-	const u32 smem_image_index_venus = 14 * 128;
+	const u32 smem_image_index = 14 * 128;
 	u8 *str_image_version;
 	int req_bytes;
 
@@ -680,9 +676,9 @@ static void hfi_process_sys_get_prop_image_version(
 
 	smem_table_ptr = qcom_smem_get(QCOM_SMEM_HOST_ANY,
 			SMEM_IMAGE_VERSION_TABLE, &smem_block_size);
-	if ((smem_image_index_venus + version_string_size) <= smem_block_size &&
+	if ((smem_image_index + version_string_size) <= smem_block_size &&
 			smem_table_ptr)
-		memcpy(smem_table_ptr + smem_image_index_venus,
+		memcpy(smem_table_ptr + smem_image_index,
 				str_image_version, version_string_size);
 }
 
@@ -693,9 +689,9 @@ static int hfi_process_sys_property_info(u32 device_id,
 	if (!pkt) {
 		dprintk(CVP_ERR, "%s: invalid param\n", __func__);
 		return -EINVAL;
-	} else if (pkt->size < sizeof(*pkt)) {
+	} else if (pkt->size > sizeof(*pkt)) {
 		dprintk(CVP_ERR,
-				"%s: bad_pkt_size\n", __func__);
+				"%s: bad_pkt_size %d\n", __func__, pkt->size);
 		return -E2BIG;
 	} else if (!pkt->num_properties) {
 		dprintk(CVP_WARN,
@@ -761,12 +757,14 @@ int cvp_hfi_process_msg_packet(u32 device_id,
 		break;
 	case HFI_MSG_SESSION_CVP_OPERATION_CONFIG:
 	case HFI_MSG_SESSION_CVP_SET_PERSIST_BUFFERS:
+	case HFI_MSG_SESSION_CVP_SET_MODEL_BUFFERS:
 		pkt_func =
 			(pkt_func_def)hfi_process_session_cvp_operation_config;
 		break;
 	case HFI_MSG_SESSION_CVP_DS:
 	case HFI_MSG_SESSION_CVP_DFS:
 	case HFI_MSG_SESSION_CVP_DME:
+	case HFI_MSG_SESSION_CVP_FD:
 		pkt_func = (pkt_func_def)hfi_process_session_cvp_msg;
 		break;
 	default:

@@ -208,6 +208,16 @@ void *synx_from_handle(s32 synx_id);
 s32 synx_create_handle(void *pObj);
 
 /**
+ * @brief: Function to retrieve the bind ops for external sync
+ *
+ * @param type : External sync type
+ *
+ * @return Bind operations registered by external sync.
+ * NULL otherwise.
+ */
+struct bind_operations *synx_get_bind_ops(u32 type);
+
+/**
  * @brief: Function to generate a secure key for authentication
  *         Used to verify the requests generated on synx objects
  *         not owned by the process.
@@ -217,6 +227,33 @@ s32 synx_create_handle(void *pObj);
  * @return The created handle
  */
 int synx_generate_secure_key(struct synx_table_row *row);
+
+/**
+ * @brief: Function to generate a key for authenticating requests
+ *         Generated key for synx object being exported is
+ *         verified during import.
+ *
+ * @param row      : Pointer to the synx object row
+ * @param synx_obj : Synx handle
+ * @param key      : Pointer to key (filled by the function)
+ *
+ * @return Status of operation. Negative in case of error. Zero otherwise.
+ */
+int synx_generate_import_key(struct synx_table_row *row,
+	s32 synx_obj,
+	u32 *key);
+
+/**
+ * @brief: Function to authenticate requests for importing synx handle
+ *         Used to verify the requests generated on synx object
+ *         being imported.
+ *
+ * @param synx_obj : Synx handle being imported
+ * @param key      : Key to authenticate import request
+ *
+ * @return Pointer to the synx object row for valid request. NULL otherwise.
+ */
+struct synx_table_row *synx_from_import_key(s32 synx_obj, u32 key);
 
 /**
  * @brief: Function to handle adding an error

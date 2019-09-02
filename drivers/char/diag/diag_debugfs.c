@@ -440,8 +440,7 @@ static ssize_t diag_dbgfs_read_usbinfo(struct file *file, char __user *ubuf,
 			"write count: %lu\n"
 			"read work pending: %d\n"
 			"read done work pending: %d\n"
-			"connect work pending: %d\n"
-			"disconnect work pending: %d\n"
+			"event work pending: %d\n"
 			"max size supported: %d\n\n",
 			usb_info->id,
 			usb_info->name,
@@ -455,8 +454,7 @@ static ssize_t diag_dbgfs_read_usbinfo(struct file *file, char __user *ubuf,
 			usb_info->write_cnt,
 			work_pending(&usb_info->read_work),
 			work_pending(&usb_info->read_done_work),
-			work_pending(&usb_info->connect_work),
-			work_pending(&usb_info->disconnect_work),
+			work_pending(&usb_info->event_work),
 			usb_info->max_size);
 		bytes_in_buffer += bytes_written;
 
@@ -488,7 +486,7 @@ static ssize_t diag_dbgfs_read_socketinfo(struct file *file, char __user *ubuf,
 	struct diag_socket_info *info = NULL;
 	struct diagfwd_info *fwd_ctxt = NULL;
 
-	if (diag_dbgfs_socketinfo_index >= NUM_PERIPHERALS) {
+	if (diag_dbgfs_socketinfo_index >= NUM_TYPES) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_socketinfo_index = 0;
 		return 0;
@@ -594,7 +592,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 	struct diag_rpmsg_info *info = NULL;
 	struct diagfwd_info *fwd_ctxt = NULL;
 
-	if (diag_dbgfs_rpmsginfo_index >= NUM_PERIPHERALS) {
+	if (diag_dbgfs_rpmsginfo_index >= NUM_TYPES) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_rpmsginfo_index = 0;
 		return 0;
@@ -632,7 +630,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 
 			bytes_written = scnprintf(buf+bytes_in_buffer,
 				bytes_remaining,
-				"name\t\t:\t%s\n"
+				"name\t\t:\t%s:\t%s\n"
 				"hdl\t\t:\t%pK\n"
 				"inited\t\t:\t%d\n"
 				"opened\t\t:\t%d\n"
@@ -647,6 +645,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 				"fwd inited\t:\t%d\n"
 				"fwd opened\t:\t%d\n"
 				"fwd ch_open\t:\t%d\n\n",
+				info->edge,
 				info->name,
 				info->hdl,
 				info->inited,
@@ -728,7 +727,7 @@ static ssize_t diag_dbgfs_read_hsicinfo(struct file *file, char __user *ubuf,
 	unsigned int bytes_in_buffer = 0;
 	struct diag_hsic_info *hsic_info = NULL;
 
-	if (diag_dbgfs_hsicinfo_index >= NUM_DIAG_USB_DEV) {
+	if (diag_dbgfs_hsicinfo_index >= NUM_HSIC_DEV) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_hsicinfo_index = 0;
 		return 0;
@@ -879,7 +878,7 @@ static ssize_t diag_dbgfs_read_bridge(struct file *file, char __user *ubuf,
 	unsigned int bytes_in_buffer = 0;
 	struct diagfwd_bridge_info *info = NULL;
 
-	if (diag_dbgfs_bridgeinfo_index >= NUM_DIAG_USB_DEV) {
+	if (diag_dbgfs_bridgeinfo_index >= NUM_REMOTE_DEV) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_bridgeinfo_index = 0;
 		return 0;

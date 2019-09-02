@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  */
 
-#include <linux/vmalloc.h>
 #include <asm/cacheflush.h>
-#include <linux/slab.h>
 #include <linux/highmem.h>
-#include <linux/version.h>
+#include <linux/of.h>
+#include <linux/scatterlist.h>
 
-#include "kgsl.h"
 #include "kgsl_device.h"
 #include "kgsl_pool.h"
+#include "kgsl_sharedmem.h"
 
 #define KGSL_MAX_POOLS 4
 #define KGSL_MAX_POOL_ORDER 8
@@ -81,6 +80,8 @@ _kgsl_pool_add_page(struct kgsl_page_pool *pool, struct page *p)
 	list_add_tail(&p->lru, &pool->page_list);
 	pool->page_count++;
 	spin_unlock(&pool->list_lock);
+	mod_node_page_state(page_pgdat(p), NR_INDIRECTLY_RECLAIMABLE_BYTES,
+				(PAGE_SIZE << pool->pool_order));
 }
 
 /* Returns a page from specified pool */
@@ -96,7 +97,8 @@ _kgsl_pool_get_page(struct kgsl_page_pool *pool)
 		list_del(&p->lru);
 	}
 	spin_unlock(&pool->list_lock);
-
+	mod_node_page_state(page_pgdat(p), NR_INDIRECTLY_RECLAIMABLE_BYTES,
+				-(PAGE_SIZE << pool->pool_order));
 	return p;
 }
 
@@ -283,6 +285,22 @@ static int kgsl_pool_get_retry_order(unsigned int order)
 	return 0;
 }
 
+static unsigned int kgsl_gfp_mask(unsigned int page_order)
+{
+	unsigned int gfp_mask = __GFP_HIGHMEM;
+
+	if (page_order > 0) {
+		gfp_mask |= __GFP_COMP | __GFP_NORETRY | __GFP_NOWARN;
+		gfp_mask &= ~__GFP_RECLAIM;
+	} else
+		gfp_mask |= GFP_KERNEL;
+
+	if (kgsl_sharedmem_get_noretry())
+		gfp_mask |= __GFP_NORETRY | __GFP_NOWARN;
+
+	return gfp_mask;
+}
+
 /**
  * kgsl_pool_alloc_page() - Allocate a page of requested size
  * @page_size: Size of the page to be allocated
@@ -382,6 +400,8 @@ done:
 		pcount++;
 	}
 
+	mod_node_page_state(page_pgdat(page), NR_UNRECLAIMABLE_PAGES,
+					(1 << order));
 	return pcount;
 
 eagain:
@@ -400,6 +420,9 @@ void kgsl_pool_free_page(struct page *page)
 		return;
 
 	page_order = compound_order(page);
+
+	mod_node_page_state(page_pgdat(page), NR_UNRECLAIMABLE_PAGES,
+					-(1 << page_order));
 
 	if (!kgsl_pool_max_pages ||
 			(kgsl_pool_size_total() < kgsl_pool_max_pages)) {

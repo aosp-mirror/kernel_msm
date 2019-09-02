@@ -42,6 +42,7 @@
 #include <linux/nls.h>
 #include <linux/of.h>
 #include <linux/bitfield.h>
+#include <linux/suspend.h>
 #include "ufshcd.h"
 #include "ufs_quirks.h"
 #include "unipro.h"
@@ -108,7 +109,7 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 {
 	int rq_type;
 	struct request *rq = lrbp->cmd ? lrbp->cmd->request : NULL;
-	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
+	s64 delta = ktime_us_delta(lrbp->compl_time_stamp,
 		lrbp->issue_time_stamp);
 
 	/* update general request statistics */
@@ -375,6 +376,39 @@ static inline bool ufshcd_is_card_offline(struct ufs_hba *hba)
 	return (atomic_read(&hba->card_state) == UFS_CARD_STATE_OFFLINE);
 }
 
+static bool ufshcd_is_card_present(struct ufs_hba *hba)
+{
+	if (ufshcd_is_card_online(hba))
+		/*
+		 * TODO: need better way to ensure that this delay is
+		 * more than extcon's debounce-ms
+		 */
+		msleep(300);
+
+	/*
+	 * Check if card was online and offline/removed now or
+	 * card was already offline.
+	 */
+	if (ufshcd_is_card_offline(hba))
+		return false;
+
+	return true;
+}
+
+static int ufshcd_card_get_extcon_state(struct ufs_hba *hba)
+{
+	int ret;
+
+	if (!hba->extcon)
+		return -EINVAL;
+
+	ret = extcon_get_state(hba->extcon, EXTCON_MECHANICAL);
+	if (ret < 0)
+		dev_err(hba->dev, "%s: Failed to check card Extcon state, ret=%d\n",
+				 __func__, ret);
+	return ret;
+}
+
 static inline enum ufs_pm_level
 ufs_get_desired_pm_lvl_for_dev_link_state(enum ufs_dev_pwr_mode dev_state,
 					enum uic_link_state link_state)
@@ -476,6 +510,8 @@ static int ufshcd_config_vreg(struct device *dev,
 				struct ufs_vreg *vreg, bool on);
 static int ufshcd_enable_vreg(struct device *dev, struct ufs_vreg *vreg);
 static int ufshcd_disable_vreg(struct device *dev, struct ufs_vreg *vreg);
+static void ufshcd_register_pm_notifier(struct ufs_hba *hba);
+static void ufshcd_unregister_pm_notifier(struct ufs_hba *hba);
 
 #if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND)
 static struct devfreq_simple_ondemand_data ufshcd_ondemand_data = {
@@ -787,7 +823,8 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 		}
 	}
 
-	if (lrbp->cmd && (lrbp->command_type == UTP_CMD_TYPE_SCSI)) {
+	if (lrbp->cmd && ((lrbp->command_type == UTP_CMD_TYPE_SCSI) ||
+			  (lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE))) {
 		cmd_type = "scsi";
 		cmd_id = (u8)(*lrbp->cmd->cmnd);
 	} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE) {
@@ -1769,7 +1806,7 @@ static int ufshcd_devfreq_scale(struct ufs_hba *hba, bool scale_up)
 		ret = ufshcd_uic_hibern8_enter(hba);
 		if (ret)
 			/* link will be bad state so no need to scale_up_gear */
-			return ret;
+			goto clk_scaling_unprepare;
 		ufshcd_custom_cmd_log(hba, "Hibern8-entered");
 	}
 
@@ -1782,7 +1819,7 @@ static int ufshcd_devfreq_scale(struct ufs_hba *hba, bool scale_up)
 		ret = ufshcd_uic_hibern8_exit(hba);
 		if (ret)
 			/* link will be bad state so no need to scale_up_gear */
-			return ret;
+			goto clk_scaling_unprepare;
 		ufshcd_custom_cmd_log(hba, "Hibern8-Exited");
 	}
 
@@ -2989,7 +3026,6 @@ static inline
 int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 {
 	hba->lrb[task_tag].issue_time_stamp = ktime_get();
-	hba->lrb[task_tag].complete_time_stamp = ktime_set(0, 0);
 	hba->lrb[task_tag].compl_time_stamp = ktime_set(0, 0);
 	ufshcd_clk_scaling_start_busy(hba);
 	__set_bit(task_tag, &hba->outstanding_reqs);
@@ -3036,7 +3072,8 @@ int ufshcd_copy_query_response(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	memcpy(&query_res->upiu_res, &lrbp->ucd_rsp_ptr->qr, QUERY_OSF_SIZE);
 
 	/* Get the descriptor */
-	if (lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_READ_DESC) {
+	if (hba->dev_cmd.query.descriptor &&
+	    lrbp->ucd_rsp_ptr->qr.opcode == UPIU_QUERY_OPCODE_READ_DESC) {
 		u8 *descp = (u8 *)lrbp->ucd_rsp_ptr +
 				GENERAL_UPIU_REQUEST_SIZE;
 		u16 resp_len;
@@ -5126,7 +5163,9 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 	ufshcd_dme_cmd_log(hba, "dme_cmpl_2", hba->active_uic_cmd->command);
 
 out:
-	if (ret && !(hba->extcon && ufshcd_is_card_offline(hba))) {
+	if (ret) {
+		if (hba->extcon && !ufshcd_is_card_present(hba))
+			goto skip_dump;
 		ufsdbg_set_err_state(hba);
 		ufshcd_print_host_state(hba);
 		ufshcd_print_pwr_info(hba);
@@ -5135,6 +5174,7 @@ out:
 		BUG_ON(hba->crash_on_err);
 	}
 
+skip_dump:
 	ufshcd_save_tstamp_of_last_dme_cmd(hba);
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	hba->active_uic_cmd = NULL;
@@ -5209,6 +5249,7 @@ static int ufshcd_link_recovery(struct ufs_hba *hba)
 	 */
 	hba->ufshcd_state = UFSHCD_STATE_ERROR;
 	hba->force_host_reset = true;
+	ufshcd_set_eh_in_progress(hba);
 	schedule_work(&hba->eh_work);
 
 	/* wait for the reset work to finish */
@@ -6389,7 +6430,7 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			scsi_dma_unmap(cmd);
 			cmd->result = result;
 			clear_bit_unlock(index, &hba->lrb_in_use);
-			lrbp->complete_time_stamp = ktime_get();
+			lrbp->compl_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
@@ -6412,6 +6453,7 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			cmd->scsi_done(cmd);
 		} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE ||
 			lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE) {
+			lrbp->compl_time_stamp = ktime_get();
 			if (hba->dev_cmd.complete) {
 				ufshcd_cond_add_cmd_trace(hba, index,
 						"dev_cmd_cmpl");
@@ -6420,8 +6462,6 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 		}
 		if (ufshcd_is_clkscaling_supported(hba))
 			hba->clk_scaling.active_reqs--;
-
-		lrbp->compl_time_stamp = ktime_get();
 	}
 
 	/* clear corresponding bits of completed commands */
@@ -6460,7 +6500,7 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 			ufshcd_clear_cmd(hba, index);
 			ufshcd_outstanding_req_clear(hba, index);
 			clear_bit_unlock(index, &hba->lrb_in_use);
-			lrbp->complete_time_stamp = ktime_get();
+			lrbp->compl_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
@@ -6479,6 +6519,7 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 			/* Do not touch lrbp after scsi done */
 			cmd->scsi_done(cmd);
 		} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE) {
+			lrbp->compl_time_stamp = ktime_get();
 			if (hba->dev_cmd.complete) {
 				ufshcd_cond_add_cmd_trace(hba, index,
 							"dev_cmd_failed");
@@ -6951,33 +6992,18 @@ static void ufshcd_err_handler(struct work_struct *work)
 
 	hba = container_of(work, struct ufs_hba, eh_work);
 
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	if (hba->extcon) {
-		if (ufshcd_is_card_online(hba)) {
-			spin_unlock_irqrestore(hba->host->host_lock, flags);
-			/*
-			 * TODO: need better way to ensure that this delay is
-			 * more than extcon's debounce-ms
-			 */
-			msleep(300);
-			spin_lock_irqsave(hba->host->host_lock, flags);
-		}
-
-		/*
-		 * ignore error if card was online and offline/removed now or
-		 * card was already offline.
-		 */
-		if (ufshcd_is_card_offline(hba)) {
-			hba->saved_err = 0;
-			hba->saved_uic_err = 0;
-			hba->saved_ce_err = 0;
-			hba->auto_h8_err = false;
-			hba->force_host_reset = false;
-			hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
-			goto out;
-		}
+	if (hba->extcon && !ufshcd_is_card_present(hba)) {
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		hba->saved_err = 0;
+		hba->saved_uic_err = 0;
+		hba->saved_ce_err = 0;
+		hba->auto_h8_err = false;
+		hba->force_host_reset = false;
+		hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
+		goto out;
 	}
 
+	spin_lock_irqsave(hba->host->host_lock, flags);
 	ufsdbg_set_err_state(hba);
 
 	if (hba->ufshcd_state == UFSHCD_STATE_RESET)
@@ -7165,6 +7191,10 @@ static void ufshcd_rls_handler(struct work_struct *work)
 	u32 mode;
 
 	hba = container_of(work, struct ufs_hba, rls_work);
+
+	if (hba->extcon && !ufshcd_is_card_present(hba))
+		return;
+
 	pm_runtime_get_sync(hba->dev);
 	ufshcd_scsi_block_requests(hba);
 	down_write(&hba->lock);
@@ -8083,19 +8113,19 @@ static u32 ufshcd_find_max_sup_active_icc_level(struct ufs_hba *hba,
 		goto out;
 	}
 
-	if (hba->vreg_info.vcc)
+	if (hba->vreg_info.vcc && hba->vreg_info.vcc->max_uA)
 		icc_level = ufshcd_get_max_icc_level(
 				hba->vreg_info.vcc->max_uA,
 				POWER_DESC_MAX_ACTV_ICC_LVLS - 1,
 				&desc_buf[PWR_DESC_ACTIVE_LVLS_VCC_0]);
 
-	if (hba->vreg_info.vccq)
+	if (hba->vreg_info.vccq && hba->vreg_info.vccq->max_uA)
 		icc_level = ufshcd_get_max_icc_level(
 				hba->vreg_info.vccq->max_uA,
 				icc_level,
 				&desc_buf[PWR_DESC_ACTIVE_LVLS_VCCQ_0]);
 
-	if (hba->vreg_info.vccq2)
+	if (hba->vreg_info.vccq2 && hba->vreg_info.vccq2->max_uA)
 		icc_level = ufshcd_get_max_icc_level(
 				hba->vreg_info.vccq2->max_uA,
 				icc_level,
@@ -8250,10 +8280,8 @@ static int ufs_get_device_desc(struct ufs_hba *hba,
 	buff_len = max_t(size_t, hba->desc_size.dev_desc,
 			 QUERY_DESC_MAX_SIZE + 1);
 	desc_buf = kmalloc(buff_len, GFP_KERNEL);
-	if (!desc_buf) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (!desc_buf)
+		return -ENOMEM;
 
 	err = ufshcd_read_device_desc(hba, desc_buf, hba->desc_size.dev_desc);
 	if (err) {
@@ -8656,15 +8684,14 @@ static int ufs_read_device_desc_data(struct ufs_hba *hba)
 	if (hba->desc_size.dev_desc) {
 		desc_buf = kmalloc(hba->desc_size.dev_desc, GFP_KERNEL);
 		if (!desc_buf) {
-			err = -ENOMEM;
 			dev_err(hba->dev,
 				"%s: Failed to allocate desc_buf\n", __func__);
-			return err;
+			return -ENOMEM;
 		}
 	}
 	err = ufshcd_read_device_desc(hba, desc_buf, hba->desc_size.dev_desc);
 	if (err)
-		return err;
+		goto out;
 
 	/*
 	 * getting vendor (manufacturerID) and Bank Index in big endian
@@ -8679,8 +8706,28 @@ static int ufs_read_device_desc_data(struct ufs_hba *hba)
 	hba->dev_info.w_spec_version =
 		desc_buf[DEVICE_DESC_PARAM_SPEC_VER] << 8 |
 		desc_buf[DEVICE_DESC_PARAM_SPEC_VER + 1];
+out:
+	kfree(desc_buf);
+	return err;
+}
 
-	return 0;
+static inline bool ufshcd_needs_reinit(struct ufs_hba *hba)
+{
+	bool reinit = false;
+
+	if (hba->dev_info.w_spec_version < 0x300 && hba->phy_init_g4) {
+		dev_warn(hba->dev, "%s: Using force-g4 setting for a non-g4 device, re-init\n",
+				  __func__);
+		hba->phy_init_g4 = false;
+		reinit = true;
+	} else if (hba->dev_info.w_spec_version >= 0x300 && !hba->phy_init_g4) {
+		dev_warn(hba->dev, "%s: Re-init UFS host to use proper PHY settings for the UFS device. This can be avoided by setting the force-g4 in DT\n",
+				  __func__);
+		hba->phy_init_g4 = true;
+		reinit = true;
+	}
+
+	return reinit;
 }
 
 /**
@@ -8694,6 +8741,12 @@ static int ufshcd_probe_hba(struct ufs_hba *hba)
 	struct ufs_dev_desc card = {0};
 	int ret;
 	ktime_t start = ktime_get();
+
+reinit:
+	if (hba->extcon && (ufshcd_card_get_extcon_state(hba) <= 0)) {
+		ret = -ENOLINK;
+		goto out;
+	}
 
 	ret = ufshcd_link_startup(hba);
 	if (ret)
@@ -8732,6 +8785,32 @@ static int ufshcd_probe_hba(struct ufs_hba *hba)
 		dev_err(hba->dev, "%s: Failed getting device info. err = %d\n",
 			__func__, ret);
 		goto out;
+	}
+
+	if (ufshcd_needs_reinit(hba)) {
+		unsigned long flags;
+		int err;
+
+		err = ufshcd_vops_full_reset(hba);
+		if (err)
+			dev_warn(hba->dev, "%s: full reset returned %d\n",
+				 __func__, err);
+
+		err = ufshcd_reset_device(hba);
+		if (err)
+			dev_warn(hba->dev, "%s: device reset failed. err %d\n",
+				 __func__, err);
+
+		/* Reset the host controller */
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		ufshcd_hba_stop(hba, false);
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+		err = ufshcd_hba_enable(hba);
+		if (err)
+			goto out;
+
+		goto reinit;
 	}
 
 	ufs_fixup_device_setup(hba, &card);
@@ -8857,6 +8936,7 @@ static void ufshcd_remove_device(struct ufs_hba *hba)
 	int sdev_count = 0, i;
 	unsigned long flags;
 
+	hba->card_removal_in_progress = 1;
 	ufshcd_hold_all(hba);
 	/* Reset the host controller */
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -8883,10 +8963,14 @@ static void ufshcd_remove_device(struct ufs_hba *hba)
 		scsi_remove_device(sdev_cache[i]);
 
 	spin_lock_irqsave(hba->host->host_lock, flags);
+	/* Complete the flying async UIC command if there is one */
+	if (hba->uic_async_done)
+		complete(hba->uic_async_done);
 	hba->silence_err_logs = false;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	ufshcd_release_all(hba);
+	hba->card_removal_in_progress = 0;
 }
 
 static void ufshcd_card_detect_handler(struct work_struct *work)
@@ -8912,9 +8996,11 @@ static int ufshcd_card_detect_notifier(struct notifier_block *nb,
 {
 	struct ufs_hba *hba = container_of(nb, struct ufs_hba, card_detect_nb);
 
-	if (event)
+	if (event) {
+		if (hba->card_removal_in_progress)
+			goto out;
 		ufshcd_set_card_online(hba);
-	else
+	} else
 		ufshcd_set_card_offline(hba);
 
 	if (ufshcd_is_card_offline(hba) && !hba->sdev_ufs_device)
@@ -9307,6 +9393,15 @@ static int ufshcd_config_vreg_load(struct device *dev, struct ufs_vreg *vreg,
 	if (!vreg)
 		return 0;
 
+	/*
+	 * "set_load" operation shall be required on those regulators
+	 * which specifically configured current limitation. Otherwise
+	 * zero max_uA may cause unexpected behavior when regulator is
+	 * enabled or set as high power mode.
+	 */
+	if (!vreg->max_uA)
+		return 0;
+
 	ret = regulator_set_load(vreg->reg, ua);
 	if (ret < 0) {
 		dev_err(dev, "%s: %s set load (ua=%d) failed, err=%d\n",
@@ -9358,15 +9453,18 @@ static int ufshcd_config_vreg(struct device *dev,
 		if (ret)
 			goto out;
 
-		min_uV = on ? vreg->min_uV : 0;
-		if (vreg->low_voltage_sup && !vreg->low_voltage_active)
-			min_uV = vreg->max_uV;
+		if (vreg->min_uV && vreg->max_uV) {
+			min_uV = on ? vreg->min_uV : 0;
+			if (vreg->low_voltage_sup && !vreg->low_voltage_active)
+				min_uV = vreg->max_uV;
 
-		ret = regulator_set_voltage(reg, min_uV, vreg->max_uV);
-		if (ret) {
-			dev_err(dev, "%s: %s set voltage failed, err=%d\n",
+			ret = regulator_set_voltage(reg, min_uV, vreg->max_uV);
+			if (ret) {
+				dev_err(dev,
+					"%s: %s set voltage failed, err=%d\n",
 					__func__, name, ret);
-			goto out;
+				goto out;
+			}
 		}
 	}
 out:
@@ -10026,6 +10124,54 @@ static void ufshcd_hba_vreg_set_hpm(struct ufs_hba *hba)
 		ufshcd_setup_hba_vreg(hba, true);
 }
 
+#ifdef CONFIG_PM_SLEEP
+static int ufshcd_pm_notify(struct notifier_block *notify_block,
+			 unsigned long mode, void *unused)
+{
+	struct ufs_hba *hba = container_of(
+		notify_block, struct ufs_hba, pm_notify);
+	int ret = 0;
+
+	if (!hba->extcon)
+		return ret;
+
+	switch (mode) {
+	case PM_SUSPEND_PREPARE:
+		ret = ufshcd_extcon_unregister(hba);
+		if (ret)
+			break;
+		cancel_work_sync(&hba->card_detect_work);
+		break;
+	case PM_POST_SUSPEND:
+		ret = ufshcd_extcon_register(hba);
+		if (ret)
+			break;
+		extcon_sync(hba->extcon, EXTCON_MECHANICAL);
+	}
+
+	return ret;
+}
+
+static void ufshcd_register_pm_notifier(struct ufs_hba *hba)
+{
+	hba->pm_notify.notifier_call = ufshcd_pm_notify;
+	register_pm_notifier(&hba->pm_notify);
+}
+
+static void ufshcd_unregister_pm_notifier(struct ufs_hba *hba)
+{
+	unregister_pm_notifier(&hba->pm_notify);
+}
+#else
+static void ufshcd_register_pm_notifier(struct ufs_hba *hba)
+{
+}
+
+static void ufshcd_unregister_pm_notifier(struct ufs_hba *hba)
+{
+}
+#endif /* CONFIG_PM_SLEEP */
+
 /**
  * ufshcd_suspend - helper function for suspend operations
  * @hba: per adapter instance
@@ -10231,7 +10377,8 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	if (hba->extcon &&
 	    (ufshcd_is_card_offline(hba) ||
-	     (ufshcd_is_card_online(hba) && !hba->sdev_ufs_device)))
+	     (ufshcd_is_card_online(hba) && !hba->sdev_ufs_device) ||
+	     !ufshcd_card_get_extcon_state(hba)))
 		goto skip_dev_ops;
 
 	if (ufshcd_is_link_hibern8(hba)) {
@@ -10570,6 +10717,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 	}
 	ufshcd_hba_exit(hba);
 	ufsdbg_remove_debugfs(hba);
+	ufshcd_unregister_pm_notifier(hba);
 }
 EXPORT_SYMBOL_GPL(ufshcd_remove);
 
@@ -10785,6 +10933,9 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 		dev_warn(hba->dev, "%s: device reset failed. err %d\n",
 			 __func__, err);
 
+	if (hba->force_g4)
+		hba->phy_init_g4 = true;
+
 	/* Host controller enable */
 	err = ufshcd_hba_enable(hba);
 	if (err) {
@@ -10844,6 +10995,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 
 	ufs_sysfs_add_nodes(hba->dev);
 
+	ufshcd_register_pm_notifier(hba);
 	return 0;
 
 out_remove_scsi_host:

@@ -10,6 +10,7 @@
 #include "wil6210.h"
 #include "txrx.h"
 #include "ipa.h"
+#include "config.h"
 
 static bool alt_ifname; /* = false; */
 module_param(alt_ifname, bool, 0444);
@@ -298,6 +299,7 @@ static void wil_vif_init(struct wil6210_vif *vif)
 
 	INIT_WORK(&vif->probe_client_worker, wil_probe_client_worker);
 	INIT_WORK(&vif->disconnect_worker, wil_disconnect_worker);
+	INIT_WORK(&vif->p2p.discovery_expired_work, wil_p2p_listen_expired);
 	INIT_WORK(&vif->p2p.delayed_listen_work, wil_p2p_delayed_listen_work);
 
 	INIT_LIST_HEAD(&vif->probe_client_pending);
@@ -391,6 +393,10 @@ void *wil_if_alloc(struct device *dev)
 		dev_err(dev, "wil_priv_init failed\n");
 		goto out_cfg;
 	}
+
+	/* read and parse ini file */
+	wil_parse_config_ini(wil);
+	wil_wiphy_init(wil);
 
 	wil_dbg_misc(wil, "if_alloc\n");
 

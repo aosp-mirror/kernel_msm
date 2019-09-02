@@ -3,22 +3,17 @@
  * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  */
 
-#include <linux/firmware.h>
-#include <linux/delay.h>
-#include <linux/sched.h>
-#include <linux/msm_kgsl.h>
 #include <linux/clk/qcom.h>
+#include <linux/firmware.h>
+#include <linux/of.h>
+#include <linux/slab.h>
 
-#include "kgsl.h"
 #include "adreno.h"
-#include "kgsl_sharedmem.h"
-#include "a3xx_reg.h"
-#include "adreno_a3xx.h"
 #include "adreno_cp_parser.h"
-#include "adreno_trace.h"
+#include "adreno_a3xx.h"
 #include "adreno_pm4types.h"
-#include "adreno_perfcounter.h"
 #include "adreno_snapshot.h"
+#include "adreno_trace.h"
 
 /*
  * Define registers for a3xx that contain addresses used by the
@@ -616,6 +611,9 @@ static void a3xx_platform_setup(struct adreno_device *adreno_dev)
 
 	gpudev->vbif_xin_halt_ctrl0_mask = A30X_VBIF_XIN_HALT_CTRL0_MASK;
 
+	/* Set the GPU busy counter for frequency scaling */
+	adreno_dev->perfctr_pwr_lo = A3XX_RBBM_PERFCTR_PWR_1_LO;
+
 	/* Check efuse bits for various capabilties */
 	a3xx_check_features(adreno_dev);
 }
@@ -831,32 +829,6 @@ static struct adreno_irq a3xx_irq = {
 	.mask = A3XX_INT_MASK,
 };
 
-/* VBIF registers start after 0x3000 so use 0x0 as end of list marker */
-static const struct adreno_vbif_data a304_vbif[] = {
-	{ A3XX_VBIF_ROUND_ROBIN_QOS_ARB, 0x0003 },
-	{0, 0},
-};
-
-static const struct adreno_vbif_data a306_vbif[] = {
-	{ A3XX_VBIF_ROUND_ROBIN_QOS_ARB, 0x0003 },
-	{ A3XX_VBIF_OUT_RD_LIM_CONF0, 0x0000000A },
-	{ A3XX_VBIF_OUT_WR_LIM_CONF0, 0x0000000A },
-	{0, 0},
-};
-
-static const struct adreno_vbif_data a306a_vbif[] = {
-	{ A3XX_VBIF_ROUND_ROBIN_QOS_ARB, 0x0003 },
-	{ A3XX_VBIF_OUT_RD_LIM_CONF0, 0x00000010 },
-	{ A3XX_VBIF_OUT_WR_LIM_CONF0, 0x00000010 },
-	{0, 0},
-};
-
-static const struct adreno_vbif_platform a3xx_vbif_platforms[] = {
-	{ adreno_is_a304, a304_vbif },
-	{ adreno_is_a306, a306_vbif },
-	{ adreno_is_a306a, a306a_vbif },
-};
-
 /*
  * Define the available perfcounter groups - these get used by
  * adreno_perfcounter_get and adreno_perfcounter_put
@@ -999,8 +971,10 @@ static struct adreno_perfcount_register a3xx_perfcounters_rb[] = {
 static struct adreno_perfcount_register a3xx_perfcounters_pwr[] = {
 	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A3XX_RBBM_PERFCTR_PWR_0_LO,
 		A3XX_RBBM_PERFCTR_PWR_0_HI, -1, 0 },
-	{ KGSL_PERFCOUNTER_NOT_USED, 0, 0, A3XX_RBBM_PERFCTR_PWR_1_LO,
-		A3XX_RBBM_PERFCTR_PWR_1_HI, -1, 0 },
+	/*
+	 * A3XX_RBBM_PERFCTR_PWR_1_LO is used for frequency scaling and removed
+	 * from the pool of available counters
+	 */
 };
 
 static struct adreno_perfcount_register a3xx_perfcounters_vbif[] = {
@@ -1094,19 +1068,6 @@ static void a3xx_perfcounter_init(struct adreno_device *adreno_dev)
 		counters->groups[KGSL_PERFCOUNTER_GROUP_VBIF_PWR].regs =
 			a3xx_perfcounters_vbif2_pwr;
 	}
-
-	/*
-	 * Enable the GPU busy count counter. This is a fixed counter on
-	 * A3XX so we don't need to bother checking the return value
-	 */
-	adreno_perfcounter_get(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-		NULL, NULL, PERFCOUNTER_FLAG_KERNEL);
-}
-
-static void a3xx_perfcounter_close(struct adreno_device *adreno_dev)
-{
-	adreno_perfcounter_put(adreno_dev, KGSL_PERFCOUNTER_GROUP_PWR, 1,
-		PERFCOUNTER_FLAG_KERNEL);
 }
 
 /**
@@ -1157,9 +1118,11 @@ static void a3xx_protect_init(struct adreno_device *adreno_dev)
 static void a3xx_start(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	const struct adreno_a3xx_core *a3xx_core = to_a3xx_core(adreno_dev);
 
-	adreno_vbif_start(adreno_dev, a3xx_vbif_platforms,
-			ARRAY_SIZE(a3xx_vbif_platforms));
+	/* Set up VBIF registers from the GPU core definition */
+	adreno_reglist_write(adreno_dev, a3xx_core->vbif,
+		a3xx_core->vbif_count);
 
 	/* Make all blocks contribute to the GPU BUSY perf counter */
 	kgsl_regwrite(device, A3XX_RBBM_GPU_BUSY_MASKED, 0xFFFFFFFF);
@@ -1394,17 +1357,18 @@ static int a3xx_microcode_read(struct adreno_device *adreno_dev)
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_firmware *pm4_fw = ADRENO_FW(adreno_dev, ADRENO_FW_PM4);
 	struct adreno_firmware *pfp_fw = ADRENO_FW(adreno_dev, ADRENO_FW_PFP);
+	const struct adreno_a3xx_core *a3xx_core = to_a3xx_core(adreno_dev);
 
 	if (pm4_fw->fwvirt == NULL) {
 		int len;
 		void *ptr;
 
 		int ret = _load_firmware(device,
-			adreno_dev->gpucore->pm4fw_name, &ptr, &len);
+			a3xx_core->pm4fw_name, &ptr, &len);
 
 		if (ret) {
 			dev_err(device->dev,  "Failed to read pm4 ucode %s\n",
-				adreno_dev->gpucore->pm4fw_name);
+				a3xx_core->pm4fw_name);
 			return ret;
 		}
 
@@ -1427,10 +1391,10 @@ static int a3xx_microcode_read(struct adreno_device *adreno_dev)
 		void *ptr;
 
 		int ret = _load_firmware(device,
-			adreno_dev->gpucore->pfpfw_name, &ptr, &len);
+			a3xx_core->pfpfw_name, &ptr, &len);
 		if (ret) {
 			dev_err(device->dev, "Failed to read pfp ucode %s\n",
-					   adreno_dev->gpucore->pfpfw_name);
+					   a3xx_core->pfpfw_name);
 			return ret;
 		}
 
@@ -1542,7 +1506,6 @@ struct adreno_gpudev adreno_a3xx_gpudev = {
 	.init = a3xx_init,
 	.microcode_read = a3xx_microcode_read,
 	.perfcounter_init = a3xx_perfcounter_init,
-	.perfcounter_close = a3xx_perfcounter_close,
 	.start = a3xx_start,
 	.snapshot = a3xx_snapshot,
 	.coresight = {&a3xx_coresight},

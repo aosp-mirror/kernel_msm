@@ -2,14 +2,13 @@
 /*
  * Copyright (c) 2002,2007-2019, The Linux Foundation. All rights reserved.
  */
-#include <linux/module.h>
-#include <linux/uaccess.h>
 
-#include "kgsl.h"
+#include <linux/slab.h>
+
+#include "a5xx_reg.h"
 #include "adreno.h"
 #include "adreno_perfcounter.h"
 #include "adreno_pm4types.h"
-#include "a5xx_reg.h"
 
 /* Bit flag for RBMM_PERFCTR_CTL */
 #define RBBM_PERFCTR_CTL_ENABLE		0x00000001
@@ -112,19 +111,6 @@ static void adreno_perfcounter_write(struct adreno_device *adreno_dev,
 	 * select register afterwards.
 	 */
 	adreno_writereg(adreno_dev, cmd[i], val);
-}
-
-/**
- * adreno_perfcounter_close() - Release counters initialized by
- * adreno_perfcounter_close
- * @adreno_dev: Pointer to an adreno_device struct
- */
-void adreno_perfcounter_close(struct adreno_device *adreno_dev)
-{
-	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
-
-	if (gpudev->perfcounter_close)
-		gpudev->perfcounter_close(adreno_dev);
 }
 
 /**
@@ -870,7 +856,6 @@ static int adreno_perfcounter_enable(struct adreno_device *adreno_dev,
 	unsigned int group, unsigned int counter, unsigned int countable)
 {
 	struct adreno_perfcounters *counters = ADRENO_PERFCOUNTERS(adreno_dev);
-	struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
 
 	if (counters == NULL)
 		return -EINVAL;
@@ -886,8 +871,6 @@ static int adreno_perfcounter_enable(struct adreno_device *adreno_dev,
 		/* alwayson counter is global, so init value is 0 */
 		break;
 	case KGSL_PERFCOUNTER_GROUP_PWR:
-		if (gpudev->enable_pwr_counters)
-			return gpudev->enable_pwr_counters(adreno_dev, counter);
 		return 0;
 	case KGSL_PERFCOUNTER_GROUP_VBIF:
 		if (countable > VBIF2_PERF_CNT_SEL_MASK)
@@ -948,10 +931,6 @@ static uint64_t _perfcounter_read_pwr(struct adreno_device *adreno_dev,
 	unsigned int enable_bit;
 
 	reg = &group->regs[counter];
-
-	/* Remember, counter 0 is not emulated on 5XX */
-	if (adreno_is_a5xx(adreno_dev) && (counter == 0))
-		return -EINVAL;
 
 	if (adreno_is_a3xx(adreno_dev)) {
 		/* On A3XX we need to freeze the counter so we can read it */

@@ -612,7 +612,6 @@ done:
 static void rtc6226_get_rds(struct rtc6226_device *radio)
 {
 	int retval = 0;
-	int i;
 
 	mutex_lock(&radio->lock);
 	retval = rtc6226_get_all_registers(radio);
@@ -626,9 +625,6 @@ static void rtc6226_get_rds(struct rtc6226_device *radio)
 	radio->block[1] = radio->registers[BB_DATA];
 	radio->block[2] = radio->registers[BC_DATA];
 	radio->block[3] = radio->registers[BD_DATA];
-
-	for (i = 0; i < 4; i++)
-		FMDBG("%s block[%d] %x\n", __func__, i, radio->block[i]);
 
 	radio->bler[0] = (radio->registers[RSSI] & RSSI_RDS_BA_ERRS) >> 14;
 	radio->bler[1] = (radio->registers[RSSI] & RSSI_RDS_BB_ERRS) >> 12;
@@ -1244,7 +1240,7 @@ void rtc6226_rds_handler(struct work_struct *worker)
 		grp_type = radio->block[1] >> OFFSET_OF_GRP_TYP;
 		FMDBG("%s grp_type = %d\n", __func__, grp_type);
 	} else {
-		FMDERR("%s invalid data %d\n", __func__, radio->bler[1]);
+		/* invalid data case */
 		return;
 	}
 	if (grp_type & 0x01)
@@ -1393,9 +1389,9 @@ int rtc6226_power_up(struct rtc6226_device *radio)
 	FMDBG("%s : after initialization\n", __func__);
 
 	/* mpxconfig */
-	/* Disable Softmute / Disable Mute / De-emphasis / Volume 8 */
-	radio->registers[MPXCFG] = 0x0008 |
-		MPXCFG_CSR0_DIS_SMUTE | MPXCFG_CSR0_DIS_MUTE |
+	/* Disable Mute / De-emphasis / Volume 12 */
+	radio->registers[MPXCFG] = 0x000c |
+		MPXCFG_CSR0_DIS_MUTE |
 		((de << 12) & MPXCFG_CSR0_DEEM);
 	retval = rtc6226_set_register(radio, MPXCFG);
 	if (retval < 0)

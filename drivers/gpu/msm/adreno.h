@@ -5,17 +5,12 @@
 #ifndef __ADRENO_H
 #define __ADRENO_H
 
-#include "kgsl_device.h"
-#include "kgsl_sharedmem.h"
-#include "adreno_drawctxt.h"
-#include "adreno_ringbuffer.h"
-#include "adreno_profile.h"
 #include "adreno_dispatch.h"
-#include "kgsl_iommu.h"
+#include "adreno_drawctxt.h"
 #include "adreno_perfcounter.h"
-#include <linux/stat.h>
-#include <linux/delay.h>
-#include "kgsl_gmu_core.h"
+#include "adreno_profile.h"
+#include "adreno_ringbuffer.h"
+#include "kgsl_sharedmem.h"
 
 #define DEVICE_3D_NAME "kgsl-3d"
 #define DEVICE_3D0_NAME "kgsl-3d0"
@@ -337,6 +332,16 @@ struct adreno_device_private {
 };
 
 /**
+ * struct adreno_reglist - simple container for register offsets / values
+ */
+struct adreno_reglist {
+	/** @offset: Offset of the register */
+	u32 offset;
+	/** @value: Default value of the register to write */
+	u32 value;
+};
+
+/**
  * struct adreno_gpu_core - A specific GPU core definition
  * @gpurev: Unique GPU revision identifier
  * @core: Match for the core version of the GPU
@@ -344,53 +349,24 @@ struct adreno_device_private {
  * @minor: Match for the minor version of the GPU
  * @patchid: Match for the patch revision of the GPU
  * @features: Common adreno features supported by this core
- * @pm4fw_name: Filename for th PM4 firmware
- * @pfpfw_name: Filename for the PFP firmware
- * @zap_name: Filename for the Zap Shader ucode
  * @gpudev: Pointer to the GPU family specific functions for this core
  * @gmem_base: Base address of binning memory (GMEM/OCMEM)
  * @gmem_size: Amount of binning memory (GMEM/OCMEM) to reserve for the core
- * @shader_offset: Offset of shader from gpu reg base
- * @shader_size: Shader size
  * @num_protected_regs: number of protected registers
- * @gpmufw_name: Filename for the GPMU firmware
- * @gpmu_major: Match for the GPMU & firmware, major revision
- * @gpmu_minor: Match for the GPMU & firmware, minor revision
- * @gpmu_features: Supported features for any given GPMU version
  * @busy_mask: mask to check if GPU is busy in RBBM_STATUS
- * @lm_major: Limits Management register sequence, major revision
- * @lm_minor: LM register sequence, minor revision
- * @regfw_name: Filename for the register sequence firmware
- * @gpmu_tsens: ID for the temporature sensor used by the GPMU
- * @max_power: Max possible power draw of a core, units elephant tail hairs
+ * @bus_width: Bytes transferred in 1 cycle
  */
 struct adreno_gpu_core {
 	enum adreno_gpurev gpurev;
 	unsigned int core, major, minor, patchid;
 	unsigned long features;
-	const char *pm4fw_name;
-	const char *pfpfw_name;
-	const char *sqefw_name;
-	const char *zap_name;
 	struct adreno_gpudev *gpudev;
 	unsigned long gmem_base;
 	size_t gmem_size;
-	unsigned long shader_offset;
-	unsigned int shader_size;
 	unsigned int num_protected_regs;
-	const char *gpmufw_name;
-	unsigned int gpmu_major;
-	unsigned int gpmu_minor;
-	unsigned int gpmu_features;
 	unsigned int busy_mask;
-	unsigned int lm_major, lm_minor;
-	const char *regfw_name;
-	unsigned int gpmu_tsens;
-	unsigned int max_power;
-	unsigned int prim_fifo_threshold;
-	unsigned int pdc_address_offset;
+	u32 bus_width;
 };
-
 
 enum gpu_coresight_sources {
 	GPU_CORESIGHT_GX = 0,
@@ -467,6 +443,7 @@ enum gpu_coresight_sources {
  * @lm_threshold_cross: number of current peaks exceeding threshold
  * @ifpc_count: Number of times the GPU went into IFPC
  * @speed_bin: Indicate which power level set to use
+ * @highest_bank_bit: Value of the highest bank bit
  * @csdev: Pointer to a coresight device (if applicable)
  * @gpmu_throttle_counters - counteers for number of throttled clocks
  * @irq_storm_work: Worker to handle possible interrupt storms
@@ -541,6 +518,7 @@ struct adreno_device {
 	uint32_t ifpc_count;
 
 	unsigned int speed_bin;
+	unsigned int highest_bank_bit;
 	unsigned int quirks;
 
 	struct coresight_device *csdev[GPU_CORESIGHT_MAX];
@@ -579,7 +557,6 @@ struct adreno_device {
  * attached and enabled
  * @ADRENO_DEVICE_CACHE_FLUSH_TS_SUSPENDED - Set if a CACHE_FLUSH_TS irq storm
  * is in progress
- * @ADRENO_DEVICE_HARD_RESET - Set if soft reset fails and hard reset is needed
  */
 enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON = 0,
@@ -596,8 +573,7 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_GPMU_INITIALIZED = 11,
 	ADRENO_DEVICE_ISDB_ENABLED = 12,
 	ADRENO_DEVICE_CACHE_FLUSH_TS_SUSPENDED = 13,
-	ADRENO_DEVICE_HARD_RESET = 14,
-	ADRENO_DEVICE_CORESIGHT_CX = 16,
+	ADRENO_DEVICE_CORESIGHT_CX = 14,
 };
 
 /**
@@ -710,6 +686,8 @@ enum adreno_regs {
 	ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
 	ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
 	ADRENO_REG_RBBM_GPR0_CNTL,
+	ADRENO_REG_RBBM_GBIF_HALT,
+	ADRENO_REG_RBBM_GBIF_HALT_ACK,
 	ADRENO_REG_RBBM_VBIF_GX_RESET_STATUS,
 	ADRENO_REG_VBIF_XIN_HALT_CTRL0,
 	ADRENO_REG_VBIF_XIN_HALT_CTRL1,
@@ -761,27 +739,6 @@ struct adreno_reg_offsets {
 #define ADRENO_REG_SKIP	0xFFFFFFFE
 #define ADRENO_REG_DEFINE(_offset, _reg)[_offset] = _reg
 #define ADRENO_INT_DEFINE(_offset, _val) ADRENO_REG_DEFINE(_offset, _val)
-
-/*
- * struct adreno_vbif_data - Describes vbif register value pair
- * @reg: Offset to vbif register
- * @val: The value that should be programmed in the register at reg
- */
-struct adreno_vbif_data {
-	unsigned int reg;
-	unsigned int val;
-};
-
-/*
- * struct adreno_vbif_platform - Holds an array of vbif reg value pairs
- * for a particular core
- * @devfunc: Pointer to platform/core identification function
- * @vbif: Array of reg value pairs for vbif registers
- */
-struct adreno_vbif_platform {
-	int (*devfunc)(struct adreno_device *adreno_dev);
-	const struct adreno_vbif_data *vbif;
-};
 
 /*
  * struct adreno_vbif_snapshot_registers - Holds an array of vbif registers
@@ -922,6 +879,7 @@ struct adreno_gpudev {
 	unsigned int vbif_xin_halt_ctrl0_mask;
 	unsigned int gbif_client_halt_mask;
 	unsigned int gbif_arb_halt_mask;
+	unsigned int gbif_gx_halt_mask;
 	/* GPU specific function hooks */
 	void (*irq_trace)(struct adreno_device *adreno_dev,
 				unsigned int status);
@@ -933,7 +891,6 @@ struct adreno_gpudev {
 	int (*rb_start)(struct adreno_device *adreno_dev);
 	int (*microcode_read)(struct adreno_device *adreno_dev);
 	void (*perfcounter_init)(struct adreno_device *adreno_dev);
-	void (*perfcounter_close)(struct adreno_device *adreno_dev);
 	void (*start)(struct adreno_device *adreno_dev);
 	bool (*is_sptp_idle)(struct adreno_device *adreno_dev);
 	int (*regulator_enable)(struct adreno_device *adreno_dev);
@@ -944,8 +901,6 @@ struct adreno_gpudev {
 	int64_t (*read_throttling_counters)(struct adreno_device *adreno_dev);
 	void (*count_throttles)(struct adreno_device *adreno_dev,
 					uint64_t adj);
-	int (*enable_pwr_counters)(struct adreno_device *adrneo_dev,
-				unsigned int counter);
 	unsigned int (*preemption_pre_ibsubmit)(
 				struct adreno_device *adreno_dev,
 				struct adreno_ringbuffer *rb,
@@ -958,6 +913,7 @@ struct adreno_gpudev {
 				struct adreno_device *adreno_dev,
 				unsigned int *cmds);
 	int (*preemption_init)(struct adreno_device *adreno_dev);
+	void (*preemption_close)(struct adreno_device *adreno_dev);
 	void (*preemption_schedule)(struct adreno_device *adreno_dev);
 	int (*preemption_context_init)(struct kgsl_context *context);
 	void (*preemption_context_destroy)(struct kgsl_context *context);
@@ -1253,6 +1209,12 @@ static inline int adreno_is_a650_family(struct adreno_device *adreno_dev)
 	return (rev == ADRENO_REV_A650 || rev == ADRENO_REV_A620);
 }
 
+static inline int adreno_is_a620v1(struct adreno_device *adreno_dev)
+{
+	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A620) &&
+		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 0);
+}
+
 static inline int adreno_is_a640v2(struct adreno_device *adreno_dev)
 {
 	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A640) &&
@@ -1488,32 +1450,16 @@ static inline void adreno_put_gpu_halt(struct adreno_device *adreno_dev)
 }
 
 
-/*
- * adreno_vbif_start() - Program VBIF registers, called in device start
- * @adreno_dev: Pointer to device whose vbif data is to be programmed
- * @vbif_platforms: list register value pair of vbif for a family
- * of adreno cores
- * @num_platforms: Number of platforms contained in vbif_platforms
+/**
+ * adreno_reglist_write - Write each register in a reglist
+ * @adreno_dev: An Adreno GPU device handle
+ * @reglist: A list of &struct adreno_reglist items
+ * @count: Number of items in @reglist
+ *
+ * Write each register listed in @reglist.
  */
-static inline void adreno_vbif_start(struct adreno_device *adreno_dev,
-			const struct adreno_vbif_platform *vbif_platforms,
-			int num_platforms)
-{
-	int i;
-	const struct adreno_vbif_data *vbif = NULL;
-
-	for (i = 0; i < num_platforms; i++) {
-		if (vbif_platforms[i].devfunc(adreno_dev)) {
-			vbif = vbif_platforms[i].vbif;
-			break;
-		}
-	}
-
-	while ((vbif != NULL) && (vbif->reg != 0)) {
-		kgsl_regwrite(KGSL_DEVICE(adreno_dev), vbif->reg, vbif->val);
-		vbif++;
-	}
-}
+void adreno_reglist_write(struct adreno_device *adreno_dev,
+		const struct adreno_reglist *list, u32 count);
 
 /**
  * adreno_set_protected_registers() - Protect the specified range of registers
@@ -1878,7 +1824,8 @@ static inline int adreno_wait_for_halt_ack(struct kgsl_device *device,
 			break;
 		if (time_after(jiffies, wait_for_vbif)) {
 			dev_err(device->dev,
-				"Wait limit reached for GBIF/VBIF Halt\n");
+				"GBIF/VBIF Halt ack timeout: reg=%08X mask=%08X status=%08X\n",
+				ack_reg, mask, val);
 			ret = -ETIMEDOUT;
 			break;
 		}
@@ -1889,8 +1836,18 @@ static inline int adreno_wait_for_halt_ack(struct kgsl_device *device,
 
 static inline void adreno_deassert_gbif_halt(struct adreno_device *adreno_dev)
 {
-	if (adreno_has_gbif(adreno_dev))
+	if (adreno_has_gbif(adreno_dev)) {
 		adreno_writereg(adreno_dev, ADRENO_REG_GBIF_HALT, 0x0);
+
+		/*
+		 * Release GBIF GX halt. For A615 family, GPU GX halt
+		 * will be cleared automatically on reset.
+		 */
+		if (!gmu_core_gpmu_isenabled(KGSL_DEVICE(adreno_dev)) &&
+			!adreno_is_a615_family(adreno_dev))
+			adreno_writereg(adreno_dev,
+				ADRENO_REG_RBBM_GBIF_HALT, 0x0);
+	}
 }
 void adreno_gmu_clear_and_unmask_irqs(struct adreno_device *adreno_dev);
 void adreno_gmu_mask_and_clear_irqs(struct adreno_device *adreno_dev);

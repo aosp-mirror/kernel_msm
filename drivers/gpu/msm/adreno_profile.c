@@ -1,20 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  */
-#include <linux/fs.h>
-#include <linux/kernel.h>
+
 #include <linux/ctype.h>
-#include <linux/slab.h>
-#include <linux/delay.h>
-#include <linux/uaccess.h>
-#include <linux/vmalloc.h>
 #include <linux/debugfs.h>
 #include <linux/sched/signal.h>
 
 #include "adreno.h"
 #include "adreno_profile.h"
-#include "kgsl_sharedmem.h"
 #include "adreno_pm4types.h"
 
 #define ASSIGNS_STR_FORMAT "%.8s:%u "
@@ -529,7 +523,7 @@ static ssize_t profile_assignments_read(struct file *filep,
 		return 0;
 	}
 
-	buf = kmalloc(max_size, GFP_KERNEL);
+	buf = kzalloc(max_size, GFP_KERNEL);
 	if (!buf) {
 		mutex_unlock(&device->mutex);
 		return -ENOMEM;
@@ -547,7 +541,7 @@ static ssize_t profile_assignments_read(struct file *filep,
 	}
 
 	size = simple_read_from_buffer(ubuf, max, ppos, buf,
-			strlen(buf));
+			pos - buf);
 
 	kfree(buf);
 
