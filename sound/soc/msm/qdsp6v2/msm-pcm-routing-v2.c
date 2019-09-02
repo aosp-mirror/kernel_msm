@@ -864,8 +864,7 @@ static struct cal_block_data *msm_routing_find_topology(int path,
 			cal_block->cal_info;
 		if ((cal_info->path == path)  &&
 			(cal_info->app_type == app_type) &&
-			(cal_info->acdb_id == acdb_id) &&
-			(cal_info->sample_rate == sample_rate)) {
+			(cal_info->acdb_id == acdb_id)) {
 			return cal_block;
 		}
 	}
