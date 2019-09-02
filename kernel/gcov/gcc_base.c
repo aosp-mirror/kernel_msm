@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
+
+#include <linux/export.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include "gcov.h"
@@ -75,3 +78,9 @@ void __gcov_merge_icall_topn(gcov_type *counters, unsigned int n_counters)
 	/* Unused. */
 }
 EXPORT_SYMBOL(__gcov_merge_icall_topn);
+
+void __gcov_exit(void)
+{
+	/* Unused. */
+}
+EXPORT_SYMBOL(__gcov_exit);
