@@ -19,3 +19,4 @@
 #include "lito-bramble-usb.dtsi"
 #include "lito-bramble-nfc.dtsi"
 #include "lito-bramble-ese.dtsi"
+#include "lito-bramble-haptics.dtsi"
