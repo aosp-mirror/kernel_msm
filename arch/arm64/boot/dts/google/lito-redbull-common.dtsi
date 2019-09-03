@@ -20,6 +20,7 @@
 #include "lito-redbull-camera-pmic.dtsi"
 #include "lito-redbull-camera-sensor.dtsi"
 #include "lito-redbull-display.dtsi"
+#include "lito-redbull-fingerprint.dtsi"
 #include "lito-redbull-memory.dtsi"
 #include "lito-redbull-nfc.dtsi"
 #include "lito-redbull-pcie.dtsi"
