@@ -624,54 +624,6 @@ static noinline void __init kasan_strings(void)
 	strnlen(ptr, 1);
 }
 
-static noinline void __init kmem_cache_double_free(void)
-{
-	char *p;
-	size_t size = 200;
-	struct kmem_cache *cache;
-
-	cache = kmem_cache_create("test_cache", size, 0, 0, NULL);
-	if (!cache) {
-		pr_err("Cache allocation failed\n");
-		return;
-	}
-	pr_info("double-free on heap object\n");
-	p = kmem_cache_alloc(cache, GFP_KERNEL);
-	if (!p) {
-		pr_err("Allocation failed\n");
-		kmem_cache_destroy(cache);
-		return;
-	}
-
-	kmem_cache_free(cache, p);
-	kmem_cache_free(cache, p);
-	kmem_cache_destroy(cache);
-}
-
-static noinline void __init kmem_cache_invalid_free(void)
-{
-	char *p;
-	size_t size = 200;
-	struct kmem_cache *cache;
-
-	cache = kmem_cache_create("test_cache", size, 0, SLAB_TYPESAFE_BY_RCU,
-				  NULL);
-	if (!cache) {
-		pr_err("Cache allocation failed\n");
-		return;
-	}
-	pr_info("invalid-free of heap object\n");
-	p = kmem_cache_alloc(cache, GFP_KERNEL);
-	if (!p) {
-		pr_err("Allocation failed\n");
-		kmem_cache_destroy(cache);
-		return;
-	}
-
-	kmem_cache_free(cache, p + 1);
-	kmem_cache_destroy(cache);
-}
-
 static int __init kmalloc_tests_init(void)
 {
 	/*
@@ -708,7 +660,6 @@ static int __init kmalloc_tests_init(void)
 	kasan_alloca_oob_right();
 	ksize_unpoisons_memory();
 	copy_user_test();
-	use_after_scope_test();
 	kmem_cache_double_free();
 	kmem_cache_invalid_free();
 	kasan_memchr();
