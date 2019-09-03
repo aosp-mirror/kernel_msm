@@ -1294,6 +1294,7 @@ static const struct devtable devtable[] = {
 	{"ulpi", SIZE_ulpi_device_id, do_ulpi_entry},
 	{"hdaudio", SIZE_hda_device_id, do_hda_entry},
 	{"fslmc", SIZE_fsl_mc_device_id, do_fsl_mc_entry},
+	{"typec", SIZE_typec_device_id, do_typec_entry},
 };
 
 /* Create MODULE_ALIAS() statements.
