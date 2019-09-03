@@ -510,10 +510,11 @@ static int of_thermal_get_crit_temp(struct thermal_zone_device *tz,
 
 	return -EINVAL;
 }
+
 static bool of_thermal_is_wakeable(struct thermal_zone_device *tz)
 {
 	struct __thermal_zone *data = tz->devdata;
-	pr_err("%s line %d\n", __func__, __LINE__);
+
 	return data->is_wakeable;
 }
 
@@ -1234,9 +1235,9 @@ __init *thermal_of_build_thermal_zone(struct device_node *np)
 
 	tz->default_disable = of_property_read_bool(np,
 					"disable-thermal-zone");
-	tz->is_wakeable = of_property_read_bool(np,
-			"wake-capable-sensor");
 
+	tz->is_wakeable = of_property_read_bool(np,
+					"wake-capable-sensor");
 	/*
 	 * REVIST: for now, the thermal framework supports only
 	 * one sensor per thermal zone. Thus, we are considering
