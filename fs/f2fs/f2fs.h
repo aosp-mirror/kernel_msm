@@ -3646,8 +3646,7 @@ static inline bool f2fs_force_buffered_io(struct inode *inode,
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	int rw = iov_iter_rw(iter);
 
-	if (f2fs_post_read_required(inode) &&
-		!fscrypt_using_hardware_encryption(inode))
+	if (f2fs_post_read_required(inode)) 
 		return true;
 	if (sbi->s_ndevs)
 		return true;
@@ -3666,15 +3665,6 @@ static inline bool f2fs_force_buffered_io(struct inode *inode,
 	return false;
 }
 
-static inline bool f2fs_may_encrypt_bio(struct inode *inode,
-		struct f2fs_io_info *fio)
-{
-	if (fio && (fio->type != DATA || fio->encrypted_page))
-		return false;
-
-	return (f2fs_encrypted_file(inode) &&
-			fscrypt_using_hardware_encryption(inode));
-}
 #ifdef CONFIG_F2FS_FAULT_INJECTION
 extern void f2fs_build_fault_attr(struct f2fs_sb_info *sbi, unsigned int rate,
 							unsigned int type);
