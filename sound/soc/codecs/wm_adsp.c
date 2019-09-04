@@ -866,11 +866,17 @@ int wm_adsp_fw_put(struct snd_kcontrol *kcontrol,
 	struct wm_adsp *dsp = snd_soc_codec_get_drvdata(codec);
 	int ret = 0;
 
-	if (ucontrol->value.enumerated.item[0] == dsp[e->shift_l].fw)
+	if (ucontrol->value.enumerated.item[0] == dsp[e->shift_l].fw) {
+		adsp_info(dsp, "%s: Same firmare number: %d",
+				__func__, dsp[e->shift_l].fw);
 		return 0;
+	}
 
-	if (ucontrol->value.enumerated.item[0] >= WM_ADSP_NUM_FW)
+	if (ucontrol->value.enumerated.item[0] >= WM_ADSP_NUM_FW) {
+		adsp_err(dsp, "%s: Invalid number: %d",
+				__func__, ucontrol->value.enumerated.item[0]);
 		return -EINVAL;
+	}
 
 	mutex_lock(&dsp[e->shift_l].pwr_lock);
 
@@ -878,6 +884,9 @@ int wm_adsp_fw_put(struct snd_kcontrol *kcontrol,
 		ret = -EBUSY;
 	else
 		dsp[e->shift_l].fw = ucontrol->value.enumerated.item[0];
+
+	adsp_info(dsp, "%s: Current firmware number dsp[%d].fw: %d",
+			__func__, e->shift_l, dsp[e->shift_l].fw);
 
 	mutex_unlock(&dsp[e->shift_l].pwr_lock);
 
@@ -1984,9 +1993,9 @@ static int wm_adsp_load(struct wm_adsp *dsp)
 	const struct wmfw_adsp1_sizes *adsp1_sizes;
 	const struct wmfw_footer *footer;
 	const struct wmfw_region *region;
-	const struct wm_adsp_region *mem;
+	const struct wm_adsp_region *mem = NULL;
 	const char *region_name;
-	char *file, *text = NULL;
+	char *file = NULL, *text = NULL;
 	unsigned int reg;
 	int regions = 0;
 	int ret, offset, type;
@@ -2066,6 +2075,10 @@ static int wm_adsp_load(struct wm_adsp *dsp)
 			region_name = "Firmware name";
 			text = kzalloc(le32_to_cpu(region->len) + 1,
 				       GFP_KERNEL);
+			if (text == NULL) {
+				ret = -ENOMEM;
+				goto out_fw;
+			}
 			break;
 		case WMFW_ALGORITHM_DATA:
 			region_name = "Algorithm";
@@ -2077,6 +2090,10 @@ static int wm_adsp_load(struct wm_adsp *dsp)
 			region_name = "Information";
 			text = kzalloc(le32_to_cpu(region->len) + 1,
 				       GFP_KERNEL);
+			if (text == NULL) {
+				ret = -ENOMEM;
+				goto out_fw;
+			}
 			break;
 		case WMFW_ABSOLUTE:
 			region_name = "Absolute";
@@ -3430,6 +3447,10 @@ int wm_adsp2_preloader_put(struct snd_kcontrol *kcontrol,
 	char preload[32];
 
 	snprintf(preload, ARRAY_SIZE(preload), "%s Preload", dsp->name);
+
+	adsp_info(dsp, "%s: preload name: %s old value: %d new value: %d",
+			__func__, preload, dsp->preloaded,
+			ucontrol->value.integer.value[0]);
 
 	dsp->preloaded = ucontrol->value.integer.value[0];
 

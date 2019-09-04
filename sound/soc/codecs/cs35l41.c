@@ -145,6 +145,9 @@ static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
 	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
 
+	dev_info(cs35l41->dev, "%s: event: %d halo_booted: %d\n",
+				__func__, event, cs35l41->halo_booted);
+
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		if (cs35l41->halo_booted == false)
@@ -168,6 +171,9 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
 	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
+
+	dev_info(cs35l41->dev, "%s: event: %d halo_booted: %d\n",
+				__func__, event, cs35l41->halo_booted);
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
@@ -196,6 +202,10 @@ static int cs35l41_halo_booted_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
+
+	dev_info(cs35l41->dev, "%s: old booted value: %d new boot value: %d\n",
+				__func__, cs35l41->halo_booted,
+				ucontrol->value.integer.value[0]);
 
 	cs35l41->halo_booted = ucontrol->value.integer.value[0];
 
@@ -487,6 +497,9 @@ static const struct snd_kcontrol_new dre_ctrl =
 	SOC_DAPM_SINGLE("DRE Switch", CS35L41_PWR_CTRL3, 20, 1, 0);
 
 static const struct snd_kcontrol_new vbstmon_out_ctrl =
+	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
+
+static const struct snd_kcontrol_new main_amp_enable_ctrl =
 	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
 
 static const char * const cs35l41_pcm_sftramp_text[] =  {
@@ -1021,6 +1034,8 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 	bool pdn;
 	unsigned int val;
 
+	dev_info(cs35l41->dev, "main amp event %d", event);
+
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
@@ -1149,6 +1164,9 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 	SND_SOC_DAPM_SWITCH("DRE", SND_SOC_NOPM, 0, 0, &dre_ctrl),
 	SND_SOC_DAPM_SWITCH("VBSTMON Output", SND_SOC_NOPM, 0, 0,
 						&vbstmon_out_ctrl),
+
+	SND_SOC_DAPM_SWITCH("Main AMP Enable", SND_SOC_NOPM, 0, 0,
+						&main_amp_enable_ctrl),
 };
 
 static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
@@ -1238,7 +1256,9 @@ static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
 	{"DRE", "DRE Switch", "CLASS H"},
 	{"Main AMP", NULL, "CLASS H"},
 	{"Main AMP", NULL, "DRE"},
-	{"SPK", NULL, "Main AMP"},
+
+	{"Main AMP Enable", "Switch", "Main AMP"},
+	{"SPK", NULL, "Main AMP Enable"},
 
 	{"PCM Source", "ASP", "ASPRX1"},
 	{"PCM Source", "DSP", "DSP1"},
@@ -2152,6 +2172,7 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	dsp->num = 1;
 	dsp->type = WMFW_HALO;
 	dsp->rev = 0;
+	dsp->fw = 9; /* 9 is WM_ADSP_FW_SPK_PROT in wm_adsp.c */
 	dsp->dev = cs35l41->dev;
 	dsp->regmap = cs35l41->regmap;
 	dsp->tuning_has_prefix = cs35l41->pdata.tuning_has_prefix;
