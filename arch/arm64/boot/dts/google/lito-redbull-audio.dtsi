@@ -518,6 +518,7 @@
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <15>;
 
+		cirrus,tuning-has-prefix;
 		cirrus,right-channel-amp;
 
 		cirrus,gpio-config2 {
