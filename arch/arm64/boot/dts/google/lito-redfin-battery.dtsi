@@ -12,3 +12,17 @@
  */
 
 #include "lito-redfin-battery-common.dtsi"
+&soc {
+	redfin_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
+		#include "qg-batterydata-alium-10k-3600mah.dtsi"
+	};
+};
+
+&pm7250b_charger {
+	qcom,battery-data = <&redfin_batterydata>;
+};
+
+&pm7250b_qg {
+	qcom,battery-data = <&redfin_batterydata>;
+};
