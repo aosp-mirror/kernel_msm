@@ -2068,33 +2068,9 @@ static void ddr_sanity_test(void *ctx, unsigned int test_data)
 #endif
 }
 
-/* Caller must hold ddr_ctx->ddr_lock */
-static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
+static int ddr_phy_reinit_train(void *ctx, enum ddr_freq_t freq)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
-
-	if (ddr_ctx->cur_freq == freq)
-		return DDR_SUCCESS;
-
-	ddr_ctx->cur_freq = freq;
-
-	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
-
-	/* Block AXI Before entering self-refresh */
-	if (ddr_block_axi_transactions(ddr_ctx))
-		return -ETIMEDOUT;
-
-	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
-		pr_err("%s: self-refresh entry failed\n", __func__);
-		return DDR_FAIL;
-	}
-
-	/* Configure the PLL for the required frequency */
-	if (ddr_set_pll_freq(ddr_ctx, freq)) {
-		pr_err("%s: pll setting failed\n", __func__);
-		return DDR_FAIL;
-	}
 
 	/* DDR Init flow (reduced) without training */
 	if (ab_ddr_init_freq_change(ddr_ctx)) {
@@ -2145,27 +2121,63 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 		}
 	}
 
-	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE)) {
-		pr_err("%s: self-refresh exit failed\n", __func__);
-		goto freq_change_fail;
-	}
-
-	ddr_axi_enable_after_all_training(ddr_ctx);
-
 	/* save the training results to local array */
 	if (!ddr_ctx->ddr_train_completed[freq])
 		ddr_train_save_configuration(ddr_ctx);
 
 	ddr_ctx->ddr_train_completed[freq] = 1;
 
-	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
-
 	return DDR_SUCCESS;
 
 freq_change_fail:
-	pr_err("%s: ddr frequency switch failed!!\n", __func__);
+	pr_err("%s: ddr phy reinit and train seqeunce failed!!\n", __func__);
 	return DDR_FAIL;
+}
+
+/* Caller must hold ddr_ctx->ddr_lock */
+static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
+{
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+
+	if (ddr_ctx->cur_freq == freq)
+		return DDR_SUCCESS;
+
+	ddr_ctx->cur_freq = freq;
+
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
+
+	/* Block AXI Before entering self-refresh */
+	if (ddr_block_axi_transactions(ddr_ctx))
+		return -ETIMEDOUT;
+
+	/* Self-refresh entry sequence */
+	if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
+		pr_err("%s: self-refresh entry failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	/* Configure the PLL for the required frequency */
+	if (ddr_set_pll_freq(ddr_ctx, freq)) {
+		pr_err("%s: pll setting failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	if (ddr_phy_reinit_train(ddr_ctx, freq)) {
+		pr_err("%s: phy reinit and train sequence failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	/* Self-refresh exit sequence */
+	if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE)) {
+		pr_err("%s: self-refresh exit failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	ddr_axi_enable_after_all_training(ddr_ctx);
+
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
+
+	return DDR_SUCCESS;
 }
 
 /* Perform ddr re-training or train result restore */
@@ -2609,6 +2621,7 @@ static int32_t ab_ddr_suspend(void *ctx)
 static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	enum ddr_freq_t freq = ddr_ctx->cur_freq;
 
 	/* Config MIF_PLL and move the MIF clock to PLL output */
 	if (ddr_set_pll_freq(ddr_ctx, ddr_ctx->cur_freq)) {
@@ -2623,8 +2636,28 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
 	if (ddr_enable_dll(ddr_ctx)) {
-		pr_err("%s: enable dll failed.\n", __func__);
-		return DDR_FAIL;
+		ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
+		pr_warn("%s: enable dll failed.\n", __func__);
+
+		/* Incase DLL Lock failure is observed during the self-refresh
+		 * exit, perform the re-train sequence at the current frequency.
+		 * This will include the re-initialization of PHY and the
+		 * re-training sequences.
+		 */
+		ddr_ctx->ddr_train_completed[freq] = 0;
+		if (ddr_phy_reinit_train(ddr_ctx, freq)) {
+			pr_err("%s: phy reint and train failed\n", __func__);
+			return DDR_FAIL;
+		}
+
+		/* Self-refresh exit sequence */
+		if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE)) {
+			pr_err("%s: self-refresh exit failed\n", __func__);
+			return DDR_FAIL;
+		}
+
+		ddr_axi_enable_after_all_training(ddr_ctx);
+		return DDR_SUCCESS;
 	}
 	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
 
