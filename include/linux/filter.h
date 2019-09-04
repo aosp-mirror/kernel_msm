@@ -391,7 +391,12 @@ struct sock_fprog_kern {
 	struct sock_filter	*filter;
 };
 
+#define BPF_BINARY_HEADER_MAGIC	0x05de0e82
+
 struct bpf_binary_header {
+#ifdef CONFIG_CFI_CLANG
+	u32 magic;
+#endif
 	unsigned int pages;
 	u8 image[];
 };
@@ -423,7 +428,60 @@ struct sk_filter {
 	struct bpf_prog	*prog;
 };
 
-#define BPF_PROG_RUN(filter, ctx)  (*filter->bpf_func)(ctx, filter->insnsi)
+#if IS_ENABLED(CONFIG_BPF_JIT) && IS_ENABLED(CONFIG_CFI_CLANG)
+/*
+ * With JIT, the kernel makes an indirect call to dynamically generated
+ * code. Use bpf_call_func to perform additional validation of the call
+ * target to narrow down attack surface. Architectures implementing BPF
+ * JIT can override arch_bpf_jit_check_func for arch-specific checking.
+ */
+extern bool arch_bpf_jit_check_func(const struct bpf_prog *prog);
+
+static inline unsigned int __bpf_call_func(const struct bpf_prog *prog,
+					   const void *ctx)
+{
+	/* Call interpreter with CFI checking. */
+	return prog->bpf_func(ctx, prog->insnsi);
+}
+
+static inline unsigned int __nocfi bpf_call_func(const struct bpf_prog *prog,
+						 const void *ctx)
+{
+	unsigned long addr = (unsigned long)prog->bpf_func & PAGE_MASK;
+	const struct bpf_binary_header *hdr = (void *)addr;
+
+	if (!IS_ENABLED(CONFIG_BPF_JIT_ALWAYS_ON) && !prog->jited)
+		return __bpf_call_func(prog, ctx);
+
+	/*
+	 * We are about to call dynamically generated code. Check that the
+	 * page has bpf_binary_header with a valid magic to limit possible
+	 * call targets.
+	 */
+	BUG_ON(hdr->magic != BPF_BINARY_HEADER_MAGIC ||
+		!arch_bpf_jit_check_func(prog));
+
+	/* Call jited function without CFI checking. */
+	return prog->bpf_func(ctx, prog->insnsi);
+}
+
+static inline void bpf_jit_set_header_magic(struct bpf_binary_header *hdr)
+{
+	hdr->magic = BPF_BINARY_HEADER_MAGIC;
+}
+#else
+static inline unsigned int bpf_call_func(const struct bpf_prog *prog,
+					 const void *ctx)
+{
+	return prog->bpf_func(ctx, prog->insnsi);
+}
+
+static inline void bpf_jit_set_header_magic(struct bpf_binary_header *hdr)
+{
+}
+#endif
+
+#define BPF_PROG_RUN(filter, ctx)  bpf_call_func(filter, ctx)
 
 #define BPF_SKB_CB_LEN QDISC_CB_PRIV_LEN
 
