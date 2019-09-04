@@ -61,10 +61,12 @@
 
 #define UICURVE_MAX	3
 
-
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
 #error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
 #endif
+
+#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
+
 
 struct ssoc_uicurve {
 	qnum_t real;
@@ -75,6 +77,29 @@ enum batt_rl_status {
 	BATT_RL_STATUS_NONE = 0,
 	BATT_RL_STATUS_DISCHARGE = -1,
 	BATT_RL_STATUS_RECHARGE = 1,
+};
+
+#define RL_DELTA_SOC_MAX	8
+
+struct batt_ssoc_rl_state {
+	/* rate limiter state */
+	qnum_t rl_ssoc_target;
+	time_t rl_ssoc_last_update;
+
+	/* rate limiter flags */
+	bool rl_no_zero;
+	int rl_fast_track;
+	int rl_track_target;
+	/* rate limiter config */
+	int rl_delta_max_time;
+	qnum_t rl_delta_max_soc;
+
+	int rl_delta_soc_ratio[RL_DELTA_SOC_MAX];
+	qnum_t rl_delta_soc_limit[RL_DELTA_SOC_MAX];
+	int rl_delta_soc_cnt;
+
+	qnum_t rl_ft_low_limit;
+	qnum_t rl_ft_delta_limit;
 };
 
 #define SSOC_STATE_BUF_SZ 128
@@ -88,6 +113,12 @@ struct batt_ssoc_state {
 	qnum_t ssoc_uic;
 	/* output of rate limiter */
 	qnum_t ssoc_rl;
+	struct batt_ssoc_rl_state ssoc_rl_state;
+
+	/* output of rate limiter */
+	int rl_rate;
+	int rl_last_ssoc;
+	time_t rl_last_update;
 
 	/* connected or disconnected */
 	int buck_enabled;
@@ -375,15 +406,76 @@ static void ssoc_uicurve_dup(struct ssoc_uicurve *dst,
 
 /* ------------------------------------------------------------------------- */
 
-/* TODO: b/111407333, apply rate limiter to UIC */
+/* could also use the rate of change for this */
+static qnum_t ssoc_rl_max_delta(const struct batt_ssoc_rl_state *rls,
+				int bucken, time_t delta_time)
+{
+	int i;
+	const qnum_t max_delta = (rls->rl_delta_max_soc * delta_time) /
+				  rls->rl_delta_max_time;
+
+	if (rls->rl_fast_track)
+		return max_delta;
+
+	/* might have one table for charging and one for discharging */
+	for (i = 0; i < rls->rl_delta_soc_cnt; i++) {
+		if (rls->rl_delta_soc_limit[i] == 0)
+			break;
+
+		if (rls->rl_ssoc_target < rls->rl_delta_soc_limit[i])
+			return (max_delta * 10) /
+				rls->rl_delta_soc_ratio[i];
+	}
+
+	return max_delta;
+}
+
 static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 {
-	qnum_t rl_val = ssoc->ssoc_uic;
+	const time_t now = get_boot_sec();
+	struct batt_ssoc_rl_state *rls = &ssoc->ssoc_rl_state;
+	qnum_t rl_val;
+
+	/* track ssoc_uic when buck is enabled or the minimum value of uic */
+	if (ssoc->buck_enabled ||
+	    (!ssoc->buck_enabled && ssoc->ssoc_uic < rls->rl_ssoc_target))
+		rls->rl_ssoc_target = ssoc->ssoc_uic;
+
+	/* sanity on the target */
+	if (rls->rl_ssoc_target > qnum_fromint(100))
+		rls->rl_ssoc_target = qnum_fromint(100);
+	if (rls->rl_ssoc_target < qnum_fromint(0))
+		rls->rl_ssoc_target = qnum_fromint(0);
+
+	/* closely track target */
+	if (rls->rl_track_target) {
+		rl_val = rls->rl_ssoc_target;
+	} else {
+		qnum_t step;
+		const time_t delta_time = now - rls->rl_ssoc_last_update;
+		const time_t max_delta = ssoc_rl_max_delta(rls,
+							   ssoc->buck_enabled,
+							   delta_time);
+
+		/* apply the rate limiter, delta_soc to target */
+		step = rls->rl_ssoc_target - ssoc->ssoc_rl;
+		if (step < -max_delta)
+			step = -max_delta;
+		else if (step > max_delta)
+			step = max_delta;
+
+		rl_val = ssoc->ssoc_rl + step;
+	}
 
 	/* do not increase when not connected */
-	if (ssoc->buck_enabled==0 && ssoc->ssoc_uic > ssoc->ssoc_rl)
+	if (!ssoc->buck_enabled && rl_val > ssoc->ssoc_rl)
 		rl_val = ssoc->ssoc_rl;
 
+	/* will report 0% when rl_no_zero clears */
+	if (rls->rl_no_zero && rl_val <= qnum_fromint(1))
+		rl_val = qnum_fromint(1);
+
+	rls->rl_ssoc_last_update = now;
 	return rl_val;
 }
 
@@ -437,32 +529,72 @@ void dump_ssoc_state(struct batt_ssoc_state *ssoc_state, struct logbuffer *log)
 /* ------------------------------------------------------------------------- */
 
 /* call while holding batt_lock
- * NOTE: for Maxim could need:
- *	1fh AvCap
- *	10h FullCap
- *	23h FullCapNom
  */
 static void ssoc_update(struct batt_ssoc_state *ssoc, qnum_t soc)
 {
+	struct batt_ssoc_rl_state *rls =  &ssoc->ssoc_rl_state;
+	qnum_t delta;
+
 	/* low pass filter */
 	ssoc->ssoc_gdf = soc;
 	/* spoof UI @ EOC */
 	ssoc->ssoc_uic = ssoc_uicurve_map(ssoc->ssoc_gdf, ssoc->ssoc_curve);
+
+	/* first target is current UIC */
+	if (rls->rl_ssoc_target == -1) {
+		rls->rl_ssoc_target = ssoc->ssoc_uic;
+		ssoc->ssoc_rl = ssoc->ssoc_uic;
+	}
+
+	/* enable fast track when target under configured limit */
+	rls->rl_fast_track |= rls->rl_ssoc_target < rls->rl_ft_low_limit;
+
+	/* delta fast tracking during charge
+	 * NOTE: might use the stats from TTF to determine the maximum rate
+	 */
+	delta = rls->rl_ssoc_target - ssoc->ssoc_rl;
+	if (rls->rl_ft_delta_limit && ssoc->buck_enabled && delta > 0) {
+		/* only when SOC increase */
+		rls->rl_fast_track |= delta > rls->rl_ft_delta_limit;
+	} else if (rls->rl_ft_delta_limit && !ssoc->buck_enabled && delta < 0) {
+		/* enable fast track when target under configured limit */
+		rls->rl_fast_track |= -delta > rls->rl_ft_delta_limit;
+	}
+
+	/* TODO: clear no_zero if set. It could be a simple filter that
+	 * decrement no_zero at each round when rl_ssoc_taget <= 0.
+	 */
+	rls->rl_no_zero = (rls->rl_ssoc_target > qnum_from_q8_8(128) );
+
 	/*  monotonicity and rate of change */
 	ssoc->ssoc_rl = ssoc_apply_rl(ssoc);
 }
 
+/* Maxim could need:
+ *	1fh AvCap, 10h FullCap. 23h FullCapNom
+ * QC could need:
+ *	QG_CC_SOC, QG_Raw_SOC, QG_Bat_SOC, QG_Sys_SOC, QG_Mon_SOC
+ */
 static int ssoc_work(struct batt_ssoc_state *ssoc_state,
 		     struct power_supply *fg_psy)
 {
 	int soc_q8_8;
 	qnum_t soc_raw;
 
-	/* TODO: POWER_SUPPLY_PROP_CAPACITY_RAW should return a qnum_t */
+	/* TODO: POWER_SUPPLY_PROP_CAPACITY_RAW should return a qnum_t
+	 * TODO: add an array here configured in DT with the properties
+	 * to query and their weights, make soc_raw come from fusion.
+	 */
 	soc_q8_8 = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_CAPACITY_RAW);
 	if (soc_q8_8 < 0)
 		return -EINVAL;
 
+	/* soc_raw can come from fusion:
+	 *    soc_raw = m1 * w1 + m2 * w2 + ...
+	 *
+	 * where m1, m2 are gauge metrics, w1,w1 are weights that change
+	 * with temperature, state of charge, battery health etc.
+	 */
 	soc_raw = qnum_from_q8_8(soc_q8_8);
 
 	ssoc_update(ssoc_state, soc_raw);
@@ -537,14 +669,85 @@ static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 	return true;
 }
 
+static int ssoc_rl_read_dt(struct batt_ssoc_rl_state *rls,
+			   struct device_node *node)
+{
+	u32 tmp, delta_soc[RL_DELTA_SOC_MAX];
+	int ret, i;
+
+	ret = of_property_read_u32(node, "google,rl_delta-max-soc", &tmp);
+	if (ret == 0)
+		rls->rl_delta_max_soc = qnum_fromint(tmp);
+
+	ret = of_property_read_u32(node, "google,rl_delta-max-time", &tmp);
+	if (ret == 0)
+		rls->rl_delta_max_time = tmp;
+
+	if (!rls->rl_delta_max_soc && !rls->rl_delta_max_time) {
+		rls->rl_track_target = 1;
+		goto done;
+	}
+
+	rls->rl_no_zero = of_property_read_bool(node, "google,rl_no-zero");
+	rls->rl_track_target = of_property_read_bool(node,
+						     "google,rl_track-target");
+
+	ret = of_property_read_u32(node, "google,rl_ft-low-limit", &tmp);
+	if (ret == 0)
+		rls->rl_ft_low_limit = qnum_fromint(tmp);
+
+	ret = of_property_read_u32(node, "google,rl_ft-delta-limit", &tmp);
+	if (ret == 0)
+		rls->rl_ft_delta_limit = qnum_fromint(tmp);
+
+	rls->rl_delta_soc_cnt = of_property_count_elems_of_size(node,
+					      "google,rl_soc-limits",
+					      sizeof(u32));
+	tmp = of_property_count_elems_of_size(node, "google,rl_soc-rates",
+					      sizeof(u32));
+	if (rls->rl_delta_soc_cnt != tmp || tmp == 0) {
+		rls->rl_delta_soc_cnt = 0;
+		goto done;
+	}
+
+	if (rls->rl_delta_soc_cnt > RL_DELTA_SOC_MAX)
+		return -EINVAL;
+
+	ret = of_property_read_u32_array(node, "google,rl_soc-limits",
+					 delta_soc,
+					 rls->rl_delta_soc_cnt);
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < rls->rl_delta_soc_cnt; i++)
+		rls->rl_delta_soc_limit[i] = qnum_fromint(delta_soc[i]);
+
+	ret = of_property_read_u32_array(node, "google,rl_soc-rates",
+					 delta_soc,
+					 rls->rl_delta_soc_cnt);
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < rls->rl_delta_soc_cnt; i++)
+		rls->rl_delta_soc_ratio[i] = delta_soc[i];
+
+done:
+	return 0;
+}
+
+
 /* NOTE: might need to use SOC from bootloader as starting point to avoid UI
  * SSOC jumping around or taking long time to coverge. Could technically read
  * charger voltage and estimate SOC% based on empty and full voltage.
  */
 static int ssoc_init(struct batt_ssoc_state *ssoc_state,
+		     struct device_node *node,
 		     struct power_supply *fg_psy)
 {
 	int ret, capacity;
+
+	ssoc_rl_read_dt(&ssoc_state->ssoc_rl_state, node);
+	ssoc_state->ssoc_rl_state.rl_ssoc_target = -1;
 
 	/* ssoc_work() needs a curve: start with the charge curve to prevent
 	 * SSOC% from increasing after a reboot. Curve type must be NONE until
@@ -712,8 +915,6 @@ done:
 }
 
 /* ------------------------------------------------------------------------- */
-
-#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
 
 static void batt_chg_stats_init(struct gbms_charging_event *ce_data,
 				const struct gbms_chg_profile *profile)
@@ -2524,13 +2725,15 @@ static bool gbatt_check_dead_battery(const struct batt_drv *batt_drv)
 #define SSOC_LEVEL_LOW		0
 
 /* could also use battery temperature, age.
+ * NOTE: this implementation looks at the SOC% but it might be looking to
+ * other quantities or flags.
  * NOTE: CRITICAL_LEVEL implies BATTERY_DEAD but BATTERY_DEAD doesn't imply
  * CRITICAL.
  */
-static int gbatt_get_capacity_level(const struct batt_drv *batt_drv,
+static int gbatt_get_capacity_level(struct batt_ssoc_state *ssoc_state,
 				    int fg_status)
 {
-	const int ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
+	const int ssoc = ssoc_get_capacity(ssoc_state);
 	int capacity_level;
 
 	if (ssoc >= SSOC_LEVEL_FULL) {
@@ -2541,9 +2744,9 @@ static int gbatt_get_capacity_level(const struct batt_drv *batt_drv,
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
 	} else if (ssoc > SSOC_LEVEL_LOW) {
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_LOW;
-	} else if (batt_drv->ssoc_state.buck_enabled == 0) {
+	} else if (ssoc_state->buck_enabled == 0) {
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
-	} else if (batt_drv->ssoc_state.buck_enabled == -1) {
+	} else if (ssoc_state->buck_enabled == -1) {
 		/* only at startup, this should not happen */
 		capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
 	} else if (fg_status == POWER_SUPPLY_STATUS_DISCHARGING ||
@@ -2604,7 +2807,8 @@ static void google_battery_work(struct work_struct *work)
 		 * same behavior during the transition 99 -> 100 -> Full
 		 */
 
-		level = gbatt_get_capacity_level(batt_drv, fg_status);
+		level = gbatt_get_capacity_level(&batt_drv->ssoc_state,
+						 fg_status);
 		if (level != batt_drv->capacity_level) {
 			batt_drv->capacity_level = level;
 			notify_psy_changed = true;
@@ -3081,11 +3285,13 @@ static struct power_supply_desc gbatt_psy_desc = {
 	.num_properties = ARRAY_SIZE(gbatt_battery_props),
 };
 
+
 static void google_battery_init_work(struct work_struct *work)
 {
 	struct power_supply *fg_psy;
 	struct batt_drv *batt_drv = container_of(work, struct batt_drv,
 						 init_work.work);
+	struct device_node *node = batt_drv->device->of_node;
 	int ret = 0;
 
 	batt_rl_reset(batt_drv);
@@ -3109,8 +3315,7 @@ static void google_battery_init_work(struct work_struct *work)
 
 	batt_drv->fg_psy = fg_psy;
 
-	if (of_property_read_bool(batt_drv->device->of_node,
-				  "google,cycle-counts"))
+	if (of_property_read_bool(node, "google,cycle-counts"))
 		batt_drv->ccbin_psy = batt_drv->fg_psy;
 
 	batt_drv->cycle_count = 0;
@@ -3126,14 +3331,13 @@ static void google_battery_init_work(struct work_struct *work)
 			pr_warn("battery not present (ret=%d)\n", ret);
 	}
 
-	ret = of_property_read_u32(batt_drv->device->of_node,
-			"google,recharge-soc-threshold",
-			&batt_drv->ssoc_state.rl_soc_threshold);
+	ret = of_property_read_u32(node, "google,recharge-soc-threshold",
+				   &batt_drv->ssoc_state.rl_soc_threshold);
 	if (ret < 0)
 		batt_drv->ssoc_state.rl_soc_threshold =
 				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
 
-	ret = ssoc_init(&batt_drv->ssoc_state, fg_psy);
+	ret = ssoc_init(&batt_drv->ssoc_state, node, fg_psy);
 	if (ret < 0 && batt_drv->batt_present)
 		goto retry_init_work;
 
@@ -3172,46 +3376,41 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_drv->fake_capacity = (batt_drv->batt_present) ? -EINVAL
 						: DEFAULT_BATT_FAKE_CAPACITY;
 
-
+	/* charging configuration */
+	ret = of_property_read_u32(node, "google,update-interval",
+				   &batt_drv->batt_update_interval);
+	if (ret < 0)
+		batt_drv->batt_update_interval = DEFAULT_BATT_UPDATE_INTERVAL;
 
 	/* charge statistics */
-	ret = of_property_read_u32(batt_drv->device->of_node,
-				   "google,chg-stats-qual-time",
+	ret = of_property_read_u32(node, "google,chg-stats-qual-time",
 				   &batt_drv->ce_data.chg_sts_qual_time);
 	if (ret < 0)
 		batt_drv->ce_data.chg_sts_qual_time =
 					DEFAULT_CHG_STATS_MIN_QUAL_TIME;
 
-	ret = of_property_read_u32(batt_drv->device->of_node,
-				   "google,chg-stats-delta-soc",
+	ret = of_property_read_u32(node, "google,chg-stats-delta-soc",
 				   &batt_drv->ce_data.chg_sts_delta_soc);
 	if (ret < 0)
 		batt_drv->ce_data.chg_sts_delta_soc =
 					DEFAULT_CHG_STATS_MIN_DELTA_SOC;
 
-	/* initialize time to full */
+	/* time to full */
 	ret = ttf_stats_init(&batt_drv->ttf_stats, batt_drv->device,
 			     batt_drv->battery_capacity);
 	if (ret < 0)
 		pr_info("time to full not available\n");
 
-	ret = of_property_read_u32(batt_drv->device->of_node,
-				   "google,update-interval",
-				   &batt_drv->batt_update_interval);
-	if (ret < 0)
-		batt_drv->batt_update_interval = DEFAULT_BATT_UPDATE_INTERVAL;
-
-	/* override setting google,battery-roundtrip = 0 in device tree */
-	batt_drv->disable_votes =
-		of_property_read_bool(batt_drv->device->of_node,
-				"google,disable-votes");
-	if (batt_drv->disable_votes)
-		pr_info("battery votes disabled\n");
-
 	/* google_resistance  */
 	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
 
-	/* debug */
+	/* override setting google,battery-roundtrip = 0 in device tree */
+	batt_drv->disable_votes =
+		of_property_read_bool(node, "google,disable-votes");
+	if (batt_drv->disable_votes)
+		pr_info("battery votes disabled\n");
+
+	/* debugfs */
 	(void)batt_init_fs(batt_drv);
 
 	pr_info("init_work done\n");
