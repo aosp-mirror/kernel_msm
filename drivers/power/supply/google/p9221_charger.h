@@ -284,6 +284,8 @@ struct p9221_charger_data {
 	u32				dc_icl_bpp;
 	int				wlc_alignment;
 	int				wlc_alignment_last;
+	bool				wlc_alignment_capable;
+	int				wlc_alignment_time;
 	u32				current_filtered;
 	u32				current_sample_cnt;
 	struct delayed_work		dcin_pon_work;
