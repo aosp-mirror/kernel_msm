@@ -42,7 +42,6 @@ struct bms_dev {
 	struct	votable			*fv_votable;
 	struct	notifier_block		nb;
 	int				batt_id_ohms;
-	int				taper_control;
 	int				rl_soc_threshold;
 	bool				fcc_stepper_enable;
 	u32				rradc_base;
@@ -82,7 +81,10 @@ struct bias_config {
 #define CHARGING_PAUSE_CMD_BIT			BIT(0)
 
 #define CHGR_FAST_CHARGE_CURRENT_SETTING	0x1061
+#define CHGR_ADC_ITERM_UP_THD_MSB		0x1067
 #define CHGR_FLOAT_VOLTAGE_SETTING		0x1070
+#define CHGR_ENG_CHARGING_CFG			0x10C0
+#define CHGR_ITERM_USE_ANALOG_BIT		BIT(3)
 
 #define DCDC_ICL_STATUS_REG			0x1107
 #define DCDC_AICL_ICL_STATUS_REG		0x1108
@@ -94,12 +96,19 @@ struct bias_config {
 #define USE_DCIN_BIT				BIT(3)
 #define VALID_INPUT_POWER_SOURCE_STS_BIT	BIT(0)
 
+#define BATIF_INT_RT_STS			0x1210
+#define BATIF_TERMINAL_MISSING_RT_STS_BIT	BIT(5)
+#define BATIF_THERM_OR_ID_MISSING_RT_STS_BIT	BIT(4)
+
 #define CHGR_BATTERY_CHARGER_STATUS_MASK	GENMASK(2, 0)
 
-#define CHGR_FLOAT_VOLTAGE_BASE		3600000
-#define CHGR_CHARGE_CURRENT_STEP	50000
+#define CHGR_FLOAT_VOLTAGE_BASE			3600000
+#define CHGR_CHARGE_CURRENT_STEP		50000
 
-#define CHG_TERM_VOLTAGE	4350
+#define CHG_TERM_VOLTAGE			4350
+
+#define ITERM_LIMITS_PM8150B_MA			10000
+#define ADC_CHG_ITERM_MASK			32767
 
 /* sync from google_battery.c */
 #define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
@@ -766,6 +775,60 @@ done:
 	return ret;
 }
 
+static int sm7250_get_batt_iterm(struct bms_dev *bms)
+{
+	int rc, temp;
+	u8 stat, buf[2];
+
+	rc = sm7250_rd8(bms->pmic_regmap,
+			CHGR_ENG_CHARGING_CFG,
+			&stat);
+	if (rc < 0) {
+		pr_err("Couldn't read CHGR_ENG_CHARGING_CFG rc=%d\n",
+			rc);
+		return rc;
+	}
+	pr_info("CHGR_ENG_CHARGING_CFG_REG = 0x%02x\n", stat);
+
+	if (stat & CHGR_ITERM_USE_ANALOG_BIT) {
+		return -EINVAL;
+	}
+
+	rc = sm7250_read(bms->pmic_regmap, CHGR_ADC_ITERM_UP_THD_MSB,
+			 buf, 2);
+	if (rc < 0) {
+		pr_err("Couldn't read CHGR_ADC_ITERM_UP_THD_MSB rc=%d\n", rc);
+		return rc;
+	}
+
+	temp = buf[1] | (buf[0] << 8);
+	temp = sign_extend32(temp, 15);
+
+	temp = DIV_ROUND_CLOSEST(temp * ITERM_LIMITS_PM8150B_MA,
+				ADC_CHG_ITERM_MASK);
+
+	return temp;
+}
+
+static int sm7250_get_batt_present(struct bms_dev *bms)
+{
+	int rc, ret;
+	u8 stat;
+
+	rc = sm7250_rd8(bms->pmic_regmap,
+			BATIF_INT_RT_STS,
+			&stat);
+	if (rc < 0) {
+		pr_err("Couldn't read BATIF_INT_RT_STS rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	ret = !(stat & (BATIF_THERM_OR_ID_MISSING_RT_STS_BIT
+					| BATIF_TERMINAL_MISSING_RT_STS_BIT));
+	return ret;
+}
+
 static int sm7250_psy_get_property(struct power_supply *psy,
 				       enum power_supply_property psp,
 				       union power_supply_propval *pval)
@@ -876,9 +939,6 @@ static int sm7250_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		pval->intval = bms->fcc_stepper_enable;
 		break;
-	case POWER_SUPPLY_PROP_TAPER_CONTROL:
-		pval->intval = bms->taper_control;
-		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
 		rc = sm7250_read(bms->pmic_regmap, CHGR_CHARGING_ENABLE_CMD,
 				&val, 1);
@@ -893,6 +953,12 @@ static int sm7250_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_RECHARGE_SOC:
 		pval->intval = bms->rl_soc_threshold;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
+		pval->intval = sm7250_get_batt_iterm(bms);
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		pval->intval = sm7250_get_batt_present(bms);
 		break;
 	default:
 		pr_err("getting unsupported property: %d\n", psp);
@@ -1007,9 +1073,6 @@ static int sm7250_psy_set_property(struct power_supply *psy,
 		pr_info("CONSTANT_CHARGE_VOLTAGE_MAX : ivalue=%d, val=%d (%d)\n",
 							ivalue, val, rc);
 		break;
-	case POWER_SUPPLY_PROP_TAPER_CONTROL:
-		bms->taper_control = pval->intval;
-		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
 		rc = sm7250_charge_disable(bms, pval->intval != 0);
 		break;
@@ -1031,7 +1094,6 @@ static int sm7250_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX:
-	case POWER_SUPPLY_PROP_TAPER_CONTROL:
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 		return 1;
@@ -1047,6 +1109,7 @@ static enum power_supply_property sm7250_psy_props[] = {
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
 	/* pixel battery management subsystem */
 	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
@@ -1055,13 +1118,13 @@ static enum power_supply_property sm7250_psy_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
 	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,		/* compat */
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_SAFETY_TIMER_EXPIRED,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,	/* compat */
 	POWER_SUPPLY_PROP_CHARGE_DISABLE,
-	POWER_SUPPLY_PROP_TAPER_CONTROL,	/* compat */
 	POWER_SUPPLY_PROP_RERUN_AICL,
 	POWER_SUPPLY_PROP_RECHARGE_SOC
 };
@@ -1177,7 +1240,6 @@ static int sm7250_parse_dt(struct bms_dev *bms)
 			devm_kstrdup(bms->dev, psy_name, GFP_KERNEL);
 
 	/* compat/fake */
-	bms->taper_control = POWER_SUPPLY_TAPER_CONTROL_MODE_STEPPER;
 	bms->fcc_stepper_enable = of_property_read_bool(node,
 						"qcom,fcc-stepping-enable");
 
