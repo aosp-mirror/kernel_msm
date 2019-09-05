@@ -9,6 +9,10 @@ Required Properties:
 -compatible: "qcom,pshold"
 -reg: Specifies the physical address of the ps-hold register
 
+Optional Properties:
+-qcom,force-warm-reboot-on-thermal-shutdown: Issue a warm reboot on
+				"shutdown,thermal" restart reason.
+
 Example:
 
 	restart@fc4ab000 {
