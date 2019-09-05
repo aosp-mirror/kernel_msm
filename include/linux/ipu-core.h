@@ -78,6 +78,9 @@ extern struct bus_type ipu_bus_type;
  */
 int ipu_alloc_queue(struct device *dev);
 
+
+void ipu_flush_queue(struct device *dev, uint32_t q_id, int queue_err);
+
 /* Free an application queue.
  *
  * Note: The caller is responsible for first sending a sync'ed

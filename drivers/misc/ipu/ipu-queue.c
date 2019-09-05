@@ -135,30 +135,30 @@ static int ipu_queue_flush(struct file *fp, fl_owner_t id)
 {
 	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
 	struct paintbox_data *pb = cmd_queue->pb;
-	int ret;
 
 	mutex_lock(&pb->lock);
 
-	ret = ipu_queue_remove_from_session(pb, cmd_queue->session, cmd_queue);
+	ipu_flush_queue(pb->dev, cmd_queue->queue_id, -EAGAIN);
 
 	mutex_unlock(&pb->lock);
 
-	/* TODO(b/114760293): An error detaching the queue from the session
-	 * should not normally occur and would likely be the result of a
-	 * catastrophic error. Need to go through the catastrophic error
-	 * recovery path correctly.
-	 */
-	return ret;
+	return 0;
 }
 
 static int ipu_queue_release(struct inode *ip, struct file *fp)
 {
 	struct paintbox_cmd_queue *cmd_queue = fp->private_data;
 	struct paintbox_data *pb = cmd_queue->pb;
+	int ret;
 
 	mutex_lock(&pb->lock);
 
-	/* The session should have been detached in the flush() hook. */
+	ret = ipu_queue_remove_from_session(pb, cmd_queue->session, cmd_queue);
+
+	if (WARN_ON(ret < 0)) {
+		mutex_unlock(&pb->lock);
+		return ret;
+	}
 	if (WARN_ON(cmd_queue->session)) {
 		mutex_unlock(&pb->lock);
 		return -EINVAL;
@@ -263,7 +263,7 @@ static const struct file_operations ipu_queue_fops = {
 	.write = ipu_queue_write,
 	.release = ipu_queue_release,
 	.unlocked_ioctl = ipu_queue_ioctl,
-	.flush = ipu_queue_flush,
+	.flush = ipu_queue_flush
 };
 
 int ipu_queue_allocate_ioctl(struct paintbox_data *pb,

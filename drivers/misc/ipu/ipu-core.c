@@ -45,6 +45,13 @@ void ipu_free_queue(struct device *dev, uint32_t q_id, int queue_err)
 	ipu_core_jqs_msg_transport_free_queue(pb_dev->bus, q_id, queue_err);
 }
 
+void ipu_flush_queue(struct device *dev, uint32_t q_id, int queue_err)
+{
+	struct paintbox_device *pb_dev = to_paintbox_device(dev);
+
+	ipu_core_jqs_msg_transport_flush_queue(pb_dev->bus, q_id, queue_err);
+}
+
 int ipu_user_write(struct device *dev, uint32_t q_id,
 		const void __user *buf, size_t size)
 {
