@@ -22,6 +22,7 @@
 #include <linux/uidgid.h>
 
 #include <net/sock.h>
+#include <uapi/linux/sched/types.h>
 
 #include "qrtr.h"
 
@@ -674,6 +675,8 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	struct sk_buff *skb;
 	struct qrtr_cb *cb;
 	unsigned int size;
+	int err = -ENOMEM;
+	int frag = false;
 	unsigned int ver;
 	size_t hdrlen;
 
@@ -681,8 +684,14 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 		return -EINVAL;
 
 	skb = netdev_alloc_skb(NULL, len);
-	if (!skb)
-		return -ENOMEM;
+	if (!skb) {
+		skb = alloc_skb_with_frags(0, len, 0, &err, GFP_ATOMIC);
+		if (!skb) {
+			pr_err("%s memory allocation failed\n", __func__);
+			return -ENOMEM;
+		}
+		frag = true;
+	}
 
 	cb = (struct qrtr_cb *)skb->cb;
 
@@ -736,7 +745,13 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	    cb->type != QRTR_TYPE_RESUME_TX)
 		goto err;
 
-	skb_put_data(skb, data + hdrlen, size);
+	if (frag) {
+		skb->data_len = size;
+		skb->len = size;
+		skb_store_bits(skb, 0, data + hdrlen, size);
+	} else {
+		skb_put_data(skb, data + hdrlen, size);
+	}
 	qrtr_log_rx_msg(node, skb);
 
 	skb_queue_tail(&node->rx_queue, skb);
@@ -891,8 +906,11 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 			if (!ipc) {
 				kfree_skb(skb);
 			} else {
-				if (sock_queue_rcv_skb(&ipc->sk, skb))
+				if (sock_queue_rcv_skb(&ipc->sk, skb)) {
+					pr_err("%s qrtr pkt dropped flow[%d]\n",
+					       __func__, cb->confirm_rx);
 					kfree_skb(skb);
+				}
 
 				qrtr_port_put(ipc);
 			}
@@ -904,13 +922,16 @@ static void qrtr_node_rx_work(struct kthread_work *work)
  * qrtr_endpoint_register() - register a new endpoint
  * @ep: endpoint to register
  * @nid: desired node id; may be QRTR_EP_NID_AUTO for auto-assignment
+ * @rt: flag to notify real time low latency endpoint
  * Return: 0 on success; negative error code on failure
  *
  * The specified endpoint must have the xmit function pointer set on call.
  */
-int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id)
+int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
+			   bool rt)
 {
 	struct qrtr_node *node;
+	struct sched_param param = {.sched_priority = 1};
 
 	if (!ep || !ep->xmit)
 		return -EINVAL;
@@ -933,6 +954,8 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id)
 		kfree(node);
 		return -ENOMEM;
 	}
+	if (rt)
+		sched_setscheduler(node->task, SCHED_FIFO, &param);
 
 	mutex_init(&node->qrtr_tx_lock);
 	INIT_RADIX_TREE(&node->qrtr_tx_flow, GFP_KERNEL);

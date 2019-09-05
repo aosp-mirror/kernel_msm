@@ -3,7 +3,6 @@
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  */
 
-#include <asm/dma-iommu.h>
 #include <linux/atomic.h>
 #include <linux/completion.h>
 #include <linux/debugfs.h>
@@ -434,6 +433,7 @@ struct gpi_dev {
 	struct device *dev;
 	struct resource *res;
 	void __iomem *regs;
+	void *ee_base; /*ee register base address*/
 	u32 max_gpii; /* maximum # of gpii instances available per gpi block */
 	u32 gpii_mask; /* gpii instances available for apps */
 	u32 ev_factor; /* ev ring length factor */
@@ -524,8 +524,6 @@ static irqreturn_t gpi_handle_irq(int irq, void *data);
 static void gpi_ring_recycle_ev_element(struct gpi_ring *ring);
 static int gpi_ring_add_element(struct gpi_ring *ring, void **wp);
 static void gpi_process_events(struct gpii *gpii);
-static u64 get_gpi_ee_base(u64 base, int num_gpii);
-
 
 static inline struct gpii_chan *to_gpii_chan(struct dma_chan *dma_chan)
 {
@@ -2535,129 +2533,12 @@ static void gpi_setup_debug(struct gpi_dev *gpi_dev)
 	}
 }
 
-static struct dma_iommu_mapping *gpi_create_mapping(struct gpi_dev *gpi_dev)
-{
-	dma_addr_t base;
-	size_t size;
-
-	/*
-	 * If S1_BYPASS enabled then iommu space is not used, however framework
-	 * still require clients to create a mapping space before attaching. So
-	 * set to smallest size required by iommu framework.
-	 */
-	if (gpi_dev->smmu_cfg & GPI_SMMU_S1_BYPASS) {
-		base = 0;
-		size = PAGE_SIZE;
-	} else {
-		base = gpi_dev->iova_base;
-		size = gpi_dev->iova_size;
-	}
-
-	GPI_LOG(gpi_dev, "Creating iommu mapping of base:0x%llx size:%lu\n",
-		base, size);
-
-	return __depr_arm_iommu_create_mapping(&platform_bus_type, base, size);
-}
-
-static int gpi_smmu_init(struct gpi_dev *gpi_dev)
-{
-	struct dma_iommu_mapping *mapping = NULL;
-	int ret;
-
-	if (gpi_dev->smmu_cfg) {
-
-		/* create mapping table */
-		mapping = gpi_create_mapping(gpi_dev);
-		if (IS_ERR(mapping)) {
-			GPI_ERR(gpi_dev,
-				"Failed to create iommu mapping, ret:%ld\n",
-				PTR_ERR(mapping));
-			return PTR_ERR(mapping);
-		}
-
-		if (gpi_dev->smmu_cfg & GPI_SMMU_S1_BYPASS) {
-			int s1_bypass = 1;
-
-			ret = iommu_domain_set_attr(mapping->domain,
-					DOMAIN_ATTR_S1_BYPASS, &s1_bypass);
-			if (ret) {
-				GPI_ERR(gpi_dev,
-					"Failed to set attr S1_BYPASS, ret:%d\n",
-					ret);
-				goto release_mapping;
-			}
-		}
-
-		if (gpi_dev->smmu_cfg & GPI_SMMU_FAST) {
-			int fast = 1;
-
-			ret = iommu_domain_set_attr(mapping->domain,
-						    DOMAIN_ATTR_FAST, &fast);
-			if (ret) {
-				GPI_ERR(gpi_dev,
-					"Failed to set attr FAST, ret:%d\n",
-					ret);
-				goto release_mapping;
-			}
-		}
-
-		if (gpi_dev->smmu_cfg & GPI_SMMU_ATOMIC) {
-			int atomic = 1;
-
-			ret = iommu_domain_set_attr(mapping->domain,
-						DOMAIN_ATTR_ATOMIC, &atomic);
-			if (ret) {
-				GPI_ERR(gpi_dev,
-					"Failed to set attr ATOMIC, ret:%d\n",
-					ret);
-				goto release_mapping;
-			}
-		}
-
-		ret = __depr_arm_iommu_attach_device(gpi_dev->dev, mapping);
-		if (ret) {
-			GPI_ERR(gpi_dev,
-				"Failed with iommu_attach, ret:%d\n", ret);
-			goto release_mapping;
-		}
-	}
-
-	GPI_LOG(gpi_dev, "Setting dma mask to 64\n");
-	ret = dma_set_mask(gpi_dev->dev, DMA_BIT_MASK(64));
-	if (ret) {
-		GPI_ERR(gpi_dev, "Error setting dma_mask to 64, ret:%d\n", ret);
-		goto error_set_mask;
-	}
-
-	return ret;
-
-error_set_mask:
-	if (gpi_dev->smmu_cfg)
-		__depr_arm_iommu_detach_device(gpi_dev->dev);
-release_mapping:
-	if (mapping)
-		__depr_arm_iommu_release_mapping(mapping);
-	return ret;
-}
-
-/* Variabe EE register offset Kona */
-static u64 get_gpi_ee_base(u64 base, int num_gpii)
-{
-	if (num_gpii == QUP0_NUM_GPII_KONA)
-		base -= QUP0_VAR_OFFSET_KONA;
-	else
-		base -= QUP1_VAR_OFFSET_KONA;
-	return base;
-}
-
 static int gpi_probe(struct platform_device *pdev)
 {
 	struct gpi_dev *gpi_dev;
 	int ret, i;
 	const char *mode = NULL;
-	u64 ee_base;
-	u64 base;
-	bool gpii_offset;
+	u32 gpi_ee_offset;
 
 	gpi_dev = devm_kzalloc(&pdev->dev, sizeof(*gpi_dev), GFP_KERNEL);
 	if (!gpi_dev)
@@ -2678,6 +2559,8 @@ static int gpi_probe(struct platform_device *pdev)
 		return -EFAULT;
 	}
 
+	gpi_dev->ee_base = gpi_dev->regs;
+
 	ret = of_property_read_u32(gpi_dev->dev->of_node, "qcom,max-num-gpii",
 				   &gpi_dev->max_gpii);
 	if (ret) {
@@ -2692,8 +2575,13 @@ static int gpi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	gpii_offset = of_property_read_bool(gpi_dev->dev->of_node,
-						"qcom,gpii_offset");
+	ret = of_property_read_u32(gpi_dev->dev->of_node,
+					"qcom,gpi-ee-offset", &gpi_ee_offset);
+	if (ret)
+		GPI_LOG(gpi_dev, "No variable ee offset present\n");
+	else
+		gpi_dev->ee_base =
+		(void *)((u64)gpi_dev->ee_base - gpi_ee_offset);
 
 	ret = of_property_read_u32(gpi_dev->dev->of_node, "qcom,ev-factor",
 				   &gpi_dev->ev_factor);
@@ -2702,56 +2590,14 @@ static int gpi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	ret = of_property_read_u32(gpi_dev->dev->of_node, "qcom,smmu-cfg",
-				   &gpi_dev->smmu_cfg);
-	if (ret) {
-		GPI_ERR(gpi_dev, "missing 'qcom,smmu-cfg' DT node\n");
-		return ret;
-	}
-
 	ret = of_property_read_string(gpi_dev->dev->of_node,
 			"qcom,iommu-dma", &mode);
 
-	if ((ret == 0) && (strcmp(mode, "disabled") == 0)) {
-		if (gpi_dev->smmu_cfg &&
-			!(gpi_dev->smmu_cfg & GPI_SMMU_S1_BYPASS)) {
-
-			u64 iova_range[2];
-
-			ret = of_property_count_elems_of_size(
-				gpi_dev->dev->of_node, "qcom,iova-range",
-							sizeof(iova_range));
-			if (ret != 1) {
-				GPI_ERR(gpi_dev,
-					"missing or incorrect 'qcom,iova-range' DT node ret:%d\n",
-					ret);
-			}
-
-			ret = of_property_read_u64_array(gpi_dev->dev->of_node,
-						"qcom,iova-range", iova_range,
-						ARRAY_SIZE(iova_range));
-			if (ret) {
-				GPI_ERR(gpi_dev,
-					"could not read DT prop 'qcom,iova-range\n");
-				return ret;
-			}
-			gpi_dev->iova_base = iova_range[0];
-			gpi_dev->iova_size = iova_range[1];
-		}
-
-		ret = gpi_smmu_init(gpi_dev);
-		if (ret) {
-			GPI_ERR(gpi_dev,
-				"error configuring smmu, ret:%d\n", ret);
-			return ret;
-		}
-	} else {
-		ret = dma_set_mask(gpi_dev->dev, DMA_BIT_MASK(64));
-		if (ret) {
-			GPI_ERR(gpi_dev,
-			"Error setting dma_mask to 64, ret:%d\n", ret);
-			return ret;
-		}
+	ret = dma_set_mask(gpi_dev->dev, DMA_BIT_MASK(64));
+	if (ret) {
+		GPI_ERR(gpi_dev,
+		"Error setting dma_mask to 64, ret:%d\n", ret);
+		return ret;
 	}
 
 	gpi_dev->gpiis = devm_kzalloc(gpi_dev->dev,
@@ -2759,12 +2605,6 @@ static int gpi_probe(struct platform_device *pdev)
 				GFP_KERNEL);
 	if (!gpi_dev->gpiis)
 		return -ENOMEM;
-
-	if (gpii_offset) {
-		base = (u64)gpi_dev->regs;
-		ee_base = get_gpi_ee_base(base, gpi_dev->max_gpii);
-	} else
-		ee_base = (u64)gpi_dev->regs;
 
 	/* setup all the supported gpii */
 	INIT_LIST_HEAD(&gpi_dev->dma_device.channels);
@@ -2776,9 +2616,9 @@ static int gpi_probe(struct platform_device *pdev)
 			continue;
 
 		/* set up ev cntxt register map */
-		gpii->ev_cntxt_base_reg = (void *)ee_base +
+		gpii->ev_cntxt_base_reg = gpi_dev->ee_base +
 			GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(i, 0);
-		gpii->ev_cntxt_db_reg = (void *)ee_base +
+		gpii->ev_cntxt_db_reg = gpi_dev->ee_base +
 			GPI_GPII_n_EV_CH_k_DOORBELL_0_OFFS(i, 0);
 		gpii->ev_ring_base_lsb_reg = gpii->ev_cntxt_base_reg +
 			CNTXT_2_RING_BASE_LSB;
@@ -2786,11 +2626,11 @@ static int gpi_probe(struct platform_device *pdev)
 			CNTXT_4_RING_RP_LSB;
 		gpii->ev_ring_wp_lsb_reg = gpii->ev_cntxt_base_reg +
 			CNTXT_6_RING_WP_LSB;
-		gpii->ev_cmd_reg = (void *)ee_base +
+		gpii->ev_cmd_reg = gpi_dev->ee_base +
 			GPI_GPII_n_EV_CH_CMD_OFFS(i);
-		gpii->ieob_src_reg = (void *)ee_base +
+		gpii->ieob_src_reg = gpi_dev->ee_base +
 			GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_OFFS(i);
-		gpii->ieob_clr_reg = (void *)ee_base +
+		gpii->ieob_clr_reg = gpi_dev->ee_base +
 			GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_CLR_OFFS(i);
 
 		/* set up irq */
@@ -2807,9 +2647,9 @@ static int gpi_probe(struct platform_device *pdev)
 			struct gpii_chan *gpii_chan = &gpii->gpii_chan[chan];
 
 			/* set up ch cntxt register map */
-			gpii_chan->ch_cntxt_base_reg = (void *)ee_base +
+			gpii_chan->ch_cntxt_base_reg = gpi_dev->ee_base +
 				GPI_GPII_n_CH_k_CNTXT_0_OFFS(i, chan);
-			gpii_chan->ch_cntxt_db_reg = (void *)ee_base +
+			gpii_chan->ch_cntxt_db_reg = gpi_dev->ee_base +
 				GPI_GPII_n_CH_k_DOORBELL_0_OFFS(i, chan);
 			gpii_chan->ch_ring_base_lsb_reg =
 				gpii_chan->ch_cntxt_base_reg +
@@ -2820,7 +2660,7 @@ static int gpi_probe(struct platform_device *pdev)
 			gpii_chan->ch_ring_wp_lsb_reg =
 				gpii_chan->ch_cntxt_base_reg +
 				CNTXT_6_RING_WP_LSB;
-			gpii_chan->ch_cmd_reg = (void *)ee_base +
+			gpii_chan->ch_cmd_reg = gpi_dev->ee_base +
 				GPI_GPII_n_CH_CMD_OFFS(i);
 
 			/* vchan setup */
@@ -2836,7 +2676,7 @@ static int gpi_probe(struct platform_device *pdev)
 			     (unsigned long)gpii);
 		init_completion(&gpii->cmd_completion);
 		gpii->gpii_id = i;
-		gpii->regs = (void *)ee_base;
+		gpii->regs = gpi_dev->ee_base;
 		gpii->gpi_dev = gpi_dev;
 		atomic_set(&gpii->dbg_index, 0);
 	}

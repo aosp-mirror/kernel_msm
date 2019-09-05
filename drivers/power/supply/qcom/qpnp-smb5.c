@@ -153,7 +153,7 @@ static struct smb_params smb5_pm8150b_params = {
 		.name   = "DC input current limit",
 		.reg    = DCDC_CFG_REF_MAX_PSNS_REG,
 		.min_u  = 0,
-		.max_u  = 1500000,
+		.max_u  = DCIN_ICL_MAX_UA,
 		.step_u = 50000,
 	},
 	.jeita_cc_comp_hot	= {
@@ -292,6 +292,11 @@ enum {
 	SMB_THERM,
 };
 
+static const struct clamp_config clamp_levels[] = {
+	{ {0x11C6, 0x11F9, 0x13F1}, {0x60, 0x2E, 0x90} },
+	{ {0x11C6, 0x11F9, 0x13F1}, {0x60, 0x2B, 0x9C} },
+};
+
 #define PMI632_MAX_ICL_UA	3000000
 #define PM6150_MAX_FCC_UA	3000000
 static int smb5_chg_config_init(struct smb5 *chip)
@@ -423,6 +428,7 @@ static int smb5_configure_internal_pull(struct smb_charger *chg, int type,
 #define MICRO_3PA			3000000
 #define OTG_DEFAULT_DEGLITCH_TIME_MS	50
 #define DEFAULT_WD_BARK_TIME		64
+#define DEFAULT_WD_SNARL_TIME_8S	0x07
 static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 {
 	int rc = 0, byte_len;
@@ -460,7 +466,7 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 	rc = of_property_read_u32(node, "qcom,wd-snarl-time-config",
 					&chip->dt.wd_snarl_time_cfg);
 	if (rc < 0)
-		chip->dt.wd_snarl_time_cfg = -EINVAL;
+		chip->dt.wd_snarl_time_cfg = DEFAULT_WD_SNARL_TIME_8S;
 
 	chip->dt.no_battery = of_property_read_bool(node,
 						"qcom,batteryless-platform");
@@ -543,12 +549,18 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 	chg->hw_skin_temp_mitigation = of_property_read_bool(node,
 					"qcom,hw-skin-temp-mitigation");
 
+	chg->en_skin_therm_mitigation = of_property_read_bool(node,
+					"qcom,en-skin-therm-mitigation");
+
 	chg->connector_pull_up = -EINVAL;
 	of_property_read_u32(node, "qcom,connector-internal-pull-kohm",
 					&chg->connector_pull_up);
 
 	chip->dt.disable_suspend_on_collapse = of_property_read_bool(node,
 					"qcom,disable-suspend-on-collapse");
+	chg->smb_pull_up = -EINVAL;
+	of_property_read_u32(node, "qcom,smb-internal-pull-kohm",
+					&chg->smb_pull_up);
 
 	chip->dt.adc_based_aicl = of_property_read_bool(node,
 					"qcom,adc-based-aicl");
@@ -608,7 +620,7 @@ static int smb5_parse_dt_adc_channels(struct smb_charger *chg)
 
 static int smb5_parse_dt_currents(struct smb5 *chip, struct device_node *node)
 {
-	int rc = 0;
+	int rc = 0, tmp;
 	struct smb_charger *chg = &chip->chg;
 
 	rc = of_property_read_u32(node,
@@ -639,6 +651,12 @@ static int smb5_parse_dt_currents(struct smb5 *chip, struct device_node *node)
 
 	rc = of_property_read_u32(node, "qcom,chg-term-current-ma",
 			&chip->dt.term_current_thresh_hi_ma);
+
+	chg->wls_icl_ua = DCIN_ICL_MAX_UA;
+	rc = of_property_read_u32(node, "qcom,wls-current-max-ua",
+			&tmp);
+	if (!rc && tmp < DCIN_ICL_MAX_UA)
+		chg->wls_icl_ua = tmp;
 
 	return 0;
 }
@@ -701,6 +719,33 @@ static int smb5_parse_dt(struct smb5 *chip)
 	return 0;
 }
 
+static int smb5_set_prop_comp_clamp_level(struct smb_charger *chg,
+			     const union power_supply_propval *val)
+{
+	int rc = 0, i;
+	struct clamp_config clamp_config;
+	enum comp_clamp_levels level;
+
+	level = val->intval;
+	if (level >= MAX_CLAMP_LEVEL) {
+		pr_err("Invalid comp clamp level=%d\n", val->intval);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(clamp_config.reg); i++) {
+		rc = smblib_write(chg, clamp_levels[level].reg[i],
+			     clamp_levels[level].val[i]);
+		if (rc < 0)
+			dev_err(chg->dev,
+				"Failed to configure comp clamp settings for reg=0x%04x rc=%d\n",
+				   clamp_levels[level].reg[i], rc);
+	}
+
+	chg->comp_clamp_level = val->intval;
+
+	return rc;
+}
+
 /************************
  * USB PSY REGISTRATION *
  ************************/
@@ -732,12 +777,14 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT,
 	POWER_SUPPLY_PROP_SMB_EN_MODE,
 	POWER_SUPPLY_PROP_SMB_EN_REASON,
+	POWER_SUPPLY_PROP_ADAPTER_CC_MODE,
 	POWER_SUPPLY_PROP_SCOPE,
 	POWER_SUPPLY_PROP_MOISTURE_DETECTED,
 	POWER_SUPPLY_PROP_HVDCP_OPTI_ALLOWED,
 	POWER_SUPPLY_PROP_QC_OPTI_DISABLE,
 	POWER_SUPPLY_PROP_VOLTAGE_VPH,
 	POWER_SUPPLY_PROP_THERM_ICL_LIMIT,
+	POWER_SUPPLY_PROP_SKIN_HEALTH,
 };
 
 static int smb5_usb_get_prop(struct power_supply *psy,
@@ -875,6 +922,12 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote(chg->usb_icl_votable,
 					THERMAL_THROTTLE_VOTER);
 		break;
+	case POWER_SUPPLY_PROP_ADAPTER_CC_MODE:
+		val->intval = chg->adapter_cc_mode;
+		break;
+	case POWER_SUPPLY_PROP_SKIN_HEALTH:
+		val->intval = smblib_get_skin_temp_status(chg);
+		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
 		rc = -EINVAL;
@@ -961,6 +1014,9 @@ static int smb5_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
 		smblib_set_prop_usb_voltage_max_limit(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_ADAPTER_CC_MODE:
+		chg->adapter_cc_mode = val->intval;
+		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
 		rc = -EINVAL;
@@ -978,6 +1034,7 @@ static int smb5_usb_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONNECTOR_HEALTH:
 	case POWER_SUPPLY_PROP_THERM_ICL_LIMIT:
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
+	case POWER_SUPPLY_PROP_ADAPTER_CC_MODE:
 		return 1;
 	default:
 		break;
@@ -1128,6 +1185,11 @@ static enum power_supply_property smb5_usb_main_props[] = {
 	POWER_SUPPLY_PROP_FLASH_TRIGGER,
 	POWER_SUPPLY_PROP_TOGGLE_STAT,
 	POWER_SUPPLY_PROP_MAIN_FCC_MAX,
+	POWER_SUPPLY_PROP_IRQ_STATUS,
+	POWER_SUPPLY_PROP_FORCE_MAIN_FCC,
+	POWER_SUPPLY_PROP_FORCE_MAIN_ICL,
+	POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL,
+	POWER_SUPPLY_PROP_HEALTH,
 };
 
 static int smb5_usb_main_get_prop(struct power_supply *psy,
@@ -1172,6 +1234,24 @@ static int smb5_usb_main_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_MAIN_FCC_MAX:
 		val->intval = chg->main_fcc_max;
+		break;
+	case POWER_SUPPLY_PROP_IRQ_STATUS:
+		rc = smblib_get_irq_status(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_FORCE_MAIN_FCC:
+		rc = smblib_get_charge_param(chg, &chg->param.fcc,
+							&val->intval);
+		break;
+	case POWER_SUPPLY_PROP_FORCE_MAIN_ICL:
+		rc = smblib_get_charge_param(chg, &chg->param.usb_icl,
+							&val->intval);
+		break;
+	case POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL:
+		val->intval = chg->comp_clamp_level;
+		break;
+	/* Use this property to report SMB health */
+	case POWER_SUPPLY_PROP_HEALTH:
+		val->intval = smblib_get_prop_smb_health(chg);
 		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
@@ -1243,6 +1323,17 @@ static int smb5_usb_main_set_prop(struct power_supply *psy,
 		chg->main_fcc_max = val->intval;
 		rerun_election(chg->fcc_votable);
 		break;
+	case POWER_SUPPLY_PROP_FORCE_MAIN_FCC:
+		vote_override(chg->fcc_main_votable, CC_MODE_VOTER,
+				(val->intval < 0) ? false : true, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_FORCE_MAIN_ICL:
+		vote_override(chg->usb_icl_votable, CC_MODE_VOTER,
+				(val->intval < 0) ? false : true, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL:
+		rc = smb5_set_prop_comp_clamp_level(chg, val);
+		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
 		rc = -EINVAL;
@@ -1260,6 +1351,9 @@ static int smb5_usb_main_prop_is_writeable(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_TOGGLE_STAT:
 	case POWER_SUPPLY_PROP_MAIN_FCC_MAX:
+	case POWER_SUPPLY_PROP_FORCE_MAIN_FCC:
+	case POWER_SUPPLY_PROP_FORCE_MAIN_ICL:
+	case POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL:
 		rc = 1;
 		break;
 	default:
@@ -1346,6 +1440,7 @@ static int smb5_dc_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
 		rc = smblib_get_prop_voltage_wls_output(chg, val);
+		break;
 	case POWER_SUPPLY_PROP_DC_RESET:
 		val->intval = 0;
 		break;
@@ -1391,15 +1486,14 @@ static int smb5_dc_set_prop(struct power_supply *psy,
 static int smb5_dc_prop_is_writeable(struct power_supply *psy,
 		enum power_supply_property psp)
 {
-	int rc;
-
 	switch (psp) {
+	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
+		return 1;
 	default:
-		rc = 0;
 		break;
 	}
 
-	return rc;
+	return 0;
 }
 
 static const struct power_supply_desc dc_psy_desc = {
@@ -1449,6 +1543,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_QNOVO,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
+	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT,
 	POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
@@ -1539,6 +1634,9 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 		val->intval = get_client_vote(chg->fcc_votable,
 					      BATT_PROFILE_VOTER);
+		break;
+	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
+		val->intval = get_effective_result(chg->fcc_votable);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT:
 		rc = smblib_get_prop_batt_iterm(chg, val);
@@ -2017,6 +2115,10 @@ static int smb5_configure_micro_usb(struct smb_charger *chg)
 		}
 	}
 
+	/* Enable HVDCP detection and authentication */
+	if (!chg->hvdcp_disable)
+		smblib_hvdcp_detect_enable(chg, true);
+
 	return rc;
 }
 
@@ -2090,13 +2192,15 @@ static int smb5_configure_iterm_thresholds(struct smb5 *chip)
 
 	switch (chip->dt.term_current_src) {
 	case ITERM_SRC_ADC:
-		rc = smblib_masked_write(chg, CHGR_ADC_TERM_CFG_REG,
-				TERM_BASED_ON_SYNC_CONV_OR_SAMPLE_CNT,
-				TERM_BASED_ON_SAMPLE_CNT);
-		if (rc < 0) {
-			dev_err(chg->dev, "Couldn't configure ADC_ITERM_CFG rc=%d\n",
-					rc);
-			return rc;
+		if (chip->chg.smb_version == PM8150B_SUBTYPE) {
+			rc = smblib_masked_write(chg, CHGR_ADC_TERM_CFG_REG,
+					TERM_BASED_ON_SYNC_CONV_OR_SAMPLE_CNT,
+					TERM_BASED_ON_SAMPLE_CNT);
+			if (rc < 0) {
+				dev_err(chg->dev, "Couldn't configure ADC_ITERM_CFG rc=%d\n",
+						rc);
+				return rc;
+			}
 		}
 		rc = smb5_configure_iterm_thresholds_adc(chip);
 		break;
@@ -2163,8 +2267,8 @@ static int smb5_init_dc_peripheral(struct smb_charger *chg)
 	if (chg->smb_version == PMI632_SUBTYPE)
 		return 0;
 
-	/* set DC icl_max 1A */
-	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, 1000000);
+	/* Set DCIN ICL to 100 mA */
+	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, DCIN_ICL_MIN_UA);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set dc_icl rc=%d\n", rc);
 		return rc;
@@ -2511,11 +2615,7 @@ static int smb5_init_hw(struct smb5 *chip)
 	val = (ilog2(chip->dt.wd_bark_time / 16) << BARK_WDOG_TIMEOUT_SHIFT)
 			& BARK_WDOG_TIMEOUT_MASK;
 	val |= (BITE_WDOG_TIMEOUT_8S | BITE_WDOG_DISABLE_CHARGING_CFG_BIT);
-
-	if (chip->dt.wd_snarl_time_cfg == -EINVAL)
-		val |= SNARL_WDOG_TMOUT_8S;
-	else
-		val |= (chip->dt.wd_snarl_time_cfg << SNARL_WDOG_TIMEOUT_SHIFT)
+	val |= (chip->dt.wd_snarl_time_cfg << SNARL_WDOG_TIMEOUT_SHIFT)
 			& SNARL_WDOG_TIMEOUT_MASK;
 
 	rc = smblib_masked_write(chg, SNARL_BARK_BITE_WD_CFG_REG,
@@ -2528,11 +2628,8 @@ static int smb5_init_hw(struct smb5 *chip)
 		return rc;
 	}
 
-	val = WDOG_TIMER_EN_ON_PLUGIN_BIT;
-	if (chip->dt.wd_snarl_time_cfg == -EINVAL)
-		val |= BARK_WDOG_INT_EN_BIT;
-
 	/* enable WD BARK and enable it on plugin */
+	val = WDOG_TIMER_EN_ON_PLUGIN_BIT | BARK_WDOG_INT_EN_BIT;
 	rc = smblib_masked_write(chg, WD_CFG_REG,
 			WATCHDOG_TRIGGER_AFP_EN_BIT |
 			WDOG_TIMER_EN_ON_PLUGIN_BIT |
@@ -2620,6 +2717,17 @@ static int smb5_init_hw(struct smb5 *chip)
 		if (rc < 0) {
 			dev_err(chg->dev,
 				"Couldn't configure CONN_THERM pull-up rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
+	if (chg->smb_pull_up != -EINVAL) {
+		rc = smb5_configure_internal_pull(chg, SMB_THERM,
+				get_valid_pullup(chg->smb_pull_up));
+		if (rc < 0) {
+			dev_err(chg->dev,
+				"Couldn't configure SMB pull-up rc=%d\n",
 				rc);
 			return rc;
 		}
@@ -2827,7 +2935,8 @@ static struct smb_irq_info smb5_irqs[] = {
 	},
 	[DCIN_UV_IRQ] = {
 		.name		= "dcin-uv",
-		.handler	= default_irq_handler,
+		.handler	= dcin_uv_irq_handler,
+		.wake		= true,
 	},
 	[DCIN_OV_IRQ] = {
 		.name		= "dcin-ov",
@@ -2946,6 +3055,11 @@ static struct smb_irq_info smb5_irqs[] = {
 	[FLASH_EN_IRQ] = {
 		.name		= "flash-en",
 	},
+	/* SDAM */
+	[SDAM_STS_IRQ] = {
+		.name		= "sdam-sts",
+		.handler	= sdam_sts_change_irq_handler,
+	},
 };
 
 static int smb5_get_irq_index_byname(const char *irq_name)
@@ -3024,19 +3138,6 @@ static int smb5_request_interrupts(struct smb5 *chip)
 			if (rc < 0)
 				return rc;
 		}
-	}
-
-	/*
-	 * WDOG_SNARL_IRQ is required for SW Thermal Regulation WA. In case
-	 * the WA is not required and neither is the snarl timer configuration
-	 * defined, disable the WDOG_SNARL_IRQ to prevent interrupt storm.
-	 */
-
-	if (chg->irq_info[WDOG_SNARL_IRQ].irq && (!(chg->wa_flags &
-				SW_THERM_REGULATION_WA) &&
-				chip->dt.wd_snarl_time_cfg == -EINVAL)) {
-		disable_irq_wake(chg->irq_info[WDOG_SNARL_IRQ].irq);
-		disable_irq_nosync(chg->irq_info[WDOG_SNARL_IRQ].irq);
 	}
 
 	vote(chg->limited_irq_disable_votable, CHARGER_TYPE_VOTER, true, 0);

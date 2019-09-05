@@ -201,18 +201,19 @@ inline int cvp_create_pkt_cmd_sys_session_init(
 		struct cvp_hal_session *session)
 {
 	int rc = 0;
+	struct msm_cvp_inst *inst = session->session_id;
 
-	if (!pkt)
+	if (!pkt || !inst)
 		return -EINVAL;
 
 	pkt->size = sizeof(struct cvp_hfi_cmd_sys_session_init_packet);
 	pkt->packet_type = HFI_CMD_SYS_SESSION_INIT;
 	pkt->session_id = hash32_ptr(session);
-	pkt->session_kmask = 0xFFFFFFFF;
-	pkt->session_type = HFI_SESSION_CV;
-	pkt->session_prio = 0;
-	pkt->is_secure = 0;
-	pkt->dsp_ac_mask = 0;
+	pkt->session_type = inst->prop.type;
+	pkt->session_kmask = inst->prop.kernel_mask;
+	pkt->session_prio = inst->prop.priority;
+	pkt->is_secure = inst->prop.is_secure;
+	pkt->dsp_ac_mask = inst->prop.dsp_mask;
 
 	return rc;
 }
@@ -296,53 +297,6 @@ int cvp_create_pkt_cmd_sys_power_control(
 	return 0;
 }
 
-static u32 get_hfi_buffer(int hal_buffer)
-{
-	u32 buffer;
-
-	switch (hal_buffer) {
-	case HAL_BUFFER_INPUT:
-		buffer = HFI_BUFFER_INPUT;
-		break;
-	case HAL_BUFFER_OUTPUT:
-		buffer = HFI_BUFFER_OUTPUT;
-		break;
-	case HAL_BUFFER_OUTPUT2:
-		buffer = HFI_BUFFER_OUTPUT2;
-		break;
-	case HAL_BUFFER_EXTRADATA_INPUT:
-		buffer = HFI_BUFFER_EXTRADATA_INPUT;
-		break;
-	case HAL_BUFFER_EXTRADATA_OUTPUT:
-		buffer = HFI_BUFFER_EXTRADATA_OUTPUT;
-		break;
-	case HAL_BUFFER_EXTRADATA_OUTPUT2:
-		buffer = HFI_BUFFER_EXTRADATA_OUTPUT2;
-		break;
-	case HAL_BUFFER_INTERNAL_SCRATCH:
-		buffer = HFI_BUFFER_COMMON_INTERNAL_SCRATCH;
-		break;
-	case HAL_BUFFER_INTERNAL_SCRATCH_1:
-		buffer = HFI_BUFFER_COMMON_INTERNAL_SCRATCH_1;
-		break;
-	case HAL_BUFFER_INTERNAL_SCRATCH_2:
-		buffer = HFI_BUFFER_COMMON_INTERNAL_SCRATCH_2;
-		break;
-	case HAL_BUFFER_INTERNAL_PERSIST:
-		buffer = HFI_BUFFER_INTERNAL_PERSIST;
-		break;
-	case HAL_BUFFER_INTERNAL_PERSIST_1:
-		buffer = HFI_BUFFER_INTERNAL_PERSIST_1;
-		break;
-	default:
-		dprintk(CVP_ERR, "Invalid buffer: %#x\n",
-				hal_buffer);
-		buffer = 0;
-		break;
-	}
-	return buffer;
-}
-
 int cvp_create_pkt_cmd_session_set_buffers(
 		void *cmd,
 		struct cvp_hal_session *session,
@@ -402,9 +356,7 @@ int cvp_create_pkt_cmd_session_release_buffers(
 		pkt->packet_type = HFI_CMD_SESSION_CVP_RELEASE_BUFFERS;
 		pkt->session_id = hash32_ptr(session);
 		pkt->num_buffers = buffer_info->num_buffers;
-		pkt->buffer_type = get_hfi_buffer(buffer_info->buffer_type);
-		if (!pkt->buffer_type)
-			return -EINVAL;
+		pkt->buffer_type = buffer_info->buffer_type;
 		pkt->size =
 			sizeof(struct cvp_session_release_buffers_packet_d) +
 			((buffer_info->num_buffers - 1) * sizeof(u32));
@@ -415,9 +367,7 @@ int cvp_create_pkt_cmd_session_release_buffers(
 		pkt->packet_type = HFI_CMD_SESSION_CVP_RELEASE_BUFFERS;
 		pkt->session_id = hash32_ptr(session);
 		pkt->num_buffers = buffer_info->num_buffers;
-		pkt->buffer_type = get_hfi_buffer(buffer_info->buffer_type);
-		if (!pkt->buffer_type)
-			return -EINVAL;
+		pkt->buffer_type = buffer_info->buffer_type;
 		pkt->size =
 			sizeof(struct cvp_session_release_buffers_packet) +
 			((buffer_info->num_buffers - 1) * sizeof(u32));
@@ -432,24 +382,6 @@ int cvp_create_pkt_cmd_session_release_buffers(
 	return 0;
 }
 
-int cvp_create_pkt_cmd_session_get_buf_req(
-		struct cvp_hfi_cmd_session_get_property_packet *pkt,
-		struct cvp_hal_session *session)
-{
-	int rc = 0;
-
-	if (!pkt || !session)
-		return -EINVAL;
-
-	pkt->size = sizeof(struct cvp_hfi_cmd_session_get_property_packet);
-	pkt->packet_type = HFI_CMD_SESSION_GET_PROPERTY;
-	pkt->session_id = hash32_ptr(session);
-	pkt->num_properties = 1;
-	pkt->rg_property_data[0] = HFI_PROPERTY_CONFIG_BUFFER_REQUIREMENTS;
-
-	return rc;
-}
-
 int cvp_create_pkt_cmd_session_send(
 		struct cvp_kmd_hfi_packet *out_pkt,
 		struct cvp_hal_session *session,
@@ -462,19 +394,19 @@ int cvp_create_pkt_cmd_session_send(
 	if (!out_pkt || !in_pkt || !session)
 		return -EINVAL;
 
+	if (ptr->size > MAX_HFI_PKT_SIZE * sizeof(unsigned int))
+		goto error_hfi_packet;
+
+	if (ptr->session_id != hash32_ptr(session))
+		goto error_hfi_packet;
+
 	def_idx = get_pkt_index(ptr);
-	if (def_idx < 0 && ptr->size < MAX_HFI_PKT_SIZE * sizeof(u32)) {
+	if (def_idx < 0) {
 		memcpy(out_pkt, in_pkt, ptr->size);
 		return 0;
 	}
 
-	if (ptr->size > MAX_HFI_PKT_SIZE * sizeof(unsigned int))
-		goto error_hfi_packet;
-
 	if (cvp_hfi_defs[def_idx].type != ptr->packet_type)
-		goto error_hfi_packet;
-
-	if (ptr->session_id != hash32_ptr(session))
 		goto error_hfi_packet;
 
 	memcpy(out_pkt, in_pkt, ptr->size);
@@ -485,27 +417,6 @@ error_hfi_packet:
 	dprintk(CVP_ERR, "%s incorrect packet: size=%d type=%d sessionid=%d\n",
 		__func__, ptr->size, ptr->packet_type, ptr->session_id);
 
-	return -EINVAL;
-}
-
-int cvp_create_pkt_cmd_session_get_property(
-		struct cvp_hfi_cmd_session_get_property_packet *pkt,
-		struct cvp_hal_session *session, enum hal_property ptype)
-{
-	/* Currently no get property is supported */
-	dprintk(CVP_ERR, "%s cmd:%#x not supported\n", __func__,
-			ptype);
-	return -EINVAL;
-}
-
-int cvp_create_pkt_cmd_session_set_property(
-		struct cvp_hfi_cmd_session_set_property_packet *pkt,
-		struct cvp_hal_session *session,
-		enum hal_property ptype, void *pdata)
-{
-	/* Currently no set property is supported */
-	dprintk(CVP_ERR, "%s cmd:%#x not supported\n", __func__,
-			ptype);
 	return -EINVAL;
 }
 
@@ -575,9 +486,6 @@ static struct cvp_hfi_packetization_ops hfi_default = {
 		cvp_create_pkt_cmd_session_set_buffers,
 	.session_release_buffers =
 		cvp_create_pkt_cmd_session_release_buffers,
-	.session_get_buf_req = cvp_create_pkt_cmd_session_get_buf_req,
-	.session_get_property = cvp_create_pkt_cmd_session_get_property,
-	.session_set_property = cvp_create_pkt_cmd_session_set_property,
 	.session_send = cvp_create_pkt_cmd_session_send,
 };
 

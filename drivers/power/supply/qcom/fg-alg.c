@@ -787,6 +787,123 @@ int cap_learning_init(struct cap_learning *cl)
 	return 0;
 }
 
+/* SOH based profile loading */
+
+/**
+ * soh_get_batt_age_level -
+ * @sp: SOH profile object
+ * @soh: SOH level
+ * @batt_age_level: Battery age level if exists for the SOH passed
+ *
+ */
+static int soh_get_batt_age_level(struct soh_profile *sp, int soh,
+				int *batt_age_level)
+{
+	struct soh_range *range = sp->soh_data;
+	int i;
+
+	for (i = 0; i < sp->profile_count; i++) {
+		if (is_between(range[i].soh_min, range[i].soh_max, soh)) {
+			*batt_age_level = range[i].batt_age_level;
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+
+/**
+ * soh_profile_update -
+ * @sp: SOH profile object
+ * @new_soh: SOH level that is updated and notified to FG/QG driver
+ *
+ * FG/QG have to call this whenever SOH is notified by the userspace.
+ *
+ */
+int soh_profile_update(struct soh_profile *sp, int new_soh)
+{
+	union power_supply_propval pval = {0, };
+	int rc, batt_age_level = 0;
+
+	if (!sp || !sp->bms_psy)
+		return -ENODEV;
+
+	if (new_soh <= 0)
+		return 0;
+
+	if (sp->last_soh <= 0)
+		pr_debug("SOH initialized to %d\n", new_soh);
+	else if (new_soh != sp->last_soh)
+		pr_debug("SOH changed from %d to %d\n", sp->last_soh, new_soh);
+
+	sp->last_soh = new_soh;
+
+	rc = soh_get_batt_age_level(sp, new_soh, &batt_age_level);
+	if (rc < 0)
+		return rc;
+
+	if (batt_age_level != sp->last_batt_age_level) {
+		pval.intval = batt_age_level;
+		rc = power_supply_set_property(sp->bms_psy,
+			POWER_SUPPLY_PROP_BATT_AGE_LEVEL, &pval);
+		if (rc < 0) {
+			pr_err("Couldn't set batt_age_level rc=%d\n", rc);
+			return rc;
+		}
+
+		sp->last_batt_age_level = batt_age_level;
+		pr_info("Batt_age_level set to %d for SOH %d\n",
+			batt_age_level, new_soh);
+	}
+
+	return 0;
+}
+
+/**
+ * soh_profile_init -
+ * @dev: Device node of FG/QG
+ * @sp: SOH profile object
+ *
+ * FG/QG have to call this after parsing battery profile node and multiple
+ * profile load feature is enabled. SOH profile object should have atleast
+ * the power supply of FG/QG and battery profile node. SOH specific range
+ * data is allocated by this function.
+ *
+ */
+int soh_profile_init(struct device *dev, struct soh_profile *sp)
+{
+	int rc, profile_count = 0;
+
+	if (!dev || !sp || !sp->bp_node || !sp->bms_psy)
+		return -ENODEV;
+
+	rc = of_batterydata_get_aged_profile_count(sp->bp_node,
+				sp->batt_id_kohms, &profile_count);
+	if (rc < 0) {
+		pr_err("Couldn't get profile count rc=%d\n", rc);
+		return rc;
+	}
+
+	sp->soh_data = devm_kcalloc(dev, profile_count, sizeof(*sp->soh_data),
+				GFP_KERNEL);
+	if (!sp->soh_data)
+		return -ENOMEM;
+
+	rc = of_batterydata_read_soh_aged_profiles(sp->bp_node,
+				sp->batt_id_kohms, sp->soh_data);
+	if (rc < 0) {
+		pr_err("Couldn't read SOH data for profile loading, rc=%d\n",
+			rc);
+		devm_kfree(dev, sp->soh_data);
+		return rc;
+	}
+
+	sp->profile_count = profile_count;
+	sp->last_soh = -EINVAL;
+	sp->initialized = true;
+	return 0;
+}
+
 /* Time to full/empty algorithm  helper functions */
 
 static void ttf_circ_buf_add(struct ttf_circ_buf *buf, int val)
@@ -891,7 +1008,7 @@ static int get_step_chg_current_window(struct ttf *ttf)
 	struct range_data *step_chg_cfg = ttf->step_chg_cfg;
 	int i, rc, curr_window, vbatt;
 
-	if (ttf->mode == TTF_MODE_V_STEP_CHG) {
+	if (ttf->mode == TTF_MODE_VBAT_STEP_CHG) {
 		rc =  ttf->get_ttf_param(ttf->data, TTF_VBAT, &vbatt);
 		if (rc < 0) {
 			pr_err("failed to get battery voltage, rc=%d\n", rc);
@@ -923,7 +1040,7 @@ static int get_cc2cv_current(struct ttf *ttf, int ibatt_avg, int vbatt_avg,
 
 	switch (ttf->mode) {
 	case TTF_MODE_NORMAL:
-	case TTF_MODE_V_STEP_CHG:
+	case TTF_MODE_VBAT_STEP_CHG:
 	case TTF_MODE_OCV_STEP_CHG:
 		i_cc2cv = ibatt_avg * vbatt_avg /
 			max(MILLI_UNIT, float_volt_uv / MILLI_UNIT);
@@ -982,7 +1099,10 @@ static int get_time_to_full_locked(struct ttf *ttf, int *val)
 
 	/* at least 10 samples are required to produce a stable IBATT */
 	if (ttf->ibatt.size < MAX_TTF_SAMPLES) {
-		*val = -1;
+		if (ttf->clear_ibatt)
+			*val = ttf->last_ttf;
+		else
+			*val = -1;
 		return 0;
 	}
 
@@ -998,6 +1118,7 @@ static int get_time_to_full_locked(struct ttf *ttf, int *val)
 		return rc;
 	}
 
+	ttf->clear_ibatt = false;
 	ibatt_avg = -ibatt_avg / MILLI_UNIT;
 	vbatt_avg /= MILLI_UNIT;
 
@@ -1085,7 +1206,7 @@ static int get_time_to_full_locked(struct ttf *ttf, int *val)
 				ibatt_this_step, t_predicted_this_step);
 		}
 		break;
-	case TTF_MODE_V_STEP_CHG:
+	case TTF_MODE_VBAT_STEP_CHG:
 	case TTF_MODE_OCV_STEP_CHG:
 		if (!step_chg_data || !step_chg_cfg)
 			break;
@@ -1113,7 +1234,7 @@ static int get_time_to_full_locked(struct ttf *ttf, int *val)
 
 			/* Calculate OCV for each window */
 			if (power_approx) {
-				i_step = pbatt_avg / max((u32)MILLI_UNIT,
+				i_step = pbatt_avg / max(MILLI_UNIT,
 					(step_chg_cfg[i].high_threshold /
 						MILLI_UNIT));
 			} else {
@@ -1126,7 +1247,7 @@ static int get_time_to_full_locked(struct ttf *ttf, int *val)
 							MILLI_UNIT);
 			}
 
-			if (ttf->mode == TTF_MODE_V_STEP_CHG)
+			if (ttf->mode == TTF_MODE_VBAT_STEP_CHG)
 				step_chg_data[i].ocv =
 					step_chg_cfg[i].high_threshold -
 					(rbatt * i_step);
@@ -1303,6 +1424,7 @@ static void ttf_work(struct work_struct *work)
 			pr_debug("Clear Ibatt buffer, Ibatt_avg=%d Ibatt_now=%d\n",
 					ibatt_avg, ibatt_now);
 			ttf_circ_buf_clr(&ttf->ibatt);
+			ttf->clear_ibatt = true;
 		}
 
 		rc = get_time_to_full_locked(ttf, &ttf_now);
@@ -1312,7 +1434,7 @@ static void ttf_work(struct work_struct *work)
 		}
 
 		/* keep the wake lock and prime the IBATT and VBATT buffers */
-		if (ttf_now < 0) {
+		if (ttf_now < 0 || ttf->clear_ibatt) {
 			/* delay for one FG cycle */
 			schedule_delayed_work(&ttf->ttf_work,
 					msecs_to_jiffies(1000));

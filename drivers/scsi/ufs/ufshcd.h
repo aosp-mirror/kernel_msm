@@ -58,7 +58,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/reset.h>
-#include <linux/extcon.h>
+#include <linux/extcon-provider.h>
 #include <linux/devfreq.h>
 #include "unipro.h"
 
@@ -196,7 +196,6 @@ struct ufs_pm_lvl_states {
  * @lun: LUN of the command
  * @intr_cmd: Interrupt command (doesn't participate in interrupt aggregation)
  * @issue_time_stamp: time stamp for debug purposes
- * @complete_time_stamp: time stamp for statistics
  * @compl_time_stamp: time stamp for statistics
  * @req_abort_skip: skip request abort task flag
  */
@@ -221,7 +220,6 @@ struct ufshcd_lrb {
 	u8 lun; /* UPIU LUN id field is only 8-bit wide */
 	bool intr_cmd;
 	ktime_t issue_time_stamp;
-	ktime_t complete_time_stamp;
 	ktime_t compl_time_stamp;
 
 	bool req_abort_skip;
@@ -842,6 +840,8 @@ enum ufshcd_slowio_systype {
  * @card_detect_nb: card detector notifier registered with @extcon
  * @card_detect_work: work to exectute the card detect function
  * @card_state: card state event, enum ufshcd_card_state defines possible states
+ * @card_removal_in_progress: to track card removal progress
+ * @pm_notify: used to register for PM events
  * @vreg_info: UFS device voltage regulator information
  * @clk_list_head: UFS host controller clocks list node head
  * @pwr_info: holds current power mode
@@ -1081,6 +1081,8 @@ struct ufs_hba {
 	struct notifier_block card_detect_nb;
 	struct work_struct card_detect_work;
 	atomic_t card_state;
+	int card_removal_in_progress;
+	struct notifier_block pm_notify;
 
 	struct ufs_pa_layer_attr pwr_info;
 	struct ufs_pwr_mode_info max_pwr_info;
@@ -1148,6 +1150,9 @@ struct ufs_hba {
 	/* To monitor slow UFS I/O requests. */
 	u64 slowio_min_us;
 	u64 slowio[UFSHCD_SLOWIO_OP_MAX][UFSHCD_SLOWIO_SYS_MAX];
+
+	bool phy_init_g4;
+	bool force_g4;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)

@@ -1,6 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_GMU_CORE_H
 #define __KGSL_GMU_CORE_H
@@ -22,7 +22,6 @@
 #endif
 
 #define MAX_GMU_CLKS 6
-#define DEFAULT_GMU_FREQ_IDX 1
 
 /*
  * These are the different ways the GMU can boot. GMU_WARM_BOOT is waking up
@@ -87,16 +86,6 @@ enum gpu_idle_level {
 	GPU_HW_SLUMBER = 0xF
 };
 
-static const char * const gpu_idle_level_names[] = {
-	[GPU_HW_ACTIVE] = "GPU_HW_ACTIVE",
-	[GPU_HW_SPTP_PC] = "GPU_HW_SPTP_PC",
-	[GPU_HW_IFPC] = "GPU_HW_IFPC",
-	[GPU_HW_NAP] = "GPU_HW_NAP",
-	[GPU_HW_MIN_VOLT] = "GPU_HW_MIN_VOLT",
-	[GPU_HW_MIN_DDR] = "GPU_HW_MIN_DDR",
-	[GPU_HW_SLUMBER] = "GPU_HW_SLUMBER"
-};
-
 /*
  * Wait time before trying to write the register again.
  * Hopefully the GMU has finished waking up during this delay.
@@ -117,6 +106,7 @@ static const char * const gpu_idle_level_names[] = {
 #define FENCE_STATUS_WRITEDROPPED0_MASK 0x1
 #define FENCE_STATUS_WRITEDROPPED1_MASK 0x2
 
+struct device_node;
 struct kgsl_device;
 struct kgsl_snapshot;
 
@@ -204,6 +194,21 @@ void gmu_core_regread(struct kgsl_device *device, unsigned int offsetwords,
 		unsigned int *value);
 void gmu_core_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 		unsigned int value);
+
+/**
+ * gmu_core_blkwrite - Do a bulk I/O write to GMU
+ * @device: Pointer to the kgsl device
+ * @offsetwords: Destination dword offset
+ * @buffer: Pointer to the source buffer
+ * @size: Number of bytes to copy
+ *
+ * Write a series of GMU registers quickly without bothering to spend time
+ * logging the register writes. The logging of these writes causes extra
+ * delays that could allow IRQs arrive and be serviced before finishing
+ * all the writes.
+ */
+void gmu_core_blkwrite(struct kgsl_device *device, unsigned int offsetwords,
+		const void *buffer, size_t size);
 void gmu_core_regrmw(struct kgsl_device *device, unsigned int offsetwords,
 		unsigned int mask, unsigned int bits);
 const char *gmu_core_oob_type_str(enum oob_request req);

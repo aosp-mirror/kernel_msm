@@ -189,7 +189,7 @@ static void group_init(struct psi_group *group)
 	for_each_possible_cpu(cpu)
 		seqcount_init(&per_cpu_ptr(group->pcpu, cpu)->seq);
 	group->avg_next_update = sched_clock() + psi_period;
-	INIT_DELAYED_WORK(&group->avgs_work, psi_avgs_work);
+	INIT_DEFERRABLE_WORK(&group->avgs_work, psi_avgs_work);
 	mutex_init(&group->avgs_lock);
 	/* Init trigger-related members */
 	atomic_set(&group->poll_scheduled, 0);
@@ -445,6 +445,9 @@ static void psi_avgs_work(struct work_struct *work)
 }
 
 #ifdef CONFIG_PSI_FTRACE
+
+#define TOKB(x) ((x) * (PAGE_SIZE / 1024))
+
 static void trace_event_helper(struct psi_group *group)
 {
 	struct zone *zone;
@@ -452,17 +455,22 @@ static void trace_event_helper(struct psi_group *group)
 	unsigned long free;
 	unsigned long cma;
 	unsigned long file;
-	u64 memstall = group->total[PSI_POLL][PSI_MEM_SOME];
+
+	u64 mem_some_delta = group->total[PSI_POLL][PSI_MEM_SOME] -
+			group->polling_total[PSI_MEM_SOME];
+	u64 mem_full_delta = group->total[PSI_POLL][PSI_MEM_FULL] -
+			group->polling_total[PSI_MEM_FULL];
 
 	for_each_populated_zone(zone) {
-		wmark = zone->watermark[WMARK_HIGH];
-		free = zone_page_state(zone, NR_FREE_PAGES);
-		cma = zone_page_state(zone, NR_FREE_CMA_PAGES);
-		file = zone_page_state(zone, NR_ZONE_ACTIVE_FILE) +
-			zone_page_state(zone, NR_ZONE_INACTIVE_FILE);
+		wmark = TOKB(high_wmark_pages(zone));
+		free = TOKB(zone_page_state(zone, NR_FREE_PAGES));
+		cma = TOKB(zone_page_state(zone, NR_FREE_CMA_PAGES));
+		file = TOKB(zone_page_state(zone, NR_ZONE_ACTIVE_FILE) +
+			zone_page_state(zone, NR_ZONE_INACTIVE_FILE));
 
 		trace_psi_window_vmstat(
-			memstall, zone->name, wmark, free, cma, file);
+			mem_some_delta, mem_full_delta, zone->name, wmark,
+			free, cma, file);
 	}
 }
 #else
@@ -571,11 +579,37 @@ static u64 update_triggers(struct psi_group *group, u64 now)
 		t->last_event_time = now;
 	}
 
+	trace_event_helper(group);
 	if (new_stall)
 		memcpy(group->polling_total, total,
 				sizeof(group->polling_total));
 
 	return now + group->poll_min_period;
+}
+
+void psi_emergency_trigger(void)
+{
+	struct psi_group *group = &psi_system;
+	struct psi_trigger *t;
+
+	if (static_branch_likely(&psi_disabled))
+		return;
+
+	/*
+	 * In unlikely case that OOM was triggered while adding/
+	 * removing triggers.
+	 */
+	if (!mutex_trylock(&group->trigger_lock))
+		return;
+
+	list_for_each_entry(t, &group->triggers, node) {
+		trace_psi_event(t->state, t->threshold);
+
+		/* Generate an event */
+		if (cmpxchg(&t->event, 0, 1) == 0)
+			wake_up_interruptible(&t->event_wait);
+	}
+	mutex_unlock(&group->trigger_lock);
 }
 
 /*
@@ -637,7 +671,6 @@ static void psi_poll_work(struct kthread_work *work)
 		 */
 		group->polling_until = now +
 			group->poll_min_period * UPDATES_PER_WINDOW;
-		trace_event_helper(group);
 	}
 
 	if (now > group->polling_until) {

@@ -39,7 +39,7 @@ static int cvp_open(struct inode *inode, struct file *filp)
 
 	dprintk(CVP_DBG, "%s: Enter\n", __func__);
 
-	inst = msm_cvp_open(core->id, MSM_CVP_CORE);
+	inst = msm_cvp_open(core->id, MSM_CVP_USER);
 	if (!inst) {
 		dprintk(CVP_ERR,
 		"Failed to create cvp instance\n");
@@ -61,7 +61,18 @@ static int cvp_close(struct inode *inode, struct file *filp)
 
 static unsigned int cvp_poll(struct file *filp, struct poll_table_struct *p)
 {
-	return 0;
+	int rc = 0;
+	struct msm_cvp_inst *inst = filp->private_data;
+	unsigned long flags = 0;
+
+	poll_wait(filp, &inst->event_handler.wq, p);
+
+	spin_lock_irqsave(&inst->event_handler.lock, flags);
+	if (inst->event_handler.event == CVP_SSR_EVENT)
+		rc |= POLLPRI;
+	spin_unlock_irqrestore(&inst->event_handler.lock, flags);
+
+	return rc;
 }
 
 static const struct file_operations cvp_fops = {
@@ -84,7 +95,7 @@ static int read_platform_resources(struct msm_cvp_core *core,
 		return -EINVAL;
 	}
 
-	core->hfi_type = CVP_HFI_VENUS;
+	core->hfi_type = CVP_HFI_IRIS;
 	core->resources.pdev = pdev;
 	if (pdev->dev.of_node) {
 		/* Target supports DT, parse from it */
@@ -123,7 +134,6 @@ static int msm_cvp_initialize_core(struct platform_device *pdev,
 	INIT_DELAYED_WORK(&core->fw_unload_work, msm_cvp_fw_unload_handler);
 	INIT_WORK(&core->ssr_work, msm_cvp_ssr_handler);
 
-	msm_cvp_init_core_clk_ops(core);
 	return rc;
 }
 
@@ -227,7 +237,6 @@ static ssize_t boot_store(struct device *dev,
 			const char *buf, size_t count)
 {
 	int rc = 0, val = 0;
-	struct msm_cvp_inst *inst;
 	static int booted;
 
 	rc = kstrtoint(buf, 0, &val);
@@ -238,7 +247,9 @@ static ssize_t boot_store(struct device *dev,
 	}
 
 	if (val > 0 && booted == 0) {
-		inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_CORE);
+		struct msm_cvp_inst *inst;
+
+		inst = msm_cvp_open(MSM_CORE_CVP, MSM_CVP_BOOT);
 		if (!inst) {
 			dprintk(CVP_ERR,
 			"Failed to create cvp instance\n");
@@ -250,8 +261,8 @@ static ssize_t boot_store(struct device *dev,
 			"Failed to close cvp instance\n");
 			return rc;
 		}
-		booted = 1;
 	}
+	booted = 1;
 	return count;
 }
 
@@ -391,6 +402,8 @@ static int msm_probe_cvp_device(struct platform_device *pdev)
 		dprintk(CVP_ERR, "Failed to trigger probe for sub-devices\n");
 		goto err_fail_sub_device_probe;
 	}
+
+	atomic64_set(&core->kernel_trans_id, 0);
 
 	return rc;
 

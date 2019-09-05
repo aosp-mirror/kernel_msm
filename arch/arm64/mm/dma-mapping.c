@@ -791,6 +791,7 @@ static int __iommu_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
 {
 	struct vm_struct *area;
 	int ret;
+	unsigned long pfn = 0;
 
 	vma->vm_page_prot = __get_dma_pgprot(attrs, vma->vm_page_prot,
 					     is_dma_coherent(dev, attrs));
@@ -798,20 +799,23 @@ static int __iommu_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
 	if (dma_mmap_from_dev_coherent(dev, vma, cpu_addr, size, &ret))
 		return ret;
 
-	if (attrs & DMA_ATTR_FORCE_CONTIGUOUS) {
-		/*
-		 * DMA_ATTR_FORCE_CONTIGUOUS allocations are always remapped,
-		 * hence in the vmalloc space.
-		 */
-		unsigned long pfn = vmalloc_to_pfn(cpu_addr);
-		return __swiotlb_mmap_pfn(vma, pfn, size);
-	}
-
 	area = find_vm_area(cpu_addr);
-	if (WARN_ON(!area || !area->pages))
-		return -ENXIO;
 
-	return iommu_dma_mmap(area->pages, size, vma);
+	if (area && area->pages)
+		return iommu_dma_mmap(area->pages, size, vma);
+	else if (!is_vmalloc_addr(cpu_addr))
+		pfn = page_to_pfn(virt_to_page(cpu_addr));
+	else if (is_vmalloc_addr(cpu_addr))
+		/*
+		 * DMA_ATTR_FORCE_CONTIGUOUS and atomic pool allocations are
+		 * always remapped, hence in the vmalloc space.
+		 */
+		pfn = vmalloc_to_pfn(cpu_addr);
+
+	if (pfn)
+		return __swiotlb_mmap_pfn(vma, pfn, size);
+
+	return -ENXIO;
 }
 
 static int __iommu_get_sgtable(struct device *dev, struct sg_table *sgt,
@@ -819,22 +823,24 @@ static int __iommu_get_sgtable(struct device *dev, struct sg_table *sgt,
 			       size_t size, unsigned long attrs)
 {
 	unsigned int count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	struct page *page = NULL;
 	struct vm_struct *area = find_vm_area(cpu_addr);
 
-	if (attrs & DMA_ATTR_FORCE_CONTIGUOUS) {
+	if (area && area->pages)
+		return sg_alloc_table_from_pages(sgt, area->pages, count, 0,
+					size, GFP_KERNEL);
+	else if (!is_vmalloc_addr(cpu_addr))
+		page = virt_to_page(cpu_addr);
+	else if (is_vmalloc_addr(cpu_addr))
 		/*
-		 * DMA_ATTR_FORCE_CONTIGUOUS allocations are always remapped,
-		 * hence in the vmalloc space.
+		 * DMA_ATTR_FORCE_CONTIGUOUS and atomic pool allocations
+		 * are always remapped, hence in the vmalloc space.
 		 */
-		struct page *page = vmalloc_to_page(cpu_addr);
+		page = vmalloc_to_page(cpu_addr);
+
+	if (page)
 		return __swiotlb_get_sgtable_page(sgt, page, size);
-	}
-
-	if (WARN_ON(!area || !area->pages))
-		return -ENXIO;
-
-	return sg_alloc_table_from_pages(sgt, area->pages, count, 0, size,
-					 GFP_KERNEL);
+	return -ENXIO;
 }
 
 static void __iommu_sync_single_for_cpu(struct device *dev,
@@ -1070,20 +1076,6 @@ static int arm_iommu_get_dma_cookie(struct device *dev,
 	return err;
 }
 
-void arm_iommu_put_dma_cookie(struct iommu_domain *domain)
-{
-	int s1_bypass = 0, is_fast = 0;
-
-	iommu_domain_get_attr(domain, DOMAIN_ATTR_S1_BYPASS,
-					&s1_bypass);
-	iommu_domain_get_attr(domain, DOMAIN_ATTR_FAST, &is_fast);
-
-	if (is_fast)
-		fast_smmu_put_dma_cookie(domain);
-	else if (!s1_bypass)
-		iommu_put_dma_cookie(domain);
-}
-
 /*
  * Checks for "qcom,iommu-dma-addr-pool" property.
  * If not present, leaves dma_addr and dma_size unmodified.
@@ -1158,179 +1150,6 @@ static void arm_iommu_setup_dma_ops(struct device *dev, u64 dma_base, u64 size)
 
 	set_dma_ops(dev, mapping.ops);
 }
-
-/**
- * DEPRECATED
- * arm_iommu_create_mapping
- * @bus: pointer to the bus holding the client device (for IOMMU calls)
- * @base: start address of the valid IO address space
- * @size: maximum size of the valid IO address space
- *
- * Creates a mapping structure which holds information about used/unused
- * IO address ranges, which is required to perform memory allocation and
- * mapping with IOMMU aware functions.
- *
- * Clients may use iommu_domain_set_attr() to set additional flags prior
- * to calling arm_iommu_attach_device() to complete initialization.
- */
-struct dma_iommu_mapping *
-__depr_arm_iommu_create_mapping(struct bus_type *bus, dma_addr_t base,
-				size_t size)
-{
-	unsigned int bits = size >> PAGE_SHIFT;
-	struct dma_iommu_mapping *mapping;
-
-	if (!bits)
-		return ERR_PTR(-EINVAL);
-
-	mapping = kzalloc(sizeof(struct dma_iommu_mapping), GFP_KERNEL);
-	if (!mapping)
-		return ERR_PTR(-ENOMEM);
-
-	mapping->base = base;
-	mapping->bits = bits;
-
-	mapping->domain = iommu_domain_alloc(bus);
-	if (!mapping->domain)
-		goto err_domain_alloc;
-
-	mapping->init = false;
-	return mapping;
-
-err_domain_alloc:
-	kfree(mapping);
-	return ERR_PTR(-ENOMEM);
-}
-EXPORT_SYMBOL(__depr_arm_iommu_create_mapping);
-
-/*
- * DEPRECATED
- * arm_iommu_release_mapping
- * @mapping: allocted via arm_iommu_create_mapping()
- *
- * Frees all resources associated with the iommu mapping.
- * The device associated with this mapping must be in the 'detached' state
- */
-void __depr_arm_iommu_release_mapping(struct dma_iommu_mapping *mapping)
-{
-	if (!mapping)
-		return;
-
-	if (mapping->domain)
-		iommu_domain_free(mapping->domain);
-
-	kfree(mapping);
-}
-EXPORT_SYMBOL(__depr_arm_iommu_release_mapping);
-
-/**
- * DEPRECATED
- * arm_iommu_attach_device
- * @dev: valid struct device pointer
- * @mapping: io address space mapping structure (returned from
- *	arm_iommu_create_mapping)
- *
- * Attaches specified io address space mapping to the provided device,
- * this replaces the dma operations (dma_map_ops pointer) with the
- * IOMMU aware version.
- *
- * Only configures dma_ops for a single device in the iommu_group.
- */
-int __depr_arm_iommu_attach_device(struct device *dev,
-			    struct dma_iommu_mapping *mapping)
-{
-	int err;
-	struct iommu_domain *domain;
-	struct iommu_group *group;
-
-	if (!dev || !mapping) {
-		pr_err("%s: Error input is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	group = dev->iommu_group;
-	if (!group) {
-		dev_err(dev, "No iommu associated with device\n");
-		return -EINVAL;
-	}
-
-	domain = iommu_get_domain_for_dev(dev);
-	if (domain) {
-		int dynamic = 0;
-
-		iommu_domain_get_attr(domain, DOMAIN_ATTR_DYNAMIC, &dynamic);
-
-		if ((domain->type == IOMMU_DOMAIN_DMA) && dynamic) {
-			dev_warn(dev, "Deprecated API %s in use! Continuing anyway\n",
-				__func__);
-		} else {
-			dev_err(dev, "Device already attached to other iommu_domain\n");
-			return -EINVAL;
-		}
-	}
-
-	err = iommu_attach_group(mapping->domain, group);
-	if (err) {
-		dev_err(dev, "iommu_attach_group failed\n");
-		return err;
-	}
-
-	err = arm_iommu_get_dma_cookie(dev, mapping);
-	if (err) {
-		dev_err(dev, "arm_iommu_get_dma_cookie failed\n");
-		iommu_detach_group(domain, group);
-		return err;
-	}
-
-	dev->archdata.mapping = mapping;
-	set_dma_ops(dev, mapping->ops);
-
-	pr_debug("Attached IOMMU controller to %s device.\n", dev_name(dev));
-	return 0;
-}
-EXPORT_SYMBOL(__depr_arm_iommu_attach_device);
-
-/**
- * DEPRECATED
- * arm_iommu_detach_device
- * @dev: valid struct device pointer
- *
- * Detaches the provided device from a previously attached map.
- * This voids the dma operations (dma_map_ops pointer)
- */
-void __depr_arm_iommu_detach_device(struct device *dev)
-{
-	struct iommu_domain *domain;
-	int s1_bypass = 0;
-
-	if (!dev->iommu_group) {
-		dev_err(dev, "No iommu associated with device\n");
-		return;
-	}
-
-	domain = iommu_get_domain_for_dev(dev);
-	if (!domain) {
-		dev_warn(dev, "Not attached\n");
-		return;
-	}
-
-	iommu_domain_get_attr(domain, DOMAIN_ATTR_S1_BYPASS, &s1_bypass);
-
-	/*
-	 * ION defers dma_unmap calls. Ensure they have all completed prior to
-	 * setting dma_ops to NULL.
-	 */
-	if (msm_dma_unmap_all_for_dev(dev))
-		dev_warn(dev, "IOMMU detach with outstanding mappings\n");
-
-	iommu_detach_group(domain, dev->iommu_group);
-	dev->archdata.mapping = NULL;
-	if (!s1_bypass)
-		set_dma_ops(dev, NULL);
-
-	pr_debug("Detached IOMMU controller from %s device.\n", dev_name(dev));
-}
-EXPORT_SYMBOL(__depr_arm_iommu_detach_device);
 
 #else /*!CONFIG_ARM64_DMA_USE_IOMMU */
 

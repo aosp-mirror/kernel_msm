@@ -15,6 +15,21 @@
 #define QBT_ENABLE_FD            104
 #define QBT_DISABLE_FD           105
 #define QBT_CONFIGURE_TOUCH_FD   106
+#define QBT_ACQUIRE_WAKELOCK     107
+#define QBT_RELEASE_WAKELOCK     108
+
+/*
+ * enum qbt_finger_events -
+ *      enumeration of qbt finger events
+ * @QBT_EVENT_FINGER_UP - finger up detected
+ * @QBT_EVENT_FINGER_DOWN - finger down detected
+ * @QBT_EVENT_FINGER_MOVE - finger move detected
+ */
+enum qbt_finger_events {
+	QBT_EVENT_FINGER_UP,
+	QBT_EVENT_FINGER_DOWN,
+	QBT_EVENT_FINGER_MOVE
+};
 
 /*
  * enum qbt_fw_event -

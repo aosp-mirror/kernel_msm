@@ -390,6 +390,8 @@ static uint32_t diag_translate_kernel_to_user_mask(uint32_t peripheral_mask)
 		ret |= DIAG_CON_UPD_AUDIO;
 	if (peripheral_mask & MD_PERIPHERAL_MASK(UPD_SENSORS))
 		ret |= DIAG_CON_UPD_SENSORS;
+	if (peripheral_mask & MD_PERIPHERAL_MASK(UPD_CHARGER))
+		ret |= DIAG_CON_UPD_CHARGER;
 	return ret;
 }
 
@@ -432,9 +434,9 @@ void diag_clear_masks(int pid)
 static void diag_close_logging_process(const int pid)
 {
 	int i, j;
-	int session_mask;
+	int session_mask = 0;
 	int device_mask = 0;
-	uint32_t p_mask;
+	uint32_t p_mask = 0;
 	struct diag_md_session_t *session_info = NULL;
 	struct diag_logging_mode_param_t params;
 
@@ -456,8 +458,9 @@ static void diag_close_logging_process(const int pid)
 		diag_clear_masks(pid);
 
 	mutex_lock(&driver->diagchar_mutex);
-	p_mask =
-	diag_translate_kernel_to_user_mask(session_mask);
+	if (session_mask)
+		p_mask =
+		diag_translate_kernel_to_user_mask(session_mask);
 
 	for (i = 0; i < NUM_MD_SESSIONS; i++)
 		if (MD_PERIPHERAL_MASK(i) & session_mask)
@@ -480,9 +483,11 @@ static void diag_close_logging_process(const int pid)
 			}
 		}
 	}
+	mutex_lock(&driver->hdlc_disable_mutex);
 	mutex_lock(&driver->md_session_lock);
 	diag_md_session_close(pid);
 	mutex_unlock(&driver->md_session_lock);
+	mutex_unlock(&driver->hdlc_disable_mutex);
 	diag_switch_logging(&params);
 	mutex_unlock(&driver->diagchar_mutex);
 }
@@ -1417,7 +1422,9 @@ static void diag_md_session_close(int pid)
 				continue;
 			driver->md_session_map[proc][i] = NULL;
 			driver->md_session_mask[proc] &=
-					~session_info->peripheral_mask[proc];
+				~session_info->peripheral_mask[proc];
+			driver->p_hdlc_disabled[i] =
+				driver->hdlc_disabled;
 		}
 	}
 	diag_log_mask_free(session_info->log_mask);
@@ -1710,6 +1717,8 @@ static uint32_t diag_translate_mask(uint32_t peripheral_mask)
 		ret |= (1 << UPD_AUDIO);
 	if (peripheral_mask & DIAG_CON_UPD_SENSORS)
 		ret |= (1 << UPD_SENSORS);
+	if (peripheral_mask & DIAG_CON_UPD_CHARGER)
+		ret |= (1 << UPD_CHARGER);
 	return ret;
 }
 
@@ -2360,6 +2369,8 @@ int diag_query_pd(char *process_name)
 		return UPD_AUDIO;
 	if (diag_query_pd_name(process_name, "sensor_pd"))
 		return UPD_SENSORS;
+	if (diag_query_pd_name(process_name, "charger_pd"))
+		return UPD_CHARGER;
 
 	return -EINVAL;
 }
@@ -2423,8 +2434,27 @@ static int diag_ioctl_query_pd_logging(struct diag_logging_mode_param_t *param)
 	return ret;
 }
 
-int diag_map_hw_accel_type_ver(
-	uint8_t hw_accel_type, uint8_t hw_accel_ver)
+void diag_map_index_to_hw_accel(uint8_t index,
+	uint8_t *hw_accel_type, uint8_t *hw_accel_ver)
+{
+	*hw_accel_type = 0;
+	*hw_accel_ver = 0;
+
+	switch (index) {
+	case DIAG_HW_ACCEL_TYPE_STM:
+		*hw_accel_type = DIAG_HW_ACCEL_TYPE_STM;
+		*hw_accel_ver = DIAG_HW_ACCEL_VER_MIN;
+		break;
+	case DIAG_HW_ACCEL_TYPE_ATB:
+		*hw_accel_type = DIAG_HW_ACCEL_TYPE_ATB;
+		*hw_accel_ver = DIAG_HW_ACCEL_VER_MIN;
+		break;
+	default:
+		break;
+	}
+}
+
+int diag_map_hw_accel_type_ver(uint8_t hw_accel_type, uint8_t hw_accel_ver)
 {
 	int index = -EINVAL;
 
@@ -2483,7 +2513,7 @@ static int diag_ioctl_query_pd_featuremask(
 static int diag_ioctl_passthru_control_func(
 	struct diag_hw_accel_cmd_req_t *req_params)
 {
-	return diag_send_passtru_ctrl_pkt(req_params);
+	return diag_send_passthru_ctrl_pkt(req_params);
 }
 
 static void diag_query_session_pid(struct diag_query_pid_t *param)
@@ -4330,7 +4360,7 @@ static int __init diagchar_init(void)
 	mutex_init(&driver->hdlc_recovery_mutex);
 	for (i = 0; i < NUM_PERIPHERALS; i++) {
 		mutex_init(&driver->diagfwd_channel_mutex[i]);
-		mutex_init(&driver->rpmsginfo_mutex[i]);
+		spin_lock_init(&driver->rpmsginfo_lock[i]);
 		driver->diag_id_sent[i] = 0;
 	}
 	init_waitqueue_head(&driver->wait_q);

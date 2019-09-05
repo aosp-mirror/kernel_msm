@@ -73,7 +73,7 @@ static int sched_feat_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-#ifdef HAVE_JUMP_LABEL
+#ifdef CONFIG_JUMP_LABEL
 
 #define jump_label_key__true  STATIC_KEY_INIT_TRUE
 #define jump_label_key__false STATIC_KEY_INIT_FALSE
@@ -99,7 +99,7 @@ static void sched_feat_enable(int i)
 #else
 static void sched_feat_disable(int i) { };
 static void sched_feat_enable(int i) { };
-#endif /* HAVE_JUMP_LABEL */
+#endif /* CONFIG_JUMP_LABEL */
 
 static int sched_feat_set(char *cmp)
 {
@@ -674,8 +674,6 @@ do {									\
 	P(cpu_capacity);
 #endif
 #ifdef CONFIG_SCHED_WALT
-	P(cluster->load_scale_factor);
-	P(cluster->capacity);
 	P(cluster->max_possible_capacity);
 	P(cluster->efficiency);
 	P(cluster->cur_freq);
@@ -765,8 +763,6 @@ static void sched_debug_header(struct seq_file *m)
 	P(sysctl_sched_features);
 #ifdef CONFIG_SCHED_WALT
 	P(sched_init_task_load_windows);
-	P(min_capacity);
-	P(max_capacity);
 	P(sched_ravg_window);
 	P(sched_load_granule);
 #endif

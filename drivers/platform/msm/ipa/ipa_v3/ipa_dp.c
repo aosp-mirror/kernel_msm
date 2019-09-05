@@ -9,6 +9,7 @@
 #include <linux/list.h>
 #include <linux/netdevice.h>
 #include <linux/msm_gsi.h>
+#include <net/sock.h>
 #include "ipa_i.h"
 #include "ipa_trace.h"
 #include "ipahal/ipahal.h"
@@ -16,6 +17,7 @@
 
 #define IPA_WAN_AGGR_PKT_CNT 5
 #define IPA_WAN_NAPI_MAX_FRAMES (NAPI_WEIGHT / IPA_WAN_AGGR_PKT_CNT)
+#define IPA_WAN_PAGE_ORDER 3
 #define IPA_LAST_DESC_CNT 0xFFFF
 #define POLLING_INACTIVITY_RX 40
 #define POLLING_MIN_SLEEP_RX 1010
@@ -88,10 +90,14 @@ static void ipa3_replenish_wlan_rx_cache(struct ipa3_sys_context *sys);
 static void ipa3_replenish_rx_cache(struct ipa3_sys_context *sys);
 static void ipa3_replenish_rx_work_func(struct work_struct *work);
 static void ipa3_fast_replenish_rx_cache(struct ipa3_sys_context *sys);
+static void ipa3_replenish_rx_page_cache(struct ipa3_sys_context *sys);
+static void ipa3_replenish_rx_page_recycle(struct ipa3_sys_context *sys);
+static struct ipa3_rx_pkt_wrapper *ipa3_alloc_rx_pkt_page(gfp_t flag,
+	bool is_tmp_alloc);
 static void ipa3_wq_handle_rx(struct work_struct *work);
 static void ipa3_wq_rx_common(struct ipa3_sys_context *sys,
 	struct gsi_chan_xfer_notify *notify);
-static void ipa3_wq_rx_napi_chain(struct ipa3_sys_context *sys,
+static void ipa3_rx_napi_chain(struct ipa3_sys_context *sys,
 		struct gsi_chan_xfer_notify *notify, uint32_t num);
 static void ipa3_wlan_wq_rx_common(struct ipa3_sys_context *sys,
 				struct gsi_chan_xfer_notify *notify);
@@ -111,8 +117,6 @@ static int ipa_gsi_setup_event_ring(struct ipa3_ep_context *ep,
 	u32 ring_size, gfp_t mem_flag);
 static int ipa_gsi_setup_transfer_ring(struct ipa3_ep_context *ep,
 	u32 ring_size, struct ipa3_sys_context *user_data, gfp_t mem_flag);
-static int ipa_setup_coal_def_pipe(struct ipa_sys_connect_params *sys_in,
-	struct ipa3_ep_context *ep_coalescing);
 static int ipa3_teardown_coal_def_pipe(u32 clnt_hdl);
 static int ipa_populate_tag_field(struct ipa3_desc *desc,
 		struct ipa3_tx_pkt_wrapper *tx_pkt,
@@ -232,6 +236,10 @@ static void ipa3_send_nop_desc(struct work_struct *work)
 	struct ipa3_tx_pkt_wrapper *tx_pkt;
 
 	IPADBG_LOW("gsi send NOP for ch: %lu\n", sys->ep->gsi_chan_hdl);
+
+	if (atomic_read(&sys->workqueue_flushed))
+		return;
+
 	tx_pkt = kmem_cache_zalloc(ipa3_ctx->tx_pkt_wrapper_cache, GFP_KERNEL);
 	if (!tx_pkt) {
 		queue_work(sys->wq, &sys->work);
@@ -340,7 +348,7 @@ int ipa3_send(struct ipa3_sys_context *sys,
 	for (i = 0; i < num_desc; i++) {
 		tx_pkt = kmem_cache_zalloc(ipa3_ctx->tx_pkt_wrapper_cache,
 					   GFP_ATOMIC);
-		if (!tx_pkt) {
+		if (unlikely(!tx_pkt)) {
 			IPAERR("failed to alloc tx wrapper\n");
 			result = -ENOMEM;
 			goto failure;
@@ -354,8 +362,8 @@ int ipa3_send(struct ipa3_sys_context *sys,
 
 		/* populate tag field */
 		if (desc[i].is_tag_status) {
-			if (ipa_populate_tag_field(&desc[i], tx_pkt,
-				&tag_pyld_ret)) {
+			if (unlikely(ipa_populate_tag_field(&desc[i], tx_pkt,
+				&tag_pyld_ret))) {
 				IPAERR("Failed to populate tag field\n");
 				result = -EFAULT;
 				goto failure_dma_map;
@@ -395,7 +403,8 @@ int ipa3_send(struct ipa3_sys_context *sys,
 				tx_pkt->no_unmap_dma = true;
 			}
 		}
-		if (dma_mapping_error(ipa3_ctx->pdev, tx_pkt->mem.phys_base)) {
+		if (unlikely(dma_mapping_error(ipa3_ctx->pdev,
+			tx_pkt->mem.phys_base))) {
 			IPAERR("failed to do dma map.\n");
 			result = -EFAULT;
 			goto failure_dma_map;
@@ -446,7 +455,7 @@ int ipa3_send(struct ipa3_sys_context *sys,
 	IPADBG_LOW("ch:%lu queue xfer\n", sys->ep->gsi_chan_hdl);
 	result = gsi_queue_xfer(sys->ep->gsi_chan_hdl, num_desc,
 			gsi_xfer, true);
-	if (result != GSI_STATUS_SUCCESS) {
+	if (unlikely(result != GSI_STATUS_SUCCESS)) {
 		IPAERR_RL("GSI xfer failed.\n");
 		result = -EFAULT;
 		goto failure;
@@ -462,6 +471,7 @@ int ipa3_send(struct ipa3_sys_context *sys,
 
 	/* set the timer for sending the NOP descriptor */
 	if (send_nop) {
+
 		ktime_t time = ktime_set(0, IPA_TX_SEND_COMPL_NOP_DELAY_NS);
 
 		IPADBG_LOW("scheduling timer for ch %lu\n",
@@ -795,10 +805,7 @@ static void ipa3_handle_rx(struct ipa3_sys_context *sys)
 	int cnt;
 	int ret;
 
-	if (ipa3_ctx->use_ipa_pm)
-		ipa_pm_activate_sync(sys->pm_hdl);
-	else
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+	ipa_pm_activate_sync(sys->pm_hdl);
 start_poll:
 	inactive_cycles = 0;
 	do {
@@ -827,10 +834,7 @@ start_poll:
 	if (ret == -GSI_STATUS_PENDING_IRQ)
 		goto start_poll;
 
-	if (ipa3_ctx->use_ipa_pm)
-		ipa_pm_deferred_deactivate(sys->pm_hdl);
-	else
-		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
+	ipa_pm_deferred_deactivate(sys->pm_hdl);
 }
 
 static void ipa3_switch_to_intr_rx_work_func(struct work_struct *work)
@@ -884,6 +888,11 @@ static void ipa_pm_sys_pipe_cb(void *p, enum ipa_pm_cb_event event)
 			usleep_range(SUSPEND_MIN_SLEEP_RX,
 				SUSPEND_MAX_SLEEP_RX);
 			IPA_ACTIVE_CLIENTS_DEC_SPECIAL("PIPE_SUSPEND_LAN");
+		} else if (sys->ep->client == IPA_CLIENT_ODL_DPL_CONS) {
+			IPA_ACTIVE_CLIENTS_INC_SPECIAL("PIPE_SUSPEND_ODL");
+			usleep_range(SUSPEND_MIN_SLEEP_RX,
+				SUSPEND_MAX_SLEEP_RX);
+			IPA_ACTIVE_CLIENTS_DEC_SPECIAL("PIPE_SUSPEND_ODL");
 		} else
 			IPAERR("Unexpected event %d\n for client %d\n",
 				event, sys->ep->client);
@@ -912,7 +921,7 @@ static void ipa_pm_sys_pipe_cb(void *p, enum ipa_pm_cb_event event)
 int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 {
 	struct ipa3_ep_context *ep;
-	int i, ipa_ep_idx;
+	int i, ipa_ep_idx, wan_handle;
 	int result = -EINVAL;
 	struct ipahal_reg_coal_qmap_cfg qmap_cfg;
 	struct ipahal_reg_coal_evict_lru evict_lru;
@@ -993,8 +1002,7 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		ep->sys->db_timer.function = ipa3_ring_doorbell_timer_fn;
 
 		/* create IPA PM resources for handling polling mode */
-		if (ipa3_ctx->use_ipa_pm &&
-			IPA_CLIENT_IS_CONS(sys_in->client)) {
+		if (IPA_CLIENT_IS_CONS(sys_in->client)) {
 			pm_reg.name = ipa_clients_strings[sys_in->client];
 			pm_reg.callback = ipa_pm_sys_pipe_cb;
 			pm_reg.user_data = ep->sys;
@@ -1086,10 +1094,6 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		atomic_set(&ep->sys->repl->pending, 0);
 		ep->sys->repl->capacity = ep->sys->rx_pool_sz + 1;
 
-		/*double for wan_coal since it will be shared between 2 pipes */
-		if (sys_in->client == IPA_CLIENT_APPS_WAN_COAL_CONS)
-			ep->sys->repl->capacity *= 2;
-
 		ep->sys->repl->cache = kcalloc(ep->sys->repl->capacity,
 				sizeof(void *), GFP_KERNEL);
 		if (!ep->sys->repl->cache) {
@@ -1103,8 +1107,30 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		}
 	}
 
+	if (ep->sys->repl_hdlr == ipa3_replenish_rx_page_recycle) {
+		ep->sys->repl = kzalloc(sizeof(*ep->sys->repl), GFP_KERNEL);
+		if (!ep->sys->repl) {
+			IPAERR("failed to alloc repl for client %d\n",
+					sys_in->client);
+			result = -ENOMEM;
+			goto fail_gen2;
+		}
+		atomic_set(&ep->sys->repl->pending, 0);
+		ep->sys->repl->capacity = (ep->sys->rx_pool_sz + 1) * 2;
+
+		ep->sys->repl->cache = kcalloc(ep->sys->repl->capacity,
+				sizeof(void *), GFP_KERNEL);
+		atomic_set(&ep->sys->repl->head_idx, 0);
+		atomic_set(&ep->sys->repl->tail_idx, 0);
+		ipa3_replenish_rx_page_cache(ep->sys);
+	}
+
 	if (IPA_CLIENT_IS_CONS(sys_in->client)) {
-		ipa3_replenish_rx_cache(ep->sys);
+		if (IPA_CLIENT_IS_WAN_CONS(sys_in->client) &&
+			ipa3_ctx->ipa_wan_skb_page) {
+			ipa3_replenish_rx_page_recycle(ep->sys);
+		} else
+			ipa3_replenish_rx_cache(ep->sys);
 		for (i = 0; i < GSI_VEID_MAX; i++)
 			INIT_LIST_HEAD(&ep->sys->pending_pkts[i]);
 	}
@@ -1137,9 +1163,6 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		goto fail_gen3;
 	}
 
-	if (!ep->keep_ipa_awake)
-		IPA_ACTIVE_CLIENTS_DEC_EP(sys_in->client);
-
 	IPADBG("client %d (ep: %d) connected sys=%pK\n", sys_in->client,
 			ipa_ep_idx, ep->sys);
 
@@ -1154,12 +1177,15 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 
 		sys_in->client = IPA_CLIENT_APPS_WAN_CONS;
 		sys_in->ipa_ep_cfg = ep_cfg_copy;
-		result = ipa_setup_coal_def_pipe(sys_in, ep);
+		result = ipa3_setup_sys_pipe(sys_in, &wan_handle);
 		if (result) {
 			IPAERR("failed to setup default coalescing pipe\n");
 			goto fail_repl;
 		}
 	}
+
+	if (!ep->keep_ipa_awake)
+		IPA_ACTIVE_CLIENTS_DEC_EP(ep->client);
 
 	return 0;
 
@@ -1170,8 +1196,7 @@ fail_repl:
 	ep->sys->repl->capacity = 0;
 	kfree(ep->sys->repl);
 fail_gen2:
-	if (ipa3_ctx->use_ipa_pm)
-		ipa_pm_deregister(ep->sys->pm_hdl);
+	ipa_pm_deregister(ep->sys->pm_hdl);
 fail_pm:
 	destroy_workqueue(ep->sys->repl_wq);
 fail_wq2:
@@ -1181,137 +1206,6 @@ fail_wq:
 	memset(&ipa3_ctx->ep[ipa_ep_idx], 0, sizeof(struct ipa3_ep_context));
 fail_and_disable_clocks:
 	IPA_ACTIVE_CLIENTS_DEC_EP(sys_in->client);
-fail_gen:
-	return result;
-}
-
-/**
- * ipa3_setup_coal_def_pipe() - Setup a crippled default pipe in addition to the
- * coalescing pipe.
- *
- * @sys_in:	[in] input needed to setup the pipe and configure EP
- * @ep_coalescing [in] the ep context of the coal pipe
- *
- *  - configure the end-point registers with the supplied
- *    parameters from the user.
- *  - Creates a GPI connection with IPA.
- *  - allocate descriptor FIFO
- *
- * Returns:	0 on success, negative on failure
- */
-static int ipa_setup_coal_def_pipe(struct ipa_sys_connect_params *sys_in,
-	struct ipa3_ep_context *ep_coalescing)
-{
-	struct ipa3_ep_context *ep;
-	int result = -EINVAL;
-	int ipa_ep_idx;
-
-	ipa_ep_idx = ipa3_get_ep_mapping(sys_in->client);
-
-	if (ipa_ep_idx == IPA_EP_NOT_ALLOCATED) {
-		IPAERR("failed to get idx");
-		goto fail_gen;
-	}
-
-	ep = &ipa3_ctx->ep[ipa_ep_idx];
-	if (ep->valid == 1) {
-		IPAERR("EP %d already allocated.\n", ipa_ep_idx);
-		goto fail_gen;
-	}
-
-	memset(ep, 0, offsetof(struct ipa3_ep_context, sys));
-
-	if (!ep->sys) {
-		ep->sys = kzalloc(sizeof(struct ipa3_sys_context), GFP_KERNEL);
-		if (!ep->sys) {
-			IPAERR("failed to sys ctx for client %d\n",
-				IPA_CLIENT_APPS_WAN_CONS);
-			result = -ENOMEM;
-			goto fail_wq;
-		}
-
-		ep->sys->ep = ep;
-		ep->sys->wq = ep_coalescing->sys->wq;
-		ep->sys->repl_wq = ep_coalescing->sys->repl_wq;
-
-		spin_lock_init(&ep->sys->spinlock);
-		hrtimer_init(&ep->sys->db_timer, CLOCK_MONOTONIC,
-			HRTIMER_MODE_REL);
-		ep->sys->db_timer.function = ipa3_ring_doorbell_timer_fn;
-	} else {
-		memset(ep->sys, 0, offsetof(struct ipa3_sys_context, ep));
-	}
-
-	ep->skip_ep_cfg = ep_coalescing->skip_ep_cfg;
-
-	if (ipa3_assign_policy(sys_in, ep->sys)) {
-		IPAERR("failed to sys ctx for client %d\n",
-			IPA_CLIENT_APPS_WAN_CONS);
-		result = -ENOMEM;
-		goto fail_wq;
-	}
-
-	ep->valid = 1;
-	ep->client = sys_in->client;
-	ep->client_notify = ep_coalescing->client_notify;
-	ep->priv = ep_coalescing->priv;
-	ep->keep_ipa_awake = ep_coalescing->keep_ipa_awake;
-	atomic_set(&ep->avail_fifo_desc,
-		((sys_in->desc_fifo_sz / IPA_FIFO_ELEMENT_SIZE) - 1));
-
-	if (!ep->skip_ep_cfg) {
-		if (ipa3_cfg_ep(ipa_ep_idx, &sys_in->ipa_ep_cfg)) {
-			IPAERR("fail to configure EP.\n");
-			goto fail_wq;
-		}
-
-		if (ep->status.status_en) {
-			IPAERR("status should be disabled for this EP.\n");
-			goto fail_wq;
-		}
-
-		if (ipa3_cfg_ep_status(ipa_ep_idx, &ep->status)) {
-			IPAERR("fail to configure status of EP.\n");
-			goto fail_wq;
-		}
-		IPADBG("ep %d configuration successful\n", ipa_ep_idx);
-	} else {
-		IPADBG("skipping ep %d configuration\n", ipa_ep_idx);
-	}
-
-	result = ipa_gsi_setup_coal_def_channel(sys_in, ep, ep_coalescing);
-	if (result) {
-		IPAERR("Failed to setup default coal GSI channel\n");
-		goto fail_wq;
-	}
-
-	ep->sys->repl = ep_coalescing->sys->repl;
-	ipa3_replenish_rx_cache(ep->sys);
-
-	ipa3_ctx->skip_ep_cfg_shadow[ipa_ep_idx] = ep->skip_ep_cfg;
-
-	result = ipa3_enable_data_path(ipa_ep_idx);
-	if (result) {
-		IPAERR("enable data path failed res=%d ep=%d.\n", result,
-			ipa_ep_idx);
-		goto fail_wq;
-	}
-
-	result = gsi_start_channel(ep->gsi_chan_hdl);
-	if (result != GSI_STATUS_SUCCESS)
-		goto fail_start_channel;
-
-	IPADBG("client %d (ep: %d) connected sys=%pK\n", ep->client,
-			ipa_ep_idx, ep->sys);
-
-	return 0;
-
-/* the rest of the fails are handled by ipa3_setup_sys_pipe */
-fail_start_channel:
-	ipa3_disable_data_path(ipa_ep_idx);
-fail_wq:
-	kfree(ep->sys);
-	memset(&ipa3_ctx->ep[ipa_ep_idx], 0, sizeof(struct ipa3_ep_context));
 fail_gen:
 	return result;
 }
@@ -1380,6 +1274,8 @@ int ipa3_teardown_sys_pipe(u32 clnt_hdl)
 	if (IPA_CLIENT_IS_CONS(ep->client))
 		cancel_delayed_work_sync(&ep->sys->replenish_rx_work);
 	flush_workqueue(ep->sys->wq);
+	if (IPA_CLIENT_IS_PROD(ep->client))
+		atomic_set(&ep->sys->workqueue_flushed, 1);
 
 	/* tear down the default pipe before we reset the channel*/
 	if (ep->client == IPA_CLIENT_APPS_WAN_COAL_CONS) {
@@ -1511,6 +1407,17 @@ static int ipa3_teardown_coal_def_pipe(u32 clnt_hdl)
 		ipa_assert();
 		return result;
 	}
+
+	if (IPA_CLIENT_IS_CONS(ep->client))
+		cancel_delayed_work_sync(&ep->sys->replenish_rx_work);
+
+	flush_workqueue(ep->sys->wq);
+
+	if (ep->sys->repl_wq)
+		flush_workqueue(ep->sys->repl_wq);
+	if (IPA_CLIENT_IS_CONS(ep->client))
+		ipa3_cleanup_rx(ep->sys);
+
 	ep->valid = 0;
 
 	IPADBG("client (ep: %d) disconnected\n", clnt_hdl);
@@ -1591,7 +1498,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 		return -EINVAL;
 	}
 
-	if (skb->len == 0) {
+	if (unlikely(skb->len == 0)) {
 		IPAERR("packet size is 0\n");
 		return -EINVAL;
 	}
@@ -1607,7 +1514,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 	 */
 	if (IPA_CLIENT_IS_CONS(dst)) {
 		src_ep_idx = ipa3_get_ep_mapping(IPA_CLIENT_APPS_LAN_PROD);
-		if (-1 == src_ep_idx) {
+		if (unlikely(-1 == src_ep_idx)) {
 			IPAERR("Client %u is not mapped\n",
 				IPA_CLIENT_APPS_LAN_PROD);
 			goto fail_gen;
@@ -1615,7 +1522,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 		dst_ep_idx = ipa3_get_ep_mapping(dst);
 	} else {
 		src_ep_idx = ipa3_get_ep_mapping(dst);
-		if (-1 == src_ep_idx) {
+		if (unlikely(-1 == src_ep_idx)) {
 			IPAERR("Client %u is not mapped\n", dst);
 			goto fail_gen;
 		}
@@ -1627,9 +1534,9 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 
 	sys = ipa3_ctx->ep[src_ep_idx].sys;
 
-	if (!sys || !sys->ep->valid) {
-		IPAERR_RL("pipe not valid\n");
-		goto fail_gen;
+	if (unlikely(!sys || !sys->ep->valid)) {
+		IPAERR_RL("pipe %d not valid\n", src_ep_idx);
+		goto fail_pipe_not_valid;
 	}
 
 	num_frags = skb_shinfo(skb)->nr_frags;
@@ -1648,7 +1555,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 		gsi_ep->prefetch_mode == GSI_FREE_PRE_FETCH)
 		max_desc -= gsi_ep->prefetch_threshold;
 	if (num_frags + 3 > max_desc) {
-		if (skb_linearize(skb)) {
+		if (unlikely(skb_linearize(skb))) {
 			IPAERR("Failed to linear skb with %d frags\n",
 				num_frags);
 			goto fail_gen;
@@ -1662,7 +1569,7 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 		 * 1 desc for each frag
 		 */
 		desc = kzalloc(sizeof(*desc) * (num_frags + 3), GFP_ATOMIC);
-		if (!desc) {
+		if (unlikely(!desc)) {
 			IPAERR("failed to alloc desc array\n");
 			goto fail_gen;
 		}
@@ -1724,7 +1631,8 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			desc[skb_idx].callback = NULL;
 		}
 
-		if (ipa3_send(sys, num_frags + data_idx, desc, true)) {
+		if (unlikely(ipa3_send(sys, num_frags + data_idx,
+		    desc, true))) {
 			IPAERR_RL("fail to send skb %pK num_frags %u SWP\n",
 				skb, num_frags);
 			goto fail_send;
@@ -1755,7 +1663,8 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			desc[data_idx].dma_address = meta->dma_address;
 		}
 		if (num_frags == 0) {
-			if (ipa3_send(sys, data_idx + 1, desc, true)) {
+			if (unlikely(ipa3_send(sys, data_idx + 1,
+				 desc, true))) {
 				IPAERR("fail to send skb %pK HWP\n", skb);
 				goto fail_mem;
 			}
@@ -1774,8 +1683,8 @@ int ipa3_tx_dp(enum ipa_client_type dst, struct sk_buff *skb,
 			desc[data_idx+f].user2 = desc[data_idx].user2;
 			desc[data_idx].callback = NULL;
 
-			if (ipa3_send(sys, num_frags + data_idx + 1,
-				desc, true)) {
+			if (unlikely(ipa3_send(sys, num_frags + data_idx + 1,
+			    desc, true))) {
 				IPAERR("fail to send skb %pK num_frags %u\n",
 					skb, num_frags);
 				goto fail_mem;
@@ -1797,6 +1706,8 @@ fail_mem:
 		kfree(desc);
 fail_gen:
 	return -EFAULT;
+fail_pipe_not_valid:
+	return -EPIPE;
 }
 
 static void ipa3_wq_handle_rx(struct work_struct *work)
@@ -1806,10 +1717,7 @@ static void ipa3_wq_handle_rx(struct work_struct *work)
 	sys = container_of(work, struct ipa3_sys_context, work);
 
 	if (sys->napi_obj) {
-		if (!ipa3_ctx->use_ipa_pm)
-			IPA_ACTIVE_CLIENTS_INC_SPECIAL("NAPI");
-		else
-			ipa_pm_activate_sync(sys->pm_hdl);
+		ipa_pm_activate_sync(sys->pm_hdl);
 		napi_schedule(sys->napi_obj);
 	} else
 		ipa3_handle_rx(sys);
@@ -1831,26 +1739,27 @@ static void ipa3_wq_repl_rx(struct work_struct *work)
 begin:
 	while (1) {
 		next = (curr + 1) % sys->repl->capacity;
-		if (next == atomic_read(&sys->repl->head_idx))
+		if (unlikely(next == atomic_read(&sys->repl->head_idx)))
 			goto fail_kmem_cache_alloc;
 
 		rx_pkt = kmem_cache_zalloc(ipa3_ctx->rx_pkt_wrapper_cache,
 					   flag);
-		if (!rx_pkt)
+		if (unlikely(!rx_pkt))
 			goto fail_kmem_cache_alloc;
 
 		INIT_WORK(&rx_pkt->work, ipa3_wq_rx_avail);
 		rx_pkt->sys = sys;
 
 		rx_pkt->data.skb = sys->get_skb(sys->rx_buff_sz, flag);
-		if (rx_pkt->data.skb == NULL)
+		if (unlikely(rx_pkt->data.skb == NULL))
 			goto fail_skb_alloc;
 
 		ptr = skb_put(rx_pkt->data.skb, sys->rx_buff_sz);
 		rx_pkt->data.dma_addr = dma_map_single(ipa3_ctx->pdev, ptr,
 						     sys->rx_buff_sz,
 						     DMA_FROM_DEVICE);
-		if (dma_mapping_error(ipa3_ctx->pdev, rx_pkt->data.dma_addr)) {
+		if (unlikely(dma_mapping_error(ipa3_ctx->pdev,
+		    rx_pkt->data.dma_addr))) {
 			pr_err_ratelimited("%s dma map fail %pK for %pK sys=%pK\n",
 			       __func__, (void *)rx_pkt->data.dma_addr,
 			       ptr, sys);
@@ -1882,6 +1791,159 @@ fail_kmem_cache_alloc:
 				__func__, sys);
 		goto begin;
 	}
+}
+
+static struct ipa3_rx_pkt_wrapper *ipa3_alloc_rx_pkt_page(
+	gfp_t flag, bool is_tmp_alloc)
+{
+	struct ipa3_rx_pkt_wrapper *rx_pkt;
+
+	flag |= __GFP_NOMEMALLOC;
+	rx_pkt = kmem_cache_zalloc(ipa3_ctx->rx_pkt_wrapper_cache,
+		flag);
+	if (!rx_pkt)
+		return NULL;
+	rx_pkt->len = PAGE_SIZE << IPA_WAN_PAGE_ORDER;
+	rx_pkt->page_data.page = __dev_alloc_pages(flag,
+		IPA_WAN_PAGE_ORDER);
+
+	if (!rx_pkt->page_data.page)
+		goto fail_page_alloc;
+
+	rx_pkt->page_data.dma_addr = dma_map_page(ipa3_ctx->pdev,
+			rx_pkt->page_data.page, 0,
+			rx_pkt->len, DMA_FROM_DEVICE);
+	if (unlikely(dma_mapping_error(ipa3_ctx->pdev,
+		rx_pkt->page_data.dma_addr))) {
+		pr_err_ratelimited("%s dma map fail %pK for %pK\n",
+			__func__, (void *)rx_pkt->page_data.dma_addr,
+			rx_pkt->page_data.page);
+		goto fail_dma_mapping;
+	}
+	if (is_tmp_alloc)
+		rx_pkt->page_data.is_tmp_alloc = true;
+	else
+		rx_pkt->page_data.is_tmp_alloc = false;
+	return rx_pkt;
+
+fail_dma_mapping:
+	__free_pages(rx_pkt->page_data.page, IPA_WAN_PAGE_ORDER);
+fail_page_alloc:
+	kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache, rx_pkt);
+	return NULL;
+}
+
+static void ipa3_replenish_rx_page_cache(struct ipa3_sys_context *sys)
+{
+	struct ipa3_rx_pkt_wrapper *rx_pkt;
+	u32 curr;
+
+	for (curr = 0; curr < sys->repl->capacity; curr++) {
+		rx_pkt = ipa3_alloc_rx_pkt_page(GFP_KERNEL, false);
+		if (unlikely(!rx_pkt)) {
+			IPAERR("ipa3_alloc_rx_pkt_page fails\n");
+			ipa_assert();
+			break;
+		}
+		rx_pkt->sys = sys;
+		sys->repl->cache[curr] = rx_pkt;
+	}
+
+	return;
+
+}
+
+static void ipa3_replenish_rx_page_recycle(struct ipa3_sys_context *sys)
+{
+	struct ipa3_rx_pkt_wrapper *rx_pkt;
+	int ret;
+	int rx_len_cached = 0;
+	struct gsi_xfer_elem gsi_xfer_elem_array[IPA_REPL_XFER_MAX];
+	u32 curr;
+	int idx = 0;
+	struct page *cur_page;
+	gfp_t flag;
+
+	/* start replenish only when buffers go lower than the threshold */
+	if (sys->rx_pool_sz - sys->len < IPA_REPL_XFER_THRESH)
+		return;
+
+	flag = gfp_any();
+	spin_lock_bh(&sys->spinlock);
+	rx_len_cached = sys->len;
+	curr = atomic_read(&sys->repl->head_idx);
+
+	while (rx_len_cached < sys->rx_pool_sz) {
+		cur_page = sys->repl->cache[curr]->page_data.page;
+		/* Found an idle page that can be used */
+		if (page_ref_count(cur_page) == 1) {
+			page_ref_inc(cur_page);
+			rx_pkt = sys->repl->cache[curr];
+			curr = (++curr == sys->repl->capacity) ? 0 : curr;
+		} else {
+			/*
+			 * Could not find idle page at curr index.
+			 * Allocate a new one.
+			 */
+			rx_pkt = ipa3_alloc_rx_pkt_page(flag, true);
+			if (!rx_pkt && flag == GFP_ATOMIC)
+				break;
+			else if (unlikely(!rx_pkt))
+				goto fail_kmem_cache_alloc;
+			rx_pkt->sys = sys;
+		}
+
+		dma_sync_single_for_device(ipa3_ctx->pdev,
+			rx_pkt->page_data.dma_addr,
+			rx_pkt->len, DMA_FROM_DEVICE);
+		gsi_xfer_elem_array[idx].addr = rx_pkt->page_data.dma_addr;
+		gsi_xfer_elem_array[idx].len = rx_pkt->len;
+		gsi_xfer_elem_array[idx].flags = GSI_XFER_FLAG_EOT;
+		gsi_xfer_elem_array[idx].flags |= GSI_XFER_FLAG_EOB;
+		gsi_xfer_elem_array[idx].flags |= GSI_XFER_FLAG_BEI;
+		gsi_xfer_elem_array[idx].type = GSI_XFER_ELEM_DATA;
+		gsi_xfer_elem_array[idx].xfer_user_data = rx_pkt;
+		rx_len_cached++;
+		idx++;
+		/*
+		 * gsi_xfer_elem_buffer has a size of IPA_REPL_XFER_THRESH.
+		 * If this size is reached we need to queue the xfers.
+		 */
+		if (idx == IPA_REPL_XFER_MAX) {
+			ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
+				gsi_xfer_elem_array, false);
+			if (unlikely(ret != GSI_STATUS_SUCCESS)) {
+				/* we don't expect this will happen */
+				IPAERR("failed to provide buffer: %d\n", ret);
+				ipa_assert();
+				break;
+			}
+			idx = 0;
+		}
+	}
+	/* only ring doorbell once here */
+	ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, idx,
+			gsi_xfer_elem_array, true);
+	if (likely(ret == GSI_STATUS_SUCCESS)) {
+		/* ensure write is done before setting head index */
+		mb();
+		atomic_set(&sys->repl->head_idx, curr);
+		sys->len = rx_len_cached;
+	} else {
+		/* we don't expect this will happen */
+		IPAERR("failed to provide buffer: %d\n", ret);
+		ipa_assert();
+	}
+	spin_unlock_bh(&sys->spinlock);
+
+	if (rx_len_cached < sys->rx_pool_sz) {
+		queue_delayed_work(sys->wq, &sys->replenish_rx_work,
+			msecs_to_jiffies(1));
+	}
+	return;
+fail_kmem_cache_alloc:
+	ipa_assert();
+	spin_unlock_bh(&sys->spinlock);
 }
 
 static void ipa3_replenish_wlan_rx_cache(struct ipa3_sys_context *sys)
@@ -1920,7 +1982,7 @@ static void ipa3_replenish_wlan_rx_cache(struct ipa3_sys_context *sys)
 			ret = gsi_queue_xfer(sys->ep->gsi_chan_hdl, 1,
 				&gsi_xfer_elem_one, true);
 
-			if (ret) {
+			if (unlikely(ret)) {
 				IPAERR("failed to provide buffer: %d\n", ret);
 				goto fail_provide_rx_buffer;
 			}
@@ -2374,6 +2436,32 @@ static void free_rx_pkt(void *chan_user_data, void *xfer_user_data)
 }
 
 /**
+ * free_rx_page() - function to free the page and rx_pkt_wrapper
+ *
+ * @chan_user_data: ipa_sys_context used for skb size and skb_free func
+ * @xfer_uder_data: rx_pkt wrapper to be freed
+ *
+ */
+static void free_rx_page(void *chan_user_data, void *xfer_user_data)
+{
+	struct ipa3_rx_pkt_wrapper *rx_pkt = (struct ipa3_rx_pkt_wrapper *)
+		xfer_user_data;
+	struct ipa3_sys_context *sys = rx_pkt->sys;
+	int i;
+
+	for (i = 0; i < sys->repl->capacity; i++)
+		if (sys->repl->cache[i] == rx_pkt)
+			break;
+	dma_unmap_page(ipa3_ctx->pdev, rx_pkt->page_data.dma_addr,
+		rx_pkt->len, DMA_FROM_DEVICE);
+	__free_pages(rx_pkt->page_data.page,
+		IPA_WAN_PAGE_ORDER);
+	kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache, rx_pkt);
+	if (i < sys->repl->capacity)
+		sys->repl->cache[i] = NULL;
+}
+
+/**
  * ipa3_cleanup_rx() - release RX queue resources
  *
  */
@@ -2383,12 +2471,14 @@ static void ipa3_cleanup_rx(struct ipa3_sys_context *sys)
 	struct ipa3_rx_pkt_wrapper *r;
 	u32 head;
 	u32 tail;
+	int i;
 
 	/*
 	 * buffers not consumed by gsi are cleaned up using cleanup callback
 	 * provided to gsi
 	 */
 
+	spin_lock_bh(&sys->spinlock);
 	list_for_each_entry_safe(rx_pkt, r,
 				 &sys->rcycl_list, link) {
 		list_del(&rx_pkt->link);
@@ -2397,17 +2487,38 @@ static void ipa3_cleanup_rx(struct ipa3_sys_context *sys)
 		sys->free_skb(rx_pkt->data.skb);
 		kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache, rx_pkt);
 	}
+	spin_unlock_bh(&sys->spinlock);
 
 	if (sys->repl) {
-		head = atomic_read(&sys->repl->head_idx);
-		tail = atomic_read(&sys->repl->tail_idx);
-		while (head != tail) {
-			rx_pkt = sys->repl->cache[head];
-			dma_unmap_single(ipa3_ctx->pdev, rx_pkt->data.dma_addr,
-					sys->rx_buff_sz, DMA_FROM_DEVICE);
-			sys->free_skb(rx_pkt->data.skb);
-			kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache, rx_pkt);
-			head = (head + 1) % sys->repl->capacity;
+		if (!ipa3_ctx->ipa_wan_skb_page) {
+			head = atomic_read(&sys->repl->head_idx);
+			tail = atomic_read(&sys->repl->tail_idx);
+			while (head != tail) {
+				rx_pkt = sys->repl->cache[head];
+				dma_unmap_single(ipa3_ctx->pdev,
+					rx_pkt->data.dma_addr,
+					sys->rx_buff_sz,
+					DMA_FROM_DEVICE);
+				sys->free_skb(rx_pkt->data.skb);
+				kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache,
+					rx_pkt);
+				head = (head + 1) % sys->repl->capacity;
+			}
+		} else {
+			for (i = 0; i < sys->repl->capacity; i++) {
+				rx_pkt = sys->repl->cache[i];
+				if (rx_pkt) {
+					dma_unmap_page(ipa3_ctx->pdev,
+						rx_pkt->page_data.dma_addr,
+						rx_pkt->len,
+						DMA_FROM_DEVICE);
+					__free_pages(rx_pkt->page_data.page,
+						IPA_WAN_PAGE_ORDER);
+					kmem_cache_free(
+						ipa3_ctx->rx_pkt_wrapper_cache,
+						rx_pkt);
+				}
+			}
 		}
 		kfree(sys->repl->cache);
 		kfree(sys->repl);
@@ -2992,6 +3103,11 @@ static void ipa3_recycle_rx_wrapper(struct ipa3_rx_pkt_wrapper *rx_pkt)
 	spin_unlock_bh(&rx_pkt->sys->spinlock);
 }
 
+static void ipa3_recycle_rx_page_wrapper(struct ipa3_rx_pkt_wrapper *rx_pkt)
+{
+	/* no-op */
+}
+
 /**
  * handle_skb_completion()- Handle event completion EOB or EOT and prep the skb
  *
@@ -3029,9 +3145,16 @@ static struct sk_buff *handle_skb_completion(struct gsi_chan_xfer_notify
 		rx_skb->truesize = rx_pkt->len + sizeof(struct sk_buff);
 	}
 
-	if (notify->veid >= GSI_VEID_MAX) {
+	if (unlikely(notify->veid >= GSI_VEID_MAX)) {
 		WARN_ON(1);
 		return NULL;
+	}
+
+	/*Assesrt when WAN consumer channel receive EOB event*/
+	if (unlikely(notify->evt_id == GSI_CHAN_EVT_EOB &&
+		sys->ep->client == IPA_CLIENT_APPS_WAN_CONS)) {
+		IPAERR("EOB event received on WAN consumer channel\n");
+		ipa_assert();
 	}
 
 	head = &rx_pkt->sys->pending_pkts[notify->veid];
@@ -3064,6 +3187,88 @@ static struct sk_buff *handle_skb_completion(struct gsi_chan_xfer_notify
 	return rx_skb;
 }
 
+/**
+ * handle_page_completion()- Handle event completion EOB or EOT
+ * and prep the skb
+ *
+ * if eob: Set skb values, put rx_pkt at the end of the list and return NULL
+ *
+ * if eot: Set skb values, put skb at the end of the list. Then update the
+ * length and put the page together to the frags while also
+ * freeing and unmapping the corresponding rx pkt. Once finished
+ * return the head_skb to be sent up the network stack.
+ */
+static struct sk_buff *handle_page_completion(struct gsi_chan_xfer_notify
+		*notify, bool update_truesize)
+{
+	struct ipa3_rx_pkt_wrapper *rx_pkt, *tmp;
+	struct sk_buff *rx_skb;
+	struct list_head *head;
+	struct ipa3_sys_context *sys;
+	struct ipa_rx_page_data rx_page;
+
+	sys = (struct ipa3_sys_context *) notify->chan_user_data;
+	rx_pkt = (struct ipa3_rx_pkt_wrapper *) notify->xfer_user_data;
+	rx_page = rx_pkt->page_data;
+
+	spin_lock_bh(&rx_pkt->sys->spinlock);
+	rx_pkt->sys->len--;
+	spin_unlock_bh(&rx_pkt->sys->spinlock);
+
+	/* TODO: truesize handle for EOB */
+	if (update_truesize)
+		IPAERR("update_truesize not supported\n");
+
+	if (notify->veid >= GSI_VEID_MAX) {
+		rx_pkt->sys->free_rx_wrapper(rx_pkt);
+		if (!rx_page.is_tmp_alloc)
+			init_page_count(rx_page.page);
+		IPAERR("notify->veid > GSI_VEID_MAX\n");
+		return NULL;
+	}
+
+	head = &rx_pkt->sys->pending_pkts[notify->veid];
+
+	INIT_LIST_HEAD(&rx_pkt->link);
+	list_add_tail(&rx_pkt->link, head);
+
+	/* Check added for handling LAN consumer packet without EOT flag */
+	if (notify->evt_id == GSI_CHAN_EVT_EOT ||
+		sys->ep->client == IPA_CLIENT_APPS_LAN_CONS) {
+		rx_skb = alloc_skb(0, GFP_ATOMIC);
+		if (unlikely(!rx_skb)) {
+			rx_pkt->sys->free_rx_wrapper(rx_pkt);
+			if (!rx_page.is_tmp_alloc)
+				init_page_count(rx_page.page);
+			IPAERR("skb alloc failure\n");
+			return NULL;
+		}
+	/* go over the list backward to save computations on updating length */
+		list_for_each_entry_safe_reverse(rx_pkt, tmp, head, link) {
+			rx_page = rx_pkt->page_data;
+
+			list_del(&rx_pkt->link);
+			if (rx_page.is_tmp_alloc)
+				dma_unmap_page(ipa3_ctx->pdev, rx_page.dma_addr,
+					rx_pkt->len, DMA_FROM_DEVICE);
+			else
+				dma_sync_single_for_cpu(ipa3_ctx->pdev,
+					rx_page.dma_addr,
+					rx_pkt->len, DMA_FROM_DEVICE);
+			rx_pkt->sys->free_rx_wrapper(rx_pkt);
+
+			skb_add_rx_frag(rx_skb,
+				skb_shinfo(rx_skb)->nr_frags,
+				rx_page.page, 0,
+				notify->bytes_xfered,
+				PAGE_SIZE << IPA_WAN_PAGE_ORDER);
+		}
+	} else {
+		return NULL;
+	}
+	return rx_skb;
+}
+
 static void ipa3_wq_rx_common(struct ipa3_sys_context *sys,
 	struct gsi_chan_xfer_notify *notify)
 {
@@ -3071,13 +3276,13 @@ static void ipa3_wq_rx_common(struct ipa3_sys_context *sys,
 	struct ipa3_sys_context *coal_sys;
 	int ipa_ep_idx;
 
-	if (!notify) {
+	if (unlikely(!notify)) {
 		IPAERR_RL("gsi_chan_xfer_notify is null\n");
 		return;
 	}
 	rx_skb = handle_skb_completion(notify, true);
 
-	if (rx_skb) {
+	if (likely(rx_skb)) {
 		sys->pyld_hdlr(rx_skb, sys);
 
 		/* For coalescing, we have 2 transfer rings to replenish */
@@ -3085,7 +3290,7 @@ static void ipa3_wq_rx_common(struct ipa3_sys_context *sys,
 			ipa_ep_idx = ipa3_get_ep_mapping(
 					IPA_CLIENT_APPS_WAN_CONS);
 
-			if (ipa_ep_idx == IPA_EP_NOT_ALLOCATED) {
+			if (unlikely(ipa_ep_idx == IPA_EP_NOT_ALLOCATED)) {
 				IPAERR("Invalid client.\n");
 				return;
 			}
@@ -3098,7 +3303,7 @@ static void ipa3_wq_rx_common(struct ipa3_sys_context *sys,
 	}
 }
 
-static void ipa3_wq_rx_napi_chain(struct ipa3_sys_context *sys,
+static void ipa3_rx_napi_chain(struct ipa3_sys_context *sys,
 		struct gsi_chan_xfer_notify *notify, uint32_t num)
 {
 	struct ipa3_sys_context *wan_def_sys;
@@ -3108,7 +3313,12 @@ static void ipa3_wq_rx_napi_chain(struct ipa3_sys_context *sys,
 	/* non-coalescing case (SKB chaining enabled) */
 	if (sys->ep->client != IPA_CLIENT_APPS_WAN_COAL_CONS) {
 		for (i = 0; i < num; i++) {
-			rx_skb = handle_skb_completion(&notify[i], false);
+			if (!ipa3_ctx->ipa_wan_skb_page)
+				rx_skb = handle_skb_completion(
+					&notify[i], false);
+			else
+				rx_skb = handle_page_completion(
+					&notify[i], false);
 
 			/* this is always true for EOTs */
 			if (rx_skb) {
@@ -3126,26 +3336,64 @@ static void ipa3_wq_rx_napi_chain(struct ipa3_sys_context *sys,
 			skb_shinfo(prev_skb)->frag_list = NULL;
 			sys->pyld_hdlr(first_skb, sys);
 		}
-
-	/* TODO: add chaining for coal case */
 	} else {
-		for (i = 0; i < num; i++) {
-			rx_skb = handle_skb_completion(&notify[i], false);
+		if (!ipa3_ctx->ipa_wan_skb_page) {
+			/* TODO: add chaining for coal case */
+			for (i = 0; i < num; i++) {
+				rx_skb = handle_skb_completion(
+					&notify[i], false);
+				if (rx_skb) {
+					sys->pyld_hdlr(rx_skb, sys);
+					/*
+					 * For coalescing, we have 2 transfer
+					 * rings to replenish
+					 */
+					ipa_ep_idx = ipa3_get_ep_mapping(
+						IPA_CLIENT_APPS_WAN_CONS);
+					if (unlikely(ipa_ep_idx ==
+						IPA_EP_NOT_ALLOCATED)) {
+						IPAERR("Invalid client.\n");
+						return;
+					}
+					wan_def_sys =
+						ipa3_ctx->ep[ipa_ep_idx].sys;
+					wan_def_sys->repl_hdlr(wan_def_sys);
+					sys->repl_hdlr(sys);
+				}
+			}
+		} else {
+			for (i = 0; i < num; i++) {
+				rx_skb = handle_page_completion(
+					&notify[i], false);
 
-			if (rx_skb) {
-				sys->pyld_hdlr(rx_skb, sys);
+				/* this is always true for EOTs */
+				if (rx_skb) {
+					if (!first_skb)
+						first_skb = rx_skb;
 
-			/*
-			 * For coalescing, we have 2 transfer rings to replenish
-			 */
+					if (prev_skb)
+						skb_shinfo(prev_skb)->frag_list
+							= rx_skb;
+
+					prev_skb = rx_skb;
+				}
+			}
+			if (prev_skb) {
+				skb_shinfo(prev_skb)->frag_list = NULL;
+				sys->pyld_hdlr(first_skb, sys);
+				/*
+				 * For coalescing, we have 2 transfer
+				 * rings to replenish
+				 */
 				ipa_ep_idx = ipa3_get_ep_mapping(
 						IPA_CLIENT_APPS_WAN_CONS);
-
-				if (ipa_ep_idx == IPA_EP_NOT_ALLOCATED) {
+				if (unlikely(ipa_ep_idx ==
+					IPA_EP_NOT_ALLOCATED)) {
 					IPAERR("Invalid client.\n");
 					return;
 				}
-				wan_def_sys = ipa3_ctx->ep[ipa_ep_idx].sys;
+				wan_def_sys =
+					ipa3_ctx->ep[ipa_ep_idx].sys;
 				wan_def_sys->repl_hdlr(wan_def_sys);
 			}
 		}
@@ -3221,11 +3469,14 @@ static int ipa3_odu_rx_pyld_hdlr(struct sk_buff *rx_skb,
 static int ipa3_odl_dpl_rx_pyld_hdlr(struct sk_buff *rx_skb,
 	struct ipa3_sys_context *sys)
 {
-	if (WARN(!sys->ep->client_notify, "sys->ep->client_notify is NULL\n"))
+	if (WARN(!sys->ep->client_notify, "sys->ep->client_notify is NULL\n")) {
 		dev_kfree_skb_any(rx_skb);
-	else
+	} else {
 		sys->ep->client_notify(sys->ep->priv, IPA_RECEIVE,
 			(unsigned long)(rx_skb));
+		/*Recycle the SKB before reusing it*/
+		ipa3_skb_recycle(rx_skb);
+	}
 
 	return 0;
 }
@@ -3248,16 +3499,12 @@ static void ipa3_set_aggr_limit(struct ipa_sys_connect_params *in,
 	sys->ep->status.status_en = false;
 	sys->rx_buff_sz = IPA_GENERIC_RX_BUFF_SZ(adjusted_sz);
 
-	if (in->client == IPA_CLIENT_APPS_WAN_COAL_CONS) {
-		*aggr_byte_limit = sys->rx_buff_sz < *aggr_byte_limit ?
-			IPA_ADJUST_AGGR_BYTE_HARD_LIMIT(sys->rx_buff_sz) :
-			IPA_ADJUST_AGGR_BYTE_HARD_LIMIT(*aggr_byte_limit);
+	if (in->client == IPA_CLIENT_APPS_WAN_COAL_CONS)
 		in->ipa_ep_cfg.aggr.aggr_hard_byte_limit_en = 1;
-	} else {
-		*aggr_byte_limit = sys->rx_buff_sz < *aggr_byte_limit ?
-			IPA_ADJUST_AGGR_BYTE_LIMIT(sys->rx_buff_sz) :
-			IPA_ADJUST_AGGR_BYTE_LIMIT(*aggr_byte_limit);
-	}
+
+	*aggr_byte_limit = sys->rx_buff_sz < *aggr_byte_limit ?
+		IPA_ADJUST_AGGR_BYTE_LIMIT(sys->rx_buff_sz) :
+		IPA_ADJUST_AGGR_BYTE_LIMIT(*aggr_byte_limit);
 
 	IPADBG("set aggr_limit %lu\n", (unsigned long) *aggr_byte_limit);
 }
@@ -3278,6 +3525,7 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 		sys->policy = IPA_POLICY_INTR_MODE;
 		sys->use_comm_evt_ring = true;
 		INIT_WORK(&sys->work, ipa3_send_nop_desc);
+		atomic_set(&sys->workqueue_flushed, 0);
 
 		/*
 		 * enable source notification status for exception packets
@@ -3307,6 +3555,7 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 			sys->policy = IPA_POLICY_INTR_MODE;
 			sys->use_comm_evt_ring = true;
 			INIT_WORK(&sys->work, ipa3_send_nop_desc);
+			atomic_set(&sys->workqueue_flushed, 0);
 		}
 	} else {
 		if (in->client == IPA_CLIENT_APPS_LAN_CONS ||
@@ -3346,28 +3595,41 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 				IPA_GENERIC_AGGR_PKT_LIMIT;
 			} else if (in->client == IPA_CLIENT_APPS_WAN_CONS ||
 				in->client == IPA_CLIENT_APPS_WAN_COAL_CONS) {
-				sys->pyld_hdlr = ipa3_wan_rx_pyld_hdlr;
-				sys->free_rx_wrapper = ipa3_free_rx_wrapper;
-				sys->rx_pool_sz = ipa3_ctx->wan_rx_ring_size;
-				if (nr_cpu_ids > 1) {
+				if (ipa3_ctx->ipa_wan_skb_page
+					&& in->napi_obj) {
+					sys->pyld_hdlr = ipa3_wan_rx_pyld_hdlr;
+					sys->free_rx_wrapper =
+						ipa3_recycle_rx_page_wrapper;
 					sys->repl_hdlr =
-					   ipa3_fast_replenish_rx_cache;
+						ipa3_replenish_rx_page_recycle;
+					sys->rx_pool_sz =
+						ipa3_ctx->wan_rx_ring_size;
 				} else {
-					sys->repl_hdlr =
-					   ipa3_replenish_rx_cache;
+					sys->pyld_hdlr = ipa3_wan_rx_pyld_hdlr;
+					sys->free_rx_wrapper =
+						ipa3_free_rx_wrapper;
+					sys->rx_pool_sz =
+						ipa3_ctx->wan_rx_ring_size;
+					if (nr_cpu_ids > 1) {
+						sys->repl_hdlr =
+						ipa3_fast_replenish_rx_cache;
+					} else {
+						sys->repl_hdlr =
+						ipa3_replenish_rx_cache;
+					}
+					if (in->napi_obj && in->recycle_enabled)
+						sys->repl_hdlr =
+						ipa3_replenish_rx_cache_recycle;
 				}
-				if (in->napi_obj && in->recycle_enabled)
-					sys->repl_hdlr =
-					 ipa3_replenish_rx_cache_recycle;
 				in->ipa_ep_cfg.aggr.aggr_sw_eof_active
-					= true;
-				if (apps_wan_cons_agg_gro_flag) {
+						= true;
+				if (apps_wan_cons_agg_gro_flag)
 					ipa3_set_aggr_limit(in, sys);
-				} else {
-					in->ipa_ep_cfg.aggr.aggr_byte_limit =
-					IPA_GENERIC_AGGR_BYTE_LIMIT;
-					in->ipa_ep_cfg.aggr.aggr_pkt_limit =
-					IPA_GENERIC_AGGR_PKT_LIMIT;
+				else {
+					in->ipa_ep_cfg.aggr.aggr_byte_limit
+						= IPA_GENERIC_AGGR_BYTE_LIMIT;
+					in->ipa_ep_cfg.aggr.aggr_pkt_limit
+						= IPA_GENERIC_AGGR_PKT_LIMIT;
 				}
 			}
 		} else if (IPA_CLIENT_IS_WLAN_CONS(in->client)) {
@@ -3901,36 +4163,22 @@ void __ipa_gsi_irq_rx_scedule_poll(struct ipa3_sys_context *sys)
 	 * pm deactivate is done in wq context
 	 * or after NAPI poll
 	 */
-	if (ipa3_ctx->use_ipa_pm) {
-		clk_off = ipa_pm_activate(sys->pm_hdl);
-		if (!clk_off && sys->napi_obj) {
-			napi_schedule(sys->napi_obj);
-			return;
-		}
-		queue_work(sys->wq, &sys->work);
+
+	clk_off = ipa_pm_activate(sys->pm_hdl);
+	if (!clk_off && sys->napi_obj) {
+		napi_schedule(sys->napi_obj);
 		return;
 	}
-
-	if (sys->napi_obj) {
-		struct ipa_active_client_logging_info log;
-
-		IPA_ACTIVE_CLIENTS_PREP_SPECIAL(log, "NAPI");
-		clk_off = ipa3_inc_client_enable_clks_no_block(
-			&log);
-		if (!clk_off) {
-			napi_schedule(sys->napi_obj);
-			return;
-		}
-	}
-
 	queue_work(sys->wq, &sys->work);
+	return;
+
 }
 
 static void ipa_gsi_irq_rx_notify_cb(struct gsi_chan_xfer_notify *notify)
 {
 	struct ipa3_sys_context *sys;
 
-	if (!notify) {
+	if (unlikely(!notify)) {
 		IPAERR("gsi notify is NULL.\n");
 		return;
 	}
@@ -3962,7 +4210,7 @@ static void ipa_dma_gsi_irq_rx_notify_cb(struct gsi_chan_xfer_notify *notify)
 {
 	struct ipa3_sys_context *sys;
 
-	if (!notify) {
+	if (unlikely(!notify)) {
 		IPAERR("gsi notify is NULL.\n");
 		return;
 	}
@@ -4039,7 +4287,7 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 	u32 ring_size;
 	int result;
 	gfp_t mem_flag = GFP_KERNEL;
-
+	u32 coale_ep_idx;
 
 	if (in->client == IPA_CLIENT_APPS_WAN_CONS ||
 		in->client == IPA_CLIENT_APPS_WAN_COAL_CONS ||
@@ -4050,6 +4298,7 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 		IPAERR("EP context is empty\n");
 		return -EINVAL;
 	}
+	coale_ep_idx = ipa3_get_ep_mapping(IPA_CLIENT_APPS_WAN_COAL_CONS);
 	/*
 	 * GSI ring length is calculated based on the desc_fifo_sz
 	 * which was meant to define the BAM desc fifo. GSI descriptors
@@ -4068,8 +4317,19 @@ static int ipa_gsi_setup_channel(struct ipa_sys_connect_params *in,
 		}
 		ipa3_ctx->gsi_evt_comm_ring_rem -= (ring_size);
 		ep->gsi_evt_ring_hdl = ipa3_ctx->gsi_evt_comm_hdl;
+	} else if (in->client == IPA_CLIENT_APPS_WAN_CONS &&
+			coale_ep_idx != IPA_EP_NOT_ALLOCATED &&
+			ipa3_ctx->ep[coale_ep_idx].valid == 1) {
+		IPADBG("Wan consumer pipe configured\n");
+		result = ipa_gsi_setup_coal_def_channel(in, ep,
+					&ipa3_ctx->ep[coale_ep_idx]);
+		if (result) {
+			IPAERR("Failed to setup default coal GSI channel\n");
+			goto fail_setup_event_ring;
+		}
+		return result;
 	} else if (ep->sys->policy != IPA_POLICY_NOINTR_MODE ||
-		IPA_CLIENT_IS_CONS(ep->client)) {
+			IPA_CLIENT_IS_CONS(ep->client)) {
 		result = ipa_gsi_setup_event_ring(ep, ring_size, mem_flag);
 		if (result)
 			goto fail_setup_event_ring;
@@ -4232,6 +4492,11 @@ static int ipa_gsi_setup_transfer_ring(struct ipa3_ep_context *ep,
 
 	if (IPA_CLIENT_IS_CONS(ep->client))
 		gsi_channel_props.cleanup_cb = free_rx_pkt;
+
+	/* overwrite the cleanup_cb for page recycling */
+	if (ipa3_ctx->ipa_wan_skb_page &&
+		(IPA_CLIENT_IS_WAN_CONS(ep->client)))
+		gsi_channel_props.cleanup_cb = free_rx_page;
 
 	result = gsi_alloc_channel(&gsi_channel_props, ipa3_ctx->gsi_dev_hdl,
 		&ep->gsi_chan_hdl);
@@ -4453,7 +4718,7 @@ start_poll:
 			break;
 
 		trace_ipa3_rx_poll_num(num);
-		ipa3_wq_rx_napi_chain(ep->sys, notify, num);
+		ipa3_rx_napi_chain(ep->sys, notify, num);
 		remain_aggr_weight -= num;
 
 		trace_ipa3_rx_poll_cnt(ep->sys->len);
@@ -4473,13 +4738,8 @@ start_poll:
 		if (ret == -GSI_STATUS_PENDING_IRQ &&
 				napi_reschedule(ep->sys->napi_obj))
 			goto start_poll;
-
-		if (ipa3_ctx->use_ipa_pm)
-			ipa_pm_deferred_deactivate(ep->sys->pm_hdl);
-		else
-			ipa3_dec_client_disable_clks_no_block(&log);
+		ipa_pm_deferred_deactivate(ep->sys->pm_hdl);
 	}
-
 	return cnt;
 }
 

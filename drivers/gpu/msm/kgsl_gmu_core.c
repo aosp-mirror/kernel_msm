@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  */
-#include <linux/module.h>
-#include <linux/types.h>
 
+#include <linux/of.h>
+
+#include "adreno.h"
 #include "kgsl_device.h"
 #include "kgsl_gmu_core.h"
 #include "kgsl_trace.h"
-#include "adreno.h"
 
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "kgsl_gmu."
@@ -229,6 +229,20 @@ void gmu_core_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 	 */
 	wmb();
 	__raw_writel(value, reg);
+}
+
+void gmu_core_blkwrite(struct kgsl_device *device, unsigned int offsetwords,
+		const void *buffer, size_t size)
+{
+	void __iomem *base;
+
+	if (WARN_ON(!gmu_core_is_register_offset(device, offsetwords)))
+		return;
+
+	offsetwords -= device->gmu_core.gmu2gpu_offset;
+	base = device->gmu_core.reg_virt + (offsetwords << 2);
+
+	memcpy_toio(base, buffer, size);
 }
 
 void gmu_core_regrmw(struct kgsl_device *device,
