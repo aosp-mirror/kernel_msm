@@ -940,7 +940,7 @@ CTRL_UPD_RANGE(0x3))
  * Polling interval for refresh rate control;
  * may be decreased pending HW data.
  */
-#define DDR_REFCTRL_POLL_TIME_MSEC      (2000)
+#define DDR_REFCTRL_POLL_TIME_MSEC      (512)
 
 enum ddr_freq_index {
 	f_DPHY_DVFS_CON,

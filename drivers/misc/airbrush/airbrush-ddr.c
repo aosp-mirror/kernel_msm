@@ -2912,8 +2912,10 @@ static int ab_ddr_set_state(const struct block_property *prop_from,
 		ddr_ctx->prev_ddr_state = ddr_ctx->ddr_state;
 		ddr_ctx->ddr_state = DDR_ON;
 
-		schedule_delayed_work(&ddr_ctx->ddr_ref_control_work,
-				msecs_to_jiffies(DDR_REFCTRL_POLL_TIME_MSEC));
+		mutex_unlock(&ddr_ctx->ddr_lock);
+		ddr_refresh_control_wkqueue(
+				&ddr_ctx->ddr_ref_control_work.work);
+		mutex_lock(&ddr_ctx->ddr_lock);
 		break;
 
 	case BLOCK_STATE_101:
