@@ -78,6 +78,9 @@ struct kernel_info {
 
 	/* For linux banner */
 	u8 last_uts_release[__NEW_UTS_LEN];
+
+	/* For mmu table */
+	u64 swapper_pg_dir;
 } __packed;
 
 struct kernel_all_info {
@@ -155,6 +158,7 @@ static void backup_kernel_info(void)
 	info->kimage_voffset = kimage_voffset;
 	strlcpy(info->last_uts_release, init_utsname()->release,
 			sizeof(info->last_uts_release));
+	info->swapper_pg_dir = (u64)swapper_pg_dir;
 
 	checksum_info = (u32 *)info;
 	for (index = 0; index < sizeof(struct kernel_info)/sizeof(u32);
