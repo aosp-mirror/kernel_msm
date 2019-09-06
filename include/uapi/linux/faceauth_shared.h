@@ -96,8 +96,7 @@
 #define ERROR_FW_DRIVER_SYNC_ERROR -84
 #define ERROR_UNEXPECTED_COMMAND -85
 
-// TODO: disable migrate until fully supported
-#define CMD_IS_VALID(cmd) ((cmd) < COMMAND_COUNT && (cmd) != COMMAND_MIGRATE)
+#define CMD_IS_VALID(cmd) ((cmd) < COMMAND_COUNT)
 
 /* Any change to the WorkloadStatus should also be accompanied by a change to
  * WORKLOAD_STATUS_STRINGS in defines.h.
@@ -152,6 +151,9 @@ typedef enum _workload_status {
 
 	/* fatal error */
 	WORKLOAD_STATUS_ERROR,
+
+	/* Soft error */
+	WORKLOAD_STATUS_REJECT_FRAME_SELECTION,
 
 	WORKLOAD_STATUS_COUNT,
 	WORKLOAD_STATUS_INTMAX =
