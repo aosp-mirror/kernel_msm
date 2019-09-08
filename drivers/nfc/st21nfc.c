@@ -891,13 +891,13 @@ static int st21nfc_probe(struct i2c_client *client,
 
 	st21nfc_dev->gpiod_pidle = devm_gpiod_get(dev, "pidle", GPIOD_IN);
 	if (IS_ERR(st21nfc_dev->gpiod_pidle)) {
-		pr_warn("[OPTIONAL] %s: Unable to request pidle-gpio\n",
-			__func__);
 		ret = 0;
 	} else {
 		/* Prepare a workqueue for st21nfc_dev_power_stats_handler */
-		mutex_init(&st21nfc_dev->pidle_mutex);
 		st21nfc_dev->st_p_wq = create_workqueue("st_pstate_work");
+		if(!st21nfc_dev->st_p_wq)
+			return -ENODEV;
+		mutex_init(&st21nfc_dev->pidle_mutex);
 		INIT_WORK(&(st21nfc_dev->st_p_work), st21nfc_pstate_wq);
 		/* Start the power stat in power mode idle */
 		st21nfc_dev->irq_pw_stats_idle =
@@ -936,8 +936,6 @@ static int st21nfc_probe(struct i2c_client *client,
 
 	st21nfc_dev->gpiod_clkreq = devm_gpiod_get(dev, "clkreq", GPIOD_IN);
 	if (IS_ERR(st21nfc_dev->gpiod_clkreq)) {
-		pr_warn("[OPTIONAL] %s : Unable to request clkreq-gpios\n",
-			__func__);
 		ret = 0;
 	} else {
 		if (!device_property_read_bool(dev, "st,clk_pinctrl")) {
@@ -967,11 +965,16 @@ static int st21nfc_probe(struct i2c_client *client,
 	init_waitqueue_head(&st21nfc_dev->read_wq);
 	mutex_init(&st21nfc_dev->read_mutex);
 	spin_lock_init(&st21nfc_dev->irq_enabled_lock);
-	pr_debug("%s : debug irq_gpio = %d, client-irq =  %d, pidle_gpio = %d\n",
-		 __func__,
-		 desc_to_gpio(st21nfc_dev->gpiod_irq),
-		 client->irq,
-		 desc_to_gpio(st21nfc_dev->gpiod_pidle));
+	pr_debug("%s : debug irq_gpio = %d, client-irq =  %d\n",
+		 __func__, desc_to_gpio(st21nfc_dev->gpiod_irq), client->irq);
+	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {
+		pr_debug("%s : pidle_gpio = %d\n", __func__,
+			desc_to_gpio(st21nfc_dev->gpiod_pidle));
+	}
+	if (!IS_ERR(st21nfc_dev->gpiod_clkreq)) {
+		pr_debug("%s : clkreq_gpio = %d\n", __func__,
+			desc_to_gpio(st21nfc_dev->gpiod_clkreq));
+	}
 	st21nfc_dev->st21nfc_device.minor = MISC_DYNAMIC_MINOR;
 	st21nfc_dev->st21nfc_device.name = "st21nfc";
 	st21nfc_dev->st21nfc_device.fops = &st21nfc_dev_fops;
