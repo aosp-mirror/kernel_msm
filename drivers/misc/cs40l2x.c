@@ -4346,7 +4346,6 @@ static void cs40l2x_vibe_pbq_worker(struct work_struct *work)
 
 	switch (cs40l2x->pbq_state) {
 	case CS40L2X_PBQ_STATE_IDLE:
-		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		goto err_mutex;
 
 	case CS40L2X_PBQ_STATE_PLAYING:
