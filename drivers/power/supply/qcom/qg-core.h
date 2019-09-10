@@ -69,6 +69,7 @@ struct qg_dt {
 	bool			qg_sleep_config;
 	bool			qg_fast_chg_cfg;
 	bool			fvss_enable;
+	const char		*batt_type_name;
 };
 
 struct qg_esr_data {
