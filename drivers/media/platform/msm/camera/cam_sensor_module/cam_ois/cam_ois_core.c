@@ -510,18 +510,18 @@ static void cam_ois_read_work(struct work_struct *work)
 			0xE003, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
 			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
 		CAM_INFO(CAM_OIS,
-			"[0xE003] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
-			buf[6], buf[7]);
+			"[0xE003] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
+			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
+			buf[3], buf[4], buf[5], buf[6], buf[7]);
 
 		rc = camera_io_dev_read_seq(
 			&ois_timer_in->o_ctrl->io_master_info,
 			0xE005, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
 			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
 		CAM_INFO(CAM_OIS,
-			"[0xE005] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
-			buf[6], buf[7]);
+			"[0xE005] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
+			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
+			buf[3], buf[4], buf[5], buf[6], buf[7]);
 	}
 
 	rc = camera_io_dev_read_seq(&ois_timer_in->o_ctrl->io_master_info,
@@ -529,8 +529,9 @@ static void cam_ois_read_work(struct work_struct *work)
 		CAMERA_SENSOR_I2C_TYPE_DWORD, 6);
 	if (ois_debug) {
 		CAM_INFO(CAM_OIS,
-			"[0xE001] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x",
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+			"[0xE001] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x",
+			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
+			buf[3], buf[4], buf[5]);
 	}
 
 	rc = camera_io_dev_read_seq(
