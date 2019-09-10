@@ -789,8 +789,6 @@ static void msm_geni_serial_console_write(struct console *co, const char *s,
 #ifdef SUPPORT_SYSRQ
 	if (uport->sysrq) {
 		locked = spin_trylock_irqsave(&uport->lock, flags);
-		if (time_after(jiffies, uport->sysrq))
-			uport->sysrq = 0;
 	} else
 #endif
 	if (oops_in_progress)
