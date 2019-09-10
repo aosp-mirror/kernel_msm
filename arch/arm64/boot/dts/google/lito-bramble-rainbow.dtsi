@@ -21,7 +21,7 @@
 		reg = <0x20>;
 		vdd-supply = <&pm8150_l17>;
 		vio-supply = <&slg51000_ldo7>;
-		regulator-names = "vdd";
+		regulator-names = "vdd", "vio";
 		status = "ok";
 	};
 };
