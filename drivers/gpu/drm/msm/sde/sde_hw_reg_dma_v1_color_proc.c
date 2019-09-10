@@ -623,6 +623,7 @@ void reg_dmav1_setup_dspp_gcv18(struct sde_hw_dspp *ctx, void *cfg)
 	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
 	int rc, i = 0;
 	u32 reg;
+	u32 *addr[GC_TBL_NUM];
 
 	rc = reg_dma_dspp_check(ctx, cfg, GC);
 	if (rc)
@@ -654,6 +655,9 @@ void reg_dmav1_setup_dspp_gcv18(struct sde_hw_dspp *ctx, void *cfg)
 		return;
 	}
 
+	addr[0] = lut_cfg->c0;
+	addr[1] = lut_cfg->c1;
+	addr[2] = lut_cfg->c2;
 	for (i = 0; i < GC_TBL_NUM; i++) {
 		reg = 0;
 		REG_DMA_SETUP_OPS(dma_write_cfg,
@@ -669,7 +673,7 @@ void reg_dmav1_setup_dspp_gcv18(struct sde_hw_dspp *ctx, void *cfg)
 		REG_DMA_SETUP_OPS(dma_write_cfg,
 			ctx->cap->sblk->gc.base + GC_C0_OFF +
 			(i * sizeof(u32) * 2),
-			lut_cfg->c0 + (ARRAY_SIZE(lut_cfg->c0) * i),
+			addr[i],
 			PGC_TBL_LEN * sizeof(u32),
 			REG_BLK_WRITE_INC, 0, 0, 0);
 		rc = dma_ops->setup_payload(&dma_write_cfg);
@@ -755,7 +759,7 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 	struct sde_hw_cp_cfg *hw_cfg = cfg;
 	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
 	int rc, i = 0, j = 0;
-	u32 *addr = NULL;
+	u32 *addr[IGC_TBL_NUM];
 	u32 offset = 0;
 	u32 reg;
 
@@ -789,18 +793,20 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 		return;
 	}
 
+	addr[0] = lut_cfg->c0;
+	addr[1] = lut_cfg->c1;
+	addr[2] = lut_cfg->c2;
 	for (i = 0; i < IGC_TBL_NUM; i++) {
-		addr = lut_cfg->c0 + (i * ARRAY_SIZE(lut_cfg->c0));
 		offset = IGC_C0_OFF + (i * sizeof(u32));
 
 		for (j = 0; j < IGC_TBL_LEN; j++) {
-			addr[j] &= IGC_DATA_MASK;
-			addr[j] |= IGC_DSPP_SEL_MASK(ctx->idx - 1);
+			addr[i][j] &= IGC_DATA_MASK;
+			addr[i][j] |= IGC_DSPP_SEL_MASK(ctx->idx - 1);
 			if (j == 0)
-				addr[j] |= IGC_INDEX_UPDATE;
+				addr[i][j] |= IGC_INDEX_UPDATE;
 		}
 
-		REG_DMA_SETUP_OPS(dma_write_cfg, offset, addr,
+		REG_DMA_SETUP_OPS(dma_write_cfg, offset, addr[i],
 			IGC_TBL_LEN * sizeof(u32),
 			REG_BLK_WRITE_INC, 0, 0, 0);
 		rc = dma_ops->setup_payload(&dma_write_cfg);
@@ -1857,6 +1863,7 @@ void reg_dmav1_setup_vig_igcv5(struct sde_hw_pipe *ctx, void *cfg)
 	struct sde_reg_dma_kickoff_cfg kick_off;
 	u32 igc_base = ctx->cap->sblk->igc_blk[0].base - REG_DMA_VIG_SWI_DIFF;
 	enum sde_sspp_multirect_index idx = SDE_SSPP_RECT_0;
+	u32 *addr[IGC_TBL_NUM];
 
 	rc = reg_dma_sspp_check(ctx, cfg, IGC, idx);
 	if (rc)
@@ -1899,6 +1906,9 @@ void reg_dmav1_setup_vig_igcv5(struct sde_hw_pipe *ctx, void *cfg)
 	if (lut_enable)
 		lut_sel = (~lut_sel) && BIT(0);
 
+	addr[0] = igc_lut->c0;
+	addr[1] = igc_lut->c1;
+	addr[2] = igc_lut->c2;
 	for (i = 0; i < IGC_TBL_NUM; i++) {
 		/* write 0 to the index register */
 		index = 0;
@@ -1911,7 +1921,7 @@ void reg_dmav1_setup_vig_igcv5(struct sde_hw_pipe *ctx, void *cfg)
 		}
 
 		offset = igc_base + 0x1B4 + i * sizeof(u32);
-		data_ptr = igc_lut->c0 + (ARRAY_SIZE(igc_lut->c0) * i);
+		data_ptr = addr[i];
 		for (j = 0; j < VIG_1D_LUT_IGC_LEN; j++)
 			data[j] = (data_ptr[2 * j] & VIG_IGC_DATA_MASK) |
 				(data_ptr[2 * j + 1] & VIG_IGC_DATA_MASK) << 16;
