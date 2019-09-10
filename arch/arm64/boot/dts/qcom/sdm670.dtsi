@@ -1005,7 +1005,7 @@
 		};
 	};
 
-	restart@10ac000 {
+	msm_poweroff: restart@10ac000 {
 		compatible = "qcom,pshold";
 		reg = <0xC264000 0x4>,
 		      <0x1fd3000 0x4>;

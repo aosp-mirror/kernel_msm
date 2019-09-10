@@ -328,3 +328,8 @@
 		qcom,pull-up = <1>;
 	};
 };
+
+// Force warm reboot on 'shutdown,thermal'
+&msm_poweroff {
+	qcom,force-warm-reboot-on-thermal-shutdown;
+};
