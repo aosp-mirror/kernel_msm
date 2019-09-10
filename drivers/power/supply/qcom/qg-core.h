@@ -80,6 +80,7 @@ struct qg_dt {
 	bool			fvss_enable;
 	bool			multi_profile_load;
 	bool			tcss_enable;
+	const char		*batt_type_name;
 };
 
 struct qg_esr_data {
