@@ -965,8 +965,7 @@ static int scsi_add_lun(struct scsi_device *sdev, unsigned char *inq_result,
 	transport_configure_device(&sdev->sdev_gendev);
 
 	/* The LLD can override auto suspend tunables in ->slave_configure() */
-	sdev->use_rpm_auto = 0;
-	sdev->autosuspend_delay = SCSI_DEFAULT_AUTOSUSPEND_DELAY;
+	sdev->rpm_autosuspend = 0;
 
 	if (sdev->host->hostt->slave_configure) {
 		ret = sdev->host->hostt->slave_configure(sdev);

@@ -6315,8 +6315,8 @@ static int ufshcd_slave_configure(struct scsi_device *sdev)
 		scsi_set_cmd_timeout_override(sdev, hba->scsi_cmd_timeout * HZ);
 	}
 
-	sdev->autosuspend_delay = UFSHCD_AUTO_SUSPEND_DELAY_MS;
-	sdev->use_rpm_auto = 1;
+	sdev->host->hostt->rpm_autosuspend_delay = UFSHCD_AUTO_SUSPEND_DELAY_MS;
+	sdev->rpm_autosuspend = 1;
 
 	ufshcd_crypto_setup_rq_keyslot_manager(hba, q);
 
