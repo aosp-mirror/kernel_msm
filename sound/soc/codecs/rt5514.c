@@ -343,6 +343,29 @@ static int rt5514_dsp_test_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rt5514_spi_switch_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = rt5514->spi_switch;
+
+	return 0;
+}
+
+static int rt5514_spi_switch_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	rt5514->spi_switch = ucontrol->value.integer.value[0];
+	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
+
+	return 0;
+}
+
 static int rt5514_memcmp(struct rt5514_priv *rt5514,
 		const void *cs, const void *ct, size_t count)
 {
@@ -914,6 +937,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_dsp_test_get, rt5514_dsp_test_put),
 	SOC_SINGLE_EXT("HW Version", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_hw_ver_get, NULL),
+	SOC_SINGLE_EXT("SPI Switch", SND_SOC_NOPM, 0, 1, 0,
+		rt5514_spi_switch_get, rt5514_spi_switch_put),
 };
 
 /* ADC Mixer*/
@@ -1809,6 +1834,8 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 				    ARRAY_SIZE(rt5514_patch));
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
+
+	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
 
 	dev_info(&i2c->dev, "Register rt5514 success\n");
 
