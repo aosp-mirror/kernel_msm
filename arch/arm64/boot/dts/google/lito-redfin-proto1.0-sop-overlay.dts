@@ -6,11 +6,10 @@
 /dts-v1/;
 /plugin/;
 
-#include "lito-redfin-dev.dtsi"
-#include "lito-redbull-display-dev.dtsi"
+#include "lito-redfin-proto.dtsi"
 
 / {
-	model = "Google Inc. MSM sm7250 Redfin DEV 1.1";
+	model = "Google Inc. MSM sm7250 Redfin PROTO1.0 SOP";
 	compatible = "google,redfin-sm7250", "qcom,sm7250";
 	qcom,msm-id = <400 0x10000>;
 	qcom,board-id = <0x0B0105 0>;
