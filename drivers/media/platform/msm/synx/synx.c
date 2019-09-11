@@ -1442,6 +1442,7 @@ int synx_register_ops(const struct synx_register_params *params)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(synx_register_ops);
 
 int synx_deregister_ops(const struct synx_register_params *params)
 {
