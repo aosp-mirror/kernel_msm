@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -122,8 +122,8 @@
 		polling-delay-passive = <250>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 0>;
-		wake-capable-sensor;
 		thermal-governor = "step_wise";
+		wake-capable-sensor;
 		trips {
 			pop_trip: pop-trip {
 				temperature = <75000>;
@@ -163,8 +163,8 @@
 		polling-delay-passive = <250>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 2>;
-		wake-capable-sensor;
 		thermal-governor = "step_wise";
+		wake-capable-sensor;
 		trips {
 			gpu_step_trip: gpu-step-trip {
 				temperature = <80000>;
@@ -186,8 +186,8 @@
 		polling-delay-passive = <65>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 3>;
-		wake-capable-sensor;
 		thermal-governor = "step_wise";
+		wake-capable-sensor;
 		trips {
 			cpu0_2_step_trip: cpu0-2-step-trip {
 				temperature = <85000>;
@@ -227,8 +227,8 @@
 		polling-delay-passive = <65>;
 		polling-delay = <0>;
 		thermal-sensors = <&tsens0 4>;
-		wake-capable-sensor;
 		thermal-governor = "step_wise";
+		wake-capable-sensor;
 		trips {
 			cpu1_3_step_trip: cpu1-3-step-trip {
 				temperature = <85000>;
