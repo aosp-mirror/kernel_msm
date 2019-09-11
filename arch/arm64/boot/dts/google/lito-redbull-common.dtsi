@@ -23,6 +23,7 @@
 #include "lito-redbull-fingerprint.dtsi"
 #include "lito-redbull-memory.dtsi"
 #include "lito-redbull-nfc.dtsi"
+#include "lito-redbull-ese.dtsi"
 #include "lito-redbull-pcie.dtsi"
 #include "lito-redbull-pinctrl.dtsi"
 #include "lito-redbull-qup.dtsi"

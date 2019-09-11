@@ -10,18 +10,3 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-&qupv3_se7_i2c {
-	status = "ok";
-	st21nfc: st21nfc@08 {
-		compatible = "st,st21nfc";
-		reg = <0x08>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <34  0>;
-		reset-gpios = <&tlmm 12 0x00>;
-		irq-gpios = <&tlmm 34 0x00>;
-		pidle-gpios = <&tlmm 69 0x00>;
-		clkreq-gpios = <&tlmm 58 0x00>;
-		st,clk_pinctrl;
-		status = "ok";
-	};
-};
