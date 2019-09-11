@@ -12,7 +12,6 @@
  */
 
 #include "lito-bramble.dtsi"
-#include "lito-redbull-display-dev.dtsi"
 #include "lito-bramble-touch-proto.dtsi"
 
 &wcd938x_codec {
