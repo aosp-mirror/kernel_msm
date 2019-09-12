@@ -214,11 +214,13 @@ void complete_err_ready(struct subsys_device *subsys)
 {
 	complete(&subsys->err_ready);
 }
+EXPORT_SYMBOL(complete_err_ready);
 
 void complete_shutdown_ack(struct subsys_device *subsys)
 {
 	complete(&subsys->shutdown_ack);
 }
+EXPORT_SYMBOL(complete_shutdown_ack);
 
 static struct subsys_tracking *subsys_get_track(struct subsys_device *subsys)
 {
@@ -1313,6 +1315,7 @@ enum crash_status subsys_get_crash_status(struct subsys_device *dev)
 {
 	return dev->crashed;
 }
+EXPORT_SYMBOL(subsys_get_crash_status);
 
 static struct subsys_device *desc_to_subsys(struct device *d)
 {
