@@ -288,16 +288,26 @@ config ARCH_MDM9607
 
 endmenu
 
-config BUILD_TRIGGERFISH
-	bool "Fossil Triggerfish"
-	default n
+choice
+	prompt "Fossil's Target build"
+	depends on ARCH_MSM8909
+	optional
 	help
-	Add support for the fossil triggerfish, default value is Darter
+	  Specify the fossil target for building kernel. Currently, there targets are supported:
+	  Triggerfish, SOLE and GILA.
+
+config BUILD_TRIGGERFISH
+	bool
+	prompt "Fossil Triggerfish"
 
 config BUILD_SOLE
-	bool "Fossil Sole"
-	default n
-	help
-	Add support for the fossil sole
+	bool
+	prompt "Fossil Sole"
+
+config BUILD_GILA
+	bool
+	prompt "Fossil Gila"
+
+endchoice
 
 endif
