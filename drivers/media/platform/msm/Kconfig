@@ -2,7 +2,7 @@
 
 menuconfig SPECTRA_CAMERA
     bool "Qualcomm Technologies, Inc. Spectra camera and video capture support"
-    depends on ARCH_QCOM && VIDEO_V4L2 && I2C
+    depends on ARCH_QCOM && VIDEO_V4L2 && I2C && BACKLIGHT_QCOM_SPMI_WLED
     help
       Say Y here to enable selecting the video adapters for
       Qualcomm Technologies, Inc. Spectra camera and video capture.
