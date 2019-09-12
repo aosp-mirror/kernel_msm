@@ -1538,6 +1538,7 @@ void diag_dci_notify_client(int peripheral_mask, int data, int proc)
 					DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
 						"diag: dci client with pid = %d Exited..\n",
 						entry->tgid);
+					put_pid(pid_struct);
 					mutex_unlock(&driver->dci_mutex);
 					return;
 				}
@@ -1552,9 +1553,12 @@ void diag_dci_notify_client(int peripheral_mask, int data, int proc)
 					if (stat)
 						pr_err("diag: Err sending dci signal to client, signal data: 0x%x, stat: %d\n",
 							info.si_int, stat);
-				} else
+				} else {
 					pr_err("diag: client data is corrupted, signal data: 0x%x, stat: %d\n",
 						info.si_int, stat);
+				}
+				put_task_struct(dci_task);
+				put_pid(pid_struct);
 			}
 		}
 	}
@@ -2289,11 +2293,35 @@ struct diag_dci_client_tbl *dci_lookup_client_entry_pid(int tgid)
 {
 	struct list_head *start, *temp;
 	struct diag_dci_client_tbl *entry = NULL;
+	struct pid *pid_struct = NULL;
+	struct task_struct *task_s = NULL;
+
 	list_for_each_safe(start, temp, &driver->dci_client_list) {
 		entry = list_entry(start, struct diag_dci_client_tbl, track);
-		if (entry->client && entry->tgid == entry->client->tgid)
-			if (entry->client->tgid == tgid)
+		pid_struct = find_get_pid(entry->tgid);
+		if (!pid_struct) {
+			DIAG_LOG(DIAG_DEBUG_DCI,
+				"diag: valid pid doesn't exist for pid = %d\n",
+				entry->tgid);
+			continue;
+		}
+		task_s = get_pid_task(pid_struct, PIDTYPE_PID);
+		if (!task_s) {
+			DIAG_LOG(DIAG_DEBUG_DCI,
+				"diag: valid task doesn't exist for pid = %d\n",
+				entry->tgid);
+			put_pid(pid_struct);
+			continue;
+		}
+		if (task_s == entry->client) {
+			if (entry->client->tgid == tgid) {
+				put_task_struct(task_s);
+				put_pid(pid_struct);
 				return entry;
+			}
+		}
+		put_task_struct(task_s);
+		put_pid(pid_struct);
 	}
 	return NULL;
 }
@@ -2923,6 +2951,7 @@ int diag_dci_register_client(struct diag_dci_reg_tbl_t *reg_entry)
 
 	mutex_lock(&driver->dci_mutex);
 
+	get_task_struct(current);
 	new_entry->client = current;
 	new_entry->tgid = current->tgid;
 	new_entry->client_info.notification_list =
@@ -3066,6 +3095,9 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
 	if (!list_empty(&entry->track))
 		list_del(&entry->track);
 	driver->num_dci_client--;
+
+	put_task_struct(entry->client);
+	entry->client = NULL;
 	/*
 	 * Clear the client's log and event masks, update the cumulative
 	 * masks and send the masks to peripherals
