@@ -1286,7 +1286,7 @@ int gsi_write_channel_scratch(unsigned long chan_hdl,
  * @Return gsi_status
  */
 int gsi_write_channel_scratch3_reg(unsigned long chan_hdl,
-		union __packed gsi_wdi_channel_scratch3_reg val);
+		union gsi_wdi_channel_scratch3_reg val);
 
 /**
  * gsi_write_channel_scratch2_reg - Peripheral should call this function to
@@ -1757,7 +1757,7 @@ static inline int gsi_write_channel_scratch(unsigned long chan_hdl,
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
 static inline int gsi_write_channel_scratch3_reg(unsigned long chan_hdl,
-		union __packed gsi_wdi_channel_scratch3_reg val)
+		union gsi_wdi_channel_scratch3_reg val)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
