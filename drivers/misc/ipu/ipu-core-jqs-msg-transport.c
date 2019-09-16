@@ -571,6 +571,41 @@ int ipu_core_jqs_msg_transport_alloc_kernel_queue(struct paintbox_bus *bus)
 	return ret;
 }
 
+void ipu_core_jqs_msg_transport_flush_queue(struct paintbox_bus *bus,
+		uint32_t q_id, int queue_err)
+{
+	struct paintbox_jqs_msg_transport *trans;
+	struct host_jqs_queue *host_q;
+	struct host_jqs_queue_waiter *waiter;
+
+	mutex_lock(&bus->transport_lock);
+
+	if (!bus->jqs_msg_transport) {
+		mutex_unlock(&bus->transport_lock);
+		return;
+	}
+
+	trans = bus->jqs_msg_transport;
+
+	if (trans->free_queue_ids & (1 << q_id)) {
+		dev_err(bus->parent_dev,
+			"%s error queue %d is not allocated!", __func__, q_id);
+		mutex_unlock(&bus->transport_lock);
+		return;
+	}
+
+	host_q = &trans->queues[q_id];
+	waiter = &host_q->waiter;
+
+	if (waiter->enabled) {
+		/* Release the waiting thread, the queue is disappearing */
+		waiter->ret = queue_err;
+		complete(&waiter->completion);
+	}
+
+	mutex_unlock(&bus->transport_lock);
+}
+
 void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 		uint32_t q_id, int queue_err)
 {

@@ -44,6 +44,9 @@ int ipu_core_jqs_msg_transport_alloc_queue(struct paintbox_bus *bus);
 void ipu_core_jqs_msg_transport_free_queue(struct paintbox_bus *bus,
 		uint32_t q_id, int queue_err);
 
+void ipu_core_jqs_msg_transport_flush_queue(struct paintbox_bus *bus,
+		uint32_t q_id, int queue_err);
+
 /* Write data into a user queue.
  *
  * The q_id is assumed to be valid, and that the calling session has permission
