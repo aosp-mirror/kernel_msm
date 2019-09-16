@@ -140,6 +140,7 @@ uint32_t register_system_pm_ops(struct system_pm_ops *pm_ops)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(register_system_pm_ops);
 
 static uint32_t least_cluster_latency(struct lpm_cluster *cluster,
 					struct latency_level *lat_level)
@@ -1612,8 +1613,6 @@ static int __init init_lpm(void)
 	return cpuidle_register_governor(&lpm_governor);
 }
 
-postcore_initcall(init_lpm);
-
 static void register_cpu_lpm_stats(struct lpm_cpu *cpu,
 		struct lpm_cluster *parent)
 {
@@ -1824,10 +1823,15 @@ static struct platform_driver lpm_driver = {
 static int __init lpm_levels_module_init(void)
 {
 	int rc;
+	int cpu __maybe_unused;
+
+#ifdef MODULE
+	rc = init_lpm();
+	if (rc)
+		return rc;
+#endif
 
 #ifdef CONFIG_ARM
-	int cpu;
-
 	for_each_possible_cpu(cpu) {
 		rc = arm_cpuidle_init(cpu);
 		if (rc) {
@@ -1844,4 +1848,12 @@ static int __init lpm_levels_module_init(void)
 
 	return rc;
 }
+
+#ifndef MODULE
+postcore_initcall(init_lpm);
+#endif
+
 late_initcall(lpm_levels_module_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. (QTI) Power Management Drivers");
