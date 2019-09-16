@@ -50,7 +50,7 @@ enum service_locator_state {
 	LOCATOR_UP = 0x1F,
 };
 
-#if defined(CONFIG_MSM_SERVICE_LOCATOR)
+#if IS_ENABLED(CONFIG_MSM_SERVICE_LOCATOR)
 /*
  * Use this api to request information regarding the process domains on
  * which a particular service runs. The client name, the service name

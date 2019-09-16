@@ -27,7 +27,7 @@ enum pd_subsys_state {
 	ROOT_PD_SHUTDOWN,
 	USER_PD_STATE_CHANGE,
 };
-#if defined(CONFIG_MSM_SERVICE_NOTIFIER)
+#if IS_ENABLED(CONFIG_MSM_SERVICE_NOTIFIER)
 
 /* service_notif_register_notifier() - Register a notifier for a service
  * On success, it returns back a handle. It takes the following arguments:

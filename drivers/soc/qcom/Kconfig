@@ -381,7 +381,7 @@ config MSM_TZ_SMMU
 	  If unsure, say N.
 
 config MSM_SERVICE_LOCATOR
-	bool "Service Locator"
+	tristate "Service Locator"
 	depends on QCOM_QMI_HELPERS
 	help
 	  The Service Locator provides a library to retrieve location
@@ -390,7 +390,7 @@ config MSM_SERVICE_LOCATOR
 	  that process domain will execute in.
 
 config MSM_SERVICE_NOTIFIER
-	bool "Service Notifier"
+	tristate "Service Notifier"
 	depends on MSM_SERVICE_LOCATOR && MSM_SUBSYSTEM_RESTART
 	help
 	  The Service Notifier provides a library for a kernel client to

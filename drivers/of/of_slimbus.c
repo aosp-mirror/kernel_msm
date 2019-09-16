@@ -80,3 +80,4 @@ of_slim_ret:
 	kfree(binfo);
 	return ret;
 }
+EXPORT_SYMBOL(of_register_slim_devices);
