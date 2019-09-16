@@ -36,7 +36,6 @@
 #include "airbrush-ddr.h"
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-regs.h"
-#include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
 #define REG_AON_PCI_OTP	0x10b3000c
@@ -55,8 +54,6 @@
 #define SOC_PWRGOOD_WAIT_TIMEOUT	msecs_to_jiffies(100)
 #define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100)
 #define POLL_USLEEP_MIN			(100)
-
-#define M0_FIRMWARE_PATH "ab.fw"
 
 static int enable_ref_clk(struct device *dev)
 {
@@ -84,15 +81,9 @@ void parse_fw(uint32_t *image_dw_buf, const unsigned char *image_buf,
 /* Caller must hold ab_ctx->state_lock */
 int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 {
-	/* Number of attempts to flash SRAM bootcode when CRC error happens */
-	int num_attempts = 1;
-	int crc_ok = 1;
-	unsigned int data;
-	struct airbrush_spi_packet spi_packet;
 	int ret;
 	struct platform_device *plat_dev = ab_ctx->pdev;
 	unsigned long timeout;
-	uint32_t dummy[3] = { 0 };
 	enum ab_chip_id saved_chip_id, raw_chip_id;
 
 	if (!ab_ctx)
@@ -166,110 +157,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 		return -EIO;
 	}
 
-	ab_sm_start_ts(AB_SM_TS_ALT_BOOT);
-	if (ab_ctx->alternate_boot) {
-		dev_info(ab_ctx->dev, "alternate boot\n");
-
-		/* Wait for AB_READY = 1,
-		 * this ensures the SPI FSM is initialized to flash the
-		 * alternate bootcode to SRAM.
-		 */
-		timeout = jiffies + AB_READY_WAIT_TIMEOUT;
-		while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
-				time_before(jiffies, timeout))
-			usleep_range(POLL_USLEEP_MIN, POLL_USLEEP_MIN + 1);
-
-		if (!gpiod_get_value_cansleep(ab_ctx->ab_ready)) {
-			dev_err(&plat_dev->dev,
-				"ab_ready is not high before fw load");
-			return -EIO;
-		}
-
-		/* Enable CRC via SPI-FSM */
-		while (num_attempts) {
-			/* [TBD] Reset CRC Register via SPI-FSM */
-
-			/* PCIe PHY OTP patch count  */
-			spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
-			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = SRAM_PCI_OTP;
-			spi_packet.data_length = 1;
-			spi_packet.data = dummy;
-
-			if (airbrush_spi_run_cmd(&spi_packet))
-				return -EIO;
-
-			/* BAR0, 2, and 4 sizes  */
-			spi_packet.command = AB_SPI_CMD_FSM_BURST_WRITE;
-			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = SRAM_PCI_BAR;
-			spi_packet.data_length = 3;
-			spi_packet.data = dummy;
-
-			if (airbrush_spi_run_cmd(&spi_packet))
-				return -EIO;
-
-			/* Stop OTP read of PCIe configuration  */
-			dummy[0] = 2;
-			spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
-			spi_packet.granularity = FOUR_BYTE;
-			spi_packet.base_address = REG_AON_PCI_OTP;
-			spi_packet.data_length = 1;
-			spi_packet.data = dummy;
-
-			if (airbrush_spi_run_cmd(&spi_packet))
-				return -EIO;
-
-			/* if CRC is OK, break the loop */
-			if (crc_ok)
-				break;
-
-			/* Decrement the number of attempts and retry */
-			num_attempts--;
-
-			if (!num_attempts)
-				return -EIO;
-		}
-
-		/* set REG_SRAM_ADDR=SRAM_BL_ADDR via SPI-FSM */
-		data = ROM_BL_ADDR;
-		spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
-		spi_packet.granularity = FOUR_BYTE;
-		spi_packet.base_address = REG_SRAM_ADDR;
-		spi_packet.data_length = 1;
-		spi_packet.data = &data;
-
-		if (airbrush_spi_run_cmd(&spi_packet))
-			return -EIO;
-
-		/* set REG_UPL_CMPL=1  via SPI-FSM */
-		data = 0x1; // used to write REG_UPL_CMPL = 0x1
-		spi_packet.command = AB_SPI_CMD_FSM_WRITE_SINGLE;
-		spi_packet.granularity = FOUR_BYTE;
-		spi_packet.base_address = REG_UPL_CMPL;
-		spi_packet.data_length = 1;
-		spi_packet.data = &data;
-
-		if (airbrush_spi_run_cmd(&spi_packet))
-			return -EIO;
-
-		/* Read the REG_UPL_COMPL register to make sure the
-		 * AB_READY is deasserted by the Airbrush.
-		 * Note: Assumption is that, by the time host reads the
-		 * REG_UPL_CMPL register, Airbrush would have deasserted
-		 * the AB_READY gpio.
-		 */
-		spi_packet.command = AB_SPI_CMD_FSM_READ_SINGLE;
-		spi_packet.granularity = FOUR_BYTE;
-		spi_packet.base_address = REG_UPL_CMPL;
-		spi_packet.data_length = 1;
-		spi_packet.data = NULL;
-
-		if (airbrush_spi_run_cmd(&spi_packet))
-			return -EIO;
-	}
-	ab_sm_record_ts(AB_SM_TS_ALT_BOOT);
-
 	if (ab_ctx->cold_boot) {
 		ab_sm_start_ts(AB_SM_TS_PCIE_ENUM);
 		ret = ab_sm_enumerate_pcie(ab_ctx);
@@ -317,10 +204,6 @@ int ab_bootsequence(struct ab_state_context *ab_ctx, enum chip_state prev_state)
 			return ret;
 	}
 
-	/* Wait for AB_READY = 1,
-	 * this ensures the SPI FSM is initialized to flash the
-	 * alternate bootcode to SRAM.
-	 */
 	timeout = jiffies + AB_READY_WAIT_TIMEOUT;
 	while (!gpiod_get_value_cansleep(ab_ctx->ab_ready) &&
 			time_before(jiffies, timeout)) {

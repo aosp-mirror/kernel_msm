@@ -30,7 +30,6 @@
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
 #include "airbrush-regs.h"
-#include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
 #define CREATE_TRACE_POINTS

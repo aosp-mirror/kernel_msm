@@ -19,7 +19,6 @@
 #include "airbrush-regs.h"
 #include "airbrush-ddr.h"
 
-int ab_interrupt_M0(int tar_dev);
 
 static int mapped_chip_state_set(void *data, u64 val)
 {
@@ -293,14 +292,6 @@ static const struct file_operations chip_info_fops = {
 	.read = seq_read,
 };
 
-static int ab_debugfs_m0_intr(void *data, u64 val)
-{
-	ab_interrupt_M0(0);
-
-	return 0;
-}
-DEFINE_SIMPLE_ATTRIBUTE(ab_m0_intr_fops, NULL, ab_debugfs_m0_intr, "%lli\n");
-
 static int ab_debugfs_ddr_ctrl(void *data, u64 val)
 {
 	struct ab_state_context *sc = (struct ab_state_context *) data;
@@ -564,8 +555,6 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 
 	sc->d_entry = debugfs_create_dir("airbrush", NULL);
 
-	debugfs_create_file("m0_intr", 0664, sc->d_entry, sc,
-					&ab_m0_intr_fops);
 
 	debugfs_create_file("ab_ddr_ctrl", 0200, sc->d_entry, sc,
 				&ab_ddr_ctrl_fops);
@@ -633,9 +622,6 @@ void ab_sm_create_debugfs(struct ab_state_context *sc)
 	debugfs_create_file("time_stamps", 0664, d_chip, sc,
 			&fops_time_stamps);
 #endif
-
-	debugfs_create_file("alternate_boot", 0664, d_chip, sc,
-				&fops_alternate_boot);
 
 	debugfs_create_file("asv_version", 0660, d_chip, sc,
 				&fops_asv_version_override);
