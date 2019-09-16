@@ -651,7 +651,7 @@ config QTI_SYSTEM_PM
 	bool
 
 config QCOM_SMCINVOKE
-	bool "Secure QSEE Support"
+	tristate "Secure QSEE Support"
 	help
 	 Enable SMCInvoke driver which supports capability based secure
 	 communication between QTI Secure Execution Environment (QSEE)
