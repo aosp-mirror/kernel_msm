@@ -327,6 +327,21 @@
 		rgltr-load-current = <80000>;
 	};
 
+	ois_rear_aux: qcom,ois@1 {
+		cell-index = <1>;
+		reg = <0x1>;
+		compatible = "qcom,ois";
+		cci-device = <0>;
+		cci-master = <1>;
+		cam_vaf-supply = <&camera_ldo>;
+		regulator-names = "cam_vaf";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <2850000>;
+		rgltr-max-voltage = <2850000>;
+		rgltr-load-current = <80000>;
+		ois-version = <2>;
+	};
+
 	qcom,cam-sensor@1 {
 		cell-index = <1>;
 		compatible = "qcom,cam-sensor";
@@ -338,6 +353,7 @@
 		led-flash-src = <&led_flash_rear_aux>;
 		actuator-src = <&actuator_rear_aux>;
 		//eeprom-src = <&eeprom_rear_aux>;
+		ois-src = <&ois_rear_aux>;
 		cam_vio-supply = <&slg51000_ldo7>;
 		cam_v_custom1-supply = <&slg51000_ldo3>;
 		cam_vaf-supply = <&camera_ldo>;
