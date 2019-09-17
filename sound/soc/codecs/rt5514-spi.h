@@ -16,6 +16,7 @@
  * RT5514_SPI_BUF_LEN is the buffer size of SPI master controller.
 */
 #define RT5514_SPI_BUF_LEN		240
+#define RT5514_SPI_RETRY_CNT		100
 
 #define RT5514_BUFFER_VOICE_BASE	0x18002fb4
 #define RT5514_BUFFER_VOICE_LIMIT	0x18002fb8
