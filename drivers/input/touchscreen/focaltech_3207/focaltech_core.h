@@ -180,6 +180,10 @@
 #define TP_ID_88 0x88
 #define TP_ID_89 0x89
 #define TP_ID_8A 0x8A
+#define TP_ID_A0 0xA0
+#define TP_ID_A1 0xA1
+#define TP_ID_A2 0xA2
+#define TP_ID_A3 0xA3
 #define TP_INI_FILE "FT3207_20170123_HOST_F02_V02_OnlyTest.ini"
 #define FTS_GESTURE_SETTING_ADRESS	0xD0
 #define FTS_GESTURE_OUTPUT_ADRESS	0xD3
