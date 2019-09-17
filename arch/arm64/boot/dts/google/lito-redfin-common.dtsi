@@ -16,6 +16,7 @@
 #include "lito-redfin-camera-sensor.dtsi"
 #include "lito-redfin-haptics.dtsi"
 #include "lito-redfin-thermal.dtsi"
+#include "lito-redfin-touch.dtsi"
 #include "lito-redfin-usb.dtsi"
 #include "lito-redfin-rainbow.dtsi"
 #include "lito-redfin-display.dtsi"
