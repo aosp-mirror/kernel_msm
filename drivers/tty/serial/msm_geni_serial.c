@@ -659,7 +659,7 @@ static int msm_geni_serial_get_char(struct uart_port *uport)
 
 	if (!(msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 			M_SEC_IRQ_EN, true)))
-		return -ENXIO;
+		return NO_POLL_CHAR;
 
 	m_irq_status = geni_read_reg_nolog(uport->membase,
 						SE_GENI_M_IRQ_STATUS);
@@ -672,7 +672,7 @@ static int msm_geni_serial_get_char(struct uart_port *uport)
 
 	if (!(msm_geni_serial_poll_bit(uport, SE_GENI_RX_FIFO_STATUS,
 			RX_FIFO_WC_MSK, true)))
-		return -ENXIO;
+		return NO_POLL_CHAR;
 
 	/*
 	 * Read the Rx FIFO only after clearing the interrupt registers and
