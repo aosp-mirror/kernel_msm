@@ -2817,7 +2817,8 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 	}
 
 	profile_node = of_batterydata_get_best_profile(batt_node,
-				chip->batt_id_ohm / 1000, NULL);
+				chip->batt_id_ohm / 1000,
+				chip->dt.batt_type_name);
 	if (IS_ERR(profile_node)) {
 		rc = PTR_ERR(profile_node);
 		pr_err("Failed to detect valid QG battery profile %d\n", rc);
@@ -4071,6 +4072,9 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 		else
 			chip->dt.fvss_vbat_mv = temp;
 	}
+
+	(void)of_property_read_string(node, "google,batt_type_name",
+				&chip->dt.batt_type_name);
 
 	qg_dbg(chip, QG_DEBUG_PON, "DT: vbatt_empty_mv=%dmV vbatt_low_mv=%dmV delta_soc=%d ext-sns=%d\n",
 			chip->dt.vbatt_empty_mv, chip->dt.vbatt_low_mv,
