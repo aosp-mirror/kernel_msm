@@ -170,6 +170,7 @@ struct msm_geni_serial_port {
 	int edge_count;
 	bool manual_flow;
 	struct msm_geni_serial_ver_info ver_info;
+	bool brk;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -822,6 +823,13 @@ static int handle_rx_console(struct uart_port *uport,
 			int sysrq;
 
 			uport->icount.rx++;
+			if (msm_port->brk && rx_char[c] == 0) {
+				flag = TTY_BREAK;
+				msm_port->brk = false;
+				if (uart_handle_break(uport))
+					continue;
+			}
+
 			sysrq = uart_handle_sysrq_char(uport, rx_char[c]);
 			if (!sysrq)
 				tty_insert_flip_char(tport, rx_char[c], flag);
@@ -1476,6 +1484,7 @@ static irqreturn_t msm_geni_serial_isr(int isr, void *dev)
 		} else if ((s_irq_status & S_GP_IRQ_2_EN) ||
 			(s_irq_status & S_GP_IRQ_3_EN)) {
 			uport->icount.brk++;
+			msm_port->brk = true;
 			IPC_LOG_MSG(msm_port->ipc_log_misc,
 				"%s.sirq 0x%x break:%d\n",
 				__func__, s_irq_status, uport->icount.brk);
