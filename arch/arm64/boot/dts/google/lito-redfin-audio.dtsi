@@ -16,6 +16,8 @@
 };
 
 &lito_snd {
+	qcom,model = "sm7250-noextcodec-snd-card";
+
 	qcom,audio-routing =
 		"Stereo1 DMIC Mux", "Audio LDO Mic1",
 		"Stereo2 DMIC Mux", "Audio LDO Mic2",
