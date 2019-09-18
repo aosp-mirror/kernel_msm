@@ -165,30 +165,33 @@
 		status = "ok";
 	};
 
-#if 0
 	eeprom_rear: qcom,eeprom@0 {
 		cell-index = <0>;
 		reg = <0>;
 		compatible = "qcom,eeprom";
-		cam_vio-supply = <&L7P>;
-		cam_vana-supply = <&L4P>;
-		cam_vdig-supply = <&L2P>;
+		cam_vio-supply = <&slg51000_ldo7>;
+		cam_vana-supply = <&slg51000_ldo3>;
+		cam_vaf-supply = <&camera_ldo>;
+		cam_vdig-supply = <&slg51000_ldo1>;
+		cam_v_custom1-supply = <&slg51000_ldo4>;
+		cam_v_custom2-supply = <&slg51000_ldo6>;
 		cam_clk-supply = <&titan_top_gdsc>;
-		cam_vaf-supply = <&L5P>;
-		regulator-names = "cam_vio", "cam_vana", "cam_vdig",
-			"cam_clk", "cam_vaf";
+		regulator-names = "cam_vio", "cam_vana", "cam_vaf", "cam_vdig",
+			"cam_v_custom1", "cam_v_custom2", "cam_clk";
 		rgltr-cntrl-support;
-		rgltr-min-voltage = <1800000 2800000 1104000 0 2800000>;
-		rgltr-max-voltage = <1800000 2800000 1104000 0 2800000>;
-		rgltr-load-current = <0 80000 105000 0 100000>;
+		rgltr-min-voltage = <1800000 2850000 2850000 2850000 1800000
+			1050000 0>;
+		rgltr-max-voltage = <1800000 2850000 2850000 2850000 1800000
+			1050000 0>;
+		rgltr-load-current = <0 0 8000 0 0 0 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
 		pinctrl-0 = <&cam_sensor_mclk0_active
-			&cam_sensor_active_rear>;
+				&cam_sensor_active_rear>;
 		pinctrl-1 = <&cam_sensor_mclk0_suspend
-			&cam_sensor_suspend_rear>;
+				&cam_sensor_suspend_rear>;
 		gpios = <&tlmm 13 0>,
-			<&tlmm 30 0>;
+			<&tlmm 23 0>;
 		gpio-reset = <1>;
 		gpio-req-tbl-num = <0 1>;
 		gpio-req-tbl-flags = <1 0>;
@@ -203,7 +206,7 @@
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
 	};
-#endif
+
 	ois_rear: qcom,ois@0 {
 		cell-index = <0>;
 		reg = <0x0>;
@@ -266,9 +269,7 @@
 		sensor-position-yaw = <180>;
 		led-flash-src = <&led_flash_rear>;
 		actuator-src = <&actuator_rear>;
-#if 0
 		eeprom-src = <&eeprom_rear>;
-#endif
 		ois-src = <&ois_rear>;
 		cam_vio-supply = <&slg51000_ldo7>;
 		cam_vana-supply = <&slg51000_ldo3>;
