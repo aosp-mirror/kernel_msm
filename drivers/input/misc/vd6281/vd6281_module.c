@@ -35,6 +35,8 @@
 
 #define VD6281_DEV_NAME	"vd6281"
 
+#define VIO_VOLTAGE_MIN 1800000
+#define VIO_VOLTAGE_MAX 1800000
 
 enum RAINBOW_POWER {
 	REGULATOR_VIO,
@@ -139,6 +141,13 @@ static int vd6281_power_up(struct rainbow_ctrl_t *ctrl)
 	}
 
 	if (!ctrl->is_power_up[REGULATOR_VIO]) {
+		rc = regulator_set_voltage(ctrl->vio,
+			VIO_VOLTAGE_MIN, VIO_VOLTAGE_MAX);
+		if (rc < 0) {
+			dev_err(&ctrl->client->dev,
+				"set vio voltage failed: %d", rc);
+			return rc;
+		}
 		rc = regulator_enable(ctrl->vio);
 		if (rc < 0) {
 			dev_err(&ctrl->client->dev,
