@@ -1160,8 +1160,7 @@ static int iaxxx_do_fw_update(struct iaxxx_priv *priv)
 	return 0;
 }
 
-static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv,
-		struct iaxxx_crashlog_header *crashlog_header)
+static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv)
 {
 	int i;
 	int j = 0;
@@ -1175,6 +1174,8 @@ static void iaxxx_crashlog_header_read(struct iaxxx_priv *priv,
 			iaxxx_conv_virtual_to_physical_register_address(
 				priv,
 				IAXXX_DEBUG_BLOCK_0_CRASHLOG_ADDR_ADDR);
+
+	struct iaxxx_crashlog_header *crashlog_header = priv->crashlog_header;
 
 	/* Reading the debug log address and size */
 	for (i = IAXXX_DBGLOG_CM4; i <= IAXXX_DBGLOG_DMX; i++) {
@@ -1237,10 +1238,7 @@ static int iaxxx_dump_crashlogs(struct iaxxx_priv *priv)
 	uint32_t log_addr;
 	uint32_t log_size;
 	int ret;
-	struct iaxxx_crashlog_header crashlog_header[IAXXX_MAX_LOG];
-
-	/* Always read debug/crash log address before dumping */
-	iaxxx_crashlog_header_read(priv, crashlog_header);
+	struct iaxxx_crashlog_header *crashlog_header = priv->crashlog_header;
 
 	/* If memory already allocated */
 	kvfree(priv->crashlog->log_buffer);
@@ -1541,6 +1539,9 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 		}
 	}
 
+	/* Read debug/crash log address after fw boot */
+	iaxxx_crashlog_header_read(priv);
+
 	dev_info(dev, "%s: done\n", __func__);
 	iaxxx_work(priv, runtime_work);
 	regmap_read(priv->regmap, IAXXX_AO_EFUSE_BOOT_ADDR, &efuse_trim_value);
@@ -1656,7 +1657,6 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	iaxxx_reset_check_sbl_mode(priv);
 	iaxxx_dump_crashlogs(priv);
 	mutex_unlock(&priv->crashdump_lock);
-
 	/* Notify the user about crash and read crash dump log*/
 	iaxxx_send_uevent(priv, "ACTION=IAXXX_CRASH_EVENT");
 	/* Bypass regmap cache */
@@ -2206,6 +2206,8 @@ int iaxxx_device_init(struct iaxxx_priv *priv)
 		goto err_event_init;
 	}
 
+	 priv->crashlog_header = kvzalloc((sizeof(struct
+			iaxxx_crashlog_header) * IAXXX_MAX_LOG), GFP_KERNEL);
 	iaxxx_work(priv, fw_update_work);
 
 	/* add misc device for hardware statistics */
@@ -2289,6 +2291,11 @@ void iaxxx_device_exit(struct iaxxx_priv *priv)
 	if (priv->regmap_no_pm) {
 		regmap_exit(priv->regmap_no_pm);
 		priv->regmap_no_pm = NULL;
+	}
+
+	if (priv->crashlog_header) {
+		kvfree(priv->crashlog_header);
+		priv->crashlog_header = NULL;
 	}
 
 }

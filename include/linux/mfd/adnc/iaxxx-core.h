@@ -376,6 +376,7 @@ struct iaxxx_priv {
 	uint32_t crash_count;
 	bool cm4_crashed;
 	atomic_t route_status;
+	struct iaxxx_crashlog_header *crashlog_header;
 	struct iaxxx_crashlog *crashlog;
 	struct mutex crashdump_lock;
 
