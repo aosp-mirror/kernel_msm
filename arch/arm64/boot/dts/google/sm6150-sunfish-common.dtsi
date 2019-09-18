@@ -16,6 +16,7 @@
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <dt-bindings/input/input.h>
 #include "qcom-base/sdmmagpie-sde-display.dtsi"
+#include "sm7150-sunfish-camera-pmic.dtsi"
 #include "qcom-base/sdmmagpie-camera-sensor-idp.dtsi"
 
 #include "sm7150-sunfish-citadel.dtsi"
