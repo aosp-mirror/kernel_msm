@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "lito-bramble-proto.dtsi"
+
+/ {
+	model = "Google Inc. MSM sm7250 Bramble PROTO 1.0";
+	compatible = "google,bramble-sm7250", "qcom,sm7250";
+	qcom,msm-id = <400 0x10000>;
+	qcom,board-id = <0x0a0305 0>;
+};
