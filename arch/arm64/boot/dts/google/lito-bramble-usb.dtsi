@@ -10,4 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+&usb2_phy0 {
+	qcom,param-override-seq =
+		<0xcc 0x70>;
+};
