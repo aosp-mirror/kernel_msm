@@ -203,7 +203,22 @@
 		clock-cntl-level = "turbo";
 		clock-rates = <24000000>;
 	};
+#endif
+	ois_rear: qcom,ois@0 {
+		cell-index = <0>;
+		reg = <0x0>;
+		compatible = "qcom,ois";
+		cci-device = <0>;
+		cci-master = <0>;
+		cam_vaf-supply = <&camera_ldo>;
+		regulator-names = "cam_vaf";
+		rgltr-cntrl-support;
+		rgltr-min-voltage = <2850000>;
+		rgltr-max-voltage = <2850000>;
+		rgltr-load-current = <80000>;
+	};
 
+#if 0
 	eeprom_rear_aux: qcom,eeprom@1 {
 		cell-index = <1>;
 		reg = <0x1>;
@@ -258,6 +273,7 @@
 #if 0
 		eeprom-src = <&eeprom_rear>;
 #endif
+		ois-src = <&ois_rear>;
 		cam_vio-supply = <&slg51000_ldo7>;
 		cam_vana-supply = <&slg51000_ldo3>;
 		cam_vaf-supply = <&camera_ldo>;
