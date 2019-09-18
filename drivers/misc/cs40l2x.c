@@ -4131,7 +4131,7 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 		if (cs40l2x->pbq_state != CS40L2X_PBQ_STATE_IDLE)
 			goto err_mutex;
 
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		cs40l2x_wl_relax(cs40l2x);
 	} else {
 		/* haptic-mode teardown */
@@ -4150,7 +4150,7 @@ static void cs40l2x_vibe_mode_worker(struct work_struct *work)
 			}
 		}
 
-		cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+		cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 		cs40l2x_wl_relax(cs40l2x);
 	}
 
@@ -4574,7 +4574,7 @@ static int cs40l2x_reset_recovery(struct cs40l2x_private *cs40l2x)
 	}
 
 	cs40l2x->vibe_mode = CS40L2X_VIBE_MODE_HAPTIC;
-	cs40l2x->vibe_state = CS40L2X_VIBE_STATE_STOPPED;
+	cs40l2x_set_state(cs40l2x, CS40L2X_VIBE_STATE_STOPPED);
 
 	cs40l2x->cp_trailer_index = CS40L2X_INDEX_IDLE;
 
