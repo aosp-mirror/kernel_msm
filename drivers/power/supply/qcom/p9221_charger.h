@@ -220,7 +220,7 @@ struct p9221_charger_platform_data {
 	int				fod_epp_num;
 	int				nb_alignment_freq;
 	int				*alignment_freq;
-	u32				wlc_alignment_scalar;
+	u32				alignment_scalar;
 };
 
 struct p9221_charger_data {
@@ -240,6 +240,7 @@ struct p9221_charger_data {
 	struct delayed_work		icl_ramp_work;
 	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
+	struct timer_list		align_timer;
 	struct bin_attribute		bin;
 	struct logbuffer		*log;
 	int				online;
@@ -265,10 +266,13 @@ struct p9221_charger_data {
 	bool				icl_ramp;
 	u32				icl_ramp_ua;
 	u32				icl_ramp_delay_ms;
-	int				wlc_alignment;
-	int				wlc_alignment_last;
-	bool				wlc_alignment_capable;
-	int				wlc_alignment_time;
+	int				align;
+	int				align_count;
+	int				alignment;
+	u8				alignment_str[(sizeof(u32) * 3) + 1];
+	int				alignment_last;
+	bool				alignment_capable;
+	int				alignment_time;
 	u32				current_filtered;
 	u32				current_sample_cnt;
 };
