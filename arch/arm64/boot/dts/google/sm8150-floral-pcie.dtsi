@@ -26,6 +26,10 @@
 };
 
 &pcie1 {
+	qcom,msm-bus,vectors-KBps =
+			<100 512 0 0>,
+			<100 512 500 2000000>;
+
 	/* WAKE# optional sideband signal not connected */
 	wake-gpio = <>;
 	perst-gpio = <&pm8150l_gpios 2 GPIO_ACTIVE_LOW>;
