@@ -15,7 +15,7 @@
 &soc {
 	redfin_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
-		#include "qg-batterydata-alium-10k-3600mah.dtsi"
+		#include "batterydata-qcom-b5-Desay-ATL.dtsi"
 	};
 };
 
