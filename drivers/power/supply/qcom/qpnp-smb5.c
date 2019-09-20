@@ -219,6 +219,7 @@ struct smb_dt_props {
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
 	int			batt_psy_is_bms;
+	int			batt_psy_disable;
 	const char		*batt_psy_name;
 };
 
@@ -569,6 +570,8 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 
 	chip->dt.batt_psy_is_bms = of_property_read_bool(node,
 					"google,batt_psy_is_bms");
+	chip->dt.batt_psy_disable = of_property_read_bool(node,
+					"google,batt_psy_disable");
 
 	(void)of_property_read_string(node, "google,batt_psy_name",
 				      &chip->dt.batt_psy_name);
@@ -1844,6 +1847,11 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 	struct power_supply_config batt_cfg = {};
 	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
+
+	if (chip->dt.batt_psy_disable) {
+		pr_warn("Requested disable of battery power supply\n");
+		return 0;
+	}
 
 	batt_cfg.drv_data = chg;
 	batt_cfg.of_node = chg->dev->of_node;
@@ -3191,7 +3199,8 @@ static int force_batt_psy_update_write(void *data, u64 val)
 {
 	struct smb_charger *chg = data;
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(force_batt_psy_update_ops, NULL,
