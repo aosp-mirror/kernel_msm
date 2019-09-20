@@ -12,3 +12,4 @@
 * GNU General Public License for more details.
 */
 
+#include "lito-redbull-led-laser.dtsi"
