@@ -1481,6 +1481,18 @@ int check_TP_ID(char *buf, ssize_t buf_len, u8 tp_id) {
 		case TP_ID_8A:
 			buf_len += sprintf(buf + buf_len, "TP is 0x8A\n");
 			break;
+		case TP_ID_A0:
+			buf_len += sprintf(buf + buf_len, "TP is 0xA0\n");
+			break;
+		case TP_ID_A1:
+			buf_len += sprintf(buf + buf_len, "TP is 0xA1\n");
+			break;
+		case TP_ID_A2:
+			buf_len += sprintf(buf + buf_len, "TP is 0xA2\n");
+			break;
+		case TP_ID_A3:
+			buf_len += sprintf(buf + buf_len, "TP is 0xA3\n");
+			break;
 		default:
 			buf_len += sprintf(buf + buf_len, "TP isn't correct\n");
 			break;
