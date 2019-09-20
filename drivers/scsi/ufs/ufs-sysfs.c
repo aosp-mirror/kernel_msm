@@ -516,23 +516,19 @@ static const struct attribute_group ufs_sysfs_geometry_descriptor_group = {
 #define UFS_HEALTH_DESC_PARAM(_name, _uname, _size)			\
 	UFS_DESC_PARAM(_name, _uname, HEALTH, _size)
 
-UFS_HEALTH_DESC_PARAM(length, _LEN, 1);
-UFS_HEALTH_DESC_PARAM(type, _TYPE, 1);
-UFS_HEALTH_DESC_PARAM(eol, _EOL_INFO, 1);
-UFS_HEALTH_DESC_PARAM(lifetimeA, _LIFE_TIME_EST_A, 1);
-UFS_HEALTH_DESC_PARAM(lifetimeB, _LIFE_TIME_EST_B, 1);
+UFS_HEALTH_DESC_PARAM(eol_info, _EOL_INFO, 1);
+UFS_HEALTH_DESC_PARAM(life_time_estimation_a, _LIFE_TIME_EST_A, 1);
+UFS_HEALTH_DESC_PARAM(life_time_estimation_b, _LIFE_TIME_EST_B, 1);
 
 static struct attribute *ufs_sysfs_health_descriptor[] = {
-	&dev_attr_length.attr,
-	&dev_attr_type.attr,
-	&dev_attr_eol.attr,
-	&dev_attr_lifetimeA.attr,
-	&dev_attr_lifetimeB.attr,
+	&dev_attr_eol_info.attr,
+	&dev_attr_life_time_estimation_a.attr,
+	&dev_attr_life_time_estimation_b.attr,
 	NULL,
 };
 
 static const struct attribute_group ufs_sysfs_health_descriptor_group = {
-	.name = "health",
+	.name = "health_descriptor",
 	.attrs = ufs_sysfs_health_descriptor,
 };
 
