@@ -5,6 +5,7 @@ airbrush-y +=	\
 		airbrush-sm-ctrl.o \
 		airbrush-clk.o \
 		airbrush-bootseq.o \
+		airbrush-spi.o \
 		airbrush-pmu.o \
 		airbrush-pmic-ctrl.o \
 		airbrush-ddr.o \

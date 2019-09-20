@@ -2300,6 +2300,7 @@ static void abc_pcie_irq_free(struct pci_dev *pdev)
 static struct property_entry ipu_properties[] = {
 	/* filled in with notifier chain for mux'ed low-priority interrupts */
 	PROPERTY_ENTRY_U64("intnc-notifier-chain", 0),
+	{ }
 };
 
 static const struct resource ipu_resources[] = {
