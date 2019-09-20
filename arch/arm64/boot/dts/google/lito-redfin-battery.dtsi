@@ -25,4 +25,5 @@
 
 &pm7250b_qg {
 	qcom,battery-data = <&redfin_batterydata>;
+	qcom,qg-ext-sns;
 };
