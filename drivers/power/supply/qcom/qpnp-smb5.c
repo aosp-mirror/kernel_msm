@@ -219,6 +219,7 @@ struct smb_dt_props {
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
 	int			batt_psy_is_bms;
+	const char		*batt_psy_name;
 };
 
 struct smb5 {
@@ -568,6 +569,9 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 
 	chip->dt.batt_psy_is_bms = of_property_read_bool(node,
 					"google,batt_psy_is_bms");
+
+	(void)of_property_read_string(node, "google,batt_psy_name",
+				      &chip->dt.batt_psy_name);
 
 	return 0;
 }
@@ -1846,6 +1850,8 @@ static int smb5_init_batt_psy(struct smb5 *chip)
 
 	if (chip->dt.batt_psy_is_bms)
 		batt_psy_desc.type = POWER_SUPPLY_TYPE_BMS;
+	if (chip->dt.batt_psy_name)
+		batt_psy_desc.name = chip->dt.batt_psy_name;
 
 	chg->batt_psy = devm_power_supply_register(chg->dev,
 					   &batt_psy_desc,
