@@ -280,14 +280,14 @@ int cam_sync_deinit_object(struct sync_table_row *table, uint32_t idx)
 	}
 
 	memset(row, 0, sizeof(*row));
-	mutex_lock(&sync_dev->table_lock);
-	clear_bit(idx, sync_dev->bitmap);
-	mutex_unlock(&sync_dev->table_lock);
 	INIT_LIST_HEAD(&row->callback_list);
 	INIT_LIST_HEAD(&row->parents_list);
 	INIT_LIST_HEAD(&row->children_list);
 	INIT_LIST_HEAD(&row->user_payload_list);
 	spin_unlock_bh(&sync_dev->row_spinlocks[idx]);
+	mutex_lock(&sync_dev->table_lock);
+	clear_bit(idx, sync_dev->bitmap);
+	mutex_unlock(&sync_dev->table_lock);
 
 	CAM_DBG(CAM_SYNC, "Destroying sync obj:%d successful", idx);
 	return 0;
