@@ -26,4 +26,6 @@
 &pm7250b_qg {
 	qcom,battery-data = <&redfin_batterydata>;
 	qcom,qg-ext-sns;
+	qcom,cl-min-delta-batt-soc = <10>;
+	qcom,cl-wt-enable;
 };
