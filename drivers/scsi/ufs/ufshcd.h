@@ -672,41 +672,6 @@ struct ufs_stats {
 	u32 dme_err_cnt;
 };
 
-static inline bool is_read_opcode(u8 opcode)
-{
-	return opcode == READ_10 || opcode == READ_16;
-}
-
-static inline bool is_write_opcode(u8 opcode)
-{
-	return opcode == WRITE_10 || opcode == WRITE_16;
-}
-
-static inline bool is_unmap_opcode(u8 opcode)
-{
-	return opcode == UNMAP;
-}
-
-static inline char *parse_opcode(u8 opcode)
-{
-	/* string should be less than 12 byte-long */
-	switch (opcode) {
-	case READ_10:
-		return "READ_10";
-	case READ_16:
-		return "READ_16";
-	case WRITE_10:
-		return "WRITE_10";
-	case WRITE_16:
-		return "WRITE_16";
-	case UNMAP:
-		return "UNMAP";
-	case SYNCHRONIZE_CACHE:
-		return "SYNC_CACHE";
-	}
-	return NULL;
-}
-
 /* UFS Host Controller debug print bitmask */
 #define UFSHCD_DBG_PRINT_CLK_FREQ_EN		UFS_BIT(0)
 #define UFSHCD_DBG_PRINT_UIC_ERR_HIST_EN	UFS_BIT(1)
@@ -749,22 +714,6 @@ enum ufshcd_card_state {
 	UFS_CARD_STATE_UNKNOWN	= 0,
 	UFS_CARD_STATE_ONLINE	= 1,
 	UFS_CARD_STATE_OFFLINE	= 2,
-};
-
-/* UFS Slow I/O operation types */
-enum ufshcd_slowio_optype {
-	UFSHCD_SLOWIO_READ = 0,
-	UFSHCD_SLOWIO_WRITE = 1,
-	UFSHCD_SLOWIO_UNMAP = 2,
-	UFSHCD_SLOWIO_SYNC = 3,
-	UFSHCD_SLOWIO_OP_MAX = 4,
-};
-
-/* UFS Slow I/O sysfs entry types */
-enum ufshcd_slowio_systype {
-	UFSHCD_SLOWIO_US = 0,
-	UFSHCD_SLOWIO_CNT = 1,
-	UFSHCD_SLOWIO_SYS_MAX = 2,
 };
 
 /**
@@ -1123,10 +1072,6 @@ struct ufs_hba {
 	struct ufs_desc_size desc_size;
 	atomic_t scsi_block_reqs_cnt;
 	bool restore_needed;
-
-	/* To monitor slow UFS I/O requests. */
-	u64 slowio_min_us;
-	u64 slowio[UFSHCD_SLOWIO_OP_MAX][UFSHCD_SLOWIO_SYS_MAX];
 
 	bool phy_init_g4;
 	bool force_g4;
@@ -1676,13 +1621,5 @@ static inline u8 ufshcd_scsi_to_upiu_lun(unsigned int scsi_lun)
 
 int ufshcd_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 		     const char *prefix);
-
-void ufshcd_update_slowio_min_us(struct ufs_hba *hba);
-
-#define UFSHCD_MIN_SLOWIO_US		(1000)     /*  1 ms      */
-#define UFSHCD_DEFAULT_SLOWIO_READ_US	(5000000)  /*  5 seconds */
-#define UFSHCD_DEFAULT_SLOWIO_WRITE_US	(10000000) /* 10 seconds */
-#define UFSHCD_DEFAULT_SLOWIO_UNMAP_US	(30000000) /* 30 seconds */
-#define UFSHCD_DEFAULT_SLOWIO_SYNC_US	(10000000) /* 10 seconds */
 
 #endif /* End of Header */

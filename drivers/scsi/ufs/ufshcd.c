@@ -50,69 +50,6 @@
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
 
-void ufshcd_update_slowio_min_us(struct ufs_hba *hba)
-{
-	enum ufshcd_slowio_optype i;
-	u64 us;
-
-	hba->slowio_min_us = hba->slowio[UFSHCD_SLOWIO_READ][UFSHCD_SLOWIO_US];
-	for (i = UFSHCD_SLOWIO_WRITE; i < UFSHCD_SLOWIO_OP_MAX; i++) {
-		us = hba->slowio[i][UFSHCD_SLOWIO_US];
-		if (us < hba->slowio_min_us)
-			hba->slowio_min_us = us;
-	}
-}
-
-static enum ufshcd_slowio_optype ufshcd_get_slowio_optype(u8 opcode)
-{
-	if (opcode == READ_10 || opcode == READ_16)
-		return UFSHCD_SLOWIO_READ;
-	else if (opcode == WRITE_10 || opcode == WRITE_16)
-		return UFSHCD_SLOWIO_WRITE;
-	else if (opcode == UNMAP)
-		return UFSHCD_SLOWIO_UNMAP;
-	else if (opcode == SYNCHRONIZE_CACHE)
-		return UFSHCD_SLOWIO_SYNC;
-	return UFSHCD_SLOWIO_OP_MAX;
-}
-
-static void ufshcd_log_slowio(struct ufs_hba *hba,
-		struct ufshcd_lrb *lrbp, s64 iotime_us)
-{
-	sector_t lba = ULONG_MAX;
-	u32 transfer_len = UINT_MAX;
-	u8 opcode = 0xff;
-	char opcode_str[16];
-	u64 slowio_cnt = 0;
-	enum ufshcd_slowio_optype optype;
-
-	/* For common case */
-	if (likely(iotime_us < hba->slowio_min_us))
-		return;
-
-	if (lrbp->cmd) {
-		opcode = (u8)(*lrbp->cmd->cmnd);
-		optype = ufshcd_get_slowio_optype(opcode);
-		if (optype < UFSHCD_SLOWIO_OP_MAX) {
-			if (iotime_us < hba->slowio[optype][UFSHCD_SLOWIO_US])
-				return;
-			slowio_cnt = ++hba->slowio[optype][UFSHCD_SLOWIO_CNT];
-		}
-		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
-						is_unmap_opcode(opcode)) {
-			if (lrbp->cmd->request && lrbp->cmd->request->bio) {
-				lba = scsi_get_lba(lrbp->cmd);
-				transfer_len = scsi_get_bytes(lrbp->cmd);
-			}
-		}
-	}
-	snprintf(opcode_str, 16, "%02x: %s", opcode, parse_opcode(opcode));
-	dev_err_ratelimited(hba->dev,
-		"Slow UFS (%lld): time = %lld us, opcode = %16s, lba = %ld, "
-		"len = %u\n",
-		slowio_cnt, iotime_us, opcode_str, lba, transfer_len);
-}
-
 #ifdef CONFIG_DEBUG_FS
 
 static int ufshcd_tag_req_type(struct request *rq)
@@ -175,9 +112,6 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	s64 delta = ktime_us_delta(lrbp->compl_time_stamp,
 		lrbp->issue_time_stamp);
 
-	/* Log for slow I/O */
-	ufshcd_log_slowio(hba, lrbp, delta);
-
 	/* update general request statistics */
 	if (hba->ufs_stats.req_stats[TS_TAG].count == 0)
 		hba->ufs_stats.req_stats[TS_TAG].min = delta;
@@ -222,11 +156,6 @@ static inline void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
 
 static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 {
-	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
-		lrbp->issue_time_stamp);
-
-	/* Log for slow I/O */
-	ufshcd_log_slowio(hba, lrbp, delta);
 }
 
 static inline
@@ -881,10 +810,10 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 		/* trace UPIU also */
 		ufshcd_add_cmd_upiu_trace(hba, tag, str);
 		opcode = (u8)(*lrbp->cmd->cmnd);
-		if (is_read_opcode(opcode) || is_write_opcode(opcode)) {
+		if ((opcode == READ_10) || (opcode == WRITE_10)) {
 			/*
-			 * Currently we only fully trace read(10), write(10),
-			 * read(16), and write(16) commands
+			 * Currently we only fully trace read(10) and write(10)
+			 * commands
 			 */
 			if (lrbp->cmd->request && lrbp->cmd->request->bio) {
 				lba = scsi_get_lba(lrbp->cmd);
@@ -10981,17 +10910,6 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	host->set_dbd_for_caching = 1;
 
 	hba->max_pwr_info.is_valid = false;
-
-	/* Set default slow io value. */
-	hba->slowio[UFSHCD_SLOWIO_READ][UFSHCD_SLOWIO_US] =
-		UFSHCD_DEFAULT_SLOWIO_READ_US;
-	hba->slowio[UFSHCD_SLOWIO_WRITE][UFSHCD_SLOWIO_US] =
-		UFSHCD_DEFAULT_SLOWIO_WRITE_US;
-	hba->slowio[UFSHCD_SLOWIO_UNMAP][UFSHCD_SLOWIO_US] =
-		UFSHCD_DEFAULT_SLOWIO_UNMAP_US;
-	hba->slowio[UFSHCD_SLOWIO_SYNC][UFSHCD_SLOWIO_US] =
-		UFSHCD_DEFAULT_SLOWIO_SYNC_US;
-	ufshcd_update_slowio_min_us(hba);
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);
