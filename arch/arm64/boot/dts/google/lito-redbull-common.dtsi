@@ -32,7 +32,6 @@
 #include "lito-redbull-touch.dtsi"
 #include "lito-redbull-usb.dtsi"
 #include "lito-redbull-citadel.dtsi"
-#include "lito-redbull-ldaf.dtsi"
 
 &soc {
 	gpio_keys {

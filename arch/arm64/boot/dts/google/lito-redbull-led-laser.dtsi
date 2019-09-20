@@ -12,18 +12,3 @@
  * GNU General Public License for more details.
  */
 
-&qupv3_se11_i2c {
-	/* VL53L1 */
-	status = "ok";
-	stmvl53l1: stmvl53l1@29 {
-		compatible = "st,stmvl53l1";
-		reg = <0x29>;
-		xsdn-gpio = <&tlmm 74 0>;
-		intr-gpio = <&tlmm 107 0>;
-		boot-reg = <0x29>;
-		vdd-supply = <&pm8150a_l9>;//L9C
-		vio-supply = <&slg51000_ldo7>;
-		regulator-names = "vdd", "vio";
-		status = "ok";
-	};
-};
