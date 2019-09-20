@@ -268,7 +268,8 @@ static int chg_psy_changed(struct notifier_block *nb,
 	    (!strcmp(psy->desc->name, chg_drv->chg_psy_name) ||
 	     !strcmp(psy->desc->name, chg_drv->bat_psy_name) ||
 	     !strcmp(psy->desc->name, "usb") ||
-	     !strcmp(psy->desc->name, chg_drv->tcpm_psy_name) ||
+	     (chg_drv->tcpm_psy_name &&
+	      !strcmp(psy->desc->name, chg_drv->tcpm_psy_name)) ||
 	     (chg_drv->wlc_psy_name &&
 	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
 		schedule_work(&chg_drv->chg_psy_work);
@@ -298,9 +299,12 @@ static int cgh_update_capability(struct power_supply *tcpm_psy, bool full)
 	u32 pdo[2] = { PDO_FIXED(5000, PD_SNK_MAX_MA, PDO_FIXED_FLAGS),
 		       PDO_FIXED(PD_SNK_MAX_MV, PD_SNK_MAX_MA_9V, 0), };
 
+	/* FIXME, b/139264914, remove temporarily before tcpm porting */
+	/*
 	ret = tcpm_update_sink_capabilities(port, pdo,
 					    (full) ? 1 : 2,
 					    OP_SNK_MW);
+	*/
 
 	return ret;
 }
@@ -326,7 +330,10 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 	chg_drv->pps_data.chg_flags = 0;
 	chg_drv->pps_data.keep_alive_cnt = 0;
 	chg_drv->pps_data.nr_src_cap = 0;
+	/* FIXME, b/139264914, remove temporarily before tcpm porting */
+	/*
 	tcpm_put_partner_src_caps(&chg_drv->pps_data.src_caps);
+	*/
 	chg_drv->pps_data.src_caps = NULL;
 }
 
@@ -346,10 +353,6 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 
 	/* TODO: handle interaction with PPS code */
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
-	/* when/if enabled */
-	GPSY_SET_PROP(chg_drv->chg_psy,
-			POWER_SUPPLY_PROP_TAPER_CONTROL,
-			POWER_SUPPLY_TAPER_CONTROL_OFF);
 	/* make sure the battery knows that it's disconnected */
 	GPSY_SET_INT64_PROP(chg_drv->bat_psy,
 			POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
@@ -625,7 +628,10 @@ static int pps_get_src_cap(struct pd_pps_data *pps,
 	if (!pps || !port)
 		return -EINVAL;
 
+	/* FIXME, b/139264914, remove temporarily before tcpm porting */
+	/*
 	pps->nr_src_cap = tcpm_get_partner_src_caps(port, &pps->src_caps);
+	*/
 
 	return pps->nr_src_cap;
 }
@@ -642,9 +648,12 @@ static int pps_update_capability(struct power_supply *tcpm_psy, u32 pps_cap)
 	pdo[1] = PDO_FIXED(PD_SNK_MAX_MV, PD_SNK_MAX_MA_9V, 0);
 	pdo[2] = pps_cap;
 
+	/* FIXME, b/139264914, remove temporarily before tcpm porting */
+	/*
 	ret = tcpm_update_sink_capabilities(port, pdo,
 					    sizeof(pdo) / sizeof(pdo[0]),
 					    OP_SNK_MW);
+	*/
 
 	return ret;
 }
@@ -1151,11 +1160,15 @@ static bool chg_update_dead_battery(const struct chg_drv *chg_drv)
 		dead = GPSY_GET_PROP(chg_drv->bat_psy,
 				    POWER_SUPPLY_PROP_DEAD_BATTERY);
 	if (dead == 0) {
+		/* FIXME, b/139264914, need to check the value of
+		 * chg->sdp_current_max from POWER_SUPPLY_PROP_SDP_CURRENT_MAX,
+		 * remove temporarily
 		dead = GPSY_SET_PROP(chg_drv->usb_psy,
 				     POWER_SUPPLY_PROP_DEAD_BATTERY,
 				     0);
 		if (dead == 0)
 			pr_info("dead battery cleared uptime=%ld\n", uptime);
+		*/
 	}
 
 	return (dead != 0);
