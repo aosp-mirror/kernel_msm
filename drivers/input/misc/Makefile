@@ -87,4 +87,3 @@ obj-$(CONFIG_INPUT_YEALINK)		+= yealink.o
 obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
 obj-$(CONFIG_INPUT_VD6281)		+= vd6281/
 obj-$(CONFIG_FPC_FINGERPRINT)		+= fpc_fingerprint/
-obj-$(CONFIG_INPUT_STMVL53L1)		+= vl53L1/
