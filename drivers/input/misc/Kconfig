@@ -889,4 +889,3 @@ endif
 
 source "drivers/input/misc/vd6281/Kconfig"
 source "drivers/input/misc/fpc_fingerprint/Kconfig"
-source "drivers/input/misc/vl53L1/Kconfig"
