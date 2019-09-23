@@ -23,7 +23,7 @@
 	model = "Google Inc. MSM sm7150 Sunfish DEV";
 	compatible = "qcom,sdmmagpie-idp", "qcom,sdmmagpie", "qcom,idp";
 	qcom,msm-id = <365 0x0>;
-	qcom,board-id = <34 0>;
+	qcom,board-id = <0x0e0005 0>;
 };
 
 &dsi_sw43404_amoled_video_display {
