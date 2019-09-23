@@ -2277,7 +2277,14 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
-static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
+static irqreturn_t synaptics_rmi4_topirq(int irq, void *data)
+{
+	struct synaptics_rmi4_data *rmi4_data = data;
+	input_set_timestamp(rmi4_data->input_dev, ktime_get());
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t synaptics_rmi4_bottomirq(int irq, void *data)
 {
 	struct synaptics_rmi4_data *rmi4_data = data;
 	const struct synaptics_dsx_board_data *bdata =
@@ -2373,8 +2380,9 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 			goto exit;
 		}
 
-		retval = request_threaded_irq(rmi4_data->irq, NULL,
-				synaptics_rmi4_irq, bdata->irq_flags,
+		retval = request_threaded_irq(rmi4_data->irq,
+				synaptics_rmi4_topirq,
+				synaptics_rmi4_bottomirq, bdata->irq_flags,
 				PLATFORM_DRIVER_NAME, rmi4_data);
 		if (retval < 0) {
 			dev_err(rmi4_data->pdev->dev.parent,
