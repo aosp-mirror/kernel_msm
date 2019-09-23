@@ -53,6 +53,16 @@
 	};
 
 	qcom,msm-imem@146ab000 {
+		kernel_rtb@c70 {
+			compatible = "msm-imem-rtb_info";
+			reg = <0xc70 64>;
+		};
+
+		pmic_info@cb0 {
+			compatible = "msm-imem-pmic_info";
+			reg = <0xcb0 64>;
+		};
+
 		uuid_info@cf0 {
 			compatible = "msm-imem-uuid_info";
 			reg = <0xcf0 64>;
