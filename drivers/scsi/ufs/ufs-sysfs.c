@@ -208,67 +208,6 @@ static ssize_t auto_hibern8_store(struct device *dev,
 	return count;
 }
 
-struct slowio_attr {
-	struct device_attribute attr;
-	enum ufshcd_slowio_optype optype;
-	enum ufshcd_slowio_systype systype;
-};
-
-static ssize_t
-slowio_store(struct device *dev, struct device_attribute *_attr,
-		const char *buf, size_t count)
-{
-	struct slowio_attr *attr = (struct slowio_attr *)_attr;
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	unsigned long flags, value;
-
-	if (kstrtol(buf, 0, &value))
-		return -EINVAL;
-
-	if (attr->systype == UFSHCD_SLOWIO_CNT)
-		value = 0;
-	else if (value < UFSHCD_MIN_SLOWIO_US)
-		return -EINVAL;
-
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	hba->slowio[attr->optype][attr->systype] = value;
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-
-	if (attr->systype == UFSHCD_SLOWIO_US)
-		ufshcd_update_slowio_min_us(hba);
-	return count;
-}
-
-static ssize_t
-slowio_show(struct device *dev, struct device_attribute *_attr, char *buf)
-{
-	struct slowio_attr *attr = (struct slowio_attr *)_attr;
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	return snprintf(buf, PAGE_SIZE, "%lld\n",
-			hba->slowio[attr->optype][attr->systype]);
-}
-
-#define __SLOWIO_ATTR(_name)                                    \
-	__ATTR(slowio_##_name, 0644, slowio_show, slowio_store)
-
-#define SLOWIO_ATTR_RW(_name, _optype)                          \
-static struct slowio_attr ufs_slowio_##_name##_us = {		\
-	.attr = __SLOWIO_ATTR(_name##_us),			\
-	.optype = _optype,					\
-	.systype = UFSHCD_SLOWIO_US,				\
-};								\
-								\
-static struct slowio_attr ufs_slowio_##_name##_cnt = {		\
-	.attr = __SLOWIO_ATTR(_name##_cnt),			\
-	.optype = _optype,					\
-	.systype = UFSHCD_SLOWIO_CNT,				\
-}
-
-SLOWIO_ATTR_RW(read, UFSHCD_SLOWIO_READ);
-SLOWIO_ATTR_RW(write, UFSHCD_SLOWIO_WRITE);
-SLOWIO_ATTR_RW(unmap, UFSHCD_SLOWIO_UNMAP);
-SLOWIO_ATTR_RW(sync, UFSHCD_SLOWIO_SYNC);
-
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -285,14 +224,6 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_spm_target_dev_state.attr,
 	&dev_attr_spm_target_link_state.attr,
 	&dev_attr_auto_hibern8.attr,
-	&ufs_slowio_read_us.attr.attr,
-	&ufs_slowio_read_cnt.attr.attr,
-	&ufs_slowio_write_us.attr.attr,
-	&ufs_slowio_write_cnt.attr.attr,
-	&ufs_slowio_unmap_us.attr.attr,
-	&ufs_slowio_unmap_cnt.attr.attr,
-	&ufs_slowio_sync_us.attr.attr,
-	&ufs_slowio_sync_cnt.attr.attr,
 	NULL
 };
 
