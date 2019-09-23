@@ -25,6 +25,9 @@
 	google,batt_psy_name = "smb5";
 	google,batt_psy_is_bms;
 	qcom,hvdcp-disable;
+	qcom,chg-term-src = <1>;
+	qcom,chg-term-current-ma = <(-190)>;
+	qcom,chg-term-base-current-ma = <(-190)>;
 
 	qcom,chgr@1000 {
 		/delete-property/ interrupts;
@@ -42,6 +45,9 @@
 	qcom,qg-ext-sns;
 	qcom,cl-min-delta-batt-soc = <10>;
 	qcom,cl-wt-enable;
+	qcom,qg-iterm-ma = <570>;
+	qcom,vbatt-cutoff-mv = <3300>;
+	qcom,vbatt-empty-mv = <2800>;
 };
 
 &spmi_bus {
@@ -90,7 +96,7 @@
 		google,fg-psy-name = "bms";
 
 		/* chg-battery-capacity = <0> -> read FULL_DESIGN from FG */
-		google,chg-battery-capacity = <0>;
+		google,chg-battery-capacity = <3800>;
 
 		/* charge table for floral */
 		google,chg-temp-limits = <0 100 200 420 460 480 550>;
