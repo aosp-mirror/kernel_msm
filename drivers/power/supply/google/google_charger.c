@@ -294,13 +294,13 @@ static char *psy_usbc_type_str[] = {
 static int cgh_update_capability(struct power_supply *tcpm_psy, bool full)
 {
 	int ret;
+	/* FIXME, b/139264914, remove temporarily before tcpm porting */
+	/*
 	struct tcpm_port *port = (struct tcpm_port *)
 				 power_supply_get_drvdata(tcpm_psy);
 	u32 pdo[2] = { PDO_FIXED(5000, PD_SNK_MAX_MA, PDO_FIXED_FLAGS),
 		       PDO_FIXED(PD_SNK_MAX_MV, PD_SNK_MAX_MA_9V, 0), };
 
-	/* FIXME, b/139264914, remove temporarily before tcpm porting */
-	/*
 	ret = tcpm_update_sink_capabilities(port, pdo,
 					    (full) ? 1 : 2,
 					    OP_SNK_MW);
@@ -638,8 +638,12 @@ static int pps_get_src_cap(struct pd_pps_data *pps,
 
 static int pps_update_capability(struct power_supply *tcpm_psy, u32 pps_cap)
 {
+	/* FIXME, b/139264914, remove temporarily before tcpm porting */
+	/*
 	struct tcpm_port *port = (struct tcpm_port *)
 					power_supply_get_drvdata(tcpm_psy);
+	*/
+
 	int ret;
 	u32 pdo[3];
 
