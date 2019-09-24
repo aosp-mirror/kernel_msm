@@ -662,6 +662,34 @@ const struct panel_switch_funcs panel_switch_default_funcs = {
 	.perform_switch = panel_switch_cmd_set_transfer,
 };
 
+struct gamma_color {
+	s16 r;
+	s16 g;
+	s16 b;
+};
+
+#define pr_debug_color(fmt, col, ...) \
+	pr_debug(fmt "RGB: (%03X %03X %03X)\n", ##__VA_ARGS__, \
+		 (col)->r, (col)->g, (col)->b)
+
+static void gamma_color_sub(struct gamma_color *result,
+			    const struct gamma_color *c1,
+			    const struct gamma_color *c2)
+{
+	result->r = c1->r - c2->r;
+	result->g = c1->g - c2->g;
+	result->b = c1->b - c2->b;
+}
+
+static void gamma_color_add(struct gamma_color *result,
+			    const struct gamma_color *c1,
+			    const struct gamma_color *c2)
+{
+	result->r = c1->r + c2->r;
+	result->g = c1->g + c2->g;
+	result->b = c1->b + c2->b;
+}
+
 enum s6e3hc2_gamma_state {
 	GAMMA_STATE_UNINITIALIZED,
 	GAMMA_STATE_EMPTY,
@@ -674,10 +702,16 @@ struct s6e3hc2_switch_data {
 
 	enum s6e3hc2_gamma_state gamma_state;
 	struct kthread_work gamma_work;
+	bool skip_swap;
 };
 
 #define S6E3HC2_GAMMA_BAND_LEN 45
 #define S6E3HC2_GAMMA_BAND_G0_OFFSET 39
+
+enum s6e3hc2_gamma_bands_indices {
+	S6E3HC2_GAMMA_BAND_G22 = 7,
+	S6E3HC2_GAMMA_BAND_G13 = 8,
+};
 
 enum s6e3hc2_gamma_flags {
 	/*
@@ -955,6 +989,137 @@ static int s6e3hc2_gamma_alloc_mode_memory(const struct dsi_display_mode *mode)
 	return 0;
 }
 
+/*
+ * Gamma bands are represented in groups of 4 x 10-bit per color (3) component
+ *   4 * 3 color components * 10 bit = 15 bytes
+ *
+ * The MSB (upper) 2 bits of each color are all found packed at the beginning of
+ * the group (2 bits * 12 = 3 bytes) in big endian memory layout.
+ * This is followed by the LSB (lower) 8 bits.
+ */
+static void s6e3hc2_gamma_band_offsets(int band_idx, u8 color, int *lsb_idx,
+				       int *msb_idx, int *msb_shift,
+				       u8 *msb_mask)
+{
+	const int index = ((band_idx % 4) * 3) + color;
+	const int group_offset = 15 * (band_idx / 4);
+
+	/* one byte per color LSB, skipping 3 bytes within group for MSB */
+	*lsb_idx = group_offset + 3 + index;
+
+	/* each byte can hold 4 colors MSB, 2 bits each */
+	*msb_idx = group_offset + (index / 4);
+	*msb_shift = 2 * ((index % 4) + 1);
+	*msb_mask = 0x3 << (BITS_PER_BYTE - *msb_shift);
+}
+
+static u16 s6e3hc2_gamma_get_color(u8 *buf, int band_idx, u8 color)
+{
+	int msb_idx, lsb_idx, msb_shift;
+	u8 msb_mask;
+
+	s6e3hc2_gamma_band_offsets(band_idx, color, &lsb_idx, &msb_idx,
+				   &msb_shift, &msb_mask);
+
+	return ((buf[msb_idx] & msb_mask) << msb_shift) | buf[lsb_idx];
+}
+
+static void s6e3hc2_gamma_set_color(u8 *buf, int band_idx, u8 color, u16 val)
+{
+	int msb_idx, lsb_idx, msb_shift;
+	u8 msb_mask;
+
+	s6e3hc2_gamma_band_offsets(band_idx, color, &lsb_idx, &msb_idx,
+				   &msb_shift, &msb_mask);
+
+	buf[lsb_idx] = val & 0xFF;
+	buf[msb_idx] &= ~msb_mask;
+	buf[msb_idx] |= (val >> msb_shift) & msb_mask;
+}
+
+static void s6e3hc2_gamma_get_rgb(void *buf, int band_idx,
+				  struct gamma_color *color)
+{
+	/* buf should point at the beginning of a 45 byte gamma band */
+	color->r = s6e3hc2_gamma_get_color(buf, band_idx, 0);
+	color->g = s6e3hc2_gamma_get_color(buf, band_idx, 1);
+	color->b = s6e3hc2_gamma_get_color(buf, band_idx, 2);
+}
+
+static int s6e3hc2_gamma_set_rgb(void *buf, int band_idx,
+				 struct gamma_color *color)
+{
+	if (color->r < 0 || color->g < 0 || color->b < 0) {
+		pr_err("Invalid color value %03X %03X %03X for band=%d\n",
+		       color->r, color->g, color->b, band_idx);
+		return -EINVAL;
+	}
+
+	/* buf should point at the beginning of a 45 byte gamma band */
+	s6e3hc2_gamma_set_color(buf, band_idx, 0, color->r);
+	s6e3hc2_gamma_set_color(buf, band_idx, 1, color->g);
+	s6e3hc2_gamma_set_color(buf, band_idx, 2, color->b);
+
+	return 0;
+}
+
+static void *s6e3hc2_gamma_get_offset(struct s6e3hc2_panel_data *data,
+				      u32 table_idx, u32 gamma_idx)
+{
+	const int gamma_offset = gamma_idx * S6E3HC2_GAMMA_BAND_LEN;
+
+	if (unlikely(table_idx >= ARRAY_SIZE(s6e3hc2_gamma_tables))) {
+		return NULL;
+	} else {
+		const int len = s6e3hc2_gamma_tables[table_idx].len;
+
+		if (unlikely(gamma_offset + S6E3HC2_GAMMA_BAND_LEN > len))
+			return NULL;
+	}
+
+	/* skip 1 byte for cmd */
+	return data->gamma_data[table_idx] + gamma_offset + 1;
+}
+
+static void s6e3hc2_gamma_swap_offsets(struct s6e3hc2_panel_data *low,
+				       struct s6e3hc2_panel_data *high)
+{
+	struct gamma_color g13_60hz, g13_90hz, g13_delta;
+	struct gamma_color g22_60hz, g22_90hz, g22_delta;
+	void *buf_60hz, *buf_90hz;
+
+	buf_60hz = s6e3hc2_gamma_get_offset(low, 0, 1);
+	buf_90hz = s6e3hc2_gamma_get_offset(high, 0, 1);
+
+	if (unlikely(!buf_60hz || !buf_90hz))
+		return;
+
+	s6e3hc2_gamma_get_rgb(buf_60hz, S6E3HC2_GAMMA_BAND_G22, &g22_60hz);
+	pr_debug_color("60Hz-22", &g22_60hz);
+
+	s6e3hc2_gamma_get_rgb(buf_60hz, S6E3HC2_GAMMA_BAND_G13, &g13_60hz);
+	pr_debug_color("60Hz-13", &g13_60hz);
+
+	s6e3hc2_gamma_get_rgb(buf_90hz, S6E3HC2_GAMMA_BAND_G22, &g22_90hz);
+	pr_debug_color("90Hz-22", &g22_90hz);
+
+	s6e3hc2_gamma_get_rgb(buf_90hz, S6E3HC2_GAMMA_BAND_G13, &g13_90hz);
+	pr_debug_color("90Hz-13", &g13_90hz);
+
+	gamma_color_sub(&g13_delta, &g13_90hz, &g13_60hz);
+	gamma_color_sub(&g22_delta, &g22_90hz, &g22_60hz);
+
+	/* keep the highest delta at g13 */
+	if (g22_delta.g < g13_delta.g)
+		return;
+
+	gamma_color_add(&g22_90hz, &g22_60hz, &g13_delta);
+	s6e3hc2_gamma_set_rgb(buf_90hz, S6E3HC2_GAMMA_BAND_G22, &g22_90hz);
+
+	gamma_color_add(&g13_90hz, &g13_60hz, &g22_delta);
+	s6e3hc2_gamma_set_rgb(buf_90hz, S6E3HC2_GAMMA_BAND_G13, &g13_90hz);
+}
+
 static int s6e3hc2_gamma_read_mode(struct panel_switch_data *pdata,
 				   const struct dsi_display_mode *mode)
 {
@@ -983,13 +1148,13 @@ static int s6e3hc2_gamma_read_mode(struct panel_switch_data *pdata,
 	return rc;
 }
 
-static int find_gamma_data_for_refresh_rate(struct dsi_panel *panel,
-	u32 refresh_rate, u8 ***gamma_data)
+static int find_switch_data_for_refresh_rate(struct dsi_panel *panel,
+	u32 refresh_rate, struct s6e3hc2_panel_data **data)
 {
 	struct dsi_display_mode *mode;
 	int i;
 
-	if (!gamma_data)
+	if (!data)
 		return -EINVAL;
 
 	for_each_display_mode(i, mode, panel)
@@ -1000,7 +1165,7 @@ static int find_gamma_data_for_refresh_rate(struct dsi_panel *panel,
 			if (unlikely(!priv_data))
 				return -ENODATA;
 
-			*gamma_data = priv_data->gamma_data;
+			*data = priv_data;
 			return 0;
 		}
 
@@ -1022,32 +1187,10 @@ static int find_gamma_data_for_refresh_rate(struct dsi_panel *panel,
  * In other words, when we write gamma data to registers, we do not modify
  * prefix data; we only modify gamma data.
  */
-static int s6e3hc2_gamma_set_prefixes(struct panel_switch_data *pdata)
+static void s6e3hc2_gamma_set_prefixes(u8 **gamma_data_otp,
+				       u8 **gamma_data_flash)
 {
 	int i;
-	int rc = 0;
-	u8 **gamma_data_otp;
-	u8 **gamma_data_flash;
-
-	/*
-	 * For s6e3hc2, 60Hz gamma curves are read from OTP and 90Hz
-	 * gamma curves are read from flash.
-	 */
-	rc = find_gamma_data_for_refresh_rate(pdata->panel, 60,
-		&gamma_data_otp);
-	if (rc) {
-		pr_err("Error setting gamma prefix: no matching OTP mode, err %d\n",
-			rc);
-		return rc;
-	}
-
-	rc = find_gamma_data_for_refresh_rate(pdata->panel, 90,
-		&gamma_data_flash);
-	if (rc) {
-		pr_err("Error setting gamma prefix: no matching flash mode, err %d\n",
-			rc);
-		return rc;
-	}
 
 	for (i = 0; i < S6E3HC2_NUM_GAMMA_TABLES; i++) {
 		const struct s6e3hc2_gamma_info *gamma_info =
@@ -1065,6 +1208,41 @@ static int s6e3hc2_gamma_set_prefixes(struct panel_switch_data *pdata)
 		memcpy(gamma_curve_flash, gamma_curve_otp,
 			gamma_info->prefix_len);
 	}
+}
+static int s6e3hc2_gamma_post_process(struct panel_switch_data *pdata)
+{
+	const struct s6e3hc2_switch_data *sdata;
+	int rc = 0;
+	struct s6e3hc2_panel_data *otp_data;
+	struct s6e3hc2_panel_data *flash_data;
+
+	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
+
+	/*
+	 * For s6e3hc2, 60Hz gamma curves are read from OTP and 90Hz
+	 * gamma curves are read from flash.
+	 */
+	rc = find_switch_data_for_refresh_rate(pdata->panel, 60,
+		&otp_data);
+	if (rc) {
+		pr_err("Error setting gamma prefix: no matching OTP mode, err %d\n",
+			rc);
+		return rc;
+	}
+
+	rc = find_switch_data_for_refresh_rate(pdata->panel, 90,
+		&flash_data);
+	if (rc) {
+		pr_err("Error setting gamma prefix: no matching flash mode, err %d\n",
+			rc);
+		return rc;
+	}
+
+	s6e3hc2_gamma_set_prefixes(otp_data->gamma_data,
+				   flash_data->gamma_data);
+
+	if (!sdata->skip_swap)
+		s6e3hc2_gamma_swap_offsets(otp_data, flash_data);
 
 	return rc;
 }
@@ -1102,7 +1280,7 @@ static int s6e3hc2_gamma_read_tables(struct panel_switch_data *pdata)
 		}
 	}
 
-	rc = s6e3hc2_gamma_set_prefixes(pdata);
+	rc = s6e3hc2_gamma_post_process(pdata);
 	if (rc) {
 		pr_err("Unable to set gamma prefix\n");
 		goto abort;
@@ -1276,6 +1454,8 @@ static struct panel_switch_data *s6e3hc2_switch_create(struct dsi_panel *panel)
 	kthread_init_work(&sdata->gamma_work, s6e3hc2_gamma_work);
 	debugfs_create_file("gamma", 0600, sdata->base.debug_root,
 			    &sdata->base, &s6e3hc2_read_gamma_fops);
+	debugfs_create_bool("skip_swap", 0600, sdata->base.debug_root,
+			    &sdata->skip_swap);
 
 	return &sdata->base;
 }
