@@ -909,6 +909,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 	SOC_DOUBLE_R_TLV("ADC2 Capture Volume", RT5514_DOWNFILTER1_CTRL1,
 		RT5514_DOWNFILTER1_CTRL2, RT5514_AD_GAIN_SFT, 63, 0,
 		adc_vol_tlv),
+	SOC_SINGLE_TLV("ADC3 Capture Volume", RT5514_DOWNFILTER2_CTRL1,
+		RT5514_AD_GAIN_SFT, 63, 0, adc_vol_tlv),
 	/*
 	 * Control "DSP Voice Wake Up"
 	 * 0 => Disable DSP
