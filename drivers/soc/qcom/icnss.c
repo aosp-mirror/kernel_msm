@@ -2453,7 +2453,8 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 
 	icnss_pr_vdbg("Modem-Notify: event %lu\n", code);
 
-	if (code == SUBSYS_RAMDUMP_NOTIFICATION) {
+	if (code == SUBSYS_RAMDUMP_NOTIFICATION &&
+		notif->crashed == CRASH_STATUS_ERR_FATAL) {
 		icnss_remove_msa_permissions(priv);
 		icnss_pr_info("Collecting msa0 segment dump\n");
 		icnss_msa0_ramdump(priv);

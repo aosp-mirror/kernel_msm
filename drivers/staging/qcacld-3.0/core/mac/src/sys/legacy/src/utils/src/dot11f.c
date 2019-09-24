@@ -8840,7 +8840,7 @@ static const tIEDefn IES_AssocRequest[] = {
 	0, DOT11F_EID_POWERCAPS, 0, 0, },
 	{ offsetof(tDot11fAssocRequest, SuppChannels),
 	offsetof(tDot11fIESuppChannels, present), 0, "SuppChannels",
-	0, 4, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
+	0, 2, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
 	0, DOT11F_EID_SUPPCHANNELS, 0, 0, },
 	{ offsetof(tDot11fAssocRequest, HTCaps), offsetof(tDot11fIEHTCaps,
 	present), 0, "HTCaps", 0, 28, 60, SigIeHTCaps, {0, 0, 0, 0, 0},
@@ -10584,7 +10584,7 @@ static const tIEDefn IES_ReAssocRequest[] = {
 	0, DOT11F_EID_POWERCAPS, 0, 0, },
 	{ offsetof(tDot11fReAssocRequest, SuppChannels),
 	offsetof(tDot11fIESuppChannels, present), 0, "SuppChannels",
-	0, 4, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
+	0, 2, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
 	0, DOT11F_EID_SUPPCHANNELS, 0, 0, },
 	{ offsetof(tDot11fReAssocRequest, RSNOpaque),
 	offsetof(tDot11fIERSNOpaque, present), 0, "RSNOpaque",
@@ -10976,7 +10976,7 @@ static const tIEDefn IES_TDLSDisRsp[] = {
 	0, DOT11F_EID_EXTSUPPRATES, 0, 0, },
 	{ offsetof(tDot11fTDLSDisRsp, SuppChannels),
 	offsetof(tDot11fIESuppChannels, present), 0, "SuppChannels",
-	0, 4, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
+	0, 2, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
 	0, DOT11F_EID_SUPPCHANNELS, 0, 0, },
 	{ offsetof(tDot11fTDLSDisRsp, SuppOperatingClasses),
 	offsetof(tDot11fIESuppOperatingClasses, present), 0,
@@ -11186,7 +11186,7 @@ static const tIEDefn IES_TDLSSetupReq[] = {
 	0, DOT11F_EID_EXTSUPPRATES, 0, 0, },
 	{ offsetof(tDot11fTDLSSetupReq, SuppChannels),
 	offsetof(tDot11fIESuppChannels, present), 0, "SuppChannels",
-	0, 4, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
+	0, 2, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
 	0, DOT11F_EID_SUPPCHANNELS, 0, 0, },
 	{ offsetof(tDot11fTDLSSetupReq, RSN), offsetof(tDot11fIERSN, present), 0,
 	"RSN", 0, 4, 132, SigIeRSN, {0, 0, 0, 0, 0}, 0, DOT11F_EID_RSN, 0, 0, },
@@ -11275,7 +11275,7 @@ static const tIEDefn IES_TDLSSetupRsp[] = {
 	0, DOT11F_EID_EXTSUPPRATES, 0, 0, },
 	{ offsetof(tDot11fTDLSSetupRsp, SuppChannels),
 	offsetof(tDot11fIESuppChannels, present), 0, "SuppChannels",
-	0, 4, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
+	0, 2, 98, SigIeSuppChannels, {0, 0, 0, 0, 0},
 	0, DOT11F_EID_SUPPCHANNELS, 0, 0, },
 	{ offsetof(tDot11fTDLSSetupRsp, RSN), offsetof(tDot11fIERSN, present), 0,
 	"RSN", 0, 4, 132, SigIeRSN, {0, 0, 0, 0, 0}, 0, DOT11F_EID_RSN, 0, 0, },
@@ -12019,20 +12019,25 @@ static uint32_t unpack_core(tpAniSirGlobal pCtx,
 		}
 
 		if (pIe) {
-			if ((nBufRemaining < pIe->minSize - pIe->noui - 2U) ||
-			    (len < pIe->minSize - pIe->noui - 2U)) {
-				FRAMES_LOG4(pCtx, FRLOGW, FRFL("The IE %s must "
+			if ((nBufRemaining < pIe->minSize - pIe->noui - 2U)) {
+				FRAMES_LOG3(pCtx, FRLOGW, FRFL("The IE %s must "
 					"be at least %d bytes in size, but "
 					"there are only %d bytes remaining in "
-					"this frame or the IE reports a size "
-					"of %d bytes.\n"),
-					pIe->name, pIe->minSize, nBufRemaining,
-					(len + pIe->noui + 2U));
+					"this frame\n"),
+					pIe->name, pIe->minSize, nBufRemaining);
 				FRAMES_DUMP(pCtx, FRLOG1, pBuf, nBuf);
 				status |= DOT11F_INCOMPLETE_IE;
 				FRAMES_DBG_BREAK();
 				goto MandatoryCheck;
 			} else {
+				if (len < pIe->minSize - pIe->noui - 2U) {
+					FRAMES_LOG3(pCtx, FRLOGW, FRFL("The IE %s must "
+							"be at least %d bytes in size, but "
+							"there are only %d bytes in the IE\n"),
+							pIe->name, pIe->minSize, (len + pIe->noui + 2U));
+					goto skip_ie;
+				}
+
 				if (len > pIe->maxSize - pIe->noui - 2U) {
 				FRAMES_LOG1(pCtx, FRLOGW, FRFL("The IE %s reports "
 					"an unexpectedly large size; it is presumably "
@@ -12046,7 +12051,7 @@ static uint32_t unpack_core(tpAniSirGlobal pCtx,
 						(*(uint16_t *)(pFrm + pIe->countOffset)));
 				if (0 != pIe->arraybound && countOffset >= pIe->arraybound) {
 					status |= DOT11F_DUPLICATE_IE;
-					goto skip_dup_ie;
+					goto skip_ie;
 				}
 				switch (pIe->sig) {
 				case SigIeGTK:
@@ -13488,7 +13493,7 @@ static uint32_t unpack_core(tpAniSirGlobal pCtx,
 			status |= DOT11F_UNKNOWN_IES;
 		}
 
-skip_dup_ie:
+skip_ie:
 		pBufRemaining += len;
 
 		if (len > nBufRemaining) {
