@@ -12,9 +12,12 @@
  */
 
 #include "lito-bramble.dtsi"
-#include "lito-redbull-display-dev.dtsi"
 #include "lito-bramble-touch-dev.dtsi"
 
 &wcd938x_codec {
 	qcom,wcd-rst-gpio-node = <&wcd938x_rst_lpi_gpio>;
+};
+
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_sofef00_sdc_1080p_cmd>;
 };

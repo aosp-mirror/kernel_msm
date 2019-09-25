@@ -12,4 +12,3 @@
  */
 
 #include "lito-redfin.dtsi"
-#include "lito-redbull-display-dev.dtsi"
