@@ -2488,6 +2488,20 @@ static void synaptics_rmi4_sensor_report(struct synaptics_rmi4_data *rmi4_data,
 	return;
 }
 
+/**
+ * Called by the kernel when the touch interrupt occurs.
+ * This represents the top half of the interrupt.
+ *
+ * Set the input event timestamp here to ensure that we have an accurate
+ * estimate of when the touch event actually occurred.
+ */
+static irqreturn_t synaptics_rmi4_hardirq(int irq, void *data)
+{
+	struct synaptics_rmi4_data *rmi4_data = data;
+	input_set_timestamp(rmi4_data->input_dev, ktime_get());
+	return IRQ_WAKE_THREAD;
+}
+
 static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 {
 	struct synaptics_rmi4_data *rmi4_data = data;
@@ -2588,7 +2602,8 @@ static int synaptics_rmi4_irq_enable(struct synaptics_rmi4_data *rmi4_data,
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 		enable_irq(rmi4_data->irq);
 #else
-		retval = request_threaded_irq(rmi4_data->irq, NULL,
+		retval = request_threaded_irq(rmi4_data->irq,
+				synaptics_rmi4_hardirq,
 				synaptics_rmi4_irq, bdata->irq_flags,
 				PLATFORM_DRIVER_NAME, rmi4_data);
 		if (retval < 0) {
@@ -5683,7 +5698,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 					"tp_direct_interrupt");
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
-	retval = request_threaded_irq(rmi4_data->irq, NULL,
+	retval = request_threaded_irq(rmi4_data->irq, synaptics_rmi4_hardirq,
 			synaptics_rmi4_irq,
 			IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 			PLATFORM_DRIVER_NAME,
