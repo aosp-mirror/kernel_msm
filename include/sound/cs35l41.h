@@ -36,6 +36,7 @@ struct cs35l41_platform_data {
 	bool amp_gain_zc;
 	bool ng_enable;
 	bool tuning_has_prefix;
+	bool invert_pcm;
 	int bst_ind;
 	int bst_vctrl;
 	int bst_ipk;
