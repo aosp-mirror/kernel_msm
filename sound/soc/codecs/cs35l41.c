@@ -2312,6 +2312,12 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 				CS35L41_ASP_DOUT_HIZ_MASK,
 				cs35l41->pdata.dout_hiz);
 
+	if (cs35l41->pdata.invert_pcm)
+		regmap_update_bits(cs35l41->regmap, CS35L41_AMP_DIG_VOL_CTRL,
+				CS35L41_AMP_INV_PCM_MASK,
+				cs35l41->pdata.invert_pcm <<
+				CS35L41_AMP_INV_PCM_SHIFT);
+
 	if (cs35l41->pdata.ng_enable) {
 		regmap_update_bits(cs35l41->regmap,
 				CS35L41_MIXER_NGATE_CH1_CFG,
@@ -2587,6 +2593,8 @@ static int cs35l41_handle_of_data(struct device *dev,
 					"cirrus,amp-gain-zc");
 	pdata->tuning_has_prefix = of_property_read_bool(np,
 					"cirrus,tuning-has-prefix");
+	pdata->invert_pcm = of_property_read_bool(np,
+					"cirrus,invert-pcm");
 
 	if (of_property_read_u32(np, "cirrus,temp-warn_threshold", &val) >= 0)
 		pdata->temp_warn_thld = val | CS35L41_VALID_PDATA;
