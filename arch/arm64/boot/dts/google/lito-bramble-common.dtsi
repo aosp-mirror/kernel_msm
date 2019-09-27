@@ -20,3 +20,4 @@
 #include "lito-bramble-ese.dtsi"
 #include "lito-bramble-haptics.dtsi"
 #include "lito-bramble-rainbow.dtsi"
+#include "lito-bramble-display.dtsi"
