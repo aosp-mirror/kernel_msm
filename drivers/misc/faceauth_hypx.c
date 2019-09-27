@@ -811,6 +811,13 @@ int el2_faceauth_cleanup(struct device *dev)
 	ret = desc.ret[0];
 	if (ret)
 		ret = parse_el2_return(ret);
+	/*
+	 * Sleep for 20ms for AB to cleanup to reduce scm_call block.
+	 * 20ms is a measured time that most of the time AB
+	 * will finish wiping in this time. In this case we don't need
+	 * extra waiting in EL2 under most of the cases.
+	 */
+	usleep_range(20000, 21000);
 
 	return ret;
 }

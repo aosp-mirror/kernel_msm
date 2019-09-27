@@ -30,7 +30,6 @@
 #include "airbrush-pmic-ctrl.h"
 #include "airbrush-pmu.h"
 #include "airbrush-regs.h"
-#include "airbrush-spi.h"
 #include "airbrush-thermal.h"
 
 #define CREATE_TRACE_POINTS
@@ -2230,13 +2229,26 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 {
 	int ret;
 
+	mutex_lock(&sc->mfd_lock);
+	if (sc->el2_mode) {
+		dev_warn(sc->dev, "Already in el2 mode\n");
+		mutex_unlock(&sc->mfd_lock);
+		return -EINVAL;
+	}
+
+	mutex_unlock(&sc->mfd_lock);
 	mutex_lock(&sc->state_transitioning_lock);
+
 	sc->return_chip_substate_id = sc->dest_chip_substate_id;
-	sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+
+	if (is_powered_down(sc->return_chip_substate_id))
+		sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+	else
+		sc->dest_chip_substate_id = CHIP_STATE_SUSPEND;
 
 	mutex_unlock(&sc->state_transitioning_lock);
 
-	/* Wait for state change to SECURE_APP state */
+	/* Wait for state change */
 	reinit_completion(&sc->transition_comp);
 	complete_all(&sc->request_state_change_comp);
 	ret = wait_for_completion_timeout(&sc->transition_comp,
@@ -2244,6 +2256,20 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 	if (ret == 0) {
 		dev_warn(sc->dev, "State change timed out\n");
 		return -ETIMEDOUT;
+	}
+
+	if (!is_powered_down(sc->return_chip_substate_id)) {
+		sc->dest_chip_substate_id = CHIP_STATE_SECURE_APP;
+
+		/* Wait for state change */
+		reinit_completion(&sc->transition_comp);
+		complete_all(&sc->request_state_change_comp);
+		ret = wait_for_completion_timeout(&sc->transition_comp,
+				msecs_to_jiffies(AB_MAX_TRANSITION_TIME_MS));
+		if (ret == 0) {
+			dev_warn(sc->dev, "State change timed out\n");
+			return -ETIMEDOUT;
+		}
 	}
 
 	mutex_lock(&sc->state_transitioning_lock);
@@ -2261,17 +2287,13 @@ int ab_sm_enter_el2(struct ab_state_context *sc)
 		return -EINVAL;
 	}
 
-	if (!sc->el2_mode) {
-		mutex_lock(&sc->mfd_lock);
-		ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
-		mutex_unlock(&sc->mfd_lock);
+	mutex_lock(&sc->mfd_lock);
+	ret = sc->mfd_ops->enter_el2(sc->mfd_ops->ctx);
 
-		if (!ret)
-			sc->el2_mode = 1;
-	} else {
-		ret = -EINVAL;
-		dev_warn(sc->dev, "Already in el2 mode\n");
-	}
+	if (!ret)
+		sc->el2_mode = 1;
+
+	mutex_unlock(&sc->mfd_lock);
 	mutex_unlock(&sc->state_transitioning_lock);
 
 	return ret;

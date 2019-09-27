@@ -2300,6 +2300,7 @@ static void abc_pcie_irq_free(struct pci_dev *pdev)
 static struct property_entry ipu_properties[] = {
 	/* filled in with notifier chain for mux'ed low-priority interrupts */
 	PROPERTY_ENTRY_U64("intnc-notifier-chain", 0),
+	{ }
 };
 
 static const struct resource ipu_resources[] = {
@@ -2357,14 +2358,12 @@ static struct mfd_cell abc_pcie_bar0[] = {
 	DEVPROP(DRV_NAME_ABC_PCIE_TPU, tpu_resources, tpu_properties),
 	DEVPROP(DRV_NAME_ABC_PCIE_IPU, ipu_resources, ipu_properties),
 #ifndef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
-	DEV(DRV_NAME_ABC_PCIE_BLK_FSYS, fsys_resources),
 	DEV(DRV_NAME_ABC_PCIE_DMA, pcie_dma_resources),
 #endif
 };
 
 #ifdef CONFIG_MULTIPLE_BAR_MAP_FOR_ABC_SFR
 static struct mfd_cell abc_pcie_bar2[] = {
-	DEV(DRV_NAME_ABC_PCIE_BLK_FSYS, fsys_resources),
 	DEV(DRV_NAME_ABC_PCIE_DMA, pcie_dma_resources)
 };
 #endif

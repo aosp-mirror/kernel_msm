@@ -50,7 +50,7 @@
 static uint32_t (*ddr_otp_rd)(uint32_t);
 
 /* forward declarations */
-static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx);
+static int ddr_config_post_initialization(struct ab_ddr_context *ddr_ctx);
 static void ddr_refresh_control_wkqueue(struct work_struct *);
 
 static const struct ddr_train_save_restore_t *
@@ -842,6 +842,27 @@ static int ddr_block_axi_transactions(struct ab_ddr_context *ddr_ctx)
 	return 0;
 }
 
+static void __ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
+{
+	/* Enabling DDR Power features */
+	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr_set(ddr_ctx, DREX_MEMCONTROL, DPWRDN_TYPE_MSK,
+			DPWRDN_TYPE(FORCED_PRECHARGE_PD) | DPWRDN_EN);
+	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+}
+
+static void __ddr_disable_power_features(struct ab_ddr_context *ddr_ctx)
+{
+	/* Disable DDR Power features */
+	ddr_reg_clr(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
+	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, DPWRDN_EN);
+	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+}
+
 static void ddr_initialize_phy_pre(struct ab_ddr_context *ddr_ctx)
 {
 	ddr_reg_clr(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
@@ -889,11 +910,7 @@ static void ddr_initialize_phy(struct ab_ddr_context *ddr_ctx,
 	ddr_disable_hw_periodic_training(ddr_ctx);
 
 	/* Disable power features till ddr training completes */
-	ddr_reg_clr(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, DPWRDN_EN);
-	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+	__ddr_disable_power_features(ddr_ctx);
 }
 
 static int ddr_initialize_dfi(struct ab_ddr_context *ddr_ctx, int is_init)
@@ -1558,8 +1575,8 @@ static void ddr_axi_enable_after_all_training(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_clr(ddr_ctx, DPHY_MDLL_CON0, CLKM_CG_EN_SW);
 	ddr_reg_clr(ddr_ctx, DPHY2_MDLL_CON0, CLKM_CG_EN_SW);
 
-	/* Enable all power saving features */
-	ddr_enable_power_features(ddr_ctx);
+	/* post init config and enabling the ddr power features */
+	ddr_config_post_initialization(ddr_ctx);
 
 	/* Enable Periodic Write Training */
 	ddr_enable_hw_periodic_training(ddr_ctx);
@@ -1573,8 +1590,18 @@ static void ddr_axi_enable_after_all_training(struct ab_ddr_context *ddr_ctx)
 	ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY, ACTIVATE_AXI_READY);
 }
 
-int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
+int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx, int ref_ctrl)
 {
+	if (ref_ctrl) {
+		/* Disable PB Refresh & Auto Refresh */
+		ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+		ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
+		ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
+
+		/* safe to send a manual all bank refresh command */
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
+	}
+
 	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_SREF_ENTR);
 	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_CKEL);
 
@@ -1588,7 +1615,7 @@ int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 	return DDR_SUCCESS;
 }
 
-int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
+int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx, int ref_ctrl)
 {
 	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_SREF_EXIT);
 
@@ -1596,6 +1623,15 @@ int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx)
 	if (ddr_reg_poll(ddr_ctx, DREX_CHIPSTATUS, p_DREX_CHIPSTATUS_sr_exit)) {
 		pr_err("%s: self-refresh exit failed.\n", __func__);
 		return DDR_FAIL;
+	}
+
+	if (ref_ctrl) {
+		/* safe to send a manual all bank refresh command */
+		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
+
+		/* Enable PB Refresh & Auto Refresh */
+		ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
+		ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 	}
 
 	return DDR_SUCCESS;
@@ -1824,7 +1860,7 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 	 */
 	if (GET_REG_TRN_ADDR()) {
 
-		if (ddr_enter_self_refresh_mode(ddr_ctx))
+		if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE))
 			goto ddr_train_fail;
 
 		/* Copy training results from TRN_ADDR to PHY/DRAM */
@@ -1832,7 +1868,7 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 						AB_DRAM_FREQ_MHZ_1866,
 						AB_RESTORE_FULL);
 
-		if (ddr_exit_self_refresh_mode(ddr_ctx))
+		if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE))
 			goto ddr_train_fail;
 
 		ddr_axi_enable_after_all_training(ddr_ctx);
@@ -1840,7 +1876,8 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 	} else {
 
 		if (!ddr_sr) {
-			if (ddr_enter_self_refresh_mode(ddr_ctx))
+			if (ddr_enter_self_refresh_mode(ddr_ctx,
+							REF_CTRL_DISABLE))
 				goto ddr_train_fail;
 		}
 
@@ -1887,7 +1924,7 @@ static int ab_ddr_train(struct ab_ddr_context *ddr_ctx, uint32_t ddr_sr)
 			}
 		}
 
-		if (ddr_exit_self_refresh_mode(ddr_ctx))
+		if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE))
 			goto ddr_train_fail;
 
 		ddr_axi_enable_after_all_training(ddr_ctx);
@@ -2031,41 +2068,9 @@ static void ddr_sanity_test(void *ctx, unsigned int test_data)
 #endif
 }
 
-/* Caller must hold ddr_ctx->ddr_lock */
-static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
+static int ddr_phy_reinit_train(void *ctx, enum ddr_freq_t freq)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
-
-	if (ddr_ctx->cur_freq == freq)
-		return DDR_SUCCESS;
-
-	ddr_ctx->cur_freq = freq;
-
-	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
-
-	/* Block AXI Before entering self-refresh */
-	if (ddr_block_axi_transactions(ddr_ctx))
-		return -ETIMEDOUT;
-
-	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
-
-	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
-
-	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
-		pr_err("%s: self-refresh entry failed\n", __func__);
-		return DDR_FAIL;
-	}
-
-	/* Configure the PLL for the required frequency */
-	if (ddr_set_pll_freq(ddr_ctx, freq)) {
-		pr_err("%s: pll setting failed\n", __func__);
-		return DDR_FAIL;
-	}
 
 	/* DDR Init flow (reduced) without training */
 	if (ab_ddr_init_freq_change(ddr_ctx)) {
@@ -2116,27 +2121,63 @@ static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
 		}
 	}
 
-	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
-		pr_err("%s: self-refresh exit failed\n", __func__);
-		goto freq_change_fail;
-	}
-
-	ddr_axi_enable_after_all_training(ddr_ctx);
-
 	/* save the training results to local array */
 	if (!ddr_ctx->ddr_train_completed[freq])
 		ddr_train_save_configuration(ddr_ctx);
 
 	ddr_ctx->ddr_train_completed[freq] = 1;
 
-	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
-
 	return DDR_SUCCESS;
 
 freq_change_fail:
-	pr_err("%s: ddr frequency switch failed!!\n", __func__);
+	pr_err("%s: ddr phy reinit and train seqeunce failed!!\n", __func__);
 	return DDR_FAIL;
+}
+
+/* Caller must hold ddr_ctx->ddr_lock */
+static int ddr_set_mif_freq(void *ctx, enum ddr_freq_t freq)
+{
+	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+
+	if (ddr_ctx->cur_freq == freq)
+		return DDR_SUCCESS;
+
+	ddr_ctx->cur_freq = freq;
+
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_WRITE);
+
+	/* Block AXI Before entering self-refresh */
+	if (ddr_block_axi_transactions(ddr_ctx))
+		return -ETIMEDOUT;
+
+	/* Self-refresh entry sequence */
+	if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
+		pr_err("%s: self-refresh entry failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	/* Configure the PLL for the required frequency */
+	if (ddr_set_pll_freq(ddr_ctx, freq)) {
+		pr_err("%s: pll setting failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	if (ddr_phy_reinit_train(ddr_ctx, freq)) {
+		pr_err("%s: phy reinit and train sequence failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	/* Self-refresh exit sequence */
+	if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE)) {
+		pr_err("%s: self-refresh exit failed\n", __func__);
+		return DDR_FAIL;
+	}
+
+	ddr_axi_enable_after_all_training(ddr_ctx);
+
+	ddr_sanity_test(ctx, DDR_BOOT_TEST_READ);
+
+	return DDR_SUCCESS;
 }
 
 /* Perform ddr re-training or train result restore */
@@ -2163,7 +2204,7 @@ int32_t ab_ddr_train_gpio(void *ctx)
 	}
 
 	/* self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE)) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
 		return DDR_FAIL;
 	}
@@ -2269,7 +2310,7 @@ int32_t ab_ddr_train_sysreg(void *ctx)
 	return DDR_SUCCESS;
 }
 
-static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
+static int ddr_config_post_initialization(struct ab_ddr_context *ddr_ctx)
 {
 	struct ddr_refresh_info_t *ref_info = &ddr_ctx->ref_info;
 
@@ -2277,16 +2318,8 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 	if (ddr_block_axi_transactions(ddr_ctx))
 		return -ETIMEDOUT;
 
-	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
-
-	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
-
 	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
+	if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
 		pr_err("self-refresh entry fail during pwr features enable\n");
 		ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY,
 				ACTIVATE_AXI_READY);
@@ -2308,27 +2341,15 @@ static int ddr_enable_power_features(struct ab_ddr_context *ddr_ctx)
 		   TIMINGARE(ref_info->t_refi, ref_info->t_refipb));
 
 	/* Enabling DDR Power features */
-	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, PCL_PD | MDLL_CG_EN | DS_IO_PD);
-	ddr_reg_clr_set(ddr_ctx, DREX_MEMCONTROL, DPWRDN_TYPE_MSK,
-			DPWRDN_TYPE(FORCED_PRECHARGE_PD) | DPWRDN_EN);
-	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+	__ddr_enable_power_features(ddr_ctx);
 
 	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
 		pr_err("self-refresh exit fail during power features enable\n");
 		ddr_reg_set(ddr_ctx, DREX_ACTIVATE_AXI_READY,
 				ACTIVATE_AXI_READY);
 		return -ETIMEDOUT;
 	}
-
-	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
-
-	/* Enable PB Refresh & Auto Refresh */
-	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* Enable Periodic Write Training */
 	ddr_enable_hw_periodic_training(ddr_ctx);
@@ -2469,16 +2490,8 @@ static int32_t __ab_ddr_suspend(void *ctx)
 		if (ddr_block_axi_transactions(ddr_ctx))
 			return -ETIMEDOUT;
 
-		/* Disable PB Refresh & Auto Refresh */
-		ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-		ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
-		ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
-
-		/* safe to send a manual all bank refresh command */
-		ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
-
 		/* Self-refresh entry sequence */
-		if (ddr_enter_self_refresh_mode(ddr_ctx))
+		if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE))
 			goto ddr_suspend_fail;
 
 	} else if ((ddr_ctx->ddr_state == DDR_SLEEP) &&
@@ -2608,6 +2621,7 @@ static int32_t ab_ddr_suspend(void *ctx)
 static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 {
 	struct ab_ddr_context *ddr_ctx = (struct ab_ddr_context *)ctx;
+	enum ddr_freq_t freq = ddr_ctx->cur_freq;
 
 	/* Config MIF_PLL and move the MIF clock to PLL output */
 	if (ddr_set_pll_freq(ddr_ctx, ddr_ctx->cur_freq)) {
@@ -2617,41 +2631,50 @@ static int32_t __ab_ddr_selfrefresh_exit(void *ctx)
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_POWER_DIS);
 	/* Disable power features for DLL locking */
-	ddr_reg_clr(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_clr(ddr_ctx, DPHY_LP_CON0, MDLL_CG_EN);
-	ddr_reg_clr(ddr_ctx, DPHY2_LP_CON0, MDLL_CG_EN);
+	__ddr_disable_power_features(ddr_ctx);
 	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_POWER_DIS);
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
 	if (ddr_enable_dll(ddr_ctx)) {
-		pr_err("%s: enable dll failed.\n", __func__);
-		return DDR_FAIL;
+		ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
+		pr_warn("%s: enable dll failed.\n", __func__);
+
+		/* Incase DLL Lock failure is observed during the self-refresh
+		 * exit, perform the re-train sequence at the current frequency.
+		 * This will include the re-initialization of PHY and the
+		 * re-training sequences.
+		 */
+		ddr_ctx->ddr_train_completed[freq] = 0;
+		if (ddr_phy_reinit_train(ddr_ctx, freq)) {
+			pr_err("%s: phy reint and train failed\n", __func__);
+			return DDR_FAIL;
+		}
+
+		/* Self-refresh exit sequence */
+		if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_DISABLE)) {
+			pr_err("%s: self-refresh exit failed\n", __func__);
+			return DDR_FAIL;
+		}
+
+		ddr_axi_enable_after_all_training(ddr_ctx);
+		return DDR_SUCCESS;
 	}
 	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_ENABLE_DLL);
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_POWER_EN);
 	/* Enable power features after DLL locking */
-	ddr_reg_set(ddr_ctx, DREX_CGCONTROL, PHY_CG_EN);
-	ddr_reg_set(ddr_ctx, DPHY_LP_CON0, MDLL_CG_EN);
-	ddr_reg_set(ddr_ctx, DPHY2_LP_CON0, MDLL_CG_EN);
-	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, CLK_STOP_EN);
+	__ddr_enable_power_features(ddr_ctx);
 	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_POWER_EN);
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_MODE);
 	/* Self-refresh exit sequence */
-	if (ddr_exit_self_refresh_mode(ddr_ctx)) {
+	if (ddr_exit_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
 		pr_err("%s: self-refresh exit failed\n", __func__);
 		return DDR_FAIL;
 	}
 	ab_sm_record_ts(AB_SM_TS_DDR_EXIT_SR_MODE);
 
 	ab_sm_start_ts(AB_SM_TS_DDR_EXIT_SR_FINISH);
-	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
-
-	/* Enable PB Refresh & Auto Refresh */
-	ddr_reg_set(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_set(ddr_ctx, DREX_CONCONTROL, AREF_EN);
 
 	/* Enable Periodic Write Training */
 	ddr_enable_hw_periodic_training(ddr_ctx);
@@ -2703,16 +2726,8 @@ static int32_t __ab_ddr_selfrefresh_enter(void *ctx)
 	if (ddr_block_axi_transactions(ddr_ctx))
 		return -ETIMEDOUT;
 
-	/* Disable PB Refresh & Auto Refresh */
-	ddr_reg_clr(ddr_ctx, DREX_MEMCONTROL, PB_REF_EN);
-	ddr_reg_clr(ddr_ctx, DREX_DFIRSTCONTROL, PB_WA_EN);
-	ddr_reg_clr(ddr_ctx, DREX_CONCONTROL, AREF_EN);
-
-	/* safe to send a manual all bank refresh command */
-	ddr_reg_wr(ddr_ctx, DREX_DIRECTCMD, CMD_TYPE_REFA);
-
 	/* Self-refresh entry sequence */
-	if (ddr_enter_self_refresh_mode(ddr_ctx)) {
+	if (ddr_enter_self_refresh_mode(ddr_ctx, REF_CTRL_ENABLE)) {
 		pr_err("%s: self-refresh entry failed\n", __func__);
 		return DDR_FAIL;
 	}
@@ -3079,8 +3094,8 @@ static int32_t ab_ddr_init(void *ctx)
 		/* Perform the post ddr init sequences which are only applicable
 		 * when ddr init is done by M0 bootrom.
 		 */
-		/* enable the ddr power features */
-		ret = ddr_enable_power_features(ddr_ctx);
+		/* post init config and enabling the ddr power features */
+		ret = ddr_config_post_initialization(ddr_ctx);
 		if (ret) {
 			pr_err("ddr_init: error!! enabling power features failed\n");
 			goto ddr_init_done;

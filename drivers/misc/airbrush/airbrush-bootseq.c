@@ -56,8 +56,6 @@
 #define AB_READY_WAIT_TIMEOUT		msecs_to_jiffies(100)
 #define POLL_USLEEP_MIN			(100)
 
-#define M0_FIRMWARE_PATH "ab.fw"
-
 static int enable_ref_clk(struct device *dev)
 {
 	struct clk *ref_clk = clk_get(dev, "ab_ref");

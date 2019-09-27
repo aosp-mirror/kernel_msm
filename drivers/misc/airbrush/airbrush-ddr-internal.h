@@ -936,6 +936,12 @@ CTRL_UPD_RANGE(0x3))
 #define MR_READ_DELAY_USEC		(100)
 #define DDR_HW_P_W_TRAIN_INTERVAL_MSEC	(32)
 
+/* These macros are used to control refresh control setting during self-refresh
+ * entry and exit.
+ */
+#define REF_CTRL_DISABLE		(0)
+#define REF_CTRL_ENABLE			(1)
+
 /*
  * Polling interval for refresh rate control;
  * may be decreased pending HW data.
@@ -1648,8 +1654,8 @@ void ddrphy_set_read_vref(struct ab_ddr_context *ddr_ctx,
 		uint32_t vref_phy0, uint32_t vref_phy1, enum vref_byte_t byte);
 uint32_t ddr_get_phy_vref(uint32_t idx);
 uint32_t ddr_get_dram_vref(uint32_t idx);
-int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx);
-int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx);
+int ddr_enter_self_refresh_mode(struct ab_ddr_context *ddr_ctx, int ref_ctrl);
+int ddr_exit_self_refresh_mode(struct ab_ddr_context *ddr_ctx, int ref_ctrl);
 
 #ifdef CONFIG_AB_DDR_RW_TEST
 int __ab_ddr_read_write_test(void *ctx, unsigned int read_write);
