@@ -590,14 +590,13 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		goto Enable_cpus;
 	}
 
+#ifdef CONFIG_PM_SLEEP_MONITOR
+	stop_suspend_mon();
+#endif
 	arch_suspend_disable_irqs();
 	BUG_ON(!irqs_disabled());
 
 	system_state = SYSTEM_SUSPEND;
-
-#ifdef CONFIG_PM_SLEEP_MONITOR
-	stop_suspend_mon();
-#endif
 
 	error = syscore_suspend();
 	if (!error) {
@@ -619,12 +618,12 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 
 	system_state = SYSTEM_RUNNING;
 
+	arch_suspend_enable_irqs();
+	BUG_ON(irqs_disabled());
+
 #ifdef CONFIG_PM_SLEEP_MONITOR
 	start_suspend_mon();
 #endif
-
-	arch_suspend_enable_irqs();
-	BUG_ON(irqs_disabled());
 
  Enable_cpus:
 	enable_nonboot_cpus();
