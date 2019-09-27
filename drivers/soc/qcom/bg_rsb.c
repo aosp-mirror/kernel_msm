@@ -547,6 +547,23 @@ static int bgrsb_enable(struct bgrsb_priv *dev, bool enable)
 	req.data = enable ? 0x01 : 0x00;
 
 	rc = bgrsb_tx_msg(dev, &req, BGRSB_MSG_SIZE);
+#if defined(CONFIG_RSB_PARAMETER_ONE)
+	if(enable ==true){
+		req.cmd_id = 0x03;
+		req.data = 0X50;//set report rate 80
+		pr_err("rsb will set report rate 80");
+		rc = bgrsb_tx_msg(dev, &req, 5);
+		if (rc != 0) {
+			pr_err("rsb Failed to send resolution value to BG\n");
+		}
+		req.cmd_id = 0x04;
+		req.data = 13;//default 13
+		rc = bgrsb_tx_msg(dev, &req, 5);
+		if (rc != 0) {
+			pr_err("rsb Failed to send interval value to BG\n");
+		}
+	}
+#endif
 	return rc;
 }
 
