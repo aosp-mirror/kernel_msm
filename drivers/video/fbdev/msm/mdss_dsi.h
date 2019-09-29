@@ -485,6 +485,8 @@ struct mdss_dsi_ctrl_pdata {
 #ifdef CONFIG_LCD_HBM_FEATURE
 	struct dsi_panel_cmds hbm_on_cmds; /* for hbm mode */
 	struct dsi_panel_cmds hbm_off_cmds;
+	struct dsi_panel_cmds hbm1_on_cmds;
+	struct dsi_panel_cmds hbm2_on_cmds;
 #endif
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;

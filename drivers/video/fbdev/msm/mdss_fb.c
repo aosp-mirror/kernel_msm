@@ -940,7 +940,7 @@ static ssize_t mdss_fb_set_hbm(struct device *dev,
 	pr_err("%s:set_hbm_cmd: %d %d\n",__func__, __LINE__, param);
 
 	switch(param){
-	case 0x1: //hbm on
+	case 0x1: //hbm 1000nits
 		if(!enter_hbm_send_cmd){
 			enter_hbm_send_cmd=1;
 			if (ctrl->hbm_on_cmds.cmd_cnt){
@@ -956,10 +956,26 @@ static ssize_t mdss_fb_set_hbm(struct device *dev,
 			enter_hbm_send_cmd=0;
 		}
 		break;
-	case 0x2: //hbm off
-		if (ctrl->hbm_off_cmds.cmd_cnt){
+	case 0x2: //hbm 700nits
+		if(!enter_hbm_send_cmd){
+			enter_hbm_send_cmd=1;
+			if (ctrl->hbm1_on_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl,
+					&ctrl->hbm1_on_cmds,CMD_REQ_COMMIT);
+			}
+			msleep(5000); //5s
+			if (ctrl->hbm_off_cmds.cmd_cnt){
+				mdss_dsi_panel_cmds_send(ctrl,
+					&ctrl->hbm_off_cmds,CMD_REQ_COMMIT);
+			}
+			msleep(55000); //55s
+			enter_hbm_send_cmd=0;
+		}
+		break;
+	case 0x3: //normal 350nits
+		if (ctrl->hbm2_on_cmds.cmd_cnt){
 			mdss_dsi_panel_cmds_send(ctrl,
-				&ctrl->hbm_off_cmds,CMD_REQ_COMMIT);
+				&ctrl->hbm2_on_cmds,CMD_REQ_COMMIT);
 		}
 		break;
 	default:

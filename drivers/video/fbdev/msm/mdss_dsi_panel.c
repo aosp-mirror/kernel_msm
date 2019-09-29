@@ -2935,6 +2935,14 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm_off_cmds,
 		"qcom,mdss-dsi-hbm-off-command",
 		"qcom,mdss-dsi-hbm-off-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm1_on_cmds,
+		"qcom,mdss-dsi-hbm1-on-command",
+		"qcom,mdss-dsi-hbm1-on-command-state");
+
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->hbm2_on_cmds,
+		"qcom,mdss-dsi-hbm2-on-command",
+		"qcom,mdss-dsi-hbm2-on-command-state");
 #endif
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-idle-fps", &tmp);
