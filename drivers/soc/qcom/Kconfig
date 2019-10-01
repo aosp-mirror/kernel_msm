@@ -648,7 +648,7 @@ config MSM_CDSP_LOADER
 	  Say M if you want to enable this module.
 
 config QTI_SYSTEM_PM
-	bool
+	tristate
 
 config QCOM_SMCINVOKE
 	tristate "Secure QSEE Support"
