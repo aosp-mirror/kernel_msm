@@ -734,6 +734,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->align_count = 0;
 	charger->alignment = -1;
 	charger->alignment_capable = false;
+	charger->mfg = 0;
 	cancel_delayed_work(&charger->align_work);
 
 	p9221_icl_ramp_reset(charger);
@@ -1038,6 +1039,23 @@ static int p9221_get_property(struct power_supply *psy,
 		ret = 0;
 		break;
 	case POWER_SUPPLY_PROP_ALIGNMENT:
+		/* recheck mfg */
+		if (charger->mfg == 0) {
+			ret = p9221_reg_read_16(charger,
+						P9221R5_EPP_TX_MFG_CODE_REG,
+						&charger->mfg);
+			if (ret < 0) {
+				dev_err(&charger->client->dev,
+					"cannot read MFG_CODE (%d)\n", ret);
+			}
+
+			if (charger->mfg == WLC_MFG_GOOGLE) {
+				charger->alignment_capable = true;
+				logbuffer_log(charger->log,
+					      "align: google wlc mfg correct");
+			}
+		}
+
 		if (charger->alignment_capable) {
 			charger->alignment_time =
 					ktime_to_ms(ktime_get_boottime());
@@ -1046,7 +1064,8 @@ static int p9221_get_property(struct power_supply *psy,
 				p9221_init_align(charger);
 		}
 
-		if (charger->align != POWER_SUPPLY_ALIGN_CENTERED)
+		if ((charger->align != POWER_SUPPLY_ALIGN_CENTERED) ||
+		    (charger->alignment == -1))
 			val->strval = align_status_str[charger->align];
 		else
 			val->strval = p9221_get_alignment_str(charger);
@@ -1353,7 +1372,6 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 {
 	int ret;
 	u8 cid = 5;
-	u16 mfg;
 
 	dev_info(&charger->client->dev, "Set online\n");
 
@@ -1387,20 +1405,28 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	if (!p9221_is_epp(charger))
 		return;
 
-	ret = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG, &mfg);
-	if (ret < 0) {
-		dev_err(&charger->client->dev,
-			"cannot read MFG_CODE (%d)\n", ret);
-		return;
-	}
+	/*
+	 *  NOTE: mfg may be zero due to race condition during bringup. will
+	 *  check once more if mfg == 0.
+	 */
+	if (charger->mfg == 0) {
+		ret = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG,
+					&charger->mfg);
+		if (ret < 0) {
+			dev_err(&charger->client->dev,
+				"cannot read MFG_CODE (%d)\n", ret);
+			return;
+		}
 
-	if (mfg != WLC_MFG_GOOGLE) {
-		logbuffer_log(charger->log,
-			      "align: not google wlc mfg: 0x%x", mfg);
-		return;
-	}
+		if (charger->mfg != WLC_MFG_GOOGLE) {
+			logbuffer_log(charger->log,
+				      "align: not google wlc mfg: 0x%x",
+				      charger->mfg);
+			return;
+		}
 
-	charger->alignment_capable = true;
+		charger->alignment_capable = true;
+	}
 }
 
 static int p9221_has_dc_in(struct p9221_charger_data *charger)
