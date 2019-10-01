@@ -184,3 +184,4 @@ u64 sched_get_cpu_last_busy_time(int cpu)
 {
 	return atomic64_read(&per_cpu(last_busy_time, cpu));
 }
+EXPORT_SYMBOL_GPL(sched_get_cpu_last_busy_time);
