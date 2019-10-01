@@ -6798,7 +6798,7 @@ static inline int ufshcd_get_bkops_status(struct ufs_hba *hba, u32 *status)
  * to know whether auto bkops is enabled or disabled after this function
  * returns control to it.
  */
-static int ufshcd_bkops_ctrl(struct ufs_hba *hba,
+int ufshcd_bkops_ctrl(struct ufs_hba *hba,
 			     enum bkops_status status)
 {
 	int err;
@@ -10691,7 +10691,7 @@ static void ufshcd_mgc_hibern8_work(struct work_struct *work)
 	struct ufs_hba *hba = container_of(work, struct ufs_hba,
 						manual_gc.hibern8_work);
 	pm_runtime_mark_last_busy(hba->dev);
-	pm_runtime_put_noidle(hba->dev);
+	/* bkops will be disabled when power down */
 }
 
 static void ufshcd_init_manual_gc(struct ufs_hba *hba)
@@ -10705,6 +10705,7 @@ static void ufshcd_init_manual_gc(struct ufs_hba *hba)
 	}
 
 	mgc->state = MANUAL_GC_ENABLE;
+	mgc->hagc_support = true;
 	mgc->delay_ms = UFSHCD_MANUAL_GC_HOLD_HIBERN8;
 
 	hrtimer_init(&mgc->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
