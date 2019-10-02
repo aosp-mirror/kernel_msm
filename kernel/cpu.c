@@ -2324,6 +2324,9 @@ EXPORT_SYMBOL(__cpu_active_mask);
 struct cpumask __cpu_isolated_mask __read_mostly;
 EXPORT_SYMBOL(__cpu_isolated_mask);
 
+unsigned int __cpu_psci_id[NR_CPUS];
+EXPORT_SYMBOL(__cpu_psci_id);
+
 void init_cpu_present(const struct cpumask *src)
 {
 	cpumask_copy(&__cpu_present_mask, src);
@@ -2360,6 +2363,7 @@ void __init boot_cpu_init(void)
 #ifdef CONFIG_SMP
 	__boot_cpu_id = cpu;
 #endif
+	set_cpu_psci_function_id(cpu, 0);
 }
 
 /*

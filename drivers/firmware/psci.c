@@ -25,6 +25,7 @@
 #include <linux/reboot.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
+#include <linux/smp.h>
 
 #include <uapi/linux/psci.h>
 
@@ -160,9 +161,12 @@ static int psci_cpu_suspend(u32 state, unsigned long entry_point)
 {
 	int err;
 	u32 fn;
+	unsigned int cpu = smp_processor_id();
 
 	fn = psci_function_id[PSCI_FN_CPU_SUSPEND];
+	set_cpu_psci_function_id(cpu, fn);
 	err = invoke_psci_fn(fn, state, entry_point, 0);
+	set_cpu_psci_function_id(cpu, 0);
 	return psci_to_linux_errno(err);
 }
 
@@ -170,9 +174,12 @@ static int psci_cpu_off(u32 state)
 {
 	int err;
 	u32 fn;
+	unsigned int cpu = smp_processor_id();
 
 	fn = psci_function_id[PSCI_FN_CPU_OFF];
+	set_cpu_psci_function_id(cpu, fn);
 	err = invoke_psci_fn(fn, state, 0, 0);
+	set_cpu_psci_function_id(cpu, 0);
 	return psci_to_linux_errno(err);
 }
 
@@ -180,9 +187,12 @@ static int psci_cpu_on(unsigned long cpuid, unsigned long entry_point)
 {
 	int err;
 	u32 fn;
+	unsigned int cpu = smp_processor_id();
 
 	fn = psci_function_id[PSCI_FN_CPU_ON];
+	set_cpu_psci_function_id(cpu, fn);
 	err = invoke_psci_fn(fn, cpuid, entry_point, 0);
+	set_cpu_psci_function_id(cpu, 0);
 	return psci_to_linux_errno(err);
 }
 
@@ -190,9 +200,12 @@ static int psci_migrate(unsigned long cpuid)
 {
 	int err;
 	u32 fn;
+	unsigned int cpu = smp_processor_id();
 
 	fn = psci_function_id[PSCI_FN_MIGRATE];
+	set_cpu_psci_function_id(cpu, fn);
 	err = invoke_psci_fn(fn, cpuid, 0, 0);
+	set_cpu_psci_function_id(cpu, 0);
 	return psci_to_linux_errno(err);
 }
 
@@ -416,6 +429,7 @@ static int psci_suspend_finisher(unsigned long state_id)
 int psci_cpu_suspend_enter(unsigned long state_id)
 {
 	int ret;
+	unsigned int cpu = smp_processor_id();
 
 	/*
 	 * idle state index 0 corresponds to wfi, should never be called
@@ -429,6 +443,7 @@ int psci_cpu_suspend_enter(unsigned long state_id)
 	else
 		ret = cpu_suspend(state_id, psci_suspend_finisher);
 
+	set_cpu_psci_function_id(cpu, 0);
 	return ret;
 }
 
