@@ -29,6 +29,14 @@ typedef struct __call_single_data call_single_data_t
 /* total number of cpus in this system (may exceed NR_CPUS) */
 extern unsigned int total_cpus;
 
+extern unsigned int __cpu_psci_id[NR_CPUS];
+
+static inline void
+set_cpu_psci_function_id(unsigned int cpu, unsigned int psci_id)
+{
+	__cpu_psci_id[cpu] = psci_id;
+}
+
 int smp_call_function_single(int cpuid, smp_call_func_t func, void *info,
 			     int wait);
 
