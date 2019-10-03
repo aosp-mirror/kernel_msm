@@ -5670,6 +5670,12 @@ static int fg_parse_dt(struct fg_chip *chip)
 			pr_err("Error reading fg-jeita-soft-cold-fv-cc, use default value\n");
 	}
 
+	rc = of_property_read_u32(node, "qcom,twm-soc-reserve", &temp);
+	if (rc < 0)
+		chip->twm_soc_value = DEFAULT_TWM_SOC_VALUE;
+	else
+		chip->twm_soc_value = temp;
+
 	rc = of_property_read_u32(node, "qcom,fg-batt-temp-delta", &temp);
 	if (rc < 0)
 		chip->dt.batt_temp_delta = -EINVAL;
@@ -6050,7 +6056,6 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	chip->twm_soc_value = DEFAULT_TWM_SOC_VALUE;
 	chip->fg_can_restart_flag = 1;
 
 	rc = fg_get_battery_voltage(chip, &volt_uv);
