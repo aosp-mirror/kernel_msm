@@ -18,6 +18,8 @@
 #include "qcom-base/sdmmagpie-sde-display.dtsi"
 #include "qcom-base/sdmmagpie-camera-sensor-idp.dtsi"
 
+#include "sm7150-sunfish-citadel.dtsi"
+
 &soc {
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
