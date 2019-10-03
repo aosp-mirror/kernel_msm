@@ -33,8 +33,8 @@
 		ti,reset-gpio = <&pm7250b_gpios 1 0>;
 		ti,smart-loop = <1>; /* 0-closeloop, 1-openloop */
 		ti,actuator = <1>; /* 0-ERM, 1-LRA */
-		ti,rated-voltage = <75>;
-		ti,odclamp-voltage = <106>; /* 2.1 Vrms */
+		ti,rated-voltage = <109>;
+		ti,odclamp-voltage = <161>; /* 3.2 Vpeak */
 		ti,lra-frequency = <172>; /* f0 = 172Hz */
 		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
 		ti,bemf-factor = <150>;
