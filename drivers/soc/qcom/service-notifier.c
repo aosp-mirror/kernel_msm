@@ -719,3 +719,5 @@ int service_notif_unregister_notifier(void *service_notif_handle,
 				&service_notif->service_notif_rcvr_list, nb);
 }
 EXPORT_SYMBOL(service_notif_unregister_notifier);
+
+MODULE_LICENSE("GPL v2");
