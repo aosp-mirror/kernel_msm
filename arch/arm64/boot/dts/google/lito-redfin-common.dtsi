@@ -18,3 +18,4 @@
 #include "lito-redfin-thermal.dtsi"
 #include "lito-redfin-usb.dtsi"
 #include "lito-redfin-rainbow.dtsi"
+#include "lito-redfin-display.dtsi"
