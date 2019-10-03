@@ -369,8 +369,6 @@ void ext_fg_init(struct fg_chip *chip)
 
 	INIT_DELAYED_WORK(&chip->fg_restart_work, fg_restart_work);
 
-	chip->twm_soc_reserve = DEFAULT_TWM_SOC_RESERVER;
-	chip->full_soc_scale = DEFAULT_FULL_SOC_SCALE;
 	chip->dt.jeita_dynamic_model = MODEL_DISABLE;
 }
 
