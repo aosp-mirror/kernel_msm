@@ -4,6 +4,7 @@
  */
 #include <linux/compat.h>
 #include <linux/fs.h>
+#include <linux/module.h>
 #include <linux/uaccess.h>
 #include <linux/msm_ion.h>
 
@@ -656,3 +657,5 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 	}
 }
 EXPORT_SYMBOL(compat_fastrpc_device_ioctl);
+
+MODULE_LICENSE("GPL v2");
