@@ -768,6 +768,7 @@ config LEDS_QTI_TRI_LED
 config LEDS_QPNP_FLASH_V2
         tristate "Support for QPNP V2 Flash LEDs"
         depends on LEDS_CLASS && MFD_SPMI_PMIC
+	depends on QPNP_REVID
 	select LEDS_TRIGGERS
         help
           This driver supports the flash V2 LED functionality of Qualcomm
