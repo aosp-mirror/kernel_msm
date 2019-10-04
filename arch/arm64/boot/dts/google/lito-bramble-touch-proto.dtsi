@@ -62,6 +62,7 @@
 		st,irq-gpio = <&tlmm 9 0>;
 		st,reset-gpio = <&tlmm 8 0>;
 		st,switch_gpio = <&tlmm 35 0>;		// Low: AP, High: SLPI
+		st,max-coords = <1079 2339>;
 		//st,disp-rate-gpio = <&tlmm 128 0>;
 //		st,regulator_dvdd = "vdd";
 //		st,regulator_avdd = "avdd";
