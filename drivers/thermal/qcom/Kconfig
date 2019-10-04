@@ -14,6 +14,7 @@ config QTI_ADC_TM
 	tristate "Qualcomm Technologies Inc. Thermal Monitor ADC Driver"
 	depends on SPMI && THERMAL
 	depends on QCOM_SPMI_ADC5
+	depends on QPNP_REVID
 	help
 	  This enables the thermal Sysfs driver for the ADC thermal monitoring
 	  device. It shows up in Sysfs as a thermal zone with multiple trip points.

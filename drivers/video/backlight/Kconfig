@@ -315,6 +315,7 @@ config BACKLIGHT_PM8941_WLED
 
 config BACKLIGHT_QCOM_SPMI_WLED
 	tristate "Qualcomm Technologies, Inc. WLED Driver"
+	depends on QPNP_REVID
 	select REGMAP
 	help
 	  If you have the Qualcomm Technologies, Inc. WLED used for backlight
