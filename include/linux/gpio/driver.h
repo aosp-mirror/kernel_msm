@@ -140,6 +140,9 @@ struct gpio_chip {
 
 	void			(*dbg_show)(struct seq_file *s,
 						struct gpio_chip *chip);
+#ifdef CONFIG_DEBUG_FS
+	int			(*gpio_dump)(struct seq_file *s);
+#endif
 	int			base;
 	u16			ngpio;
 	const char		*const *names;
