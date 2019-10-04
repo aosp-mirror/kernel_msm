@@ -744,10 +744,10 @@ config SND_SOC_RT298
 	depends on I2C
 
 config SND_SOC_RT5514
-	tristate
+	tristate "Realtek RT5514 CODEC"
 
 config SND_SOC_RT5514_SPI
-	tristate
+	tristate "Realtek RT5514 CODEC SPI"
 
 config SND_SOC_RT5616
 	tristate "Realtek RT5616 CODEC"

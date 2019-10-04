@@ -34,7 +34,9 @@
 #define RT5514_CLK_CTRL1			0x2104
 #define RT5514_CLK_CTRL2			0x2108
 #define RT5514_PLL3_CALIB_CTRL1			0x2110
+#define RT5514_PLL3_CALIB_CTRL4			0x2120
 #define RT5514_PLL3_CALIB_CTRL5			0x2124
+#define RT5514_PLL3_CALIB_CTRL6			0x2128
 #define RT5514_DELAY_BUF_CTRL1			0x2140
 #define RT5514_DELAY_BUF_CTRL3			0x2148
 #define RT5514_ASRC_IN_CTRL1			0x2180
@@ -165,18 +167,6 @@
 #define RT5514_I2S_DL_24			(0x2 << 0)
 #define RT5514_I2S_DL_8				(0x3 << 0)
 
-/* RT5514_I2S_CTRL2 (0x2014) */
-#define RT5514_TDM_DOCKING_MODE			(0x1 << 31)
-#define RT5514_TDM_DOCKING_MODE_SFT		31
-#define RT5514_TDM_DOCKING_VALID_CH_MASK	(0x1 << 29)
-#define RT5514_TDM_DOCKING_VALID_CH_SFT		29
-#define RT5514_TDM_DOCKING_VALID_CH2		(0x0 << 29)
-#define RT5514_TDM_DOCKING_VALID_CH4		(0x1 << 29)
-#define RT5514_TDM_DOCKING_START_MASK		(0x1 << 28)
-#define RT5514_TDM_DOCKING_START_SFT		28
-#define RT5514_TDM_DOCKING_START_SLOT0		(0x0 << 28)
-#define RT5514_TDM_DOCKING_START_SLOT4		(0x1 << 28)
-
 /* RT5514_DIG_SOURCE_CTRL (0x20a4) */
 #define RT5514_AD1_DMIC_INPUT_SEL		(0x1 << 1)
 #define RT5514_AD1_DMIC_INPUT_SEL_SFT		1
@@ -255,6 +245,10 @@
 
 #define RT5514_FIRMWARE1	"rt5514_dsp_fw1.bin"
 #define RT5514_FIRMWARE2	"rt5514_dsp_fw2.bin"
+#define RT5514_FIRMWARE3	"rt5514_dsp_fw3.bin"
+#define RT5514_FIRMWARE4	"rt5514_dsp_fw4.bin"
+
+#define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
 
 /* System Clock Source */
 enum {
@@ -268,6 +262,28 @@ enum {
 	RT5514_PLL1_S_BCLK,
 };
 
+enum {
+	RT5514_DSP_WOV_BOTH,
+	RT5514_DSP_WOV_HOTWORD,
+	RT5514_DSP_WOV_MUSDET,
+	RT5514_DSP_WOV_NON,
+};
+
+enum {
+	RT5514_DSP_FUNC_WOV,
+	RT5514_DSP_FUNC_WOV_SENSOR,
+	RT5514_DSP_FUNC_WOV_I2S,
+	RT5514_DSP_FUNC_WOV_I2S_SENSOR,
+	RT5514_DSP_FUNC_SUSPEND,
+	RT5514_DSP_FUNC_I2S,
+};
+
+typedef struct _payload_st {
+	unsigned int size;
+	unsigned int status;
+	char data[AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE];
+} RT5514_PAYLOAD;
+
 struct rt5514_priv {
 	struct rt5514_platform_data pdata;
 	struct snd_soc_codec *codec;
@@ -280,7 +296,15 @@ struct rt5514_priv {
 	int pll_src;
 	int pll_in;
 	int pll_out;
-	int dsp_enabled;
+	int dsp_enabled, dsp_enabled_last, dsp_test;
+	int dsp_adc_enabled, dsp_buffer_channel;
+	u8 *hotword_model_buf, *musdet_model_buf;
+	unsigned int hotword_model_len, musdet_model_len;
+	RT5514_PAYLOAD payload;
 };
+
+int rt5514_set_gpio(int gpio, bool output);
+void rt5514_watchdog_handler(void);
+extern struct regmap *rt5514_g_i2c_regmap;
 
 #endif /* __RT5514_H__ */
