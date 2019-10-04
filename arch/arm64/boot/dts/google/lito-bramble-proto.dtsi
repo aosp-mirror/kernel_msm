@@ -13,7 +13,3 @@
 
 #include "lito-bramble.dtsi"
 #include "lito-bramble-touch-proto.dtsi"
-
-&wcd938x_codec {
-	qcom,wcd-rst-gpio-node = <&wcd938x_rst_lpi_gpio>;
-};
