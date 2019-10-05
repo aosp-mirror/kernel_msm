@@ -1,0 +1,24 @@
+#
+# Nxp SPi protocol (SPI) devices
+#
+
+config NXP_P73_DEVICES
+	tristate "Nxp P73 secure element protocol driver (SPI) devices"
+	depends on SPI
+	default n
+	---help---
+	  You'll have to say Y if your computer contains an SPI device that
+	  you want to use under Linux.
+
+	  You can say N here if you don't have any SPI connected to your computer.
+
+config NXP_P73_DEVICES_DEBUG
+	tristate "Nxp P73 secure element protocol driver (SPI) DEBUG"
+	depends on NXP_P73_DEVICES
+	default n
+	---help---
+	  You'll have to say Y if your want to debug Nxp P73 SPI device that
+	  you want to use under Linux.
+
+	  You can say N here if you don't have any SPI connected to your computer.
+
