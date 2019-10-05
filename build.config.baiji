@@ -47,5 +47,6 @@ System.map
 IN_KERNEL_MODULES=1
 EXT_MODULES="
 private/msm-xiaomi-cw-modules/wlan
+private/msm-xiaomi-cw-extra/drivers/tp
 "
 EXTRA_CMDS="tar_modules"
