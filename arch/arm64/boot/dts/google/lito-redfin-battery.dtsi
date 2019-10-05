@@ -27,7 +27,6 @@
 	qcom,hvdcp-disable;
 	qcom,chg-term-src = <1>;
 	qcom,chg-term-current-ma = <(-190)>;
-	qcom,chg-term-base-current-ma = <(-190)>;
 
 	qcom,chgr@1000 {
 		/delete-property/ interrupts;
@@ -48,6 +47,8 @@
 	qcom,qg-iterm-ma = <570>;
 	qcom,vbatt-cutoff-mv = <3300>;
 	qcom,vbatt-empty-mv = <2800>;
+	qcom,fvss-enable;
+	qcom,fvss-vbatt-mv = <3450>;
 };
 
 &spmi_bus {
