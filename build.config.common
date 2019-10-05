@@ -27,6 +27,7 @@ System.map
 "
 EXT_MODULES="
 private/msm-google-modules/wlan/qcacld-3.0
+private/msm-google-modules/touch/fts
 "
 IN_KERNEL_MODULES=1
 STOP_SHIP_TRACEPRINTK=1
