@@ -174,6 +174,10 @@ enum haptics_custom_effect_param {
 
 #define REG_HAP_SEC_ACCESS		0xD0
 
+#define HAP_LONG_WAVE_PERIODS_DEFAULT   2
+#define HAP_LONG_WAVE_PERIODS_MAX       3
+
+
 struct qti_hap_effect {
 	int			id;
 	u8			*pattern;
@@ -204,8 +208,10 @@ struct qti_hap_config {
 	u16			vmax_mv;
 	u16			ilim_ma;
 	u16			play_rate_us;
+	u16			lra_long_wave_add_vmax_mv;
 	bool			lra_allow_variable_play_rate;
 	bool			use_ext_wf_src;
+	bool			lra_auto_res_disable;
 };
 
 struct qti_hap_chip {
@@ -221,6 +227,7 @@ struct qti_hap_chip {
 	struct regulator		*vdd_supply;
 	struct hrtimer			stop_timer;
 	struct hrtimer			hap_disable_timer;
+	struct hrtimer			change_vmax;
 	struct dentry			*hap_debugfs;
 	spinlock_t			bus_lock;
 	ktime_t				last_sc_time;
@@ -229,9 +236,12 @@ struct qti_hap_chip {
 	int				effects_count;
 	int				sc_det_count;
 	u16				reg_base;
+	u16				long_wave_periods;
 	bool				perm_disable;
 	bool				play_irq_en;
 	bool				vdd_enabled;
+	bool				long_wave_append_support;
+	bool				allow_short_wave_overdrive;
 };
 
 static int wf_repeat[8] = {1, 2, 4, 8, 16, 32, 64, 128};
@@ -634,13 +644,17 @@ static int qti_haptics_load_constant_waveform(struct qti_hap_chip *chip)
 	 * playing time accuracy.
 	 */
 	if (play->length_us >= VMAX_MIN_PLAY_TIME_US) {
+		if (play->length_us >= VMAX_MIN_PLAY_TIME_US && chip->long_wave_append_support) {
+			play->vmax_mv += config->lra_long_wave_add_vmax_mv;
+		}
 		rc = qti_haptics_config_vmax(chip, play->vmax_mv);
 		if (rc < 0)
 			return rc;
 
 		/* Enable Auto-Resonance when VMAX wf-src is selected */
 		if (config->act_type == ACT_LRA) {
-			rc = qti_haptics_lra_auto_res_enable(chip, true);
+			rc = qti_haptics_lra_auto_res_enable(chip, 
+				!config->lra_auto_res_disable);
 			if (rc < 0)
 				return rc;
 		}
@@ -889,6 +903,8 @@ static int qti_haptics_upload_effect(struct input_dev *dev,
 		tmp = level * chip->predefined[i].vmax_mv;
 		play->vmax_mv = tmp / 0x7fff;
 
+		if(chip->allow_short_wave_overdrive)
+			play->vmax_mv = chip->predefined[i].vmax_mv;
 		dev_dbg(chip->dev, "upload effect %d, vmax_mv=%d\n",
 				chip->predefined[i].id, play->vmax_mv);
 		rc = qti_haptics_load_predefined_effect(chip, i);
@@ -964,6 +980,12 @@ static int qti_haptics_playback(struct input_dev *dev, int effect_id, int val)
 			if (chip->play_irq_en) {
 				disable_irq_nosync(chip->play_irq);
 				chip->play_irq_en = false;
+			}
+			if (play->length_us >= VMAX_MIN_PLAY_TIME_US && chip->long_wave_append_support) {
+				secs = (chip->long_wave_periods) * chip->config.play_rate_us / USEC_PER_SEC;
+				nsecs =  ((chip->long_wave_periods)*(chip->config.play_rate_us) % USEC_PER_SEC) * NSEC_PER_USEC;
+				hrtimer_start(&chip->change_vmax, ktime_set(secs, nsecs),
+						HRTIMER_MODE_REL);
 			}
 			secs = play->length_us / USEC_PER_SEC;
 			nsecs = (play->length_us % USEC_PER_SEC) *
@@ -1163,6 +1185,19 @@ static enum hrtimer_restart qti_hap_disable_timer(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static enum hrtimer_restart qti_hap_change_vmax(struct hrtimer *timer)
+{
+	struct qti_hap_chip *chip = container_of(timer, struct qti_hap_chip,
+			change_vmax);
+	int rc = 0;
+	struct qti_hap_play_info *play = &chip->play;
+	struct qti_hap_config *config = &chip->config;
+	play->vmax_mv = config->vmax_mv ;
+	rc = qti_haptics_config_vmax(chip, chip->play.vmax_mv);
+	dev_err(chip->dev, "change vmax = %d rc = %d change addr== %p\n", play->vmax_mv, rc, &(play->vmax_mv));
+	return HRTIMER_NORESTART;
+}
+
 static void verify_brake_setting(struct qti_hap_effect *effect)
 {
 	int i = effect->brake_pattern_length - 1;
@@ -1182,6 +1217,7 @@ static void verify_brake_setting(struct qti_hap_effect *effect)
 
 	effect->brake_en = (val != 0);
 }
+
 
 static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 {
@@ -1301,6 +1337,28 @@ static int qti_haptics_parse_dt(struct qti_hap_chip *chip)
 						str);
 				return -EINVAL;
 			}
+		}
+
+		config->lra_auto_res_disable =of_property_read_bool(node,
+				"qcom,lra-auto-resonance-disable");
+
+		rc = of_property_read_u32(node, "qcom,lra-long-wave-add-vmax-mv", &tmp);
+		if (!rc)
+			config->lra_long_wave_add_vmax_mv = tmp;
+
+		chip->allow_short_wave_overdrive = of_property_read_bool(
+				node, "qcom,lra-allow-short-wave-overdrive");
+
+		chip->long_wave_append_support = of_property_read_bool(
+				node, "qcom,lra-long-wave-append-support");
+
+		if(chip->long_wave_append_support){
+			chip->long_wave_periods = HAP_LONG_WAVE_PERIODS_DEFAULT;
+			rc = of_property_read_u32(node, "qcom,lra-long-wave-periods", &tmp);
+			if (!rc)
+				chip->long_wave_periods = (tmp > HAP_LONG_WAVE_PERIODS_MAX) ?
+					HAP_LONG_WAVE_PERIODS_MAX : tmp;
+
 		}
 	}
 
@@ -1903,6 +1961,8 @@ static int qti_haptics_probe(struct platform_device *pdev)
 	hrtimer_init(&chip->hap_disable_timer, CLOCK_MONOTONIC,
 						HRTIMER_MODE_REL);
 	chip->hap_disable_timer.function = qti_hap_disable_timer;
+	hrtimer_init(&chip->change_vmax, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	chip->change_vmax.function = qti_hap_change_vmax;
 	input_dev->name = "qti-haptics";
 	input_set_drvdata(input_dev, chip);
 	chip->input_dev = input_dev;
