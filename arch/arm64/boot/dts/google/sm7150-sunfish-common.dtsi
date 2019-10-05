@@ -22,13 +22,13 @@
 #include "sm7150-sunfish-citadel.dtsi"
 #include "sm7150-sunfish-haptics.dtsi"
 #include "sm7150-sunfish-pac193x.dtsi"
-#include "sm7150-sunfish-touch-dev.dtsi"
 #include "sm7150-sunfish-thermal.dtsi"
 #include "sm7150-sunfish-nfc.dtsi"
 #include "sm7150-sunfish-ese.dtsi"
 #include "sm7150-sunfish-memory.dtsi"
-
 #include "sm7150-sunfish-fingerprint.dtsi"
+#include "sm7150-sunfish-touch-common.dtsi"
+#include "sm7150-sunfish-touch-proto.dtsi"
 
 &tlmm {
 	goog,ignored-gpios = <59 60 61 62>;
