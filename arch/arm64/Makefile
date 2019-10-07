@@ -49,11 +49,6 @@ $(warning Detected assembler with broken .inst; disassembly will be unreliable)
   endif
 endif
 
-ifeq ($(CONFIG_GENERIC_COMPAT_VDSO), y)
-  export CONFIG_COMPAT_VDSO := y
-  compat_vdso := -DCONFIG_COMPAT_VDSO=1
-endif
-
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mno-implicit-float
 else
