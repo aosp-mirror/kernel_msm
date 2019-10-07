@@ -64,7 +64,7 @@ int fscrypt_is_aes_xts_cipher(const struct inode *inode)
 	if (!ci)
 		return 0;
 
-	return (ci->ci_data_mode == FS_ENCRYPTION_MODE_PRIVATE);
+	return fscrypt_policy_contents_mode(&ci->ci_policy) == FSCRYPT_MODE_PRIVATE;
 }
 
 /*
