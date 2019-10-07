@@ -20,6 +20,7 @@
 #include "qcom-base/sdmmagpie-camera-sensor-idp.dtsi"
 
 #include "sm7150-sunfish-citadel.dtsi"
+#include "sm7150-sunfish-haptics.dtsi"
 #include "sm7150-sunfish-touch-dev.dtsi"
 
 &soc {
