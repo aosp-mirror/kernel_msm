@@ -20,6 +20,8 @@
 #include "qcom-base/sdmmagpie-audio-overlay.dtsi"
 #include "sm7150-sunfish-display.dtsi"
 #include "sm7150-sunfish-audio.dtsi"
+#include "sm7150-sunfish-usb.dtsi"
+
 
 / {
 	model = "Google Inc. MSM sm7150 Sunfish DEV";
