@@ -234,9 +234,7 @@
 		sensor-position-yaw = <180>;
 		led-flash-src = <&led_flash_rear>;
 		actuator-src = <&actuator_rear>;
-#if 0
 		eeprom-src = <&eeprom_rear>;
-#endif
 		ois-src = <&ois_rear>;
 		cam_vio-supply = <&slg51000_ldo7>;
 		cam_vana-supply = <&slg51000_ldo3>;
