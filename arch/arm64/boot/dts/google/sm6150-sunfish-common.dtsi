@@ -381,6 +381,10 @@
 			gpio-key,wakeup;
 		};
 	};
+
+	modemsmem {
+		compatible = "modemsmem";
+	};
 };
 
 &thermal_zones {
