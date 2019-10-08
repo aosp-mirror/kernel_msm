@@ -385,6 +385,7 @@ static long vd6281_ioctl_handler(struct file *file, unsigned int cmd,
 {
 	int rc, value = 0;
 	int i;
+	uint32_t isEnable;
 	struct rainbow_ctrl_t *ctrl = file->private_data;
 	struct rainbow_config config;
 	uint8_t data[MAX_RAINBOW_CONFIG_SIZE];
@@ -440,6 +441,36 @@ static long vd6281_ioctl_handler(struct file *file, unsigned int cmd,
 				config.reg_data[i] = data[i];
 
 			rc = copy_to_user(p, &config, sizeof(config));
+		} else if (config.operation == RAINBOW_RANDOM_WRITE) {
+			for (i = 0; i < config.size; i++) {
+				rc = i2c_smbus_write_byte_data(ctrl->client,
+					config.reg_addr[i] & 0xFF,
+					config.reg_data[i] & 0xFF);
+
+				if (rc != 0) {
+					dev_err(&ctrl->client->dev,
+					"%s: set data 0x%x from 0x%x",
+					__func__,
+					config.reg_data[i] & 0xFF,
+					config.reg_addr[i] & 0xFF);
+				}
+			}
+		} else if (config.operation == RAINBOW_ENABLE) {
+			isEnable = config.reg_data[0];
+
+			if (isEnable == 1) {
+				rc = vd6281_power_up(ctrl);
+				if (rc != 0) {
+					vd6281_power_down(ctrl);
+				}
+			} else {
+				rc = vd6281_power_down(ctrl);
+				if (rc != 0) {
+					dev_err(&ctrl->client->dev,
+					"%s: Fail to power down\n",
+					__func__);
+				}
+			}
 		} else {
 			dev_err(&ctrl->client->dev,
 				"%s: Unsupported opertion type %d\n",
