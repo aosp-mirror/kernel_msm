@@ -3680,4 +3680,4 @@ module_init(icnss_initialize);
 module_exit(icnss_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION(DEVICE "iCNSS CORE platform driver");
+MODULE_DESCRIPTION("iCNSS CORE platform driver");
