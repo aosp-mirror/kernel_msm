@@ -23,6 +23,9 @@
 #include "sm7150-sunfish-haptics.dtsi"
 #include "sm7150-sunfish-touch-dev.dtsi"
 
+#include "sm7150-sunfish-nfc.dtsi"
+#include "sm7150-sunfish-ese.dtsi"
+
 &soc {
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
