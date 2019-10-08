@@ -5070,6 +5070,8 @@ static int dsi_display_bind(struct device *dev,
 		goto error_host_deinit;
 	}
 
+	dsi_panel_debugfs_init(display->panel, display->root);
+
 	pr_info("Successfully bind display panel '%s'\n", display->name);
 	display->drm_dev = drm;
 

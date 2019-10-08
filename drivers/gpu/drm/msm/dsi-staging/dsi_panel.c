@@ -13,6 +13,7 @@
  */
 
 #define pr_fmt(fmt)	"msm-dsi-panel:[%s:%d] " fmt, __func__, __LINE__
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/gpio.h>
@@ -3310,6 +3311,125 @@ void dsi_panel_put(struct dsi_panel *panel)
 	dsi_panel_esd_config_deinit(&panel->esd_config);
 
 	kfree(panel);
+}
+
+static ssize_t parse_byte_buf(u8 *out, size_t len, char *src)
+{
+	const char *skip = "\n ";
+	size_t i = 0;
+	int rc = 0;
+	char *s;
+	while (src && !rc && i < len) {
+		s = strsep(&src, skip);
+		if (*s != '\0') {
+			rc = kstrtou8(s, 16, out + i);
+			i++;
+		}
+	}
+	return rc ? : i;
+}
+
+ssize_t dsi_panel_debugfs_write_reg(struct file *file,
+				    const char __user *user_buf,
+				    size_t count, loff_t *ppos)
+{
+	struct seq_file *seq = file->private_data;
+	struct dsi_panel *panel = seq->private;
+	char *buf;
+	char *payload;
+	size_t len;
+	int rc = 0;
+	/* calculate length for worst case (1 digit per byte + whitespace) */
+	len = (count + 1) / 2;
+	buf = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	payload = kmalloc(len, GFP_KERNEL);
+	if (!payload) {
+		kfree(buf);
+		return -ENOMEM;
+	}
+	if (copy_from_user(buf, user_buf, count)) {
+		rc = -EFAULT;
+		goto done;
+	}
+	buf[count] = 0; /* terminate end of string */
+	rc = parse_byte_buf(payload, len, buf);
+	if (rc <= 0) {
+		rc = -EINVAL;
+		goto done;
+	}
+	len = rc;
+	pr_debug("writing cmd=%x len=%zu\n", payload[0], len);
+	mutex_lock(&panel->panel_lock);
+	rc = mipi_dsi_dcs_write_buffer(&panel->mipi_device, payload, len);
+	mutex_unlock(&panel->panel_lock);
+done:
+	kfree(buf);
+	kfree(payload);
+	return rc ? : count;
+}
+
+int dsi_panel_debugfs_read_reg(struct seq_file *seq, void *data)
+{
+	struct dsi_panel *panel = seq->private;
+	char *buf;
+	ssize_t rc;
+	size_t len;
+	u8 cmd;
+	len = panel->debug.reg_read_len;
+	cmd = panel->debug.reg_read_cmd;
+	if (len == 0)
+		return -EINVAL;
+	buf = kmalloc(max(PAGE_SIZE, len), GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	mutex_lock(&panel->panel_lock);
+	rc = mipi_dsi_dcs_read(&panel->mipi_device, cmd, buf, len);
+	mutex_unlock(&panel->panel_lock);
+	if (rc > 0) {
+		int i;
+		pr_debug("got %zd bytes back, first: 0x%x\n", rc, buf[0]);
+		for (i = 0; i < rc; i++) {
+			if ((i % 8) > 0)
+				seq_puts(seq, " ");
+			else if (i)
+				seq_puts(seq, "\n");
+			seq_printf(seq, "%02X", buf[i]);
+		}
+		seq_puts(seq, "\n");
+		rc = 0;
+	} else if (rc == 0) {
+		pr_debug("no response back\n");
+	}
+	kfree(buf);
+	return rc;
+}
+
+static int dsi_panel_debugfs_open_reg(struct inode *inode, struct file *f)
+{
+	return single_open(f, dsi_panel_debugfs_read_reg, inode->i_private);
+}
+
+static const struct file_operations panel_reg_fops = {
+	.owner =	THIS_MODULE,
+	.open =		dsi_panel_debugfs_open_reg,
+	.write =	dsi_panel_debugfs_write_reg,
+	.read =		seq_read,
+	.llseek =	seq_lseek,
+	.release =	single_release,
+};
+
+void dsi_panel_debugfs_init(struct dsi_panel *panel, struct dentry *dir)
+{
+	struct dentry *r;
+	struct dsi_panel_debug *pdbg = &panel->debug;
+	r = debugfs_create_dir("panel_reg", dir);
+	/* default read of 2 bytes */
+	pdbg->reg_read_len = 2;
+	debugfs_create_u8("addr", 0600, r, &pdbg->reg_read_cmd);
+	debugfs_create_size_t("len", 0600, r, &pdbg->reg_read_len);
+	debugfs_create_file("payload", 0600, r, panel, &panel_reg_fops);
 }
 
 int dsi_panel_drv_init(struct dsi_panel *panel,
