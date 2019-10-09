@@ -366,6 +366,56 @@ static int rt5514_spi_switch_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rt5514_dmic_rate_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	switch (rt5514->divider_param) {
+	case DIVIDER_1_P024:
+		ucontrol->value.integer.value[0] = 0;
+		break;
+	case DIVIDER_1_P536:
+		ucontrol->value.integer.value[0] = 1;
+		break;
+	case DIVIDER_2_P048:
+		ucontrol->value.integer.value[0] = 2;
+		break;
+	case DIVIDER_3_P072:
+	default:
+		ucontrol->value.integer.value[0] = 3;
+		break;
+	}
+
+	return 0;
+}
+
+static int rt5514_dmic_rate_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	switch (ucontrol->value.integer.value[0]) {
+	case 0:
+		rt5514->divider_param = DIVIDER_1_P024;
+		break;
+	case 1:
+		rt5514->divider_param = DIVIDER_1_P536;
+		break;
+	case 2:
+		rt5514->divider_param = DIVIDER_2_P048;
+		break;
+	case 3:
+	default:
+		rt5514->divider_param = DIVIDER_3_P072;
+		break;
+	}
+
+	return 0;
+}
+
 static int rt5514_memcmp(struct rt5514_priv *rt5514,
 		const void *cs, const void *ct, size_t count)
 {
@@ -900,6 +950,13 @@ done:
 	return ret;
 }
 
+static const char * const dmic_divider_rate_txt[] = {
+	"1.024K", "1.536K", "2.048K", "3.072K",
+};
+
+static SOC_ENUM_SINGLE_EXT_DECL(dmic_divider_rate, dmic_divider_rate_txt);
+
+
 static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 	SOC_DOUBLE_TLV("MIC Boost Volume", RT5514_ANA_CTRL_MICBST,
 		RT5514_SEL_BSTL_SFT, RT5514_SEL_BSTR_SFT, 8, 0, bst_tlv),
@@ -941,6 +998,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_hw_ver_get, NULL),
 	SOC_SINGLE_EXT("SPI Switch", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_spi_switch_get, rt5514_spi_switch_put),
+	SOC_ENUM_EXT("DMIC_DIVIDER_RATE", dmic_divider_rate,
+		rt5514_dmic_rate_get, rt5514_dmic_rate_put),
 };
 
 /* ADC Mixer*/
@@ -1001,6 +1060,7 @@ static const struct snd_kcontrol_new rt5514_sto2_dmic_mux =
  */
 static int rt5514_calc_dmic_clk(struct snd_soc_component *component, int rate)
 {
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 	int div[] = {2, 3, 4, 8, 12, 16, 24, 32};
 	int i;
 
@@ -1010,8 +1070,7 @@ static int rt5514_calc_dmic_clk(struct snd_soc_component *component, int rate)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(div); i++) {
-		/* find divider that gives DMIC frequency below 3.072MHz */
-		if (3072000 * div[i] >= rate)
+		if (rt5514->divider_param * div[i] >= rate)
 			return i;
 	}
 
@@ -1838,6 +1897,8 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
 
 	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
+
+	rt5514->divider_param = DIVIDER_1_P536;
 
 	dev_info(&i2c->dev, "Register rt5514 success\n");
 

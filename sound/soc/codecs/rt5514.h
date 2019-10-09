@@ -250,6 +250,11 @@
 
 #define RT5514_SPI_SWITCH_GPIO	5
 
+#define DIVIDER_1_P024		1024000
+#define DIVIDER_1_P536		1536000
+#define DIVIDER_2_P048		2048000
+#define DIVIDER_3_P072		3072000
+
 /* System Clock Source */
 enum {
 	RT5514_SCLK_S_MCLK,
@@ -295,6 +300,7 @@ struct rt5514_priv {
 	int dsp_adc_enabled;
 	u8 *hotword_model_buf, *musdet_model_buf;
 	unsigned int hotword_model_len, musdet_model_len;
+	int divider_param;
 };
 
 int rt5514_set_gpio(int gpio, bool output);
