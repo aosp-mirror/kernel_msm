@@ -31,15 +31,22 @@
  * removed_mem:        0x80b00000 0x1300000
  * qtee_apps_mem:      0x81e00000 0x2600000
  * pil_camera_mem:     0x86000000 0x500000
+ * pil_npu_mem:        0x86500000 0x500000
+ * pil_video_mem:      0x86a00000 0x500000
+ * pil_cvp_mem:        0x86f00000 0x500000
+ * pil_cdsp_mem:       0x87400000 0x1e00000
  * pil_adsp_mem:       0x89200000 0x2800000
  * pil_wlan_fw_mem:    0x8ba00000 0x200000
  * pil_ipa_fw_mem:     0x8bc00000 0x10000
  * pil_ipa_gsi_mem:    0x8bc10000 0x5400
  * pil_gpu_mem:        0x8bc15400 0x2000
  * reserved_pil:       0x8bc17400 0x3e8c00
- * modem_wlan_mem:     0x8c000000 0xf800000
+ * modem_wlan_mem:     0x8c000000 0x11800000
  * cdsp_sec_mem:       0x9f400000 0xc00000
- * cont_splash_memory: 0xA0000000 0x02400000
+ * cont_splash_memory: 0xA0000000 0x02300000
+ * dfps_data_memory:   0xa2300000 0x0100000
+ * debug_info:         0xB09A1000 0x20000    (Google)
+ * ramoops@B09C1000:   0xB09C1000 0x400000   (Google)
  */
 
 &modem_wlan_mem {
