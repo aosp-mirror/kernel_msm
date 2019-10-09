@@ -38,7 +38,11 @@
 	status = "disabled";
 };
 
-&pm6150_gpios{
+&wcd937x_codec {
+	qcom,cdc-micbias2-mv = <2700>;
+};
+
+&pm6150_gpios {
 	interrupts = <0x0 0xc0 0 IRQ_TYPE_NONE>,
 			<0x0 0xc1 0 IRQ_TYPE_NONE>,
 			<0x0 0xc2 0 IRQ_TYPE_NONE>,
