@@ -355,4 +355,11 @@ config GENERIC_ARCH_TOPOLOGY
 	  appropriate scaling, sysfs interface for changing capacity values at
 	  runtime.
 
+config POWER_DEBUG
+        bool "Support power debug feature"
+        default n
+        help
+          Use this to enable power debug feature including PM statistics,
+          wakeup source, SubSystem sleep info
+
 endmenu
