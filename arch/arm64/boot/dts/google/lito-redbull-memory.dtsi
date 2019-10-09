@@ -37,10 +37,14 @@
  * pil_ipa_gsi_mem:    0x8bc10000 0x5400
  * pil_gpu_mem:        0x8bc15400 0x2000
  * reserved_pil:       0x8bc17400 0x3e8c00
- * modem_wlan_mem:     0x8c000000 0xc900000
+ * modem_wlan_mem:     0x8c000000 0xf800000
  * cdsp_sec_mem:       0x9f400000 0xc00000
  * cont_splash_memory: 0xA0000000 0x02400000
  */
+
+&modem_wlan_mem {
+	reg = <0x0 0x8c000000 0x0 0x11800000>;
+	};
 
 &reserved_memory {
 	debug_info: debug_info@B09A1000 {
