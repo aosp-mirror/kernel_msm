@@ -14,11 +14,3 @@
 	qcom,model = "sm7250-bolero-snd-card";
 };
 
-&q6core {
-	kona_snd: sound {
-		rt5514-address = "rt5514.1-0057";
-		cs35l41-l-address = "cs35l41.2-0040";
-		cs35l41-r-address = "cs35l41.2-0041";
-	};
-};
-

@@ -15,14 +15,6 @@
 	status = "disabled";
 };
 
-&q6core {
-	kona_snd: sound {
-		rt5514-address = "rt5514.0-0057";
-		cs35l41-l-address = "cs35l41.1-0040";
-		cs35l41-r-address = "cs35l41.1-0041";
-	};
-};
-
 &lito_snd {
 	qcom,model = "sm7250-noextcodec-snd-card";
 

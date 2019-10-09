@@ -184,6 +184,27 @@
 				"msm-dai-cdc-dma-dev.45116",
 				"msm-dai-cdc-dma-dev.45118",
 				"msm-dai-q6-dev.24577";
+
+	external-capture-dai-link@0 {
+		cpu-dai-name = "msm-dai-q6-tdm.36865";
+		codec {
+			sound-dai = <&rt5514 0>;
+		};
+	};
+
+	external-playback-dai-link@0 {
+		cpu-dai-name = "msm-dai-q6-tdm.36928";
+		codec {
+			sound-dai = <&cs35l41_l 0>, <&cs35l41_r 0>;
+		};
+	};
+
+	external-playback-ref-dai-link@0 {
+		cpu-dai-name = "msm-dai-q6-tdm.36929";
+		codec {
+			sound-dai = <&cs35l41_l 0>, <&cs35l41_r 0>;
+		};
+	};
 };
 
 &q6core {
@@ -220,6 +241,7 @@
 &qupv3_se7_i2c {
 	status = "ok";
 	rt5514: audio-codec@57 {
+		#sound-dai-cells = <1>;
 		compatible = "realtek,rt5514";
 		reg = <0x57>;
 	};
