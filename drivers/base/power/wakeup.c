@@ -1086,6 +1086,38 @@ static int print_wakeup_source_stats(struct seq_file *m,
 	return 0;
 }
 
+void pm_print_debug_wakeup_sources(void)
+{
+	struct wakeup_source *ws;
+	int srcuidx, len;
+	char read_buf[256];
+
+	len = 0;
+	memset(read_buf, 0, sizeof(read_buf));
+
+	srcuidx = srcu_read_lock(&wakeup_srcu);
+	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
+		if (ws->active) {
+			if (len > sizeof(read_buf))
+				break;
+
+			if (ws->name)
+				len += snprintf(read_buf + len,
+					sizeof(read_buf) - len,
+					"'%s'", ws->name);
+			else
+				len += snprintf(read_buf + len,
+					sizeof(read_buf) - len,
+					" 'Null' ");
+		}
+	}
+	srcu_read_unlock(&wakeup_srcu, srcuidx);
+	read_buf[sizeof(read_buf) - 1] = '\0';
+	pr_info("[K] wakeup_source: %s\n", read_buf);
+
+}
+EXPORT_SYMBOL_GPL(pm_print_debug_wakeup_sources);
+
 /**
  * wakeup_sources_stats_show - Print wakeup sources statistics information.
  * @m: seq_file to print the statistics into.
