@@ -123,7 +123,15 @@ static struct devfreq_governor devfreq_vbif = {
 
 static int __init devfreq_vbif_init(void)
 {
-	return devfreq_add_governor(&devfreq_vbif);
+	int ret = devfreq_add_governor(&devfreq_vbif);
+	if (!ret) {
+		pr_info("%s: VBIF GPUBW governor registered.\n", __func__);
+	} else {
+		pr_err("%s: VBIF GPUBW governor registration failed!\n",
+		       __func__);
+	}
+	return ret;
+
 }
 subsys_initcall(devfreq_vbif_init);
 
