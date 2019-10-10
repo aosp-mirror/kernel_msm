@@ -69,7 +69,7 @@ struct adc_tm_param {
 };
 
 /* Public API */
-#if defined(CONFIG_QTI_ADC_TM)
+#if IS_ENABLED(CONFIG_QTI_ADC_TM)
 struct adc_tm_chip *get_adc_tm(struct device *dev, const char *name);
 int32_t adc_tm5_channel_measure(struct adc_tm_chip *chip,
 					struct adc_tm_param *param);
