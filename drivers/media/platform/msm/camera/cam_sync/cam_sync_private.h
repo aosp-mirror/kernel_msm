@@ -179,6 +179,7 @@ struct cam_signalable_info {
  * @sync_table      : Table of all sync objects
  * @row_spinlocks   : Spinlock array, one for each row in the table
  * @table_lock      : Mutex used to lock the table
+ * @bitmap_lock     : Mutex used to lock the bitmap
  * @open_cnt        : Count of file open calls made on the sync driver
  * @dentry          : Debugfs entry
  * @work_queue      : Work queue used for dispatching kernel callbacks
@@ -191,6 +192,7 @@ struct sync_device {
 	struct sync_table_row sync_table[CAM_SYNC_MAX_OBJS];
 	spinlock_t row_spinlocks[CAM_SYNC_MAX_OBJS];
 	struct mutex table_lock;
+	struct mutex bitmap_lock;
 	int open_cnt;
 	struct dentry *dentry;
 	struct workqueue_struct *work_queue;
