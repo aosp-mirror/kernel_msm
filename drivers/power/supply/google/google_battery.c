@@ -561,10 +561,12 @@ static void ssoc_update(struct batt_ssoc_state *ssoc, qnum_t soc)
 		rls->rl_fast_track |= -delta > rls->rl_ft_delta_limit;
 	}
 
-	/* TODO: clear no_zero if set. It could be a simple filter that
-	 * decrement no_zero at each round when rl_ssoc_taget <= 0.
+	/* Right now a simple test on target metric falling under 0.5%
+	 * TODO: add a filter that decrements no_zero when a specific
+	 * condition is met (ex rl_ssoc_target < 1%).
 	 */
-	rls->rl_no_zero = (rls->rl_ssoc_target > qnum_from_q8_8(128) );
+	if (rls->rl_no_zero)
+		rls->rl_no_zero = rls->rl_ssoc_target > qnum_from_q8_8(128);
 
 	/*  monotonicity and rate of change */
 	ssoc->ssoc_rl = ssoc_apply_rl(ssoc);
@@ -2790,6 +2792,9 @@ static void google_battery_work(struct work_struct *work)
 	/* batt_lock protect SSOC code etc. */
 	mutex_lock(&batt_drv->batt_lock);
 
+	/* TODO: poll rate should be min between ->batt_update_interval and
+	 * whatever ssoc_work() decides (typically rls->rl_delta_max_time)
+	 */
 	ret = ssoc_work(ssoc_state, fg_psy);
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
