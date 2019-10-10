@@ -988,6 +988,9 @@ static void batt_chg_stats_tier(struct gbms_ce_tier_stats *tier,
 				int msc_state,
 				time_t elap)
 {
+	if (msc_state < 0 || msc_state >= MSC_STATES_COUNT)
+		return;
+
 	tier->msc_cnt[msc_state] += 1;
 	tier->msc_elap[msc_state] += elap;
 }
@@ -1025,6 +1028,7 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 				  int ibatt_ma, int temp, time_t elap)
 {
 	int cc;
+	const int msc_state = batt_drv->msc_state;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 	struct gbms_ce_tier_stats *tier =
 				&batt_drv->ce_data.tier_stats[tier_idx];
@@ -1039,7 +1043,7 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 	cc = cc / 1000;
 
 	/* book to previous soc unless discharging */
-	if (batt_drv->msc_state != MSC_DSG) {
+	if (msc_state != MSC_DSG) {
 		qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
 
 		/* TODO: should I use ssoc instead? */
@@ -1048,7 +1052,7 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 	}
 
 	/* book to previous state */
-	batt_chg_stats_tier(tier, batt_drv->msc_state, elap);
+	batt_chg_stats_tier(tier, msc_state, elap);
 
 	if (tier->soc_in == -1) {
 		int soc_in;
@@ -1131,8 +1135,10 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 	const int cc_out = GPSY_GET_PROP(batt_drv->fg_psy,
 				POWER_SUPPLY_PROP_CHARGE_COUNTER);
 
-	/* book last period to the current tier */
-	if (batt_drv->vbatt_idx != -1) {
+	/* book last period to the current tier
+	 * NOTE: vbatt_idx != -1 -> temp_idx != -1
+	 */
+	if (batt_drv->vbatt_idx != -1 && batt_drv->temp_idx != -1) {
 		const time_t now = get_boot_sec();
 		const time_t elap = now - batt_drv->ce_data.last_update;
 
@@ -1857,7 +1863,9 @@ static int msc_logic_internal(struct batt_drv *batt_drv)
 		batt_drv->checked_ov_cnt = 0;
 	}
 
-	/* book elapsed time to previous tier & msc_state */
+	/* book elapsed time to previous tier & msc_state
+	 * NOTE: temp_idx != -1 but batt_drv->msc_state could be -1
+	 */
 	mutex_lock(&batt_drv->stats_lock);
 	if (vbatt_idx != -1 && vbatt_idx < GBMS_STATS_TIER_COUNT) {
 		int tier_idx = batt_drv->vbatt_idx;
