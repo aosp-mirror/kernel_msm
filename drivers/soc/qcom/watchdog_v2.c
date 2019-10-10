@@ -760,6 +760,24 @@ static int __init setup_console_enabled(char *unused)
 
 	return 1;
 }
+
+#ifdef CONFIG_QCOM_WATCHDOG_V2_MODULE
+#undef __setup
+/* Good for only one __setup per source file */
+#define __setup(str, func)					\
+static void parse_cmdline(void)					\
+{								\
+	extern char *saved_command_line;			\
+	size_t len = strlen(saved_command_line);		\
+	char *cp = strnstr(saved_command_line, str, len);	\
+								\
+	if (cp)							\
+		func(cp);					\
+}
+#else
+static inline void parse_cmdline(void) {}
+#endif
+
 __setup("androidboot.console=", setup_console_enabled);
 
 static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
@@ -805,6 +823,7 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 	wdog_dd->min_slack_ns = ULLONG_MAX;
 	configure_scandump(wdog_dd);
 	configure_bark_dump(wdog_dd);
+	parse_cmdline();
 	if (console_enabled) {
 		dev_info(wdog_dd->dev, "Console enabled, extend "
 				"bark/bite times by %d seconds\n",
@@ -1005,11 +1024,15 @@ static struct platform_driver msm_watchdog_driver = {
 	},
 };
 
-static int init_watchdog(void)
+static int __init init_watchdog(void)
 {
 	return platform_driver_register(&msm_watchdog_driver);
 }
 
+#ifdef CONFIG_QCOM_WATCHDOG_V2_MODULE
+module_init(init_watchdog);
+#else
 pure_initcall(init_watchdog);
+#endif
 MODULE_DESCRIPTION("MSM Watchdog Driver");
 MODULE_LICENSE("GPL v2");

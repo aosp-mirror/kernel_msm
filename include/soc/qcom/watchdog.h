@@ -12,7 +12,7 @@
 #define WDOG_BITE_ON_PANIC 0
 #endif
 
-#ifdef CONFIG_QCOM_WATCHDOG_V2
+#if IS_ENABLED(CONFIG_QCOM_WATCHDOG_V2)
 void msm_trigger_wdog_bite(void);
 #else
 static inline void msm_trigger_wdog_bite(void) { }

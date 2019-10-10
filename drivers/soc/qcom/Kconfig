@@ -526,7 +526,7 @@ config QCOM_FSA4480_I2C
 	  modes, changing orientation.
 
 config QCOM_WATCHDOG_V2
-	bool "QTI Watchdog Support"
+	tristate "QTI Watchdog Support"
 	depends on ARCH_QCOM
 	help
 	  This enables the watchdog module. It causes kernel panic if the
@@ -536,7 +536,7 @@ config QCOM_WATCHDOG_V2
 
 config QCOM_FORCE_WDOG_BITE_ON_PANIC
 	bool "QCOM force watchdog bite"
-	depends on QCOM_WATCHDOG_V2
+	depends on QCOM_WATCHDOG_V2=y
 	help
 	  This forces a watchdog bite when the device restarts due to a
 	  kernel panic. On certain MSM SoCs, this provides us
