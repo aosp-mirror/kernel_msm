@@ -72,7 +72,7 @@ config QTI_QMI_COOLING_DEVICE
 	   using QTI QMI interface.
 
 config QTI_THERMAL_LIMITS_DCVS
-	bool "QTI LMH DCVS Driver"
+	tristate "QTI LMH DCVS Driver"
 	depends on THERMAL_OF
 	depends on CPU_THERMAL
 	help
