@@ -3030,6 +3030,7 @@ void sched_update_cpu_freq_min_max(const cpumask_t *cpus, u32 fmin, u32 fmax)
 	if (update_capacity)
 		walt_cpus_capacity_changed(cpus);
 }
+EXPORT_SYMBOL_GPL(sched_update_cpu_freq_min_max);
 
 void note_task_waking(struct task_struct *p, u64 wallclock)
 {
