@@ -730,6 +730,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_work);
 
 	/* Reset alignment value when charger goes offline */
+	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 	charger->align = POWER_SUPPLY_ALIGN_ERROR;
 	charger->align_count = 0;
 	charger->alignment = -1;
@@ -767,8 +768,10 @@ static void p9221_vrect_timer_handler(unsigned long data)
 {
 	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
 
-	if (charger->align == POWER_SUPPLY_ALIGN_CHECKING)
+	if (charger->align == POWER_SUPPLY_ALIGN_CHECKING) {
+		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_MOVE;
+	}
 	dev_info(&charger->client->dev,
 		 "timeout waiting for VRECT, online=%d\n", charger->online);
 	logbuffer_log(charger->log,
@@ -784,6 +787,7 @@ static void p9221_align_timer_handler(unsigned long data)
 {
 	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
 
+	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 	charger->align = POWER_SUPPLY_ALIGN_ERROR;
 	logbuffer_log(charger->log, "align: timeout no IRQ");
 }
@@ -946,6 +950,7 @@ no_scaling:
 	}
 
 	if (charger->alignment != charger->alignment_last) {
+		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		logbuffer_log(charger->log,
 			      "align: alignment=%i. op_freq=%u. current_avg=%u",
 			     charger->alignment, wlc_freq,
@@ -1400,6 +1405,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_pon_work);
 
 	charger->alignment_capable = false;
+	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 	charger->align = POWER_SUPPLY_ALIGN_CENTERED;
 
 	if (!p9221_is_epp(charger))
@@ -2915,11 +2921,14 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 		return IRQ_HANDLED;
 
 	if (charger->align != POWER_SUPPLY_ALIGN_MOVE) {
+		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_CHECKING;
 		charger->align_count++;
 	}
-	if (charger->align_count > WLC_ALIGN_IRQ_THRESHOLD)
+	if (charger->align_count > WLC_ALIGN_IRQ_THRESHOLD) {
+		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_MOVE;
+	}
 
 	del_timer(&charger->align_timer);
 
