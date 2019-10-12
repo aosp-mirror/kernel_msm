@@ -843,7 +843,6 @@ int bgcom_resume(void *handle)
 	mutex_lock(&bg_resume_mutex);
 	if (bg_spi->bg_state == BGCOM_STATE_ACTIVE)
 		goto unlock;
-	enable_irq(bg_irq);
 	do {
 		if (is_bg_resume(handle)) {
 			bg_spi->bg_state = BGCOM_STATE_ACTIVE;
