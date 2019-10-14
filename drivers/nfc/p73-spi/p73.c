@@ -320,9 +320,9 @@ static long p61_dev_ioctl(struct file *filp, unsigned int cmd,
 
 		p61_dev->enable_poll_mode = (unsigned char )arg;
 		if (p61_dev->enable_poll_mode == 0) {
-			P61_DBG_MSG("[NXP-P61] - IRQ Mode is set \n");
+			P61_DBG_MSG(KERN_INFO"[NXP-P61] - IRQ Mode is set \n");
 		} else {
-			P61_DBG_MSG("[NXP-P61] - Poll Mode is set \n");
+			P61_DBG_MSG(KERN_INFO"[NXP-P61] - Poll Mode is set \n");
 			p61_dev->enable_poll_mode = 1;
 		}
 		break;
@@ -344,7 +344,7 @@ static long p61_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	case P61_SET_THROUGHPUT:
 		p61_through_put_t.enable_through_put_measure = true;
-		P61_DBG_MSG("[NXP-P61] -  P61_SET_THROUGHPUT enable %d",
+		P61_DBG_MSG(KERN_INFO"[NXP-P61] P61_SET_THROUGHPUT enable %d",
 				p61_through_put_t.enable_through_put_measure);
 		break;
 	case P61_GET_ESE_ACCESS:
@@ -392,7 +392,7 @@ static ssize_t p61_dev_write(struct file *filp, const char *buf, size_t count,
 	struct p61_dev *p61_dev;
 	unsigned char tx_buffer[MAX_BUFFER_SIZE];
 
-	P61_DBG_MSG( "p61_dev_write -Enter count %d\n", count);
+    pr_debug( "p61_dev_write -Enter count %d\n", count);
 
 	p61_dev = filp->private_data;
 
@@ -419,7 +419,7 @@ static ssize_t p61_dev_write(struct file *filp, const char *buf, size_t count,
 	}
 
 	mutex_unlock(&p61_dev->write_mutex);
-	P61_DBG_MSG("p61_dev_write ret %d- Exit \n", ret);
+    pr_debug( "p61_dev_write ret %d- Exit \n", ret);
 	return ret;
 }
 
@@ -498,7 +498,7 @@ static ssize_t p61_dev_read(struct file *filp, char *buf, size_t count,
 	struct p61_dev *p61_dev = filp->private_data;
 	unsigned char rx_buffer[MAX_BUFFER_SIZE];
 
-	P61_DBG_MSG("p61_dev_read count %d - Enter \n", count);
+    pr_debug("p61_dev_read count %d - Enter \n", count);
 
 	mutex_lock(&p61_dev->read_mutex);
 	if (count > MAX_BUFFER_SIZE) {
@@ -546,7 +546,7 @@ static ssize_t p61_dev_read(struct file *filp, char *buf, size_t count,
 			}
 		}
 #else
-		P61_ERR_MSG("%s P61_IRQ_ENABLE not Enabled \n", __FUNCTION__);
+    pr_debug(" %s P61_IRQ_ENABLE not Enabled \n", __FUNCTION__);
 #endif
 		ret = spi_read(p61_dev->spi, (void *)&rx_buffer[0], count);
 		if (0 > ret) {
@@ -562,14 +562,14 @@ static ssize_t p61_dev_read(struct file *filp, char *buf, size_t count,
 
 	if(p61_through_put_t.enable_through_put_measure)
 		 p61_stop_throughput_measurement (READ_THROUGH_PUT, count);
-	P61_DBG_MSG("total_count = %d", count);
+    pr_debug(KERN_INFO"total_count = %d", count);
 
 	if (copy_to_user(buf, &rx_buffer[0], count)) {
 		P61_ERR_MSG("%s : failed to copy to user space\n", __func__);
 		ret = -EFAULT;
 		goto fail;
 	}
-	P61_DBG_MSG("p61_dev_read ret %d rx_buffer %d Exit\n",
+	pr_debug("p61_dev_read ret %d rx_buffer %d Exit\n",
 				ret ,rx_buffer[0]);
 
 	mutex_unlock(&p61_dev->read_mutex);

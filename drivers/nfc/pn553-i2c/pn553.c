@@ -63,6 +63,8 @@
 #define SIG_NFC 44
 #define MAX_BUFFER_SIZE 512
 #define MAX_SECURE_SESSIONS 1
+#define WAKEUP_SRC_TIMEOUT 2000
+
 /* Macro added to disable SVDD power toggling */
 /* #define JCOP_4X_VALIDATION */
 
@@ -94,6 +96,8 @@ struct pn544_dev    {
 	unsigned int        secure_timer_cnt;
 	/*DWP link update status*/
 	unsigned long       dwpLinkUpdateStat;
+	unsigned int        count_irq;
+	bool                irq_wake_up;
 	struct workqueue_struct *pSecureTimerCbWq;
 	struct work_struct wq_task;
 	/* CLK control */
@@ -135,6 +139,18 @@ static int nqx_clock_deselect(struct pn544_dev *nqx_dev);
 
 #define SECURE_TIMER_WORK_QUEUE "SecTimerCbWq"
 
+static void pn544_enable_irq(struct pn544_dev *pn544_dev)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&pn544_dev->irq_enabled_lock, flags);
+	if (!pn544_dev->irq_enabled) {
+		pn544_dev->irq_enabled = true;
+		enable_irq(pn544_dev->client->irq);
+	}
+	spin_unlock_irqrestore(&pn544_dev->irq_enabled_lock, flags);
+}
+
 static void pn544_disable_irq(struct pn544_dev *pn544_dev)
 {
 	unsigned long flags;
@@ -142,7 +158,7 @@ static void pn544_disable_irq(struct pn544_dev *pn544_dev)
 	spin_lock_irqsave(&pn544_dev->irq_enabled_lock, flags);
 	if (pn544_dev->irq_enabled) {
 		disable_irq_nosync(pn544_dev->client->irq);
-		disable_irq_wake(pn544_dev->client->irq);
+//		disable_irq_wake(pn544_dev->client->irq);
 		pn544_dev->irq_enabled = false;
 	}
 	spin_unlock_irqrestore(&pn544_dev->irq_enabled_lock, flags);
@@ -151,8 +167,14 @@ static void pn544_disable_irq(struct pn544_dev *pn544_dev)
 static irqreturn_t pn544_dev_irq_handler(int irq, void *dev_id)
 {
 	struct pn544_dev *pn544_dev = dev_id;
+	unsigned long flags;
 
+	if (device_may_wakeup(&pn544_dev->client->dev))
+		pm_wakeup_event(&pn544_dev->client->dev, WAKEUP_SRC_TIMEOUT);
 	pn544_disable_irq(pn544_dev);
+	spin_lock_irqsave(&pn544_dev->irq_enabled_lock, flags);
+	pn544_dev->count_irq++;
+	spin_unlock_irqrestore(&pn544_dev->irq_enabled_lock, flags);
 	/* HiKey Compilation fix */
 #ifndef HiKey_620_COMPILATION_FIX
 	if (sIsWakeLocked == false) {
@@ -188,26 +210,24 @@ static ssize_t pn544_dev_read(struct file *filp, char __user *buf,
 			goto fail;
 		}
 
-		while (1) {
-			pn544_dev->irq_enabled = true;
-			enable_irq(pn544_dev->client->irq);
-			enable_irq_wake(pn544_dev->client->irq);
+//		while (1) {
+		/*while 1 will cause IRQ alwayes high for a long time*/
+			if (!pn544_dev->irq_enabled) {
+				pn544_dev->irq_enabled = true;
+				enable_irq(pn544_dev->client->irq);
+			}
+//			enable_irq_wake(pn544_dev->client->irq);
 			ret = wait_event_interruptible(
 					pn544_dev->read_wq,
-					!pn544_dev->irq_enabled);
-
-			pn544_disable_irq(pn544_dev);
+					gpio_get_value(pn544_dev->irq_gpio));
 
 			if (ret)
 				goto fail;
 
-			if (gpio_get_value(pn544_dev->irq_gpio))
-				break;
-
-			pr_warning("%s: spurious interrupt detected\n",
-					__func__);
-		}
-	}
+			pn544_disable_irq(pn544_dev);
+			pr_debug("%s: spurious interrupt detected\n", __func__);
+//        }
+    }
 
 	/* Read data */
 	ret = i2c_master_recv(pn544_dev->client, tmp, count);
@@ -415,12 +435,18 @@ static int release_dwpOnOff_wait(void)
 	return 0;
 }
 
+static void pn544_init_stat(struct pn544_dev *pn544_dev)
+{
+	pn544_dev->count_irq = 0;
+}
+
 static int pn544_dev_open(struct inode *inode, struct file *filp)
 {
 	struct pn544_dev *pn544_dev = container_of(filp->private_data,
 		struct pn544_dev, pn544_device);
 
 	filp->private_data = pn544_dev;
+	pn544_init_stat(pn544_dev);
 
 	pr_debug("%s : %d,%d\n", __func__, imajor(inode), iminor(inode));
 
@@ -504,6 +530,7 @@ long  pn544_dev_ioctl(struct file *filp, unsigned int cmd,
 		} else if (arg == 1) {
 			/* power on */
 			pr_info("%s power on\n", __func__);
+			pn544_enable_irq(pn544_dev);
 			if (pn544_dev->firm_gpio) {
 				if ((current_state
 					& (P61_STATE_WIRED
@@ -534,6 +561,7 @@ long  pn544_dev_ioctl(struct file *filp, unsigned int cmd,
 
 		} else if (arg == 0) {
 			/* power off */
+			pn544_disable_irq(pn544_dev);
 			pr_info("%s power off\n", __func__);
 			if (pn544_dev->firm_gpio) {
 				if ((current_state
@@ -1403,22 +1431,28 @@ static int pn544_probe(struct i2c_client *client,
 	platform_data = client->dev.platform_data;
 #else
 	struct device_node *node = client->dev.of_node;
+
 #ifndef HiKey_620_COMPILATION_FIX
 	sIsWakeLocked = false;
 #endif
+
 	if (node) {
 		platform_data = devm_kzalloc(&client->dev,
 			sizeof(struct pn544_i2c_platform_data), GFP_KERNEL);
 		if (!platform_data) {
 			dev_err(&client->dev,
-			"nfc-nci probe: Failed to allocate memory\n");
+				"nfc-nci probe: Failed to allocate memory\n");
 			return -ENOMEM;
 		}
+
 		ret = pn544_parse_dt(&client->dev, platform_data);
+
 		if (ret) {
 			pr_info("%s pn544_parse_dt failed", __func__);
 		}
+
 		client->irq = gpio_to_irq(platform_data->irq_gpio);
+
 		if (client->irq < 0) {
 			pr_info("%s gpio to irq failed", __func__);
 		}
@@ -1574,9 +1608,11 @@ static int pn544_probe(struct i2c_client *client,
 		dev_err(&client->dev, "request_irq failed\n");
 		goto err_request_irq_failed;
 	}
-	enable_irq_wake(pn544_dev->client->irq);
+	device_init_wakeup(&client->dev, true);
+	device_set_wakeup_capable(&client->dev, true);
 	pn544_disable_irq(pn544_dev);
 	i2c_set_clientdata(client, pn544_dev);
+	pn544_dev->irq_wake_up = false;
 #if HWINFO
 	/*
 	* This function is used only if
@@ -1609,6 +1645,34 @@ err_ven:
 
 	return ret;
 }
+
+static int pn544_suspend(struct device *device)
+{
+	struct i2c_client *client = to_i2c_client(device);
+	struct pn544_dev *pn544_dev = i2c_get_clientdata(client);
+
+	if (device_may_wakeup(&client->dev) && pn544_dev->irq_enabled) {
+		if (!enable_irq_wake(client->irq))
+			pn544_dev->irq_wake_up = true;
+	}
+	return 0;
+}
+
+static int pn544_resume(struct device *device)
+{
+	struct i2c_client *client = to_i2c_client(device);
+	struct pn544_dev *pn544_dev = i2c_get_clientdata(client);
+
+	if (device_may_wakeup(&client->dev) && pn544_dev->irq_wake_up) {
+		if (!disable_irq_wake(client->irq))
+			pn544_dev->irq_wake_up = false;
+	}
+	return 0;
+}
+
+static const struct dev_pm_ops nfc_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pn544_suspend, pn544_resume)
+};
 
 static int pn544_remove(struct i2c_client *client)
 {
@@ -1672,6 +1736,7 @@ static struct i2c_driver pn544_driver = {
 			.of_match_table = pn544_i2c_dt_match,
 #endif
 			.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+			.pm = &nfc_pm_ops,
 		},
 };
 #if HWINFO
