@@ -252,6 +252,7 @@ struct p9221_charger_platform_data {
 	int				nb_alignment_freq;
 	int				*alignment_freq;
 	u32				alignment_scalar;
+	u32				icl_ramp_delay_ms;
 };
 
 struct p9221_charger_data {
@@ -300,7 +301,6 @@ struct p9221_charger_data {
 	bool				resume_complete;
 	bool				icl_ramp;
 	u32				icl_ramp_ua;
-	u32				icl_ramp_delay_ms;
 	bool				fake_force_epp;
 	bool				force_bpp;
 	u32				dc_icl_bpp;

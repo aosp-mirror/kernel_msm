@@ -1359,18 +1359,21 @@ static void p9221_icl_ramp_reset(struct p9221_charger_data *charger)
 
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger)
 {
+	const bool no_ramp = charger->pdata->icl_ramp_delay_ms == -1 ||
+			     !charger->icl_ramp_ua;
+
 	/* Only ramp on BPP at this time */
-	if (p9221_is_epp(charger))
+	if (p9221_is_epp(charger) || no_ramp)
 		return;
 
 	p9221_icl_ramp_reset(charger);
 
 	dev_info(&charger->client->dev, "ICL ramp set alarm %dms, %dua, ramp=%d\n",
-		 charger->icl_ramp_delay_ms, charger->icl_ramp_ua,
+		 charger->pdata->icl_ramp_delay_ms, charger->icl_ramp_ua,
 		 charger->icl_ramp);
 
 	alarm_start_relative(&charger->icl_ramp_alarm,
-			     ms_to_ktime(charger->icl_ramp_delay_ms));
+			     ms_to_ktime(charger->pdata->icl_ramp_delay_ms));
 }
 
 static void p9221_set_online(struct p9221_charger_data *charger)
@@ -1966,7 +1969,8 @@ static ssize_t p9221_show_icl_ramp_delay_ms(struct device *dev,
 	struct i2c_client *client = to_i2c_client(dev);
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->icl_ramp_delay_ms);
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 charger->pdata->icl_ramp_delay_ms);
 }
 
 static ssize_t p9221_store_icl_ramp_delay_ms(struct device *dev,
@@ -1981,7 +1985,7 @@ static ssize_t p9221_store_icl_ramp_delay_ms(struct device *dev,
 	ret = kstrtou32(buf, 10, &ms);
 	if (ret < 0)
 		return ret;
-	charger->icl_ramp_delay_ms = ms;
+	charger->pdata->icl_ramp_delay_ms = ms;
 	return count;
 }
 
@@ -3134,6 +3138,10 @@ static int p9221_parse_dt(struct device *dev,
 				 pdata->alignment_scalar);
 	}
 
+	ret = of_property_read_bool(node, "idt,ramp-disable");
+	if (ret)
+		pdata->icl_ramp_delay_ms = -1 ;
+
 	return 0;
 }
 
@@ -3295,8 +3303,13 @@ static int p9221_charger_probe(struct i2c_client *client,
 	if (!charger->dc_icl_votable)
 		dev_warn(&charger->client->dev, "Could not find DC_ICL votable\n");
 
-	charger->icl_ramp_ua = P9221_DC_ICL_BPP_RAMP_DEFAULT_UA;
-	charger->icl_ramp_delay_ms = P9221_DC_ICL_BPP_RAMP_DELAY_DEFAULT_MS;
+	/* Ramping on BPP is optional */
+	if (charger->pdata->icl_ramp_delay_ms != -1) {
+		charger->icl_ramp_ua = P9221_DC_ICL_BPP_RAMP_DEFAULT_UA;
+		charger->pdata->icl_ramp_delay_ms =
+					P9221_DC_ICL_BPP_RAMP_DELAY_DEFAULT_MS;
+	}
+
 	charger->dc_icl_bpp = 0;
 
 	/* valid chip_id [P9382A_CHIP_ID, P9221_CHIP_ID] or 0 */
