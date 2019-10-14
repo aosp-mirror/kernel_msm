@@ -118,8 +118,8 @@
 
 		// TODO: check avdd and dvdd
 		//vdd-supply = <&pm8150_l14>;
-		avdd-supply = <&pm8150_l17>;
+//		avdd-supply = <&pm8150_l17>;
 		//sec,regulator_dvdd = "vdd";
-		sec,regulator_avdd = "avdd";
+//		sec,regulator_avdd = "avdd";
 	};
 };
