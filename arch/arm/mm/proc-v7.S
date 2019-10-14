@@ -278,9 +278,10 @@ __v7_ca17mp_setup:
 1:	adr	r0, __v7_setup_stack_ptr
 	ldr	r12, [r0]
 	add	r12, r12, r0			@ the local stack
-	stmia	r12, {r1-r6, lr}		@ v7_invalidate_l1 touches r0-r6
+
+	/* stmia	r12, {r1-r6, lr}		@ v7_invalidate_l1 touches r0-r6
 	bl      v7_invalidate_l1
-	ldmia	r12, {r1-r6, lr}
+	ldmia	r12, {r1-r6, lr} */
 #ifdef CONFIG_SMP
 	orr	r10, r10, #(1 << 6)		@ Enable SMP/nAMP mode
 	ALT_SMP(mrc	p15, 0, r0, c1, c0, 1)
