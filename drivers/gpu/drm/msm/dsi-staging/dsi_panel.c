@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/of_gpio.h>
-#include <linux/pwm.h>
 #include <video/mipi_display.h>
 
 #include "dsi_panel.h"

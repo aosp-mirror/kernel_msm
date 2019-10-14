@@ -117,14 +117,24 @@ struct dsi_backlight_config {
 	u32 bl_actual;
 
 	int en_gpio;
-	/* PWM params */
-	struct pwm_device *pwm_bl;
-	bool pwm_enabled;
-	u32 pwm_period_usecs;
 
-	/* WLED params */
-	struct led_trigger *wled;
 	struct backlight_device *bl_device;
+	void *priv;
+
+	/**
+	 * update_bl - function used to update backlight
+	 * @bl_cfg - ptr to backlight config struct
+	 * @bl_lvl - backlight level set
+	 *
+	 * return: non-zero on success otherwise errno
+	 */
+	int (*update_bl)(struct dsi_backlight_config *bl_cfg, u32 bl_lvl);
+
+	/**
+	 * unregister - unregisters and frees any backlight data
+	 * @bl_cfg - ptr to backlight config struct
+	 */
+	void (*unregister)(struct dsi_backlight_config *bl_cfg);
 };
 
 struct dsi_reset_seq {
