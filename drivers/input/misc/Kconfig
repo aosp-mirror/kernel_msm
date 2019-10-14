@@ -900,4 +900,8 @@ config INPUT_HISI_POWERKEY
 	  To compile this driver as a module, choose M here: the
 	  module will be called hisi_powerkey.
 
+config FPC_FINGERPRINT
+    default n
+    tristate "fpc1020 fingerprint driver"
+
 endif
