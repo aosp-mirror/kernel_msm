@@ -1189,7 +1189,9 @@ static void device_restart_work_hdlr(struct work_struct *work)
 	panic("subsys-restart: Resetting the SoC - %s crashed.",
 							dev->desc->name);
 }
-
+/*Add policy for only restart subsystem begin*/
+extern bool get_dload_mode(void);
+/*Add policy for only restart subsystem end*/
 int subsystem_restart_dev(struct subsys_device *dev)
 {
 	const char *name;
@@ -1214,7 +1216,11 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		pr_err("%s crashed during a system poweroff/shutdown.\n", name);
 		return -EBUSY;
 	}
-
+	/*Add policy for only restart subsystem begin*/
+	if(!get_dload_mode()){
+		dev->restart_level = 1;
+	}
+	/*Add policy for only restart subsystem end*/
 	pr_info("Restart sequence requested for %s, restart_level = %s.\n",
 		name, restart_levels[dev->restart_level]);
 

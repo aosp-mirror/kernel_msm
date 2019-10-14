@@ -158,11 +158,17 @@ static void set_dload_mode(int on)
 	dload_mode_enabled = on;
 }
 
-static bool get_dload_mode(void)
+/*Add policy for only restart subsystem begin*/
+/*static bool get_dload_mode(void)*/
+bool get_dload_mode(void)
+/*Add policy for only restart subsystem end*/
 {
 	return dload_mode_enabled;
 }
 
+/*Add policy for only restart subsystem begin*/
+EXPORT_SYMBOL(get_dload_mode);
+/*Add policy for only restart subsystem end*/
 static void enable_emergency_dload_mode(void)
 {
 	int ret;
@@ -222,10 +228,16 @@ static void enable_emergency_dload_mode(void)
 	pr_err("dload mode is not enabled on target\n");
 }
 
-static bool get_dload_mode(void)
+/*Add policy for only restart subsystem begin*/
+/*static bool get_dload_mode(void)*/
+bool get_dload_mode(void)
+/*Add policy for only restart subsystem end*/
 {
 	return false;
 }
+/*Add policy for only restart subsystem begin*/
+EXPORT_SYMBOL(get_dload_mode);
+/*Add policy for only restart subsystem end*/
 #endif
 
 static void scm_disable_sdi(void)
