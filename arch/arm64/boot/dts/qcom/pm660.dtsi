@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -399,6 +399,7 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x4c>;
 		thermal-governor = "user_space";
+		wake-capable-sensor;
 
 		trips {
 			active-config0 {
@@ -414,6 +415,7 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x4d>;
 		thermal-governor = "user_space";
+		wake-capable-sensor;
 
 		trips {
 			active-config0 {
@@ -429,6 +431,7 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x4e>;
 		thermal-governor = "user_space";
+		wake-capable-sensor;
 
 		trips {
 			active-config0 {
@@ -444,6 +447,7 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x4f>;
 		thermal-governor = "user_space";
+		wake-capable-sensor;
 
 		trips {
 			active-config0 {
@@ -459,6 +463,7 @@
 		polling-delay = <0>;
 		thermal-sensors = <&pm660_adc_tm 0x51>;
 		thermal-governor = "user_space";
+		wake-capable-sensor;
 
 		trips {
 			active-config0 {
@@ -474,6 +479,7 @@
 		polling-delay = <0>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&bcl_sensor 0>;
+		wake-capable-sensor;
 
 		trips {
 			ibat-high {
@@ -489,6 +495,7 @@
 		polling-delay = <0>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&bcl_sensor 1>;
+		wake-capable-sensor;
 
 		trips {
 			ibat-vhigh {
@@ -504,6 +511,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_cap";
 		thermal-sensors = <&bcl_sensor 2>;
+		wake-capable-sensor;
 		tracks-low;
 
 		trips {
@@ -520,6 +528,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_cap";
 		thermal-sensors = <&bcl_sensor 3>;
+		wake-capable-sensor;
 		tracks-low;
 
 		trips {
@@ -536,6 +545,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_cap";
 		thermal-sensors = <&bcl_sensor 4>;
+		wake-capable-sensor;
 		tracks-low;
 
 		trips {
@@ -552,6 +562,7 @@
 		polling-delay = <0>;
 		thermal-governor = "low_limits_cap";
 		thermal-sensors = <&bcl_sensor 5>;
+		wake-capable-sensor;
 		tracks-low;
 
 		trips {
@@ -568,6 +579,7 @@
 		polling-delay = <0>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&pm660_tz>;
+		wake-capable-sensor;
 
 		trips {
 			pm660_trip0: pm660-trip0 {
