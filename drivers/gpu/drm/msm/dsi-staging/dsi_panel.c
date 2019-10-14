@@ -4149,6 +4149,10 @@ int dsi_panel_unprepare(struct dsi_panel *panel)
 
 error:
 	mutex_unlock(&panel->panel_lock);
+
+	if (panel->bl_config.bl_update == BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
+		panel->bl_config.allow_bl_update = false;
+
 	return rc;
 }
 

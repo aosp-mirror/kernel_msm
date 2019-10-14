@@ -446,8 +446,9 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 	else
 		bl_config->bl_scale_ad = c_conn->bl_scale_ad;
 
-	SDE_DEBUG("bl_scale = %u, bl_scale_ad = %u\n",
-		bl_config->bl_scale, bl_config->bl_scale_ad);
+	SDE_DEBUG("bl_scale = %u, bl_scale_ad = %u\n, bl_actual = %u",
+		bl_config->bl_scale, bl_config->bl_scale_ad,
+		bl_config->bl_actual);
 	if (bl_config->bl_device)
 		backlight_update_status(bl_config->bl_device);
 
@@ -479,6 +480,8 @@ static int _sde_connector_update_dirty_properties(
 {
 	struct sde_connector *c_conn;
 	struct sde_connector_state *c_state;
+	struct dsi_display *dsi_display = NULL;
+	struct dsi_backlight_config *bl_config = NULL;
 	int idx;
 
 	if (!connector) {
@@ -488,6 +491,12 @@ static int _sde_connector_update_dirty_properties(
 
 	c_conn = to_sde_connector(connector);
 	c_state = to_sde_connector_state(connector->state);
+
+	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
+		dsi_display = c_conn->display;
+		if (dsi_display && dsi_display->panel)
+			bl_config = &dsi_display->panel->bl_config;
+	}
 
 	while ((idx = msm_property_pop_dirty(&c_conn->property_info,
 					&c_state->property_state)) >= 0) {
@@ -513,7 +522,8 @@ static int _sde_connector_update_dirty_properties(
 	 * Special handling for postproc properties and
 	 * for updating backlight if any unset backlight level is present
 	 */
-	if (c_conn->bl_scale_dirty) {
+	if (c_conn->bl_scale_dirty || (bl_config &&
+			bl_config->bl_update_pending == true)) {
 		_sde_connector_update_bl_scale(c_conn);
 		c_conn->bl_scale_dirty = false;
 	}
@@ -586,26 +596,43 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 	sde_connector_schedule_status_work(connector, false);
 
 	c_conn = to_sde_connector(connector);
-	if (c_conn->bl_device) {
-		c_conn->bl_device->props.power = FB_BLANK_POWERDOWN;
-		c_conn->bl_device->props.state |= BL_CORE_FBBLANK;
-		backlight_update_status(c_conn->bl_device);
-	}
 
-	c_conn->allow_bl_update = false;
 	c_conn->last_panel_power_mode = SDE_MODE_DPMS_OFF;
 }
 
-void sde_connector_helper_bridge_enable(struct drm_connector *connector)
+void sde_connector_helper_bridge_pre_enable(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn = NULL;
-	struct dsi_display *display;
 
 	if (!connector)
 		return;
 
 	c_conn = to_sde_connector(connector);
-	display = (struct dsi_display *) c_conn->display;
+	c_conn->last_panel_power_mode = SDE_MODE_DPMS_ON;
+}
+
+void sde_connector_helper_bridge_post_enable(struct drm_connector *connector)
+{
+	struct sde_connector *c_conn = NULL;
+	struct dsi_display *dsi_display = NULL;
+	struct dsi_backlight_config *bl_config = NULL;
+
+	if (!connector)
+		return;
+
+	c_conn = to_sde_connector(connector);
+	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
+		dsi_display = c_conn->display;
+
+		if (dsi_display && dsi_display->panel)
+			bl_config = &dsi_display->panel->bl_config;
+	}
+
+	c_conn->panel_dead = false;
+	if (!bl_config) {
+		SDE_ERROR("Invalid params bl_config null\n");
+		return;
+	}
 
 	/*
 	 * Special handling for some panels which need atleast
@@ -613,19 +640,13 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	 * So delay backlight update to these panels until the
 	 * first frame commit is received from the HW.
 	 */
-	if (display->panel->bl_config.bl_update ==
-				BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
+	if (bl_config->bl_update == BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
 		sde_encoder_wait_for_event(c_conn->encoder,
 				MSM_ENC_TX_COMPLETE);
-	c_conn->allow_bl_update = true;
+	bl_config->allow_bl_update = true;
 
-	if (c_conn->bl_device) {
-		c_conn->bl_device->props.power = FB_BLANK_UNBLANK;
-		c_conn->bl_device->props.state &= ~BL_CORE_FBBLANK;
-		backlight_update_status(c_conn->bl_device);
-	}
-	c_conn->panel_dead = false;
-	c_conn->last_panel_power_mode = SDE_MODE_DPMS_ON;
+	if (bl_config->bl_device)
+		backlight_update_status(bl_config->bl_device);
 }
 
 int sde_connector_clk_ctrl(struct drm_connector *connector, bool enable)

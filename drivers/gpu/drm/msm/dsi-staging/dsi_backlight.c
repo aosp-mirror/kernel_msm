@@ -109,6 +109,12 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 		return 0;
 
 	mutex_lock(&panel->panel_lock);
+
+	if (!bl->allow_bl_update) {
+		bl->bl_update_pending = true;
+		goto done;
+	}
+
 	if (dsi_panel_initialized(panel) && bl->update_bl) {
 		pr_info("req:%d bl:%d state:0x%x\n",
 			bd->props.brightness, bl_lvl, bd->props.state);
@@ -118,6 +124,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 			pr_err("unable to set backlight (%d)\n", rc);
 			goto done;
 		}
+		bl->bl_update_pending = false;
 	}
 	bl->bl_actual = bl_lvl;
 
