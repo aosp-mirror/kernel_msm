@@ -13,7 +13,6 @@
 
 #include "lito-redbull-common.dtsi"
 #include "lito-bramble-audio.dtsi"
-#include "lito-bramble-camera-sensor.dtsi"
 #include "lito-bramble-thermal.dtsi"
 #include "lito-bramble-usb.dtsi"
 #include "lito-bramble-nfc.dtsi"

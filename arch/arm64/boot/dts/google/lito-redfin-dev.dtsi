@@ -12,6 +12,7 @@
  */
 
 #include "lito-redfin.dtsi"
+#include "lito-redfin-camera-sensor.dtsi"
 
 &sde_dsi {
 	qcom,dsi-default-panel = <&dsi_sofef00_sdc_1080p_cmd>;

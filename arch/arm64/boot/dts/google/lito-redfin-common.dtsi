@@ -13,7 +13,6 @@
 
 #include "lito-redbull-common.dtsi"
 #include "lito-redfin-audio.dtsi"
-#include "lito-redfin-camera-sensor.dtsi"
 #include "lito-redfin-haptics.dtsi"
 #include "lito-redfin-thermal.dtsi"
 #include "lito-redfin-touch.dtsi"
