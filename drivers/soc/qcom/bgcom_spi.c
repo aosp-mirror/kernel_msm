@@ -843,6 +843,7 @@ int bgcom_resume(void *handle)
 	mutex_lock(&bg_resume_mutex);
 	if (bg_spi->bg_state == BGCOM_STATE_ACTIVE)
 		goto unlock;
+	enable_irq(bg_irq);
 	do {
 		if (is_bg_resume(handle)) {
 			bg_spi->bg_state = BGCOM_STATE_ACTIVE;
@@ -1027,7 +1028,7 @@ static int bg_spi_probe(struct spi_device *spi)
 
 	bg_irq = gpio_to_irq(irq_gpio);
 	ret = request_threaded_irq(bg_irq, NULL, bg_irq_tasklet_hndlr,
-		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom-bg_spi", bg_spi);
+		IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "qcom,bg_spi", bg_spi);
 
 	if (ret)
 		goto err_ret;
@@ -1077,6 +1078,7 @@ static int bgcom_pm_suspend(struct device *dev)
 	if (ret == 0) {
 		bg_spi->bg_state = BGCOM_STATE_SUSPEND;
 		atomic_set(&bg_is_spi_active, 0);
+		disable_irq(bg_irq);
 	}
 	pr_info("suspended with : %d\n", ret);
 	return ret;
