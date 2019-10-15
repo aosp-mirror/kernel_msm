@@ -54,6 +54,65 @@ u64 walt_load_reported_window;
 static struct irq_work walt_cpufreq_irq_work;
 static struct irq_work walt_migration_irq_work;
 
+static unsigned int task_load(struct task_struct *p)
+{
+	return p->ravg.demand;
+}
+
+static inline void fixup_cum_window_demand(struct rq *rq, s64 delta)
+{
+	rq->cum_window_demand += delta;
+	if (unlikely((s64)rq->cum_window_demand < 0))
+		rq->cum_window_demand = 0;
+}
+
+void
+walt_inc_cumulative_runnable_avg(struct rq *rq,
+				 struct task_struct *p)
+{
+	rq->cumulative_runnable_avg += p->ravg.demand;
+
+	/*
+	 * Add a task's contribution to the cumulative window demand when
+	 *
+	 * (1) task is enqueued with on_rq = 1 i.e migration,
+	 *     prio/cgroup/class change.
+	 * (2) task is waking for the first time in this window.
+	 */
+	if (p->on_rq || (p->last_sleep_ts < rq->window_start))
+		fixup_cum_window_demand(rq, p->ravg.demand);
+}
+
+void
+walt_dec_cumulative_runnable_avg(struct rq *rq,
+				 struct task_struct *p)
+{
+	rq->cumulative_runnable_avg -= p->ravg.demand;
+	BUG_ON((s64)rq->cumulative_runnable_avg < 0);
+
+	/*
+	 * on_rq will be 1 for sleeping tasks. So check if the task
+	 * is migrating or dequeuing in RUNNING state to change the
+	 * prio/cgroup/class.
+	 */
+	if (task_on_rq_migrating(p) || p->state == TASK_RUNNING)
+		fixup_cum_window_demand(rq, -(s64)p->ravg.demand);
+}
+
+void
+walt_fixup_cumulative_runnable_avg(struct rq *rq,
+				   struct task_struct *p, u64 new_task_load)
+{
+	s64 task_load_delta = (s64)new_task_load - task_load(p);
+
+	rq->cumulative_runnable_avg += task_load_delta;
+	if ((s64)rq->cumulative_runnable_avg < 0)
+		panic("cra less than zero: tld: %lld, task_load(p) = %u\n",
+			task_load_delta, task_load(p));
+
+	fixup_cum_window_demand(rq, task_load_delta);
+}
+
 u64 sched_ktime_clock(void)
 {
 	if (unlikely(sched_ktime_suspended))
@@ -1752,6 +1811,9 @@ static void update_history(struct rq *rq, struct task_struct *p,
 				p->sched_class->fixup_walt_sched_stats)
 			p->sched_class->fixup_walt_sched_stats(rq, p,
 					demand_scaled, pred_demand_scaled);
+		if (task_on_rq_queued(p))
+			p->sched_class->fixup_cumulative_runnable_avg(rq, p,
+								      demand);
 		else if (rq->curr == p)
 			walt_fixup_cum_window_demand(rq, demand_scaled);
 	}
