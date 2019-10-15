@@ -1718,13 +1718,11 @@ enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 	struct zoneref *z;
 	struct zone *zone;
 	enum compact_result rc = COMPACT_SKIPPED;
-	ktime_t event_ts;
 
 	/* Check if the GFP flags allow compaction */
 	if (!may_enter_fs || !may_perform_io)
 		return COMPACT_SKIPPED;
 
-	mm_event_start(&event_ts);
 	trace_mm_compaction_try_to_compact_pages(order, gfp_mask, prio);
 
 	/* Compact each zone in the list */
@@ -1774,7 +1772,6 @@ enum compact_result try_to_compact_pages(gfp_t gfp_mask, unsigned int order,
 			break;
 	}
 
-	mm_event_end(MM_COMPACTION, event_ts);
 	return rc;
 }
 
