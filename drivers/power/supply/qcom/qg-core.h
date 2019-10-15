@@ -64,6 +64,7 @@ struct qg_dt {
 	int			min_sleep_time_secs;
 	int			sys_min_volt_mv;
 	int			fvss_vbat_mv;
+	int			fvss_interval_ms;
 	bool			hold_soc_while_full;
 	bool			linearize_soc;
 	bool			cl_disable;

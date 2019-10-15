@@ -191,7 +191,7 @@ static void get_next_update_time(struct qpnp_qg *chip)
 		/* if in maintenance mode scale slower */
 		min_delta_soc_interval_ms = qg_maint_soc_update_ms;
 	else if (chip->fvss_active)
-		min_delta_soc_interval_ms = qg_fvss_delta_soc_interval_ms;
+		min_delta_soc_interval_ms = chip->dt.fvss_interval_ms;
 
 	if (!min_delta_soc_interval_ms)
 		min_delta_soc_interval_ms = 1000;	/* 1 second */
