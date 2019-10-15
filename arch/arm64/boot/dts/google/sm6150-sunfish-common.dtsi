@@ -77,7 +77,7 @@
 
 &qupv3_se2_i2c {
 	status = "ok";
-	qcom,clk-freq-out = <1000000>;
+	qcom,clk-freq-out = <400000>;
 	nq@28 {
 		compatible = "qcom,nq-nci";
 		reg = <0x28>;
