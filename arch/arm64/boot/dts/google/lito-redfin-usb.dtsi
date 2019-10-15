@@ -34,11 +34,12 @@
 			"pm8150_gpio7", "pm8150_gpio8",
 			"pm8150_gpio9", "pm8150_gpio10",
 			"pm8150_gpio11", "pm8150_gpio12";
+
 	usb_ext_5v_boost{
-		usb_ext_5v_boost_default:usb_ext_5v_boost_default {
-			pins = "gpio7";
+		usb_ext_5v_boost_default: usb_ext_5v_boost_default {
+			pins = "gpio8";
 			function = "normal";
-			output-high;
+			output-low;
 		};
 	};
 };
@@ -48,11 +49,9 @@
 		compatible = "regulator-tps";
 		regulator-name = "ext_5v_boost";
 		nr-control-gpios = <1>;
-		control-gpios = <&pm8150_gpios 7 GPIO_ACTIVE_HIGH>;
-		nr-gpio-enable-sequence = <1>;
+		control-gpios = <&pm8150_gpios 8 GPIO_ACTIVE_HIGH>;
 		gpio-enable-sequence = <1>;
 		gpio-enable-delay = <0>;
-		nr-gpio-disable-sequence = <1>;
 		gpio-disable-sequence = <1>;
 		gpio-disable-delay = <0>;
 		pinctrl-names = "default";
