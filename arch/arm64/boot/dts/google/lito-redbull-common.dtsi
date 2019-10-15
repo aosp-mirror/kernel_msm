@@ -332,17 +332,6 @@
 	qcom,dsi-default-panel = <&dsi_sw43404_amoled_video>;
 };
 
-&android_vbmeta {
-  compatible = "android,vbmeta";
-  parts = "vbmeta,boot,system,vendor,dtbo,product";
-};
-
 &android_fstab {
-  product {
-    compatible = "android,product";
-    dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/product";
-    type = "ext4";
-    mnt_flags = "ro";
-    fsmgr_flags = "wait,slotselect,avb";
-  };
+    status = "disabled";
 };
