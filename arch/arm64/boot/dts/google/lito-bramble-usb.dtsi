@@ -37,7 +37,7 @@
 		usb_ext_5v_boost_default:usb_ext_5v_boost_default {
 			pins = "gpio8";
 			function = "normal";
-			output-high;
+			output-low;
 		};
 	};
 };
