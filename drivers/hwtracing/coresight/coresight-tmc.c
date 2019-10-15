@@ -182,7 +182,7 @@ struct tmc_drvdata {
 	bool			aborting;
 	char			*buf;
 	dma_addr_t		paddr;
-	void __iomem		*vaddr;
+	void			*vaddr;
 	u32			size;
 	struct mutex		mem_lock;
 	u32			mem_size;
@@ -1991,20 +1991,11 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 
 err_misc_register:
 	coresight_unregister(drvdata->csdev);
-	return ret;
-}
-
-static int tmc_remove(struct amba_device *adev)
-{
-	struct tmc_drvdata *drvdata = amba_get_drvdata(adev);
-
-	misc_deregister(&drvdata->miscdev);
-	coresight_unregister(drvdata->csdev);
+err_devm_kzalloc:
 	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR)
-		tmc_etr_free_mem(drvdata);
-	tmc_etr_bam_exit(drvdata);
-
-	return 0;
+		dma_free_coherent(dev, drvdata->size,
+				drvdata->vaddr, drvdata->paddr);
+	return ret;
 }
 
 static struct amba_id tmc_ids[] = {
@@ -2019,9 +2010,9 @@ static struct amba_driver tmc_driver = {
 	.drv = {
 		.name   = "coresight-tmc",
 		.owner  = THIS_MODULE,
+		.suppress_bind_attrs = true,
 	},
 	.probe		= tmc_probe,
-	.remove		= tmc_remove,
 	.id_table	= tmc_ids,
 };
 
