@@ -50,6 +50,7 @@ void devfreq_vbif_register_callback(getbw_func func, void *data)
 	extern_get_bw = func;
 	extern_get_bw_data = data;
 }
+EXPORT_SYMBOL_GPL(devfreq_vbif_register_callback);
 
 int devfreq_vbif_update_bw(void)
 {
@@ -64,6 +65,7 @@ int devfreq_vbif_update_bw(void)
 	mutex_unlock(&df_lock);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(devfreq_vbif_update_bw);
 
 static int devfreq_vbif_ev_handler(struct devfreq *devfreq,
 					unsigned int event, void *data)
