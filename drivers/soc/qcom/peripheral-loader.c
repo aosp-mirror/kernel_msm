@@ -470,10 +470,14 @@ int pil_do_ramdump(struct pil_desc *desc,
 			    MD_SS_ENCR_DONE) {
 				pr_debug("Dumping Minidump for %s\n",
 					desc->name);
-				return pil_do_minidump(desc, minidump_dev);
-			}
-			pr_debug("Minidump aborted for %s\n", desc->name);
-			return -EINVAL;
+				ret = pil_do_minidump(desc, minidump_dev);
+				if (ret) {
+					pr_debug("pil_do_minidump failed %d\n",
+							ret);
+				}
+			} else
+				pr_debug("Minidump aborted for %s\n",
+						desc->name);
 		}
 	}
 	pr_debug("Continuing with full SSR dump for %s\n", desc->name);
