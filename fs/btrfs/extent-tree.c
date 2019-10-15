@@ -7168,6 +7168,14 @@ search:
 			 */
 			if ((flags & extra) && !(block_group->flags & extra))
 				goto loop;
+
+			/*
+			 * This block group has different flags than we want.
+			 * It's possible that we have MIXED_GROUP flag but no
+			 * block group is mixed.  Just skip such block group.
+			 */
+			btrfs_release_block_group(block_group, delalloc);
+			continue;
 		}
 
 have_block_group:
@@ -10730,9 +10738,9 @@ int btrfs_error_unpin_extent_range(struct btrfs_root *root, u64 start, u64 end)
  * transaction.
  */
 static int btrfs_trim_free_extents(struct btrfs_device *device,
-				   u64 minlen, u64 *trimmed)
+				   struct fstrim_range *range, u64 *trimmed)
 {
-	u64 start = 0, len = 0;
+	u64 start = range->start, len = 0;
 	int ret;
 
 	*trimmed = 0;
@@ -10768,8 +10776,8 @@ static int btrfs_trim_free_extents(struct btrfs_device *device,
 			atomic_inc(&trans->use_count);
 		spin_unlock(&fs_info->trans_lock);
 
-		ret = find_free_dev_extent_start(trans, device, minlen, start,
-						 &start, &len);
+		ret = find_free_dev_extent_start(trans, device, range->minlen,
+						 start, &start, &len);
 		if (trans)
 			btrfs_put_transaction(trans);
 
@@ -10781,6 +10789,16 @@ static int btrfs_trim_free_extents(struct btrfs_device *device,
 			break;
 		}
 
+		/* If we are out of the passed range break */
+		if (start > range->start + range->len - 1) {
+			mutex_unlock(&fs_info->chunk_mutex);
+			ret = 0;
+			break;
+		}
+
+		start = max(range->start, start);
+		len = min(range->len, len);
+
 		ret = btrfs_issue_discard(device->bdev, start, len, &bytes);
 		up_read(&fs_info->commit_root_sem);
 		mutex_unlock(&fs_info->chunk_mutex);
@@ -10790,6 +10808,10 @@ static int btrfs_trim_free_extents(struct btrfs_device *device,
 
 		start += len;
 		*trimmed += bytes;
+
+		/* We've trimmed enough */
+		if (*trimmed >= range->len)
+			break;
 
 		if (fatal_signal_pending(current)) {
 			ret = -ERESTARTSYS;
@@ -10857,8 +10879,7 @@ int btrfs_trim_fs(struct btrfs_root *root, struct fstrim_range *range)
 	mutex_lock(&root->fs_info->fs_devices->device_list_mutex);
 	devices = &root->fs_info->fs_devices->devices;
 	list_for_each_entry(device, devices, dev_list) {
-		ret = btrfs_trim_free_extents(device, range->minlen,
-					      &group_trimmed);
+		ret = btrfs_trim_free_extents(device, range, &group_trimmed);
 		if (ret)
 			break;
 
