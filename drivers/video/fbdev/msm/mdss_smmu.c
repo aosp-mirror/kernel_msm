@@ -573,7 +573,7 @@ static int mdss_smmu_dsi_map_buffer_v2(phys_addr_t phys, unsigned int domain,
 	}
 
 	*dma_addr = dma_map_single(mdss_smmu->base.dev, cpu_addr, size, dir);
-	if (IS_ERR_VALUE(*dma_addr)) {
+	if (dma_mapping_error(mdss_smmu->base.dev, *dma_addr)) {
 		pr_err("dma map single failed\n");
 		return -ENOMEM;
 	}
