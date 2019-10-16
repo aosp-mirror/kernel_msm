@@ -17,6 +17,20 @@ config TOUCHSCREEN_PROPERTIES
 	def_tristate INPUT
 	depends on INPUT
 
+config TOUCHSCREEN_TBN
+	tristate "Touch Bus Negotiator for Pixel 2020"
+	depends on QCOM_QMI_HELPERS
+	help
+	  Say Y here if you have a Google Pixel 2019 device. This module enables
+	  support for kernel touch drivers to coordinate bus access with remote
+	  processors (e.g. sensor DSP processor), which is required to enable
+	  low power touch gesture detection in processors other than AP.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called touch_bus_negotiator.
+
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
 	depends on MFD_88PM860X
