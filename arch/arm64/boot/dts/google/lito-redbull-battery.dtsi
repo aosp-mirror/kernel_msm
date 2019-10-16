@@ -35,9 +35,15 @@
 	qcom,cl-wt-enable;
 	qcom,qg-iterm-ma = <570>;
 	qcom,vbatt-cutoff-mv = <3300>;
+	qcom,vbatt-low-mv = <3500>;
+	qcom,vbatt-low-cold-mv = <3800>;
 	qcom,vbatt-empty-mv = <2800>;
+	qcom,s2-fifo-length = <1>;
+	qcom,s2-vbat-low-fifo-length = <1>;
 	qcom,fvss-enable;
-	qcom,fvss-vbatt-mv = <3450>;
+	qcom,fvss-vbatt-mv = <3420>;
+	qcom,fvss-fifo-count = <10>;
+	google,fvss-interval-ms = <5000>;
 };
 
 &spmi_bus {
