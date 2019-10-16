@@ -17,7 +17,7 @@
 #include "diagfwd_hsic.h"
 #include "diagfwd_smux.h"
 #endif
-#ifdef CONFIG_MHI_BUS
+#if IS_ENABLED(CONFIG_MHI_BUS)
 #include "diagfwd_mhi.h"
 #endif
 #include "diagmem.h"
@@ -786,7 +786,7 @@ const struct file_operations diag_dbgfs_hsicinfo_ops = {
 	.read = diag_dbgfs_read_hsicinfo,
 };
 #endif
-#ifdef CONFIG_MHI_BUS
+#if IS_ENABLED(CONFIG_MHI_BUS)
 static ssize_t diag_dbgfs_read_mhiinfo(struct file *file, char __user *ubuf,
 				       size_t count, loff_t *ppos)
 {
@@ -1040,7 +1040,7 @@ int diag_debugfs_init(void)
 	if (!entry)
 		goto err;
 #endif
-#ifdef CONFIG_MHI_BUS
+#if IS_ENABLED(CONFIG_MHI_BUS)
 	entry = debugfs_create_file("mhiinfo", 0444, diag_dbgfs_dent, 0,
 				    &diag_dbgfs_mhiinfo_ops);
 	if (!entry)
