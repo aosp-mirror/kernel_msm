@@ -167,6 +167,9 @@ static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 	regmap_write(rt5514->i2c_regmap, 0x18001114, 0x00000001);
 	/* Reduce DSP power */
 	regmap_write(rt5514->i2c_regmap, 0x18001118, 0x00000001);
+	/* Buffer data mono/stereo */
+	regmap_write(rt5514->i2c_regmap, 0x18002fcc,
+		rt5514->dsp_buffer_channel);
 }
 
 static bool rt5514_volatile_register(struct device *dev, unsigned int reg)
@@ -339,6 +342,28 @@ static int rt5514_dsp_test_put(struct snd_kcontrol *kcontrol,
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 
 	rt5514->dsp_test = ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
+static int rt5514_dsp_buf_ch_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = rt5514->dsp_buffer_channel;
+
+	return 0;
+}
+
+static int rt5514_dsp_buf_ch_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	rt5514->dsp_buffer_channel = ucontrol->value.integer.value[0];
 
 	return 0;
 }
@@ -994,6 +1019,9 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_dsp_frame_flag_get, NULL),
 	SOC_SINGLE_EXT("DSP Test", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_dsp_test_get, rt5514_dsp_test_put),
+	/* 0 => Stereo ; 1 => Mono */
+	SOC_SINGLE_EXT("DSP Buffer Channel", SND_SOC_NOPM, 0, 1, 0,
+		rt5514_dsp_buf_ch_get, rt5514_dsp_buf_ch_put),
 	SOC_SINGLE_EXT("HW Version", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_hw_ver_get, NULL),
 	SOC_SINGLE_EXT("SPI Switch", SND_SOC_NOPM, 0, 1, 0,
@@ -1899,6 +1927,9 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
 
 	rt5514->divider_param = DIVIDER_1_P536;
+
+	/* 0 => Stereo ; 1 => Mono */
+	rt5514->dsp_buffer_channel = 1;
 
 	dev_info(&i2c->dev, "Register rt5514 success\n");
 
