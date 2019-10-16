@@ -6151,6 +6151,7 @@ out:
 			    start_time, 1);
 	return ret_code;
 }
+EXPORT_SYMBOL_GPL(sched_isolate_cpu);
 
 /*
  * Note: The client calling sched_isolate_cpu() is repsonsible for ONLY
@@ -6195,6 +6196,7 @@ out:
 			    start_time, 0);
 	return ret_code;
 }
+EXPORT_SYMBOL_GPL(sched_unisolate_cpu_unlocked);
 
 int sched_unisolate_cpu(int cpu)
 {
@@ -6205,6 +6207,7 @@ int sched_unisolate_cpu(int cpu)
 	cpu_maps_update_done();
 	return ret_code;
 }
+EXPORT_SYMBOL_GPL(sched_unisolate_cpu);
 
 #endif /* CONFIG_HOTPLUG_CPU */
 
