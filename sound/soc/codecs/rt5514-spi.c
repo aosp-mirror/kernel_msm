@@ -295,7 +295,8 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	dev_err(rt5514_dsp->dev, "[DSP Dump]");
 	for (i = 0; i < RT5514_DBG_BUF_CNT; i++)
 		dev_err(&rt5514_spi->dev, "[%02x][%06x][%08x]\n",
-			dbgbuf.unit[i].id, dbgbuf.unit[i].ts, dbgbuf.unit[i].val);
+			dbgbuf.unit[i].id, dbgbuf.unit[i].ts,
+			dbgbuf.unit[i].val);
 	dev_err(rt5514_dsp->dev, "[%08x][%08x]\n",
 		dbgbuf.reserve, dbgbuf.idx);
 
@@ -315,7 +316,8 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 			val[0], val[1], val[2], val[3], val[4]);
 	}
 
-	dev_err(rt5514_dsp->dev, "==================================================");
+	dev_err(rt5514_dsp->dev,
+		"==================================================");
 
 	regmap_write(rt5514_g_i2c_regmap, 0xfafafafa, 0x00000001);
 	for (i = 0; i < ARRAY_SIZE(rt5514_regdump_table2); i+=5) {
@@ -379,7 +381,8 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 			remain_data = (cur_wp - rt5514_dsp->buf_rp[0]);
 		else
 			remain_data =
-				(rt5514_dsp->buf_limit[0] - rt5514_dsp->buf_rp[0]) +
+				(rt5514_dsp->buf_limit[0] -
+				rt5514_dsp->buf_rp[0]) +
 				(cur_wp - rt5514_dsp->buf_base[0]);
 
 		if (remain_data < period_bytes) {
@@ -469,7 +472,8 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 			remain_data = (cur_wp - rt5514_dsp->buf_rp[1]);
 		else
 			remain_data =
-				(rt5514_dsp->buf_limit[1] - rt5514_dsp->buf_rp[1]) +
+				(rt5514_dsp->buf_limit[1] -
+				rt5514_dsp->buf_rp[1]) +
 				(cur_wp - rt5514_dsp->buf_base[1]);
 
 		if (remain_data < period_bytes) {
@@ -484,7 +488,8 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 			runtime->dma_area + rt5514_dsp->dma_offset[1],
 			period_bytes);
 
-		if (rt5514_dsp->buf_rp[1] + period_bytes == rt5514_dsp->buf_limit[1])
+		if (rt5514_dsp->buf_rp[1] + period_bytes ==
+			rt5514_dsp->buf_limit[1])
 			rt5514_dsp->buf_rp[1] = rt5514_dsp->buf_base[1];
 		else
 			rt5514_dsp->buf_rp[1] += period_bytes;
