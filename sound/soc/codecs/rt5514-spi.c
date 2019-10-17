@@ -42,7 +42,7 @@ static struct mutex spi_lock;
 struct rt5514_dsp {
 	struct device *dev;
 	struct delayed_work copy_work_0, copy_work_1, copy_work_2, start_work;
-	struct mutex dma_lock, suspend_lock;
+	struct mutex dma_lock;
 	struct snd_pcm_substream *substream[3];
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
 	unsigned int stream_flag[2];
@@ -174,7 +174,7 @@ static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 		.capture = {
 			.stream_name = "SoundTrigger Capture",
 			.aif_name = "AIF_SPI_FE",
-			.channels_min = 2,
+			.channels_min = 1,
 			.channels_max = 2,
 			.rates = SNDRV_PCM_RATE_16000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
@@ -783,9 +783,6 @@ static void rt5514_spi_start_work(struct work_struct *work) {
 	else
 		return;
 
-	mutex_lock(&rt5514_dsp->suspend_lock);
-	mutex_unlock(&rt5514_dsp->suspend_lock);
-
 	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, false);
 }
@@ -906,7 +903,6 @@ static int rt5514_spi_pcm_probe(struct snd_soc_platform *platform)
 
 	rt5514_dsp->dev = &rt5514_spi->dev;
 	mutex_init(&rt5514_dsp->dma_lock);
-	mutex_init(&rt5514_dsp->suspend_lock);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_0, rt5514_spi_copy_work_0);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_1, rt5514_spi_copy_work_1);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_2, rt5514_spi_copy_work_2);
@@ -1119,30 +1115,20 @@ static int rt5514_spi_probe(struct spi_device *spi)
 
 static int rt5514_suspend(struct device *dev)
 {
-	struct snd_soc_platform *platform = snd_soc_lookup_platform(dev);
-	struct rt5514_dsp *rt5514_dsp =
-		snd_soc_platform_get_drvdata(platform);
 	int irq = to_spi_device(dev)->irq;
 
 	if (device_may_wakeup(dev))
 		enable_irq_wake(irq);
-
-	mutex_lock(&rt5514_dsp->suspend_lock);
 
 	return 0;
 }
 
 static int rt5514_resume(struct device *dev)
 {
-	struct snd_soc_platform *platform = snd_soc_lookup_platform(dev);
-	struct rt5514_dsp *rt5514_dsp =
-		snd_soc_platform_get_drvdata(platform);
 	int irq = to_spi_device(dev)->irq;
 
 	if (device_may_wakeup(dev))
 		disable_irq_wake(irq);
-
-	mutex_unlock(&rt5514_dsp->suspend_lock);
 
 	return 0;
 }

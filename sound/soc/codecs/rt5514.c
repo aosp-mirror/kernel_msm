@@ -1883,6 +1883,11 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
 
+	/* 0 => Stereo ; 1 => Mono */
+	rt5514->dsp_buffer_channel = 1;
+
+	dev_info(&i2c->dev, "Register rt5514 success\n");
+
 	return snd_soc_register_codec(&i2c->dev, &soc_codec_dev_rt5514,
 			rt5514_dai, ARRAY_SIZE(rt5514_dai));
 }
