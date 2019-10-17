@@ -1740,8 +1740,10 @@ static void vdm_run_state_machine(struct tcpm_port *port)
 				break;
 			}
 
-			if (res < 0)
+			if (res < 0) {
+				port->vdm_sm_running = false;
 				return;
+			}
 		}
 
 		port->vdm_state = VDM_STATE_SEND_MESSAGE;
@@ -3336,6 +3338,7 @@ static void tcpm_reset_port(struct tcpm_port *port)
 {
 	port->in_ams = false;
 	port->ams = NONE_AMS;
+	port->vdm_sm_running = false;
 	tcpm_unregister_altmodes(port);
 	tcpm_typec_disconnect(port);
 	port->attached = false;
