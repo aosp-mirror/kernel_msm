@@ -1284,7 +1284,7 @@ int fts_5x36_ctpm_fw_upgrade(struct i2c_client *client, u8 *pbt_buf, u32 dw_lent
 	u8	is_5336_fwsize_30 = 0;
 	u32	packet_number;
 	u32	j;
-	u32	temp;
+	u32	temp = 0;
 	u32	lenght;
 	u8	packet_buf[FTS_PACKET_LENGTH + 6];
 	u8	auc_i2c_write_buf[10];

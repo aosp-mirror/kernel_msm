@@ -273,7 +273,7 @@ static int bgchar_read_cmd(struct bg_ui_data *fui_obj_msg,
 static int bgchar_write_cmd(struct bg_ui_data *fui_obj_msg, int type)
 {
 	void              *write_buf;
-	int               ret;
+	int               ret = -EINVAL;
 	void __user       *write     = (void *)
 			(uintptr_t)fui_obj_msg->write;
 
@@ -359,8 +359,8 @@ static long bg_com_ioctl(struct file *filp,
 				sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed\n");
 			ret = -EFAULT;
-		}
-		ret = bgchar_write_cmd(&ui_obj_msg, ui_bgcom_cmd);
+		} else
+			ret = bgchar_write_cmd(&ui_obj_msg, ui_bgcom_cmd);
 		if (ret < 0)
 			pr_err("bgchar_write_cmd failed\n");
 		break;
