@@ -37,6 +37,14 @@ Following properties are for LPI GPIO controller device main node.
 		    The first cell will be used to define gpio number and the
 		    second denotes the flags for this gpio.
 
+- goog,ignored-gpios:
+        Usage: optional
+        Value type: <prop-encoded-array>
+        Definition: List of gpio numbers should be ignored by the driver. It
+                    might be useful if this gpio mmio is unmapped from Linux
+                    kernel address space and that addresses should never be
+                    accessed.
+
 - clock-names:
 	Usage: optional
 	Value type: <string>
