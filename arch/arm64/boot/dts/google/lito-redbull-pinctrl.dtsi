@@ -11,3 +11,6 @@
  * GNU General Public License for more details.
  */
 
+&tlmm {
+	goog,ignored-gpios = <0 1 2 3>;
+};
