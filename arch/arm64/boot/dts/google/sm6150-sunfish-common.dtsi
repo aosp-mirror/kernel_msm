@@ -28,6 +28,10 @@
 
 #include "sm7150-sunfish-fingerprint.dtsi"
 
+&tlmm {
+	goog,ignored-gpios = <59 60 61 62>;
+};
+
 &soc {
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
