@@ -347,4 +347,5 @@ static struct platform_driver cpu_isolate_driver = {
 		.of_match_table = cpu_isolate_match,
 	},
 };
-builtin_platform_driver(cpu_isolate_driver);
+module_platform_driver(cpu_isolate_driver);
+MODULE_LICENSE("GPL v2");

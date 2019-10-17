@@ -103,7 +103,7 @@ config REGULATOR_COOLING_DEVICE
 	  If you want this support, you should say Y here.
 
 config QTI_CPU_ISOLATE_COOLING_DEVICE
-	bool "QTI CPU Isolate cooling devices"
+	tristate "QTI CPU Isolate cooling devices"
 	depends on THERMAL_OF
 	help
 	   This enables the QTI CPU Isolation cooling devices. These cooling
