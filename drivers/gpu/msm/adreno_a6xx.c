@@ -296,8 +296,8 @@ static const struct kgsl_hwcg_reg a640_hwcg_regs[] = {
 static const struct kgsl_hwcg_reg a612_hwcg_regs[] = {
 	{A6XX_RBBM_CLOCK_CNTL_SP0, 0x22222222},
 	{A6XX_RBBM_CLOCK_CNTL2_SP0, 0x02222220},
-	{A6XX_RBBM_CLOCK_DELAY_SP0, 0x0000F3CF},
-	{A6XX_RBBM_CLOCK_HYST_SP0, 0x00000081},
+	{A6XX_RBBM_CLOCK_DELAY_SP0, 0x00000081},
+	{A6XX_RBBM_CLOCK_HYST_SP0, 0x0000F3CF},
 	{A6XX_RBBM_CLOCK_CNTL_TP0, 0x22222222},
 	{A6XX_RBBM_CLOCK_CNTL2_TP0, 0x22222222},
 	{A6XX_RBBM_CLOCK_CNTL3_TP0, 0x22222222},
@@ -1640,7 +1640,7 @@ static void a6xx_llc_configure_gpu_scid(struct adreno_device *adreno_dev)
 			| gpu_scid;
 
 	if (adreno_is_a640(adreno_dev) || adreno_is_a612(adreno_dev) ||
-		adreno_is_a610(adreno_dev)) {
+		adreno_is_a610(adreno_dev) || adreno_is_a680(adreno_dev)) {
 		kgsl_regrmw(KGSL_DEVICE(adreno_dev), A6XX_GBIF_SCACHE_CNTL1,
 			A6XX_GPU_LLC_SCID_MASK, gpu_cntl1_val);
 	} else {
@@ -1663,7 +1663,7 @@ static void a6xx_llc_configure_gpuhtw_scid(struct adreno_device *adreno_dev)
 	 * XBL image.
 	 */
 	if (adreno_is_a640(adreno_dev) || adreno_is_a612(adreno_dev) ||
-		adreno_is_a610(adreno_dev))
+		adreno_is_a610(adreno_dev) || adreno_is_a680(adreno_dev))
 		return;
 
 	gpuhtw_scid = adreno_llc_get_scid(adreno_dev->gpuhtw_llc_slice);
@@ -1685,7 +1685,7 @@ static void a6xx_llc_enable_overrides(struct adreno_device *adreno_dev)
 	 * Attributes are used as configured through SMMU pagetable entries.
 	 */
 	if (adreno_is_a640(adreno_dev) || adreno_is_a612(adreno_dev) ||
-		adreno_is_a610(adreno_dev))
+		adreno_is_a610(adreno_dev) || adreno_is_a680(adreno_dev))
 		return;
 
 	/*
@@ -3341,6 +3341,7 @@ struct adreno_gpudev adreno_a6xx_gpudev = {
 	.preemption_pre_ibsubmit = a6xx_preemption_pre_ibsubmit,
 	.preemption_post_ibsubmit = a6xx_preemption_post_ibsubmit,
 	.preemption_init = a6xx_preemption_init,
+	.preemption_close = a6xx_preemption_close,
 	.preemption_schedule = a6xx_preemption_schedule,
 	.set_marker = a6xx_set_marker,
 	.preemption_context_init = a6xx_preemption_context_init,

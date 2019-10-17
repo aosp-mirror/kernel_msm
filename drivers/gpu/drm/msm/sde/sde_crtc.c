@@ -778,7 +778,7 @@ static ssize_t measured_fps_show(struct device *device,
 	struct drm_crtc *crtc;
 	struct sde_crtc *sde_crtc;
 	unsigned int fps_int, fps_decimal;
-	u64 fps = 0, frame_count = 1;
+	u64 fps = 0, frame_count = 0;
 	ktime_t current_time;
 	int i = 0, current_time_index;
 	u64 diff_us;
@@ -857,7 +857,7 @@ static ssize_t measured_fps_show(struct device *device,
 	fps_int = (unsigned int) sde_crtc->fps_info.measured_fps;
 	fps_decimal = do_div(fps_int, 10);
 	return scnprintf(buf, PAGE_SIZE,
-		"fps: %d.%d duration:%d frame_count:%llu", fps_int, fps_decimal,
+	"fps: %d.%d duration:%d frame_count:%llu\n", fps_int, fps_decimal,
 			sde_crtc->fps_info.fps_periodic_duration, frame_count);
 }
 
@@ -1408,8 +1408,10 @@ static u32 _sde_crtc_get_displays_affected(struct drm_crtc *crtc,
 {
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *crtc_state;
+	struct drm_encoder *encoder;
 	u32 disp_bitmask = 0;
 	int i;
+	bool is_ppsplit = false;
 
 	if (!crtc || !state) {
 		pr_err("Invalid crtc or state\n");
@@ -1419,8 +1421,16 @@ static u32 _sde_crtc_get_displays_affected(struct drm_crtc *crtc,
 	sde_crtc = to_sde_crtc(crtc);
 	crtc_state = to_sde_crtc_state(state);
 
+	list_for_each_entry(encoder,
+			&crtc->dev->mode_config.encoder_list, head) {
+		if (encoder->crtc != state->crtc)
+			continue;
+
+		is_ppsplit |= sde_encoder_is_topology_ppsplit(encoder);
+	}
+
 	/* pingpong split: one ROI, one LM, two physical displays */
-	if (crtc_state->is_ppsplit) {
+	if (is_ppsplit) {
 		u32 lm_split_width = crtc_state->lm_bounds[0].w / 2;
 		struct sde_rect *roi = &crtc_state->lm_roi[0];
 
@@ -2116,7 +2126,9 @@ static void _sde_crtc_blend_setup_mixer(struct drm_crtc *crtc,
 		cnt++;
 	}
 
-	sort(pstates, cnt, sizeof(pstates[0]), pstate_cmp, NULL);
+	if (cnt > 0)
+		sort(pstates, cnt, sizeof(pstates[0]), pstate_cmp, NULL);
+
 	_sde_crtc_set_src_split_order(crtc, pstates, cnt);
 
 	if (lm && lm->ops.setup_dim_layer) {
@@ -3091,18 +3103,26 @@ static void _sde_crtc_clear_dim_layers_v1(struct sde_crtc_state *cstate)
  * @cstate:      Pointer to sde crtc state
  * @user_ptr:    User ptr for sde_drm_dim_layer_v1 struct
  */
-static void _sde_crtc_set_dim_layer_v1(struct sde_crtc_state *cstate,
-		void __user *usr_ptr)
+static void _sde_crtc_set_dim_layer_v1(struct drm_crtc *crtc,
+		struct sde_crtc_state *cstate, void __user *usr_ptr)
 {
 	struct sde_drm_dim_layer_v1 dim_layer_v1;
 	struct sde_drm_dim_layer_cfg *user_cfg;
 	struct sde_hw_dim_layer *dim_layer;
 	u32 count, i;
+	struct sde_kms *kms;
 
-	if (!cstate) {
-		SDE_ERROR("invalid cstate\n");
+	if (!crtc || !cstate) {
+		SDE_ERROR("invalid crtc or cstate\n");
 		return;
 	}
+
+	kms = _sde_crtc_get_kms(crtc);
+	if (!kms || !kms->catalog) {
+		SDE_ERROR("invalid kms\n");
+		return;
+	}
+
 	dim_layer = cstate->dim_layer;
 
 	if (!usr_ptr) {
@@ -3122,14 +3142,14 @@ static void _sde_crtc_set_dim_layer_v1(struct sde_crtc_state *cstate,
 		SDE_ERROR("invalid number of dim_layers:%d", count);
 		return;
 	}
-
 	/* populate from user space */
 	cstate->num_dim_layers = count;
 	for (i = 0; i < count; i++) {
 		user_cfg = &dim_layer_v1.layer_cfg[i];
 
 		dim_layer[i].flags = user_cfg->flags;
-		dim_layer[i].stage = user_cfg->stage + SDE_STAGE_0;
+		dim_layer[i].stage = (kms->catalog->has_base_layer) ?
+			user_cfg->stage : user_cfg->stage + SDE_STAGE_0;
 
 		dim_layer[i].rect.x = user_cfg->rect.x1;
 		dim_layer[i].rect.y = user_cfg->rect.y1;
@@ -3279,24 +3299,27 @@ static int _sde_crtc_check_dest_scaler_data(struct drm_crtc *crtc,
 
 	SDE_DEBUG("crtc%d\n", crtc->base.id);
 
+	mutex_lock(&sde_crtc->crtc_lock);
+
 	if (!cstate->ds_dirty) {
 		SDE_DEBUG("dest scaler property not set, skip validation\n");
-		return 0;
+		goto end;
 	}
 
 	if (!kms || !kms->catalog) {
 		SDE_ERROR("crtc%d: invalid parameters\n", crtc->base.id);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto end;
 	}
 
 	if (!kms->catalog->mdp[0].has_dest_scaler) {
 		SDE_DEBUG("dest scaler feature not supported\n");
-		return 0;
+		goto end;
 	}
 
 	if (!sde_crtc->num_mixers) {
 		SDE_DEBUG("mixers not allocated\n");
-		return 0;
+		goto end;
 	}
 
 	ret = _sde_validate_hw_resources(sde_crtc);
@@ -3475,10 +3498,12 @@ disable:
 			cstate->ds_dirty = false;
 	}
 
-	return 0;
+	goto end;
 
 err:
 	cstate->ds_dirty = false;
+end:
+	mutex_unlock(&sde_crtc->crtc_lock);
 	return ret;
 }
 
@@ -3598,12 +3623,12 @@ static void _sde_crtc_setup_mixers(struct drm_crtc *crtc)
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
 	struct drm_encoder *enc;
 
+	mutex_lock(&sde_crtc->crtc_lock);
 	sde_crtc->num_ctls = 0;
 	sde_crtc->num_mixers = 0;
 	sde_crtc->mixers_swapped = false;
 	memset(sde_crtc->mixers, 0, sizeof(sde_crtc->mixers));
 
-	mutex_lock(&sde_crtc->crtc_lock);
 	/* Check for mixers on all encoders attached to this crtc */
 	list_for_each_entry(enc, &crtc->dev->mode_config.encoder_list, head) {
 		if (enc->crtc != crtc)
@@ -5153,9 +5178,12 @@ static int _sde_crtc_check_secure_state(struct drm_crtc *crtc,
 			int sec_stage = cnt ? pstates[0].sde_pstate->stage :
 						cstate->dim_layer[0].stage;
 
+			if (!sde_kms->catalog->has_base_layer)
+				sec_stage -= SDE_STAGE_0;
+
 			if ((!cnt && !cstate->num_dim_layers) ||
 				(sde_kms->catalog->sui_supported_blendstage
-						!= (sec_stage - SDE_STAGE_0))) {
+						!= sec_stage)) {
 				SDE_ERROR(
 				  "crtc%d: empty cnt%d/dim%d or bad stage%d\n",
 					DRMID(crtc), cnt,
@@ -5229,6 +5257,7 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	struct sde_crtc *sde_crtc;
 	struct plane_state *pstates = NULL;
 	struct sde_crtc_state *cstate;
+	struct sde_kms *kms;
 
 	const struct drm_plane_state *pstate;
 	struct drm_plane *plane;
@@ -5240,6 +5269,7 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	int multirect_count = 0;
 	const struct drm_plane_state *pipe_staged[SSPP_MAX];
 	int left_zpos_cnt = 0, right_zpos_cnt = 0;
+	int inc_sde_stage = 0;
 
 	struct drm_connector *conn;
 	struct drm_connector_list_iter conn_iter;
@@ -5253,6 +5283,12 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(state);
+	kms = _sde_crtc_get_kms(crtc);
+
+	if (!kms || !kms->catalog) {
+		SDE_ERROR("Invalid kms\n");
+		return -EINVAL;
+	}
 
 	if (!state->enable || !state->active) {
 		SDE_DEBUG("crtc%d -> enable %d, active %d, skip atomic_check\n",
@@ -5302,23 +5338,6 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	mixer_width = sde_crtc_get_mixer_width(sde_crtc, cstate, mode);
 	mixer_height = sde_crtc_get_mixer_height(sde_crtc, cstate, mode);
 
-	if (cstate->num_ds_enabled) {
-		if (!state->state)
-			goto end;
-
-		drm_atomic_crtc_state_for_each_plane_state(plane,
-							pstate, state) {
-			if ((pstate->crtc_h > mixer_height) ||
-					(pstate->crtc_w > mixer_width)) {
-				SDE_ERROR("plane w/h:%x*%x > mixer w/h:%x*%x\n",
-					pstate->crtc_w, pstate->crtc_h,
-					mixer_width, mixer_height);
-				return -E2BIG;
-				goto end;
-			}
-		}
-	}
-
 	_sde_crtc_setup_is_ppsplit(state);
 	_sde_crtc_setup_lm_bounds(crtc, state);
 
@@ -5356,10 +5375,17 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 				pstates[cnt].sde_pstate, PLANE_PROP_ZPOS);
 		pstates[cnt].pipe_id = sde_plane_pipe(plane);
 
+		/*
+		 * check for stages of dimlayer and planestate based on
+		 * has_base_layer property
+		 */
+		if (!kms->catalog->has_base_layer)
+			inc_sde_stage = SDE_STAGE_0;
+
 		/* check dim layer stage with every plane */
 		for (i = 0; i < cstate->num_dim_layers; i++) {
-			if (cstate->dim_layer[i].stage
-					== (pstates[cnt].stage + SDE_STAGE_0)) {
+			if (cstate->dim_layer[i].stage == (pstates[cnt].stage
+						+ inc_sde_stage)) {
 				SDE_ERROR(
 					"plane:%d/dim_layer:%i-same stage:%d\n",
 					plane->base.id, i,
@@ -5393,6 +5419,17 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 			rc = -E2BIG;
 			goto end;
 		}
+
+		if (cstate->num_ds_enabled &&
+			((pstate->crtc_h > mixer_height) ||
+			(pstate->crtc_w >
+			 (mixer_width * cstate->num_ds_enabled)))) {
+			SDE_ERROR("plane w/h:%x*%x > mixer w/h:%x*%x\n",
+				pstate->crtc_w, pstate->crtc_h,
+				mixer_width, mixer_height);
+			return -E2BIG;
+			goto end;
+		}
 	}
 
 	for (i = 1; i < SSPP_MAX; i++) {
@@ -5409,7 +5446,8 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 	}
 
 	/* assign mixer stages based on sorted zpos property */
-	sort(pstates, cnt, sizeof(pstates[0]), pstate_cmp, NULL);
+	if (cnt > 0)
+		sort(pstates, cnt, sizeof(pstates[0]), pstate_cmp, NULL);
 
 	rc = _sde_crtc_excl_dim_layer_check(state, pstates, cnt);
 	if (rc)
@@ -5461,7 +5499,10 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 			right_zpos_cnt++;
 		}
 
-		pstates[i].sde_pstate->stage = z_pos + SDE_STAGE_0;
+		if (!kms->catalog->has_base_layer)
+			pstates[i].sde_pstate->stage = z_pos + SDE_STAGE_0;
+		else
+			pstates[i].sde_pstate->stage = z_pos;
 		SDE_DEBUG("%s: zpos %d", sde_crtc->name, z_pos);
 	}
 
@@ -5683,6 +5724,14 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 	if (catalog->qseed_type == SDE_SSPP_SCALER_QSEED3LITE)
 		sde_kms_info_add_keystr(info, "qseed_type", "qseed3lite");
 
+	sde_kms_info_add_keyint(info, "UBWC version", catalog->ubwc_version);
+	sde_kms_info_add_keyint(info, "UBWC macrotile_mode",
+				catalog->macrotile_mode);
+	sde_kms_info_add_keyint(info, "UBWC highest banking bit",
+				catalog->mdp[0].highest_bank_bit);
+	sde_kms_info_add_keyint(info, "UBWC swizzle",
+				catalog->mdp[0].ubwc_swizzle);
+
 	if (sde_is_custom_client()) {
 		/* No support for SMART_DMA_V1 yet */
 		if (catalog->smart_dma_rev == SDE_SSPP_SMART_DMA_V2)
@@ -5788,6 +5837,9 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 		sde_kms_info_add_keyint(info, "ubwc_bw_calc_ver",
 				catalog->ubwc_bw_calc_version);
 
+	sde_kms_info_add_keyint(info, "use_baselayer_for_stage",
+				catalog->has_base_layer);
+
 	msm_property_set_blob(&sde_crtc->property_info, &sde_crtc->blob_info,
 			info->data, SDE_KMS_INFO_DATALEN(info), CRTC_PROP_INFO);
 
@@ -5799,7 +5851,11 @@ static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 {
 	struct sde_crtc *sde_crtc;
 	struct sde_crtc_state *cstate;
-	uint32_t offset;
+	uint32_t offset, i;
+	struct drm_connector_state *old_conn_state, *new_conn_state;
+	struct drm_connector *conn;
+	struct sde_connector *sde_conn = NULL;
+	struct msm_display_info disp_info;
 	bool is_vid = false;
 	struct drm_encoder *encoder;
 
@@ -5811,6 +5867,29 @@ static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 						MSM_DISPLAY_CAP_VID_MODE);
 		if (is_vid)
 			break;
+	}
+
+	/*
+	 * encoder_mask of drm_crtc_state will be zero until atomic_check
+	 * phase completes for first commit of dp. Hence, check for video
+	 * mode capability for current commit from new_connector_state.
+	 */
+	if (!state->encoder_mask) {
+		for_each_oldnew_connector_in_state(state->state, conn,
+				 old_conn_state, new_conn_state, i) {
+			if (!new_conn_state || new_conn_state->crtc != crtc)
+				continue;
+
+			sde_conn = to_sde_connector(new_conn_state->connector);
+			if (sde_conn->display && sde_conn->ops.get_info) {
+				sde_conn->ops.get_info(conn, &disp_info,
+							sde_conn->display);
+				is_vid |= disp_info.capabilities &
+						MSM_DISPLAY_CAP_VID_MODE;
+				if (is_vid)
+					break;
+			}
+		}
 	}
 
 	offset = sde_crtc_get_property(cstate, CRTC_PROP_OUTPUT_FENCE_OFFSET);
@@ -5830,6 +5909,7 @@ static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 	 * which will be incremented during the prepare commit phase
 	 */
 	offset++;
+	SDE_EVT32(DRMID(crtc), is_vid, offset);
 
 	return sde_fence_create(sde_crtc->output_fence, val, offset);
 }
@@ -5878,7 +5958,7 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 		_sde_crtc_set_input_fence_timeout(cstate);
 		break;
 	case CRTC_PROP_DIM_LAYER_V1:
-		_sde_crtc_set_dim_layer_v1(cstate,
+		_sde_crtc_set_dim_layer_v1(crtc, cstate,
 					(void __user *)(uintptr_t)val);
 		break;
 	case CRTC_PROP_ROI_V1:

@@ -13,6 +13,8 @@
 #include <linux/printk.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
+#include <linux/suspend.h>
+#include <linux/timer.h>
 
 #include <linux/msm_ipa.h>
 
@@ -23,6 +25,11 @@ enum ipa_eth_states {
 	IPA_ETH_ST_UC_READY,
 	IPA_ETH_ST_IPA_READY,
 	IPA_ETH_ST_MAX,
+};
+
+enum ipa_eth_dev_states {
+	IPA_ETH_DEV_ST_UNPAIRING,
+	IPA_ETH_DEV_ST_MAX,
 };
 
 static unsigned long ipa_eth_state;
@@ -54,12 +61,15 @@ static inline bool ipa_eth_ready(void)
 
 static inline bool initable(struct ipa_eth_device *eth_dev)
 {
-	return eth_dev->init;
+	return !test_bit(IPA_ETH_DEV_ST_UNPAIRING, &eth_dev->state) &&
+		eth_dev->init;
 }
 
 static inline bool startable(struct ipa_eth_device *eth_dev)
 {
-	return eth_dev->init && eth_dev->start &&
+	return !test_bit(IPA_ETH_DEV_ST_UNPAIRING, &eth_dev->state) &&
+		eth_dev->init &&
+		eth_dev->start &&
 		test_bit(IPA_ETH_IF_ST_LOWER_UP, &eth_dev->if_state);
 }
 
@@ -146,9 +156,13 @@ static int ipa_eth_deinit_device(struct ipa_eth_device *eth_dev)
 	return 0;
 }
 
+static void ipa_eth_free_msg(void *buff, u32 len, u32 type) {}
+
 static int ipa_eth_start_device(struct ipa_eth_device *eth_dev)
 {
 	int rc;
+	struct ipa_msg_meta msg_meta;
+	struct ipa_ecm_msg ecm_msg;
 
 	if (eth_dev->of_state == IPA_ETH_OF_ST_STARTED)
 		return 0;
@@ -178,6 +192,16 @@ static int ipa_eth_start_device(struct ipa_eth_device *eth_dev)
 		return rc;
 	}
 
+	memset(&msg_meta, 0, sizeof(msg_meta));
+	memset(&ecm_msg, 0, sizeof(ecm_msg));
+
+	ecm_msg.ifindex = eth_dev->net_dev->ifindex;
+	strlcpy(ecm_msg.name, eth_dev->net_dev->name, IPA_RESOURCE_NAME_MAX);
+
+	msg_meta.msg_type = ECM_CONNECT;
+	msg_meta.msg_len = sizeof(struct ipa_ecm_msg);
+	(void) ipa_send_msg(&msg_meta, &ecm_msg, ipa_eth_free_msg);
+
 	ipa_eth_dev_log(eth_dev, "Started device");
 
 	eth_dev->of_state = IPA_ETH_OF_ST_STARTED;
@@ -188,6 +212,18 @@ static int ipa_eth_start_device(struct ipa_eth_device *eth_dev)
 static int ipa_eth_stop_device(struct ipa_eth_device *eth_dev)
 {
 	int rc;
+	struct ipa_msg_meta msg_meta;
+	struct ipa_ecm_msg ecm_msg;
+
+	memset(&msg_meta, 0, sizeof(msg_meta));
+	memset(&ecm_msg, 0, sizeof(ecm_msg));
+
+	ecm_msg.ifindex = eth_dev->net_dev->ifindex;
+	strlcpy(ecm_msg.name, eth_dev->net_dev->name, IPA_RESOURCE_NAME_MAX);
+
+	msg_meta.msg_type = ECM_DISCONNECT;
+	msg_meta.msg_len = sizeof(struct ipa_ecm_msg);
+	(void) ipa_send_msg(&msg_meta, &ecm_msg, ipa_eth_free_msg);
 
 	if (eth_dev->of_state == IPA_ETH_OF_ST_DEINITED)
 		return 0;
@@ -224,11 +260,8 @@ static int ipa_eth_stop_device(struct ipa_eth_device *eth_dev)
 	return 0;
 }
 
-static void __ipa_eth_refresh_device(struct work_struct *work)
+static void __ipa_eth_refresh(struct ipa_eth_device *eth_dev)
 {
-	struct ipa_eth_device *eth_dev = container_of(work,
-				struct ipa_eth_device, refresh);
-
 	ipa_eth_dev_log(eth_dev, "Refreshing offload state for device");
 
 	if (!ipa_eth_offload_device_paired(eth_dev)) {
@@ -299,6 +332,16 @@ static void __ipa_eth_refresh_device(struct work_struct *work)
 	}
 }
 
+static void __ipa_eth_refresh_device(struct work_struct *work)
+{
+	struct ipa_eth_device *eth_dev = container_of(work,
+				struct ipa_eth_device, refresh);
+
+	mutex_lock(&eth_dev->refresh_mutex);
+	__ipa_eth_refresh(eth_dev);
+	mutex_unlock(&eth_dev->refresh_mutex);
+}
+
 static void ipa_eth_refresh_device(struct ipa_eth_device *eth_dev)
 {
 	if (ipa_eth_ready())
@@ -329,7 +372,62 @@ static void ipa_eth_refresh_devices(void)
 	queue_work(ipa_eth_wq, &global_refresh);
 }
 
-static int ipa_eth_netdev_event_change(struct ipa_eth_device *eth_dev)
+/**
+ * ipa_eth_device_notify() - Notifies a device event to the offload sub-system
+ * @eth_dev: Device for which the event is generated
+ * @event: Device event
+ * @data: Event specific data, if required
+ *
+ * Return: 0 on success, non-zero otherwise
+ */
+int ipa_eth_device_notify(struct ipa_eth_device *eth_dev,
+	enum ipa_eth_device_event event, void *data)
+{
+	int rc = -EINVAL;
+
+	ipa_eth_dev_log(eth_dev,
+		"Received notificaiton %s", ipa_eth_device_event_name(event));
+
+	mutex_lock(&eth_dev->refresh_mutex);
+
+	switch (event) {
+	case IPA_ETH_DEV_RESET_PREPARE:
+		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+		rc = ipa_eth_offload_prepare_reset(eth_dev, data);
+		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
+		break;
+	case IPA_ETH_DEV_RESET_COMPLETE:
+		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+		rc = ipa_eth_offload_complete_reset(eth_dev, data);
+		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
+		break;
+	default:
+		break;
+	}
+
+	if (rc) {
+		ipa_eth_dev_err(eth_dev, "Failed to handle notification");
+		eth_dev->of_state = IPA_ETH_OF_ST_ERROR;
+	}
+
+	mutex_unlock(&eth_dev->refresh_mutex);
+
+	return rc;
+}
+EXPORT_SYMBOL(ipa_eth_device_notify);
+
+static void ipa_eth_dev_start_timer_cb(unsigned long data)
+{
+	struct ipa_eth_device *eth_dev = (struct ipa_eth_device *)data;
+
+	/* Do not start offload if user disabled start_on_timeout in between */
+	if (eth_dev && eth_dev->start_on_timeout)
+		eth_dev->start = true;
+
+	ipa_eth_refresh_device(eth_dev);
+}
+
+static int __ipa_eth_netdev_event(struct ipa_eth_device *eth_dev)
 {
 	bool refresh_needed = netif_carrier_ok(eth_dev->net_dev) ?
 		!test_and_set_bit(IPA_ETH_IF_ST_LOWER_UP, &eth_dev->if_state) :
@@ -352,17 +450,9 @@ static int ipa_eth_netdev_event(struct notifier_block *nb,
 	if (net_dev != eth_dev->net_dev)
 		return NOTIFY_DONE;
 
-	ipa_eth_dev_log(eth_dev, "Received netdev event %lu", event);
+	ipa_eth_dev_log(eth_dev, "Received netdev event 0x%04lx", event);
 
-	switch (event) {
-	case NETDEV_CHANGE:
-		return ipa_eth_netdev_event_change(eth_dev);
-	default:
-		/* Ignore other events */
-		break;
-	}
-
-	return NOTIFY_DONE;
+	return __ipa_eth_netdev_event(eth_dev);
 }
 
 static int ipa_eth_uc_ready_cb(struct notifier_block *nb,
@@ -419,6 +509,13 @@ static ssize_t ipa_eth_dev_write_start(struct file *file,
 	struct ipa_eth_device *eth_dev = container_of(file->private_data,
 						      struct ipa_eth_device,
 						      start);
+
+	/* Set/reset timer to automatically start offload after the timeout
+	 * specified in eth_dev->start_on_timeout (milliseconds) expires.
+	 */
+	if (!eth_dev->start && eth_dev->start_on_timeout)
+		mod_timer(&eth_dev->start_timer,
+			jiffies + msecs_to_jiffies(eth_dev->start_on_timeout));
 
 	ipa_eth_refresh_device(eth_dev);
 
@@ -529,6 +626,15 @@ static int ipa_eth_device_debugfs_create(struct ipa_eth_device *eth_dev)
 	debugfs_create_file("start", 0644, eth_dev->debugfs, &eth_dev->start,
 			    &fops_eth_dev_start);
 
+	debugfs_create_bool("start_on_wakeup", 0644,
+			    eth_dev->debugfs, &eth_dev->start_on_wakeup);
+
+	debugfs_create_bool("start_on_resume", 0644,
+			    eth_dev->debugfs, &eth_dev->start_on_resume);
+
+	debugfs_create_u32("start_on_timeout", 0644, eth_dev->debugfs,
+			    &eth_dev->start_on_timeout);
+
 	debugfs_create_file("stats", 0644, eth_dev->debugfs, eth_dev,
 			    &fops_eth_dev_stats);
 
@@ -584,7 +690,14 @@ static void __ipa_eth_unpair_device(struct ipa_eth_device *eth_dev)
 
 	ipa_eth_device_debugfs_remove(eth_dev);
 
-	eth_dev->init = eth_dev->start = false;
+	eth_dev->start_on_wakeup = false;
+	eth_dev->start_on_resume = false;
+	eth_dev->start_on_timeout = 0;
+	del_timer_sync(&eth_dev->start_timer);
+
+	flush_work(&eth_dev->refresh);
+
+	set_bit(IPA_ETH_DEV_ST_UNPAIRING, &eth_dev->state);
 
 	ipa_eth_refresh_device(eth_dev);
 	flush_work(&eth_dev->refresh);
@@ -592,6 +705,8 @@ static void __ipa_eth_unpair_device(struct ipa_eth_device *eth_dev)
 
 	unregister_netdevice_notifier(&eth_dev->netdevice_nb);
 	ipa_eth_offload_unpair_device(eth_dev);
+
+	clear_bit(IPA_ETH_DEV_ST_UNPAIRING, &eth_dev->state);
 }
 
 static void ipa_eth_pair_devices(void)
@@ -637,9 +752,15 @@ int ipa_eth_register_device(struct ipa_eth_device *eth_dev)
 	eth_dev->of_state = IPA_ETH_OF_ST_DEINITED;
 	eth_dev->pm_handle = IPA_PM_MAX_CLIENTS;
 	INIT_WORK(&eth_dev->refresh, __ipa_eth_refresh_device);
+	mutex_init(&eth_dev->refresh_mutex);
 
 	INIT_LIST_HEAD(&eth_dev->rx_channels);
 	INIT_LIST_HEAD(&eth_dev->tx_channels);
+
+	init_timer(&eth_dev->start_timer);
+
+	eth_dev->start_timer.function = ipa_eth_dev_start_timer_cb;
+	eth_dev->start_timer.data = (unsigned long)eth_dev;
 
 	eth_dev->init = eth_dev->start = !ipa_eth_noauto;
 
@@ -863,6 +984,7 @@ int ipa_eth_register_offload_driver(struct ipa_eth_offload_driver *od)
 	ipa_eth_log("Registered offload driver %s", od->name);
 
 	ipa_eth_pair_devices();
+	ipa_eth_refresh_devices();
 
 	return 0;
 }
@@ -1041,10 +1163,28 @@ static struct notifier_block ipa_eth_panic_nb = {
 	.notifier_call  = ipa_eth_panic_notifier,
 };
 
+static int ipa_eth_pm_notifier_cb(struct notifier_block *nb,
+	unsigned long pm_event, void *unused)
+{
+	ipa_eth_log("PM notifier called for event %lu", pm_event);
+
+	switch (pm_event) {
+	case PM_POST_SUSPEND:
+		ipa_eth_refresh_devices();
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block pm_notifier = {
+	.notifier_call = ipa_eth_pm_notifier_cb,
+};
+
 int ipa_eth_init(void)
 {
 	int rc;
-	unsigned int wq_flags = WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_FREEZABLE;
+	unsigned int wq_flags = WQ_UNBOUND | WQ_MEM_RECLAIM;
 
 	(void) atomic_notifier_chain_register(
 			&panic_notifier_list, &ipa_eth_panic_nb);
@@ -1081,6 +1221,12 @@ int ipa_eth_init(void)
 		goto err_offload;
 	}
 
+	rc = register_pm_notifier(&pm_notifier);
+	if (rc) {
+		ipa_eth_err("Failed to register for PM notification");
+		goto err_pm_notifier;
+	}
+
 	rc = ipa3_uc_register_ready_cb(&uc_ready_cb);
 	if (rc) {
 		ipa_eth_err("Failed to register for uC ready cb");
@@ -1106,6 +1252,8 @@ int ipa_eth_init(void)
 err_ipa:
 	ipa3_uc_unregister_ready_cb(&uc_ready_cb);
 err_uc:
+	unregister_pm_notifier(&pm_notifier);
+err_pm_notifier:
 	ipa_eth_offload_modexit();
 err_offload:
 	ipa_eth_bus_modexit();
@@ -1130,6 +1278,8 @@ void ipa_eth_exit(void)
 
 	// IPA ready CB can not be unregistered; just unregister uC ready CB
 	ipa3_uc_unregister_ready_cb(&uc_ready_cb);
+
+	unregister_pm_notifier(&pm_notifier);
 
 	ipa_eth_offload_modexit();
 	ipa_eth_bus_modexit();

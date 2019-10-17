@@ -470,7 +470,7 @@
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
-		qcom,pet-time = <10000>;
+		qcom,pet-time = <9744>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
 		status = "okay";
@@ -1297,7 +1297,7 @@
 			100000000 200000000 4294967295>;
 
 		qcom,clk-rates = <400000 20000000 25000000
-					50000000 100000000 200000000>;
+					50000000 100000000>;
 		qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50",
 				      "SDR104";
 
@@ -1310,13 +1310,20 @@
 		qcom,nonhotplug;
 
 		/* VDD is an external regulator eLDO5 */
-		vdd-io-supply = <&pms405_l11>;
-		qcom,vdd-io-voltage-level = <1800000 2950000>;
+		vdd-io-supply = <&pms405_l6>;
+		qcom,vdd-io-voltage-level = <1800000 1800000>;
 		qcom,vdd-io-current-level = <0 24200>;
+		post-power-on-delay-ms = <100>;
+
+		qcom,core_3_0v_support;
+		qcom,nonremovable;
 
 		pinctrl-names = "active", "sleep";
 		pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on>;
 		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+
+		/delete-property/ qcom,devfreq,freq-table;
+		/delete-property/ cd-gpios;
 
 		status = "ok";
 	};
@@ -1510,6 +1517,26 @@
 		qcom,vdd-cx-mx-config = <1224000 1224000>;
 		qcom,smmu-s1-bypass;
 		qcom,hyp_disabled;
+	};
+
+	cnss_sdio: qcom,cnss_sdio {
+		compatible = "qcom,cnss_sdio";
+		subsys-name = "AR6320";
+		/**
+		 * There is no vdd-wlan on board and this is not for DSRC.
+		 * IO and XTAL share the same vreg.
+		 **/
+		vdd-wlan-io-supply = <&pms405_l5>;
+		qcom,cap-tsf-gpio = <&tlmm 42 1>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
+		qcom,msm-bus,name = "msm-cnss";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<79 512 0 0>,             /* No vote */
+				<79 512 6250 200000>,     /* 50 Mbps */
+				<79 512 25000 200000>,    /* 200 Mbps */
+				<79 512 2048000 4096000>; /* MAX */
 	};
 };
 
