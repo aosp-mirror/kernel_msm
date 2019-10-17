@@ -15,7 +15,6 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -90,8 +89,6 @@ struct qpnp_amoled {
 	struct oledb_regulator	oledb;
 	struct ab_regulator	ab;
 	struct ibb_regulator	ibb;
-	struct mutex		reg_lock;
-	struct workqueue_struct *wq;
 
 	/* DT params */
 	u32			oledb_base;
@@ -560,18 +557,6 @@ static int qpnp_amoled_regulator_probe(struct platform_device *pdev)
 	if (!chip)
 		return -ENOMEM;
 
-	/*
-	 * We need this workqueue to order the mode transitions that require
-	 * timing considerations. This way, we can ensure whenever the mode
-	 * transition is requested, it can be queued with high priority.
-	 */
-	chip->wq = alloc_ordered_workqueue("qpnp_amoled_wq", WQ_HIGHPRI);
-	if (!chip->wq) {
-		dev_err(chip->dev, "Unable to alloc workqueue\n");
-		return -ENOMEM;
-	}
-
-	mutex_init(&chip->reg_lock);
 	chip->dev = &pdev->dev;
 
 	chip->regmap = dev_get_regmap(pdev->dev.parent, NULL);
@@ -590,22 +575,15 @@ static int qpnp_amoled_regulator_probe(struct platform_device *pdev)
 	}
 
 	rc = qpnp_amoled_hw_init(chip);
-	if (rc < 0) {
+	if (rc < 0)
 		dev_err(chip->dev, "Failed to initialize HW rc=%d\n", rc);
-		goto error;
-	}
 
-	return 0;
 error:
-	destroy_workqueue(chip->wq);
 	return rc;
 }
 
 static int qpnp_amoled_regulator_remove(struct platform_device *pdev)
 {
-	struct qpnp_amoled *chip = dev_get_drvdata(&pdev->dev);
-
-	destroy_workqueue(chip->wq);
 	return 0;
 }
 
