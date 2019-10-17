@@ -6,11 +6,11 @@
 /dts-v1/;
 /plugin/;
 
-#include "lito-bramble-proto.dtsi"
+#include "lito-bramble-proto1_6.dtsi"
 
 / {
-	model = "Google Inc. MSM sm7250 Bramble PROTO 1.5";
+	model = "Google Inc. MSM sm7250 Bramble PROTO 1.6";
 	compatible = "google,bramble-sm7250", "qcom,sm7250";
 	qcom,msm-id = <400 0x10000>;
-	qcom,board-id = <0x0a0805 0>;
+	qcom,board-id = <0x0a0905 0>;
 };
