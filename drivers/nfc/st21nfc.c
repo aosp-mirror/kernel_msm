@@ -893,12 +893,11 @@ static int st21nfc_probe(struct i2c_client *client,
 			__func__);
 			goto err_pidle_workqueue;
 		}
-		ret = sysfs_create_file(&dev->kobj,
-					&dev_attr_power_stats.attr);
+
+		ret = sysfs_create_group(&dev->kobj, &st21nfc_attr_grp);
 		if (ret) {
 			pr_err(
-			"%s : sysfs_create_file for power stats failed\n",
-			__func__);
+			"%s : sysfs_create_group failed\n", __func__);
 			goto err_pidle_workqueue;
 		}
 	}
@@ -956,25 +955,18 @@ static int st21nfc_probe(struct i2c_client *client,
 		goto err_misc_register;
 	}
 
-	ret = sysfs_create_group(&dev->kobj, &st21nfc_attr_grp);
-	if (ret) {
-		pr_err("%s : sysfs_create_group failed\n", __func__);
-		goto err_sysfs_create_group_failed;
-	}
 	device_init_wakeup(&client->dev, true);
 	device_set_wakeup_capable(&client->dev, true);
 	st21nfc_dev->irq_wake_up = false;
 
 	return 0;
 
-err_sysfs_create_group_failed:
-	misc_deregister(&st21nfc_dev->st21nfc_device);
 err_misc_register:
 	mutex_destroy(&st21nfc_dev->read_mutex);
 err_sysfs_power_stats:
 	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {
-		sysfs_remove_file(&client->dev.kobj,
-				  &dev_attr_power_stats.attr);
+		sysfs_remove_group(&client->dev.kobj,
+				  &st21nfc_attr_grp);
 	}
 err_pidle_workqueue:
 	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {
