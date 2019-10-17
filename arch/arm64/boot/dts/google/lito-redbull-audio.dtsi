@@ -244,6 +244,8 @@
 		#sound-dai-cells = <1>;
 		compatible = "realtek,rt5514";
 		reg = <0x57>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&audio_ldo1>;
 	};
 };
 
@@ -474,6 +476,11 @@
 		function = "normal";
 		bias-pull-down;
 		qcom,drive-strength = <2>;
+	};
+
+	audio_ldo1: audio_ldo1 {
+		pins = "gpio6";
+		power-source = <1>;
 	};
 };
 
