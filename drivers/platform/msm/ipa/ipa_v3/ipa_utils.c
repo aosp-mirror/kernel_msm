@@ -5104,6 +5104,7 @@ complete:
 	IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa3_cfg_ep_aggr);
 
 /**
  * ipa3_cfg_ep_route() - IPA end-point routing configuration
@@ -6172,6 +6173,7 @@ err:
 	idr_preload_end();
 	return -ENOMEM;
 }
+EXPORT_SYMBOL_GPL(ipa3_alloc_counter_id);
 
 void ipa3_counter_remove_hdl(int hdl)
 {

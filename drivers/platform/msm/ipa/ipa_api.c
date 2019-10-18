@@ -3363,6 +3363,7 @@ void ipa_assert(void)
 	pr_err("IPA: unrecoverable error has occurred, asserting\n");
 	BUG();
 }
+EXPORT_SYMBOL_GPL(ipa_assert);
 
 /**
  * ipa_rx_poll() - Poll the rx packets from IPA HW in the
