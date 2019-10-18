@@ -511,7 +511,7 @@
 		function = "normal";
 		bias-pull-down;
 		qcom,drive-strength = <2>;
-
+		power-source = <1>;
 	};
 
 	irq_pin_bottom_default: irq_pin_bottom_default {
@@ -519,6 +519,7 @@
 		function = "normal";
 		bias-pull-down;
 		qcom,drive-strength = <2>;
+		power-source = <1>;
 	};
 
 	audio_ldo1: audio_ldo1 {
