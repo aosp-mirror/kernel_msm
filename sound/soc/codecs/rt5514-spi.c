@@ -123,31 +123,10 @@ static const struct snd_soc_dapm_route intercon_common[] = {
 	{"AIF_SPI_BE3", NULL, "SPI Capture 3"},
 };
 
-static int rt5514_spi_fe_add_route(struct snd_soc_dai *dai)
+static int rt5514_spi_fe_dai_probe(struct snd_soc_component *component)
 {
-	struct snd_soc_dapm_context *dapm;
-
-	if (!dai) {
-		pr_err("%s: Invalid params dai\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!dai->driver) {
-		pr_err("%s: Invalid params dai driver\n", __func__);
-		return -EINVAL;
-	}
-
-	dapm = snd_soc_component_get_dapm(dai->component);
-	if (!dai || !dai->driver) {
-		pr_err("%s Invalid params\n", __func__);
-		return -EINVAL;
-	}
-
-	snd_soc_dapm_new_controls(dapm, rt5514_spi_dapm_widgets,
-			ARRAY_SIZE(rt5514_spi_dapm_widgets));
-
-	snd_soc_dapm_add_routes(dapm, intercon_common,
-		ARRAY_SIZE(intercon_common));
+	struct snd_soc_dapm_context *dapm =
+				 snd_soc_component_get_dapm(component);
 
 	snd_soc_dapm_ignore_suspend(dapm, "SoundTrigger Capture");
 	snd_soc_dapm_ignore_suspend(dapm, "SoundTrigger Capture 2");
@@ -162,11 +141,6 @@ static int rt5514_spi_fe_add_route(struct snd_soc_dai *dai)
 	return 0;
 }
 
-static int rt5514_spi_fe_dai_probe(struct snd_soc_dai *dai)
-{
-	return rt5514_spi_fe_add_route(dai);
-}
-
 static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 	{
 		.name = "rt5514-dsp-fe-dai1",
@@ -179,7 +153,6 @@ static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 			.rates = SNDRV_PCM_RATE_16000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 		},
-		.probe = rt5514_spi_fe_dai_probe,
 	},
 	{
 		.name = "rt5514-dsp-fe-dai2",
@@ -192,7 +165,6 @@ static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 			.rates = SNDRV_PCM_RATE_16000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 		},
-		.probe = rt5514_spi_fe_dai_probe,
 	},
 	{
 		.name = "rt5514-dsp-fe-dai3",
@@ -205,7 +177,6 @@ static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 			.rates = SNDRV_PCM_RATE_8000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 		},
-		.probe = rt5514_spi_fe_dai_probe,
 	},
 	{
 		.name = "rt5514-dsp-be-dai1",
@@ -930,6 +901,11 @@ static struct snd_soc_platform_driver rt5514_spi_platform = {
 
 static const struct snd_soc_component_driver rt5514_spi_dai_component = {
 	.name		= "rt5514-spi-dai",
+	.probe = rt5514_spi_fe_dai_probe,
+	.dapm_widgets = rt5514_spi_dapm_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(rt5514_spi_dapm_widgets),
+	.dapm_routes = intercon_common,
+	.num_dapm_routes = ARRAY_SIZE(intercon_common),
 };
 
 /**
