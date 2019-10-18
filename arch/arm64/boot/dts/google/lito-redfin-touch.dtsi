@@ -112,6 +112,7 @@
 		sec,switch_gpio = <&tlmm 35 0>;	// Low: AP, High: SLPI
 		sec,reset_gpio = <&tlmm 8 0>;
 		sec,firmware_name = "s6sy79x.bin";
+		sec,mis_cal_check = <1>;
 
 		// TODO: check resolution
 		sec,max_coords = <1080 2340>;
