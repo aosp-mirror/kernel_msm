@@ -900,6 +900,7 @@ int mhi_device_configure(struct mhi_device *mhi_dev,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(mhi_device_configure);
 
 static int of_parse_ev_cfg(struct mhi_controller *mhi_cntrl,
 			   struct device_node *of_node)
