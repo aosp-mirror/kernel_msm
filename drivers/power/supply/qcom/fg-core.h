@@ -528,11 +528,14 @@ struct fg_chip {
 	struct alarm		esr_filter_alarm;
 	ktime_t			last_delta_temp_time;
 	struct delayed_work	fg_restart_work;
+	struct delayed_work	twm_improve_work;
 	bool		fg_can_restart_flag;
 	bool		external_fg_gen3;
+	bool		twm_improve_work_flag;
 	int			twm_soc_reserve;
 	int			full_soc_scale;
 	int			g_isretailmode;
+	int			twm_improve_count;
 };
 
 /* Debugfs data structures are below */

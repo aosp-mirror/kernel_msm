@@ -228,6 +228,28 @@ void fg_recharge_mode_detection(struct fg_chip *chip)
 	}
 }
 
+static void twm_improve_work(struct work_struct *work)
+{
+	struct fg_chip *chip = container_of(work,
+				struct fg_chip,
+				twm_improve_work.work);
+	bool usb_online;
+
+	fg_get_usb_online(chip, &usb_online);
+
+	if (chip->twm_improve_count > 20 || !chip->twm_improve_work_flag) {
+		chip->twm_improve_work_flag = 0;
+		cancel_delayed_work_sync(&chip->twm_improve_work);
+	} else
+		schedule_delayed_work(&chip->twm_improve_work,
+				msecs_to_jiffies(3000));
+
+	if (usb_online)
+		chip->twm_improve_count = 0;
+	else
+		chip->twm_improve_count++;
+}
+
 #define FULL_CAPACITY	100
 void ext_fg_soc_compensation(struct fg_chip *chip, int *msoc)
 {
@@ -251,10 +273,14 @@ void ext_fg_soc_compensation(struct fg_chip *chip, int *msoc)
 	else
 		*msoc = chip->last_soc;
 
+	if (*msoc > chip->twm_soc_reserve && chip->twm_improve_work_flag) {
+		chip->twm_improve_work_flag = 0;
+	}
+
 	if (chip->last_soc <= chip->twm_soc_reserve) {
 		fg_get_usb_online(chip, &usb_online);
 		fg_get_battery_current(chip, &twm_ibat);
-		if (usb_online || twm_ibat < 0)
+		if (usb_online || twm_ibat < 0 || chip->twm_improve_work_flag)
 			*msoc = 1;
 		else
 			*msoc = 0;
@@ -363,12 +389,16 @@ void ext_fg_init(struct fg_chip *chip)
 {
 	chip->fg_can_restart_flag = 1;
 	chip->g_isretailmode = false;
+	chip->twm_improve_work_flag = 1;
+	chip->twm_improve_count = 0;
 
 	if (!chip->external_fg_gen3)
 		return;
 
 	INIT_DELAYED_WORK(&chip->fg_restart_work, fg_restart_work);
+	INIT_DELAYED_WORK(&chip->twm_improve_work, twm_improve_work);
 
 	chip->dt.jeita_dynamic_model = MODEL_DISABLE;
+	schedule_delayed_work(&chip->twm_improve_work, 0);
 }
 
