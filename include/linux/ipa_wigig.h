@@ -243,7 +243,7 @@ struct ipa_wigig_conn_tx_in_params_smmu {
 	u8 client_mac[IPA_MAC_ADDR_SIZE];
 };
 
-#if defined CONFIG_IPA || defined CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA) || IS_ENABLED(CONFIG_IPA3)
 
 /*
  * ipa_wigig_init - Client should call this function to

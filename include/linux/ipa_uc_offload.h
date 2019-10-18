@@ -196,7 +196,7 @@ struct ipa_uc_ready_params {
 	enum ipa_uc_offload_proto proto;
 };
 
-#if defined CONFIG_IPA || defined CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA) || IS_ENABLED(CONFIG_IPA3)
 
 /**
  * ipa_uc_offload_reg_intf - Client should call this function to

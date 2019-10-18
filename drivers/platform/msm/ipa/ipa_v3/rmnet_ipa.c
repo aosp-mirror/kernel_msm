@@ -4462,7 +4462,7 @@ static void rmnet_ipa_debugfs_remove(void){}
 
 
 
-static int __init ipa3_wwan_init(void)
+int __init ipa3_wwan_init(void)
 {
 	int i, j;
 	struct ipa_tether_device_info *teth_ptr = NULL;
@@ -4549,7 +4549,7 @@ fail_dbgfs_rm:
 	return rc;
 }
 
-static void __exit ipa3_wwan_cleanup(void)
+void __exit ipa3_wwan_cleanup(void)
 {
 	int ret;
 
@@ -4596,7 +4596,10 @@ static int ipa3_rmnet_poll(struct napi_struct *napi, int budget)
 	return rcvd_pkts;
 }
 
+#ifndef CONFIG_IPA3_MODULE
 late_initcall(ipa3_wwan_init);
 module_exit(ipa3_wwan_cleanup);
+#endif
+
 MODULE_DESCRIPTION("WWAN Network Interface");
 MODULE_LICENSE("GPL v2");

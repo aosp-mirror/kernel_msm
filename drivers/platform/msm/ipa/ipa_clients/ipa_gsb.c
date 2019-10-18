@@ -20,7 +20,7 @@
 #include <linux/cdev.h>
 #include <linux/ipa_odu_bridge.h>
 #include "../ipa_common_i.h"
-#ifdef CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA3)
 #include "../ipa_v3/ipa_pm.h"
 #endif
 
