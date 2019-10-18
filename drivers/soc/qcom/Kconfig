@@ -63,7 +63,7 @@ config QCOM_GLINK_SSR
 	  neighboring subsystems going up or down.
 
 config QCOM_CPUSS_DUMP
-	bool "CPU Subsystem Dumping support"
+	tristate "CPU Subsystem Dumping support"
 	help
 	  Add support to dump various hardware entities such as the instruction
 	  and data tlb's as well as the unified tlb, which are a part of the
