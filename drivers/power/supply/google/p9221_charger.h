@@ -323,6 +323,7 @@ struct p9221_charger_data {
 	u32				current_filtered;
 	u32				current_sample_cnt;
 	struct delayed_work		dcin_pon_work;
+	bool				is_mfg_google;
 	u8				ptmc_id_str[(sizeof(u16) * 2) + 1];
 };
 
