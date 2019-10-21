@@ -40,7 +40,6 @@ extern struct mutex cluster_lock;
 extern rwlock_t related_thread_group_lock;
 extern __read_mostly unsigned int sched_ravg_hist_size;
 extern __read_mostly unsigned int sched_freq_aggregate;
-extern __read_mostly unsigned int sched_window_stats_policy;
 extern __read_mostly unsigned int sched_group_upmigrate;
 extern __read_mostly unsigned int sched_group_downmigrate;
 
@@ -306,6 +305,26 @@ static inline void walt_enable_frequency_aggregation(bool enable)
 	sched_freq_aggr_en = enable;
 }
 
+static inline bool is_suh_max(void)
+{
+	return sysctl_sched_user_hint == sched_user_hint_max;
+}
+
+#define DEFAULT_CGROUP_COLOC_ID 1
+static inline bool walt_should_kick_upmigrate(struct task_struct *p, int cpu)
+{
+	struct related_thread_group *rtg = p->grp;
+
+	if (is_suh_max() && rtg && rtg->id == DEFAULT_CGROUP_COLOC_ID &&
+			    rtg->skip_min && p->unfilter)
+		return is_min_capacity_cpu(cpu);
+
+	return false;
+}
+
+extern bool is_rtgb_active(void);
+extern u64 get_rtgb_active_time(void);
+
 #else /* CONFIG_SCHED_WALT */
 
 static inline void walt_sched_init_rq(struct rq *rq) { }
@@ -383,6 +402,16 @@ fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
 }
 
 static inline u64 sched_irqload(int cpu)
+{
+	return 0;
+}
+
+static inline bool walt_should_kick_upmigrate(struct task_struct *p, int cpu)
+{
+	return false;
+}
+
+static inline u64 get_rtgb_active_time(void)
 {
 	return 0;
 }

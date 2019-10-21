@@ -33,10 +33,13 @@
  *     M0 <--> M0
  *     M0 -> FW_DL_ERR
  *     M0 -> M3_ENTER -> M3 -> M3_EXIT --> M0
- * L1: SYS_ERR_DETECT -> SYS_ERR_PROCESS --> POR
- * L2: SHUTDOWN_PROCESS -> DISABLE
+ * L1: DEVICE_ERR_DETECT -> SYS_ERR_DETECT
+ *     SYS_ERR_DETECT -> SYS_ERR_PROCESS --> POR
+ * L2: SHUTDOWN_PROCESS -> LD_ERR_FATAL_DETECT
+ *     SHUTDOWN_PROCESS -> DISABLE
  * L3: LD_ERR_FATAL_DETECT <--> LD_ERR_FATAL_DETECT
- *     LD_ERR_FATAL_DETECT -> SHUTDOWN_PROCESS
+ *     LD_ERR_FATAL_DETECT -> SHUTDOWN_NO_ACCESS
+ *     SHUTDOWN_NO_ACCESS -> DISABLE
  */
 static struct mhi_pm_transitions const mhi_state_transitions[] = {
 	/* L0 States */
@@ -47,50 +50,62 @@ static struct mhi_pm_transitions const mhi_state_transitions[] = {
 	{
 		MHI_PM_POR,
 		MHI_PM_POR | MHI_PM_DISABLE | MHI_PM_M0 |
-		MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_FW_DL_ERR
+		MHI_PM_DEVICE_ERR_DETECT | MHI_PM_SYS_ERR_DETECT |
+		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT |
+		MHI_PM_FW_DL_ERR | MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_M0,
 		MHI_PM_M0 | MHI_PM_M2 | MHI_PM_M3_ENTER |
-		MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_FW_DL_ERR
+		MHI_PM_DEVICE_ERR_DETECT | MHI_PM_SYS_ERR_DETECT |
+		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT |
+		MHI_PM_FW_DL_ERR | MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_M2,
-		MHI_PM_M0 | MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_M0 | MHI_PM_DEVICE_ERR_DETECT | MHI_PM_SYS_ERR_DETECT |
+		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT |
+		MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_M3_ENTER,
-		MHI_PM_M3 | MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_M3 | MHI_PM_DEVICE_ERR_DETECT | MHI_PM_SYS_ERR_DETECT |
+		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT |
+		MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_M3,
-		MHI_PM_M3_EXIT | MHI_PM_SYS_ERR_DETECT |
-		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_M3_EXIT | MHI_PM_DEVICE_ERR_DETECT |
+		MHI_PM_SYS_ERR_DETECT | MHI_PM_LD_ERR_FATAL_DETECT |
+		MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_M3_EXIT,
-		MHI_PM_M0 | MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_M0 | MHI_PM_DEVICE_ERR_DETECT | MHI_PM_SYS_ERR_DETECT |
+		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT |
+		MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_FW_DL_ERR,
-		MHI_PM_FW_DL_ERR | MHI_PM_SYS_ERR_DETECT |
-		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_FW_DL_ERR | MHI_PM_DEVICE_ERR_DETECT |
+		MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
+		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	/* L1 States */
 	{
+		MHI_PM_DEVICE_ERR_DETECT,
+		MHI_PM_SYS_ERR_DETECT | MHI_PM_SHUTDOWN_PROCESS |
+		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_SHUTDOWN_NO_ACCESS
+	},
+	{
 		MHI_PM_SYS_ERR_DETECT,
 		MHI_PM_SYS_ERR_PROCESS | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	{
 		MHI_PM_SYS_ERR_PROCESS,
 		MHI_PM_POR | MHI_PM_SHUTDOWN_PROCESS |
-		MHI_PM_LD_ERR_FATAL_DETECT
+		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_SHUTDOWN_NO_ACCESS
 	},
 	/* L2 States */
 	{
@@ -100,7 +115,11 @@ static struct mhi_pm_transitions const mhi_state_transitions[] = {
 	/* L3 States */
 	{
 		MHI_PM_LD_ERR_FATAL_DETECT,
-		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_SHUTDOWN_PROCESS
+		MHI_PM_LD_ERR_FATAL_DETECT | MHI_PM_SHUTDOWN_NO_ACCESS
+	},
+	{
+		MHI_PM_SHUTDOWN_NO_ACCESS,
+		MHI_PM_DISABLE
 	},
 };
 
@@ -492,7 +511,7 @@ static int mhi_pm_mission_mode_transition(struct mhi_controller *mhi_cntrl)
 	mhi_create_devices(mhi_cntrl);
 
 	/* setup sysfs nodes for userspace votes */
-	mhi_create_vote_sysfs(mhi_cntrl);
+	mhi_create_sysfs(mhi_cntrl);
 
 	read_lock_bh(&mhi_cntrl->pm_lock);
 
@@ -602,7 +621,7 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 	MHI_LOG("Finish resetting channels\n");
 
 	/* remove support for userspace votes */
-	mhi_destroy_vote_sysfs(mhi_cntrl);
+	mhi_destroy_sysfs(mhi_cntrl);
 
 	MHI_LOG("Waiting for all pending threads to complete\n");
 	wake_up_all(&mhi_cntrl->state_event);
@@ -926,19 +945,24 @@ EXPORT_SYMBOL(mhi_async_power_up);
 /* Transition MHI into error state and notify critical clients */
 void mhi_control_error(struct mhi_controller *mhi_cntrl)
 {
-	enum MHI_PM_STATE cur_state;
+	enum MHI_PM_STATE cur_state, transition_state;
 
 	MHI_LOG("Enter with pm_state:%s MHI_STATE:%s\n",
 		to_mhi_pm_state_str(mhi_cntrl->pm_state),
 		TO_MHI_STATE_STR(mhi_cntrl->dev_state));
 
+	/* link is not down if device is in RDDM */
+	transition_state = (mhi_cntrl->ee == MHI_EE_RDDM) ?
+		MHI_PM_DEVICE_ERR_DETECT : MHI_PM_LD_ERR_FATAL_DETECT;
+
 	write_lock_irq(&mhi_cntrl->pm_lock);
-	cur_state = mhi_tryset_pm_state(mhi_cntrl, MHI_PM_LD_ERR_FATAL_DETECT);
+	cur_state = mhi_tryset_pm_state(mhi_cntrl, transition_state);
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 
-	if (cur_state != MHI_PM_LD_ERR_FATAL_DETECT) {
+	/* proceed if we move to device error or are already in error state */
+	if (!MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) {
 		MHI_ERR("Failed to transition to state:%s from:%s\n",
-			to_mhi_pm_state_str(MHI_PM_LD_ERR_FATAL_DETECT),
+			to_mhi_pm_state_str(transition_state),
 			to_mhi_pm_state_str(cur_state));
 		goto exit_control_error;
 	}
@@ -959,6 +983,7 @@ EXPORT_SYMBOL(mhi_control_error);
 void mhi_power_down(struct mhi_controller *mhi_cntrl, bool graceful)
 {
 	enum MHI_PM_STATE cur_state;
+	enum MHI_PM_STATE transition_state = MHI_PM_SHUTDOWN_PROCESS;
 
 	/* if it's not graceful shutdown, force MHI to a linkdown state */
 	if (!graceful) {
@@ -972,8 +997,10 @@ void mhi_power_down(struct mhi_controller *mhi_cntrl, bool graceful)
 			MHI_ERR("Failed to move to state:%s from:%s\n",
 				to_mhi_pm_state_str(MHI_PM_LD_ERR_FATAL_DETECT),
 				to_mhi_pm_state_str(mhi_cntrl->pm_state));
+
+		transition_state = MHI_PM_SHUTDOWN_NO_ACCESS;
 	}
-	mhi_pm_disable_transition(mhi_cntrl, MHI_PM_SHUTDOWN_PROCESS);
+	mhi_pm_disable_transition(mhi_cntrl, transition_state);
 
 	mhi_deinit_debugfs(mhi_cntrl);
 
@@ -1095,10 +1122,8 @@ int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 
 	/* notify any clients we enter lpm */
 	list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans, node) {
-		mutex_lock(&itr->mutex);
 		if (itr->mhi_dev)
 			mhi_notify(itr->mhi_dev, MHI_CB_LPM_ENTER);
-		mutex_unlock(&itr->mutex);
 	}
 
 	return 0;
@@ -1134,6 +1159,11 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 		MHI_VERB("Busy, aborting M3\n");
 		return -EBUSY;
 	}
+
+	/* wait here if controller wants device to be in M2 before proceeding */
+	wait_event_timeout(mhi_cntrl->state_event,
+			   mhi_cntrl->dev_state == MHI_STATE_M2,
+			   msecs_to_jiffies(mhi_cntrl->m2_timeout_ms));
 
 	/* disable ctrl event processing */
 	tasklet_disable(&mhi_cntrl->mhi_event->task);
@@ -1201,10 +1231,8 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 
 	/* notify any clients we enter lpm */
 	list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans, node) {
-		mutex_lock(&itr->mutex);
 		if (itr->mhi_dev)
 			mhi_notify(itr->mhi_dev, MHI_CB_LPM_ENTER);
-		mutex_unlock(&itr->mutex);
 	}
 
 	return 0;
@@ -1240,10 +1268,8 @@ int mhi_pm_resume(struct mhi_controller *mhi_cntrl)
 
 	/* notify any clients we enter lpm */
 	list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans, node) {
-		mutex_lock(&itr->mutex);
 		if (itr->mhi_dev)
 			mhi_notify(itr->mhi_dev, MHI_CB_LPM_EXIT);
-		mutex_unlock(&itr->mutex);
 	}
 
 	write_lock_irq(&mhi_cntrl->pm_lock);
@@ -1316,10 +1342,8 @@ int mhi_pm_fast_resume(struct mhi_controller *mhi_cntrl, bool notify_client)
 	if (notify_client) {
 		list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans,
 					 node) {
-			mutex_lock(&itr->mutex);
 			if (itr->mhi_dev)
 				mhi_notify(itr->mhi_dev, MHI_CB_LPM_EXIT);
-			mutex_unlock(&itr->mutex);
 		}
 	}
 
@@ -1335,6 +1359,7 @@ int mhi_pm_fast_resume(struct mhi_controller *mhi_cntrl, bool notify_client)
 	switch (mhi_cntrl->pm_state) {
 	case MHI_PM_M0:
 		mhi_pm_m0_transition(mhi_cntrl);
+		break;
 	case MHI_PM_M2:
 		read_lock_bh(&mhi_cntrl->pm_lock);
 		mhi_cntrl->wake_get(mhi_cntrl, true);

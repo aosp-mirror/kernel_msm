@@ -34,6 +34,7 @@ static unsigned int counter_delta(struct kgsl_device *device,
 static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.bus = {
 		.max = 350,
+		.floating = true,
 	},
 	.device_id = KGSL_DEVICE_3D0,
 };
@@ -50,7 +51,6 @@ static struct adreno_device device_3d0 = {
 			.irq_name = "kgsl_3d0_irq",
 		},
 		.iomemname = "kgsl_3d0_reg_memory",
-		.shadermemname = "kgsl_3d0_shader_memory",
 		.ftbl = &adreno_functable,
 	},
 	.ft_policy = KGSL_FT_DEFAULT_POLICY,
@@ -331,6 +331,28 @@ void adreno_fault_detect_stop(struct adreno_device *adreno_dev)
 	}
 
 	adreno_dev->fast_hang_detect = 0;
+}
+
+#define GMU_CM3_CFG_NONMASKINTR_SHIFT	9
+
+/* Send an NMI to the GMU */
+void adreno_gmu_send_nmi(struct adreno_device *adreno_dev)
+{
+	/* Mask so there's no interrupt caused by NMI */
+	adreno_write_gmureg(adreno_dev,
+			ADRENO_REG_GMU_GMU2HOST_INTR_MASK, 0xFFFFFFFF);
+
+	/* Make sure the interrupt is masked before causing it */
+	wmb();
+	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_HFI_USE_REG))
+		adreno_write_gmureg(adreno_dev,
+				ADRENO_REG_GMU_NMI_CONTROL_STATUS, 0);
+	adreno_write_gmureg(adreno_dev,
+			ADRENO_REG_GMU_CM3_CFG,
+			(1 << GMU_CM3_CFG_NONMASKINTR_SHIFT));
+
+	/* Make sure the NMI is invoked before we proceed*/
+	wmb();
 }
 
 /*
@@ -878,32 +900,6 @@ static void adreno_of_get_ca_aware_properties(struct adreno_device *adreno_dev,
 	}
 }
 
-static int _of_property_read_ddrtype(struct device_node *node, const char *base,
-		u32 *ptr)
-{
-	char str[32];
-	int ddr = of_fdt_get_ddrtype();
-
-	/* of_fdt_get_ddrtype returns error if the DDR type isn't determined */
-	if (ddr >= 0) {
-		int ret;
-
-		/* Construct expanded string for the DDR type  */
-		ret = snprintf(str, sizeof(str), "%s-ddr%d", base, ddr);
-
-		/* WARN_ON() if the array size was too small for the string */
-		if (WARN_ON(ret > sizeof(str)))
-			return -ENOMEM;
-
-		/* Read the expanded string */
-		if (!of_property_read_u32(node, str, ptr))
-			return 0;
-	}
-
-	/* Read the default string */
-	return of_property_read_u32(node, base, ptr);
-}
-
 static int adreno_of_parse_pwrlevels(struct adreno_device *adreno_dev,
 		struct device_node *node)
 {
@@ -948,7 +944,10 @@ static int adreno_of_parse_pwrlevels(struct adreno_device *adreno_dev,
 			&level->gpu_freq))
 			return -EINVAL;
 
-		ret = _of_property_read_ddrtype(child,
+		of_property_read_u32(child, "qcom,acd-level",
+			&level->acd_level);
+
+		ret = kgsl_of_property_read_ddrtype(child,
 			"qcom,bus-freq", &level->bus_freq);
 		if (ret) {
 			dev_err(device->dev,
@@ -958,11 +957,11 @@ static int adreno_of_parse_pwrlevels(struct adreno_device *adreno_dev,
 		}
 
 		level->bus_min = level->bus_freq;
-		_of_property_read_ddrtype(child,
+		kgsl_of_property_read_ddrtype(child,
 			"qcom,bus-min", &level->bus_min);
 
 		level->bus_max = level->bus_freq;
-		_of_property_read_ddrtype(child,
+		kgsl_of_property_read_ddrtype(child,
 			"qcom,bus-max", &level->bus_max);
 	}
 
@@ -1344,6 +1343,7 @@ static int adreno_probe(struct platform_device *pdev)
 	struct adreno_device *adreno_dev;
 	struct kgsl_device *device;
 	int status;
+	unsigned int priv;
 
 	of_id = of_match_device(adreno_match_table, &pdev->dev);
 	if (!of_id)
@@ -1428,6 +1428,18 @@ static int adreno_probe(struct platform_device *pdev)
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_IOCOHERENT))
 		device->mmu.features |= KGSL_MMU_IO_COHERENT;
 
+	/* Allocate the memstore for storing timestamps and other useful info */
+	priv = KGSL_MEMDESC_CONTIG;
+
+	if (ADRENO_FEATURE(adreno_dev, ADRENO_APRIV))
+		priv |= KGSL_MEMDESC_PRIVILEGED;
+
+	status = kgsl_allocate_global(device, &device->memstore,
+		KGSL_MEMSTORE_SIZE, 0, priv, "memstore");
+
+	if (status)
+		goto out;
+
 	status = adreno_ringbuffer_probe(adreno_dev);
 	if (status)
 		goto out;
@@ -1479,6 +1491,7 @@ static int adreno_probe(struct platform_device *pdev)
 out:
 	if (status) {
 		adreno_ringbuffer_close(adreno_dev);
+		kgsl_free_global(device, &device->memstore);
 		kgsl_device_platform_remove(device);
 		device->pdev = NULL;
 	}
@@ -1558,6 +1571,8 @@ static int adreno_remove(struct platform_device *pdev)
 
 	if (efuse_base != NULL)
 		iounmap(efuse_base);
+
+	kgsl_free_global(device, &device->memstore);
 
 	kgsl_device_platform_remove(device);
 
@@ -1713,6 +1728,9 @@ static int adreno_init(struct kgsl_device *device)
 	adreno_perfcounter_init(adreno_dev);
 	adreno_fault_detect_init(adreno_dev);
 
+	adreno_dev->cooperative_reset = ADRENO_FEATURE(adreno_dev,
+							ADRENO_COOP_RESET);
+
 	/* Power down the device */
 	if (ADRENO_GPUREV(adreno_dev) < 600)
 		kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
@@ -1728,9 +1746,15 @@ static int adreno_init(struct kgsl_device *device)
 	 */
 
 	if (!adreno_is_a3xx(adreno_dev)) {
-		int r = kgsl_allocate_global(device,
+		unsigned int priv = 0;
+		int r;
+
+		if (ADRENO_FEATURE(adreno_dev, ADRENO_APRIV))
+			priv |= KGSL_MEMDESC_PRIVILEGED;
+
+		r = kgsl_allocate_global(device,
 			&adreno_dev->profile_buffer, PAGE_SIZE,
-			0, 0, "alwayson");
+			0, priv, "alwayson");
 
 		adreno_dev->profile_index = 0;
 
@@ -2039,15 +2063,6 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 		}
 	}
 
-	if (gmu_core_isenabled(device) && adreno_dev->perfctr_ifpc_lo == 0) {
-		ret = adreno_perfcounter_get(adreno_dev,
-				KGSL_PERFCOUNTER_GROUP_GPMU_PWR, 4,
-				&adreno_dev->perfctr_ifpc_lo, NULL,
-				PERFCOUNTER_FLAG_KERNEL);
-		if (WARN_ONCE(ret, "Unable to get perf counter for IFPC\n"))
-			adreno_dev->perfctr_ifpc_lo = 0;
-	}
-
 	/* Clear the busy_data stats - we're starting over from scratch */
 	adreno_dev->busy_data.gpu_busy = 0;
 	adreno_dev->busy_data.bif_ram_cycles = 0;
@@ -2254,10 +2269,13 @@ static inline bool adreno_try_soft_reset(struct kgsl_device *device, int fault)
 	 * needs a reset too) and also for below gpu
 	 * A304: It can't do SMMU programming of any kind after a soft reset
 	 * A612: IPC protocol between RGMU and CP will not restart after reset
+	 * A610: An across chip issue with reset line in all 11nm chips,
+	 * resulting in recommendation to not use soft reset
 	 */
 
 	if ((fault & ADRENO_IOMMU_PAGE_FAULT) || adreno_is_a304(adreno_dev) ||
-			adreno_is_a612(adreno_dev))
+			adreno_is_a612(adreno_dev) ||
+			adreno_is_a610(adreno_dev))
 		return false;
 
 	return true;
@@ -3025,55 +3043,10 @@ static int adreno_suspend_context(struct kgsl_device *device)
 	return adreno_idle(device);
 }
 
-/**
- * adreno_read - General read function to read adreno device memory
- * @device - Pointer to the GPU device struct (for adreno device)
- * @base - Base address (kernel virtual) where the device memory is mapped
- * @offsetwords - Offset in words from the base address, of the memory that
- * is to be read
- * @value - Value read from the device memory
- * @mem_len - Length of the device memory mapped to the kernel
- */
-static void adreno_read(struct kgsl_device *device, void __iomem *base,
-		unsigned int offsetwords, unsigned int *value,
-		unsigned int mem_len)
-{
-
-	void __iomem *reg;
-
-	/* Make sure we're not reading from invalid memory */
-	if (WARN(offsetwords * sizeof(uint32_t) >= mem_len,
-		"Out of bounds register read: 0x%x/0x%x\n",
-			offsetwords, mem_len >> 2))
-		return;
-
-	reg = (base + (offsetwords << 2));
-
-	if (!in_interrupt())
-		kgsl_pre_hwaccess(device);
-
-	*value = __raw_readl(reg);
-	/*
-	 * ensure this read finishes before the next one.
-	 * i.e. act like normal readl()
-	 */
-	rmb();
-}
-
 static void adreno_retry_rbbm_read(struct kgsl_device *device,
-		void __iomem *base, unsigned int offsetwords,
-		unsigned int *value, unsigned int mem_len)
+		unsigned int offsetwords, unsigned int *value)
 {
 	int i;
-	void __iomem *reg;
-
-	/* Make sure we're not reading from invalid memory */
-	if (WARN(offsetwords * sizeof(uint32_t) >= mem_len,
-		"Out of bounds register read: 0x%x/0x%x\n",
-		offsetwords, mem_len >> 2))
-		return;
-
-	reg = (base + (offsetwords << 2));
 
 	/*
 	 * If 0xdeafbead was transient, second read is expected to return the
@@ -3081,7 +3054,7 @@ static void adreno_retry_rbbm_read(struct kgsl_device *device,
 	 * 0xdeafbead, read it enough times to guarantee that.
 	 */
 	for (i = 0; i < 16; i++) {
-		*value = readl_relaxed(reg);
+		*value = readl_relaxed(device->reg_virt + (offsetwords << 2));
 		/*
 		 * Read barrier needed so that register is read from hardware
 		 * every iteration
@@ -3093,17 +3066,19 @@ static void adreno_retry_rbbm_read(struct kgsl_device *device,
 	}
 }
 
-static bool adreno_is_rbbm_batch_reg(struct kgsl_device *device,
+static bool adreno_is_rbbm_batch_reg(struct adreno_device *adreno_dev,
 	unsigned int offsetwords)
 {
-	if (adreno_is_a650(ADRENO_DEVICE(device)) ||
-		adreno_is_a620v1(ADRENO_DEVICE(device))) {
-		if (((offsetwords > 0x0) && (offsetwords < 0x3FF)) ||
-			((offsetwords > 0x4FA) && (offsetwords < 0x53F)) ||
-			((offsetwords > 0x556) && (offsetwords < 0x5FF)) ||
-			((offsetwords > 0xF400) && (offsetwords < 0xFFFF)))
+	if ((adreno_is_a650(adreno_dev) &&
+		ADRENO_CHIPID_PATCH(adreno_dev->chipid) < 2) ||
+		adreno_is_a620v1(adreno_dev)) {
+		if (((offsetwords >= 0x0) && (offsetwords <= 0x3FF)) ||
+		((offsetwords >= 0x4FA) && (offsetwords <= 0x53F)) ||
+		((offsetwords >= 0x556) && (offsetwords <= 0x5FF)) ||
+		((offsetwords >= 0xF400) && (offsetwords <= 0xFFFF)))
 			return  true;
 	}
+
 	return false;
 }
 
@@ -3115,26 +3090,22 @@ static bool adreno_is_rbbm_batch_reg(struct kgsl_device *device,
 static void adreno_regread(struct kgsl_device *device, unsigned int offsetwords,
 	unsigned int *value)
 {
-	adreno_read(device, device->reg_virt, offsetwords, value,
-						device->reg_len);
+	/* Make sure we're not reading from invalid memory */
+	if (WARN(offsetwords * sizeof(uint32_t) >= device->reg_len,
+		"Out of bounds register read: 0x%x/0x%x\n",
+			offsetwords, device->reg_len >> 2))
+		return;
+
+	if (!in_interrupt())
+		kgsl_pre_hwaccess(device);
+
+	*value = readl_relaxed(device->reg_virt + (offsetwords << 2));
+	/* Order this read with respect to the following memory accesses */
+	rmb();
 
 	if ((*value == 0xdeafbead) &&
-		adreno_is_rbbm_batch_reg(device, offsetwords))
-		adreno_retry_rbbm_read(device, device->reg_virt, offsetwords,
-			value, device->reg_len);
-}
-
-/**
- * adreno_shadermem_regread - Used to read GPU (adreno) shader memory
- * @device - GPU device whose shader memory is to be read
- * @offsetwords - Offset in words, of the shader memory address to be read
- * @value - Pointer to where the read shader mem value is to be stored
- */
-void adreno_shadermem_regread(struct kgsl_device *device,
-	unsigned int offsetwords, unsigned int *value)
-{
-	adreno_read(device, device->shader_mem_virt, offsetwords, value,
-					device->shader_mem_len);
+		adreno_is_rbbm_batch_reg(ADRENO_DEVICE(device), offsetwords))
+		adreno_retry_rbbm_read(device, offsetwords, value);
 }
 
 static void adreno_regwrite(struct kgsl_device *device,

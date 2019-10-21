@@ -213,8 +213,9 @@ static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
 
 	/* Instance count includes current instance as well. */
 
-	if ((instance_count > core->resources.max_inst_count) ||
-		(secure_instance_count > core->resources.max_secure_inst_count))
+	if ((instance_count >= core->resources.max_inst_count) ||
+		(secure_instance_count >=
+			core->resources.max_secure_inst_count))
 		overload = true;
 	return overload;
 }
@@ -225,11 +226,6 @@ static int _init_session_queue(struct msm_cvp_inst *inst)
 	INIT_LIST_HEAD(&inst->session_queue.msgs);
 	inst->session_queue.msg_count = 0;
 	init_waitqueue_head(&inst->session_queue.wq);
-	inst->session_queue.msg_cache = KMEM_CACHE(cvp_session_msg, 0);
-	if (!inst->session_queue.msg_cache) {
-		dprintk(CVP_ERR, "Failed to allocate msg quque\n");
-		return -ENOMEM;
-	}
 	inst->session_queue.state = QUEUE_ACTIVE;
 	return 0;
 }
@@ -242,15 +238,13 @@ static void _deinit_session_queue(struct msm_cvp_inst *inst)
 	spin_lock(&inst->session_queue.lock);
 	list_for_each_entry_safe(msg, tmpmsg, &inst->session_queue.msgs, node) {
 		list_del_init(&msg->node);
-		kmem_cache_free(inst->session_queue.msg_cache, msg);
+		kmem_cache_free(cvp_driver->msg_cache, msg);
 	}
 	inst->session_queue.msg_count = 0;
 	inst->session_queue.state = QUEUE_STOP;
 	spin_unlock(&inst->session_queue.lock);
 
 	wake_up_all(&inst->session_queue.wq);
-
-	kmem_cache_destroy(inst->session_queue.msg_cache);
 }
 
 void *msm_cvp_open(int core_id, int session_type)
@@ -273,6 +267,19 @@ void *msm_cvp_open(int core_id, int session_type)
 		goto err_invalid_core;
 	}
 
+	core->resources.max_inst_count = MAX_SUPPORTED_INSTANCES;
+	if (msm_cvp_check_for_inst_overload(core)) {
+		dprintk(CVP_ERR, "Instance num reached Max, rejecting session");
+		mutex_lock(&core->lock);
+		list_for_each_entry(inst, &core->instances, list)
+			dprintk(CVP_ERR, "inst %pK, cmd %d id %d\n",
+				inst, inst->cur_cmd_type,
+				hash32_ptr(inst->session));
+		mutex_unlock(&core->lock);
+
+		return NULL;
+	}
+
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst) {
 		dprintk(CVP_ERR, "Failed to allocate memory\n");
@@ -283,6 +290,7 @@ void *msm_cvp_open(int core_id, int session_type)
 	pr_info(CVP_DBG_TAG "Opening cvp instance: %pK\n", "info", inst);
 	mutex_init(&inst->sync_lock);
 	mutex_init(&inst->lock);
+	mutex_init(&inst->fence_lock);
 	spin_lock_init(&inst->event_handler.lock);
 
 	INIT_MSM_CVP_LIST(&inst->persistbufs);
@@ -304,10 +312,6 @@ void *msm_cvp_open(int core_id, int session_type)
 	inst->clk_data.bitrate = 0;
 	inst->clk_data.core_id = 0;
 	inst->deprecate_bitmask = 0;
-	inst->fence_data_cache = KMEM_CACHE(msm_cvp_fence_thread_data, 0);
-	inst->frame_cache = KMEM_CACHE(msm_cvp_frame, 0);
-	inst->frame_buf_cache = KMEM_CACHE(msm_cvp_frame_buf, 0);
-	inst->internal_buf_cache = KMEM_CACHE(msm_cvp_internal_buffer, 0);
 
 	for (i = SESSION_MSG_INDEX(SESSION_MSG_START);
 		i <= SESSION_MSG_INDEX(SESSION_MSG_END); i++) {
@@ -331,19 +335,6 @@ void *msm_cvp_open(int core_id, int session_type)
 		goto fail_init;
 	}
 
-	core->resources.max_inst_count = MAX_SUPPORTED_INSTANCES;
-	if (msm_cvp_check_for_inst_overload(core)) {
-		dprintk(CVP_ERR, "Instance num reached Max, rejecting session");
-		mutex_lock(&core->lock);
-		list_for_each_entry(inst, &core->instances, list)
-			dprintk(CVP_ERR, "inst %pK, cmd %d id %d\n",
-				inst, inst->cur_cmd_type,
-				hash32_ptr(inst->session));
-		mutex_unlock(&core->lock);
-
-		goto fail_init;
-	}
-
 	inst->debugfs_root =
 		msm_cvp_debugfs_init_inst(inst, core->debugfs_root);
 
@@ -355,16 +346,12 @@ fail_init:
 	mutex_unlock(&core->lock);
 	mutex_destroy(&inst->sync_lock);
 	mutex_destroy(&inst->lock);
+	mutex_destroy(&inst->fence_lock);
 
 	DEINIT_MSM_CVP_LIST(&inst->persistbufs);
 	DEINIT_MSM_CVP_LIST(&inst->cvpcpubufs);
 	DEINIT_MSM_CVP_LIST(&inst->cvpdspbufs);
 	DEINIT_MSM_CVP_LIST(&inst->frames);
-
-	kmem_cache_destroy(inst->fence_data_cache);
-	kmem_cache_destroy(inst->frame_cache);
-	kmem_cache_destroy(inst->frame_buf_cache);
-	kmem_cache_destroy(inst->internal_buf_cache);
 
 	kfree(inst);
 	inst = NULL;
@@ -406,13 +393,9 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 	DEINIT_MSM_CVP_LIST(&inst->cvpdspbufs);
 	DEINIT_MSM_CVP_LIST(&inst->frames);
 
-	kmem_cache_destroy(inst->fence_data_cache);
-	kmem_cache_destroy(inst->frame_cache);
-	kmem_cache_destroy(inst->frame_buf_cache);
-	kmem_cache_destroy(inst->internal_buf_cache);
-
 	mutex_destroy(&inst->sync_lock);
 	mutex_destroy(&inst->lock);
+	mutex_destroy(&inst->fence_lock);
 
 	msm_cvp_debugfs_deinit_inst(inst);
 	_deinit_session_queue(inst);

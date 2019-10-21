@@ -1886,8 +1886,13 @@ static void bfq_request_merged(struct request_queue *q, struct request *req,
 	    blk_rq_pos(container_of(rb_prev(&req->rb_node),
 				    struct request, rb_node))) {
 		struct bfq_queue *bfqq = bfq_init_rq(req);
-		struct bfq_data *bfqd = bfqq->bfqd;
+		struct bfq_data *bfqd;
 		struct request *prev, *next_rq;
+
+		if (!bfqq)
+			return;
+
+		bfqd = bfqq->bfqd;
 
 		/* Reposition request in its sort_list */
 		elv_rb_del(&bfqq->sort_list, req);
@@ -1929,6 +1934,9 @@ static void bfq_requests_merged(struct request_queue *q, struct request *rq,
 {
 	struct bfq_queue *bfqq = bfq_init_rq(rq),
 		*next_bfqq = bfq_init_rq(next);
+
+	if (!bfqq)
+		return;
 
 	/*
 	 * If next and rq belong to the same bfq_queue and next is older
@@ -3938,7 +3946,6 @@ exit:
 #if defined(CONFIG_BFQ_GROUP_IOSCHED) && defined(CONFIG_DEBUG_BLK_CGROUP)
 static void bfq_update_dispatch_stats(struct request_queue *q,
 				      struct request *rq,
-				      struct bfq_queue *in_serv_queue,
 				      bool idle_timer_disabled)
 {
 	struct bfq_queue *bfqq = rq ? RQ_BFQQ(rq) : NULL;
@@ -3960,17 +3967,15 @@ static void bfq_update_dispatch_stats(struct request_queue *q,
 	 * bfqq_group(bfqq) exists as well.
 	 */
 	spin_lock_irq(q->queue_lock);
-	if (idle_timer_disabled)
+	if (bfqq && idle_timer_disabled)
 		/*
-		 * Since the idle timer has been disabled,
-		 * in_serv_queue contained some request when
-		 * __bfq_dispatch_request was invoked above, which
-		 * implies that rq was picked exactly from
-		 * in_serv_queue. Thus in_serv_queue == bfqq, and is
-		 * therefore guaranteed to exist because of the above
-		 * arguments.
+		 * It could be possible that current active
+		 * queue and group might got updated along with
+		 * request via. __bfq_dispatch_request.
+		 * So, always use current active request to
+		 * derive its associated bfq queue and group.
 		 */
-		bfqg_stats_update_idle_time(bfqq_group(in_serv_queue));
+		bfqg_stats_update_idle_time(bfqq_group(bfqq));
 	if (bfqq) {
 		struct bfq_group *bfqg = bfqq_group(bfqq);
 
@@ -3983,7 +3988,6 @@ static void bfq_update_dispatch_stats(struct request_queue *q,
 #else
 static inline void bfq_update_dispatch_stats(struct request_queue *q,
 					     struct request *rq,
-					     struct bfq_queue *in_serv_queue,
 					     bool idle_timer_disabled) {}
 #endif
 
@@ -4006,7 +4010,7 @@ static struct request *bfq_dispatch_request(struct blk_mq_hw_ctx *hctx)
 
 	spin_unlock_irq(&bfqd->lock);
 
-	bfq_update_dispatch_stats(hctx->queue, rq, in_serv_queue,
+	bfq_update_dispatch_stats(hctx->queue, rq,
 				  idle_timer_disabled);
 
 	return rq;
@@ -4590,12 +4594,12 @@ static void bfq_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 
 	spin_lock_irq(&bfqd->lock);
 	bfqq = bfq_init_rq(rq);
-	if (at_head || blk_rq_is_passthrough(rq)) {
+	if (!bfqq || at_head || blk_rq_is_passthrough(rq)) {
 		if (at_head)
 			list_add(&rq->queuelist, &bfqd->dispatch);
 		else
 			list_add_tail(&rq->queuelist, &bfqd->dispatch);
-	} else { /* bfqq is assumed to be non null here */
+	} else {
 		idle_timer_disabled = __bfq_insert_request(bfqd, rq);
 		/*
 		 * Update bfqq, because, if a queue merge has occurred

@@ -14,6 +14,14 @@
 #include <linux/mhi.h>
 #include "mhi_internal.h"
 
+const char * const mhi_log_level_str[MHI_MSG_LVL_MAX] = {
+	[MHI_MSG_LVL_VERBOSE] = "Verbose",
+	[MHI_MSG_LVL_INFO] = "Info",
+	[MHI_MSG_LVL_ERROR] = "Error",
+	[MHI_MSG_LVL_CRITICAL] = "Critical",
+	[MHI_MSG_LVL_MASK_ALL] = "Mask all",
+};
+
 const char * const mhi_ee_str[MHI_EE_MAX] = {
 	[MHI_EE_PBL] = "PBL",
 	[MHI_EE_SBL] = "SBL",
@@ -54,10 +62,12 @@ static const char * const mhi_pm_state_str[] = {
 	[MHI_PM_BIT_M3] = "M3",
 	[MHI_PM_BIT_M3_EXIT] = "M3->M0",
 	[MHI_PM_BIT_FW_DL_ERR] = "FW DL Error",
+	[MHI_PM_BIT_DEVICE_ERR_DETECT] = "Device Error Detect",
 	[MHI_PM_BIT_SYS_ERR_DETECT] = "SYS_ERR Detect",
 	[MHI_PM_BIT_SYS_ERR_PROCESS] = "SYS_ERR Process",
 	[MHI_PM_BIT_SHUTDOWN_PROCESS] = "SHUTDOWN Process",
 	[MHI_PM_BIT_LD_ERR_FATAL_DETECT] = "LD or Error Fatal Detect",
+	[MHI_PM_BIT_SHUTDOWN_NO_ACCESS] = "SHUTDOWN No Access",
 };
 
 struct mhi_bus mhi_bus;
@@ -71,6 +81,38 @@ const char *to_mhi_pm_state_str(enum MHI_PM_STATE state)
 
 	return mhi_pm_state_str[index];
 }
+
+static ssize_t log_level_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct mhi_device *mhi_dev = to_mhi_device(dev);
+	struct mhi_controller *mhi_cntrl = mhi_dev->mhi_cntrl;
+
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+			TO_MHI_LOG_LEVEL_STR(mhi_cntrl->log_lvl));
+}
+
+static ssize_t log_level_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t count)
+{
+	struct mhi_device *mhi_dev = to_mhi_device(dev);
+	struct mhi_controller *mhi_cntrl = mhi_dev->mhi_cntrl;
+	enum MHI_DEBUG_LEVEL log_level;
+
+	if (kstrtou32(buf, 0, &log_level) < 0)
+		return -EINVAL;
+
+	mhi_cntrl->log_lvl = log_level;
+
+	MHI_LOG("IPC log level changed to: %s\n",
+		TO_MHI_LOG_LEVEL_STR(log_level));
+
+	return count;
+}
+static DEVICE_ATTR_RW(log_level);
 
 static ssize_t bus_vote_show(struct device *dev,
 			     struct device_attribute *attr,
@@ -130,27 +172,28 @@ static ssize_t device_vote_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(device_vote);
 
-static struct attribute *mhi_vote_attrs[] = {
+static struct attribute *mhi_sysfs_attrs[] = {
+	&dev_attr_log_level.attr,
 	&dev_attr_bus_vote.attr,
 	&dev_attr_device_vote.attr,
 	NULL,
 };
 
-static const struct attribute_group mhi_vote_group = {
-	.attrs = mhi_vote_attrs,
+static const struct attribute_group mhi_sysfs_group = {
+	.attrs = mhi_sysfs_attrs,
 };
 
-int mhi_create_vote_sysfs(struct mhi_controller *mhi_cntrl)
+int mhi_create_sysfs(struct mhi_controller *mhi_cntrl)
 {
 	return sysfs_create_group(&mhi_cntrl->mhi_dev->dev.kobj,
-				  &mhi_vote_group);
+				  &mhi_sysfs_group);
 }
 
-void mhi_destroy_vote_sysfs(struct mhi_controller *mhi_cntrl)
+void mhi_destroy_sysfs(struct mhi_controller *mhi_cntrl)
 {
 	struct mhi_device *mhi_dev = mhi_cntrl->mhi_dev;
 
-	sysfs_remove_group(&mhi_dev->dev.kobj, &mhi_vote_group);
+	sysfs_remove_group(&mhi_dev->dev.kobj, &mhi_sysfs_group);
 
 	/* relinquish any pending votes for device */
 	while (atomic_read(&mhi_dev->dev_vote))
@@ -1256,7 +1299,7 @@ static int of_parse_dt(struct mhi_controller *mhi_cntrl,
 	return 0;
 
 error_ev_cfg:
-	kfree(mhi_cntrl->mhi_chan);
+	vfree(mhi_cntrl->mhi_chan);
 
 	return ret;
 }
@@ -1399,7 +1442,7 @@ error_alloc_dev:
 	kfree(mhi_cntrl->mhi_cmd);
 
 error_alloc_cmd:
-	kfree(mhi_cntrl->mhi_chan);
+	vfree(mhi_cntrl->mhi_chan);
 	kfree(mhi_cntrl->mhi_event);
 
 	return ret;
@@ -1412,7 +1455,7 @@ void mhi_unregister_mhi_controller(struct mhi_controller *mhi_cntrl)
 
 	kfree(mhi_cntrl->mhi_cmd);
 	kfree(mhi_cntrl->mhi_event);
-	kfree(mhi_cntrl->mhi_chan);
+	vfree(mhi_cntrl->mhi_chan);
 	kfree(mhi_cntrl->mhi_tsync);
 
 	device_del(&mhi_dev->dev);
@@ -1571,7 +1614,6 @@ static int mhi_driver_probe(struct device *dev)
 	struct mhi_event *mhi_event;
 	struct mhi_chan *ul_chan = mhi_dev->ul_chan;
 	struct mhi_chan *dl_chan = mhi_dev->dl_chan;
-	bool auto_start = false;
 	int ret;
 
 	/* bring device out of lpm */
@@ -1590,7 +1632,11 @@ static int mhi_driver_probe(struct device *dev)
 
 		ul_chan->xfer_cb = mhi_drv->ul_xfer_cb;
 		mhi_dev->status_cb = mhi_drv->status_cb;
-		auto_start = ul_chan->auto_start;
+		if (ul_chan->auto_start) {
+			ret = mhi_prepare_channel(mhi_cntrl, ul_chan);
+			if (ret)
+				goto exit_probe;
+		}
 	}
 
 	if (dl_chan) {
@@ -1614,15 +1660,22 @@ static int mhi_driver_probe(struct device *dev)
 
 		/* ul & dl uses same status cb */
 		mhi_dev->status_cb = mhi_drv->status_cb;
-		auto_start = (auto_start || dl_chan->auto_start);
 	}
 
 	ret = mhi_drv->probe(mhi_dev, mhi_dev->id);
+	if (ret)
+		goto exit_probe;
 
-	if (!ret && auto_start)
-		mhi_prepare_for_transfer(mhi_dev);
+	if (dl_chan && dl_chan->auto_start)
+		mhi_prepare_channel(mhi_cntrl, dl_chan);
+
+	mhi_device_put(mhi_dev, MHI_VOTE_DEVICE);
+
+	return ret;
 
 exit_probe:
+	mhi_unprepare_from_transfer(mhi_dev);
+
 	mhi_device_put(mhi_dev, MHI_VOTE_DEVICE);
 
 	return ret;

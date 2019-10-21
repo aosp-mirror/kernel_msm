@@ -22,8 +22,6 @@
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX "kgsl."
 
-#define GMU_CM3_CFG_NONMASKINTR_SHIFT    9
-
 struct gmu_iommu_context {
 	const char *name;
 	struct device *dev;
@@ -383,6 +381,9 @@ static void gmu_memory_close(struct gmu_device *gmu)
 		md = &gmu->kmem_entries[i];
 		ctx = &gmu_ctx[md->ctx_idx];
 
+		if (!ctx->domain)
+			continue;
+
 		if (md->gmuaddr && md->mem_type != GMU_ITCM &&
 				md->mem_type != GMU_DTCM)
 			iommu_unmap(ctx->domain, md->gmuaddr, md->size);
@@ -447,7 +448,7 @@ int gmu_prealloc_req(struct kgsl_device *device, struct gmu_block_header *blk)
  * to share with GMU in kernel mode.
  * @device: Pointer to KGSL device
  */
-int gmu_memory_probe(struct kgsl_device *device)
+static int gmu_memory_probe(struct kgsl_device *device)
 {
 	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
@@ -804,38 +805,6 @@ static void build_bwtable_cmd_cache(struct gmu_device *gmu)
 				votes->cnoc_votes.cmd_data[i][j];
 }
 
-static int gmu_acd_probe(struct gmu_device *gmu, struct device_node *node)
-{
-	struct hfi_acd_table_cmd *cmd = &gmu->hfi.acd_tbl_cmd;
-	struct device_node *acd_node;
-
-	acd_node = of_find_node_by_name(node, "qcom,gpu-acd-table");
-	if (!acd_node)
-		return -ENODEV;
-
-	cmd->hdr = 0xFFFFFFFF;
-	cmd->version = HFI_ACD_INIT_VERSION;
-	cmd->enable_by_level = 0;
-	cmd->stride = 0;
-	cmd->num_levels = 0;
-
-	of_property_read_u32(acd_node, "qcom,acd-stride", &cmd->stride);
-	if (!cmd->stride || cmd->stride > MAX_ACD_STRIDE)
-		return -EINVAL;
-
-	of_property_read_u32(acd_node, "qcom,acd-num-levels", &cmd->num_levels);
-	if (!cmd->num_levels || cmd->num_levels > MAX_ACD_NUM_LEVELS)
-		return -EINVAL;
-
-	of_property_read_u32(acd_node, "qcom,acd-enable-by-level",
-			&cmd->enable_by_level);
-	if (hweight32(cmd->enable_by_level) != cmd->num_levels)
-		return -EINVAL;
-
-	return of_property_read_u32_array(acd_node, "qcom,acd-data",
-			cmd->data, cmd->stride * cmd->num_levels);
-}
-
 /*
  * gmu_bus_vote_init - initialized RPMh votes needed for bw scaling by GMU.
  * @gmu: Pointer to GMU device
@@ -912,24 +881,6 @@ static int gmu_rpmh_init(struct kgsl_device *device,
 	return rpmh_arc_votes_init(device, gmu, &cx_arc, &mx_arc, GMU_ARC_VOTE);
 }
 
-static void send_nmi_to_gmu(struct adreno_device *adreno_dev)
-{
-	/* Mask so there's no interrupt caused by NMI */
-	adreno_write_gmureg(adreno_dev,
-			ADRENO_REG_GMU_GMU2HOST_INTR_MASK, 0xFFFFFFFF);
-
-	/* Make sure the interrupt is masked before causing it */
-	wmb();
-	adreno_write_gmureg(adreno_dev,
-		ADRENO_REG_GMU_NMI_CONTROL_STATUS, 0);
-	adreno_write_gmureg(adreno_dev,
-		ADRENO_REG_GMU_CM3_CFG,
-		(1 << GMU_CM3_CFG_NONMASKINTR_SHIFT));
-
-	/* Make sure the NMI is invoked before we proceed*/
-	wmb();
-}
-
 static irqreturn_t gmu_irq_handler(int irq, void *data)
 {
 	struct kgsl_device *device = data;
@@ -951,7 +902,7 @@ static irqreturn_t gmu_irq_handler(int irq, void *data)
 				ADRENO_REG_GMU_AO_HOST_INTERRUPT_MASK,
 				(mask | GMU_INT_WDOG_BITE));
 
-		send_nmi_to_gmu(adreno_dev);
+		adreno_gmu_send_nmi(adreno_dev);
 		/*
 		 * There is sufficient delay for the GMU to have finished
 		 * handling the NMI before snapshot is taken, as the fault
@@ -1278,6 +1229,41 @@ int gmu_cache_finalize(struct kgsl_device *device)
 	return 0;
 }
 
+static void gmu_acd_probe(struct kgsl_device *device, struct gmu_device *gmu,
+		struct device_node *node)
+{
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	struct hfi_acd_table_cmd *cmd = &gmu->hfi.acd_tbl_cmd;
+	u32 acd_level, cmd_idx, numlvl = pwr->num_pwrlevels;
+	int ret, i;
+
+	if (!ADRENO_FEATURE(ADRENO_DEVICE(device), ADRENO_ACD))
+		return;
+
+	cmd->hdr = 0xFFFFFFFF;
+	cmd->version = HFI_ACD_INIT_VERSION;
+	cmd->stride = 1;
+	cmd->enable_by_level = 0;
+
+	for (i = 0, cmd_idx = 0; i < numlvl; i++) {
+		acd_level = pwr->pwrlevels[numlvl - i - 1].acd_level;
+		if (acd_level) {
+			cmd->enable_by_level |= (1 << i);
+			cmd->data[cmd_idx++] = acd_level;
+		}
+	}
+
+	if (!cmd->enable_by_level)
+		return;
+
+	cmd->num_levels = cmd_idx;
+
+	ret = gmu_aop_mailbox_init(device, gmu);
+	if (ret)
+		dev_err(&gmu->pdev->dev,
+			"AOP mailbox init failed: %d\n", ret);
+}
+
 /* Do not access any GMU registers in GMU probe function */
 static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 {
@@ -1390,17 +1376,7 @@ static int gmu_probe(struct kgsl_device *device, struct device_node *node)
 	else
 		gmu->idle_level = GPU_HW_ACTIVE;
 
-	if (ADRENO_FEATURE(adreno_dev, ADRENO_ACD)) {
-		if (!gmu_acd_probe(gmu, node)) {
-			/* Init the AOP mailbox if we have a valid ACD table */
-			ret = gmu_aop_mailbox_init(device, gmu);
-			if (ret)
-				dev_err(&gmu->pdev->dev,
-					"AOP mailbox init failed: %d\n", ret);
-		} else
-			dev_err(&gmu->pdev->dev,
-				"ACD probe failed: missing or invalid table\n");
-	}
+	gmu_acd_probe(device, gmu, node);
 
 	set_bit(GMU_ENABLED, &device->gmu_core.flags);
 	device->gmu_core.dev_ops = &adreno_a6xx_gmudev;
@@ -1548,7 +1524,7 @@ static void gmu_snapshot(struct kgsl_device *device)
 	struct gmu_dev_ops *gmu_dev_ops = GMU_DEVICE_OPS(device);
 	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 
-	send_nmi_to_gmu(adreno_dev);
+	adreno_gmu_send_nmi(adreno_dev);
 	/* Wait for the NMI to be handled */
 	udelay(100);
 	kgsl_device_snapshot(device, NULL, true);
@@ -1562,6 +1538,24 @@ static void gmu_snapshot(struct kgsl_device *device)
 	gmu->fault_count++;
 }
 
+static int gmu_init(struct kgsl_device *device)
+{
+	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
+	struct gmu_dev_ops *ops = GMU_DEVICE_OPS(device);
+	int ret;
+
+	ret = ops->load_firmware(device);
+	if (ret)
+		return ret;
+
+	ret = gmu_memory_probe(device);
+	if (ret)
+		return ret;
+
+	hfi_init(gmu);
+
+	return 0;
+}
 /* To be called to power on both GPU and GMU */
 static int gmu_start(struct kgsl_device *device)
 {
@@ -1575,7 +1569,9 @@ static int gmu_start(struct kgsl_device *device)
 	case KGSL_STATE_INIT:
 		gmu_aop_send_acd_state(device, test_bit(ADRENO_ACD_CTRL,
 					&adreno_dev->pwrctrl_flag));
-
+		ret = gmu_init(device);
+		if (ret)
+			return ret;
 	case KGSL_STATE_SUSPEND:
 		WARN_ON(test_bit(GMU_CLK_ON, &device->gmu_core.flags));
 

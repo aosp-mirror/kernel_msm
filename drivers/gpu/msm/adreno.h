@@ -96,8 +96,6 @@
 #define ADRENO_MIN_VOLT BIT(15)
 /* The core supports IO-coherent memory */
 #define ADRENO_IOCOHERENT BIT(16)
-/* To retain RBBM perfcntl enable setting in IFPC */
-#define ADRENO_PERFCTRL_RETAIN BIT(17)
 /*
  * The GMU supports Adaptive Clock Distribution (ACD)
  * for droop mitigation
@@ -109,6 +107,8 @@
 #define ADRENO_COOP_RESET BIT(19)
 /* Indicates that the specific target is no longer supported */
 #define ADRENO_DEPRECATED BIT(20)
+/* The target supports ringbuffer level APRIV */
+#define ADRENO_APRIV BIT(21)
 /*
  * Adreno GPU quirks - control bits for various workarounds
  */
@@ -195,6 +195,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A512 = 512,
 	ADRENO_REV_A530 = 530,
 	ADRENO_REV_A540 = 540,
+	ADRENO_REV_A610 = 610,
 	ADRENO_REV_A612 = 612,
 	ADRENO_REV_A615 = 615,
 	ADRENO_REV_A616 = 616,
@@ -352,7 +353,6 @@ struct adreno_reglist {
  * @gpudev: Pointer to the GPU family specific functions for this core
  * @gmem_base: Base address of binning memory (GMEM/OCMEM)
  * @gmem_size: Amount of binning memory (GMEM/OCMEM) to reserve for the core
- * @num_protected_regs: number of protected registers
  * @busy_mask: mask to check if GPU is busy in RBBM_STATUS
  * @bus_width: Bytes transferred in 1 cycle
  */
@@ -363,7 +363,6 @@ struct adreno_gpu_core {
 	struct adreno_gpudev *gpudev;
 	unsigned long gmem_base;
 	size_t gmem_size;
-	unsigned int num_protected_regs;
 	unsigned int busy_mask;
 	u32 bus_width;
 };
@@ -407,6 +406,8 @@ enum gpu_coresight_sources {
  * @ft_policy: Defines the fault tolerance policy
  * @long_ib_detect: Long IB detection availability
  * @ft_pf_policy: Defines the fault policy for page faults
+ * @cooperative_reset: Indicates if graceful death handshake is enabled
+ * between GMU and GPU
  * @profile: Container for adreno profiler information
  * @dispatcher: Container for adreno GPU dispatcher
  * @pwron_fixup: Command buffer to run a post-power collapse shader workaround
@@ -484,6 +485,7 @@ struct adreno_device {
 	unsigned long ft_policy;
 	unsigned int long_ib_detect;
 	unsigned long ft_pf_policy;
+	bool cooperative_reset;
 	struct adreno_profile profile;
 	struct adreno_dispatcher dispatcher;
 	struct kgsl_memdesc pwron_fixup;
@@ -606,7 +608,6 @@ enum adreno_regs {
 	ADRENO_REG_CP_ME_RAM_DATA,
 	ADRENO_REG_CP_PFP_UCODE_DATA,
 	ADRENO_REG_CP_PFP_UCODE_ADDR,
-	ADRENO_REG_CP_WFI_PEND_CTR,
 	ADRENO_REG_CP_RB_BASE,
 	ADRENO_REG_CP_RB_BASE_HI,
 	ADRENO_REG_CP_RB_RPTR_ADDR_LO,
@@ -927,7 +928,7 @@ struct adreno_gpudev {
 	void (*gpu_keepalive)(struct adreno_device *adreno_dev,
 			bool state);
 	bool (*hw_isidle)(struct adreno_device *adreno_dev);
-	const char *(*iommu_fault_block)(struct adreno_device *adreno_dev,
+	const char *(*iommu_fault_block)(struct kgsl_device *device,
 				unsigned int fsynr1);
 	int (*reset)(struct kgsl_device *device, int fault);
 	int (*soft_reset)(struct adreno_device *adreno_dev);
@@ -1046,10 +1047,6 @@ int adreno_set_constraint(struct kgsl_device *device,
 				struct kgsl_context *context,
 				struct kgsl_device_constraint *constraint);
 
-void adreno_shadermem_regread(struct kgsl_device *device,
-						unsigned int offsetwords,
-						unsigned int *value);
-
 void adreno_snapshot(struct kgsl_device *device,
 		struct kgsl_snapshot *snapshot,
 		struct kgsl_context *context);
@@ -1164,6 +1161,7 @@ static inline int adreno_is_a6xx(struct adreno_device *adreno_dev)
 			ADRENO_GPUREV(adreno_dev) < 700;
 }
 
+ADRENO_TARGET(a610, ADRENO_REV_A610)
 ADRENO_TARGET(a612, ADRENO_REV_A612)
 ADRENO_TARGET(a618, ADRENO_REV_A618)
 ADRENO_TARGET(a620, ADRENO_REV_A620)
@@ -1460,43 +1458,6 @@ static inline void adreno_put_gpu_halt(struct adreno_device *adreno_dev)
  */
 void adreno_reglist_write(struct adreno_device *adreno_dev,
 		const struct adreno_reglist *list, u32 count);
-
-/**
- * adreno_set_protected_registers() - Protect the specified range of registers
- * from being accessed by the GPU
- * @adreno_dev: pointer to the Adreno device
- * @index: Pointer to the index of the protect mode register to write to
- * @reg: Starting dword register to write
- * @mask_len: Size of the mask to protect (# of registers = 2 ** mask_len)
- *
- * Add the range of registers to the list of protected mode registers that will
- * cause an exception if the GPU accesses them.  There are 16 available
- * protected mode registers.  Index is used to specify which register to write
- * to - the intent is to call this function multiple times with the same index
- * pointer for each range and the registers will be magically programmed in
- * incremental fashion
- */
-static inline void adreno_set_protected_registers(
-		struct adreno_device *adreno_dev, unsigned int *index,
-		unsigned int reg, int mask_len)
-{
-	unsigned int val;
-	unsigned int base =
-		adreno_getreg(adreno_dev, ADRENO_REG_CP_PROTECT_REG_0);
-	unsigned int offset = *index;
-	unsigned int max_slots = adreno_dev->gpucore->num_protected_regs ?
-				adreno_dev->gpucore->num_protected_regs : 16;
-
-	/* Do we have a free slot? */
-	if (WARN(*index >= max_slots, "Protected register slots full: %d/%d\n",
-					*index, max_slots))
-		return;
-
-	val = 0x60000000 | ((mask_len & 0x1F) << 24) | ((reg << 2) & 0xFFFFF);
-
-	kgsl_regwrite(KGSL_DEVICE(adreno_dev), base + offset, val);
-	*index = *index + 1;
-}
 
 #ifdef CONFIG_DEBUG_FS
 void adreno_debugfs_init(struct adreno_device *adreno_dev);
@@ -1855,4 +1816,5 @@ int adreno_gmu_fenced_write(struct adreno_device *adreno_dev,
 	enum adreno_regs offset, unsigned int val,
 	unsigned int fence_mask);
 int adreno_clear_pending_transactions(struct kgsl_device *device);
+void adreno_gmu_send_nmi(struct adreno_device *adreno_dev);
 #endif /*__ADRENO_H */
