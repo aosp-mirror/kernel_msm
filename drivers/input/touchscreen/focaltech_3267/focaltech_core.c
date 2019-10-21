@@ -1000,15 +1000,6 @@ int fts_ts_start(struct device *dev)
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 	int err = 0;
 
-	if (ts_pwr_disabled) {
-		err = fts_power_on(data, true);
-		if (err) {
-			dev_err(dev, "power on failed");
-			return err;
-		}
-		enable_irq(data->client->irq);
-		ts_pwr_disabled = false;
-	}
 
 #ifdef FTS_POWER_CONTROL
 	if (data->pdata->power_on) {
@@ -1024,6 +1015,7 @@ int fts_ts_start(struct device *dev)
 			return err;
 		}
 	}
+	ts_pwr_disabled = false;
 
 	#ifdef MSM_NEW_VER
 	if (data->ts_pinctrl) {
@@ -1039,7 +1031,7 @@ int fts_ts_start(struct device *dev)
 #ifdef FTS_GPIO_CONTROL
 	err = fts_gpio_configure(data, true);
 	if (err < 0) {
-		dev_err(&data->client->dev, "failed to put gpios in resue state\n");
+		dev_err(&data->client->dev, "failed to put gpios in resume state\n");
 		goto err_gpio_configuration;
 	}
 #endif
@@ -1050,19 +1042,15 @@ int fts_ts_start(struct device *dev)
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
 	}
 
-#ifndef FTS_GESTRUE_EN
-	enable_irq(data->client->irq);
-#endif
+	while (fts_irq_desc->depth > 0) {
+		enable_irq(data->client->irq);
+		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__,
+			fts_irq_desc->depth);
+	}
 
 #ifdef FTS_GESTRUE_EN
 	big_area_enabled_flag = false;
 #endif
-
-	if (fts_irq_desc->depth > 0 && fts_wq_running == false) {
-		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
-		enable_irq(fts_wq_data->client->irq);
-		suspend_resume_recovery_count++;
-	}
 
 	data->suspended = false;
 
@@ -1167,6 +1155,7 @@ int fts_ts_stop(struct device *dev)
 			goto pwr_off_fail;
 		}
 	}
+	ts_pwr_disabled = true;
 
 #ifdef MSM_NEW_VER
 	if (data->ts_pinctrl) {
@@ -1188,12 +1177,12 @@ int fts_ts_stop(struct device *dev)
 	}
 #endif
 
-	if (fts_irq_desc->depth > 0 && fts_wq_running == false) {
+#ifdef FTS_GESTRUE_EN
+	while (fts_irq_desc->depth > 0) {
+		enable_irq(data->client->irq);
 		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
-			enable_irq(fts_wq_data->client->irq);
-		suspend_resume_recovery_count++;
 	}
-
+#endif
 	data->suspended = true;
 
 	return 0;
@@ -1233,6 +1222,36 @@ pwr_off_fail:
 #ifndef FTS_GESTRUE_EN
 	enable_irq(data->client->irq);
 #endif
+	return err;
+}
+
+int fts_ts_enable(struct device *dev)
+{
+	struct fts_ts_data *data = dev_get_drvdata(dev);
+	int err = 0;
+
+	if (!ts_pwr_disabled) {
+		pr_info("[fts]Touch vdd/vcc has been enabled\n");
+		return 0;
+	}
+	err = fts_power_on(data, true);
+	if (err) {
+		dev_err(dev, "[fts]power on failed\n");
+		return err;
+	}
+	ts_pwr_disabled = false;
+
+	if (gpio_is_valid(data->pdata->reset_gpio)) {
+		gpio_set_value_cansleep(data->pdata->reset_gpio, 0);
+		msleep(data->pdata->hard_rst_dly);
+		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
+	}
+
+	while (fts_irq_desc->depth > 0) {
+		enable_irq(data->client->irq);
+		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__,
+			fts_irq_desc->depth);
+	}
 	return err;
 }
 
@@ -1277,7 +1296,6 @@ int fts_ts_disable(struct device *dev)
 	}
 
 	ts_pwr_disabled = true;	
-	data->suspended = true;
 	return 0;
 
 pwr_off_fail:
@@ -1303,11 +1321,6 @@ int fts_ts_suspend(struct device *dev)
 	struct fts_ts_data *data = dev_get_drvdata(dev);
 
 	int err = 0;
-
-	if (ts_pwr_disabled) {
-		dev_dbg(dev, "Touch vdd/vcc has been disabled\n");
-		return 0;
-	}
 
 	printk(KERN_ERR "[fts]%s, start\n", __func__);
 
@@ -1397,13 +1410,12 @@ static int fts_ts_open(struct input_dev *input_dev)
 
 	printk(KERN_INFO "[fts]%s, start\n", __func__);
 	data = input_get_drvdata(input_dev);
-	err = fts_ts_resume(&(data->client->dev));
+	err = fts_ts_enable(&data->client->dev);
 	printk(KERN_INFO "[fts]%s, finish, err : %d\n", __func__, err);
 	if (err < 0) {
 		printk(KERN_ERR "[fts]%s, TP power on fail, err : %d\n", __func__, err);
 		return err;
 	}
-	ts_pwr_disabled = false;
 	return 0;
 }
 
@@ -1427,7 +1439,6 @@ static void fts_ts_close(struct input_dev *input_dev)
 		printk(KERN_ERR "[fts]%s, TP power disable fail, err : %d\n", __func__, err);
 		return;
 	}
-	ts_pwr_disabled = true;
 }
 
 static const struct dev_pm_ops fts_ts_pm_ops = {

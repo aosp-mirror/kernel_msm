@@ -1648,7 +1648,7 @@ static ssize_t fts_tp_pwr_disabled_store(struct device *dev, struct device_attri
 	} else {
 		if (ts_pwr_disabled) {
 			printk(KERN_DEBUG "[fts]%s, Enable TP Now \n", __func__);
-			fts_ts_start(dev);
+			fts_ts_enable(dev);
 			ts_pwr_disabled = false;
 		} else {
 			printk(KERN_INFO "[fts]%s, TP power already on \n", __func__);
