@@ -380,6 +380,20 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 	if (charger->force_bpp)
 		return false;
 
+	/*
+	*  NOTE: mfg may be zero due to race condition during bringup. will
+	*  check once more if mfg == 0.
+	*/
+	if (charger->mfg == 0) {
+		ret = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG,
+					&charger->mfg);
+		if (ret < 0)
+			dev_err(&charger->client->dev,
+				"cannot read MFG_CODE (%d)\n", ret);
+	}
+
+	charger->is_mfg_google = charger->mfg == WLC_MFG_GOOGLE;
+
 	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
 	if (ret == 0)
 		return (reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0;
@@ -734,11 +748,13 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	p9221_vote_defaults(charger);
 	if (charger->enabled &&
 	    charger->pdata->qien_gpio >= 0) {
-		gpio_set_value(charger->pdata->qien_gpio, 1);
+		if (charger->is_mfg_google == false)
+			gpio_set_value(charger->pdata->qien_gpio, 1);
 
 		mod_delayed_work(system_wq, &charger->dcin_pon_work,
 				 msecs_to_jiffies(P9221_DCIN_PON_DELAY_MS));
 	}
+	charger->is_mfg_google = false;
 }
 
 static void p9221_tx_work(struct work_struct *work)
@@ -2961,6 +2977,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->resume_complete = true;
 	charger->align = POWER_SUPPLY_ALIGN_ERROR;
 	charger->align_count = 0;
+	charger->is_mfg_google = false;
 	mutex_init(&charger->io_lock);
 	mutex_init(&charger->cmd_lock);
 	setup_timer(&charger->vrect_timer, p9221_vrect_timer_handler,
