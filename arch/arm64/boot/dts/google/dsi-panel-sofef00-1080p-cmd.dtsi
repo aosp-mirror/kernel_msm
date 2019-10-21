@@ -52,6 +52,8 @@
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <4>;
 		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
+		/* param1 = DBV[9:8], param2 = DBV[7:0] */
+		google,dsi-bl-cmd-high-byte-offset = <8>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
