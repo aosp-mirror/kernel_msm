@@ -20,6 +20,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/pmic-voter.h>
 #include <linux/of_batterydata.h>
+#include <linux/ktime.h>
 #include "smb5-lib.h"
 #include "smb5-reg.h"
 #include "battery.h"
@@ -47,6 +48,8 @@
 
 
 #define LPD_VOTER  "LPD_VOTER"
+
+#define AICL_VOTER "AICL_VOTER"
 
 int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				       const union power_supply_propval *val);
@@ -3092,8 +3095,22 @@ int smblib_get_prop_dc_current_max(struct smb_charger *chg,
 int smblib_get_prop_dc_voltage_max(struct smb_charger *chg,
 				    union power_supply_propval *val)
 {
-	val->intval = MICRO_12V;
-	return 0;
+	int rc;
+
+	if (!chg->wls_psy) {
+		chg->wls_psy = power_supply_get_by_name("wireless");
+		if (!chg->wls_psy)
+			return -ENODEV;
+	}
+
+	rc = power_supply_get_property(chg->wls_psy,
+				       POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't get VOLTAGE_MAX, rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
 }
 
 int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
@@ -3108,11 +3125,13 @@ int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
 	}
 
 	rc = power_supply_get_property(chg->wls_psy,
-				POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION,
+				POWER_SUPPLY_PROP_VOLTAGE_NOW,
 				val);
-	if (rc < 0)
-		dev_err(chg->dev, "Couldn't get POWER_SUPPLY_PROP_VOLTAGE_REGULATION, rc=%d\n",
-				rc);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't get VOLTAGE_NOW, rc=%d\n", rc);
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -3126,6 +3145,7 @@ int smblib_set_prop_dc_current_max(struct smb_charger *chg,
 	return smblib_set_charge_param(chg, &chg->param.dc_icl, val->intval);
 }
 
+#define DCIN_AICL_RERUN_DELAY_MS	5000
 int smblib_set_prop_voltage_wls_output(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
@@ -3140,11 +3160,24 @@ int smblib_set_prop_voltage_wls_output(struct smb_charger *chg,
 	rc = power_supply_set_property(chg->wls_psy,
 				POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION,
 				val);
-	if (rc < 0)
+	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set POWER_SUPPLY_PROP_VOLTAGE_REGULATION, rc=%d\n",
 				rc);
-
+		return rc;
+	}
 	smblib_dbg(chg, PR_WLS, "Set WLS output voltage %d\n", val->intval);
+
+	/*
+	 * When WLS VOUT goes down, the power-constrained adaptor may be able
+	 * to supply more current, so allow it to do so.
+	 */
+	if ((val->intval > 0) && (val->intval < chg->last_wls_vout)) {
+		/* Rerun AICL once after 10 s */
+		alarm_start_relative(&chg->dcin_aicl_alarm,
+				ms_to_ktime(DCIN_AICL_RERUN_DELAY_MS));
+	}
+
+	chg->last_wls_vout = val->intval;
 
 	return rc;
 }
@@ -3154,6 +3187,9 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 	int rc = -EAGAIN;
 
 	mutex_lock(&chg->dc_reset_lock);
+
+	/* Ignore SW AICL vote */
+	vote(chg->dc_icl_votable, AICL_VOTER, false, 0);
 
 	if (chg->dc_reset) {
 		smblib_dbg(chg, PR_MISC, "DC reset skipped\n");
@@ -6080,6 +6116,162 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void dcin_aicl(struct smb_charger *chg)
+{
+	int rc, icl, icl_save;
+	int input_present;
+
+	/*
+	 * Hold awake votable to prevent pm_relax being called prior to
+	 * completion of this work.
+	 */
+	vote(chg->awake_votable, DCIN_AICL_VOTER, true, 0);
+
+increment:
+	mutex_lock(&chg->dcin_aicl_lock);
+
+	rc = smblib_get_charge_param(chg, &chg->param.dc_icl, &icl);
+	if (rc < 0)
+		goto unlock;
+
+	if (icl == DCIN_ICL_MAX_UA) {
+		/* Upper limit reached; do nothing */
+		smblib_dbg(chg, PR_WLS, "hit max ICL: stop\n");
+		goto unlock;
+	}
+
+	icl += DCIN_ICL_STEP_UA;
+	if (icl < DCIN_SW_AICL_MIN_UA)
+		icl = DCIN_SW_AICL_MIN_UA;
+	icl_save = icl;
+
+	vote(chg->dc_icl_votable, DEFAULT_VOTER, true, icl);
+
+	mutex_unlock(&chg->dcin_aicl_lock);
+
+	smblib_dbg(chg, PR_WLS, "icl: %d mA\n", (icl / 1000));
+
+	/* Check to see if DC is still present before and after sleep */
+	rc = smblib_is_input_present(chg, &input_present);
+	if (!(input_present & INPUT_PRESENT_DC) || rc < 0)
+		goto unvote;
+
+	/*
+	 * Wait awhile to check for any DCIN_UVs (the UV handler reduces the
+	 * ICL). If the adaptor collapses, the ICL read after waking up will be
+	 * lesser, indicating that the AICL process is complete.
+	 */
+	msleep(500);
+
+	rc = smblib_is_input_present(chg, &input_present);
+	if (!(input_present & INPUT_PRESENT_DC) || rc < 0)
+		goto unvote;
+
+	mutex_lock(&chg->dcin_aicl_lock);
+
+	rc = smblib_get_charge_param(chg, &chg->param.dc_icl, &icl);
+	if (rc < 0)
+		goto unlock;
+
+	if (icl < icl_save) {
+		smblib_dbg(chg, PR_WLS, "done: icl: %d mA\n", (icl / 1000));
+		vote(chg->dc_icl_votable, DEFAULT_VOTER, true, icl);
+		goto unlock;
+	}
+
+	mutex_unlock(&chg->dcin_aicl_lock);
+
+	goto increment;
+unlock:
+	mutex_unlock(&chg->dcin_aicl_lock);
+unvote:
+	vote(chg->awake_votable, DCIN_AICL_VOTER, false, 0);
+}
+
+static void dcin_aicl_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						dcin_aicl_work);
+	dcin_aicl(chg);
+}
+
+static enum alarmtimer_restart dcin_aicl_alarm_cb(struct alarm *alarm,
+							ktime_t now)
+{
+	struct smb_charger *chg = container_of(alarm, struct smb_charger,
+					dcin_aicl_alarm);
+
+	pm_stay_awake(chg->dev);
+	schedule_work(&chg->dcin_aicl_work);
+
+	return ALARMTIMER_NORESTART;
+}
+
+static void dcin_icl_decrement(struct smb_charger *chg)
+{
+	int rc, icl;
+	union power_supply_propval val;
+	ktime_t now = ktime_get();
+
+	rc = power_supply_get_property(chg->dc_psy,
+				       POWER_SUPPLY_PROP_VOLTAGE_MAX, &val);
+	if (rc < 0) {
+		smblib_err(chg, "reading DCIN VOLTAGE MAX failed: %d\n", rc);
+	} else {
+		if (val.intval == MICRO_9V) {
+			smblib_err(chg, "9V charger ignore icl decrement\n ");
+			return;
+		}
+	}
+
+	rc = smblib_get_charge_param(chg, &chg->param.dc_icl, &icl);
+	if (rc < 0) {
+		smblib_err(chg, "reading DCIN ICL failed: %d\n", rc);
+		return;
+	}
+
+	if (icl == DCIN_ICL_MIN_UA) {
+		/* Cannot possibly decrease ICL any further - do nothing */
+		smblib_dbg(chg, PR_WLS, "hit max ICL: stop\n");
+		return;
+	}
+
+	/* Reduce ICL by 100 mA if 3 UVs happen in a row */
+	if (ktime_us_delta(now, chg->dcin_uv_last_time) > (200 * 1000)) {
+		chg->dcin_uv_count = 0;
+	} else if (chg->dcin_uv_count == 3) {
+		vote(chg->dc_icl_votable, DEFAULT_VOTER, true,
+		     DCIN_ICL_MIN_UA);
+
+		/* Set the lowbound icl to 700mA */
+		icl = DCIN_SW_AICL_MIN_UA;
+
+		smblib_dbg(chg, PR_WLS, "re-run icl: %d mA\n", (icl / 1000));
+		vote(chg->dc_icl_votable, AICL_VOTER, true, icl);
+		schedule_work(&chg->dcin_aicl_work);
+
+		chg->dcin_uv_count = 0;
+	}
+
+	chg->dcin_uv_last_time = now;
+}
+
+irqreturn_t dcin_uv_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+
+	mutex_lock(&chg->dcin_aicl_lock);
+
+	chg->dcin_uv_count++;
+	smblib_dbg(chg, PR_WLS, "[WLS]DCIN UV cnt:%d\n", chg->dcin_uv_count);
+	dcin_icl_decrement(chg);
+
+	mutex_unlock(&chg->dcin_aicl_lock);
+
+	return IRQ_HANDLED;
+}
+
 irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -6109,6 +6301,15 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 		chg->dc_reset = false;
 		mutex_unlock(&chg->dc_reset_lock);
 
+		if (!vbus_present) {
+			cancel_work_sync(&chg->dcin_aicl_work);
+
+			/* Reset DCIN ICL to 100 mA */
+			mutex_lock(&chg->dcin_aicl_lock);
+			vote(chg->dc_icl_votable, DEFAULT_VOTER, true,
+			     DCIN_ICL_MIN_UA);
+			mutex_unlock(&chg->dcin_aicl_lock);
+		}
 		if (!vbus_present && chg->sec_cp_present) {
 			pval.intval = wireless_vout;
 			rc = smblib_set_prop_voltage_wls_output(chg, &pval);
@@ -6123,6 +6324,8 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 				dev_err(chg->dev, "Couldn't enable secondary chargers  rc=%d\n",
 					rc);
 		}
+
+		schedule_work(&chg->dcin_aicl_work);
 	} else {
 		smblib_set_prop_dc_reset(chg);
 
@@ -6138,6 +6341,8 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 		}
 
 		vote(chg->dc_suspend_votable, CHG_TERMINATION_VOTER, false, 0);
+
+		chg->last_wls_vout = 0;
 	}
 
 	power_supply_changed(chg->dc_psy);
@@ -7319,9 +7524,11 @@ int smblib_init(struct smb_charger *chg)
 	mutex_init(&chg->smb_lock);
 	mutex_init(&chg->moisture_detection_enable);
 	mutex_init(&chg->dc_reset_lock);
+	mutex_init(&chg->dcin_aicl_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_update_work, pl_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
+	INIT_WORK(&chg->dcin_aicl_work, dcin_aicl_work);
 	INIT_WORK(&chg->lpd_recheck_work, lpd_recheck_work);
 	INIT_DELAYED_WORK(&chg->clear_hdc_work, clear_hdc_work);
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblib_icl_change_work);
@@ -7366,6 +7573,14 @@ int smblib_init(struct smb_charger *chg)
 			smblib_err(chg, "Failed to initialize moisture protection alarm\n");
 			return -ENODEV;
 		}
+	}
+
+	if (alarmtimer_get_rtcdev()) {
+		alarm_init(&chg->dcin_aicl_alarm, ALARM_REALTIME,
+				dcin_aicl_alarm_cb);
+	} else {
+		smblib_err(chg, "Failed to initialize dcin aicl alarm\n");
+		return -ENODEV;
 	}
 
 	chg->fake_capacity = -EINVAL;
@@ -7478,6 +7693,7 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_work_sync(&chg->bms_update_work);
 		cancel_work_sync(&chg->jeita_update_work);
 		cancel_work_sync(&chg->pl_update_work);
+		cancel_work_sync(&chg->dcin_aicl_work);
 		cancel_delayed_work_sync(&chg->clear_hdc_work);
 		cancel_delayed_work_sync(&chg->icl_change_work);
 		cancel_delayed_work_sync(&chg->pl_enable_work);

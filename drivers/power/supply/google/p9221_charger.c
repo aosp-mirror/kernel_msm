@@ -1276,6 +1276,9 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 
 	dev_info(&charger->client->dev, "Setting ICL %duA ramp=%d\n", icl,
 		 charger->icl_ramp);
+	if (charger->icl_ramp)
+	    vote(charger->dc_icl_votable, P9221_DEFAULT_VOTER, true, icl);
+
 	ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true, icl);
 	if (ret)
 		dev_err(&charger->client->dev,
