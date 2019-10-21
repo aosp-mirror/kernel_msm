@@ -25,6 +25,8 @@
 #define P9221_EPP_THRESHOLD_UV			7000000
 #define P9221_MAX_VOUT_SET_MV_DEFAULT		9000
 
+#define P9221_DEFAULT_VOTER			"DEFAULT_VOTER"
+
 /*
  * P9221 common registers
  */
