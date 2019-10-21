@@ -1175,7 +1175,7 @@ struct slim_device_id *slim_get_device_id(const struct slim_device *sdev);
  * API enumerates respective devices on corresponding controller.
  * Called from board-init function.
  */
-#ifdef CONFIG_SLIMBUS
+#if IS_ENABLED(CONFIG_SLIMBUS)
 extern int slim_register_board_info(struct slim_boardinfo const *info,
 					unsigned int n);
 #else
