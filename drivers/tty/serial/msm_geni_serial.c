@@ -3336,11 +3336,15 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		}
 	}
 
-	dev_port->geni_wake = wakeup_source_register(&pdev->dev, dev_name(&pdev->dev));
-	if (!dev_port->geni_wake) {
-		dev_err(&pdev->dev, "Failed to register wakeup source!\n");
-		ret = -ENODEV;
-		goto exit_geni_serial_probe;
+	if (!is_console) {
+		dev_port->geni_wake = wakeup_source_register(uport->dev,
+						dev_name(&pdev->dev));
+		if (!dev_port->geni_wake) {
+			dev_err(&pdev->dev,
+				"Failed to register wakeup_source\n");
+			ret = -ENOMEM;
+			goto exit_geni_serial_probe;
+		}
 	}
 
 	dev_port->tx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
@@ -3367,7 +3371,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(uport->dev, "%s: Failed to get IRQ ret %d\n",
 							__func__, ret);
-		goto exit_geni_serial_probe;
+		goto exit_wakeup_unregister;
 	}
 
 	uport->private_data = (void *)drv;
@@ -3407,9 +3411,20 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_port->port_setup = false;
 	ret = msm_geni_serial_get_ver_info(uport);
 	if (ret)
-		goto exit_geni_serial_probe;
+		goto exit_wakeup_unregister;
 
 	ret = uart_add_one_port(drv, uport);
+	if (ret)
+		goto exit_wakeup_unregister;
+
+	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: port:%s irq:%d\n", __func__,
+			uport->name, uport->irq);
+
+	return 0;
+
+exit_wakeup_unregister:
+	if (!is_console)
+		wakeup_source_unregister(dev_port->geni_wake);
 
 exit_geni_serial_probe:
 	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n", __func__, ret);
@@ -3422,7 +3437,8 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	struct uart_driver *drv =
 			(struct uart_driver *)port->uport.private_data;
 
-	wakeup_source_unregister(port->geni_wake);
+	if (!uart_console(&port->uport))
+		wakeup_source_unregister(port->geni_wake);
 	uart_remove_one_port(drv, &port->uport);
 	if (port->rx_dma) {
 		geni_se_iommu_free_buf(port->wrapper_dev, &port->rx_dma,
