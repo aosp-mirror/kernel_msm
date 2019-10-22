@@ -101,7 +101,7 @@
 
 		/* charge table for floral */
 		google,chg-temp-limits = <0 100 200 420 460 480 550>;
-		google,chg-cv-limits = <4200000 4300000 4400000>;
+		google,chg-cv-limits = <4200000 4300000 4450000>;
 		google,chg-cc-limits = <
 			 30  10   0
 			 50  30  30
@@ -142,7 +142,7 @@
 		google,chg-power-supply = "sm7250_bms";
 		google,bat-power-supply = "battery";
 		google,thermal-mitigation = <3700000 1850000 925000 500000>;
-		google,fv-max-uv = <4400000>;
+		google,fv-max-uv = <4450000>;
 
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
