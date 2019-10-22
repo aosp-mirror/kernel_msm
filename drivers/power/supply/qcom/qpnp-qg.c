@@ -3858,6 +3858,7 @@ static int qg_parse_cl_dt(struct qpnp_qg *chip)
 #define DEFAULT_SLEEP_TIME_SECS		1800 /* 30 mins */
 #define DEFAULT_SYS_MIN_VOLT_MV		2800
 #define DEFAULT_FVSS_VBAT_MV		3500
+#define DEFAULT_FVSS_INTERVAL_MS	10000
 static int qg_parse_dt(struct qpnp_qg *chip)
 {
 	int rc = 0;
@@ -4099,6 +4100,13 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 			chip->dt.fvss_vbat_mv = DEFAULT_FVSS_VBAT_MV;
 		else
 			chip->dt.fvss_vbat_mv = temp;
+
+		rc = of_property_read_u32(node,
+				"google,fvss-interval-ms", &temp);
+		if (rc < 0)
+			chip->dt.fvss_interval_ms = DEFAULT_FVSS_INTERVAL_MS;
+		else
+			chip->dt.fvss_interval_ms = temp;
 	}
 
 	(void)of_property_read_string(node, "google,batt_type_name",
