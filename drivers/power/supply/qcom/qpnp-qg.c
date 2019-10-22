@@ -2065,11 +2065,11 @@ static int qg_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		/*
-		 * FIX_ME, b/139264914, to be compatible with other fuel gauge
+		 * to be compatible with other fuel gauge
 		 * for google_battery supporting
 		 */
 		rc = qg_get_battery_capacity(chip, &pval->intval);
-		pval->intval *= 255;
+		pval->intval <<= 8;
 		break;
 	case POWER_SUPPLY_PROP_REAL_CAPACITY:
 		rc = qg_get_battery_capacity_real(chip, &pval->intval);
