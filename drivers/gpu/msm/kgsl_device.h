@@ -50,6 +50,7 @@ enum kgsl_event_results {
 };
 
 #define KGSL_FLAG_WAKE_ON_TOUCH BIT(0)
+#define KGSL_FLAG_SPARSE        BIT(1)
 
 /*
  * "list" of event types for ftrace symbolic magic
@@ -247,18 +248,12 @@ struct kgsl_device {
 	/* Kernel virtual address for GPU shader memory */
 	void __iomem *shader_mem_virt;
 
-	/* Starting physical address for GPU shader memory */
-	unsigned long shader_mem_phys;
-
 	/* Starting kernel virtual address for QDSS GFX DBG register block */
 	void __iomem *qdss_gfx_virt;
 
-	/* GPU shader memory size */
-	unsigned int shader_mem_len;
 	struct kgsl_memdesc memstore;
 	struct kgsl_memdesc scratch;
 	const char *iomemname;
-	const char *shadermemname;
 
 	struct kgsl_mmu mmu;
 	struct gmu_core_device gmu_core;
@@ -297,6 +292,7 @@ struct kgsl_device {
 
 	u32 snapshot_faultcount;	/* Total number of faults since boot */
 	bool force_panic;		/* Force panic after snapshot dump */
+	bool skip_ib_capture;		/* Skip IB capture after snapshot */
 	bool prioritize_unrecoverable;	/* Overwrite with new GMU snapshots */
 	bool set_isdb_breakpoint;	/* Set isdb registers before snapshot */
 
@@ -923,6 +919,22 @@ void kgsl_snapshot_add_section(struct kgsl_device *device, u16 id,
 	struct kgsl_snapshot *snapshot,
 	size_t (*func)(struct kgsl_device *, u8 *, size_t, void *),
 	void *priv);
+
+/**
+ * kgsl_of_property_read_ddrtype - Get property from devicetree based on
+ * the type of DDR.
+ * @node: Devicetree node
+ * @base: prefix string of the property
+ * @ptr:  Pointer to store the value of the property
+ *
+ * First look up the devicetree property based on the prefix string and DDR
+ * type. If property is not specified per DDR type, then look for the property
+ * based on prefix string only.
+ *
+ * Return: 0 on success or error code on failure.
+ */
+int kgsl_of_property_read_ddrtype(struct device_node *node, const char *base,
+		u32 *ptr);
 
 /**
  * kgsl_query_property_list - Get a list of valid properties

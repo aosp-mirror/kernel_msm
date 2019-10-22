@@ -178,7 +178,7 @@ int qg_adjust_sys_soc(struct qpnp_qg *chip)
 
 	chip->sys_soc = CAP(QG_MIN_SOC, QG_MAX_SOC, chip->sys_soc);
 
-	if (chip->sys_soc == QG_MIN_SOC) {
+	if (chip->sys_soc <= 50) { /* 0.5% */
 		/* Hold SOC to 1% of VBAT has not dropped below cutoff */
 		rc = qg_get_battery_voltage(chip, &vbat_uv);
 		if (!rc && vbat_uv >= (vcutoff_uv + VBAT_LOW_HYST_UV))
@@ -306,7 +306,7 @@ static bool maint_soc_timeout(struct qpnp_qg *chip)
 
 static void update_msoc(struct qpnp_qg *chip)
 {
-	int rc = 0, sdam_soc, batt_temp = 0,  batt_soc_32bit = 0;
+	int rc = 0, sdam_soc, batt_temp = 0;
 	bool input_present = is_input_present(chip);
 
 	if (chip->catch_up_soc > chip->msoc) {
@@ -345,11 +345,8 @@ static void update_msoc(struct qpnp_qg *chip)
 		rc = qg_get_battery_temp(chip, &batt_temp);
 		if (rc < 0) {
 			pr_err("Failed to read BATT_TEMP rc=%d\n", rc);
-		} else {
-			batt_soc_32bit = div64_u64(
-						chip->batt_soc * BATT_SOC_32BIT,
-						QG_SOC_FULL);
-			cap_learning_update(chip->cl, batt_temp, batt_soc_32bit,
+		} else if (chip->batt_soc >= 0) {
+			cap_learning_update(chip->cl, batt_temp, chip->batt_soc,
 					chip->charge_status, chip->charge_done,
 					input_present, false);
 		}

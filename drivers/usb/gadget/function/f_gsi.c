@@ -855,6 +855,11 @@ static void ipa_work_handler(struct work_struct *w)
 		break;
 	case STATE_INITIALIZED:
 		if (event == EVT_SET_ALT) {
+			if (!atomic_read(&gsi->connected)) {
+				log_event_err("USB cable not connected\n");
+				break;
+			}
+
 			usb_gadget_autopm_get(d_port->gadget);
 			log_event_dbg("%s: get = %d", __func__,
 				atomic_read(&gad_dev->power.usage_count));
@@ -1339,11 +1344,13 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 	unsigned long flags;
 	struct gsi_ctrl_pkt *cpkt;
 	struct gsi_ctrl_port *c_port;
-	struct usb_request *req;
 	enum ipa_usb_teth_prot prot_id =
 		*(enum ipa_usb_teth_prot *)(fp->private_data);
 	struct gsi_inst_status *inst_cur = &inst_status[prot_id];
 	struct f_gsi *gsi;
+
+	if (prot_id == IPA_USB_DIAG)
+		return -EINVAL;
 
 	pr_debug("Enter %zu", count);
 
@@ -1358,13 +1365,6 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 
 	gsi = inst_cur->opts->gsi;
 	c_port = &gsi->c_port;
-	req = c_port->notify_req;
-
-	if (!c_port || !req || !req->buf) {
-		log_event_err("%s: c_port %pK req %p req->buf %p",
-			__func__, c_port, req, req ? req->buf : req);
-		return -ENODEV;
-	}
 
 	if (!count || count > GSI_MAX_CTRL_PKT_SIZE) {
 		log_event_err("error: ctrl pkt length %zu", count);

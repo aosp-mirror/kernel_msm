@@ -86,8 +86,8 @@ enum kgsl_iommu_context_id {
  * @cb_num: The hardware context bank number, used for calculating register
  *		offsets.
  * @kgsldev: The kgsl device that uses this context.
- * @fault: Flag when set indicates that this iommu device has caused a page
- * fault
+ * @stalled_on_fault: Flag when set indicates that this iommu device is stalled
+ * on a page fault
  * @default_pt: The default pagetable for this context,
  *		it may be changed by self programming.
  */
@@ -97,7 +97,7 @@ struct kgsl_iommu_context {
 	enum kgsl_iommu_context_id id;
 	unsigned int cb_num;
 	struct kgsl_device *kgsldev;
-	int fault;
+	bool stalled_on_fault;
 	void __iomem *regbase;
 	struct kgsl_pagetable *default_pt;
 };
@@ -112,7 +112,6 @@ struct kgsl_iommu_context {
  * @clk_enable_count: The ref count of clock enable calls
  * @clks: Array of pointers to IOMMU clocks
  * @smmu_info: smmu info used in a5xx preemption
- * @protect: register protection settings for the iommu.
  */
 struct kgsl_iommu {
 	struct kgsl_iommu_context ctx[KGSL_IOMMU_CONTEXT_MAX];
@@ -123,7 +122,6 @@ struct kgsl_iommu {
 	atomic_t clk_enable_count;
 	struct clk *clks[KGSL_IOMMU_MAX_CLKS];
 	struct kgsl_memdesc smmu_info;
-	struct kgsl_protected_registers protect;
 };
 
 /*

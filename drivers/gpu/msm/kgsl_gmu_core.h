@@ -142,6 +142,7 @@ struct gmu_dev_ops {
 	unsigned int (*ifpc_show)(struct kgsl_device *device);
 	void (*snapshot)(struct kgsl_device *device,
 		struct kgsl_snapshot *shapshot);
+	void (*cooperative_reset)(struct kgsl_device *device);
 	void (*halt_execution)(struct kgsl_device *device);
 	int (*wait_for_active_transition)(struct kgsl_device *device);
 	const unsigned int gmu2host_intr_mask;
@@ -217,7 +218,6 @@ void gmu_core_dev_oob_clear(struct kgsl_device *device, enum oob_request req);
 int gmu_core_dev_hfi_start_msg(struct kgsl_device *device);
 int gmu_core_dev_wait_for_lowest_idle(struct kgsl_device *device);
 void gmu_core_dev_enable_lm(struct kgsl_device *device);
-int gmu_core_dev_load_firmware(struct kgsl_device *device);
 void gmu_core_dev_snapshot(struct kgsl_device *device,
 		struct kgsl_snapshot *snapshot);
 bool gmu_core_dev_gx_is_on(struct kgsl_device *device);
@@ -225,5 +225,6 @@ int gmu_core_dev_ifpc_show(struct kgsl_device *device);
 int gmu_core_dev_ifpc_store(struct kgsl_device *device, unsigned int val);
 void gmu_core_dev_prepare_stop(struct kgsl_device *device);
 int gmu_core_dev_wait_for_active_transition(struct kgsl_device *device);
+void gmu_core_dev_cooperative_reset(struct kgsl_device *device);
 
 #endif /* __KGSL_GMU_CORE_H */

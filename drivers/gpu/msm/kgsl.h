@@ -113,6 +113,7 @@ struct kgsl_context;
  * @pagetable_list: LIst of open pagetables
  * @ptlock: Lock for accessing the pagetable list
  * @process_mutex: Mutex for accessing the process list
+ * @proclist_lock: Lock for accessing the process list
  * @devlock: Mutex protecting the device list
  * @stats: Struct containing atomic memory statistics
  * @full_cache_threshold: the threshold that triggers a full cache flush
@@ -131,6 +132,7 @@ struct kgsl_driver {
 	struct list_head pagetable_list;
 	spinlock_t ptlock;
 	struct mutex process_mutex;
+	spinlock_t proclist_lock;
 	struct mutex devlock;
 	struct {
 		atomic_long_t vmalloc;
@@ -184,6 +186,8 @@ struct kgsl_memdesc_ops {
 #define KGSL_MEMDESC_CONTIG BIT(8)
 /* This is an instruction buffer */
 #define KGSL_MEMDESC_UCODE BIT(9)
+/* For global buffers, randomly assign an address from the region */
+#define KGSL_MEMDESC_RANDOM BIT(10)
 
 /**
  * struct kgsl_memdesc - GPU memory object descriptor
@@ -328,16 +332,6 @@ struct kgsl_event_group {
 	char name[64];
 	readtimestamp_func readtimestamp;
 	void *priv;
-};
-
-/**
- * struct kgsl_protected_registers - Protected register range
- * @base: Offset of the range to be protected
- * @range: Range (# of registers = 2 ** range)
- */
-struct kgsl_protected_registers {
-	unsigned int base;
-	int range;
 };
 
 /**
