@@ -40,4 +40,25 @@
 
 &thermal_zones {
 	/delete-node/ case-therm-step;
+	pop-mem-step {
+		cooling-maps {
+			/delete-node/ pop_cdev1;
+			/delete-node/ pop_cdev2;
+			/delete-node/ pop_cdev3;
+		};
+	};
+	cpu0-2-step {
+		cooling-maps {
+			/delete-node/ cpu1_cdev;
+			/delete-node/ cpu2_cdev;
+			/delete-node/ cpu3_cdev;
+		};
+	};
+	cpu1-3-step {
+		cooling-maps {
+			/delete-node/ cpu1_cdev;
+			/delete-node/ cpu2_cdev;
+			/delete-node/ cpu3_cdev;
+		};
+	};
 };
