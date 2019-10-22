@@ -142,12 +142,123 @@ static ssize_t error_event_show(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "%d\n", 1);
 }
 
+static ssize_t clk_expect_frequency_show(struct device *dev,
+		char *buf, enum block_name blk_id)
+{
+	u64 clk_frequency_expt;
+	struct ab_state_context *sc =
+		(struct ab_state_context *)dev_get_drvdata(dev);
+
+	mutex_lock(&sc->state_transitioning_lock);
+
+	clk_frequency_expt = sc->blocks[blk_id].current_state->clk_frequency;
+
+	mutex_unlock(&sc->state_transitioning_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n", clk_frequency_expt);
+}
+
+static ssize_t ipu_clk_expect_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_expect_frequency_show(dev, buf, BLK_IPU);
+}
+
+static ssize_t tpu_clk_expect_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_expect_frequency_show(dev, buf, BLK_TPU);
+}
+
+static ssize_t aon_clk_expect_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_expect_frequency_show(dev, buf, BLK_AON);
+}
+
+static ssize_t mif_clk_expect_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_expect_frequency_show(dev, buf, BLK_MIF);
+}
+
+static ssize_t clk_meas_frequency_show(struct device *dev,
+		char *buf, enum block_name blk_id)
+{
+	unsigned int clkout_idx, clkout_blk_idx, clkout_clk_idx;
+	u64 val;
+	int retval;
+	struct ab_state_context *sc =
+		(struct ab_state_context *)dev_get_drvdata(dev);
+	clkout_idx = 0;
+
+	switch (blk_id) {
+	case BLK_IPU:
+		clkout_blk_idx = 1;
+		clkout_clk_idx = 2;
+		break;
+	case BLK_TPU:
+		clkout_blk_idx = 2;
+		clkout_clk_idx = 2;
+		break;
+	case BLK_AON:
+		clkout_blk_idx = 0;
+		clkout_clk_idx = 4;
+		break;
+	case BLK_MIF:
+		clkout_blk_idx = 4;
+		clkout_clk_idx = 11;
+		break;
+	default:
+		return scnprintf(buf, PAGE_SIZE, "UnKnown\n");
+	}
+
+	ab_clkout_sel(sc, clkout_idx);
+	ab_clkout_blksel(sc, clkout_blk_idx);
+	ab_clkout_clksel(sc, clkout_clk_idx);
+	retval = ab_clkout_freq(sc, &val);
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n", val);
+}
+
+static ssize_t ipu_clk_meas_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_meas_frequency_show(dev, buf, BLK_IPU);
+}
+
+static ssize_t tpu_clk_meas_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_meas_frequency_show(dev, buf, BLK_TPU);
+}
+
+static ssize_t aon_clk_meas_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_meas_frequency_show(dev, buf, BLK_AON);
+}
+
+static ssize_t mif_clk_meas_frequency_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return clk_meas_frequency_show(dev, buf, BLK_MIF);
+}
+
 static struct device_attribute ab_sm_attrs[] = {
 	__ATTR_RW(mapped_chip_state),
 	__ATTR_RO(version),
 	__ATTR_RO(state_stats),
 	__ATTR_RO(error_event),
 	__ATTR_WO(gen_error),
+	__ATTR_RO(ipu_clk_expect_frequency),
+	__ATTR_RO(tpu_clk_expect_frequency),
+	__ATTR_RO(aon_clk_expect_frequency),
+	__ATTR_RO(mif_clk_expect_frequency),
+	__ATTR_RO(ipu_clk_meas_frequency),
+	__ATTR_RO(tpu_clk_meas_frequency),
+	__ATTR_RO(aon_clk_meas_frequency),
+	__ATTR_RO(mif_clk_meas_frequency)
 };
 
 void ab_sm_create_sysfs(struct ab_state_context *sc)
