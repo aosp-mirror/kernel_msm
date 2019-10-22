@@ -39,19 +39,18 @@
 
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
+static struct wakeup_source rt5514_spi_ws;
 
 struct rt5514_dsp {
 	struct device *dev;
 	struct delayed_work copy_work_0, copy_work_1, copy_work_2, start_work,
 		adc_work;
-	struct mutex dma_lock, suspend_lock;
+	struct mutex dma_lock;
 	struct snd_pcm_substream *substream[3];
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
 	unsigned int stream_flag[2];
 	unsigned int hotword_ignore_ms, musdet_ignore_ms;
 	size_t buf_size[3], get_size[2], dma_offset[3];
-	struct wakeup_source ws;
-	int wake_count;
 };
 
 static const struct snd_pcm_hardware rt5514_spi_pcm_hardware = {
@@ -134,7 +133,7 @@ static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 		.capture = {
 			.stream_name = "SoundTrigger Capture",
 			.aif_name = "AIF_SPI_FE",
-			.channels_min = 2,
+			.channels_min = 1,
 			.channels_max = 2,
 			.rates = SNDRV_PCM_RATE_16000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
@@ -665,9 +664,6 @@ static void rt5514_spi_start_work(struct work_struct *work)
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	mutex_lock(&rt5514_dsp->suspend_lock);
-	mutex_unlock(&rt5514_dsp->suspend_lock);
-
 	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, false);
 }
@@ -815,16 +811,12 @@ static int rt5514_spi_pcm_probe(struct snd_soc_component *component)
 
 	rt5514_dsp->dev = &rt5514_spi->dev;
 	mutex_init(&rt5514_dsp->dma_lock);
-	mutex_init(&rt5514_dsp->suspend_lock);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_0, rt5514_spi_copy_work_0);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_1, rt5514_spi_copy_work_1);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_2, rt5514_spi_copy_work_2);
 	INIT_DELAYED_WORK(&rt5514_dsp->start_work, rt5514_spi_start_work);
 	INIT_DELAYED_WORK(&rt5514_dsp->adc_work, rt5514_spi_adc_start);
 	snd_soc_component_set_drvdata(component, rt5514_dsp);
-
-	wakeup_source_init(&rt5514_dsp->ws, "rt5514-spi");
-	rt5514_dsp->wake_count = 0;
 
 	if (rt5514_spi->irq) {
 		ret = devm_request_threaded_irq(&rt5514_spi->dev,
@@ -878,14 +870,9 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	unsigned int i, end, offset = 0;
 	struct spi_message message;
 	struct spi_transfer x[3];
-	struct snd_soc_component *component =
-		snd_soc_lookup_component(&rt5514_spi->dev, DRV_NAME);
-	struct rt5514_dsp *rt5514_dsp =
-		snd_soc_component_get_drvdata(component);
 
 	mutex_lock(&spi_lock);
-	if (rt5514_dsp->wake_count++ == 0)
-		__pm_stay_awake(&rt5514_dsp->ws);
+	__pm_stay_awake(&rt5514_spi_ws);
 
 	write_buf = kzalloc(8, GFP_DMA | GFP_KERNEL);
 	read_buf = kzalloc(RT5514_SPI_BUF_LEN, GFP_DMA | GFP_KERNEL);
@@ -922,8 +909,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 		if (status) {
 			kfree(read_buf);
 			kfree(write_buf);
-			if (--rt5514_dsp->wake_count == 0)
-				__pm_relax(&rt5514_dsp->ws);
+			__pm_relax(&rt5514_spi_ws);
 			mutex_unlock(&spi_lock);
 			return false;
 		}
@@ -956,8 +942,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	kfree(read_buf);
 	kfree(write_buf);
 
-	if (--rt5514_dsp->wake_count == 0)
-		__pm_relax(&rt5514_dsp->ws);
+	__pm_relax(&rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
 
 	return true;
@@ -978,10 +963,6 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 	u8 spi_cmd = RT5514_SPI_CMD_BURST_WRITE;
 	u8 *write_buf;
 	unsigned int i, end, offset = 0;
-	struct snd_soc_component *component =
-		snd_soc_lookup_component(&rt5514_spi->dev, DRV_NAME);
-	struct rt5514_dsp *rt5514_dsp =
-		snd_soc_component_get_drvdata(component);
 
 	write_buf = kzalloc(RT5514_SPI_BUF_LEN + 6, GFP_DMA | GFP_KERNEL);
 
@@ -989,8 +970,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 		return -ENOMEM;
 
 	mutex_lock(&spi_lock);
-	if (rt5514_dsp->wake_count++ == 0)
-		__pm_stay_awake(&rt5514_dsp->ws);
+	__pm_stay_awake(&rt5514_spi_ws);
 
 	while (offset < len) {
 		if (offset + RT5514_SPI_BUF_LEN <= len)
@@ -1024,8 +1004,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 
 	kfree(write_buf);
 
-	if (--rt5514_dsp->wake_count == 0)
-		__pm_relax(&rt5514_dsp->ws);
+	__pm_relax(&rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
 
 	return 0;
@@ -1038,6 +1017,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 
 	rt5514_spi = spi;
 	mutex_init(&spi_lock);
+	wakeup_source_init(&rt5514_spi_ws, "rt5514-spi");
 
 	ret = devm_snd_soc_register_component(&spi->dev,
 					      &rt5514_spi_component,
@@ -1057,32 +1037,20 @@ static int rt5514_spi_probe(struct spi_device *spi)
 
 static int rt5514_suspend(struct device *dev)
 {
-	struct snd_soc_component *component =
-		snd_soc_lookup_component(dev, DRV_NAME);
-	struct rt5514_dsp *rt5514_dsp =
-		snd_soc_component_get_drvdata(component);
 	int irq = to_spi_device(dev)->irq;
 
 	if (device_may_wakeup(dev))
 		enable_irq_wake(irq);
-
-	mutex_lock(&rt5514_dsp->suspend_lock);
 
 	return 0;
 }
 
 static int rt5514_resume(struct device *dev)
 {
-	struct snd_soc_component *component =
-		snd_soc_lookup_component(dev, DRV_NAME);
-	struct rt5514_dsp *rt5514_dsp =
-		snd_soc_component_get_drvdata(component);
 	int irq = to_spi_device(dev)->irq;
 
 	if (device_may_wakeup(dev))
 		disable_irq_wake(irq);
-
-	mutex_unlock(&rt5514_dsp->suspend_lock);
 
 	return 0;
 }
