@@ -54,13 +54,13 @@
 		qcom,mdss-pan-physical-width-dimension  = <63>;
 		qcom,mdss-pan-physical-height-dimension = <137>;
 
-		qcom,mdss-dsi-t-clk-post = <0x13>;
-		qcom,mdss-dsi-t-clk-pre = <0x0F>;
+		qcom,mdss-dsi-t-clk-post = <0x15>;
+		qcom,mdss-dsi-t-clk-pre = <0x12>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
-				qcom,mdss-dsi-panel-clockrate = <537969600>;
+				qcom,mdss-dsi-panel-clockrate = <550000000>;
 				qcom,mdss-mdp-transfer-time-us = <14000>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2340>;
@@ -118,8 +118,8 @@
 				qcom,mdss-dsc-block-prediction-enable;
 
 				qcom,mdss-dsi-panel-phy-timings = [
-					00 0F 03 03 1E 1D 04
-					04 02 02 04 00 0F 13
+					00 14 05 05 1F 1F 05
+					05 03 02 04 00 12 15
 				];
 
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
@@ -129,8 +129,8 @@
 
 			timing@1 {
 				qcom,mdss-dsi-panel-framerate = <90>;
-				qcom,mdss-dsi-panel-clockrate = <537969600>;
-				qcom,mdss-mdp-transfer-time-us = <11000>;
+				qcom,mdss-dsi-panel-clockrate = <550000000>;
+				qcom,mdss-mdp-transfer-time-us = <9000>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2340>;
 				qcom,mdss-dsi-h-pulse-width = <12>;
@@ -187,8 +187,8 @@
 				qcom,mdss-dsc-block-prediction-enable;
 
 				qcom,mdss-dsi-panel-phy-timings = [
-					00 0F 03 03 1E 1D 04
-					04 02 02 04 00 0F 13
+					00 14 05 05 1F 1F 05
+					05 03 02 04 00 12 15
 				];
 
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
