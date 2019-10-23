@@ -96,17 +96,6 @@
 		memory-region = <&debug_info>;
 	};
 
-	qmp_dp_phy_core_supply: qmp_dp_phy_core_supply {
-		compatible = "regulator-fixed";
-		regulator-name = "core_supply";
-		regulator-min-microvolt = <1200000>;
-		regulator-max-microvolt = <1200000>;
-		enable-active-high;
-		gpio = <&pm8150l_gpios 12 GPIO_ACTIVE_HIGH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb_eldo13>;
-	};
-
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		#include "qcom-base/qg-batterydata-alium-3600mah.dtsi"
@@ -122,14 +111,6 @@
 	modemsmem {
 		compatible = "modemsmem";
 	};
-};
-
-&usb_qmp_dp_phy {
-	core-supply = <&qmp_dp_phy_core_supply>;
-};
-
-&sde_dp {
-	vdda-0p9-supply = <&qmp_dp_phy_core_supply>;
 };
 
 &ufsphy_mem {
