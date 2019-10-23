@@ -408,6 +408,13 @@ static int fts_read_tp_psensor_data(struct fts_ts_data *data)
 */
 #endif
 
+static void
+fts_irq_enable(struct fts_ts_data *fts_ts)
+{
+	while (fts_irq_desc->depth > 0)
+		enable_irq(fts_ts->client->irq);
+}
+
 /*******************************************************************************
 *  Name: fts_ts_interrupt
 *  Brief:
@@ -432,7 +439,7 @@ static irqreturn_t fts_ts_interrupt(int irq, void *dev_id)
 	fts_wq_queue_result = queue_work(fts_ts->ts_workqueue, &fts_ts->touch_event_work);
 
 	if (fts_wq_queue_result == false) {
-		enable_irq(fts_ts->client->irq);
+		fts_irq_enable(fts_ts);
 		irq_handler_recovery_count++;
 	}
 
@@ -706,7 +713,7 @@ static void fts_touch_irq_work(struct work_struct *work)
 		if (ret == 0)
 			fts_report_value(fts_wq_data);
 	}
-	enable_irq(fts_wq_data->client->irq);
+	fts_irq_enable(fts_wq_data);
 	fts_wq_running = false;
 }
 
@@ -1042,11 +1049,7 @@ int fts_ts_start(struct device *dev)
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
 	}
 
-	while (fts_irq_desc->depth > 0) {
-		enable_irq(data->client->irq);
-		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__,
-			fts_irq_desc->depth);
-	}
+	fts_irq_enable(data);
 
 #ifdef FTS_GESTRUE_EN
 	big_area_enabled_flag = false;
@@ -1178,10 +1181,7 @@ int fts_ts_stop(struct device *dev)
 #endif
 
 #ifdef FTS_GESTRUE_EN
-	while (fts_irq_desc->depth > 0) {
-		enable_irq(data->client->irq);
-		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__, fts_irq_desc->depth);
-	}
+	fts_irq_enable(data);
 #endif
 	data->suspended = true;
 
@@ -1220,7 +1220,7 @@ pwr_off_fail:
 #endif
 
 #ifndef FTS_GESTRUE_EN
-	enable_irq(data->client->irq);
+	fts_irq_enable(data);
 #endif
 	return err;
 }
@@ -1247,11 +1247,7 @@ int fts_ts_enable(struct device *dev)
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
 	}
 
-	while (fts_irq_desc->depth > 0) {
-		enable_irq(data->client->irq);
-		pr_info("[fts]%s, enable irq, disable depth : %u\n", __func__,
-			fts_irq_desc->depth);
-	}
+	fts_irq_enable(data);
 	return err;
 }
 
@@ -1305,7 +1301,7 @@ pwr_off_fail:
 		gpio_set_value_cansleep(data->pdata->reset_gpio, 1);
 	}
 
-	enable_irq(data->client->irq);
+	fts_irq_enable(data);
 	return err;
 }
 
@@ -2331,7 +2327,7 @@ static int fts_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	register_early_suspend(&data->early_suspend);
 #endif
 
-	enable_irq(client->irq);
+	fts_irq_enable(data);
 
 	return 0;
 
