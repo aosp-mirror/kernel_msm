@@ -57,6 +57,8 @@
 };
 
 &sm6150_snd {
+	qcom,model = "sm6150-bolero-snd-card";
+
 	qcom,audio-routing =
 		"AMIC2", "MIC BIAS2",
 		"MIC BIAS2", "Analog Mic2",
