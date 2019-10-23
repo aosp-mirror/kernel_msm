@@ -183,6 +183,7 @@ err:
 	mutex_unlock(&register_mutex);
 	return subs;
 }
+EXPORT_SYMBOL_GPL(find_snd_usb_substream);
 
 /*
  * disconnect streams

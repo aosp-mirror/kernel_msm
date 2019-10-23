@@ -701,6 +701,7 @@ int snd_usb_enable_audio_stream(struct snd_usb_substream *subs,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(snd_usb_enable_audio_stream);
 
 /*
  * Return the score of matching two audioformats.
