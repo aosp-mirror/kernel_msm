@@ -85,6 +85,8 @@ void gbms_init_chg_table(struct gbms_chg_profile *profile, u32 capacity_ma)
 	int vi, ti;
 	const int fv_uv_step = profile->fv_uv_resolution;
 
+	profile->capacity_ma = capacity_ma;
+
 	/* chg-battery-capacity is in mAh, chg-cc-limits relative to 100 */
 	for (ti = 0; ti < profile->temp_nb_limits - 1; ti++) {
 		for (vi = 0; vi < profile->volt_nb_limits; vi++) {
