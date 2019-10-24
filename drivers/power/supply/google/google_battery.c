@@ -685,10 +685,8 @@ static int ssoc_rl_read_dt(struct batt_ssoc_rl_state *rls,
 	if (ret == 0)
 		rls->rl_delta_max_time = tmp;
 
-	if (!rls->rl_delta_max_soc && !rls->rl_delta_max_time) {
-		rls->rl_track_target = 1;
-		goto done;
-	}
+	if (!rls->rl_delta_max_soc || !rls->rl_delta_max_time)
+		return -EINVAL;
 
 	rls->rl_no_zero = of_property_read_bool(node, "google,rl_no-zero");
 	rls->rl_track_target = of_property_read_bool(node,
@@ -748,7 +746,9 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
 {
 	int ret, capacity;
 
-	ssoc_rl_read_dt(&ssoc_state->ssoc_rl_state, node);
+	ret = ssoc_rl_read_dt(&ssoc_state->ssoc_rl_state, node);
+	if (ret < 0)
+		ssoc_state->ssoc_rl_state.rl_track_target = 1;
 	ssoc_state->ssoc_rl_state.rl_ssoc_target = -1;
 
 	/* ssoc_work() needs a curve: start with the charge curve to prevent
