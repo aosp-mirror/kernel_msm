@@ -21,6 +21,7 @@
 
 #include "sm7150-sunfish-citadel.dtsi"
 #include "sm7150-sunfish-haptics.dtsi"
+#include "sm7150-sunfish-pac193x.dtsi"
 #include "sm7150-sunfish-touch-dev.dtsi"
 
 #include "sm7150-sunfish-nfc.dtsi"
