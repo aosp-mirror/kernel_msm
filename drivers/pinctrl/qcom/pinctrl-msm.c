@@ -640,6 +640,7 @@ int msm_gpio_dump(struct seq_file *s)
 	};
 	return 0;
 }
+EXPORT_SYMBOL_GPL(msm_gpio_dump);
 
 #else
 #define msm_gpio_dbg_show NULL

@@ -4466,6 +4466,7 @@ static const struct file_operations list_gpios_fops = {
 };
 
 bool pm_gpio_debug_mask;
+EXPORT_SYMBOL_GPL(pm_gpio_debug_mask);
 
 static int __init gpiolib_debugfs_init(void)
 {
