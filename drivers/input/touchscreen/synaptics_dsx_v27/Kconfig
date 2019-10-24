@@ -2,7 +2,7 @@
 # Synaptics DSX touchscreen driver configuration
 #
 menuconfig TOUCHSCREEN_SYNAPTICS_DSX_v27
-	bool "Synaptics DSX touchscreen"
+	tristate "Synaptics DSX touchscreen"
 	default y
 	help
 	  Say Y here if you have a Synaptics DSX touchscreen connected
@@ -29,6 +29,7 @@ endchoice
 config TOUCHSCREEN_SYNAPTICS_DSX_CORE_v27
 	tristate "Synaptics DSX core driver module"
 	depends on I2C || SPI_MASTER
+	depends on TOUCHSCREEN_SYNAPTICS_DSX_v27
 	help
 	  Say Y here to enable basic touch reporting functionality.
 
