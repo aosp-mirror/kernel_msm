@@ -69,6 +69,9 @@
 			qcom,apsd-disabled;
 			qcom,thermal-mitigation = <1500 900 500 100>;
 		};
+	/delete-node/ mpu6050@68;
+	/delete-node/ avago@39;
+	/delete-node/ akm@c;
 	};
 	i2c@78ba000 { /* BLSP1 QUP6 */
 		st21nfc@08 {
