@@ -1107,6 +1107,12 @@ struct ufs_hba {
 	 */
 #define UFSHCD_CAP_POWER_COLLAPSE_DURING_HIBERN8 (1 << 7)
 
+	/*
+	 * This capability allows the host controller driver to use the
+	 * inline crypto engine, if it is present
+	 */
+#define UFSHCD_CAP_CRYPTO (1 << 8)
+
 	struct devfreq *devfreq;
 	struct ufs_clk_scaling clk_scaling;
 	bool is_sys_suspended;
