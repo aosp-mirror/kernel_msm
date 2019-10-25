@@ -1166,6 +1166,33 @@ static int sm8150_parse_dt(struct bms_dev *bms)
 	return 0;
 }
 
+static int sm8150_storage_iter(int index, gbms_tag_t *tag, void *ptr)
+{
+	if (index != 0)
+		return -ENOENT;
+	*tag = GBMS_TAG_BRID;
+	return 0;
+}
+
+static int sm8150_storage_read(gbms_tag_t tag, void *buff, size_t size,
+			       void *ptr)
+{
+	struct bms_dev *bms = (struct bms_dev *)ptr;
+
+	if (tag != GBMS_TAG_BRID)
+		return -ENOENT;
+	if (size != sizeof(int))
+		return -EINVAL;
+
+	*((int *)buff) = bms->batt_id_ohms;
+	return 0;
+}
+
+static struct gbms_storage_desc sm8150_storage_dsc = {
+	.iter = sm8150_storage_iter,
+	.read = sm8150_storage_read,
+};
+
 static int bms_probe(struct platform_device *pdev)
 {
 	struct bms_dev *bms;
@@ -1185,6 +1212,10 @@ static int bms_probe(struct platform_device *pdev)
 		pr_err("Parent regmap is unavailable\n");
 	} else {
 		sm8150_get_batt_id(bms, &bms->batt_id_ohms);
+
+		rc = gbms_storage_register(&sm8150_storage_dsc, "pmic", bms);
+		if (rc < 0)
+			pr_err("Couldn't register the storage rc = %d\n", rc);
 	}
 
 	rc = sm8150_parse_dt(bms);
