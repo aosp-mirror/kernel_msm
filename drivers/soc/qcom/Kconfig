@@ -631,7 +631,7 @@ config QCOM_SMP2P_SLEEPSTATE
 	  processor.
 
 config QCOM_QDSS_BRIDGE
-	bool "Configure bridge driver for QTI/Qualcomm Technologies, Inc. MDM"
+	tristate "Configure bridge driver for QTI/Qualcomm Technologies, Inc. MDM"
 	depends on MHI_BUS
 	help
 	  The driver will help route diag traffic from modem side over the QDSS
