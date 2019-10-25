@@ -559,11 +559,13 @@ static const struct attribute_group ufs_sysfs_geometry_descriptor_group = {
 UFS_HEALTH_DESC_PARAM(eol_info, _EOL_INFO, 1);
 UFS_HEALTH_DESC_PARAM(life_time_estimation_a, _LIFE_TIME_EST_A, 1);
 UFS_HEALTH_DESC_PARAM(life_time_estimation_b, _LIFE_TIME_EST_B, 1);
+UFS_HEALTH_DESC_PARAM(life_time_estimation_c, _LIFE_TIME_EST_C, 1);
 
 static struct attribute *ufs_sysfs_health_descriptor[] = {
 	&dev_attr_eol_info.attr,
 	&dev_attr_life_time_estimation_a.attr,
 	&dev_attr_life_time_estimation_b.attr,
+	&dev_attr_life_time_estimation_c.attr,
 	NULL,
 };
 
