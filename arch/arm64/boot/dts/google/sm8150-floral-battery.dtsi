@@ -79,9 +79,6 @@
 	/* check for NV integrity */
 	maxim,enable-nv-check;
 
-	/* read resistorID from the charger */
-	maxim,bat-power-supply = "charger";
-
 	maxim,nconvgcfg-temp-hysteresis = <10>;
 	maxim,nconvgcfg-temp-limits = /bits/ 16
 		<(-70) (-45) (-20) (-3) 14 30 55 80
@@ -218,7 +215,11 @@
 		google,polling-freq = <3>;
 		#cooling-cells = <2>;
 	};
-};
 
+	google_bms {
+		google,gbms-providers = "pmic";
+	};
+
+};
 
 /* FIXME: bcl sensor */
