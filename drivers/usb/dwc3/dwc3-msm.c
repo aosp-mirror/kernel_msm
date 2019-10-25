@@ -526,7 +526,7 @@ int msm_data_fifo_config(struct usb_ep *ep, unsigned long addr,
 	return	dbm_data_fifo_config(mdwc->dbm, dep->number, addr, size,
 						dst_pipe_idx);
 }
-
+EXPORT_SYMBOL_GPL(msm_data_fifo_config);
 
 /**
  * Cleanups for msm endpoint on request complete.
