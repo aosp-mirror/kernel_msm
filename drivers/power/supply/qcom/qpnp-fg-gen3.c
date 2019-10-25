@@ -156,6 +156,10 @@
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
 
+#ifdef TWM_SOC_VALUE_MANUAL
+#define DEFAULT_TWM_SOC_VALUE CONFIG_TWM_SOC_ENTER_VALUE
+#endif
+
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
 static int fg_decode_value_16b(struct fg_sram_param *sp,
@@ -170,6 +174,10 @@ static void fg_encode_current(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val_ma, u8 *buf);
 static void fg_encode_default(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val, u8 *buf);
+
+#ifdef TWM_SOC_VALUE_MANUAL
+static int __fg_restart(struct fg_chip *chip);
+#endif
 
 static struct fg_irq_info fg_irqs[FG_IRQ_MAX];
 
@@ -781,12 +789,34 @@ static int fg_get_msoc_raw(struct fg_chip *chip, int *val)
 	return 0;
 }
 
+#ifdef TWM_SOC_VALUE_MANUAL
+static int fg_get_usb_online(struct fg_chip *chip, bool *usb_online)
+{
+	ssize_t ret = 0;
+	struct power_supply *psy = power_supply_get_by_name("usb");
+	union power_supply_propval value;
+
+	value.intval = 0;
+	ret = power_supply_get_property(psy, POWER_SUPPLY_PROP_ONLINE, &value);
+	if (ret < 0)
+		pr_err("driver failed to report USB property\n");
+	*usb_online = value.intval;
+
+	return ret;
+}
+#endif
+
 #define FULL_CAPACITY	100
 #define FULL_SOC_RAW	255
 static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 {
 	int rc;
+#ifdef TWM_SOC_VALUE_MANUAL
+	bool usb_online;
+	int twm_ibat;
 
+	if (chip->fg_can_restart_flag == 1) {
+#endif
 	rc = fg_get_msoc_raw(chip, msoc);
 	if (rc < 0)
 		return rc;
@@ -804,6 +834,25 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 	else
 		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
 				FULL_SOC_RAW - 2) + 1;
+
+#ifdef TWM_SOC_VALUE_MANUAL
+	chip->last_soc = *msoc;
+	} else
+		*msoc = chip->last_soc;
+	if (chip->last_soc <= chip->twm_soc_value) {
+		fg_get_usb_online(chip, &usb_online);
+		fg_get_battery_current(chip, &twm_ibat);
+		if (usb_online || twm_ibat < 0)
+			*msoc = 1;
+		else
+			*msoc = 0;
+	} else {
+		*msoc = DIV_ROUND_CLOSEST(
+				(*msoc - chip->twm_soc_value) * FULL_CAPACITY,
+				(FULL_CAPACITY - chip->twm_soc_value));
+	}
+#endif
+
 	return 0;
 }
 
@@ -905,7 +954,11 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		return 0;
 	}
 
+#ifdef TWM_SOC_VALUE_MANUAL
+	if (chip->fg_restarting || !chip->fg_can_restart_flag) {
+#else
 	if (chip->fg_restarting) {
+#endif
 		*val = chip->last_soc;
 		return 0;
 	}
@@ -2773,6 +2826,16 @@ static const char *fg_get_cycle_count(struct fg_chip *chip)
 	return buf;
 }
 
+#ifdef TWM_SOC_VALUE_MANUAL
+static void fg_restart_work(struct work_struct *work)
+{
+	struct fg_chip *chip = container_of(work, struct fg_chip,
+					    fg_restart_work.work);
+
+	chip->fg_can_restart_flag = 1;
+}
+#endif
+
 #define ESR_SW_FCC_UA				100000	/* 100mA */
 #define ESR_EXTRACTION_ENABLE_MASK		BIT(0)
 static void fg_esr_sw_work(struct work_struct *work)
@@ -2915,6 +2978,11 @@ static void status_change_work(struct work_struct *work)
 			struct fg_chip, status_change_work);
 	union power_supply_propval prop = {0, };
 	int rc, batt_temp;
+#ifdef TWM_SOC_VALUE_MANUAL
+	int msoc;
+	bool usb_online;
+	static bool fg_restart_once;
+#endif
 
 	if (!batt_psy_initialized(chip)) {
 		fg_dbg(chip, FG_STATUS, "Charger not available?!\n");
@@ -2938,6 +3006,24 @@ static void status_change_work(struct work_struct *work)
 	}
 
 	chip->charge_status = prop.intval;
+#ifdef TWM_SOC_VALUE_MANUAL
+	fg_get_prop_capacity(chip, &msoc);
+	fg_get_usb_online(chip, &usb_online);
+	if (!usb_online && fg_restart_once)
+		fg_restart_once = 0;
+
+	if (chip->charge_status == POWER_SUPPLY_STATUS_FULL &&
+			msoc < 99 && !fg_restart_once) {
+		if (chip->fg_can_restart_flag) {
+			fg_restart_once = 1;
+			chip->fg_can_restart_flag = 0;
+			schedule_delayed_work(&chip->fg_restart_work,
+					msecs_to_jiffies(3000));
+			__fg_restart(chip);
+		}
+	}
+#endif
+
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_CHARGE_TYPE, &prop);
 	if (rc < 0) {
@@ -5752,6 +5838,9 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->esr_sw_work, fg_esr_sw_work);
 	INIT_DELAYED_WORK(&chip->ttf_work, ttf_work);
 	INIT_DELAYED_WORK(&chip->sram_dump_work, sram_dump_work);
+#ifdef TWM_SOC_VALUE_MANUAL
+	INIT_DELAYED_WORK(&chip->fg_restart_work, fg_restart_work);
+#endif
 	INIT_WORK(&chip->esr_filter_work, esr_filter_work);
 	alarm_init(&chip->esr_filter_alarm, ALARM_BOOTTIME,
 			fg_esr_filter_alarm_cb);
@@ -5837,6 +5926,11 @@ static int fg_gen3_probe(struct platform_device *pdev)
 			rc);
 		goto exit;
 	}
+
+#ifdef TWM_SOC_VALUE_MANUAL
+	chip->twm_soc_value = DEFAULT_TWM_SOC_VALUE;
+	chip->fg_can_restart_flag = 1;
+#endif
 
 	rc = fg_get_battery_voltage(chip, &volt_uv);
 	if (!rc)

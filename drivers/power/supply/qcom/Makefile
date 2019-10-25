@@ -1,5 +1,6 @@
 obj-$(CONFIG_QPNP_FG)		+= qpnp-fg.o
 obj-$(CONFIG_QPNP_FG_GEN3)     += qpnp-fg-gen3.o fg-memif.o fg-util.o
+ccflags-$(CONFIG_TWM_SOC_VALUE_MANUAL) += -DTWM_SOC_VALUE_MANUAL
 obj-$(CONFIG_QPNP_SMBCHARGER)	+= qpnp-smbcharger.o pmic-voter.o
 obj-$(CONFIG_SMB135X_CHARGER)   += smb135x-charger.o pmic-voter.o
 obj-$(CONFIG_SMB1360_CHARGER_FG) += smb1360-charger-fg.o

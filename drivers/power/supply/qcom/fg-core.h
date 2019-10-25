@@ -493,6 +493,11 @@ struct fg_chip {
 	enum prof_load_status	profile_load_status;
 	bool			battery_missing;
 	bool			fg_restarting;
+#ifdef TWM_SOC_VALUE_MANUAL
+	bool			fg_can_restart_flag;
+	int			twm_soc_value;
+	struct delayed_work	fg_restart_work;
+#endif
 	bool			charge_full;
 	bool			recharge_soc_adjusted;
 	bool			ki_coeff_dischg_en;

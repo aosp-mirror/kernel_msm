@@ -163,4 +163,18 @@ config SMB1390_CHARGE_PUMP
 	  SMB1390 is a div2 charge pump capable of delivering 6A charge current
 	  with very high efficiency.
 
+config TWM_SOC_VALUE_MANUAL
+	tristate "TWM SOC VALUE SETTING"
+	depends on QPNP_FG_GEN3
+	help
+	  Say Y here to manual define enter twm mode when at set capacity value(percentage).
+
+config TWM_SOC_ENTER_VALUE
+	int "TWM SOC TENTER VALUE SET"
+	range 5 20
+	default 12
+	depends on TWM_SOC_VALUE_MANUAL
+	help
+	  Set the value percent capacity to enter twm mode.
+
 endmenu
