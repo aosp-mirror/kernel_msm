@@ -575,7 +575,7 @@ config USB_CONFIGFS_F_CCID
 	  implementation necessary to interface with the smartcard.
 
 config USB_CONFIGFS_F_QDSS
-	bool "USB QDSS function"
+	tristate "USB QDSS function"
 	select USB_F_QDSS
 	depends on USB_CONFIGFS
 	help
