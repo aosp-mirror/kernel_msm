@@ -598,6 +598,7 @@ struct debugfs_files {
 	struct fault_attr fail_attr;
 #endif
 };
+#endif
 
 /* tag stats statistics types */
 enum ts_types {
@@ -609,6 +610,13 @@ enum ts_types {
 	TS_URGENT_WRITE		= 4,
 	TS_FLUSH		= 5,
 	TS_NUM_STATS		= 6,
+};
+
+enum req_show_types {
+	SHOW_IO_MIN	= 0,
+	SHOW_IO_MAX	= 1,
+	SHOW_IO_AVG	= 2,
+	SHOW_IO_SUM	= 3,
 };
 
 /**
@@ -624,7 +632,6 @@ struct ufshcd_req_stat {
 	u64 sum;
 	u64 count;
 };
-#endif
 
 enum ufshcd_ctx {
 	QUEUE_CMD,
@@ -667,7 +674,6 @@ struct ufs_stats {
 	u64 **tag_stats;
 	int q_depth;
 	int err_stats[UFS_ERR_MAX];
-	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
 	int query_stats_arr[UPIU_QUERY_OPCODE_MAX][MAX_QUERY_IDN];
 
 #endif
@@ -688,6 +694,7 @@ struct ufs_stats {
 	u32 dl_err_cnt_total;
 	u32 dl_err_cnt[UFS_EC_DL_MAX];
 	u32 dme_err_cnt;
+	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
 };
 
 /* UFS Host Controller debug print bitmask */

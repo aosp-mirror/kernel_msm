@@ -838,6 +838,121 @@ static const struct attribute_group ufs_sysfs_attributes_group = {
 	.attrs = ufs_sysfs_attributes,
 };
 
+#define UFS_REQ_STATS_ATTR(_name, _type_name, _type_show)			\
+static ssize_t _name##_show(struct device *dev,				\
+	struct device_attribute *attr, char *buf)				\
+{										\
+	struct ufs_hba *hba = dev_get_drvdata(dev);				\
+	unsigned long flags;							\
+	u64 val;								\
+	spin_lock_irqsave(hba->host->host_lock, flags);				\
+	switch (_type_show) {							\
+	case SHOW_IO_MIN:							\
+		val = hba->ufs_stats.req_stats[_type_name].min;			\
+		break;								\
+	case SHOW_IO_MAX:							\
+		val = hba->ufs_stats.req_stats[_type_name].max;			\
+		break;								\
+	case SHOW_IO_AVG:							\
+		val = div64_u64(hba->ufs_stats.req_stats[_type_name].sum,	\
+				hba->ufs_stats.req_stats[_type_name].count);	\
+		break;								\
+	case SHOW_IO_SUM:							\
+		val = hba->ufs_stats.req_stats[_type_name].sum;			\
+		break;								\
+	default:								\
+		val = 0;							\
+		break;								\
+	}									\
+	spin_unlock_irqrestore(hba->host->host_lock, flags);			\
+	return sprintf(buf, "%llu\n", val);					\
+}										\
+static DEVICE_ATTR_RO(_name)
+
+static ssize_t
+reset_req_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf) { return 0; }
+
+static ssize_t
+reset_req_status_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+	unsigned long value;
+
+	if (kstrtoul(buf, 0, &value)) {
+		dev_err(hba->dev, "%s: Invalid argument\n", __func__);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	ufshcd_init_req_stats(hba);
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	return count;
+}
+
+UFS_REQ_STATS_ATTR(all_min, TS_TAG, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(all_max, TS_TAG, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(all_avg, TS_TAG, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(all_sum, TS_TAG, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(read_min, TS_READ, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(read_max, TS_READ, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(read_avg, TS_READ, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(read_sum, TS_READ, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(write_min, TS_WRITE, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(write_max, TS_WRITE, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(write_avg, TS_WRITE, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(write_sum, TS_WRITE, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(urg_read_min, TS_URGENT_READ, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(urg_read_max, TS_URGENT_READ, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(urg_read_avg, TS_URGENT_READ, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(urg_read_sum, TS_URGENT_READ, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(urg_write_min, TS_URGENT_WRITE, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(urg_write_max, TS_URGENT_WRITE, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(urg_write_avg, TS_URGENT_WRITE, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(urg_write_sum, TS_URGENT_WRITE, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(flush_min, TS_FLUSH, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(flush_max, TS_FLUSH, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(flush_avg, TS_FLUSH, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(flush_sum, TS_FLUSH, SHOW_IO_SUM);
+DEVICE_ATTR_RW(reset_req_status);
+
+static struct attribute *ufs_sysfs_req_stats[] = {
+	&dev_attr_all_min.attr,
+	&dev_attr_all_max.attr,
+	&dev_attr_all_avg.attr,
+	&dev_attr_all_sum.attr,
+	&dev_attr_read_min.attr,
+	&dev_attr_read_max.attr,
+	&dev_attr_read_avg.attr,
+	&dev_attr_read_sum.attr,
+	&dev_attr_write_min.attr,
+	&dev_attr_write_max.attr,
+	&dev_attr_write_avg.attr,
+	&dev_attr_write_sum.attr,
+	&dev_attr_urg_read_min.attr,
+	&dev_attr_urg_read_max.attr,
+	&dev_attr_urg_read_avg.attr,
+	&dev_attr_urg_read_sum.attr,
+	&dev_attr_urg_write_min.attr,
+	&dev_attr_urg_write_max.attr,
+	&dev_attr_urg_write_avg.attr,
+	&dev_attr_urg_write_sum.attr,
+	&dev_attr_flush_min.attr,
+	&dev_attr_flush_max.attr,
+	&dev_attr_flush_avg.attr,
+	&dev_attr_flush_sum.attr,
+	&dev_attr_reset_req_status.attr,
+	NULL,
+};
+
+static const struct attribute_group ufs_sysfs_req_stats_group = {
+	.name = "req_stats",
+	.attrs = ufs_sysfs_req_stats,
+};
+
 static const struct attribute_group *ufs_sysfs_groups[] = {
 	&ufs_sysfs_default_group,
 	&ufs_sysfs_device_descriptor_group,
@@ -848,6 +963,7 @@ static const struct attribute_group *ufs_sysfs_groups[] = {
 	&ufs_sysfs_string_descriptors_group,
 	&ufs_sysfs_flags_group,
 	&ufs_sysfs_attributes_group,
+	&ufs_sysfs_req_stats_group,
 	NULL,
 };
 

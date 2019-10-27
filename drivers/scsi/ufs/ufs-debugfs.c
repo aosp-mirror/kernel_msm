@@ -1746,17 +1746,6 @@ void ufsdbg_add_debugfs(struct ufs_hba *hba)
 		goto err;
 	}
 
-	hba->debugfs_files.req_stats =
-		debugfs_create_file("req_stats", 0600,
-			hba->debugfs_files.stats_folder, hba,
-			&ufsdbg_req_stats_desc);
-	if (!hba->debugfs_files.req_stats) {
-		dev_err(hba->dev,
-			"%s:  failed create req_stats debugfs entry\n",
-			__func__);
-		goto err;
-	}
-
 	hba->debugfs_files.reset_controller =
 		debugfs_create_file("reset_controller", 0600,
 			hba->debugfs_files.debugfs_root, hba,
