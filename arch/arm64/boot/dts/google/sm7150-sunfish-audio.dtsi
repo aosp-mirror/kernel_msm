@@ -446,12 +446,24 @@
 			config {
 				pins = "gpio58";
 				drive-strength = <2>;
-				pull-down;
+				bias-pull-down;
 				input-enable;
 			};
 		};
-	};
 
+		rt5514_reset: rt5514_reset {
+			mux {
+				pins = "gpio33";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio33";
+				drive-strength = <2>;
+				output-high;
+			};
+		};
+	};
 };
 
 &pm6150l_gpios {
@@ -572,6 +584,9 @@
 	rt5514: audio-codec@57 {
 		compatible = "realtek,rt5514";
 		reg = <0x57>;
+		reset-gpio = <&tlmm 33 0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rt5514_reset>;
 	};
 };
 
