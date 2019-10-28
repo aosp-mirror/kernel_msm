@@ -583,7 +583,7 @@ config QSEE_IPC_IRQ
 
 config MSM_SPSS_UTILS
 	depends on MSM_PIL
-	bool "Secure Processor Utilities"
+	tristate "Secure Processor Utilities"
 	help
 	  spss-utils driver selects Secure Processor firmware file name.
 	  The firmware file name for dev, test or production is selected

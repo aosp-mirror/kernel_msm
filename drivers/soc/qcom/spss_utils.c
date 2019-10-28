@@ -893,8 +893,8 @@ static int spss_probe(struct platform_device *pdev)
 
 	ret = subsystem_set_fwname("spss", firmware_name);
 	if (ret < 0) {
-		pr_err("fail to set fw name\n");
-		return -EINVAL;
+		pr_err("fail to set spss fw name to %s\n", firmware_name);
+		return -EPROBE_DEFER;
 	}
 
 	ret = spss_utils_create_chardev(dev);
