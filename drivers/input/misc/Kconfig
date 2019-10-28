@@ -906,5 +906,4 @@ config FPC_FINGERPRINT
 
 endif
 
-source "drivers/input/misc/lm36011/Kconfig"
 source "drivers/input/misc/vd6281/Kconfig"
