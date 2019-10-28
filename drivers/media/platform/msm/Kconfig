@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 menuconfig SPECTRA_CAMERA
-    bool "Qualcomm Technologies, Inc. Spectra camera and video capture support"
+    tristate "Qualcomm Technologies, Inc. Spectra camera and video capture support"
     depends on ARCH_QCOM && VIDEO_V4L2 && I2C
     depends on BACKLIGHT_QCOM_SPMI_WLED
     depends on LEDS_QPNP_FLASH_V2
