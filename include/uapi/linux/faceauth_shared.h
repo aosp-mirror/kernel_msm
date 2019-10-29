@@ -16,9 +16,16 @@
 #ifndef __FACEAUTH_SHARED_H__
 #define __FACEAUTH_SHARED_H__
 
+/* input image sizes */
+#define INPUT_IMAGE_WIDTH 480
+#define INPUT_IMAGE_HEIGHT 640
+#define INPUT_IMAGE_SIZE (INPUT_IMAGE_WIDTH * INPUT_IMAGE_HEIGHT)
+
 /* Feature Flags - bug: 123535349 */
-#define DISABLE_GAZE                            (1ULL << 0) //bit 0
+#define DISABLE_GAZE_DEPRECATED                 (1ULL << 0) //bit 0
 #define SECURE_CAMERA_DATA                      (1ULL << 2) //bit 2
+#define REQUIRE_ATTENTION                       (1ULL << 3) //bit 3
+
 /* Keep temporary feature bits in the top part of the field */
 
 #define MAX_CACHE_ENROLLMENT 1536
@@ -186,6 +193,10 @@ typedef enum _faceauth_input_commands {
 	COMMAND_INTMAX =
 		0xffffffff /* used to extend enum size to 4 bytes */
 } FaceAuthInputCommands;
+
+#define IS_IMAGE_PROCESSING_CMD(cmd) ((cmd) == COMMAND_ENROLL || \
+				      (cmd) == COMMAND_VALIDATE || \
+				      (cmd) == COMMAND_MIGRATE)
 
 typedef enum _faceauth_ack_messages {
 	STATUS_NONE = 0,
