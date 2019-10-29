@@ -9,6 +9,10 @@
 
 static DEFINE_IDA(esoc_ida);
 
+void (*notify_esoc_clients_cb)(struct esoc_clink *esoc_clink, unsigned long
+			       evt);
+EXPORT_SYMBOL_GPL(notify_esoc_clients_cb);
+
 /* SYSFS */
 static ssize_t
 esoc_name_show(struct device *dev, struct device_attribute *attr,
@@ -160,6 +164,7 @@ struct esoc_clink *get_esoc_clink_by_node(struct device_node *node)
 	esoc_clink = to_esoc_clink(dev);
 	return esoc_clink;
 }
+EXPORT_SYMBOL_GPL(get_esoc_clink_by_node);
 
 void put_esoc_clink(struct esoc_clink *esoc_clink)
 {
@@ -226,7 +231,11 @@ void esoc_clink_evt_notify(enum esoc_evt evt, struct esoc_clink *esoc_clink)
 	unsigned long flags;
 
 	spin_lock_irqsave(&esoc_clink->notify_lock, flags);
-	notify_esoc_clients(esoc_clink, evt);
+	if (!notify_esoc_clients_cb) {
+		spin_unlock_irqrestore(&esoc_clink->notify_lock, flags);
+		return;
+	}
+	notify_esoc_clients_cb(esoc_clink, evt);
 	if (esoc_clink->req_eng && esoc_clink->req_eng->handle_clink_evt)
 		esoc_clink->req_eng->handle_clink_evt(evt, esoc_clink->req_eng);
 	if (esoc_clink->cmd_eng && esoc_clink->cmd_eng->handle_clink_evt)
