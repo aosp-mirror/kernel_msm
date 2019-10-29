@@ -313,6 +313,56 @@ manual_gc_hold_store(struct device *dev,
 	return count;
 }
 
+/**
+ * Two sysfs entries for slow I/O monitoring:
+ *  - slowio_us:  watermark time in us. Can be updated by writing.
+ *  - slowio_cnt: number of I/O count. Can be reseted by writing any value.
+*/
+static ssize_t
+slowio_us_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags, value;
+
+	if (kstrtol(buf, 0, &value))
+		return -EINVAL;
+
+	if (value < UFSHCD_MIN_SLOWIO_US)
+		return -EINVAL;
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->slowio_us = value;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	return count;
+}
+
+static ssize_t
+slowio_us_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_us);
+}
+
+static ssize_t
+slowio_cnt_store(struct device *dev, struct device_attribute *attr,
+		   const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->slowio_cnt = 0;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	return count;
+}
+
+static ssize_t
+slowio_cnt_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	return snprintf(buf, PAGE_SIZE, "%lld\n", hba->slowio_cnt);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -322,6 +372,8 @@ static DEVICE_ATTR_RO(spm_target_link_state);
 static DEVICE_ATTR_RW(auto_hibern8);
 static DEVICE_ATTR_RW(manual_gc);
 static DEVICE_ATTR_RW(manual_gc_hold);
+static DEVICE_ATTR_RW(slowio_us);
+static DEVICE_ATTR_RW(slowio_cnt);
 
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -333,6 +385,8 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_auto_hibern8.attr,
 	&dev_attr_manual_gc.attr,
 	&dev_attr_manual_gc_hold.attr,
+	&dev_attr_slowio_us.attr,
+	&dev_attr_slowio_cnt.attr,
 	NULL
 };
 
