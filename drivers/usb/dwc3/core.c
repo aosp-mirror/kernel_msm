@@ -59,6 +59,7 @@ void dwc3_usb3_phy_suspend(struct dwc3 *dwc, int suspend)
 
 	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
 }
+EXPORT_SYMBOL_GPL(dwc3_usb3_phy_suspend);
 
 /**
  * dwc3_get_dr_mode - Validates and sets dr_mode
@@ -134,6 +135,7 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode)
 
 	dwc->current_dr_role = mode;
 }
+EXPORT_SYMBOL_GPL(dwc3_set_prtcap);
 
 void dwc3_en_sleep_mode(struct dwc3 *dwc)
 {
@@ -146,6 +148,7 @@ void dwc3_en_sleep_mode(struct dwc3 *dwc)
 	reg |= DWC3_GUSB2PHYCFG_ENBLSLPM;
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 }
+EXPORT_SYMBOL_GPL(dwc3_en_sleep_mode);
 
 void dwc3_dis_sleep_mode(struct dwc3 *dwc)
 {
@@ -155,6 +158,7 @@ void dwc3_dis_sleep_mode(struct dwc3 *dwc)
 	reg &= ~DWC3_GUSB2PHYCFG_ENBLSLPM;
 	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
 }
+EXPORT_SYMBOL_GPL(dwc3_dis_sleep_mode);
 
 void dwc3_set_mode(struct dwc3 *dwc, u32 mode)
 {
@@ -1093,6 +1097,7 @@ err0a:
 err0:
 	return ret;
 }
+EXPORT_SYMBOL_GPL(dwc3_core_init);
 
 static int dwc3_core_get_phy(struct dwc3 *dwc)
 {

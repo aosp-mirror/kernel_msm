@@ -83,6 +83,7 @@ int dwc3_gadget_get_link_state(struct dwc3 *dwc)
 
 	return DWC3_DSTS_USBLNKST(reg);
 }
+EXPORT_SYMBOL_GPL(dwc3_gadget_get_link_state);
 
 /**
  * dwc3_gadget_set_link_state - sets usb link to a particular state
@@ -165,6 +166,7 @@ void dwc3_ep_inc_enq(struct dwc3_ep *dep)
 {
 	dwc3_ep_inc_trb(&dep->trb_enqueue);
 }
+EXPORT_SYMBOL_GPL(dwc3_ep_inc_enq);
 
 /**
  * dwc3_ep_inc_deq - increment endpoint's dequeue pointer
@@ -274,6 +276,7 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc, struct dwc3_ep *dep)
 							fifo_size);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(dwc3_gadget_resize_tx_fifos);
 
 static void dwc3_gadget_del_and_unmap_request(struct dwc3_ep *dep,
 		struct dwc3_request *req, int status)
@@ -493,6 +496,7 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned cmd,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(dwc3_send_gadget_ep_cmd);
 
 static int dwc3_send_clear_stall_ep_cmd(struct dwc3_ep *dep)
 {
@@ -2250,6 +2254,7 @@ void dwc3_gadget_disable_irq(struct dwc3 *dwc)
 	/* mask all interrupts */
 	dwc3_writel(dwc->regs, DWC3_DEVTEN, 0x00);
 }
+EXPORT_SYMBOL_GPL(dwc3_gadget_disable_irq);
 
 static irqreturn_t dwc3_thread_interrupt(int irq, void *_dwc);
 
@@ -3095,6 +3100,7 @@ void dwc3_stop_active_transfer(struct dwc3 *dwc, u32 epnum, bool force)
 	dbg_log_string("%s(%d): endxfer ret:%d)",
 			dep->name, dep->number, ret);
 }
+EXPORT_SYMBOL_GPL(dwc3_stop_active_transfer);
 
 void dwc3_stop_active_transfer_noioc(struct dwc3 *dwc, u32 epnum, bool force)
 {
