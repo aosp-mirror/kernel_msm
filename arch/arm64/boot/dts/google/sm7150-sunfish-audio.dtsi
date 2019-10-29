@@ -460,6 +460,7 @@
 		function = "normal";
 		output-high;
 		qcom,drive-strength = <2>;
+		power-source = <1>;
 	};
 
 	reset_pin_bottom_default: reset_pin_bottom_default {
@@ -467,6 +468,7 @@
 		function = "normal";
 		output-high;
 		qcom,drive-strength = <2>;
+		power-source = <1>;
 	};
 };
 
