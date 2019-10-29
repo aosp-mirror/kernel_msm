@@ -22,7 +22,7 @@
 		ch1: channel@0 {
 		     uohms-shunt-res = <10000>;
 		     rail-name = "VPH_PWR_S2C_S3C";
-		     subsys-name = "VDDCX including NPU";
+		     subsys-name = "VDDCX with NPU";
 		     channel_enabled;
 		};
 		ch2: channel@1 {
