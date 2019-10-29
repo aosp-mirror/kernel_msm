@@ -84,6 +84,7 @@ static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 
 static bool force_warm_reboot;
+static bool force_warm_reboot_on_thermal;
 
 /* interface for exporting attributes */
 struct reset_attribute {
@@ -565,12 +566,6 @@ static void msm_restart_prepare(const char *cmd)
 	if (force_warm_reboot)
 		pr_info("Forcing a warm reset of the system\n");
 
-	/* Hard reset the PMIC unless memory contents must be maintained. */
-	if (force_warm_reboot || need_warm_reset)
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
-	else
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
-
 	if (in_panic) {
 		qpnp_pon_set_restart_reason(PON_RESTART_REASON_PANIC);
 	} else if (cmd != NULL) {
@@ -598,10 +593,14 @@ static void msm_restart_prepare(const char *cmd)
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_KEYS_CLEAR);
 			__raw_writel(0x7766550a, restart_reason);
-		} else if (!strcmp(cmd, "shutdown-thermal")) {
+		} else if (!strcmp(cmd, "shutdown,thermal")) {
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_SHUTDOWN_THERMAL);
 			__raw_writel(0x7766550b, restart_reason);
+
+			if (force_warm_reboot_on_thermal)
+				need_warm_reset = true;
+
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
 			int ret;
@@ -616,6 +615,12 @@ static void msm_restart_prepare(const char *cmd)
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
+
+	/* Hard reset the PMIC unless memory contents must be maintained. */
+	if (force_warm_reboot || need_warm_reset)
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+	else
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 
 	flush_cache_all();
 
@@ -772,6 +777,9 @@ static int msm_restart_probe(struct platform_device *pdev)
 
 	force_warm_reboot = of_property_read_bool(dev->of_node,
 						"qcom,force-warm-reboot");
+
+	force_warm_reboot_on_thermal = of_property_read_bool(dev->of_node,
+						"qcom,force-warm-reboot-on-thermal-shutdown");
 
 	return 0;
 
