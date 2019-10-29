@@ -1671,6 +1671,12 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 		err = abc_pcie_sg_retrieve_from_dma_buf(xfer->dir,
 							xfer->size,
 							rbuf);
+		if (!err && !is_ab_dram_dma_buf(rbuf->sgl->dma_buf)) {
+			dev_err(&abc_dma.pdev->dev,
+					"%s: Remote DMA buffer is is not Airbrush memory\n",
+					__func__);
+			err = -EINVAL;
+		}
 		break;
 	default:
 		dev_err(&abc_dma.pdev->dev,
