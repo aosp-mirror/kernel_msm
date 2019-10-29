@@ -561,7 +561,7 @@ config  QCOM_BUS_CONFIG_RPMH
 
 config MSM_SPCOM
 	depends on QCOM_GLINK
-	bool "Secure Processor Communication over GLINK"
+	tristate "Secure Processor Communication over GLINK"
 	help
 	  spcom driver allows loading Secure Processor Applications and
 	  sending messages to Secure Processor Applications.
