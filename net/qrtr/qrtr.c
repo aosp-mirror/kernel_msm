@@ -461,10 +461,8 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
 	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
 	if (!flow) {
 		flow = kzalloc(sizeof(*flow), GFP_KERNEL);
-		if (!flow) {
-			mutex_unlock(&node->qrtr_tx_lock);
+		if (!flow)
 			return 1;
-		}
 		INIT_LIST_HEAD(&flow->waiters);
 		radix_tree_insert(&node->qrtr_tx_flow, key, flow);
 	}
@@ -954,12 +952,6 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 				kfree_skb(skb);
 			} else {
 				qrtr_sock_queue_skb(node, skb, ipc);
-				if (sock_queue_rcv_skb(&ipc->sk, skb)) {
-					pr_err("%s qrtr pkt dropped flow[%d]\n",
-					       __func__, cb->confirm_rx);
-					kfree_skb(skb);
-				}
-
 				qrtr_port_put(ipc);
 			}
 		}
