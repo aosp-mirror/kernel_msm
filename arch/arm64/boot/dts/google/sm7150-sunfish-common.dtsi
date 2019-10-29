@@ -321,8 +321,7 @@
 			pins = "gpio3";
 			function = "normal";
 			input-enable;
-			bias-pull-up;
-			qcom,pull-up-strength = <PMIC_GPIO_PULL_UP_30>;
+			bias-pull-down;
 			power-source = <0>;
 		};
 	};
