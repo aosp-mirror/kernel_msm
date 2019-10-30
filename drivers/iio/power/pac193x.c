@@ -522,11 +522,10 @@ static int pac193x_i2c_write(struct i2c_client *client, u8 reg_addr,
 				int len, u8 *data)
 {
 	int ret;
-	u8 *send = kmalloc((len + 1) * sizeof(u8), GFP_KERNEL);
+	u8 send[len + 1];
 	struct i2c_msg msg = { .addr = client->addr,
 				.len = len + 1, .flags = 0 };
 
-	memset(send, 0, (len + 1) * sizeof(u8));
 	send[0] = reg_addr;
 	memcpy(&send[1], data, len * sizeof(u8));
 	msg.buf = send;
@@ -536,7 +535,6 @@ static int pac193x_i2c_write(struct i2c_client *client, u8 reg_addr,
 		pr_err("failed writing data from register 0x%02X\n", reg_addr);
 		return ret;
 	}
-	kfree(send);
 	return 0;
 }
 
@@ -1276,6 +1274,7 @@ static int pac193x_write_raw(struct iio_dev *indio_dev,
 
 static const struct iio_info pac193x_info = {
 	.attrs = &pac193x_group,
+	.driver_module = THIS_MODULE,
 	.read_raw = pac193x_read_raw,
 	.write_raw = pac193x_write_raw,
 };
@@ -1505,11 +1504,10 @@ static void pac193x_work_periodic_rfsh(struct work_struct *work)
 			PAC193x_MIN_UPDATE_WAIT_TIME);
 }
 
-void pac193x_read_reg_timeout(struct timer_list *t)
+void pac193x_read_reg_timeout(unsigned long arg)
 {
 	int ret;
-	struct pac193x_chip_info *chip_info =
-	    from_timer(chip_info, t, tmr_forced_update);
+	struct pac193x_chip_info *chip_info = (struct pac193x_chip_info *)arg;
 
 	ret = mod_timer(&chip_info->tmr_forced_update,
 		jiffies + msecs_to_jiffies(PAC193X_MAX_RFSH_LIMIT));
@@ -1584,18 +1582,14 @@ static int pac193x_setup_periodic_refresh(struct pac193x_chip_info *chip_info)
 	INIT_WORK(&chip_info->work_chip_rfsh, pac193x_work_periodic_rfsh);
 
 	/* setup the latest moment for reading the regs before saturation */
-	//init_timer(&chip_info->tmr_forced_update);
+	init_timer(&chip_info->tmr_forced_update);
 	/* register the timer */
-	//chip_info->tmr_forced_update.data = (unsigned long)chip_info;
-	//chip_info->tmr_forced_update.function = pac193x_read_reg_timeout;
-	//add_timer(&chip_info->tmr_forced_update);
-
-	/* After kenel kernel 4.19 use the timer_setup function */
-	/* to initial and register the timer */
-	timer_setup(&chip_info->tmr_forced_update, pac193x_read_reg_timeout, 0);
+	chip_info->tmr_forced_update.data = (unsigned long)chip_info;
+	chip_info->tmr_forced_update.function = pac193x_read_reg_timeout;
 	chip_info->tmr_forced_update.expires = jiffies +
 			msecs_to_jiffies(PAC193X_MAX_RFSH_LIMIT);
 	chip_info->forced_reads_triggered = 0;
+	add_timer(&chip_info->tmr_forced_update);
 
 	return ret;
 }
@@ -1921,10 +1915,9 @@ static struct i2c_driver pac193x_driver = {
 			.name = "pac193x",
 			.of_match_table = pac193x_of_match,
 		    },
-
-	.probe		= pac193x_probe,
-	.remove 	= pac193x_remove,
-	.id_table 	= pac193x_id,
+	.probe	 = pac193x_probe,
+	.remove		= pac193x_remove,
+	.id_table = pac193x_id,
 };
 
 module_i2c_driver(pac193x_driver);
