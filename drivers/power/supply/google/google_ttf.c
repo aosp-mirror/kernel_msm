@@ -60,7 +60,7 @@ static int ttf_pwr_ibatt(const struct gbms_charging_event *ce_data,
 
 	elap = ts->time_fast + ts->time_taper;
 	if (elap <= ELAP_LIMIT_S) {
-		pr_info("%d,%d: fast=%d taper=%d other=%d limit=%d\n",
+		pr_debug("%d,%d: fast=%d taper=%d other=%d limit=%d\n",
 			vbatt_idx, temp_idx,
 			ts->time_fast, ts->time_taper, ts->time_other,
 			ELAP_LIMIT_S);
@@ -72,7 +72,7 @@ static int ttf_pwr_ibatt(const struct gbms_charging_event *ce_data,
 	if (avg_ibatt < 0)
 		sign = -1;
 
-	pr_info("%d,%d: fast=%d taper=%d other=%d avg_ibatt=%d\n",
+	pr_debug("%d,%d: fast=%d taper=%d other=%d avg_ibatt=%d\n",
 		vbatt_idx, temp_idx,
 		ts->time_fast, ts->time_taper, ts->time_other,
 		avg_ibatt * sign);
@@ -147,7 +147,7 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 
 		temp_idx = gbms_msc_temp_idx(profile, t_avg);
 
-		pr_info("%d: temp_idx=%d t_avg=%ld sum=%ld elap=%d\n",
+		pr_debug("%d: temp_idx=%d t_avg=%ld sum=%ld elap=%d\n",
 			soc, temp_idx, t_avg,
 			ce_data->tier_stats[vbatt_idx].temp_sum,
 			elap);
@@ -161,27 +161,27 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 	/* statistical demand for soc, account for taper */
 	avg_cc = ttf_pwr_avg_cc(stats, soc);
 	if (avg_cc <= 0 || avg_cc > cc_max) {
-		pr_info("%d: demand use default avg_cc=%d->%d\n",
+		pr_debug("%d: demand use default avg_cc=%d->%d\n",
 			soc, avg_cc, cc_max);
 		avg_cc = cc_max;
 	}
 
 	/* actual battery power demand */
 	pwr_demand = (profile->volt_limits[vbatt_idx] / 10000) * avg_cc;
-	pr_info("%d:%d,%d: pwr_demand=%d avg_cc=%d cc_max=%d\n",
+	pr_debug("%d:%d,%d: pwr_demand=%d avg_cc=%d cc_max=%d\n",
 		soc, temp_idx, vbatt_idx, pwr_demand,
 		avg_cc, cc_max);
 
 	/* actual adapter current capabilities for this tier */
 	act_icl = ttf_pwr_icl(ce_data, temp_idx, vbatt_idx);
 	if (act_icl <= 0) {
-		pr_info("%d: negative, null act_icl=%d\n", soc, act_icl);
+		pr_debug("%d: negative, null act_icl=%d\n", soc, act_icl);
 		return -1;
 	}
 
 	/* compensate for temperature (might not need) */
 	if (temp_idx != stats->ref_temp_idx && cc_max < act_icl) {
-		pr_info("%d: temp_idx=%d, reduce icl %d->%d\n",
+		pr_debug("%d: temp_idx=%d, reduce icl %d->%d\n",
 			soc, temp_idx, act_icl, cc_max);
 		act_icl = cc_max;
 	}
@@ -191,10 +191,10 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 	 */
 	act_ibatt = ttf_pwr_ibatt(ce_data, temp_idx, vbatt_idx);
 	if (act_ibatt < 0) {
-		pr_info("%d: ibatt=%d, discharging\n", soc, act_ibatt);
+		pr_debug("%d: ibatt=%d, discharging\n", soc, act_ibatt);
 		return -1;
 	} else if (act_ibatt > 0 && act_ibatt < act_icl) {
-		pr_info("%d: sysload ibatt=%d, avg_cc=%d, reduce icl %d->%d\n",
+		pr_debug("%d: sysload ibatt=%d, avg_cc=%d, reduce icl %d->%d\n",
 			soc, act_ibatt, avg_cc, act_icl, act_ibatt);
 		act_icl = act_ibatt;
 	}
@@ -208,7 +208,7 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 	else
 		ratio = 100;
 
-	pr_info("%d: pwr_avail=%d, pwr_demand=%d ratio=%d\n",
+	pr_debug("%d: pwr_avail=%d, pwr_demand=%d ratio=%d\n",
 		soc, pwr_avail, pwr_demand, ratio);
 
 	return ratio;
@@ -248,7 +248,7 @@ int ttf_soc_estimate(time_t *res,
 
 			ratio = ttf_pwr_ratio(stats, ce_data, i);
 			if (ratio < 0) {
-				pr_info("%d: negative ratio=%d\n", i, ratio);
+				pr_debug("%d: negative ratio=%d\n", i, ratio);
 				return -EINVAL;
 			}
 		}
@@ -344,7 +344,7 @@ static void ttf_soc_update(struct batt_ttf_stats *stats,
 
 			elap = (src->elap[i] * 100) / ratio;
 
-			pr_info("%d: dst->elap=%ld, ref_elap=%ld, elap=%ld, src_elap=%ld ratio=%d\n",
+			pr_debug("%d: dst->elap=%ld, ref_elap=%ld, elap=%ld, src_elap=%ld ratio=%d\n",
 				i, dst->elap[i], stats->soc_ref.elap[i],
 				elap, src->elap[i], ratio);
 
