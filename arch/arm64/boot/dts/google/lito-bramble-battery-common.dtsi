@@ -11,3 +11,19 @@
  * GNU General Public License for more details.
  */
 #include "lito-redbull-battery.dtsi"
+
+&soc {
+	bramble_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
+		#include "batterydata-qcom-b5-Desay-ATL.dtsi"
+	};
+};
+
+&pm7250b_charger {
+	qcom,battery-data = <&bramble_batterydata>;
+	qcom,chg-term-current-ma = <(-190)>;
+};
+
+&pm7250b_qg {
+	qcom,battery-data = <&bramble_batterydata>;
+};

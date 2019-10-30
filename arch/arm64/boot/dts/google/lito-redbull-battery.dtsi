@@ -11,3 +11,141 @@
  * GNU General Public License for more details.
  */
 
+&pm7250b_charger {
+	/* google,batt_psy_disable ; */
+	google,batt_psy_name = "smb5";
+	google,batt_psy_is_bms;
+	qcom,hvdcp-disable;
+	qcom,chg-term-src = <1>;
+
+	qcom,chgr@1000 {
+		/delete-property/ interrupts;
+		/delete-property/ interrupt-names;
+	};
+
+	qcom,batif@1200 {
+		/delete-property/ interrupts;
+		/delete-property/ interrupt-names;
+	};
+};
+
+&pm7250b_qg {
+	qcom,qg-ext-sns;
+	qcom,cl-min-delta-batt-soc = <10>;
+	qcom,cl-wt-enable;
+	qcom,qg-iterm-ma = <570>;
+	qcom,vbatt-cutoff-mv = <3300>;
+	qcom,vbatt-empty-mv = <2800>;
+	qcom,fvss-enable;
+	qcom,fvss-vbatt-mv = <3450>;
+};
+
+&spmi_bus {
+	qcom,pm7250b@2 {
+		google_bms: google,bms {
+			compatible = "google,sm7250_bms";
+			google,psy-name = "sm7250_bms";
+
+			io-channels = <&pm7250b_vadc ADC_BAT_THERM_PU2>,
+				      <&pm7250b_vadc ADC_BAT_ID_PU2>;
+			io-channel-names = "batt-therm",
+					   "batt-id";
+
+			sm7250_bms,chgr@1000 {
+				reg = <0x1000 0x100>;
+				interrupts =
+					<0x2 0x10 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x10 0x1 IRQ_TYPE_EDGE_RISING>;
+				interrupt-names =
+					"chgr-error",
+					"chg-state-change";
+			};
+
+			sm7250_bms,batif@1200 {
+				reg = <0x1200 0x100>;
+				interrupts =
+					<0x2 0x12 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x12 0x2 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x3 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x4 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x5 IRQ_TYPE_EDGE_BOTH>;
+				interrupt-names =
+						"bat-temp",
+						"bat-ov",
+						"bat-low",
+						"bat-therm-or-id-missing",
+						"bat-terminal-missing";
+			};
+		};
+	};
+};
+
+&soc {
+	google_battery: google,battery {
+		compatible = "google,battery";
+		google,fg-psy-name = "bms";
+
+		/* chg-battery-capacity = <0> -> read FULL_DESIGN from FG */
+		google,chg-battery-capacity = <3800>;
+
+		/* charge table for floral */
+		google,chg-temp-limits = <0 100 200 420 460 480 550>;
+		google,chg-cv-limits = <4200000 4300000 4450000>;
+		google,chg-cc-limits = <
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
+		>;
+
+		/* battery poll rate */
+		google,update-interval = <30000>;
+		/* IRDrop Compensation */
+		google,fv-uv-resolution = <25000>;
+		google,fv-uv-margin-dpct = <1020>;
+		/* tier switch */
+		google,cv-range-accuracy = <10000>;
+		google,cv-otv-margin = <12000>;
+		google,cv-debounce-cnt = <3>;
+		google,cv-tier-ov-cnt = <1>;
+		google,cv-tier-switch-cnt = <3>;
+		/* charging stats */
+		google,chg-stats-qual-time = <900>;
+		google,chg-stats-delta-soc = <15>;
+		/* resistance estimation */
+		google,res-temp-hi = <390>;
+		google,res-temp-lo = <350>;
+		google,res-soc-thresh = <75>;
+		google,res-filt-length = <10>;
+		/* enable cycle counts */
+		google,cycle-counts;
+
+		#thermal-sensor-cells = <0>;
+		google,ttf-adapter = <1800>;
+		google,ttf-soc-table =  <62 75 85 89  92  95  98  100>;
+		google,ttf-elap-table = <40 55 75 100 120 180 250 300>;
+		google,ttf-tier-table = <0 64 80>;
+	};
+
+	google_charger: google,charger {
+		compatible = "google,charger";
+		#cooling-cells = <2>;
+		google,chg-power-supply = "sm7250_bms";
+		google,bat-power-supply = "battery";
+		google,thermal-mitigation = <3700000 1850000 925000 500000>;
+		google,fv-max-uv = <4450000>;
+
+		/* TODO: remove when using proper "charger" */
+		google,chg-cc-tolerance = <25>;
+	};
+
+	google_overheat_mitigation: google,overheat_mitigation {
+		compatible = "google,overheat_mitigation";
+		google,port-overheat-work-interval = <2000>;
+		/* Must maintain < 1/15 duty cycle */
+		google,polling-freq = <3>;
+		#cooling-cells = <2>;
+	};
+};
