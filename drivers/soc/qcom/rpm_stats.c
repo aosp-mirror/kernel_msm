@@ -219,6 +219,70 @@ uint64_t get_sleep_exit_time(void)
 }
 EXPORT_SYMBOL(get_sleep_exit_time);
 
+struct msm_rpmstats_platform_data *rpmstats_pdata;
+void __iomem *rpmstats_base;
+static DEFINE_MUTEX(rpm_stats_mutex);
+int msm_rpmstats_stats_dump(void)
+{
+	void __iomem *reg;
+	char *buf;
+	int j, curr_len = 0;
+	struct msm_rpm_stats_data data;
+	char stat_type[5] = {0};
+	u64 actual_last_sleep = 0;
+	int ret = 0;
+
+	mutex_lock(&rpm_stats_mutex);
+
+	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf) {
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
+	reg = rpmstats_base;
+	if (!reg) {
+		ret = -EBUSY;
+		goto err_kfree;
+	}
+
+	for (j = 0; j < rpmstats_pdata->num_records; j++) {
+		data.stat_type = msm_rpmstats_read_long_register(reg, j,
+			offsetof(struct msm_rpm_stats_data, stat_type));
+		data.count = msm_rpmstats_read_long_register(reg, j,
+			offsetof(struct msm_rpm_stats_data, count));
+		data.accumulated = msm_rpmstats_read_quad_register(reg, j,
+			offsetof(struct msm_rpm_stats_data, accumulated));
+
+		memcpy(stat_type, &data.stat_type, sizeof(u32));
+		actual_last_sleep = get_time_in_sec(data.accumulated);
+
+		if (curr_len < PAGE_SIZE) {
+			curr_len += snprintf(buf + curr_len,
+				PAGE_SIZE - curr_len,
+				"(%s,", stat_type);
+		}
+		if (curr_len < PAGE_SIZE) {
+			curr_len += snprintf(buf + curr_len,
+				PAGE_SIZE - curr_len,
+				"%d,sleep:%llus) ", data.count,
+				actual_last_sleep);
+		}
+	}
+
+	if (curr_len < PAGE_SIZE) {
+		buf[curr_len] = '\0';
+		pr_info("%s\n", buf);
+	} else
+		pr_err("Failed to allocate string range\n");
+
+err_kfree:
+	kfree(buf);
+err_unlock:
+	mutex_unlock(&rpm_stats_mutex);
+
+	return ret;
+}
+
 static ssize_t rpmstats_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
@@ -324,6 +388,17 @@ static int msm_rpmstats_probe(struct platform_device *pdev)
 
 	msm_rpmstats_create_sysfs(pdev, pdata);
 	gpdata = pdata;
+
+	rpmstats_pdata = pdata;
+	rpmstats_base = ioremap_nocache(
+		rpmstats_pdata->phys_addr_base,
+		rpmstats_pdata->phys_size);
+	if (!rpmstats_base) {
+		pr_err("Failed to ioremap offset address base=%pa, size=%u\n",
+			&rpmstats_pdata->phys_addr_base,
+			rpmstats_pdata->phys_size);
+		return -ENODEV;
+	}
 
 	return 0;
 }
