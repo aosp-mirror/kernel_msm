@@ -166,4 +166,10 @@ int btfm_slim_register_codec(struct device *dev);
  * VOID
  */
 void btfm_slim_unregister_codec(struct device *dev);
+
+#if defined(CONFIG_MSM_BT_POWER_MODULE)
+extern int __init btfm_slim_init(void);
+extern void __exit btfm_slim_exit(void);
+#endif
+
 #endif /* BTFM_SLIM_H */

@@ -26,7 +26,7 @@
 #include <net/cnss.h>
 #endif
 
-#if defined CONFIG_BT_SLIM_QCA6390 || defined CONFIG_BTFM_SLIM_WCN3990
+#if IS_ENABLED(CONFIG_BT_SLIM_QCA6390) || IS_ENABLED(CONFIG_BTFM_SLIM_WCN3990)
 #include "btfm_slim.h"
 #endif
 #include <linux/fs.h>
@@ -818,7 +818,7 @@ static long bt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	case BT_CMD_SLIM_TEST:
-#if defined CONFIG_BT_SLIM_QCA6390 || defined CONFIG_BTFM_SLIM_WCN3990
+#if IS_ENABLED(CONFIG_BT_SLIM_QCA6390) || IS_ENABLED(CONFIG_BTFM_SLIM_WCN3990)
 		if (!bt_power_pdata->slim_dev) {
 			BT_PWR_ERR("slim_dev is null\n");
 			return -EINVAL;
@@ -876,6 +876,8 @@ static int __init bluetooth_power_init(void)
 	int ret;
 
 	ret = platform_driver_register(&bt_power_driver);
+	if (ret)
+		return ret;
 
 	bt_major = register_chrdev(0, "bt", &bt_dev_fops);
 	if (bt_major < 0) {
@@ -895,16 +897,30 @@ static int __init bluetooth_power_init(void)
 		BT_PWR_ERR("failed to allocate char dev\n");
 		goto chrdev_unreg;
 	}
+
+#if IS_ENABLED(CONFIG_BT_SLIM_QCA6390) || IS_ENABLED(CONFIG_BTFM_SLIM_WCN3990)
+#if defined(CONFIG_MSM_BT_POWER_MODULE)
+	ret = btfm_slim_init();
+	if (ret)
+		goto chrdev_unreg;
+#endif
+#endif
 	return 0;
 
 chrdev_unreg:
 	unregister_chrdev(bt_major, "bt");
 	class_destroy(bt_class);
+	platform_driver_unregister(&bt_power_driver);
 	return ret;
 }
 
 static void __exit bluetooth_power_exit(void)
 {
+#if IS_ENABLED(CONFIG_BT_SLIM_QCA6390) || IS_ENABLED(CONFIG_BTFM_SLIM_WCN3990)
+#if defined(CONFIG_MSM_BT_POWER_MODULE)
+	btfm_slim_exit();
+#endif
+#endif
 	platform_driver_unregister(&bt_power_driver);
 }
 
