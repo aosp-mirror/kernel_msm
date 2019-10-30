@@ -291,6 +291,7 @@ struct rt5514_priv {
 	struct snd_soc_codec *codec;
 	struct regmap *i2c_regmap, *regmap;
 	struct clk *mclk;
+	struct gpio_desc *gpiod_reset;
 	int sysclk;
 	int sysclk_src;
 	int lrck;

@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
 #include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -718,8 +719,14 @@ watchdog:
 
 void rt5514_watchdog_handler(void)
 {
-	regmap_multi_reg_write(rt5514_g_i2c_regmap,
-		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+	if (g_rt5514->gpiod_reset) {
+		gpiod_set_value(g_rt5514->gpiod_reset, 0);
+		usleep_range(1000, 2000);
+		gpiod_set_value(g_rt5514->gpiod_reset, 1);
+	} else {
+		regmap_multi_reg_write(rt5514_g_i2c_regmap,
+			rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+	}
 
 	rt5514_dsp_enable(g_rt5514, false, true);
 }
@@ -871,9 +878,36 @@ static int rt5514_hw_ver_get(struct snd_kcontrol *kcontrol,
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 	unsigned int val;
 
-	regmap_read(rt5514->regmap, RT5514_VENDOR_ID2, &val);
+	regmap_read(rt5514->regmap, RT5514_VENDOR_ID1, &val);
 
-	ucontrol->value.integer.value[0] = (val != RT5514_DEVICE_ID);
+	ucontrol->value.integer.value[0] = ((val & 80) == 80);
+
+	return 0;
+}
+
+static int rt5514_hw_reset_set(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	if (rt5514->gpiod_reset) {
+		gpiod_set_value(rt5514->gpiod_reset, 0);
+		usleep_range(1000, 2000);
+		gpiod_set_value(rt5514->gpiod_reset, 1);
+		rt5514_dsp_enable(g_rt5514, false, true);
+	}
+
+	return 0;
+}
+
+static int rt5514_hw_reset_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = !!rt5514->gpiod_reset;
 
 	return 0;
 }
@@ -1041,6 +1075,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_dsp_buf_ch_get, rt5514_dsp_buf_ch_put),
 	SOC_SINGLE_EXT("HW Version", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_hw_ver_get, NULL),
+	SOC_SINGLE_EXT("HW Reset", SND_SOC_NOPM, 0, 1, 0,
+		rt5514_hw_reset_get, rt5514_hw_reset_set),
 	SND_SOC_BYTES_TLV("Ambient Payload", sizeof(RT5514_PAYLOAD),
 		rt5514_ambient_payload_get, rt5514_ambient_payload_put),
 	SND_SOC_BYTES_TLV("Ambient Process Payload", sizeof(RT5514_PAYLOAD),
@@ -1922,6 +1958,14 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 		ret = PTR_ERR(rt5514->regmap);
 		dev_err(&i2c->dev, "Failed to allocate register map: %d\n",
 			ret);
+		return ret;
+	}
+
+	rt5514->gpiod_reset = devm_gpiod_get_optional(&i2c->dev, "reset",
+							GPIOD_OUT_HIGH);
+	if (IS_ERR(rt5514->gpiod_reset)) {
+		ret = PTR_ERR(rt5514->gpiod_reset);
+		dev_err(&i2c->dev, "Failed to initialize gpiod: %d\n", ret);
 		return ret;
 	}
 
