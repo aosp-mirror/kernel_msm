@@ -570,6 +570,7 @@ config QCOM_PM8XXX_XOADC
 config QCOM_SPMI_ADC5
 	tristate "Qualcomm Technologies Inc. SPMI PMIC5 ADC"
 	depends on SPMI
+	depends on QPNP_REVID
 	select REGMAP_SPMI
 	select QCOM_VADC_COMMON
 	help
