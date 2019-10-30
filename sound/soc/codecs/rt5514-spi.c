@@ -42,7 +42,8 @@ static struct wakeup_source rt5514_spi_ws;
 
 struct rt5514_dsp {
 	struct device *dev;
-	struct delayed_work copy_work_0, copy_work_1, copy_work_2, start_work;
+	struct delayed_work copy_work_0, copy_work_1, copy_work_2, start_work,
+		adc_work;
 	struct mutex dma_lock;
 	struct snd_pcm_substream *substream[3];
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
@@ -614,6 +615,7 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 	unsigned int base_addr, limit_addr, truncated_bytes,
 			buf_ignore_size = 0;
 	unsigned int hotword_flag, musdet_flag, stream_flag;
+	int retry_cnt = 0;
 
 	if (is_adc) {
 		stream_flag = RT5514_DSP_STREAM_ADC;
@@ -682,28 +684,45 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 	 * support spi burst read perfectly. So we use the spi burst read
 	 * individually to make sure the data correctly.
 	 */
-	rt5514_spi_burst_read(base_addr, (u8 *)&buf, sizeof(buf));
-	rt5514_dsp->buf_base[stream_flag - 1] =
-		buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-	if ((rt5514_dsp->buf_base[stream_flag - 1] & 0xfff00000) != 0x4ff00000)
-		return;
+	while (retry_cnt < RT5514_SPI_RETRY_CNT) {
+		/* sleep 10 ms if need retry*/
+		if (retry_cnt)
+			usleep_range(10000, 10010);
+		retry_cnt++;
 
-	rt5514_spi_burst_read(limit_addr, (u8 *)&buf, sizeof(buf));
-	rt5514_dsp->buf_limit[stream_flag - 1] =
-		buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-	if ((rt5514_dsp->buf_limit[stream_flag - 1] & 0xfff00000) != 0x4ff00000)
-		return;
+		rt5514_spi_burst_read(base_addr, (u8 *)&buf, sizeof(buf));
+		rt5514_dsp->buf_base[stream_flag - 1] =
+			buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
+		if ((rt5514_dsp->buf_base[stream_flag - 1] & 0xfff00000) !=
+			0x4ff00000)
+			continue;
 
-	if (rt5514_dsp->buf_limit[stream_flag - 1] % 8)
+		rt5514_spi_burst_read(limit_addr, (u8 *)&buf, sizeof(buf));
 		rt5514_dsp->buf_limit[stream_flag - 1] =
-		((rt5514_dsp->buf_limit[stream_flag - 1] / 8) + 1) * 8;
+			buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
+		if ((rt5514_dsp->buf_limit[stream_flag - 1] & 0xfff00000) !=
+			0x4ff00000)
+			continue;
 
-	rt5514_spi_burst_read(rt5514_dsp->buf_rp_addr[stream_flag - 1],
-		(u8 *)&buf, sizeof(buf));
-	rt5514_dsp->buf_rp[stream_flag - 1] =
-		buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-	if ((rt5514_dsp->buf_rp[stream_flag - 1] & 0xfff00000) != 0x4ff00000)
+		if (rt5514_dsp->buf_limit[stream_flag - 1] % 8)
+			rt5514_dsp->buf_limit[stream_flag - 1] =
+			((rt5514_dsp->buf_limit[stream_flag - 1] / 8) + 1) * 8;
+
+		rt5514_spi_burst_read(rt5514_dsp->buf_rp_addr[stream_flag - 1],
+			(u8 *)&buf, sizeof(buf));
+		rt5514_dsp->buf_rp[stream_flag - 1] =
+			buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
+		if ((rt5514_dsp->buf_rp[stream_flag - 1] & 0xfff00000) !=
+			0x4ff00000)
+			continue;
+		else
+			break;
+	}
+
+	if (retry_cnt == RT5514_SPI_RETRY_CNT) {
+		pr_err("%s: Fail for address read", __func__);
 		return;
+	}
 
 	rt5514_dsp->buf_rp[stream_flag - 1] += buf_ignore_size;
 
@@ -764,6 +783,21 @@ static void rt5514_spi_start_work(struct work_struct *work) {
 		rt5514_schedule_copy(rt5514_dsp, false);
 }
 
+static void rt5514_spi_adc_start(struct work_struct *work)
+{
+	struct rt5514_dsp *rt5514_dsp =
+		container_of(work, struct rt5514_dsp, adc_work.work);
+	struct snd_card *card;
+
+	if (rt5514_dsp->substream[2] && rt5514_dsp->substream[2]->pcm)
+		card = rt5514_dsp->substream[2]->pcm->card;
+	else
+		return;
+
+	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
+		rt5514_schedule_copy(rt5514_dsp, true);
+}
+
 static irqreturn_t rt5514_spi_irq(int irq, void *data)
 {
 	struct rt5514_dsp *rt5514_dsp = data;
@@ -799,7 +833,8 @@ static int rt5514_spi_hw_params(struct snd_pcm_substream *substream,
 	rt5514_dsp->dma_offset[cpu_dai->id] = 0;
 
 	if (cpu_dai->id == 2)
-		rt5514_schedule_copy(rt5514_dsp, true);
+		schedule_delayed_work(&rt5514_dsp->adc_work,
+			msecs_to_jiffies(0));
 
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
@@ -884,6 +919,7 @@ static int rt5514_spi_pcm_probe(struct snd_soc_platform *platform)
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_1, rt5514_spi_copy_work_1);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_2, rt5514_spi_copy_work_2);
 	INIT_DELAYED_WORK(&rt5514_dsp->start_work, rt5514_spi_start_work);
+	INIT_DELAYED_WORK(&rt5514_dsp->adc_work, rt5514_spi_adc_start);
 	snd_soc_platform_set_drvdata(platform, rt5514_dsp);
 
 	if (rt5514_spi->irq) {
