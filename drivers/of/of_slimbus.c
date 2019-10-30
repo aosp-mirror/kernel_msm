@@ -81,3 +81,6 @@ of_slim_ret:
 	return ret;
 }
 EXPORT_SYMBOL(of_register_slim_devices);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Open Firmware Slimbus");
