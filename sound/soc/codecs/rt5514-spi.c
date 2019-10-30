@@ -38,6 +38,7 @@
 
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
+static struct wakeup_source rt5514_spi_ws;
 
 struct rt5514_dsp {
 	struct device *dev;
@@ -933,6 +934,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	struct spi_transfer x[3];
 
 	mutex_lock(&spi_lock);
+	__pm_stay_awake(&rt5514_spi_ws);
 
 	write_buf = kzalloc(8, GFP_DMA | GFP_KERNEL);
 	read_buf = kzalloc(RT5514_SPI_BUF_LEN, GFP_DMA | GFP_KERNEL);
@@ -969,6 +971,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 		if (status) {
 			kfree(read_buf);
 			kfree(write_buf);
+			__pm_relax(&rt5514_spi_ws);
 			mutex_unlock(&spi_lock);
 			return false;
 		}
@@ -1001,6 +1004,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	kfree(read_buf);
 	kfree(write_buf);
 
+	__pm_relax(&rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
 	return true;
 }
@@ -1021,12 +1025,13 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 	u8 *write_buf;
 	unsigned int i, end, offset = 0;
 
-	mutex_lock(&spi_lock);
-
 	write_buf = kzalloc(RT5514_SPI_BUF_LEN + 6, GFP_DMA | GFP_KERNEL);
 
 	if (write_buf == NULL)
 		return -ENOMEM;
+
+	mutex_lock(&spi_lock);
+	__pm_stay_awake(&rt5514_spi_ws);
 
 	while (offset < len) {
 		if (offset + RT5514_SPI_BUF_LEN <= len)
@@ -1060,6 +1065,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 
 	kfree(write_buf);
 
+	__pm_relax(&rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
 	return 0;
 }
@@ -1071,6 +1077,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 
 	rt5514_spi = spi;
 	mutex_init(&spi_lock);
+	wakeup_source_init(&rt5514_spi_ws, "rt5514-spi");
 
 	ret = devm_snd_soc_register_platform(&spi->dev, &rt5514_spi_platform);
 	if (ret < 0) {
