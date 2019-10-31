@@ -2312,10 +2312,11 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_CHECKING;
 		charger->align_count++;
-	}
-	if (charger->align_count > WLC_ALIGN_IRQ_THRESHOLD) {
-		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
-		charger->align = POWER_SUPPLY_ALIGN_MOVE;
+
+		if (charger->align_count > WLC_ALIGN_IRQ_THRESHOLD) {
+			kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+			charger->align = POWER_SUPPLY_ALIGN_MOVE;
+		}
 	}
 
 	del_timer(&charger->align_timer);
