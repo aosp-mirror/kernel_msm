@@ -35,6 +35,13 @@
 };
 
 &soc {
+	bootloader_log {
+		compatible = "qcom,bldr_log";
+		reg = <0xA47DF000 0xB400>, <0xA47EA400 0xB400>;
+		reg-names = "bl_log", "bl_old_log";
+		memory-region = <&debug_info>;
+	};
+
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
 		#include "qcom-base/qg-batterydata-alium-3600mah.dtsi"

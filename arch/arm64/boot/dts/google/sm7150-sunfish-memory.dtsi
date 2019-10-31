@@ -41,3 +41,10 @@
 &cdsp_sec_mem {
 	reg = <0 0x9f800000 0 0x1e00000>;
 };
+&reserved_memory {
+	debug_info: debug_info@A47DF000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xA47DF000 0 0x20000>;
+	};
+};
