@@ -429,7 +429,7 @@ config MSM_SYSMON_GLINK_COMM
 	  state-changes.
 
 config MSM_SYSMON_QMI_COMM
-       bool "MSM System Monitor communication support using QMI transport"
+       tristate "MSM System Monitor communication support using QMI transport"
        depends on QCOM_QMI_HELPERS && MSM_SUBSYSTEM_RESTART
        help
          This option adds support for MSM System Monitor APIs using the
