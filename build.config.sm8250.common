@@ -1,7 +1,5 @@
 DEFCONFIG=vendor/kona_defconfig
-EXT_MODULES="
-private/msm-google-modules/wlan/qcacld-3.0
-"
+EXT_MODULES=""
 BUILD_INITRAMFS=1
 MKBOOTIMG_PATH=tools/mkbootimg/mkbootimg.py
 VENDOR_RAMDISK_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-sm8250.img
