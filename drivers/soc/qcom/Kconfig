@@ -733,7 +733,7 @@ config QTI_DDR_STATS_LOG
 	  sysfs.
 
 config MSM_JTAGV8
-	bool "Debug and ETM trace support across power collapse for ARMv8"
+	tristate "Debug and ETM trace support across power collapse for ARMv8"
 	default y if CORESIGHT_SOURCE_ETM4X
 	help
 	  Enables support for debugging (specifically breakpoints) and ETM
