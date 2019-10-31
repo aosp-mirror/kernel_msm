@@ -489,6 +489,7 @@
 		pins = "gpio11";
 		function = "normal";
 		output-high;
+		power-source = <1>;
 		qcom,drive-strength = <2>;
 	};
 
@@ -496,6 +497,7 @@
 		pins = "gpio10";
 		function = "normal";
 		output-high;
+		power-source = <1>;
 		qcom,drive-strength = <2>;
 	};
 };
