@@ -171,7 +171,7 @@ config TWM_SOC_VALUE_MANUAL
 
 config TWM_SOC_ENTER_VALUE
 	int "TWM SOC TENTER VALUE SET"
-	range 5 20
+	range 0 20
 	default 12
 	depends on TWM_SOC_VALUE_MANUAL
 	help
