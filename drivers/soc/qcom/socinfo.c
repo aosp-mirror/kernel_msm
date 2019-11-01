@@ -590,6 +590,7 @@ uint32_t socinfo_get_g_platform_type(void)
 			socinfo->v0_15.g_hw_platform : 0)
 		: 0;
 }
+EXPORT_SYMBOL_GPL(socinfo_get_g_platform_type);
 
 uint32_t socinfo_get_g_platform_version(void)
 {
@@ -598,6 +599,7 @@ uint32_t socinfo_get_g_platform_version(void)
 			socinfo->v0_15.g_platform_version : 0)
 		: 0;
 }
+EXPORT_SYMBOL_GPL(socinfo_get_g_platform_version);
 
 uint32_t socinfo_get_g_platform_subtype(void)
 {
@@ -606,6 +608,7 @@ uint32_t socinfo_get_g_platform_subtype(void)
 			socinfo->v0_15.g_hw_platform_subtype : 0)
 		: 0;
 }
+EXPORT_SYMBOL_GPL(socinfo_get_g_platform_subtype);
 
 enum pmic_model socinfo_get_pmic_model(void)
 {
