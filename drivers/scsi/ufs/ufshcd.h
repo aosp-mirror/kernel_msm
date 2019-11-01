@@ -777,7 +777,7 @@ struct ufshcd_cmd_log_entry {
 	u8 lun;
 	u8 cmd_id;
 	sector_t lba;
-	int transfer_len;
+	u32 transfer_len;
 	u8 idn;		/* used only for query idn */
 	u32 doorbell;
 	u32 outstanding_reqs;

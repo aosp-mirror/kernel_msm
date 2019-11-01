@@ -79,8 +79,8 @@ static enum ufshcd_slowio_optype ufshcd_get_slowio_optype(u8 opcode)
 static void ufshcd_log_slowio(struct ufs_hba *hba,
 		struct ufshcd_lrb *lrbp, s64 iotime_us)
 {
-	sector_t la = -1;
-	int transfer_len = -1;
+	sector_t lba = ULONG_MAX;
+	u32 transfer_len = UINT_MAX;
 	u8 opcode = 0xff;
 	char opcode_str[16];
 	u64 slowio_cnt = 0;
@@ -100,17 +100,17 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 		}
 		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
 						is_unmap_opcode(opcode)) {
-			if (lrbp->cmd->request && lrbp->cmd->request->bio)
-				la = lrbp->cmd->request->bio->bi_iter.bi_sector;
-			transfer_len = be32_to_cpu(
-				lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+			if (lrbp->cmd->request && lrbp->cmd->request->bio) {
+				lba = scsi_get_lba(lrbp->cmd);
+				transfer_len = scsi_get_bytes(lrbp->cmd);
+			}
 		}
 	}
 	snprintf(opcode_str, 16, "%02x: %s", opcode, parse_opcode(opcode));
 	dev_err_ratelimited(hba->dev,
 		"Slow UFS (%lld): time = %lld us, opcode = %16s, lba = %ld, "
-		"len = %d\n",
-		slowio_cnt, iotime_us, opcode_str, la, transfer_len);
+		"len = %u\n",
+		slowio_cnt, iotime_us, opcode_str, lba, transfer_len);
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -215,7 +215,7 @@ ufshcd_update_query_stats(struct ufs_hba *hba, enum query_opcode opcode, u8 idn)
 
 static void
 __update_io_stat(struct ufs_hba *hba, struct ufshcd_io_stat *io_stat,
-		int transfer_len, int is_start)
+		u32 transfer_len, int is_start)
 {
 	if (is_start) {
 		u64 diff;
@@ -242,7 +242,7 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 {
 	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	u8 opcode;
-	int transfer_len;
+	u32 transfer_len;
 
 	if (!lrbp->cmd)
 		return;
@@ -250,7 +250,7 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 	if (!is_read_opcode(opcode) && is_write_opcode(opcode))
 		return;
 
-	transfer_len = be32_to_cpu(lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+	transfer_len = scsi_get_bytes(lrbp->cmd);
 
 	__update_io_stat(hba, &hba->ufs_stats.io_readwrite, transfer_len,
 			is_start);
@@ -821,7 +821,7 @@ static void ufshcd_cmd_log_init(struct ufs_hba *hba)
 
 static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 			     unsigned int tag, u8 cmd_id, u8 idn, u8 lun,
-			     sector_t lba, int transfer_len)
+			     sector_t lba, u32 transfer_len)
 {
 	struct ufshcd_cmd_log_entry *entry;
 
@@ -879,7 +879,7 @@ static void ufshcd_print_cmd_log(struct ufs_hba *hba)
 		pos = (pos + 1) % UFSHCD_MAX_CMD_LOGGING;
 
 		if (ktime_to_us(p->tstamp)) {
-			pr_err("%s: %s: seq_no=%u lun=0x%x cmd_id=0x%02x lba=0x%llx txfer_len=%d tag=%u, doorbell=0x%x outstanding=0x%x idn=%d time=%lld us\n",
+			pr_err("%s: %s: seq_no=%u lun=0x%x cmd_id=0x%02x lba=0x%llx txfer_len=%u tag=%u, doorbell=0x%x outstanding=0x%x idn=%d time=%lld us\n",
 				p->cmd_type, p->str, p->seq_num,
 				p->lun, p->cmd_id, (unsigned long long)p->lba,
 				p->transfer_len, p->tag, p->doorbell,
@@ -896,7 +896,7 @@ static void ufshcd_cmd_log_init(struct ufs_hba *hba)
 
 static void __ufshcd_cmd_log(struct ufs_hba *hba, char *str, char *cmd_type,
 			     unsigned int tag, u8 cmd_id, u8 idn, u8 lun,
-			     sector_t lba, int transfer_len)
+			     sector_t lba, u32 transfer_len)
 {
 	struct ufshcd_cmd_log_entry entry;
 
@@ -931,8 +931,8 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 	char *cmd_type = NULL;
 	u8 opcode = 0;
 	u8 cmd_id = 0, idn = 0;
-	sector_t lba = 0;
-	int transfer_len = 0;
+	sector_t lba = ULONG_MAX;
+	u32 transfer_len = UINT_MAX;
 
 	if (lrbp->cmd) { /* data phase exists */
 		/* trace UPIU also */
@@ -944,11 +944,10 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 			 * Currently we only fully trace read(10), write(10),
 			 * read(16), write(16), unmap commands
 			 */
-			if (lrbp->cmd->request && lrbp->cmd->request->bio)
-				lba =
-				lrbp->cmd->request->bio->bi_iter.bi_sector;
-			transfer_len = be32_to_cpu(
-				lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+			if (lrbp->cmd->request && lrbp->cmd->request->bio) {
+				lba = scsi_get_lba(lrbp->cmd);
+				transfer_len = scsi_get_bytes(lrbp->cmd);
+			}
 		}
 	}
 
