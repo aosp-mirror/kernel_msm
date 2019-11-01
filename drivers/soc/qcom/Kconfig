@@ -826,7 +826,7 @@ config ICNSS_QMI
 	  over QMI channel.
 
 config MODEMSMEM
-	bool "Modem SMEM driver"
+	tristate "Modem SMEM driver"
 	default N
 	---help---
 	Enable to pass device information and other data to shared memory for
