@@ -56,7 +56,6 @@
 #define WLC_MFG_GOOGLE			0x72
 #define WLC_CURRENT_FILTER_LENGTH	10
 #define WLC_ALIGN_DEFAULT_SCALAR	4
-#define WLC_ALIGN_DEFAULT_TIMEOUT_MS	(10 * 1000)
 #define WLC_ALIGN_IRQ_THRESHOLD		10
 
 #define RTX_BEN_DISABLED	0
@@ -771,6 +770,8 @@ static void p9221_vrect_timer_handler(unsigned long data)
 	if (charger->align == POWER_SUPPLY_ALIGN_CHECKING) {
 		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_MOVE;
+		logbuffer_log(charger->log, "align: state: %s\n",
+			      align_status_str[charger->align]);
 	}
 	dev_info(&charger->client->dev,
 		 "timeout waiting for VRECT, online=%d\n", charger->online);
@@ -874,14 +875,6 @@ static void p9221_align_work(struct work_struct *work)
 	if (charger->pdata->alignment_freq == NULL)
 		return;
 
-	if ((ktime_to_ms(ktime_get_boottime()) - charger->alignment_time) >=
-	    WLC_ALIGN_DEFAULT_TIMEOUT_MS) {
-		charger->alignment = -1;
-		logbuffer_log(charger->log,
-			      "align: stopping due to inactivity");
-		return;
-	}
-
 	schedule_delayed_work(&charger->align_work,
 			msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 
@@ -949,14 +942,6 @@ no_scaling:
 			     charger->current_filtered);
 		charger->alignment_last = charger->alignment;
 	}
-}
-
-static const char *p9221_get_alignment_str(struct p9221_charger_data *charger)
-{
-	scnprintf(charger->alignment_str,
-		  sizeof(charger->alignment_str), "%d",
-		  charger->alignment);
-	return charger->alignment_str;
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -1034,39 +1019,6 @@ static int p9221_get_property(struct power_supply *psy,
 
 		/* success */
 		ret = 0;
-		break;
-	case POWER_SUPPLY_PROP_ALIGNMENT:
-		/* recheck mfg */
-		if (charger->mfg == 0) {
-			ret = p9221_reg_read_16(charger,
-						P9221R5_EPP_TX_MFG_CODE_REG,
-						&charger->mfg);
-			if (ret < 0) {
-				dev_err(&charger->client->dev,
-					"cannot read MFG_CODE (%d)\n", ret);
-			}
-
-			if (charger->mfg == WLC_MFG_GOOGLE) {
-				charger->alignment_capable = true;
-				logbuffer_log(charger->log,
-					      "align: google wlc mfg correct");
-			}
-		}
-
-		if (charger->alignment_capable) {
-			charger->alignment_time =
-					ktime_to_ms(ktime_get_boottime());
-
-			if (charger->alignment == -1)
-				p9221_init_align(charger);
-		}
-
-		if ((charger->align != POWER_SUPPLY_ALIGN_CENTERED) ||
-		    (charger->alignment == -1))
-			val->strval = align_status_str[charger->align];
-		else
-			val->strval = p9221_get_alignment_str(charger);
-
 		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
@@ -1402,6 +1354,8 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	charger->alignment_capable = false;
 	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 	charger->align = POWER_SUPPLY_ALIGN_CENTERED;
+	logbuffer_log(charger->log, "align: state: %s\n",
+		      align_status_str[charger->align]);
 
 	if (!p9221_is_epp(charger))
 		return;
@@ -2293,6 +2247,44 @@ static ssize_t p9221_set_dc_icl_bpp(struct device *dev,
 static DEVICE_ATTR(dc_icl_bpp, 0644,
 		   p9221_show_dc_icl_bpp, p9221_set_dc_icl_bpp);
 
+static ssize_t p9221_show_alignment(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret;
+
+	/* recheck mfg */
+	if (charger->mfg == 0) {
+		ret = p9221_reg_read_16(charger,
+					P9221R5_EPP_TX_MFG_CODE_REG,
+					&charger->mfg);
+		if (ret < 0) {
+			dev_err(&charger->client->dev,
+				"cannot read MFG_CODE (%d)\n", ret);
+		}
+
+		if (charger->mfg == WLC_MFG_GOOGLE) {
+			charger->alignment_capable = true;
+			logbuffer_log(charger->log,
+				      "align: google wlc mfg correct");
+		}
+	}
+
+	if ((charger->alignment_capable) && (charger->alignment == -1))
+		p9221_init_align(charger);
+
+	if ((charger->align != POWER_SUPPLY_ALIGN_CENTERED) ||
+	    (charger->alignment == -1))
+		return scnprintf(buf, PAGE_SIZE, "%s\n",
+				 align_status_str[charger->align]);
+	else
+		return scnprintf(buf, PAGE_SIZE, "%d\n", charger->alignment);
+}
+
+static DEVICE_ATTR(alignment, 0444, p9221_show_alignment, NULL);
+
 /* ------------------------------------------------------------------------ */
 
 static ssize_t p9382_show_rtx_sw(struct device *dev,
@@ -2518,6 +2510,7 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_rtx_sw.attr,
 	&dev_attr_rtx_boost.attr,
 	&dev_attr_rtx.attr,
+	&dev_attr_alignment.attr,
 	NULL
 };
 
@@ -2925,6 +2918,8 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 			kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 			charger->align = POWER_SUPPLY_ALIGN_MOVE;
 		}
+		logbuffer_log(charger->log, "align: state: %s\n",
+			      align_status_str[charger->align]);
 	}
 
 	del_timer(&charger->align_timer);
@@ -3149,7 +3144,6 @@ static enum power_supply_property p9221_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_OPERATING_FREQ,
-	POWER_SUPPLY_PROP_ALIGNMENT,
 };
 
 static const struct power_supply_desc p9221_psy_desc = {
