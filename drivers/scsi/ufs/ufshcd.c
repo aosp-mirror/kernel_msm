@@ -938,10 +938,11 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 		/* trace UPIU also */
 		ufshcd_add_cmd_upiu_trace(hba, tag, str);
 		opcode = (u8)(*lrbp->cmd->cmnd);
-		if (is_read_opcode(opcode) || is_write_opcode(opcode)) {
+		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
+				is_unmap_opcode(opcode)) {
 			/*
 			 * Currently we only fully trace read(10), write(10),
-			 * read(16), and write(16) commands
+			 * read(16), write(16), unmap commands
 			 */
 			if (lrbp->cmd->request && lrbp->cmd->request->bio)
 				lba =
