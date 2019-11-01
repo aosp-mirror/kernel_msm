@@ -247,7 +247,7 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 	if (!lrbp->cmd)
 		return;
 	opcode = (u8)(*lrbp->cmd->cmnd);
-	if (!is_read_opcode(opcode) && is_write_opcode(opcode))
+	if (!is_read_opcode(opcode) && !is_write_opcode(opcode))
 		return;
 
 	transfer_len = scsi_get_bytes(lrbp->cmd);
