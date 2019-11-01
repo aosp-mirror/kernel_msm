@@ -1126,6 +1126,10 @@ struct ufs_hba {
 	bool force_g4;
 
 	struct ufs_manual_gc manual_gc;
+
+	/* To monitor slow UFS I/O requests. */
+	u64 slowio_us;
+	u64 slowio_cnt;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1678,5 +1682,8 @@ static inline u8 ufshcd_scsi_to_upiu_lun(unsigned int scsi_lun)
 
 int ufshcd_dump_regs(struct ufs_hba *hba, size_t offset, size_t len,
 		     const char *prefix);
+
+#define UFSHCD_MIN_SLOWIO_US		(1000)     /* 1 ms */
+#define UFSHCD_DEFAULT_SLOWIO_US	(10000000) /* 10 seconds */
 
 #endif /* End of Header */

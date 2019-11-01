@@ -50,6 +50,33 @@
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
 
+static void ufshcd_log_slowio(struct ufs_hba *hba,
+		struct ufshcd_lrb *lrbp, s64 iotime_us)
+{
+	sector_t la = -1;
+	int transfer_len = -1;
+	u8 opcode = 0xff;
+
+	if (likely(iotime_us < hba->slowio_us))
+		return;
+
+	hba->slowio_cnt++;
+
+	if (lrbp->cmd) {
+		opcode = (u8)(*lrbp->cmd->cmnd);
+		if (opcode == READ_10 || opcode == WRITE_10) {
+			if (lrbp->cmd->request && lrbp->cmd->request->bio)
+				la = lrbp->cmd->request->bio->bi_iter.bi_sector;
+			transfer_len = be32_to_cpu(
+				lrbp->ucd_req_ptr->sc.exp_data_transfer_len);
+		}
+	}
+	dev_err_ratelimited(hba->dev,
+		"Slow UFS (%lld): time = %lld us, opcode = %02x, lba = %ld, "
+		"len = %d\n", hba->slowio_cnt, iotime_us, opcode, la,
+		transfer_len);
+}
+
 #ifdef CONFIG_DEBUG_FS
 
 static int ufshcd_tag_req_type(struct request *rq)
@@ -114,6 +141,9 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	struct request *rq = lrbp->cmd ? lrbp->cmd->request : NULL;
 	s64 delta = ktime_us_delta(lrbp->compl_time_stamp,
 		lrbp->issue_time_stamp);
+
+	/* Log for slow I/O */
+	ufshcd_log_slowio(hba, lrbp, delta);
 
 	/* update general request statistics */
 	if (hba->ufs_stats.req_stats[TS_TAG].count == 0)
@@ -214,6 +244,11 @@ static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 static inline
 void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 {
+	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
+		lrbp->issue_time_stamp);
+
+	/* Log for slow I/O */
+	ufshcd_log_slowio(hba, lrbp, delta);
 }
 
 static inline
@@ -11048,6 +11083,9 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	host->set_dbd_for_caching = 1;
 
 	hba->max_pwr_info.is_valid = false;
+
+	/* Set default slow io value. */
+	hba->slowio_us = UFSHCD_DEFAULT_SLOWIO_US;
 
 	/* Initailize wait queue for task management */
 	init_waitqueue_head(&hba->tm_wq);
