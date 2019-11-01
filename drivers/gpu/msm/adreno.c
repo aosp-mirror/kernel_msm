@@ -846,6 +846,7 @@ MODULE_DEVICE_TABLE(platform, adreno_id_table);
 static const struct of_device_id adreno_match_table[] = {
 	{ .compatible = "qcom,kgsl-3d0", .data = &device_3d0 },
 	{ .compatible = "qcom,gpu-gmu" },
+	{ .compatible = "qcom,kgsl-smmu-v2" },
 	{}
 };
 
@@ -1351,10 +1352,12 @@ static int adreno_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	/*
-	 * The gmu device shouldn't be left hanging as an unprobed device. So
-	 * hacking up to just probe it without doing anything.
+	 * The gmu and the kgsl-iommu device shouldn't be left hanging as an
+	 * unprobed device. So hacking up to just probe it without doing
+	 * anything.
 	 */
-	if (!strcmp(of_id->compatible, "qcom,gpu-gmu"))
+	if (!strcmp(of_id->compatible, "qcom,gpu-gmu") ||
+	    !strcmp(of_id->compatible, "qcom,kgsl-smmu-v2"))
 		return 0;
 
 	adreno_dev = (struct adreno_device *) of_id->data;
