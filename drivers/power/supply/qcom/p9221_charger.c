@@ -788,7 +788,6 @@ static void p9221_init_align(struct p9221_charger_data *charger)
 static void p9221_align_work(struct work_struct *work)
 {
 	int res, align_buckets, i;
-	u16 status_reg = 0;
 	u16 current_now, current_filter_sample;
 	u32 wlc_freq, current_scaling;
 	struct p9221_charger_data *charger = container_of(work,
@@ -808,14 +807,7 @@ static void p9221_align_work(struct work_struct *work)
 	schedule_delayed_work(&charger->align_work,
 			msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 
-	res = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
-	if (res != 0)
-		return;
-
-	if (!(status_reg & P9221R5_STAT_VRECTON))
-		return;
-
-	if (!(status_reg & P9221R5_STAT_VOUTCHANGED))
+	if (!charger->online)
 		return;
 
 	if (charger->pdata->alignment_scalar == 0)
