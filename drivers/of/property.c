@@ -1135,6 +1135,21 @@ static struct device_node *parse_regulators(struct device_node *np,
 	return of_parse_phandle(np, prop_name, 0);
 }
 
+static struct device_node *parse_msm_bus_name(struct device_node *np,
+					    const char *prop_name, int index)
+{
+	static struct device_node *bus_dev_np;
+
+	if (index || strcmp(prop_name, "qcom,msm-bus,name"))
+		return NULL;
+
+	if (!bus_dev_np)
+		bus_dev_np = of_find_compatible_node(NULL, NULL,
+						     "qcom,msm-bus-device");
+
+	return bus_dev_np;
+}
+
 /**
  * struct supplier_bindings - Property parsing functions for suppliers
  *
@@ -1161,6 +1176,7 @@ static const struct supplier_bindings of_supplier_bindings[] = {
 	{ .parse_prop = parse_interconnects, },
 	{ .parse_prop = parse_regulators, },
 	{ .parse_prop = parse_iommus, },
+	{ .parse_prop = parse_msm_bus_name, },
 	{}
 };
 
