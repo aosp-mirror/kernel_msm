@@ -241,7 +241,9 @@ static int __init init_debug_lar_unlock(void)
 
 	return ret;
 }
+#ifndef CONFIG_QCOM_MEMORY_DUMP_V2_MODULE
 early_initcall(init_debug_lar_unlock);
+#endif
 #endif
 
 #define MSM_DUMP_DATA_SIZE sizeof(struct msm_dump_data)
@@ -384,4 +386,21 @@ static int __init mem_dump_init(void)
 	return platform_driver_register(&mem_dump_driver);
 }
 
+#ifdef CONFIG_QCOM_MEMORY_DUMP_V2_MODULE
+int __init memory_dump_v2_init(void)
+{
+	int ret;
+
+#ifdef CONFIG_MSM_DEBUG_LAR_UNLOCK
+	ret = init_debug_lar_unlock();
+	if (ret)
+		return ret;
+#endif
+	ret = mem_dump_init();
+	return ret;
+}
+module_init(memory_dump_v2_init);
+#else
 pure_initcall(mem_dump_init);
+#endif
+MODULE_LICENSE("GPL v2");

@@ -41,7 +41,7 @@ static inline int msm_dump_tbl_register(struct msm_client_dump *entry)
 #endif
 
 
-#if defined(CONFIG_QCOM_MEMORY_DUMP) || defined(CONFIG_QCOM_MEMORY_DUMP_V2)
+#if defined(CONFIG_QCOM_MEMORY_DUMP) || IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
 extern uint32_t msm_dump_table_version(void);
 #else
 static inline uint32_t msm_dump_table_version(void)
@@ -113,7 +113,7 @@ struct msm_dump_entry {
 	uint64_t addr;
 };
 
-#ifdef CONFIG_QCOM_MEMORY_DUMP_V2
+#if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
 extern int msm_dump_data_register(enum msm_dump_table_ids id,
 				  struct msm_dump_entry *entry);
 extern int msm_dump_data_register_nominidump(enum msm_dump_table_ids id,
