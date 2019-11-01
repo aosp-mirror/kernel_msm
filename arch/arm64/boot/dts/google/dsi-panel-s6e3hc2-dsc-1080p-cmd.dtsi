@@ -13,7 +13,8 @@
 
 &mdss_mdp {
 	dsi_s6e3hc2_dsc_1080p_cmd: qcom,mdss_dsi_s6e3hc2_dsc_1080p_cmd {
-		compatible = "google,dsi_s6e3hc2_gamma";
+		compatible = "google,dsi_s6e3hc2_gamma",
+			     "google,dsi_binned_lp";
 
 		qcom,mdss-dsi-panel-name = "s6e3hc2 amoled 5.96 cmd mode panel";
 		google,mdss-dsi-panel-vendor = "SAMSUNG";
@@ -116,6 +117,33 @@
 					15 01 00 00 00 00 02 53 20 /* write ctl 60hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
+				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 11 00 01 28
+
+					/* swire refresh off */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 00 00 02 B5 05
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+
+				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 01
+					15 01 00 00 00 00 02 53 20 /* write ctl 60 hz */
+
+					/* swire refresh on */
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 22 00 02 B5 85
+				];
+
+				qcom,mdss-dsi-post-nolp-command = [
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <65>;
 				qcom,mdss-dsc-slice-width = <540>;
@@ -185,6 +213,33 @@
 					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
+				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 11 00 01 28
+
+					/* swire refresh off */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 00 00 02 B5 05
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+
+				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 01
+					15 01 00 00 00 00 02 53 30 /* write ctl 90 hz */
+
+					/* swire refresh on */
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 22 00 02 B5 85
+				];
+
+				qcom,mdss-dsi-post-nolp-command = [
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+
 				qcom,compression-mode = "dsc";
 				qcom,mdss-dsc-slice-height = <65>;
 				qcom,mdss-dsc-slice-width = <540>;
@@ -201,6 +256,51 @@
 				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
 				qcom,display-topology = <2 2 1>;
 				qcom,default-topology-index = <0>;
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					05 01 00 00 00 00 01 28
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "low";
+				google,dsi-lp-brightness-threshold = <10>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					15 01 00 00 24 00 02 53 03
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 00
+					39 01 00 00 00 00 03 B0 05 BB
+					15 01 00 00 00 00 02 BB 80
+					15 01 00 00 00 00 02 F7 02
+					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@2 {
+				label = "high";
+				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					15 01 00 00 24 00 02 53 02
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 00
+					39 01 00 00 00 00 03 B0 05 BB
+					15 01 00 00 00 00 02 BB 00
+					15 01 00 00 00 00 02 F7 02
+					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
 	};
