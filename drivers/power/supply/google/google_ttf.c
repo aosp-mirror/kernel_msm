@@ -216,6 +216,34 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 
 /* SOC estimates ---------------------------------------------------------  */
 
+int ttf_elap(time_t *estimate, int i,
+	     const struct batt_ttf_stats *stats,
+	     const struct gbms_charging_event *ce_data)
+{
+	int ratio;
+	time_t elap;
+
+	if (i < 0 || i >= 100) {
+		*estimate = 0;
+		return 0;
+	}
+
+	elap = stats->soc_stats.elap[i];
+	if (elap == 0)
+		elap = stats->soc_ref.elap[i];
+
+	ratio = ttf_pwr_ratio(stats, ce_data, i);
+	if (ratio < 0) {
+		pr_debug("%d: negative ratio=%d\n", i, ratio);
+		return -EINVAL;
+	}
+
+	pr_debug("i=%d elap=%ld ratio=%d\n", i, elap, ratio);
+	*estimate = elap * ratio;
+
+	return 0;
+}
+
 /* time to full from SOC%
  * NOTE: prediction is based stats and corrected with the ce_data
  * NOTE: usually called with soc > ce_data->last_soc
@@ -225,35 +253,36 @@ int ttf_soc_estimate(time_t *res,
 		     const struct gbms_charging_event *ce_data,
 		     qnum_t soc, qnum_t last)
 {
-	int i;
-	time_t elap, estimate = 0;
-	const int end = qnum_toint(last);
 	const int ssoc_in = ce_data->charging_stats.ssoc_in;
+	const int end = qnum_toint(last);
+	const int frac = qnum_fracdgt(soc);
+	int i = qnum_toint(soc);
+	time_t estimate = 0;
+	int ret;
 
 	if (end > 100)
 		return -EINVAL;
 
-	for (i = qnum_toint(soc); i < end; i++) {
-		int ratio;
+	ret = ttf_elap(&estimate, i, stats, ce_data);
+	if (ret < 0)
+		return ret;
+
+	/* add ttf_elap starting from i + 1 */
+	estimate = (estimate * (100 - frac)) / 100;
+	for (i += 1; i < end; i++) {
+		time_t elap;
 
 		if (i >= ssoc_in && i < ce_data->last_soc) {
 			/* use real data if within charging event */
-			elap = ce_data->soc_stats.elap[i];
-			ratio = 100;
+			elap = ce_data->soc_stats.elap[i] * 100;
 		} else {
-			/* use estimates for the future */
-			elap = stats->soc_stats.elap[i];
-			if (elap == 0)
-				elap = stats->soc_ref.elap[i];
-
-			ratio = ttf_pwr_ratio(stats, ce_data, i);
-			if (ratio < 0) {
-				pr_debug("%d: negative ratio=%d\n", i, ratio);
-				return -EINVAL;
-			}
+			/* future (and soc before ssoc_in) */
+			ret = ttf_elap(&elap, i, stats, ce_data);
+			if (ret < 0)
+				return ret;
 		}
 
-		estimate += elap * ratio;
+		estimate += elap;
 	}
 
 	*res = estimate / 100;
