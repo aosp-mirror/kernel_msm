@@ -67,7 +67,6 @@
 
 #define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
 
-
 struct ssoc_uicurve {
 	qnum_t real;
 	qnum_t ui;
@@ -240,7 +239,8 @@ struct batt_drv {
 	struct batt_ttf_stats ttf_stats;
 
 	/* logging */
-	struct logbuffer *log;
+	struct logbuffer *ttf_log;
+	struct logbuffer *ssoc_log;
 
 	/* thermal */
 	struct thermal_zone_device *tz_dev;
@@ -819,60 +819,10 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
-static int batt_ttf_full_capacity(struct power_supply *fg_psy)
-{
-	union power_supply_propval val = { .intval = 0 };
-	int fe, err;
-
-	if (!fg_psy)
-		return -EINVAL;
-
-	err = power_supply_get_property(fg_psy,
-					POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE,
-					&val);
-	if (err < 0)
-		fe = err;
-	else
-		fe = val.intval;
-
-	/* reference value */
-	err = power_supply_get_property(fg_psy,
-					POWER_SUPPLY_PROP_CHARGE_FULL,
-					&val);
-	if (err < 0)
-		err = power_supply_get_property(fg_psy,
-					POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
-					&val);
-	if (err < 0)
-		return -EIO;
-
-	/* TODO: sanity! bound fe to charge full/design */
-
-	return val.intval;
-}
-
-static int batt_ttf_capacity(struct power_supply *fg_psy)
-{
-	int err;
-	union power_supply_propval val = { .intval = 0 };
-
-	if (!fg_psy)
-		return -EINVAL;
-
-	err = power_supply_get_property(fg_psy,
-					POWER_SUPPLY_PROP_CHARGE_COUNTER,
-					&val);
-	if (err < 0)
-		return -EIO;
-
-	/* TODO: bound to ->battery_capacity */
-	return val.intval;
-}
-
 static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 {
-	int rc, capacity, full_capacity;
-	time_t te, se, estimate = batt_drv->ttf_stats.ttf_fake;
+	int rc;
+	time_t estimate = batt_drv->ttf_stats.ttf_fake;
 
 	if (batt_drv->ssoc_state.buck_enabled != 1)
 		return -EINVAL;
@@ -880,36 +830,15 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 	if (batt_drv->ttf_stats.ttf_fake != -1)
 		goto done;
 
-	/* these should really be cached */
-	full_capacity = batt_ttf_full_capacity(batt_drv->fg_psy);
-	if (full_capacity < 0)
-		return -EIO;
-
-	capacity = batt_ttf_capacity(batt_drv->fg_psy);
-	if (capacity < 0)
-		return -EIO;
-
-	if (capacity >= full_capacity) {
-		*res = 0;
-		return 0;
-	}
-
-	rc = ttf_tier_estimate(&te, &batt_drv->ttf_stats,
-			  batt_drv->temp_idx, batt_drv->vbatt_idx,
-			  capacity, full_capacity);
-	if (rc != 0)
-		te = -1;
-
-	rc = ttf_soc_estimate(&se, &batt_drv->ttf_stats,
+	rc = ttf_soc_estimate(&estimate, &batt_drv->ttf_stats,
 			      &batt_drv->ce_data,
 			      ssoc_get_capacity_raw(&batt_drv->ssoc_state),
 			      ssoc_point_full);
 	if (rc < 0)
-		se = -1;
+		estimate = -1;
 
-	pr_info("estimates: te=%ld, se=%ld\n", te, se);
+	pr_info("ttf_soc: estimate=%ld\n", estimate);
 
-	estimate = se;
 	if (estimate == -1)
 		return -ERANGE;
 
@@ -1992,7 +1921,6 @@ static int msc_logic(struct batt_drv *batt_drv)
 					BATT_RL_STATUS_RECHARGE);
 		if (changed)
 			batt_chg_stats_pub(batt_drv, "100%", false);
-
 	}
 
 	err = msc_logic_internal(batt_drv);
@@ -2076,7 +2004,7 @@ msc_logic_done:
 msc_logic_exit:
 
 	if (changed) {
-		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+		dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->ssoc_log);
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
 	}
@@ -2485,7 +2413,7 @@ static const DEVICE_ATTR(charge_stats, 0664, batt_show_chg_stats,
 					     batt_ctl_chg_stats);
 
 static ssize_t batt_show_chg_details(struct device *dev,
-				   struct device_attribute *attr, char *buf)
+				     struct device_attribute *attr, char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *)
@@ -2512,7 +2440,7 @@ static const DEVICE_ATTR(charge_details, 0444, batt_show_chg_details,
 
 /* tier and soc details */
 static ssize_t batt_show_ttf_details(struct device *dev,
-				   struct device_attribute *attr, char *buf)
+				     struct device_attribute *attr, char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv = (struct batt_drv *)
@@ -2743,6 +2671,27 @@ static int gbatt_get_capacity_level(struct batt_ssoc_state *ssoc_state,
 	return capacity_level;
 }
 
+void log_ttf_estimate(const char *label, int ssoc, struct batt_drv *batt_drv)
+{
+	int cc, err;
+	time_t res = 0;
+
+
+	err = batt_ttf_estimate(&res, batt_drv);
+	if (err < 0) {
+		logbuffer_log(batt_drv->ttf_log, "%s ssoc=%d time=%ld err=%d",
+			(label) ? label : "", ssoc, get_boot_sec(), err);
+		return;
+	}
+
+	cc = GPSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER);
+	logbuffer_log(batt_drv->ttf_log,
+		      "%s ssoc=%d cc=%d time=%ld %d:%d:%d (est=%ld)",
+		      (label) ? label : "", ssoc, cc / 1000, get_boot_sec(),
+		      res / 3600, (res % 3600) / 60, (res % 3600) % 60,
+		      res);
+}
+
 /* poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
  */
@@ -2781,14 +2730,18 @@ static void google_battery_work(struct work_struct *work)
 	if (ret < 0) {
 		update_interval = BATT_WORK_ERROR_RETRY_MS;
 	} else {
+		bool full;
 		int ssoc, level;
 
 		/* handle charge/recharge */
 		batt_rl_update_status(batt_drv);
 
 		ssoc = ssoc_get_capacity(ssoc_state);
-		if (prev_ssoc != ssoc)
+		if (prev_ssoc != ssoc) {
+			if (ssoc > prev_ssoc)
+				log_ttf_estimate("SSOC", ssoc, batt_drv);
 			notify_psy_changed = true;
+		}
 
 		/* TODO(b/138860602): clear ->chg_done to enforce the
 		 * same behavior during the transition 99 -> 100 -> Full
@@ -2809,7 +2762,10 @@ static void google_battery_work(struct work_struct *work)
 		}
 
 		/* fuel gauge triggered recharge logic. */
-		batt_drv->batt_full = (ssoc == SSOC_FULL);
+		full = (ssoc == SSOC_FULL);
+		if (full && !batt_drv->batt_full)
+			log_ttf_estimate("Full", ssoc, batt_drv);
+		batt_drv->batt_full = full;
 	}
 
 	/* TODO: poll other data here if needed */
@@ -2824,6 +2780,7 @@ static void google_battery_work(struct work_struct *work)
 
 		if (fg_status != POWER_SUPPLY_STATUS_DISCHARGING &&
 		    fg_status != POWER_SUPPLY_STATUS_NOT_CHARGING) {
+			log_ttf_estimate("Start", prev_ssoc, batt_drv);
 			batt_drv->batt_fast_update_cnt = 0;
 		} else {
 			update_interval = BATT_WORK_FAST_RETRY_MS;
@@ -2841,7 +2798,7 @@ static void google_battery_work(struct work_struct *work)
 	mutex_unlock(&batt_drv->chg_lock);
 
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
-	dump_ssoc_state(ssoc_state, batt_drv->log);
+	dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
 
 	if (notify_psy_changed)
 		power_supply_changed(batt_drv->psy);
@@ -2888,6 +2845,7 @@ static enum power_supply_property gbatt_battery_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG,
 	POWER_SUPPLY_PROP_TIME_TO_FULL_AVG,
+	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_AVG,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
@@ -3112,13 +3070,12 @@ static int gbatt_get_property(struct power_supply *psy,
 			val->intval = batt_drv->res_state.resistance_avg;
 		break;
 
-	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG: {
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW: {
 		time_t res;
 
-		/* API return value in seconds */
 		err = batt_ttf_estimate(&res, batt_drv);
 		if (err == 0)
-			val->intval = res / 60;
+			val->intval = res;
 		else if (!batt_drv->fg_psy)
 			err = -EINVAL;
 		else
@@ -3220,7 +3177,7 @@ static int gbatt_set_property(struct power_supply *psy,
 		}
 		break;
 
-	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
 		if (val->intval <= 0)
 			batt_drv->ttf_stats.ttf_fake = -1;
 		else
@@ -3254,7 +3211,7 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
-	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
 		return 1;
 	default:
 		break;
@@ -3327,7 +3284,7 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0 && batt_drv->batt_present)
 		goto retry_init_work;
 
-	dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->log);
+	dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->ssoc_log);
 
 	ret = batt_init_chg_profile(batt_drv);
 	if (ret == -EPROBE_DEFER)
@@ -3477,12 +3434,20 @@ static int google_battery_probe(struct platform_device *pdev)
 			"Couldn't register as power supply, ret=%d\n", ret);
 	}
 
-	batt_drv->log = debugfs_logbuffer_register("ssoc");
-	if (IS_ERR(batt_drv->log)) {
-		ret = PTR_ERR(batt_drv->log);
+	batt_drv->ssoc_log = debugfs_logbuffer_register("ssoc");
+	if (IS_ERR(batt_drv->ssoc_log)) {
+		ret = PTR_ERR(batt_drv->ssoc_log);
 		dev_err(batt_drv->device,
-			"failed to obtain logbuffer instance, ret=%d\n", ret);
-		batt_drv->log = NULL;
+			"failed to create ssoc_log, ret=%d\n", ret);
+		batt_drv->ssoc_log = NULL;
+	}
+
+	batt_drv->ttf_log = debugfs_logbuffer_register("ttf");
+	if (IS_ERR(batt_drv->ttf_log)) {
+		ret = PTR_ERR(batt_drv->ttf_log);
+		dev_err(batt_drv->device,
+			"failed to create ttf_log, ret=%d\n", ret);
+		batt_drv->ttf_log = NULL;
 	}
 
 	/* Resistance Estimation configuration */
@@ -3540,8 +3505,10 @@ static int google_battery_remove(struct platform_device *pdev)
 		wakeup_source_trash(&batt_drv->taper_ws);
 		wakeup_source_trash(&batt_drv->poll_ws);
 
-		if (batt_drv->log)
-			debugfs_logbuffer_unregister(batt_drv->log);
+		if (batt_drv->ssoc_log)
+			debugfs_logbuffer_unregister(batt_drv->ssoc_log);
+		if (batt_drv->ttf_log)
+			debugfs_logbuffer_unregister(batt_drv->ttf_log);
 		if (batt_drv->tz_dev)
 			thermal_zone_of_sensor_unregister(batt_drv->device,
 					batt_drv->tz_dev);
