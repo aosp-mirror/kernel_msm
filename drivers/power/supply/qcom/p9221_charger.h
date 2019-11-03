@@ -272,6 +272,7 @@ struct p9221_charger_data {
 	u8				alignment_str[(sizeof(u32) * 3) + 1];
 	int				alignment_last;
 	bool				alignment_capable;
+	int				mfg_check_count;
 	u16				mfg;
 	int				alignment_time;
 	u32				current_filtered;

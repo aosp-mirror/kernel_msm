@@ -735,7 +735,7 @@ static void p9221_vrect_timer_handler(unsigned long data)
 	if (charger->align == POWER_SUPPLY_ALIGN_CHECKING) {
 		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_MOVE;
-		logbuffer_log(charger->log, "align: state: %s\n",
+		logbuffer_log(charger->log, "align: state: %s",
 			      align_status_str[charger->align]);
 	}
 	dev_info(&charger->client->dev,
@@ -782,6 +782,7 @@ static void p9221_init_align(struct p9221_charger_data *charger)
 	charger->alignment_last = -1;
 	charger->current_filtered = 0;
 	charger->current_sample_cnt = 0;
+	charger->mfg_check_count = 0;
 	schedule_delayed_work(&charger->align_work,
 			      msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 }
@@ -797,11 +798,41 @@ static void p9221_align_work(struct work_struct *work)
 	if (charger->pdata->alignment_freq == NULL)
 		return;
 
-	schedule_delayed_work(&charger->align_work,
-			msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
-
 	if (!charger->online)
 		return;
+
+	/*
+	 *  NOTE: mfg may be zero due to race condition during bringup. If the
+	 *  mfg check continues to fail then mfg is not correct and we do not
+	 *  reschedule align_work. Always reschedule if alignment_capable.
+	 */
+	if ((charger->mfg_check_count < 10) || charger->alignment_capable)
+		schedule_delayed_work(&charger->align_work,
+				      msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
+
+	if (charger->mfg == 0) {
+		charger->mfg_check_count += 1;
+
+		res = p9221_reg_read_16(charger,
+					P9221R5_EPP_TX_MFG_CODE_REG,
+					&charger->mfg);
+		if (res < 0) {
+			dev_err(&charger->client->dev,
+				"cannot read MFG_CODE (%d)\n", res);
+			return;
+		}
+
+		if (charger->mfg == 0)
+			return;
+
+		if ((charger->mfg == WLC_MFG_GOOGLE) && p9221_is_epp(charger))
+			charger->alignment_capable = true;
+		else {
+			logbuffer_log(charger->log,
+				      "align: not align capable mfg: 0x%x",
+				      charger->mfg);
+		}
+	}
 
 	if (charger->pdata->alignment_scalar == 0)
 		goto no_scaling;
@@ -1263,34 +1294,10 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	charger->alignment_capable = false;
 	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 	charger->align = POWER_SUPPLY_ALIGN_CENTERED;
-	logbuffer_log(charger->log, "align: state: %s\n",
+	charger->alignment = -1;
+	logbuffer_log(charger->log, "align: state: %s",
 		      align_status_str[charger->align]);
-
-	if (!p9221_is_epp(charger))
-		return;
-
-	/*
-	 *  NOTE: mfg may be zero due to race condition during bringup. will
-	 *  check once more if mfg == 0.
-	 */
-	if (charger->mfg == 0) {
-		ret = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG,
-					&charger->mfg);
-		if (ret < 0) {
-			dev_err(&charger->client->dev,
-				"cannot read MFG_CODE (%d)\n", ret);
-			return;
-		}
-
-		if (charger->mfg != WLC_MFG_GOOGLE) {
-			logbuffer_log(charger->log,
-				      "align: not google wlc mfg: 0x%x",
-				      charger->mfg);
-			return;
-		}
-
-		charger->alignment_capable = true;
-	}
+	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 }
 
 /* 2 * P9221_NOTIFIER_DELAY_MS from VRECTON */
@@ -1939,26 +1946,8 @@ static ssize_t p9221_show_alignment(struct device *dev,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
-	int ret;
 
-	/* recheck mfg */
-	if (charger->mfg == 0) {
-		ret = p9221_reg_read_16(charger,
-					P9221R5_EPP_TX_MFG_CODE_REG,
-					&charger->mfg);
-		if (ret < 0) {
-			dev_err(&charger->client->dev,
-				"cannot read MFG_CODE (%d)\n", ret);
-		}
-
-		if (charger->mfg == WLC_MFG_GOOGLE) {
-			charger->alignment_capable = true;
-			logbuffer_log(charger->log,
-				      "align: google wlc mfg correct");
-		}
-	}
-
-	if ((charger->alignment_capable) && (charger->alignment == -1))
+	if (charger->alignment == -1)
 		p9221_init_align(charger);
 
 	if ((charger->align != POWER_SUPPLY_ALIGN_CENTERED) ||
@@ -2302,7 +2291,8 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 		return IRQ_HANDLED;
 
 	if (charger->align != POWER_SUPPLY_ALIGN_MOVE) {
-		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+		if (charger->align != POWER_SUPPLY_ALIGN_CHECKING)
+			kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 		charger->align = POWER_SUPPLY_ALIGN_CHECKING;
 		charger->align_count++;
 
@@ -2310,7 +2300,7 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 			kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 			charger->align = POWER_SUPPLY_ALIGN_MOVE;
 		}
-		logbuffer_log(charger->log, "align: state: %s\n",
+		logbuffer_log(charger->log, "align: state: %s",
 			      align_status_str[charger->align]);
 	}
 
