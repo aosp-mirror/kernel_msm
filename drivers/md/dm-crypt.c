@@ -116,7 +116,8 @@ enum flags { DM_CRYPT_SUSPENDED, DM_CRYPT_KEY_VALID,
 	     DM_CRYPT_SAME_CPU, DM_CRYPT_NO_OFFLOAD };
 
 enum cipher_flags {
-	CRYPT_IV_LARGE_SECTORS,		/* Calculate IV from sector_size, not 512B sectors */
+	/* Calculate IV from sector_size, not 512B sectors */
+	CRYPT_IV_LARGE_SECTORS,
 };
 
 /*
@@ -1896,7 +1897,8 @@ static int crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 				if (cc->sector_size < (1 << SECTOR_SHIFT) ||
 				    cc->sector_size > 4096 ||
 				    (cc->sector_size & (cc->sector_size - 1))) {
-					ti->error = "Invalid feature value for sector_size";
+					ti->error = "Invalid feature value for"
+							" sector_size";
 					goto bad;
 				}
 				if (ti->len & ((cc->sector_size >> SECTOR_SHIFT) - 1)) {
@@ -1990,7 +1992,8 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	 * Ensure that bio is a multiple of internal sector encryption size
 	 * and is aligned to this size as defined in IO hints.
 	 */
-	if (unlikely((bio->bi_iter.bi_sector & ((cc->sector_size >> SECTOR_SHIFT) - 1)) != 0))
+	if (unlikely((bio->bi_iter.bi_sector &
+		((cc->sector_size >> SECTOR_SHIFT) - 1)) != 0))
 		return -EIO;
 
 	if (unlikely(bio->bi_iter.bi_size & (cc->sector_size - 1)))
@@ -2037,7 +2040,8 @@ static void crypt_status(struct dm_target *ti, status_type_t type,
 		num_feature_args += test_bit(DM_CRYPT_SAME_CPU, &cc->flags);
 		num_feature_args += test_bit(DM_CRYPT_NO_OFFLOAD, &cc->flags);
 		num_feature_args += cc->sector_size != (1 << SECTOR_SHIFT);
-		num_feature_args += test_bit(CRYPT_IV_LARGE_SECTORS, &cc->cipher_flags);
+		num_feature_args += test_bit(CRYPT_IV_LARGE_SECTORS,
+					&cc->cipher_flags);
 		if (num_feature_args) {
 			DMEMIT(" %d", num_feature_args);
 			if (ti->num_discard_bios)

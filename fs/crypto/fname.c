@@ -96,30 +96,30 @@ static int fname_decrypt(struct inode *inode,
 	struct scatterlist src_sg, dst_sg;
 	struct fscrypt_info *ci = inode->i_crypt_info;
 	struct crypto_skcipher *tfm = ci->ci_ctfm;
-        union fscrypt_iv iv;
-        int res;
+	union fscrypt_iv iv;
+	int res;
  
 	/* Allocate request */
 	req = skcipher_request_alloc(tfm, GFP_NOFS);
-	if (!req) 
+	if (!req)
 		return -ENOMEM;
 	skcipher_request_set_callback(req,
 		CRYPTO_TFM_REQ_MAY_BACKLOG | CRYPTO_TFM_REQ_MAY_SLEEP,
 		crypto_req_done, &wait);
 
 	/* Initialize IV */
-        fscrypt_generate_iv(&iv, 0, ci);
+	fscrypt_generate_iv(&iv, 0, ci);
 
 	/* Create decryption request */
 	sg_init_one(&src_sg, iname->name, iname->len);
 	sg_init_one(&dst_sg, oname->name, oname->len);
-        skcipher_request_set_crypt(req, &src_sg, &dst_sg, iname->len, &iv);
+	skcipher_request_set_crypt(req, &src_sg, &dst_sg, iname->len, &iv);
 	res = crypto_wait_req(crypto_skcipher_decrypt(req), &wait);
 	skcipher_request_free(req);
 	if (res < 0) {
-               fscrypt_err(inode->i_sb,
-                           "Filename decryption failed for inode %lu: %d",
-                           inode->i_ino, res);
+		fscrypt_err(inode->i_sb,
+			"Filename decryption failed for inode %lu: %d",
+			inode->i_ino, res);
 		return res;
 	}
 
