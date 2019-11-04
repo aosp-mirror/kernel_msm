@@ -701,13 +701,13 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_work);
 
 	/* Reset alignment value when charger goes offline */
-	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+	cancel_delayed_work(&charger->align_work);
 	charger->align = POWER_SUPPLY_ALIGN_ERROR;
 	charger->align_count = 0;
 	charger->alignment = -1;
 	charger->alignment_capable = false;
 	charger->mfg = 0;
-	cancel_delayed_work(&charger->align_work);
+	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 
 	p9221_icl_ramp_reset(charger);
 	del_timer(&charger->vrect_timer);
@@ -797,6 +797,8 @@ static void p9221_align_work(struct work_struct *work)
 
 	if (charger->pdata->alignment_freq == NULL)
 		return;
+
+	charger->alignment = -1;
 
 	if (!charger->online)
 		return;
