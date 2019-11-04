@@ -244,8 +244,9 @@
 		#sound-dai-cells = <1>;
 		compatible = "realtek,rt5514";
 		reg = <0x57>;
+		reset-gpios = <&rt5514_reset>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&audio_ldo1>;
+		pinctrl-0 = <&audio_ldo1>, <&rt5514_reset>;
 	};
 };
 
@@ -398,7 +399,7 @@
 		};
 	};
 
-	rt5514_pin {
+	rt5514_irq_pin {
 		rt5514_irq: rt5514_irq {
 			mux {
 				pins = "gpio65";
@@ -408,8 +409,23 @@
 			config {
 				pins = "gpio65";
 				drive-strength = <2>;
-				pull-down;
+				bias-pull-down;
 				input-enable;
+			};
+		};
+	};
+
+	rt5514_reset_pin {
+		rt5514_reset: rt5514_reset {
+			mux {
+				pins = "gpio91";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio91";
+				drive-strength = <2>;
+				output-high;
 			};
 		};
 	};
