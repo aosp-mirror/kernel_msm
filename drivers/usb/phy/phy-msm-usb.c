@@ -116,7 +116,7 @@ enum msm_usb_phy_type {
 	QUSB_ULPI_PHY,
 };
 
-#define IDEV_CHG_MAX	1500
+#define IDEV_CHG_MAX	500
 #define IUNIT		100
 #define IDEV_HVDCP_CHG_MAX	1800
 
@@ -259,7 +259,7 @@ module_param(lpm_disconnect_thresh, uint, 0644);
 MODULE_PARM_DESC(lpm_disconnect_thresh,
 	"Delay before entering LPM on USB disconnect");
 
-static bool floated_charger_enable;
+static bool floated_charger_enable = true;
 module_param(floated_charger_enable, bool, 0644);
 MODULE_PARM_DESC(floated_charger_enable,
 	"Whether to enable floated charger");
@@ -274,7 +274,7 @@ static int dcp_max_current = IDEV_CHG_MAX;
 module_param(dcp_max_current, int, 0644);
 MODULE_PARM_DESC(dcp_max_current, "max current drawn for DCP charger");
 
-static bool chg_detection_for_float_charger;
+static bool chg_detection_for_float_charger = true;
 module_param(chg_detection_for_float_charger, bool, 0644);
 MODULE_PARM_DESC(chg_detection_for_float_charger,
 	"Whether to do PHY based charger detection for float chargers");
@@ -3001,6 +3001,7 @@ static void msm_otg_set_vbus_state(int online)
 	 */
 	if (test_bit(B_SESS_VLD, &motg->inputs) && !motg->chg_detection) {
 		if ((get_psy_type(motg) == POWER_SUPPLY_TYPE_UNKNOWN) ||
+			(get_psy_type(motg) == POWER_SUPPLY_TYPE_USB) ||
 		    (get_psy_type(motg) == POWER_SUPPLY_TYPE_USB_FLOAT &&
 		     chg_detection_for_float_charger))
 			motg->chg_detection = true;
