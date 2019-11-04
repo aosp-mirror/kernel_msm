@@ -47,4 +47,22 @@
 		no-map;
 		reg = <0 0xA47DF000 0 0x20000>;
 	};
+
+	ramoops_mem: ramoops_region@A47FF000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xA47FF000 0 0x200000>;
+	};
+
+	alt_ramoops_mem: alt_ramoops_region@A49FF000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xA49FF000 0 0x200000>;
+	};
+
+	ramoops_meta_mem: ramoops_meta_region@0xA4BFF000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xA4BFF000 0 0x1000>;
+	};
 };
