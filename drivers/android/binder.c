@@ -3246,7 +3246,7 @@ static void binder_transaction(struct binder_proc *proc,
 				    ALIGN(secctx_sz, sizeof(u64));
 		char *kptr = t->buffer->data + buf_offset;
 
-		t->security_ctx = (binder_uintptr_t)kptr +
+		t->security_ctx = (uintptr_t)kptr +
 		    binder_alloc_get_user_buffer_offset(&target_proc->alloc);
 		memcpy(kptr, secctx, secctx_sz);
 		security_release_secctx(secctx, secctx_sz);
@@ -3287,9 +3287,9 @@ static void binder_transaction(struct binder_proc *proc,
 		goto err_bad_offset;
 	}
 	if (!IS_ALIGNED(extra_buffers_size, sizeof(u64))) {
-		binder_user_error("%d:%d got transaction with unaligned buffers size, %llu\n",
+		binder_user_error("%d:%d got transaction with unaligned buffers size, %lld\n",
 				  proc->pid, thread->pid,
-				  extra_buffers_size);
+				  (u64)extra_buffers_size);
 		return_error = BR_FAILED_REPLY;
 		return_error_param = -EINVAL;
 		return_error_line = __LINE__;
@@ -4413,9 +4413,9 @@ retry:
 					ALIGN(t->buffer->data_size,
 					    sizeof(void *));
 
+		tr.secctx = t->security_ctx;
 		if (t->security_ctx) {
 			cmd = BR_TRANSACTION_SEC_CTX;
-			tr.secctx = t->security_ctx;
 			trsize = sizeof(tr);
 		}
 		if (put_user(cmd, (uint32_t __user *)ptr)) {
@@ -4445,7 +4445,7 @@ retry:
 			     "%d:%d %s %d %d:%d, cmd %d size %zd-%zd ptr %016llx-%016llx\n",
 			     proc->pid, thread->pid,
 			     (cmd == BR_TRANSACTION) ? "BR_TRANSACTION" :
-			         (cmd == BR_TRANSACTION_SEC_CTX) ?
+				(cmd == BR_TRANSACTION_SEC_CTX) ?
 				     "BR_TRANSACTION_SEC_CTX" : "BR_REPLY",
 			     t->debug_id, t_from ? t_from->proc->pid : 0,
 			     t_from ? t_from->pid : 0, cmd,
@@ -4983,7 +4983,6 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			ret = -EINVAL;
 			goto err;
 		}
-
 		if (put_user(BINDER_CURRENT_PROTOCOL_VERSION,
 			     &ver->protocol_version)) {
 			ret = -EINVAL;
