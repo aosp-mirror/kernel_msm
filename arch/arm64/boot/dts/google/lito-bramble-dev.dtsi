@@ -13,6 +13,7 @@
 
 #include "lito-bramble.dtsi"
 #include "lito-bramble-touch-dev.dtsi"
+#include "lito-bramble-camera-sensor.dtsi"
 
 &wcd938x_codec {
 	qcom,wcd-rst-gpio-node = <&wcd938x_rst_lpi_gpio>;

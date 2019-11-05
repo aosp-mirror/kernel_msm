@@ -12,3 +12,4 @@
  */
 
 #include "lito-redfin.dtsi"
+#include "lito-redfin-camera-sensor.dtsi"
