@@ -339,13 +339,16 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 typedef uint32_t gbms_tag_t;
 
 enum gbms_tags {
-	GBMS_TAG_BGCE = 0x42434541,
+	GBMS_TAG_BGCE = 0x42474345,
 	GBMS_TAG_BCNT = 0x42434e54,
 	GBMS_TAG_BRES = 0x42524553,
 	GBMS_TAG_SNUM = 0x534e554d,
 	GBMS_TAG_HIST = 0x48495354,
 	GBMS_TAG_BRID = 0x42524944,
 	GBMS_TAG_DSNM = 0x44534e4d,
+	GBMS_TAG_MINF = 0x4d494e46,
+	GBMS_TAG_DINF = 0x44494e46,
+	GBMS_TAG_BGPN = 0x4247504e,
 };
 
 /**
