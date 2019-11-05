@@ -320,6 +320,7 @@ static void __init arm64_memory_present(void)
 
 static phys_addr_t memory_limit = PHYS_ADDR_MAX;
 phys_addr_t bootloader_memory_limit;
+EXPORT_SYMBOL_GPL(bootloader_memory_limit);
 
 #ifdef CONFIG_OVERRIDE_MEMORY_LIMIT
 static void __init update_memory_limit(void)

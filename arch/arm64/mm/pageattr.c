@@ -137,6 +137,7 @@ int set_memory_valid(unsigned long addr, int numpages, int enable)
 					__pgprot(0),
 					__pgprot(PTE_VALID));
 }
+EXPORT_SYMBOL_GPL(set_memory_valid);
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 void __kernel_map_pages(struct page *page, int numpages, int enable)
