@@ -9,6 +9,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+&pm6150l_l6 {
+	regulator-min-microvolt = <2960000>;
+	regulator-max-microvolt = <3304000>;
+	qcom,init-voltage = <296000>;
+	status = "ok";
+};
+
 &qupv3_se9_i2c {
 	status = "ok";
 	qcom,clk-freq-out = <400000>;
