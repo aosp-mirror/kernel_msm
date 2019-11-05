@@ -415,6 +415,34 @@
 		};
 	};
 
+	rt5514_handshake_pin {
+		rt5514_handshake: rt5514_handshake {
+			mux {
+				pins = "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;
+				output-high;
+			};
+		};
+		rt5514_handshake_ack: rt5514_handshake_ack {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				drive-strength = <2>;
+				bias-pull-down;
+				input-enable;
+			};
+		};
+	};
+
 	rt5514_reset_pin {
 		rt5514_reset: rt5514_reset {
 			mux {
@@ -453,8 +481,11 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <65 0>;
 		irq-gpio = <&tlmm 65 0>;
+		handshake-gpio = <&tlmm 66 0>;
+		handshake-ack-gpio = <&tlmm 11 0>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&rt5514_irq>;
+		pinctrl-0 = <&rt5514_irq>,
+			<&rt5514_handshake>, <&rt5514_handshake_ack>;
 		spi-max-frequency = <10000000>;
 		spi-cpol;
 		spi-cpha;
