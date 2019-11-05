@@ -12,10 +12,10 @@
 * GNU General Public License for more details.
 */
 #include <dt-bindings/clock/qcom,camcc-lito.h>
-&pm7250b_gpios {
+&pm8150l_gpios {
 	camera_rear_vcm_en {
 		camera_rear_vcm_en_default: camera_rear_vcm_en_default {
-			pins = "gpio11";
+			pins = "gpio8";
 			function = "normal";
 			power-source = <0>;
 			output-low;
@@ -54,7 +54,7 @@
 		regulator-min-microvolt = <2850000>;
 		regulator-max-microvolt = <2850000>;
 		enable-active-high;
-		gpio = <&pm7250b_gpios 11 GPIO_ACTIVE_HIGH>;
+		gpio = <&pm8150l_gpios 8 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&camera_rear_vcm_en_default>;
 	};
