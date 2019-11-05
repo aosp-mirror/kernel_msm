@@ -2314,6 +2314,29 @@ static bool kvm_vcpu_eligible_for_directed_yield(struct kvm_vcpu *vcpu)
 #endif
 }
 
+/*
+ * Unlike kvm_arch_vcpu_runnable, this function is called outside
+ * a vcpu_load/vcpu_put pair.  However, for most architectures
+ * kvm_arch_vcpu_runnable does not require vcpu_load.
+ */
+bool __weak kvm_arch_dy_runnable(struct kvm_vcpu *vcpu)
+{
+	return kvm_arch_vcpu_runnable(vcpu);
+}
+
+static bool vcpu_dy_runnable(struct kvm_vcpu *vcpu)
+{
+	if (kvm_arch_dy_runnable(vcpu))
+		return true;
+
+#ifdef CONFIG_KVM_ASYNC_PF
+	if (!list_empty_careful(&vcpu->async_pf.done))
+		return true;
+#endif
+
+	return false;
+}
+
 void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 {
 	struct kvm *kvm = me->kvm;
@@ -2343,7 +2366,7 @@ void kvm_vcpu_on_spin(struct kvm_vcpu *me, bool yield_to_kernel_mode)
 				continue;
 			if (vcpu == me)
 				continue;
-			if (swait_active(&vcpu->wq) && !kvm_arch_vcpu_runnable(vcpu))
+			if (swait_active(&vcpu->wq) && !vcpu_dy_runnable(vcpu))
 				continue;
 			if (yield_to_kernel_mode && !kvm_arch_vcpu_in_kernel(vcpu))
 				continue;
@@ -2886,12 +2909,14 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 	struct kvm_device_ops *ops = NULL;
 	struct kvm_device *dev;
 	bool test = cd->flags & KVM_CREATE_DEVICE_TEST;
+	int type;
 	int ret;
 
 	if (cd->type >= ARRAY_SIZE(kvm_device_ops_table))
 		return -ENODEV;
 
-	ops = kvm_device_ops_table[cd->type];
+	type = array_index_nospec(cd->type, ARRAY_SIZE(kvm_device_ops_table));
+	ops = kvm_device_ops_table[type];
 	if (ops == NULL)
 		return -ENODEV;
 
@@ -2906,7 +2931,7 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 	dev->kvm = kvm;
 
 	mutex_lock(&kvm->lock);
-	ret = ops->create(dev, cd->type);
+	ret = ops->create(dev, type);
 	if (ret < 0) {
 		mutex_unlock(&kvm->lock);
 		kfree(dev);
@@ -2962,8 +2987,6 @@ static long kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 	case KVM_CAP_MULTI_ADDRESS_SPACE:
 		return KVM_ADDRESS_SPACE_NUM;
 #endif
-	case KVM_CAP_MAX_VCPU_ID:
-		return KVM_MAX_VCPU_ID;
 	default:
 		break;
 	}
