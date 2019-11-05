@@ -14,7 +14,7 @@ config QCOM_COMMAND_DB
 	  SoC specific identifier and information for the shared resources.
 
 config QCOM_MEM_OFFLINE
-	bool "Dynamic Memory Region Offline driver"
+	tristate "Dynamic Memory Region Offline driver"
 	depends on MEMORY_HOTPLUG
 	help
 	  Add support for DDR Self-Refresh power management through the dynamic
