@@ -1895,20 +1895,22 @@ static ssize_t itoc_cali_data_store_store(struct device *dev,
 	return count;
 }
 
-static enum silego_self_test_result_type silego_self_test(
-	struct led_laser_ctrl_t *ctrl)
+static void silego_self_test(
+	struct led_laser_ctrl_t *ctrl,
+	struct silego_self_test_result *test_result)
 {
 	int rc, retry;
 	uint32_t data;
-	enum silego_self_test_result_type result = SILEGO_TEST_FAILED;
 
 	mutex_lock(&ctrl->cam_sensor_mutex);
 	mutex_lock(&lm36011_mutex);
+	test_result->is_cracked = false;
+	test_result->result = SILEGO_TEST_FAILED;
 
 	if (regulator_is_enabled(ctrl->silego.vdd)) {
 		/* Bypass test when silego power is on */
 		mutex_unlock(&lm36011_mutex);
-		result = SILEGO_TEST_BYPASS;
+		test_result->result = SILEGO_TEST_BYPASS;
 		goto out;
 	}
 	mutex_unlock(&lm36011_mutex);
@@ -1959,13 +1961,23 @@ static enum silego_self_test_result_type silego_self_test(
 		dev_info(ctrl->soc_info.dev,
 			"laser driver mode has been set to 0x%x", data);
 
+	/* check ITO-R status */
+	if (silego_check_fault_type(ctrl) < 0)
+		dev_warn(ctrl->soc_info.dev, "failed to read silego status");
+	else {
+		if (ctrl->silego.fault_flag == ITOR_OPEN_CIRCUIT)
+			test_result->is_cracked = true;
+		dev_info(ctrl->soc_info.dev,
+			"Silego status: 0x%x", ctrl->silego.fault_flag);
+	}
+
 
 	/* wait for torch reach to 5 ms pulse width */
 	usleep_range(5000, 10000);
 
 	for (retry = 0; retry < MAX_RETRY_COUNT; retry++) {
 		if (ctrl->silego.is_vcsel_fault) {
-			result = SILEGO_TEST_PASS;
+			test_result->result = SILEGO_TEST_PASS;
 			break;
 		}
 		/* wait 3~5 ms and retry */
@@ -1993,7 +2005,6 @@ power_down:
 
 out:
 	mutex_unlock(&ctrl->cam_sensor_mutex);
-	return result;
 }
 
 static ssize_t get_silego_state_show(struct device *dev,
@@ -2090,22 +2101,22 @@ static long lm36011_ioctl(struct file *file, unsigned int cmd,
 {
 	int rc = 0;
 	struct led_laser_ctrl_t *ctrl = file->private_data;
-	enum silego_self_test_result_type silego_self_test_result;
+	struct silego_self_test_result test_result;
 
 	switch (cmd) {
 	case LM36011_SET_CERTIFICATION_STATUS:
 		ctrl->is_certified = (arg == 1 ? true : false);
 		break;
 	case LM36011_SILEGO_SELF_TEST:
-		silego_self_test_result = silego_self_test(ctrl);
+		silego_self_test(ctrl, &test_result);
 		dev_info(ctrl->soc_info.dev,
 			"silego self test result: %d",
-			silego_self_test_result);
-		if (silego_self_test_result != SILEGO_TEST_BYPASS)
+			test_result.result);
+		if (test_result.result != SILEGO_TEST_BYPASS)
 			ctrl->silego.self_test_result =
-				(silego_self_test_result == SILEGO_TEST_PASS);
+				(test_result.result == SILEGO_TEST_PASS);
 		rc = copy_to_user((void __user *)arg,
-			&silego_self_test_result, sizeof(int));
+			&test_result, sizeof(struct silego_self_test_result));
 		break;
 	default:
 		dev_err(ctrl->soc_info.dev,
