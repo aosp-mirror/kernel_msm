@@ -98,6 +98,10 @@ static const struct regmap_range slg51000_writeable_ranges[] = {
 	regmap_reg_range(SLG51000_LDO7_IRQ_MASK, SLG51000_LDO7_IRQ_MASK),
 	regmap_reg_range(SLG51000_OTP_IRQ_MASK, SLG51000_OTP_IRQ_MASK),
 	regmap_reg_range(SLG51000_SW_TEST_MODE_1, SLG51000_SW_TEST_MODE_4),
+	regmap_reg_range(SLG51000_MUXARRAY_INPUT_SEL_39,
+				SLG51000_MUXARRAY_INPUT_SEL_39),
+	regmap_reg_range(SLG51000_LUTARRAY_LUT_VAL_3,
+				SLG51000_LUTARRAY_LUT_VAL_3),
 };
 
 static const struct regmap_range slg51000_readable_ranges[] = {
@@ -455,10 +459,29 @@ static int slg51000_config_tuning(struct slg51000 *chip)
 		dev_err(chip->dev, "Failed to set software test mode\n");
 		return ret;
 	}
-
 	ret = slg51000_regmap_write(chip->regmap, SLG51000_LDO3_CONF1, 0x28);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to set LDO3_CONF1\n");
+		return ret;
+	}
+
+	ret = slg51000_regmap_write(chip->regmap, SLG51000_LDO5_VSEL, 0x9f);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to set LDO5_VSEL\n");
+		return ret;
+	}
+
+	ret = slg51000_regmap_write(chip->regmap,
+			SLG51000_MUXARRAY_INPUT_SEL_39, 0x34);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to set MUXARRAY_INPUT_SEL_39\n");
+		return ret;
+	}
+
+	ret = slg51000_regmap_write(chip->regmap,
+			SLG51000_LUTARRAY_LUT_VAL_3, 0xea);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to set LUTARRAY_LUT_VAL_3\n");
 		return ret;
 	}
 
