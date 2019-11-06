@@ -872,14 +872,6 @@ static int cs35l41_vol_ramp0(struct cs35l41_private *cs35l41,
 		goto exit;
 	}
 
-	if (final_y <= init_y) {
-		dev_info(cs35l41->dev, "Vol ramp slope is not positive\n");
-		cs35l41_set_vol((int)init_y, cs35l41);
-		usleep_range(final_x, final_x + 1);
-		cs35l41_set_vol((int)final_y, cs35l41);
-		goto exit;
-	}
-
 	step_y = 1;	/* 1/8 dB, min IC supported step */
 	step_x = delta_x / delta_y;	/* in micro-second */
 	if (step_x == 0)
