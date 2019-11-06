@@ -27,3 +27,7 @@
 &pm7250b_qg {
 	qcom,battery-data = <&redfin_batterydata>;
 };
+
+&google_charger {
+	google,wlc-power-supply = "wireless";
+};
