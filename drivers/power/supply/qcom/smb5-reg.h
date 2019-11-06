@@ -148,6 +148,7 @@ enum {
 
 #define DCDC_CMD_OTG_REG			(DCDC_BASE + 0x40)
 #define OTG_EN_BIT				BIT(0)
+#define FAST_ROLE_SWAP_CMD			BIT(1)
 
 #define DCDC_FSW_SEL_REG			(DCDC_BASE + 0x50)
 
@@ -161,6 +162,8 @@ enum {
 #define USBIN_COLLAPSE_FAULT_EN_BIT		BIT(4)
 
 #define DCDC_CFG_REF_MAX_PSNS_REG		(DCDC_BASE + 0x8C)
+
+#define SCHG_P_DCDC_VBOOST_CFG			(DCDC_BASE + 0x86)
 
 #define DCDC_ENG_SDCDC_CFG5_REG			(DCDC_BASE + 0xC4)
 #define ENG_SDCDC_BAT_HPWR_MASK			GENMASK(7, 6)
@@ -334,16 +337,29 @@ enum {
 
 #define DCIN_LOAD_CFG_REG			(DCIN_BASE + 0x65)
 #define INPUT_MISS_POLL_EN_BIT			BIT(5)
+#define DCIN_PON_RT_STS_BIT			BIT(6)
 
 /********************************
  *  TYPEC Peripheral Registers  *
  ********************************/
 #define TYPE_C_SNK_STATUS_REG			(TYPEC_BASE + 0x06)
-#define DETECTED_SRC_TYPE_MASK			GENMASK(3, 0)
+#define DETECTED_SRC_TYPE_MASK			GENMASK(6, 0)
+#define SNK_RP_STD_DAM_BIT			BIT(6)
+#define SNK_RP_1P5_DAM_BIT			BIT(5)
+#define SNK_RP_3P0_DAM_BIT			BIT(4)
 #define SNK_RP_STD_BIT				BIT(3)
 #define SNK_RP_1P5_BIT				BIT(2)
 #define SNK_RP_3P0_BIT				BIT(1)
 #define SNK_RP_SHORT_BIT			BIT(0)
+
+#define TYPE_C_SNK_DAM_STATUS_REG		(TYPEC_BASE + 0x07)
+#define DETECTED_SNK_DAM_TYPE_MASK		GENMASK(5, 0)
+#define SNK_RPHIGH_RPHIGH_BIT			BIT(5)
+#define SNK_RPMID_RPHIGH_BIT			BIT(4)
+#define SNK_RPMID_RPMID_BIT			BIT(3)
+#define SNK_RPSTD_RPHIGH_BIT			BIT(2)
+#define SNK_RPSTD_RPMID_BIT			BIT(1)
+#define SNK_RPSTD_RPSTD_BIT			BIT(0)
 
 #define TYPE_C_SRC_STATUS_REG			(TYPEC_BASE + 0x08)
 #define DETECTED_SNK_TYPE_MASK			GENMASK(4, 0)

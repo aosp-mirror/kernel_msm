@@ -1426,12 +1426,9 @@ static struct page *shmem_swapin(swp_entry_t swap, gfp_t gfp,
 {
 	struct vm_area_struct pvma;
 	struct page *page;
-	struct vm_fault vmf;
 
 	shmem_pseudo_vma_init(&pvma, info, index);
-	vmf.vma = &pvma;
-	vmf.address = 0;
-	page = swap_cluster_readahead(swap, gfp, &vmf);
+	page = swapin_readahead(swap, gfp, &pvma, 0);
 	shmem_pseudo_vma_destroy(&pvma);
 
 	return page;

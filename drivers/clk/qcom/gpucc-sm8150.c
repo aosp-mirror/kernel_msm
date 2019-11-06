@@ -510,6 +510,7 @@ static struct platform_driver gpu_cc_sm8150_driver = {
 	.driver		= {
 		.name	= "gpu_cc-sm8150",
 		.of_match_table = gpu_cc_sm8150_match_table,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

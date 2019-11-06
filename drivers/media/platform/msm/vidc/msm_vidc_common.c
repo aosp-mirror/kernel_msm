@@ -1577,8 +1577,6 @@ static void handle_session_init_done(enum hal_command_response cmd, void *data)
 	print_cap("rc_modes", &inst->capability.rc_modes);
 	print_cap("blur_width", &inst->capability.blur_width);
 	print_cap("blur_height", &inst->capability.blur_height);
-	print_cap("rotation", &inst->capability.rotation);
-	print_cap("color_space_caps", &inst->capability.color_space_caps);
 	print_cap("slice_delivery_mode", &inst->capability.slice_delivery_mode);
 	print_cap("slice_bytes", &inst->capability.slice_bytes);
 	print_cap("slice_mbs", &inst->capability.slice_mbs);
@@ -2747,7 +2745,7 @@ exit:
 	put_inst(inst);
 }
 
-void handle_cmd_response(enum hal_command_response cmd, void *data)
+void handle_cmd_response(u32 cmd, void *data)
 {
 	dprintk(VIDC_DBG, "Command response = %d\n", cmd);
 	switch (cmd) {
@@ -4257,6 +4255,11 @@ static void populate_frame_data(struct vidc_frame_data *data,
 	if (extra_idx && extra_idx < VIDEO_MAX_PLANES) {
 		data->extradata_addr = mbuf->smem[extra_idx].device_addr;
 		data->extradata_size = vb->planes[extra_idx].length;
+		if (inst->session_type == MSM_VIDC_ENCODER) {
+			dprintk(VIDC_DBG, "%s: Extradata addr: %x, size: %d\n",
+				__func__, data->extradata_addr,
+				data->extradata_size);
+		}
 		data->flags |= HAL_BUFFERFLAG_EXTRADATA;
 	}
 }

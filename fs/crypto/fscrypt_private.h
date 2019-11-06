@@ -12,14 +12,12 @@
 #ifndef _FSCRYPT_PRIVATE_H
 #define _FSCRYPT_PRIVATE_H
 
-#ifndef __FS_HAS_ENCRYPTION
-#define __FS_HAS_ENCRYPTION 1
-#endif
 #include <linux/fscrypt.h>
 #include <crypto/hash.h>
 #include <linux/pfk.h>
 
 /* Encryption parameters */
+#define FS_AES_256_XTS_KEY_SIZE		64
 #define FS_KEY_DERIVATION_NONCE_SIZE	16
 
 /**
@@ -90,6 +88,8 @@ struct fscrypt_info {
 	u8 ci_flags;
 	u8 ci_master_key_descriptor[FS_KEY_DESCRIPTOR_SIZE];
 	u8 ci_nonce[FS_KEY_DERIVATION_NONCE_SIZE];
+
+	/* Raw key, only for inline encryption w/ FS_ENCRYPTION_MODE_PRIVATE */
 	u8 ci_raw_key[FS_MAX_KEY_SIZE];
 };
 
@@ -112,20 +112,15 @@ static inline bool fscrypt_valid_enc_modes(u32 contents_mode,
 	    filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
 		return true;
 
-	if (contents_mode == FS_ENCRYPTION_MODE_PRIVATE &&
-	    filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
-		return true;
-
 	if (contents_mode == FS_ENCRYPTION_MODE_ADIANTUM &&
 	    filenames_mode == FS_ENCRYPTION_MODE_ADIANTUM)
 		return true;
 
-	return false;
-}
+	if (contents_mode == FS_ENCRYPTION_MODE_PRIVATE &&
+	    filenames_mode == FS_ENCRYPTION_MODE_AES_256_CTS)
+		return true;
 
-static inline bool is_private_data_mode(const struct fscrypt_context *ctx)
-{
-	return ctx->contents_encryption_mode == FS_ENCRYPTION_MODE_PRIVATE;
+	return false;
 }
 
 /* crypto.c */
@@ -182,6 +177,12 @@ struct fscrypt_mode {
 	bool logged_impl_name;
 	bool needs_essiv;
 };
+
+static inline bool is_private_mode(const struct fscrypt_mode *mode)
+{
+	/* Using inline encryption with ICE, rather than the crypto API? */
+	return mode->cipher_str == NULL;
+}
 
 extern void __exit fscrypt_essiv_cleanup(void);
 

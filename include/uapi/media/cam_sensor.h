@@ -8,8 +8,45 @@
 #define CAM_SENSOR_PROBE_CMD   (CAM_COMMON_OPCODE_MAX + 1)
 #define CAM_FLASH_MAX_LED_TRIGGERS 3
 #define MAX_OIS_NAME_SIZE 32
+#define MAX_RAINBOW_CONFIG_SIZE 32
 #define CAM_CSIPHY_SECURE_MODE_ENABLED 1
 #define CAM_IR_LED_SUPPORTED
+
+enum rainbow_op_type {
+	RAINBOW_SEQ_READ,
+	RAINBOW_RANDOM_READ,
+	RAINBOW_SEQ_WRITE,
+	RAINBOW_RANDOM_WRITE
+};
+
+enum strobe_type {
+	STROBE_ALTERNATIVE,
+	STROBE_SYNCHRONIZE,
+	STROBE_NONE
+};
+
+enum silego_self_test_result_type {
+	SILEGO_TEST_FAILED,
+	SILEGO_TEST_PASS,
+	SILEGO_TEST_BYPASS
+};
+
+struct rainbow_config {
+	enum rainbow_op_type operation;
+	uint32_t             size;
+	uint32_t             reg_addr[MAX_RAINBOW_CONFIG_SIZE];
+	uint32_t             reg_data[MAX_RAINBOW_CONFIG_SIZE];
+} __attribute__((packed));
+
+#define RAINBOW_CONFIG \
+	_IOWR('R', 1, struct rainbow_config)
+
+#define LM36011_SET_CERTIFICATION_STATUS \
+	_IOWR('R', 1, bool)
+
+#define LM36011_SILEGO_SELF_TEST \
+	_IOWR('R', 1, enum silego_self_test_result_type)
+
 /**
  * struct cam_sensor_query_cap - capabilities info for sensor
  *
@@ -124,6 +161,7 @@ struct cam_cmd_get_ois_data {
  * @ois_shift_y         :    shift in y dim
  * @af_shift_z          :    shift in z dim
  * @af_ois_xtalk_z      :    shift in z dim with ois
+ * @af_lop1             :    shift in z dim (0x764)
  * @time_readout        :    time that the shift is read out
  */
 struct cam_ois_shift {
@@ -131,6 +169,7 @@ struct cam_ois_shift {
 	int16_t             ois_shift_y;
 	int16_t             af_shift_z;
 	int16_t             af_ois_xtalk_z;
+	int16_t             af_lop1;
 	int64_t             time_readout;
 } __attribute__((packed));
 
@@ -237,7 +276,7 @@ struct cam_cmd_power {
  * @ cmd_type        :   Command buffer type
  * @ data_type       :   I2C data type
  * @ addr_type       :   I2C address type
- * @ reserved
+ * @ slave_addr      :   Slave address
  */
 struct i2c_rdwr_header {
 	uint16_t    count;
@@ -245,7 +284,7 @@ struct i2c_rdwr_header {
 	uint8_t     cmd_type;
 	uint8_t     data_type;
 	uint8_t     addr_type;
-	uint16_t    reserved;
+	uint16_t    slave_addr;
 } __attribute__((packed));
 
 /**

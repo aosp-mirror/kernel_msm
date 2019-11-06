@@ -38,6 +38,11 @@
 
 static struct dentry *clients;
 static struct dentry *dir;
+/**
+ * flag to enable/disable prints of active bus
+ * requests during system suspend
+ */
+static uint8_t debug_suspend;
 static DEFINE_MUTEX(msm_bus_dbg_fablist_lock);
 static DEFINE_RT_MUTEX(msm_bus_dbg_cllist_lock);
 struct msm_bus_dbg_state {
@@ -116,6 +121,7 @@ static void msm_bus_dbg_init_vectors(void)
 	requested_vectors[0].ib = 0;
 	clstate.enable = 0;
 	clstate.current_index = 0;
+	debug_suspend = 1;
 }
 
 static int msm_bus_dbg_update_cl_request(uint32_t cl)
@@ -277,6 +283,32 @@ static int msm_bus_dbg_en_set(void  *data, u64 val)
 }
 DEFINE_SIMPLE_ATTRIBUTE(shell_client_en_fops, msm_bus_dbg_en_get,
 	msm_bus_dbg_en_set, "%llu\n");
+
+/**
+ * The following functions are used to enable/disable printing
+ * the list of active bus requests when entering system suspend
+ */
+
+static int msm_bus_debug_suspend_en_get(void  *data, u64 *val)
+{
+	*val = debug_suspend;
+
+	MSM_BUS_DBG("Get debug bus suspend: %llu\n", *val);
+	return 0;
+}
+
+static int msm_bus_debug_suspend_en_set(void  *data, u64 val)
+{
+	if (val)
+		debug_suspend = 1;
+	else
+		debug_suspend = 0;
+
+	MSM_BUS_DBG("Set debug bus suspend: %llu\n", val);
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(msm_bus_debug_suspend_en_fops,
+	msm_bus_debug_suspend_en_get, msm_bus_debug_suspend_en_set, "%llu\n");
 
 /**
  * The following functions are used for viewing the client data
@@ -857,6 +889,59 @@ void msm_bus_dbg_commit_data(const char *fabname, void *cdata,
 }
 EXPORT_SYMBOL(msm_bus_dbg_commit_data);
 
+/**
+ * msm_bus_dbg_suspend_print_clients() - Prints list of active bus requests
+ */
+void msm_bus_dbg_suspend_print_clients(void)
+{
+	int j;
+	int cnt = 0;
+	struct msm_bus_cldata *cldata = NULL;
+	struct msm_bus_vectors *active_vector = NULL;
+	struct msm_bus_paths *active_usecase = NULL;
+
+	if (!debug_suspend)
+		return;
+
+	rt_mutex_lock(&msm_bus_dbg_cllist_lock);
+	list_for_each_entry(cldata, &cl_list, list) {
+		if (IS_ERR_OR_NULL(cldata->pdata))
+			continue;
+		if (cldata->index == -1)
+			continue;
+		/* Skip if this is an active only request
+		 */
+		if (cldata->pdata->active_only)
+			continue;
+
+		active_usecase = &cldata->pdata->usecase[cldata->index];
+
+		for (j = 0; j < cldata->pdata->usecase->num_paths; j++) {
+			active_vector = &active_usecase->vectors[j];
+			/* Print client bandwidth request if AB or IB
+			 * vote is non-ZERO
+			 */
+			if ((active_vector->ab) || (active_vector->ib)) {
+				if (!cnt)
+					printk("Enabled Bus Clients:\n");
+
+				printk("Name=%s src=%d dest=%d "
+					"ab=%llu ib=%llu\n",
+					cldata->pdata->name,
+					active_vector->src,
+					active_vector->dst,
+					active_vector->ab,
+					active_vector->ib);
+				cnt++;
+			}
+		}
+	}
+	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
+	if(cnt)
+		printk("Enabled Bus Client Count=%d\n",cnt);
+}
+EXPORT_SYMBOL(msm_bus_dbg_suspend_print_clients);
+
 static int __init msm_bus_debugfs_init(void)
 {
 	struct dentry *commit, *shell_client, *rules_dbg;
@@ -915,6 +1000,9 @@ static int __init msm_bus_debugfs_init(void)
 		goto err;
 	if (debugfs_create_file("update-request", 0644,
 		clients, NULL, &msm_bus_dbg_update_request_fops) == NULL)
+		goto err;
+	if (debugfs_create_file("debug_suspend", 0644,
+		clients, NULL, &msm_bus_debug_suspend_en_fops) == NULL)
 		goto err;
 
 	rules_buf = kzalloc(MAX_BUFF_SIZE, GFP_KERNEL);

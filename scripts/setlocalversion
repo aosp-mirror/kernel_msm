@@ -29,16 +29,11 @@ if test $# -gt 0 -o ! -d "$srctree"; then
 	usage
 fi
 
-scm_version()
+_scm_version()
 {
 	local short
 	short=false
 
-	cd "$srctree"
-	if test -e .scmversion; then
-		cat .scmversion
-		return
-	fi
 	if test "$1" = "--short"; then
 		short=true
 	fi
@@ -113,6 +108,33 @@ scm_version()
 
 		# All done with svn
 		return
+	fi
+}
+
+scm_version()
+{
+	local git_path res git_all_proj name
+	cd "$srctree"
+	if test -e .scmversion; then
+		cat .scmversion
+		return
+	fi
+	git_all_proj=$(find . -name .git -type d | sort)
+	if [ ! -z "$git_all_proj" ] ; then
+		res=""
+		for git_path in $git_all_proj; do
+			git_path=${git_path%.git}
+			name=$(basename ${git_path})
+			if [ $name = "." ] ; then
+				name=""
+			else
+				name="_$name"
+			fi
+			res="$res$name$(cd $git_path;_scm_version)"
+		done
+		printf -- '%s' "$res"
+	else
+		_scm_version
 	fi
 }
 

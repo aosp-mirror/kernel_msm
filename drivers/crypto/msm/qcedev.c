@@ -2211,6 +2211,7 @@ static struct platform_driver qcedev_plat_driver = {
 		.name = "qce",
 		.owner = THIS_MODULE,
 		.of_match_table = qcedev_match,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

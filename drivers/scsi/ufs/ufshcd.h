@@ -4,6 +4,8 @@
  * This code is based on drivers/scsi/ufs/ufshcd.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
  * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018 Samsung Electronics Co., Ltd.
+ * Copyright (C) 2018, Google, Inc.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -44,6 +46,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/delay.h>
+#include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/rwsem.h>
@@ -73,6 +76,10 @@
 
 #include "ufs.h"
 #include "ufshci.h"
+#include "ufshpb.h"
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+#include "ufs-impaired.h"
+#endif
 
 #define UFSHCD "ufshcd"
 #define UFSHCD_DRIVER_VERSION "0.3"
@@ -155,6 +162,8 @@ enum {
 	UFS_ERR_LINKSTARTUP,
 	UFS_ERR_POWER_MODE_CHANGE,
 	UFS_ERR_TASK_ABORT,
+	UFS_ERR_AUTOH8_ENTER,
+	UFS_ERR_AUTOH8_EXIT,
 	UFS_ERR_MAX,
 };
 
@@ -198,6 +207,11 @@ struct ufs_pm_lvl_states {
  * @issue_time_stamp: time stamp for debug purposes
  * @complete_time_stamp: time stamp for statistics
  * @req_abort_skip: skip request abort task flag
+ *
+ * impaired storage related
+ * @list_head: LRB list node head
+ * @complete_delay: target delay in us
+ * @target_complete_time: target completion time with delay emulation.
  */
 struct ufshcd_lrb {
 	struct utp_transfer_req_desc *utr_descriptor_ptr;
@@ -223,6 +237,12 @@ struct ufshcd_lrb {
 	ktime_t complete_time_stamp;
 
 	bool req_abort_skip;
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	struct list_head list;
+	int complete_delay;
+	ktime_t target_complete_time;
+#endif
 };
 
 /**
@@ -259,6 +279,7 @@ struct ufs_desc_size {
 	int interc_desc;
 	int unit_desc;
 	int conf_desc;
+	int health_desc;
 };
 
 /**
@@ -408,6 +429,16 @@ struct ufs_hba_variant {
 	struct ufs_hba_variant_ops		*vops;
 	struct ufs_hba_crypto_variant_ops	*crypto_vops;
 	struct ufs_hba_pm_qos_variant_ops	*pm_qos_vops;
+};
+
+/* for manual gc */
+struct ufs_manual_gc {
+	int state;
+	bool hagc_support;
+	struct hrtimer hrtimer;
+	unsigned long delay_ms;
+	struct work_struct hibern8_work;
+	struct workqueue_struct *mgc_workq;
 };
 
 /* clock gating state  */
@@ -561,6 +592,7 @@ struct debugfs_files {
 	struct dentry *dbg_print_en;
 	struct dentry *req_stats;
 	struct dentry *query_stats;
+	struct dentry *io_stats;
 	u32 dme_local_attr_id;
 	u32 dme_peer_attr_id;
 	struct dentry *reset_controller;
@@ -583,7 +615,8 @@ enum ts_types {
 	TS_URGENT_READ		= 3,
 	TS_URGENT_WRITE		= 4,
 	TS_FLUSH		= 5,
-	TS_NUM_STATS		= 6,
+	TS_DISCARD		= 6,
+	TS_NUM_STATS		= 7,
 };
 
 /**
@@ -598,6 +631,24 @@ struct ufshcd_req_stat {
 	u64 max;
 	u64 sum;
 	u64 count;
+};
+
+/**
+ * struct ufshcd_io_stat - statistics for I/O amount.
+ * @req_count_started: total number of I/O requests, which were started.
+ * @total_bytes_started: total I/O amount in bytes, which were started.
+ * @req_count_completed: total number of I/O request, which were completed.
+ * @total_bytes_completed: total I/O amount in bytes, which were completed.
+ * @max_diff_req_count: MAX of 'req_count_started - req_count_completed'.
+ * @max_diff_total_bytes: MAX of 'total_bytes_started - total_bytes_completed'.
+ */
+struct ufshcd_io_stat {
+	u64 req_count_started;
+	u64 total_bytes_started;
+	u64 req_count_completed;
+	u64 total_bytes_completed;
+	u64 max_diff_req_count;
+	u64 max_diff_total_bytes;
 };
 #endif
 
@@ -644,6 +695,9 @@ struct ufs_stats {
 	int err_stats[UFS_ERR_MAX];
 	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
 	int query_stats_arr[UPIU_QUERY_OPCODE_MAX][MAX_QUERY_IDN];
+	struct ufshcd_io_stat io_read;
+	struct ufshcd_io_stat io_write;
+	struct ufshcd_io_stat io_readwrite;
 
 #endif
 	u32 last_intr_status;
@@ -664,6 +718,41 @@ struct ufs_stats {
 	u32 dl_err_cnt[UFS_EC_DL_MAX];
 	u32 dme_err_cnt;
 };
+
+static inline bool is_read_opcode(u8 opcode)
+{
+	return opcode == READ_10 || opcode == READ_16;
+}
+
+static inline bool is_write_opcode(u8 opcode)
+{
+	return opcode == WRITE_10 || opcode == WRITE_16;
+}
+
+static inline bool is_unmap_opcode(u8 opcode)
+{
+	return opcode == UNMAP;
+}
+
+static inline char *parse_opcode(u8 opcode)
+{
+	/* string should be less than 12 byte-long */
+	switch (opcode) {
+	case READ_10:
+		return "READ_10";
+	case READ_16:
+		return "READ_16";
+	case WRITE_10:
+		return "WRITE_10";
+	case WRITE_16:
+		return "WRITE_16";
+	case UNMAP:
+		return "UNMAP";
+	case SYNCHRONIZE_CACHE:
+		return "SYNC_CACHE";
+	}
+	return NULL;
+}
 
 /* UFS Host Controller debug print bitmask */
 #define UFSHCD_DBG_PRINT_CLK_FREQ_EN		UFS_BIT(0)
@@ -687,10 +776,13 @@ struct ufshcd_cmd_log_entry {
 	u8 lun;
 	u8 cmd_id;
 	sector_t lba;
-	int transfer_len;
+	u32 transfer_len;
 	u8 idn;		/* used only for query idn */
 	u32 doorbell;
 	u32 outstanding_reqs;
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	u32 delayed_reqs;
+#endif
 	u32 seq_num;
 	unsigned int tag;
 	ktime_t tstamp;
@@ -708,6 +800,26 @@ enum ufshcd_card_state {
 	UFS_CARD_STATE_ONLINE	= 1,
 	UFS_CARD_STATE_OFFLINE	= 2,
 };
+
+/* UFS Slow I/O operation types */
+enum ufshcd_slowio_optype {
+	UFSHCD_SLOWIO_READ = 0,
+	UFSHCD_SLOWIO_WRITE = 1,
+	UFSHCD_SLOWIO_UNMAP = 2,
+	UFSHCD_SLOWIO_SYNC = 3,
+	UFSHCD_SLOWIO_OP_MAX = 4,
+};
+
+/* UFS Slow I/O sysfs entry types */
+enum ufshcd_slowio_systype {
+	UFSHCD_SLOWIO_US = 0,
+	UFSHCD_SLOWIO_CNT = 1,
+	UFSHCD_SLOWIO_SYS_MAX = 2,
+};
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+extern void ufshcd_complete_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
+#endif
 
 /**
  * struct ufs_hba - per adapter private structure
@@ -797,8 +909,6 @@ struct ufs_hba {
 	int rpm_lvl;
 	/* Desired UFS power management level during system PM */
 	int spm_lvl;
-	struct device_attribute rpm_lvl_attr;
-	struct device_attribute spm_lvl_attr;
 	int pm_op_in_progress;
 
 	struct ufshcd_lrb *lrb;
@@ -956,6 +1066,8 @@ struct ufs_hba {
 	/* Number of requests aborts */
 	int req_abort_count;
 
+	u32 security_in;
+
 	/* Number of lanes available (1 or 2) for Rx/Tx */
 	u32 lanes_per_direction;
 
@@ -1024,6 +1136,7 @@ struct ufs_hba {
 
 	/* sync b/w diff contexts */
 	struct rw_semaphore lock;
+	struct rw_semaphore query_lock;
 	unsigned long shutdown_in_prog;
 
 	/* If set, don't gate device ref_clk during clock gating */
@@ -1036,16 +1149,42 @@ struct ufs_hba {
 
 	struct reset_control *core_reset;
 
+	int latency_hist_enabled;
+	struct io_latency_state io_lat_read;
+	struct io_latency_state io_lat_write;
 	struct ufs_desc_size desc_size;
 	bool restore_needed;
 
-	int latency_hist_enabled;
-	struct io_latency_state io_lat_s;
+	/* To monitor slow UFS I/O requests. */
+	u64 slowio_min_us;
+	u64 slowio[UFSHCD_SLOWIO_OP_MAX][UFSHCD_SLOWIO_SYS_MAX];
+
+	/* HPB support */
+	u32 ufshpb_feat;
+	int ufshpb_state;
+	int ufshpb_max_regions;
+	struct delayed_work ufshpb_init_work;
+	bool issue_ioctl;
+	struct ufshpb_lu *ufshpb_lup[UFS_UPIU_MAX_GENERAL_LUN];
+	struct scsi_device *sdev_ufs_lu[UFS_UPIU_MAX_GENERAL_LUN];
+	struct work_struct ufshpb_eh_work;
+
+	struct ufs_manual_gc manual_gc;
 
 	bool reinit_g4_rate_A;
 	bool force_g4;
+
 	/* distinguish between resume and restore */
 	bool restore;
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+	struct kobject *impaired_kobj;
+	struct ufs_impaired_storage impaired;
+	struct task_struct *impaired_thread;
+	struct mutex impaired_thread_mutex;
+	struct list_head impaired_list_head;
+	unsigned long delayed_reqs;
+#endif
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1558,5 +1697,11 @@ static inline void ufshcd_vops_pm_qos_req_end(struct ufs_hba *hba,
 	if (hba->var && hba->var->pm_qos_vops && hba->var->pm_qos_vops->req_end)
 		hba->var->pm_qos_vops->req_end(hba, req, lock);
 }
+
+#define UFSHCD_MIN_SLOWIO_US		(1000)     /*  1 ms      */
+#define UFSHCD_DEFAULT_SLOWIO_READ_US	(5000000)  /*  5 seconds */
+#define UFSHCD_DEFAULT_SLOWIO_WRITE_US	(10000000) /* 10 seconds */
+#define UFSHCD_DEFAULT_SLOWIO_UNMAP_US	(30000000) /* 30 seconds */
+#define UFSHCD_DEFAULT_SLOWIO_SYNC_US	(10000000) /* 10 seconds */
 
 #endif /* End of Header */

@@ -177,6 +177,7 @@ struct cam_ois_ctrl_t {
 	struct cam_ois_shift_buffer buf;
 	struct cam_ois_timer_t timer;
 	struct mutex ois_shift_mutex;
+	uint32_t ois_version;
 };
 
 #endif /*_CAM_OIS_DEV_H_ */

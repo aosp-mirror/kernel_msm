@@ -207,6 +207,7 @@ static struct platform_driver dwc3_of_simple_driver = {
 	.driver		= {
 		.name	= "dwc3-of-simple",
 		.of_match_table = of_dwc3_simple_match,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

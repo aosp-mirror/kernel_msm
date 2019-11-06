@@ -29,6 +29,11 @@ struct ovl_dir_cache;
 
 #define OVL_MAX_STACK 500
 
+static bool __read_mostly ovl_override_creds_def = true;
+module_param_named(override_creds, ovl_override_creds_def, bool, 0644);
+MODULE_PARM_DESC(ovl_override_creds_def,
+		"Use mounter's credentials for accesses");
+
 static bool ovl_redirect_dir_def = IS_ENABLED(CONFIG_OVERLAY_FS_REDIRECT_DIR);
 module_param_named(redirect_dir, ovl_redirect_dir_def, bool, 0644);
 MODULE_PARM_DESC(ovl_redirect_dir_def,
@@ -38,11 +43,6 @@ static bool ovl_index_def = IS_ENABLED(CONFIG_OVERLAY_FS_INDEX);
 module_param_named(index, ovl_index_def, bool, 0644);
 MODULE_PARM_DESC(ovl_index_def,
 		 "Default to on or off for the inodes index feature");
-
-static bool __read_mostly ovl_override_creds_def = true;
-module_param_named(override_creds, ovl_override_creds_def, bool, 0644);
-MODULE_PARM_DESC(ovl_override_creds_def,
-		 "Use mounter's credentials for accesses");
 
 static void ovl_dentry_release(struct dentry *dentry)
 {
@@ -326,6 +326,7 @@ static int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	if (ufs->config.override_creds != ovl_override_creds_def)
 		seq_show_option(m, "override_creds",
 				ufs->config.override_creds ? "on" : "off");
+
 	return 0;
 }
 
@@ -1178,6 +1179,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		       ovl_dentry_lower(root_dentry));
 
 	sb->s_root = root_dentry;
+
 	return 0;
 
 out_free_oe:

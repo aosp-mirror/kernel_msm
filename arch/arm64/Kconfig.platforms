@@ -347,4 +347,9 @@ config BOARD_SUNFISH
 	depends on ARCH_QCOM
 	select ARCH_SM6150
 
+config BOARD_FLORAL
+	bool "Google Floral Family"
+	depends on ARCH_QCOM
+	select ARCH_SM8150
+
 endmenu

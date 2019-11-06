@@ -488,6 +488,19 @@ void sde_core_perf_crtc_update(struct drm_crtc *crtc,
 		SDE_ERROR("invalid kms\n");
 		return;
 	}
+
+	/*
+	 * When doing FPS mode switch, the switch may take an extra vsync to
+	 * adjust to new refresh rate. Abort early to avoid drop in performance
+	 * for the frame where the switch happens. The next frame (or idle)
+	 * should then lower the vote appropariately.
+	 */
+	if (msm_is_mode_seamless_dms_fps(&crtc->state->adjusted_mode) &&
+	    !params_changed) {
+		SDE_DEBUG("crtc:%d skip perf update\n", crtc->base.id);
+		return;
+	}
+
 	priv = kms->dev->dev_private;
 	sde_crtc = to_sde_crtc(crtc);
 	sde_cstate = to_sde_crtc_state(crtc->state);

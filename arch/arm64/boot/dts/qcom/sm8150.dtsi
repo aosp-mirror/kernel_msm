@@ -211,7 +211,7 @@
 			compatible = "arm,armv8";
 			reg = <0x0 0x400>;
 			enable-method = "psci";
-			capacity-dmips-mhz = <1740>;
+			capacity-dmips-mhz = <2515>;
 			cache-size = <0x20000>;
 			next-level-cache = <&L2_4>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
@@ -253,7 +253,7 @@
 			compatible = "arm,armv8";
 			reg = <0x0 0x500>;
 			enable-method = "psci";
-			capacity-dmips-mhz = <1740>;
+			capacity-dmips-mhz = <2515>;
 			cache-size = <0x20000>;
 			next-level-cache = <&L2_5>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
@@ -295,7 +295,7 @@
 			compatible = "arm,armv8";
 			reg = <0x0 0x600>;
 			enable-method = "psci";
-			capacity-dmips-mhz = <1740>;
+			capacity-dmips-mhz = <2515>;
 			cache-size = <0x20000>;
 			next-level-cache = <&L2_6>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
@@ -337,7 +337,7 @@
 			compatible = "arm,armv8";
 			reg = <0x0 0x700>;
 			enable-method = "psci";
-			capacity-dmips-mhz = <1740>;
+			capacity-dmips-mhz = <2515>;
 			cache-size = <0x20000>;
 			next-level-cache = <&L2_7>;
 			sched-energy-costs = <&CPU_COST_2 &CLUSTER_COST_2>;
@@ -572,11 +572,7 @@
 	firmware: firmware {
 		android {
 			compatible = "android,firmware";
-			shared_meta: vbmeta {
-				compatible = "android,vbmeta";
-				parts = "vbmeta,boot,system,vendor,dtbo,odm";
-			};
-			android_q_fstab: fstab {
+			android_fstab: fstab {
 				compatible = "android,fstab";
 				vendor {
 					compatible = "android,vendor";
@@ -699,12 +695,6 @@
 			compatible = "shared-dma-pool";
 			no-map;
 			reg = <0 0x9e400000 0 0x1400000>;
-		};
-
-		cdsp_sec_mem: cdsp_sec_regions {
-			compatible = "removed-dma-pool";
-			no-map;
-			reg = <0x0 0xa4c00000 0x0 0x3c00000>;
 		};
 
 		cont_splash_memory: cont_splash_region {
@@ -1350,7 +1340,7 @@
 		};
 	};
 
-	restart@c264000 {
+	msm_poweroff: restart@c264000 {
 		compatible = "qcom,pshold";
 		reg = <0xc264000 0x4>,
 		      <0x1fd3000 0x4>;
@@ -3239,6 +3229,68 @@
 				 <DCC_READ 0x183a3a84 2 0>,
 				 <DCC_READ 0x18393500 80 0>,
 				 <DCC_READ 0x183a3500 80 0>,
+				 <DCC_READ 0x18200D04 1 0>,
+				 <DCC_READ 0x18230D04 1 0>,
+				 <DCC_READ 0x18322C18 1 0>,
+				 <DCC_READ 0x18324C18 1 0>,
+				 <DCC_READ 0x18327418 1 0>,
+				 <DCC_READ 0x18329418 1 0>,
+				 <DCC_READ 0x18321700 1 0>,
+				 <DCC_READ 0x18323700 1 0>,
+				 <DCC_READ 0x18325F00 1 0>,
+				 <DCC_READ 0x18327F00 1 0>,
+				 <DCC_READ 0x18321818 1 0>,
+				 <DCC_READ 0x18323818 1 0>,
+				 <DCC_READ 0x18326018 1 0>,
+				 <DCC_READ 0x18328018 1 0>,
+				 <DCC_READ 0x18321700 1 0>,
+				 <DCC_READ 0x18323700 1 0>,
+				 <DCC_READ 0x18325F00 1 0>,
+				 <DCC_READ 0x18327F00 1 0>,
+				 <DCC_READ 0x18284000 1 0>,
+				 <DCC_READ 0x18284004 1 0>,
+				 <DCC_READ 0x18284008 1 0>,
+				 <DCC_READ 0x1828400C 1 0>,
+				 <DCC_READ 0x18284010 1 0>,
+				 <DCC_READ 0x18284014 1 0>,
+				 <DCC_READ 0x18284018 1 0>,
+				 <DCC_READ 0x1828401C 1 0>,
+				 <DCC_READ 0x18284020 1 0>,
+				 <DCC_READ 0x18284024 1 0>,
+				 <DCC_READ 0x18284028 1 0>,
+				 <DCC_READ 0x18282000 1 0>,
+				 <DCC_READ 0x18282004 1 0>,
+				 <DCC_READ 0x18282008 1 0>,
+				 <DCC_READ 0x1828200C 1 0>,
+				 <DCC_READ 0x18282010 1 0>,
+				 <DCC_READ 0x18282014 1 0>,
+				 <DCC_READ 0x18282018 1 0>,
+				 <DCC_READ 0x1828201C 1 0>,
+				 <DCC_READ 0x18282020 1 0>,
+				 <DCC_READ 0x18282024 1 0>,
+				 <DCC_READ 0x18282028 1 0>,
+				 <DCC_READ 0x18280000 1 0>,
+				 <DCC_READ 0x18280004 1 0>,
+				 <DCC_READ 0x18280008 1 0>,
+				 <DCC_READ 0x1828000C 1 0>,
+				 <DCC_READ 0x18280010 1 0>,
+				 <DCC_READ 0x18280014 1 0>,
+				 <DCC_READ 0x18280018 1 0>,
+				 <DCC_READ 0x1828001C 1 0>,
+				 <DCC_READ 0x18280020 1 0>,
+				 <DCC_READ 0x18280024 1 0>,
+				 <DCC_READ 0x18280028 1 0>,
+				 <DCC_READ 0x18286000 1 0>,
+				 <DCC_READ 0x18286004 1 0>,
+				 <DCC_READ 0x18286008 1 0>,
+				 <DCC_READ 0x1828600C 1 0>,
+				 <DCC_READ 0x18286010 1 0>,
+				 <DCC_READ 0x18286014 1 0>,
+				 <DCC_READ 0x18286018 1 0>,
+				 <DCC_READ 0x1828601C 1 0>,
+				 <DCC_READ 0x18286020 1 0>,
+				 <DCC_READ 0x18286024 1 0>,
+				 <DCC_READ 0x18286028 1 0>,
 				 <DCC_READ 0x09050008 1 0>,
 				 <DCC_READ 0x09050078 1 0>,
 				 <DCC_READ 0x09601000 1 0>,

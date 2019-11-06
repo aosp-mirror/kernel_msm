@@ -416,7 +416,6 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 	int bridge_enable_count = 0;
 	int i;
 
-
 	SDE_ATRACE_BEGIN("msm_enable");
 	for_each_oldnew_crtc_in_state(old_state, crtc, old_crtc_state,
 			new_crtc_state, i) {
@@ -523,6 +522,7 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 				 encoder->base.id, encoder->name);
 
 		drm_bridge_enable(encoder->bridge);
+
 	}
 	SDE_ATRACE_END("msm_enable");
 }

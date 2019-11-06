@@ -731,11 +731,11 @@ static void
 __msm_geni_serial_console_write(struct uart_port *uport, const char *s,
 				unsigned int count)
 {
-	int new_line = 0;
-	int i;
-	int bytes_to_send = count;
-	int fifo_depth = DEF_FIFO_DEPTH_WORDS;
-	int tx_wm = DEF_TX_WM;
+	unsigned int new_line = 0;
+	unsigned int i;
+	unsigned int bytes_to_send = count;
+	unsigned int fifo_depth = DEF_FIFO_DEPTH_WORDS;
+	unsigned int tx_wm = DEF_TX_WM;
 
 	for (i = 0; i < count; i++) {
 		if (s[i] == '\n')
@@ -756,11 +756,10 @@ __msm_geni_serial_console_write(struct uart_port *uport, const char *s,
 		 * command. Unfortunately the current data being written is
 		 * lost.
 		 */
-		while (!msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
+		if (!msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 						M_TX_FIFO_WATERMARK_EN, true))
 			break;
-		chars_to_write = min((unsigned int)(count - i),
-							avail_fifo_bytes);
+		chars_to_write = min((count - i), avail_fifo_bytes);
 		if ((chars_to_write << 1) > avail_fifo_bytes)
 			chars_to_write = (avail_fifo_bytes >> 1);
 		uart_console_write(uport, (s + i), chars_to_write,

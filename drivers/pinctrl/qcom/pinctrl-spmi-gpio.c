@@ -1124,7 +1124,8 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	}
 
 	if (of_find_property(dev->of_node, "qcom,gpios-disallowed",
-					&disallowed_count)) {
+					&disallowed_count)
+					&& disallowed_count) {
 		disallowed_count /= sizeof(u32);
 		if (disallowed_count == 0) {
 			dev_err(dev, "No data in gpios-disallowed\n");

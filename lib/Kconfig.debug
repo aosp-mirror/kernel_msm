@@ -30,6 +30,22 @@ config CONSOLE_LOGLEVEL_DEFAULT
 	  usage in the kernel. That is controlled by the MESSAGE_LOGLEVEL_DEFAULT
 	  option.
 
+config PRINTK_CPU_ID
+	bool "Show CPU number on printks"
+	default y
+	depends on PRINTK
+	help
+	  Selecting this option adds CPU number to printk() messages.
+	  It can be turned off by writing 0 to printk module parameter cpu.
+
+config PRINTK_PID
+	bool "Show process ID on printks"
+	default y
+	depends on PRINTK
+	help
+	  Selecting this option adds process ID to printk() messages.
+	  It can be turned off by writing 0 to printk module parameter pid.
+
 config MESSAGE_LOGLEVEL_DEFAULT
 	int "Default message log level (1-7)"
 	range 1 7
@@ -986,6 +1002,14 @@ config PANIC_ON_OOPS_VALUE
 	range 0 1
 	default 0 if !PANIC_ON_OOPS
 	default 1 if PANIC_ON_OOPS
+
+config PANIC_ON_WARN_DEFAULT_ENABLE
+	bool "Panic on warn"
+	default n
+	help
+	  Say Y here to enable the kernel to panic when detect warnings. This
+	  has the same effect as setting panic_on_warn on the kernel command
+	  line.
 
 config PANIC_TIMEOUT
 	int "panic timeout"
@@ -2059,6 +2083,16 @@ config BUG_ON_DATA_CORRUPTION
 	  Select this option if the kernel should BUG when it encounters
 	  data corruption in kernel memory structures when they get checked
 	  for validity.
+
+	  If unsure, say N.
+
+config CC_WERROR
+	bool "Treat all compile warnings as errors"
+	default n
+	help
+	  Select this option to set compiler warnings as errors,
+	  to prevent easily-fixable problems from creeping into
+	  the codebase.
 
 	  If unsure, say N.
 

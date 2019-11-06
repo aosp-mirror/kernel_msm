@@ -12,40 +12,13 @@
 
 #include "fscrypt_ice.h"
 
-extern int fscrypt_get_mode_key_size(int mode);
-
 int fscrypt_using_hardware_encryption(const struct inode *inode)
 {
 	struct fscrypt_info *ci = inode->i_crypt_info;
 
-	return S_ISREG(inode->i_mode) && ci &&
-		ci->ci_data_mode == FS_ENCRYPTION_MODE_PRIVATE;
+	return ci && is_private_mode(ci->ci_mode);
 }
 EXPORT_SYMBOL(fscrypt_using_hardware_encryption);
-
-size_t fscrypt_get_ice_encryption_key_size(const struct inode *inode)
-{
-	struct fscrypt_info *ci = NULL;
-
-	if (inode)
-		ci = inode->i_crypt_info;
-	if (!ci)
-		return 0;
-
-	return fscrypt_get_mode_key_size(ci->ci_data_mode) / 2;
-}
-
-size_t fscrypt_get_ice_encryption_salt_size(const struct inode *inode)
-{
-	struct fscrypt_info *ci = NULL;
-
-	if (inode)
-		ci = inode->i_crypt_info;
-	if (!ci)
-		return 0;
-
-        return fscrypt_get_mode_key_size(ci->ci_data_mode) / 2;
-}
 
 /*
  * Retrieves encryption key from the inode
@@ -70,7 +43,6 @@ char *fscrypt_get_ice_encryption_key(const struct inode *inode)
 char *fscrypt_get_ice_encryption_salt(const struct inode *inode)
 {
 	struct fscrypt_info *ci = NULL;
-	int size = 0;
 
 	if (!inode)
 		return NULL;
@@ -79,11 +51,7 @@ char *fscrypt_get_ice_encryption_salt(const struct inode *inode)
 	if (!ci)
 		return NULL;
 
-	size = fscrypt_get_ice_encryption_key_size(inode);
-	if (!size)
-		return NULL;
-
-	return &(ci->ci_raw_key[size]);
+	return &(ci->ci_raw_key[fscrypt_get_ice_encryption_key_size(inode)]);
 }
 
 /*
@@ -116,9 +84,7 @@ bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 	if (inode1 == inode2)
 		return true;
 
-	/* both do not belong to ice, so we don't care, they are equal
-	 *for us
-	 */
+	/* both do not belong to ice, so we don't care, they are equal for us */
 	if (!fscrypt_should_be_processed_by_ice(inode1) &&
 			!fscrypt_should_be_processed_by_ice(inode2))
 		return true;
@@ -146,7 +112,6 @@ bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 		(memcmp(salt1, salt2,
 			fscrypt_get_ice_encryption_salt_size(inode1)) == 0))
 		return true;
-
 	return false;
 }
 
@@ -185,6 +150,6 @@ bool fscrypt_mergeable_bio(struct bio *bio, u64 dun, bool bio_encrypted,
 		return true;
 
 	/* ICE allows only consecutive iv_key stream. */
-	return bio_end_dun(bio) == dun;
+	return bio_end_dun(bio, bio_sectors(bio)) == dun;
 }
 EXPORT_SYMBOL(fscrypt_mergeable_bio);

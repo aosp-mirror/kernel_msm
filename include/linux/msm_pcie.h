@@ -30,6 +30,12 @@ enum msm_pcie_pm_opt {
 	MSM_PCIE_ENABLE_PC,
 };
 
+enum msm_pcie_pm_l1ss {
+	MSM_PCIE_PM_L1SS_DISABLE,
+	MSM_PCIE_PM_L1SS_L11,
+	MSM_PCIE_PM_L1SS_L12,
+};
+
 enum msm_pcie_event {
 	MSM_PCIE_EVENT_INVALID = 0,
 	MSM_PCIE_EVENT_LINKDOWN = 0x1,
@@ -115,6 +121,14 @@ void msm_pcie_l1ss_timeout_disable(struct pci_dev *pci_dev);
 void msm_pcie_l1ss_timeout_enable(struct pci_dev *pci_dev);
 
 /**
+ * msm_pcie_set_l1ss_state - configure active l1ss
+ * @dev: pci device structure
+ * @l1ss - the l1ss to enable - lower power sub states will be disabled
+ */
+void msm_pcie_set_l1ss_state(struct pci_dev *dev,
+	enum msm_pcie_pm_l1ss l1ss);
+
+/**
  * msm_pcie_pm_control - control the power state of a PCIe link.
  * @pm_opt:	power management operation
  * @busnr:	bus number of PCIe endpoint
@@ -161,6 +175,22 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg);
  * Return: 0 on success, negative value on error
  */
 int msm_pcie_recover_config(struct pci_dev *dev);
+
+int msm_pcie_assert_perst(u32 rc_idx);
+int msm_pcie_deassert_perst(u32 rc_idx);
+
+/**
+ * msm_pcie_eq_ctrl - controls PCIe link equalization
+ * @rc_idx:	RC that Endpoints connect to.
+ * @enable:	equalization should be enabled or disabled
+ *
+ * This function gives PCIe endpoint device drivers the control to enable
+ * or disable link equalization.
+ *
+ * Note that this function only sets the eq_en flag, equalization configuration
+ * is done by msm_pcie_enable() function after PCIe clock is enabled.
+ */
+void msm_pcie_eq_ctrl(u32 rc_idx, bool eq_en);
 
 /**
  * msm_pcie_enumerate - enumerate Endpoints.
@@ -212,6 +242,11 @@ int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
 			u32 offset, u32 mask, u32 value);
 
 #else /* !CONFIG_PCI_MSM */
+void msm_pcie_set_l1ss_state(struct pci_dev *dev,
+	enum msm_pcie_pm_l1ss l1ss)
+{
+}
+
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
 {
@@ -241,6 +276,10 @@ static inline int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 static inline int msm_pcie_recover_config(struct pci_dev *dev)
 {
 	return -ENODEV;
+}
+
+static inline void msm_pcie_eq_ctrl(u32 rc_idx, bool eq_en)
+{
 }
 
 static inline int msm_pcie_enumerate(u32 rc_idx)

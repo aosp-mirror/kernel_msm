@@ -248,6 +248,7 @@ struct fg_dt_props {
 	int	ki_coeff_med_dischg[KI_COEFF_SOC_LEVELS];
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
+	bool	soc_irq_disable;
 };
 
 struct fg_gen4_chip {
@@ -5667,6 +5668,8 @@ static int fg_gen4_parse_dt(struct fg_gen4_chip *chip)
 			chip->dt.esr_meas_curr_ma = temp;
 	}
 
+	chip->dt.soc_irq_disable =
+		of_property_read_bool(node, "google,fg-soc-irq-disable");
 	rc = fg_parse_esr_cal_params(fg);
 	if (rc < 0)
 		return rc;
@@ -5725,7 +5728,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 {
 	struct fg_gen4_chip *chip;
 	struct fg_dev *fg;
-	struct power_supply_config fg_psy_cfg;
+	struct power_supply_config fg_psy_cfg = {};
 	int rc, msoc, volt_uv, batt_temp;
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
@@ -5862,7 +5865,7 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	}
 
 	/* Register the power supply */
-	fg_psy_cfg.drv_data = fg;
+	fg_psy_cfg.drv_data = chip;
 	fg_psy_cfg.of_node = NULL;
 	fg_psy_cfg.supplied_to = NULL;
 	fg_psy_cfg.num_supplicants = 0;
@@ -5895,6 +5898,21 @@ static int fg_gen4_probe(struct platform_device *pdev)
 	/* Keep SOC_UPDATE irq disabled until we require it */
 	if (fg->irqs[SOC_UPDATE_IRQ].irq)
 		disable_irq_nosync(fg->irqs[SOC_UPDATE_IRQ].irq);
+
+	if (chip->dt.soc_irq_disable) {
+		if (fg_irqs[MSOC_EMPTY_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_EMPTY_IRQ].irq);
+		if (fg_irqs[MSOC_FULL_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_FULL_IRQ].irq);
+		if (fg_irqs[MSOC_HIGH_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_HIGH_IRQ].irq);
+		if (fg_irqs[MSOC_LOW_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_LOW_IRQ].irq);
+		if (fg_irqs[MSOC_DELTA_IRQ].irq)
+			disable_irq_nosync(fg_irqs[MSOC_DELTA_IRQ].irq);
+		if (fg_irqs[BSOC_DELTA_IRQ].irq)
+			disable_irq_nosync(fg_irqs[BSOC_DELTA_IRQ].irq);
+	}
 
 	/* Keep BSOC_DELTA_IRQ disabled until we require it */
 	vote(fg->delta_bsoc_irq_en_votable, DELTA_BSOC_IRQ_VOTER, false, 0);

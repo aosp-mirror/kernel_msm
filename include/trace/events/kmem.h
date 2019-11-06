@@ -330,6 +330,90 @@ TRACE_EVENT(mm_page_alloc_extfrag,
 		__entry->change_ownership)
 );
 
+TRACE_EVENT(ion_heap_shrink,
+
+	TP_PROTO(const char *heap_name,
+		 size_t len,
+		 long total_allocated),
+
+	TP_ARGS(heap_name, len, total_allocated),
+
+	TP_STRUCT__entry(
+		__string(heap_name, heap_name)
+		__field(size_t, len)
+		__field(long, total_allocated)
+	),
+
+	TP_fast_assign(
+		__assign_str(heap_name, heap_name);
+		__entry->len = len;
+		__entry->total_allocated = total_allocated;
+	),
+
+	TP_printk("heap_name=%s, len=%zu, total_allocated=%ld",
+		  __get_str(heap_name), __entry->len, __entry->total_allocated)
+);
+
+TRACE_EVENT(ion_heap_grow,
+
+	TP_PROTO(const char *heap_name,
+		 size_t len,
+		 long total_allocated),
+
+	TP_ARGS(heap_name, len, total_allocated),
+
+	TP_STRUCT__entry(
+		__string(heap_name, heap_name)
+		__field(size_t, len)
+		__field(long, total_allocated)
+	),
+
+	TP_fast_assign(
+		__assign_str(heap_name, heap_name);
+		__entry->len = len;
+		__entry->total_allocated = total_allocated;
+	),
+
+	TP_printk("heap_name=%s, len=%zu, total_allocated=%ld",
+		  __get_str(heap_name), __entry->len, __entry->total_allocated)
+);
+
+DECLARE_EVENT_CLASS(ion_buffer,
+
+	TP_PROTO(void *addr,
+		 size_t len),
+
+	TP_ARGS(addr, len),
+
+	TP_STRUCT__entry(
+		__field(void *, addr)
+		__field(size_t, len)
+	),
+
+	TP_fast_assign(
+		__entry->addr = addr;
+		__entry->len = len;
+	),
+
+	TP_printk("addr=%p, len=%zu",
+		  __entry->addr, __entry->len)
+);
+
+DEFINE_EVENT(ion_buffer, ion_buffer_create,
+
+	TP_PROTO(void *addr,
+		 size_t len),
+
+	TP_ARGS(addr, len)
+);
+
+DEFINE_EVENT(ion_buffer, ion_buffer_destroy,
+
+	TP_PROTO(void *addr,
+		 size_t len),
+
+	TP_ARGS(addr, len)
+);
 
 DECLARE_EVENT_CLASS(ion_alloc,
 
@@ -343,7 +427,7 @@ DECLARE_EVENT_CLASS(ion_alloc,
 
 	TP_STRUCT__entry(
 		__array(char,		client_name, 64)
-		__field(const char *,	heap_name)
+		__string(heap_name, heap_name)
 		__field(size_t,		len)
 		__field(unsigned int,	mask)
 		__field(unsigned int,	flags)
@@ -351,7 +435,7 @@ DECLARE_EVENT_CLASS(ion_alloc,
 
 	TP_fast_assign(
 		strlcpy(__entry->client_name, client_name, 64);
-		__entry->heap_name	= heap_name;
+		__assign_str(heap_name, heap_name);
 		__entry->len		= len;
 		__entry->mask		= mask;
 		__entry->flags		= flags;
@@ -359,7 +443,7 @@ DECLARE_EVENT_CLASS(ion_alloc,
 
 	TP_printk("client_name=%s heap_name=%s len=%zu mask=0x%x flags=0x%x",
 		__entry->client_name,
-		__entry->heap_name,
+		__get_str(heap_name),
 		__entry->len,
 		__entry->mask,
 		__entry->flags)
@@ -400,7 +484,7 @@ DECLARE_EVENT_CLASS(ion_alloc_error,
 
 	TP_STRUCT__entry(
 		__field(const char *,	client_name)
-		__field(const char *,	heap_name)
+		__string(heap_name, heap_name)
 		__field(size_t,		len)
 		__field(unsigned int,	mask)
 		__field(unsigned int,	flags)
@@ -409,7 +493,7 @@ DECLARE_EVENT_CLASS(ion_alloc_error,
 
 	TP_fast_assign(
 		__entry->client_name	= client_name;
-		__entry->heap_name	= heap_name;
+		__assign_str(heap_name, heap_name);
 		__entry->len		= len;
 		__entry->mask		= mask;
 		__entry->flags		= flags;
@@ -419,7 +503,7 @@ DECLARE_EVENT_CLASS(ion_alloc_error,
 	TP_printk(
 	"client_name=%s heap_name=%s len=%zu mask=0x%x flags=0x%x error=%ld",
 		__entry->client_name,
-		__entry->heap_name,
+		__get_str(heap_name),
 		__entry->len,
 		__entry->mask,
 		__entry->flags,
@@ -732,19 +816,19 @@ DECLARE_EVENT_CLASS(ion_secure_cma_allocate,
 	TP_ARGS(heap_name, len, flags),
 
 	TP_STRUCT__entry(
-		__field(const char *, heap_name)
+		__string(heap_name, heap_name)
 		__field(unsigned long, len)
 		__field(unsigned long, flags)
 		),
 
 	TP_fast_assign(
-		__entry->heap_name = heap_name;
+		__assign_str(heap_name, heap_name);
 		__entry->len = len;
 		__entry->flags = flags;
 		),
 
 	TP_printk("heap_name=%s len=%lx flags=%lx",
-		__entry->heap_name,
+		__get_str(heap_name),
 		__entry->len,
 		__entry->flags)
 	);
@@ -774,19 +858,19 @@ DECLARE_EVENT_CLASS(ion_cp_secure_buffer,
 	TP_ARGS(heap_name, len, flags),
 
 	TP_STRUCT__entry(
-		__field(const char *, heap_name)
+		__string(heap_name, heap_name)
 		__field(unsigned long, len)
 		__field(unsigned long, flags)
 		),
 
 	TP_fast_assign(
-		__entry->heap_name = heap_name;
+		__assign_str(heap_name, heap_name);
 		__entry->len = len;
 		__entry->flags = flags;
 		),
 
 	TP_printk("heap_name=%s len=%lx flags=%lx",
-		__entry->heap_name,
+		__get_str(heap_name),
 		__entry->len,
 		__entry->flags)
 	);
@@ -861,6 +945,28 @@ DEFINE_EVENT(iommu_sec_ptbl_map_range, iommu_sec_ptbl_map_range_end,
 		size_t len),
 
 	TP_ARGS(sec_id, num, va, pa, len)
+	);
+
+TRACE_EVENT(rss_stat,
+
+	TP_PROTO(int member,
+		long count),
+
+	TP_ARGS(member, count),
+
+	TP_STRUCT__entry(
+		__field(int, member)
+		__field(long, size)
+	),
+
+	TP_fast_assign(
+		__entry->member = member;
+		__entry->size = (count << PAGE_SHIFT);
+	),
+
+	TP_printk("member=%d size=%ldB",
+		__entry->member,
+		__entry->size)
 	);
 #endif /* _TRACE_KMEM_H */
 

@@ -402,6 +402,7 @@ static int cam_ife_hw_mgr_init_hw(
 {
 	struct cam_ife_hw_mgr_res *hw_mgr_res;
 	int rc = 0, i;
+	struct cam_hw_intf *hw_intf;
 
 	CAM_DBG(CAM_ISP, "INIT IFE CID ... in ctx id:%d",
 		ctx->ctx_index);
@@ -425,6 +426,26 @@ static int cam_ife_hw_mgr_init_hw(
 			CAM_ERR(CAM_ISP, "Can not INIT IFE CSID(id :%d)",
 				 hw_mgr_res->res_id);
 			goto deinit;
+		}
+	}
+
+	/* Enable CSID IRQ */
+	list_for_each_entry(hw_mgr_res, &ctx->res_list_ife_csid, list) {
+		if (hw_mgr_res->hw_res[0]) {
+			hw_intf = hw_mgr_res->hw_res[0]->hw_intf;
+			if (hw_intf->hw_ops.process_cmd) {
+				rc = hw_intf->hw_ops.process_cmd(
+					hw_intf->hw_priv,
+					CAM_IFE_CSID_ENABLE_IRQ,
+					hw_mgr_res->hw_res[0],
+					sizeof(struct cam_isp_resource_node));
+				if (rc < 0) {
+					CAM_ERR(CAM_ISP,
+						"Failed to enable CSID IRQ");
+					goto deinit;
+				}
+				break;
+			}
 		}
 	}
 
@@ -1383,8 +1404,11 @@ static int cam_ife_mgr_acquire_cid_res(
 	csid_acquire.res_id =  path_res_id;
 	CAM_DBG(CAM_ISP, "path_res_id %d", path_res_id);
 
-	if (in_port->num_out_res)
+	if (in_port->num_out_res) {
 		out_port = &(in_port->data[0]);
+		CAM_DBG(CAM_ISP, "Secure Mode: %d",
+			out_port->secure_mode);
+	}
 
 	/* Try acquiring CID resource from previously acquired HW */
 	list_for_each_entry(cid_res_iterator, &ife_ctx->res_list_ife_cid,
@@ -1394,10 +1418,15 @@ static int cam_ife_mgr_acquire_cid_res(
 			if (!cid_res_iterator->hw_res[i])
 				continue;
 
-			if (cid_res_iterator->is_secure == 1 ||
+			if (in_port->num_out_res &&
+				((cid_res_iterator->is_secure == 1 &&
+				out_port->secure_mode == 0) ||
 				(cid_res_iterator->is_secure == 0 &&
-				in_port->num_out_res &&
-				out_port->secure_mode == 1))
+				out_port->secure_mode == 1)))
+				continue;
+
+			if (!in_port->num_out_res &&
+				cid_res_iterator->is_secure == 1)
 				continue;
 
 			hw_intf = cid_res_iterator->hw_res[i]->hw_intf;
@@ -2085,6 +2114,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 		 acquire_hw_info->input_info_offset);
 
 	/* acquire HW resources */
+	CAM_DBG(CAM_ISP, "num_inputs=%x", acquire_hw_info->num_inputs);
 	for (i = 0; i < acquire_hw_info->num_inputs; i++) {
 
 		if ((in_port->num_out_res > CAM_IFE_HW_OUT_RES_MAX) ||

@@ -179,13 +179,6 @@ int msm_vidc_query_ctrl(void *instance, struct v4l2_queryctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MAX_BYTES:
 		msm_vidc_ctrl_get_range(ctrl, &inst->capability.slice_bytes);
 		break;
-	case V4L2_CID_MPEG_VIDC_VIDEO_COLOR_SPACE_CAPS:
-		msm_vidc_ctrl_get_range(ctrl,
-			&inst->capability.color_space_caps);
-		break;
-	case V4L2_CID_MPEG_VIDC_VIDEO_ROTATION_CAPS:
-		msm_vidc_ctrl_get_range(ctrl, &inst->capability.rotation);
-		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_FRAME_RATE:
 	case V4L2_CID_MPEG_VIDC_VIDEO_OPERATING_RATE:
 		msm_vidc_ctrl_get_range(ctrl, &inst->capability.frame_rate);
@@ -518,6 +511,11 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 	if (!inst || !inst->core || !b || !valid_v4l2_buffer(b, inst)) {
 		dprintk(VIDC_ERR, "%s: invalid params, inst %pK\n",
 			__func__, inst);
+		return -EINVAL;
+	}
+	if (inst->in_flush && inst->session_type == MSM_VIDC_DECODER &&
+				b->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		dprintk(VIDC_ERR, "%s: session in flush, discarding qbuf\n", __func__);
 		return -EINVAL;
 	}
 

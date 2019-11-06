@@ -18,6 +18,7 @@ int cam_cci_init(struct v4l2_subdev *sd,
 {
 	uint8_t i = 0, j = 0;
 	int32_t rc = 0;
+	uint32_t val = 0;
 	struct cci_device *cci_dev;
 	enum cci_i2c_master_t master = c_ctrl->cci_info->cci_i2c_master;
 	struct cam_ahb_vote ahb_vote;
@@ -68,12 +69,29 @@ int cam_cci_init(struct v4l2_subdev *sd,
 			else
 				cam_io_w_mb(CCI_M1_RESET_RMSK,
 					base + CCI_RESET_CMD_ADDR);
-			/* wait for reset done irq */
-			rc = wait_for_completion_timeout(
-			&cci_dev->cci_master_info[master].reset_complete,
-				CCI_TIMEOUT);
-			if (rc <= 0)
-				CAM_ERR(CAM_CCI, "wait failed %d", rc);
+			/* Read proper mask from RESET CMD address */
+			val = cam_io_r_mb(base + CCI_RESET_CMD_ADDR);
+			if (((master == MASTER_0) &&
+				(val == CCI_M0_RESET_RMSK)) ||
+				((master == MASTER_1) &&
+				(val == CCI_M1_RESET_RMSK))) {
+				/* Get expected proper mask then
+				 * reset the flag and status
+				 */
+				cci_dev->cci_master_info[
+					master].reset_pending = FALSE;
+				wait_for_completion_timeout(
+				&cci_dev->cci_master_info[
+					master].reset_complete, 0);
+			} else {
+				/* wait for reset done irq */
+				rc = wait_for_completion_timeout(
+				&cci_dev->cci_master_info[
+					master].reset_complete,
+					CCI_TIMEOUT);
+				if (rc <= 0)
+					CAM_ERR(CAM_CCI, "wait failed %d", rc);
+			}
 			mutex_unlock(&cci_dev->cci_master_info[master].mutex);
 		}
 		return 0;

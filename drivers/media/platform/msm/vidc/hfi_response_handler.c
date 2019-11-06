@@ -635,12 +635,6 @@ enum hal_capability get_hal_cap_type(u32 capability_type)
 	case HFI_CAPABILITY_BLUR_HEIGHT:
 		hal_cap = HAL_CAPABILITY_BLUR_HEIGHT;
 		break;
-	case HFI_CAPABILITY_ROTATION:
-		hal_cap = HAL_CAPABILITY_ROTATION;
-		break;
-	case HFI_CAPABILITY_COLOR_SPACE_CONVERSION:
-		hal_cap = HAL_CAPABILITY_COLOR_SPACE_CONVERSION;
-		break;
 	case HFI_CAPABILITY_SLICE_DELIVERY_MODES:
 		hal_cap = HAL_CAPABILITY_SLICE_DELIVERY_MODES;
 		break;
@@ -764,12 +758,6 @@ static inline void copy_cap_prop(
 		break;
 	case HFI_CAPABILITY_BLUR_HEIGHT:
 		out = &capability->blur_height;
-		break;
-	case HFI_CAPABILITY_ROTATION:
-		out = &capability->rotation;
-		break;
-	case HFI_CAPABILITY_COLOR_SPACE_CONVERSION:
-		out = &capability->color_space_caps;
 		break;
 	case HFI_CAPABILITY_SLICE_DELIVERY_MODES:
 		out = &capability->slice_delivery_mode;
@@ -2069,9 +2057,6 @@ static int hfi_process_ignore(u32 device_id,
 int hfi_process_msg_packet(u32 device_id, struct vidc_hal_msg_pkt_hdr *msg_hdr,
 		struct msm_vidc_cb_info *info)
 {
-	typedef int (*pkt_func_def)(u32, void *, struct msm_vidc_cb_info *info);
-	pkt_func_def pkt_func = NULL;
-
 	if (!info || !msg_hdr || msg_hdr->size < VIDC_IFACEQ_MIN_PKT_SIZE) {
 		dprintk(VIDC_ERR, "%s: bad packet/packet size\n",
 			__func__);
@@ -2081,70 +2066,90 @@ int hfi_process_msg_packet(u32 device_id, struct vidc_hal_msg_pkt_hdr *msg_hdr,
 	dprintk(VIDC_DBG, "Parse response %#x\n", msg_hdr->packet);
 	switch (msg_hdr->packet) {
 	case HFI_MSG_EVENT_NOTIFY:
-		pkt_func = (pkt_func_def)hfi_process_event_notify;
-		break;
+		return hfi_process_event_notify(device_id,
+			(struct hfi_msg_event_notify_packet *)msg_hdr,
+			info);
 	case  HFI_MSG_SYS_INIT_DONE:
-		pkt_func = (pkt_func_def)hfi_process_sys_init_done;
-		break;
+		return hfi_process_sys_init_done(device_id,
+			(struct hfi_msg_sys_init_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SYS_SESSION_INIT_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_init_done;
-		break;
+		return hfi_process_session_init_done(device_id,
+			(struct hfi_msg_sys_session_init_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SYS_PROPERTY_INFO:
-		pkt_func = (pkt_func_def)hfi_process_sys_property_info;
-		break;
+		return hfi_process_sys_property_info(device_id,
+			(struct hfi_msg_sys_property_info_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SYS_SESSION_END_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_end_done;
-		break;
+		return hfi_process_session_end_done(device_id,
+			(struct hfi_msg_sys_session_end_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SESSION_LOAD_RESOURCES_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_load_res_done;
-		break;
+		return hfi_process_session_load_res_done(device_id,
+			(struct hfi_msg_session_load_resources_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SESSION_START_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_start_done;
-		break;
+		return hfi_process_session_start_done(device_id,
+			(struct hfi_msg_session_start_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SESSION_STOP_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_stop_done;
-		break;
+		return hfi_process_session_stop_done(device_id,
+			(struct hfi_msg_session_stop_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SESSION_EMPTY_BUFFER_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_etb_done;
-		break;
+		return hfi_process_session_etb_done(device_id,
+			(struct hfi_msg_session_empty_buffer_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SESSION_FILL_BUFFER_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_ftb_done;
-		break;
+		return hfi_process_session_ftb_done(device_id, msg_hdr, info);
 	case HFI_MSG_SESSION_FLUSH_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_flush_done;
-		break;
+		return hfi_process_session_flush_done(device_id,
+			(struct hfi_msg_session_flush_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SESSION_PROPERTY_INFO:
-		pkt_func = (pkt_func_def)hfi_process_session_prop_info;
-		break;
+		return hfi_process_session_prop_info(device_id,
+			(struct hfi_msg_session_property_info_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SESSION_RELEASE_RESOURCES_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_rel_res_done;
-		break;
+		return hfi_process_session_rel_res_done(device_id,
+			(struct hfi_msg_session_release_resources_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SYS_RELEASE_RESOURCE:
-		pkt_func = (pkt_func_def)hfi_process_sys_rel_resource_done;
-		break;
+		return hfi_process_sys_rel_resource_done(device_id,
+			(struct hfi_msg_sys_release_resource_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SESSION_RELEASE_BUFFERS_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_rel_buf_done;
-		break;
+		return hfi_process_session_rel_buf_done(device_id,
+			(struct hfi_msg_session_release_buffers_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SESSION_REGISTER_BUFFERS_DONE:
-		pkt_func = (pkt_func_def)
-			hfi_process_session_register_buffer_done;
-		break;
+		return hfi_process_session_register_buffer_done(device_id,
+			(struct hfi_msg_session_register_buffers_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SESSION_UNREGISTER_BUFFERS_DONE:
-		pkt_func = (pkt_func_def)
-			hfi_process_session_unregister_buffer_done;
-		break;
+		return hfi_process_session_unregister_buffer_done(device_id,
+			(struct
+			 hfi_msg_session_unregister_buffers_done_packet *)
+			msg_hdr,
+			info);
 	case HFI_MSG_SYS_SESSION_ABORT_DONE:
-		pkt_func = (pkt_func_def)hfi_process_session_abort_done;
-		break;
+		return hfi_process_session_abort_done(device_id,
+			(struct hfi_msg_sys_session_abort_done_packet *)msg_hdr,
+			info);
 	case HFI_MSG_SESSION_SYNC_DONE:
-		pkt_func = (pkt_func_def)hfi_process_ignore;
-		break;
+		return hfi_process_ignore(device_id, msg_hdr, info);
 	default:
 		dprintk(VIDC_DBG, "Unable to parse message: %#x\n",
 				msg_hdr->packet);
 		break;
 	}
 
-	return pkt_func ?
-		pkt_func(device_id, (void *)msg_hdr, info) : -ENOTSUPP;
+	return -ENOTSUPP;
 }

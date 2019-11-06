@@ -1457,7 +1457,7 @@ static void sde_color_process_plane_setup(struct drm_plane *plane)
 					MEMCOLOR_FOLIAGE, memcol);
 	}
 
-	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_GAMUT &&
+	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_GAMUT && !psde->is_virtual &&
 			psde->pipe_hw->ops.setup_vig_gamut) {
 		vig_gamut = msm_property_get_blob(&psde->property_info,
 				&pstate->property_state,
@@ -1470,7 +1470,7 @@ static void sde_color_process_plane_setup(struct drm_plane *plane)
 		psde->pipe_hw->ops.setup_vig_gamut(psde->pipe_hw, &hw_cfg);
 	}
 
-	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_IGC &&
+	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_IGC && !psde->is_virtual &&
 			psde->pipe_hw->ops.setup_vig_igc) {
 		igc = msm_property_get_blob(&psde->property_info,
 				&pstate->property_state,
@@ -3903,7 +3903,7 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 	if (psde->revalidate) {
 		SDE_DEBUG("plane:%d - reconfigure all the parameters\n",
 				plane->base.id);
-		pstate->dirty = SDE_PLANE_DIRTY_ALL;
+		pstate->dirty = SDE_PLANE_DIRTY_ALL | SDE_PLANE_DIRTY_CP;
 		psde->revalidate = false;
 	}
 
@@ -4579,7 +4579,7 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 			PLANE_PROP_FOLIAGE_COLOR);
 	}
 
-	if (psde->features & BIT(SDE_SSPP_VIG_GAMUT)) {
+	if (psde->features & BIT(SDE_SSPP_VIG_GAMUT) && !psde->is_virtual) {
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_VIG_3D_LUT_GAMUT_V",
 			psde->pipe_sblk->gamut_blk.version >> 16);
@@ -4587,7 +4587,7 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 			PLANE_PROP_VIG_GAMUT);
 	}
 
-	if (psde->features & BIT(SDE_SSPP_VIG_IGC)) {
+	if (psde->features & BIT(SDE_SSPP_VIG_IGC) && !psde->is_virtual) {
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_VIG_1D_LUT_IGC_V",
 			psde->pipe_sblk->igc_blk[0].version >> 16);

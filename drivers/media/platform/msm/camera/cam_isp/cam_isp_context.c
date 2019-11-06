@@ -26,6 +26,7 @@
 #include "cam_cdm_util.h"
 #include "cam_isp_context.h"
 #include "cam_common_util.h"
+#include "cam_sensor_vsync.h"
 
 static const char isp_dev_name[] = "cam-isp";
 
@@ -620,6 +621,11 @@ static void __cam_isp_ctx_send_sof_boot_timestamp(
 		ctx_isp->boot_timestamp, ctx_isp->prev_boot_timestamp,
 		delta_ts);
 
+	if (cam_notify_vsync_qmi(&req_msg)) {
+		CAM_ERR(CAM_ISP,
+			"Error in notifying vsync QMI for req id:%lld",
+			request_id);
+	}
 
 	if (cam_req_mgr_notify_message(&req_msg,
 		V4L_EVENT_CAM_REQ_MGR_SOF_BOOT_TS,

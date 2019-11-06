@@ -50,3 +50,5 @@ obj-$(CONFIG_BCM2835_VCHIQ)	+= vc04_services/
 obj-$(CONFIG_CRYPTO_DEV_CCREE)	+= ccree/
 obj-$(CONFIG_DRM_VBOXVIDEO)	+= vboxvideo/
 obj-$(CONFIG_PI433)		+= pi433/
+obj-$(CONFIG_S2MPG01)		+= s2mpg01/
+obj-$(CONFIG_GOOGLE_WLAN_MAC)	+= wlan_mac/

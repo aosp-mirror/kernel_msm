@@ -5149,7 +5149,7 @@ int smblib_init(struct smb_charger *chg)
 			return rc;
 		}
 
-		chg->bms_psy = power_supply_get_by_name("bms");
+		chg->bms_psy = power_supply_get_by_name("battery");
 		chg->pl.psy = power_supply_get_by_name("parallel");
 		if (chg->pl.psy) {
 			rc = smblib_stat_sw_override_cfg(chg, false);

@@ -78,7 +78,7 @@ typedef int (*pfk_parse_inode_type)(const struct bio *bio,
 
 typedef bool (*pfk_allow_merge_bio_type)(const struct bio *bio1,
 	const struct bio *bio2, const struct inode *inode1,
-	const struct inode *inode2);
+	const struct inode *inode2, unsigned int sectors);
 
 static const pfk_parse_inode_type pfk_parse_inode_ftable[] = {
 	/* EXT4_CRYPT_PFE */ &pfk_ext4_parse_inode,
@@ -197,6 +197,8 @@ static inline bool pfk_is_ready(void)
  */
 static struct inode *pfk_bio_get_inode(const struct bio *bio)
 {
+	struct inode *inode;
+
 	if (!bio)
 		return NULL;
 	if (!bio_has_data((struct bio *)bio))
@@ -206,13 +208,10 @@ static struct inode *pfk_bio_get_inode(const struct bio *bio)
 	if (!bio->bi_io_vec->bv_page)
 		return NULL;
 
-	if (PageAnon(bio->bi_io_vec->bv_page)) {
-		struct inode *inode;
-
-		/* Using direct-io (O_DIRECT) without page cache */
-		inode = dio_bio_get_inode((struct bio *)bio);
+	/* Using direct-io (O_DIRECT) without page cache */
+	inode = dio_bio_get_inode((struct bio *)bio);
+	if (inode) {
 		pr_debug("inode on direct-io, inode = 0x%pK.\n", inode);
-
 		return inode;
 	}
 
@@ -237,7 +236,6 @@ int pfk_key_size_to_key_type(size_t key_size,
 	 *  in the future, table with supported key sizes might
 	 *  be introduced
 	 */
-
 	if (key_size != PFK_SUPPORTED_KEY_SIZE) {
 		pr_err("not supported key size %zu\n", key_size);
 		return -EINVAL;
@@ -335,7 +333,6 @@ static int pfk_get_key_for_bio(const struct bio *bio,
 		*algo_mode = ICE_CRYPTO_ALGO_MODE_AES_XTS;
 	return 0;
 }
-
 
 /**
  * pfk_load_key_start() - loads PFE encryption key to the ICE
@@ -478,7 +475,8 @@ int pfk_load_key_end(const struct bio *bio, bool *is_pfe)
  * Return: true if the BIOs allowed to be merged, false
  * otherwise.
  */
-bool pfk_allow_merge_bio(const struct bio *bio1, const struct bio *bio2)
+bool pfk_allow_merge_bio(const struct bio *bio1, const struct bio *bio2,
+				unsigned int sectors)
 {
 	const struct blk_encryption_key *key1 = NULL;
 	const struct blk_encryption_key *key2 = NULL;
@@ -501,9 +499,6 @@ bool pfk_allow_merge_bio(const struct bio *bio1, const struct bio *bio2)
 	if (bio1 == bio2)
 		return true;
 
-	key1 = bio1->bi_crypt_key;
-	key2 = bio2->bi_crypt_key;
-
 	inode1 = pfk_bio_get_inode(bio1);
 	inode2 = pfk_bio_get_inode(bio2);
 
@@ -521,7 +516,7 @@ bool pfk_allow_merge_bio(const struct bio *bio1, const struct bio *bio2)
 	if (which_pfe1 != INVALID_PFE) {
 		/* Both bios are for the same type of encrypted file. */
 		return (*(pfk_allow_merge_bio_ftable[which_pfe1]))(bio1, bio2,
-				inode1, inode2);
+			inode1, inode2, sectors);
 	}
 
 	/*

@@ -686,6 +686,7 @@ struct msm_pcie_dev_t {
 	bool				clk_power_manage_en;
 	bool				 aux_clk_sync;
 	bool				aer_enable;
+	bool			   	eq_en;
 	uint32_t			smmu_sid_base;
 	uint32_t			target_link_speed;
 	uint32_t			   n_fts;
@@ -3974,6 +3975,12 @@ static void msm_pcie_scale_link_bandwidth(struct msm_pcie_dev_t *pcie_dev,
 		mutex_unlock(&pcie_dev->clk_lock);
 	}
 }
+void msm_pcie_eq_ctrl(u32 rc_idx, bool eq_en)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+	dev->eq_en = eq_en;
+}
+EXPORT_SYMBOL(msm_pcie_eq_ctrl);
 
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 {
@@ -3994,14 +4001,15 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 		goto out;
 	}
 
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE)
 	/* assert PCIe reset link to keep EP in reset */
-
 	PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
 		dev->rc_idx);
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				dev->gpio[MSM_PCIE_GPIO_PERST].on);
 	usleep_range(PERST_PROPAGATION_DELAY_US_MIN,
 				 PERST_PROPAGATION_DELAY_US_MAX);
+#endif
 
 	/* enable power */
 
@@ -4113,28 +4121,45 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_EP].num,
 				dev->gpio[MSM_PCIE_GPIO_EP].on);
 
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE)
 	/* de-assert PCIe reset link to bring EP out of reset */
-
 	PCIE_INFO(dev, "PCIe: Release the reset of endpoint of RC%d.\n",
 		dev->rc_idx);
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				1 - dev->gpio[MSM_PCIE_GPIO_PERST].on);
 	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
+#endif
 
 	ep_up_timeout = jiffies + usecs_to_jiffies(EP_UP_TIMEOUT_US);
 
 	msm_pcie_write_reg_field(dev->dm_core,
 		PCIE_GEN3_GEN2_CTRL, 0x1f00, 1);
 
-	msm_pcie_write_mask(dev->dm_core,
+	msm_pcie_write_reg(dev->dm_core,
 		PCIE_GEN3_EQ_CONTROL, 0x20);
 
 	msm_pcie_write_mask(dev->dm_core +
 		PCIE_GEN3_RELATED, BIT(0), 0);
 
+	if (dev->eq_en) {
+		PCIE_INFO(dev, "PCIe: RC%d: enable equalization\n",
+			  dev->rc_idx);
+		msm_pcie_write_reg_field(dev->dm_core,
+			PCIE_GEN3_RELATED, BIT(16), 0);
+	} else {
+		PCIE_INFO(dev, "PCIe: RC%d: disable equalization\n",
+			  dev->rc_idx);
+		msm_pcie_write_reg_field(dev->dm_core,
+			PCIE_GEN3_RELATED, BIT(16), 1);
+	}
+
 	/* configure PCIe preset */
 	msm_pcie_write_reg_field(dev->dm_core,
 		PCIE_GEN3_MISC_CONTROL, BIT(0), 1);
+
+	/* USP lane0 and lane1 tx_preset = 4
+	 * DSP lane0 and lane1 tx_preset = 7
+	 */
 	msm_pcie_write_reg(dev->dm_core,
 		PCIE_GEN3_SPCIE_CAP, dev->core_preset);
 	msm_pcie_write_reg_field(dev->dm_core,
@@ -4178,10 +4203,12 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev, u32 options)
 			link_check_count);
 		PCIE_INFO(dev, "PCIe RC%d link initialized\n", dev->rc_idx);
 	} else {
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE)
 		PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
 			dev->rc_idx);
 		gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 			dev->gpio[MSM_PCIE_GPIO_PERST].on);
+#endif
 		PCIE_ERR(dev, "PCIe RC%d link initialization failed\n",
 			dev->rc_idx);
 		ret = -1;
@@ -4312,11 +4339,13 @@ static void msm_pcie_disable(struct msm_pcie_dev_t *dev, u32 options)
 	dev->power_on = false;
 	dev->link_turned_off_counter++;
 
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE)
 	PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
 		dev->rc_idx);
 
 	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 				dev->gpio[MSM_PCIE_GPIO_PERST].on);
+#endif
 
 	if (dev->phy_power_down_offset)
 		msm_pcie_write_reg(dev->phy, dev->phy_power_down_offset, 0);
@@ -4561,6 +4590,28 @@ static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 		sid_info->value = val;
 	}
 }
+
+int msm_pcie_assert_perst(u32 rc_idx)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+
+	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
+			dev->gpio[MSM_PCIE_GPIO_PERST].on);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_pcie_assert_perst);
+
+int msm_pcie_deassert_perst(u32 rc_idx)
+{
+	struct msm_pcie_dev_t *dev = &msm_pcie_dev[rc_idx];
+
+	gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
+			1 - dev->gpio[MSM_PCIE_GPIO_PERST].on);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_pcie_deassert_perst);
 
 int msm_pcie_enumerate(u32 rc_idx)
 {
@@ -5020,10 +5071,12 @@ static irqreturn_t handle_linkdown_irq(int irq, void *data)
 		if (dev->linkdown_panic)
 			panic("User has chosen to panic on linkdown\n");
 
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE)
 		/* assert PERST */
 		if (!(msm_pcie_keep_resources_on & BIT(dev->rc_idx)))
 			gpio_set_value(dev->gpio[MSM_PCIE_GPIO_PERST].num,
 					dev->gpio[MSM_PCIE_GPIO_PERST].on);
+#endif
 
 		PCIE_ERR(dev, "PCIe link is down for RC%d\n", dev->rc_idx);
 
@@ -5446,6 +5499,26 @@ static void msm_pcie_config_l0s_enable_all(struct msm_pcie_dev_t *dev)
 {
 	if (dev->l0s_supported)
 		pci_walk_bus(dev->dev->bus, msm_pcie_config_l0s_enable, dev);
+}
+
+void msm_pcie_set_l1ss_state(struct pci_dev *dev,
+	enum msm_pcie_pm_l1ss l1ss)
+{
+	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev->bus);
+	bool set_l11 = l1ss >= MSM_PCIE_PM_L1SS_L11;
+	bool set_l12 = l1ss >= MSM_PCIE_PM_L1SS_L12;
+	bool enable = set_l11 || set_l12;
+
+	msm_pcie_config_l1ss_disable_all(pcie_dev, pcie_dev->dev->bus);
+	if (!enable)
+		return;
+
+	pcie_dev->l1_1_pcipm_supported = set_l11;
+	pcie_dev->l1_2_pcipm_supported = set_l12;
+	pcie_dev->l1_1_aspm_supported = set_l11;
+	pcie_dev->l1_2_aspm_supported = set_l12;
+
+	msm_pcie_config_l1ss_enable_all(pcie_dev);
 }
 
 static void msm_pcie_config_l1(struct msm_pcie_dev_t *dev,
@@ -5953,6 +6026,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	msm_pcie_dev[rc_idx].aer_enable = true;
 	if (msm_pcie_invert_aer_support)
 		msm_pcie_dev[rc_idx].aer_enable = false;
+	msm_pcie_dev[rc_idx].eq_en = true;
 	msm_pcie_dev[rc_idx].power_on = false;
 	msm_pcie_dev[rc_idx].use_pinctrl = false;
 	msm_pcie_dev[rc_idx].linkdown_panic = false;

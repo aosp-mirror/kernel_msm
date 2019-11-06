@@ -37,7 +37,6 @@
 #include <linux/uio.h>
 #include <linux/atomic.h>
 #include <linux/prefetch.h>
-#define __FS_HAS_ENCRYPTION IS_ENABLED(CONFIG_F2FS_FS_ENCRYPTION)
 #include <linux/fscrypt.h>
 
 /*
@@ -456,7 +455,8 @@ dio_bio_alloc(struct dio *dio, struct dio_submit *sdio,
 
 #ifdef CONFIG_PFK
 static bool is_inode_filesystem_type(const struct inode *inode,
-					const char *fs_type)
+		const char *fs_type)
+
 {
 	if (!inode || !fs_type)
 		return false;
@@ -497,11 +497,11 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 	bio->bi_dio_inode = dio->inode;
 
 /* iv sector for security/pfe/pfk_fscrypt.c and f2fs in fs/f2fs/f2fs.h */
-#define PG_DUN_NEW(i,p)                                            \
-	(((((u64)(i)->i_ino) & 0xffffffff) << 32) | ((p) & 0xffffffff))
+#define PG_DUN(i,p)                                            \
+	((((i)->i_ino & 0xffffffff) << 32) | ((p) & 0xffffffff))
 
 	if (is_inode_filesystem_type(dio->inode, "f2fs"))
-		fscrypt_set_ice_dun(dio->inode, bio, PG_DUN_NEW(dio->inode,
+		fscrypt_set_ice_dun(dio->inode, bio, PG_DUN(dio->inode,
 			(sdio->logical_offset_in_bio >> PAGE_SHIFT)));
 #endif
 	if (sdio->submit_io) {
@@ -526,6 +526,7 @@ struct inode *dio_bio_get_inode(struct bio *bio)
 #endif
 	return inode;
 }
+EXPORT_SYMBOL(dio_bio_get_inode);
 
 /*
  * Release any resources in case of a failure

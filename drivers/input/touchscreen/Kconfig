@@ -12,10 +12,25 @@ menuconfig INPUT_TOUCHSCREEN
 if INPUT_TOUCHSCREEN
 
 source "drivers/input/touchscreen/synaptics_dsx_v27/Kconfig"
+source "drivers/input/touchscreen/sec_ts/Kconfig"
 
 config TOUCHSCREEN_PROPERTIES
 	def_tristate INPUT
 	depends on INPUT
+
+config TOUCHSCREEN_TBN
+	tristate "Touch Bus Negotiator for Pixel 2019"
+	depends on QCOM_QMI_HELPERS
+	help
+	  Say Y here if you have a Google Pixel 2019 device. This module enables
+	  support for kernel touch drivers to coordinate bus access with remote
+	  processors (e.g. sensor DSP processor), which is required to enable
+	  low power touch gesture detection in processors other than AP.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the module will be
+	  called touch_bus_negotiator.
 
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
@@ -288,6 +303,13 @@ config TOUCHSCREEN_HAMPSHIRE
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called hampshire.
+
+config TOUCHSCREEN_HEATMAP
+	tristate "Heatmap support for touchscreen"
+	select VIDEOBUF2_VMALLOC
+	help
+	  Do not explicitly select this option. The drivers that utilize
+	  this module must select this in their Kconfig.
 
 config TOUCHSCREEN_EETI
 	tristate "EETI touchscreen panel support"

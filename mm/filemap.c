@@ -2007,6 +2007,7 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 		pgoff_t end_index;
 		loff_t isize;
 		unsigned long nr, ret;
+		ktime_t event_ts = 0;
 
 		cond_resched();
 find_page:
@@ -2017,6 +2018,7 @@ find_page:
 
 		page = find_get_page(mapping, index);
 		if (!page) {
+			mm_event_start(&event_ts);
 			if (iocb->ki_flags & IOCB_NOWAIT)
 				goto would_block;
 			page_cache_sync_readahead(mapping,
@@ -2065,6 +2067,8 @@ find_page:
 			unlock_page(page);
 		}
 page_ok:
+		if (event_ts != 0)
+			mm_event_end(MM_READ_IO, event_ts);
 		/*
 		 * i_size must be checked after we know the page is Uptodate.
 		 *
@@ -2297,11 +2301,10 @@ EXPORT_SYMBOL(generic_file_read_iter);
 
 #ifdef CONFIG_MMU
 #define MMAP_LOTSAMISS  (100)
-static struct file *maybe_unlock_mmap_for_io(struct vm_fault *vmf,
-					     struct file *fpin)
-{
-	int flags = vmf->flags;
 
+static struct file *maybe_unlock_mmap_for_io(struct vm_area_struct *vma,
+		unsigned long flags, struct file *fpin)
+{
 	if (fpin)
 		return fpin;
 
@@ -2311,9 +2314,9 @@ static struct file *maybe_unlock_mmap_for_io(struct vm_fault *vmf,
 	 * FAULT_FLAG_ALLOW_RETRY is set.
 	 */
 	if ((flags & (FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_RETRY_NOWAIT)) ==
-	    FAULT_FLAG_ALLOW_RETRY) {
-		fpin = get_file(vmf->vma->vm_file);
-		up_read(&vmf->vma->vm_mm->mmap_sem);
+			FAULT_FLAG_ALLOW_RETRY) {
+		fpin = get_file(vma->vm_file);
+		up_read(&vma->vm_mm->mmap_sem);
 	}
 	return fpin;
 }
@@ -2329,22 +2332,16 @@ static struct file *maybe_unlock_mmap_for_io(struct vm_fault *vmf,
  * if it couldn't lock the page.  If we did have to drop the mmap_sem then fpin
  * will point to the pinned file and needs to be fput()'ed at a later point.
  */
-static int lock_page_maybe_drop_mmap(struct vm_fault *vmf, struct page *page,
-				     struct file **fpin)
+static int lock_page_maybe_drop_mmap(struct vm_area_struct *vma,
+		unsigned long flags, struct page *page, struct file **fpin)
 {
 	if (trylock_page(page))
 		return 1;
 
-	/*
-	 * NOTE! This will make us return with VM_FAULT_RETRY, but with
-	 * the mmap_sem still held. That's how FAULT_FLAG_RETRY_NOWAIT
-	 * is supposed to work. We have way too many special cases..
-	 */
-	if (vmf->flags & FAULT_FLAG_RETRY_NOWAIT)
+	if (flags & FAULT_FLAG_RETRY_NOWAIT)
 		return 0;
-
-	*fpin = maybe_unlock_mmap_for_io(vmf, *fpin);
-	if (vmf->flags & FAULT_FLAG_KILLABLE) {
+	*fpin = maybe_unlock_mmap_for_io(vma, flags, *fpin);
+	if (flags & FAULT_FLAG_KILLABLE) {
 		if (__lock_page_killable(page)) {
 			/*
 			 * We didn't have the right flags to drop the mmap_sem,
@@ -2353,14 +2350,13 @@ static int lock_page_maybe_drop_mmap(struct vm_fault *vmf, struct page *page,
 			 * mmap_sem here and return 0 if we don't have a fpin.
 			 */
 			if (*fpin == NULL)
-				up_read(&vmf->vma->vm_mm->mmap_sem);
+				up_read(&vma->vm_mm->mmap_sem);
 			return 0;
 		}
 	} else
 		__lock_page(page);
 	return 1;
 }
-
 
 /*
  * Synchronous readahead happens when we don't even find a page in the page
@@ -2369,22 +2365,23 @@ static int lock_page_maybe_drop_mmap(struct vm_fault *vmf, struct page *page,
  * that.  If we didn't pin a file then we return NULL.  The file that is
  * returned needs to be fput()'ed when we're done with it.
  */
-static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
+static struct file *do_sync_mmap_readahead(struct vm_area_struct *vma,
+				   unsigned long flags,
+				   struct file_ra_state *ra,
+				   struct file *file,
+				   pgoff_t offset)
 {
-	struct file *file = vmf->vma->vm_file;
-	struct file_ra_state *ra = &file->f_ra;
-	struct address_space *mapping = file->f_mapping;
 	struct file *fpin = NULL;
-	pgoff_t offset = vmf->pgoff;
+	struct address_space *mapping = file->f_mapping;
 
 	/* If we don't want any read-ahead, don't bother */
-	if (vmf->vma->vm_flags & VM_RAND_READ)
+	if (vma->vm_flags & VM_RAND_READ)
 		return fpin;
 	if (!ra->ra_pages)
 		return fpin;
 
-	if (vmf->vma->vm_flags & VM_SEQ_READ) {
-		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	if (vma->vm_flags & VM_SEQ_READ) {
+		fpin = maybe_unlock_mmap_for_io(vma, flags, fpin);
 		page_cache_sync_readahead(mapping, ra, file, offset,
 					  ra->ra_pages);
 		return fpin;
@@ -2404,7 +2401,7 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	/*
 	 * mmap read-around
 	 */
-	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	fpin = maybe_unlock_mmap_for_io(vma, flags, fpin);
 	ra->start = max_t(long, 0, offset - ra->ra_pages / 2);
 	ra->size = ra->ra_pages;
 	ra->async_size = ra->ra_pages / 4;
@@ -2417,22 +2414,23 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
  * so we want to possibly extend the readahead further.  We return the file that
  * was pinned if we have to drop the mmap_sem in order to do IO.
  */
-static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
-					    struct page *page)
+static struct file *do_async_mmap_readahead(struct vm_area_struct *vma,
+				    unsigned long flags,
+				    struct file_ra_state *ra,
+				    struct file *file,
+				    struct page *page,
+				    pgoff_t offset)
 {
-	struct file *file = vmf->vma->vm_file;
-	struct file_ra_state *ra = &file->f_ra;
 	struct address_space *mapping = file->f_mapping;
 	struct file *fpin = NULL;
-	pgoff_t offset = vmf->pgoff;
 
 	/* If we don't want any read-ahead, don't bother */
-	if (vmf->vma->vm_flags & VM_RAND_READ)
+	if (vma->vm_flags & VM_RAND_READ)
 		return fpin;
 	if (ra->mmap_miss > 0)
 		ra->mmap_miss--;
 	if (PageReadahead(page)) {
-		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+		fpin = maybe_unlock_mmap_for_io(vma, flags, fpin);
 		page_cache_async_readahead(mapping, ra, file,
 					   page, offset, ra->ra_pages);
 	}
@@ -2488,13 +2486,16 @@ int filemap_fault(struct vm_fault *vmf)
 		 * We found the page, so try async readahead before
 		 * waiting for the lock.
 		 */
-		fpin = do_async_mmap_readahead(vmf, page);
+
+		fpin = do_async_mmap_readahead(
+			vmf->vma, vmf->flags, ra, file, page, offset);
 	} else if (!page) {
 		/* No page in the page cache at all */
 		count_vm_event(PGMAJFAULT);
 		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
 		ret = VM_FAULT_MAJOR;
-		fpin = do_sync_mmap_readahead(vmf);
+		fpin = do_sync_mmap_readahead(
+			vmf->vma, vmf->flags, ra, file, offset);
 retry_find:
 		page = pagecache_get_page(mapping, offset,
 					  FGP_CREAT|FGP_FOR_MMAP,
@@ -2506,7 +2507,7 @@ retry_find:
 		}
 	}
 
-	if (!lock_page_maybe_drop_mmap(vmf, page, &fpin))
+	if (!lock_page_maybe_drop_mmap(vmf->vma, vmf->flags, page, &fpin))
 		goto out_retry;
 
 	/* Did it get truncated? */
@@ -2556,7 +2557,7 @@ page_not_uptodate:
 	 * and we need to check for errors.
 	 */
 	ClearPageError(page);
-	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	fpin = maybe_unlock_mmap_for_io(vmf->vma, vmf->flags, fpin);
 	error = mapping->a_ops->readpage(file, page);
 	if (!error) {
 		wait_on_page_locked(page);

@@ -80,6 +80,10 @@ static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_DMS;
 	if (msm_is_mode_seamless_vrr(drm_mode))
 		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_VRR;
+	if (msm_is_mode_seamless_dms_fps(drm_mode))
+		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_DMS_FPS;
+	if (drm_mode->type & DRM_MODE_TYPE_PREFERRED)
+		dsi_mode->preferred = true;
 	if (msm_is_mode_seamless_dyn_clk(drm_mode))
 		dsi_mode->dsi_mode_flags |= DSI_MODE_FLAG_DYN_CLK;
 
@@ -122,6 +126,8 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 		drm_mode->private_flags |= MSM_MODE_FLAG_VBLANK_PRE_MODESET;
 	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_DMS)
 		drm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_DMS;
+	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_DMS_FPS)
+		drm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_DMS_FPS;
 	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_VRR)
 		drm_mode->private_flags |= MSM_MODE_FLAG_SEAMLESS_VRR;
 	if (dsi_mode->dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)
@@ -131,6 +137,8 @@ void dsi_convert_to_drm_mode(const struct dsi_display_mode *dsi_mode,
 		drm_mode->flags |= DRM_MODE_FLAG_PHSYNC;
 	if (dsi_mode->timing.v_sync_polarity)
 		drm_mode->flags |= DRM_MODE_FLAG_PVSYNC;
+	if (dsi_mode->preferred)
+		drm_mode->type |= DRM_MODE_TYPE_PREFERRED;
 
 	/* set mode name */
 	snprintf(drm_mode->name, DRM_DISPLAY_MODE_LEN, "%dx%dx%dx%d",
@@ -211,8 +219,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 									rc);
 
 	if (c_bridge->display && c_bridge->display->drm_conn)
-		sde_connector_helper_bridge_pre_enable(
-						c_bridge->display->drm_conn);
+		sde_connector_helper_bridge_pre_enable(c_bridge->display->drm_conn);
 }
 
 static void dsi_bridge_enable(struct drm_bridge *bridge)
@@ -240,8 +247,7 @@ static void dsi_bridge_enable(struct drm_bridge *bridge)
 		       c_bridge->id, rc);
 
 	if (c_bridge->display && c_bridge->display->drm_conn)
-		sde_connector_helper_bridge_post_enable(
-						c_bridge->display->drm_conn);
+		sde_connector_helper_bridge_post_enable(c_bridge->display->drm_conn);
 }
 
 static void dsi_bridge_disable(struct drm_bridge *bridge)
@@ -326,7 +332,6 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 	struct dsi_display *display;
 	struct dsi_display_mode dsi_mode, cur_dsi_mode, *panel_dsi_mode;
-	struct drm_display_mode cur_mode;
 	struct drm_crtc_state *crtc_state;
 
 	crtc_state = container_of(mode, struct drm_crtc_state, mode);
@@ -378,9 +383,10 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 
 	if (bridge->encoder && bridge->encoder->crtc &&
 			crtc_state->crtc) {
+		const struct drm_display_mode *cur_mode =
+				&crtc_state->crtc->state->mode;
 
-		convert_to_dsi_mode(&crtc_state->crtc->state->mode,
-							&cur_dsi_mode);
+		convert_to_dsi_mode(cur_mode, &cur_dsi_mode);
 		cur_dsi_mode.timing.dsc_enabled =
 				dsi_mode.priv_info->dsc_enabled;
 		cur_dsi_mode.timing.dsc = &dsi_mode.priv_info->dsc;
@@ -392,10 +398,8 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 			return false;
 		}
 
-		cur_mode = crtc_state->crtc->mode;
-
 		/* No DMS/VRR when drm pipeline is changing */
-		if (!drm_mode_equal(&cur_mode, adjusted_mode) &&
+		if (!drm_mode_equal(cur_mode, adjusted_mode) &&
 			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR)) &&
 			(!(dsi_mode.dsi_mode_flags & DSI_MODE_FLAG_DYN_CLK)) &&
 			(!crtc_state->active_changed ||

@@ -37,6 +37,7 @@
 
 /* maximum number of device regulator */
 #define CAM_SOC_MAX_REGULATOR       7
+#define CAM_SOC_MAX_REGULATOR       9
 
 /* maximum number of device clock */
 #define CAM_SOC_MAX_CLK             32

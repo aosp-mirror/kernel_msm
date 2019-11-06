@@ -24,6 +24,11 @@
 
 #include "u_os_desc.h"
 
+static bool disable_l1_for_hs;
+module_param(disable_l1_for_hs, bool, 0644);
+MODULE_PARM_DESC(disable_l1_for_hs,
+		 "Disable support for USB L1 LPM for HS devices");
+
 /**
  * struct usb_os_string - represents OS String to be reported by a gadget
  * @bLength: total length of the entire descritor, always 0x12
@@ -1746,6 +1751,8 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				if (gadget->speed >= USB_SPEED_SUPER) {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0320);
 					cdev->desc.bMaxPacketSize0 = 9;
+				} else if (disable_l1_for_hs) {
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 				} else {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0210);
 				}

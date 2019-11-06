@@ -335,6 +335,17 @@ config BATTERY_MAX1721X
 	  Say Y here to enable support for the MAX17211/MAX17215 standalone
 	  battery gas-gauge.
 
+config BATTERY_MAX1720X
+tristate "Maxim MAX17201/MAX17205/MAX17301/MAX17305 Fuel Gauge"
+	depends on I2C
+	help
+	  MAX17x01 is a family of fuel-gauge systems for lithium-ion (Li+)
+		batteries in handheld and portable equipment. MAX17x01 are
+		configured to operate with a single lithium cell, the MAX17x05
+		can operate with multiple cells. Support for the MAX1730x family
+		is experimental.
+	  Say Y to include support for the MAX17x01/MAX17x05 Fuel Gauges.
+
 config BATTERY_Z2
 	tristate "Z2 battery driver"
 	depends on I2C && MACH_ZIPIT2
@@ -610,6 +621,8 @@ config CHARGER_RT9455
 	help
 	  Say Y to enable support for Richtek RT9455 battery charger.
 
+
 source "drivers/power/supply/qcom/Kconfig"
+source "drivers/power/supply/google/Kconfig"
 
 endif # POWER_SUPPLY

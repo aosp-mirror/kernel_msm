@@ -39,6 +39,7 @@ enum msm_drm_display_id {
 
 struct msm_drm_notifier {
 	enum msm_drm_display_id id;
+	int refresh_rate;
 	void *data;
 };
 

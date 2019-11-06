@@ -64,6 +64,7 @@ config QPNP_SMB2
 config QPNP_SMB5
 	tristate "SMB5 Battery Charger"
 	depends on MFD_SPMI_PMIC
+	depends on GOOGLE_LOGBUFFER
 	help
 	  Say Y to enables support for the SMB5 charging peripheral.
 	  The QPNP SMB5 charger driver supports the charger peripheral
@@ -119,5 +120,12 @@ config SMB1390_CHARGE_PUMP_PSY
 	  power supply framework.
 	  SMB1390 is a div2 charge pump capable of delivering 6A charge current
 	  with very high efficiency.
+
+config CHARGER_P9221
+	tristate "IDT P9221 wireless power receiver driver"
+	depends on I2C
+	help
+	  This driver provides support for the IDT P9221 wireless
+	  power receiver.
 
 endmenu

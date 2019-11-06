@@ -3,6 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufs.h
  * Copyright (C) 2011-2013 Samsung India Software Operations
+ # Copyright (c) 2017-2018 Samsung Electronics Co., Ltd.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -141,6 +142,8 @@ enum {
 	UPIU_QUERY_FUNC_STANDARD_WRITE_REQUEST          = 0x81,
 };
 
+#define UFSHCD_DEFAULT_PE_CYCLE		3000
+
 enum desc_header_offset {
 	QUERY_DESC_LENGTH_OFFSET	= 0x00,
 	QUERY_DESC_DESC_TYPE_OFFSET	= 0x01,
@@ -153,6 +156,18 @@ enum ufs_desc_def_size {
 	QUERY_DESC_INTERCONNECT_DEF_SIZE	= 0x06,
 	QUERY_DESC_GEOMETRY_DEF_SIZE		= 0x44,
 	QUERY_DESC_POWER_DEF_SIZE		= 0x62,
+	QUERY_DESC_HEALTH_DEF_SIZE		= 0x25,
+};
+
+enum ufs_health_offset {
+	UFSHCD_HEALTH_LEN_OFFSET	= 0x0,
+	UFSHCD_HEALTH_TYPE_OFFSET	= 0x1,
+	UFSHCD_HEALTH_EOL_OFFSET	= 0x2,
+	UFSHCD_HEALTH_LIFEA_OFFSET	= 0x3,
+	UFSHCD_HEALTH_LIFEB_OFFSET	= 0x4,
+	UFSHCD_HEALTH_ERASE_OFFSET	= 0x0D,
+	UFSHCD_HEALTH_WRITE_OFFSET	= 0x15,
+	UFSHCD_HEALTH_LIFEC_OFFSET	= 0x24,
 };
 
 /* Unit descriptor parameters offsets in bytes*/
@@ -173,6 +188,9 @@ enum unit_desc_param {
 	UNIT_DESC_PARAM_PHY_MEM_RSRC_CNT	= 0x18,
 	UNIT_DESC_PARAM_CTX_CAPABILITIES	= 0x20,
 	UNIT_DESC_PARAM_LARGE_UNIT_SIZE_M1	= 0x22,
+	UNIT_DESC_HPB_LU_MAX_ACTIVE_REGIONS	= 0x23,
+	UNIT_DESC_HPB_LU_PIN_REGION_START_OFFSET = 0x25,
+	UNIT_DESC_HPB_LU_NUM_PIN_REGIONS	= 0x27,
 };
 
 /* Device descriptor parameters offsets in bytes*/
@@ -204,6 +222,16 @@ enum device_desc_param {
 	DEVICE_DESC_PARAM_UD_LEN		= 0x1B,
 	DEVICE_DESC_PARAM_RTT_CAP		= 0x1C,
 	DEVICE_DESC_PARAM_FRQ_RTC		= 0x1D,
+	DEVICE_DESC_PARAM_FEAT_SUP		= 0x1F,
+	DEVICE_DESC_PARAM_HPB_VER		= 0x40,
+};
+
+enum geometry_desc_param {
+	GEOMETRY_DESC_SEGMENT_SIZE			= 0x0D,
+	GEOMETRY_DESC_HPB_REGION_SIZE			= 0x48,
+	GEOMETRY_DESC_HPB_NUMBER_LU			= 0x49,
+	GEOMETRY_DESC_HPB_SUBREGION_SIZE		= 0x4A,
+	GEOMETRY_DESC_HPB_DEVICE_MAX_ACTIVE_REGIONS	= 0x4B,
 };
 
 /*
@@ -518,6 +546,11 @@ struct ufs_dev_info {
 
 	/* Device deviations from standard UFS device spec. */
 	unsigned int quirks;
+
+	unsigned int pre_eol_info;
+	unsigned int lifetime_a;
+	unsigned int lifetime_b;
+	unsigned int lifetime_c;
 };
 
 #define MAX_MODEL_LEN 16

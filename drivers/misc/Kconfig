@@ -553,6 +553,50 @@ config QPNP_MISC
 	  and the driver provides an API to check if this interrupt
 	  is available on the current PMIC chip.
 
+
+config CITADEL
+	tristate "Google Citadel"
+	depends on SPI
+	---help---
+	  Say Y here if you have a Citadel security microcontroller from Google Inc.
+	  It will be accessible using a TPM-style transport interface from within
+	  Linux.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called citadel-spi.
+
+config CS40L2X_HAPTIC
+	tristate "Cirrus Logic CS40L2X haptics support"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the CS CS40L2X haptics driver.
+
+	  To compile this driver as a module, choose M here.
+
+config LL_ALLOCATOR
+	bool "Linked list based allocator for Airbrush DRAM"
+
+config AIRBRUSH_DRAM
+	bool "Airbrush DRAM Manager"
+	default "n"
+	select LL_ALLOCATOR
+	---help---
+	  This option enables the Airbrush DRAM manager
+
+config ACCESS_RAMOOPS
+	tristate "Driver to allow access for decrypting encrypted ramoops"
+	depends on PSTORE_CONSOLE
+	help
+	  Say 'y' if ramoops is encrypted.
+
+config FACEAUTH
+	tristate "EL1 Driver for Google Face Authentication"
+	depends on MFD_ABC_PCIE
+	default y
+	help
+	  Say 'y' to enable EL1 face authentication support.
+
 config OKL4_USER_VIRQ
 	tristate "User space accessible OKL4 virtual interrupts"
 	depends on OKL4_GUEST
@@ -598,6 +642,19 @@ config CITADEL
          To compile this driver as a module, choose M here: the
          module will be called citadel-spi.
 
+config SYSTRACE
+	bool "Android Systrace"
+	depends on TRACING
+        default n
+	help
+	  This module exports ATRACE_XXX APIs at kernel.
+	  All tracepoints can be identified and plotted at Chrome tracing UI.
+
+	  Use APIs exported by this module to correlate kernel activities
+	  to userspace and system events in the timeline.
+
+	  If in doubt, say N.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -610,7 +667,9 @@ source "drivers/misc/mic/Kconfig"
 source "drivers/misc/genwqe/Kconfig"
 source "drivers/misc/echo/Kconfig"
 source "drivers/misc/cxl/Kconfig"
+source "drivers/misc/ipu/Kconfig"
 source "drivers/misc/fpr_FingerprintCard/Kconfig"
+source "drivers/misc/airbrush/Kconfig"
 endmenu
 
 config OKL4_USER_VIPC

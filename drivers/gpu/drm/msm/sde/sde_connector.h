@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -301,6 +301,13 @@ struct sde_connector_ops {
 	 * Returns: v_front_porch on success error-code on failure
 	 */
 	int (*get_panel_vfp)(void *display, int h_active, int v_active);
+
+	/**
+	 * set_idle_hint - gives hint to display whether display is idle
+	 * @display: Pointer to private display handle
+	 * @is_idle: true if display is idle, false otherwise
+	 */
+	void (*set_idle_hint)(void *display, bool is_idle);
 };
 
 /**
@@ -369,6 +376,7 @@ struct sde_connector_evt {
  * @qsync_updated: Qsync settings were updated
  * last_cmd_tx_sts: status of the last command transfer
  * @hdr_capable: external hdr support present
+ * @mode_info_lock: lock to protect mode info
  */
 struct sde_connector {
 	struct drm_connector base;
@@ -414,12 +422,12 @@ struct sde_connector {
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	bool allow_bl_update;
-
 	u32 qsync_mode;
 	bool qsync_updated;
 
 	bool last_cmd_tx_sts;
 	bool hdr_capable;
+	struct mutex mode_info_lock;
 };
 
 /**
@@ -840,8 +848,8 @@ void sde_conn_timeline_status(struct drm_connector *conn);
 void sde_connector_helper_bridge_disable(struct drm_connector *connector);
 
 /**
- * sde_connector_helper_bridge_pre_enable - helper function for drm
- *                                          pre bridge enable
+ * sde_connector_helper_bridge_pre_enable - helper function for drm bridge
+ *                                          pre enable
  * @connector: Pointer to DRM connector object
  */
 void sde_connector_helper_bridge_pre_enable(struct drm_connector *connector);
@@ -862,8 +870,8 @@ void sde_connector_destroy(struct drm_connector *connector);
 int sde_connector_event_notify(struct drm_connector *connector, uint32_t type,
 		uint32_t len, uint32_t val);
 /**
- * sde_connector_helper_bridge_post_enable - helper function for drm
- *                                           post bridge enable
+ * sde_connector_helper_bridge_post_enable - helper function for drm bridge
+ *                                           post enable
  * @connector: Pointer to DRM connector object
  */
 void sde_connector_helper_bridge_post_enable(struct drm_connector *connector);
@@ -877,6 +885,14 @@ void sde_connector_helper_bridge_post_enable(struct drm_connector *connector);
  */
 int sde_connector_get_panel_vfp(struct drm_connector *connector,
 	struct drm_display_mode *mode);
+
+/**
+ * sde_connector_set_idle_hint - helper to give idle hint to connector
+ * @connector: pointer to drm connector
+ * @is_idle: true on idle, false on wake up from idle
+ */
+void sde_connector_set_idle_hint(struct drm_connector *connector, bool is_idle);
+
 /**
  * sde_connector_esd_status - helper function to check te status
  * @connector: Pointer to DRM connector object

@@ -36,16 +36,18 @@ struct persistent_ram_buffer {
 	uint8_t     data[0];
 };
 
+static int persistent_ram_buffer_map_alt(struct persistent_ram_zone *prz);
+
 #define PERSISTENT_RAM_SIG (0x43474244) /* DBGC */
 
-static inline size_t buffer_size(struct persistent_ram_zone *prz)
+static inline size_t buffer_size(struct persistent_ram_buffer *buffer)
 {
-	return atomic_read(&prz->buffer->size);
+	return atomic_read(&buffer->size);
 }
 
-static inline size_t buffer_start(struct persistent_ram_zone *prz)
+static inline size_t buffer_start(struct persistent_ram_buffer *buffer)
 {
-	return atomic_read(&prz->buffer->start);
+	return atomic_read(&buffer->start);
 }
 
 /* increase and wrap the start pointer, returning the old value */
@@ -156,9 +158,11 @@ static void persistent_ram_update_header_ecc(struct persistent_ram_zone *prz)
 				  prz->par_header);
 }
 
-static void persistent_ram_ecc_old(struct persistent_ram_zone *prz)
+static void persistent_ram_ecc_old(struct persistent_ram_zone *prz,
+				   bool use_alt)
 {
-	struct persistent_ram_buffer *buffer = prz->buffer;
+	struct persistent_ram_buffer *buffer =
+		use_alt ? prz->alt_buffer : prz->buffer;
 	uint8_t *block;
 	uint8_t *par;
 
@@ -166,8 +170,8 @@ static void persistent_ram_ecc_old(struct persistent_ram_zone *prz)
 		return;
 
 	block = buffer->data;
-	par = prz->par_buffer;
-	while (block < buffer->data + buffer_size(prz)) {
+	par = buffer->data + prz->buffer_size;
+	while (block < buffer->data + buffer_size(buffer)) {
 		int numerr;
 		int size = prz->ecc_info.block_size;
 		if (block + size > buffer->data + prz->buffer_size)
@@ -280,18 +284,31 @@ static int notrace persistent_ram_update_user(struct persistent_ram_zone *prz,
 	return ret;
 }
 
-void persistent_ram_save_old(struct persistent_ram_zone *prz)
+void persistent_ram_save_old(struct persistent_ram_zone *prz, bool use_alt)
 {
-	struct persistent_ram_buffer *buffer = prz->buffer;
-	size_t size = buffer_size(prz);
-	size_t start = buffer_start(prz);
+	struct persistent_ram_buffer *buffer;
+	size_t size;
+	size_t start;
 
-	if (!size)
+	if (!use_alt)
+		buffer = prz->buffer;
+	else {
+		if (!prz->alt_buffer)
+			if (persistent_ram_buffer_map_alt(prz))
+				return;
+		buffer = prz->alt_buffer;
+	}
+	size = buffer_size(buffer);
+	start = buffer_start(buffer);
+	if (!size || size < start)
 		return;
 
+	if (prz->old_log && prz->old_log_alloc_size < size)
+		persistent_ram_free_old(prz);
 	if (!prz->old_log) {
-		persistent_ram_ecc_old(prz);
-		prz->old_log = kmalloc(size, GFP_KERNEL);
+		persistent_ram_ecc_old(prz, use_alt);
+		prz->old_log = vmalloc(size);
+		prz->old_log_alloc_size = size;
 	}
 	if (!prz->old_log) {
 		pr_err("failed to allocate buffer\n");
@@ -377,16 +394,26 @@ void *persistent_ram_old(struct persistent_ram_zone *prz)
 
 void persistent_ram_free_old(struct persistent_ram_zone *prz)
 {
-	kfree(prz->old_log);
+	vfree(prz->old_log);
 	prz->old_log = NULL;
 	prz->old_log_size = 0;
+	prz->old_log_alloc_size = 0;
 }
 
-void persistent_ram_zap(struct persistent_ram_zone *prz)
+void persistent_ram_zap(struct persistent_ram_zone *prz, bool use_alt)
 {
-	atomic_set(&prz->buffer->start, 0);
-	atomic_set(&prz->buffer->size, 0);
-	persistent_ram_update_header_ecc(prz);
+	struct persistent_ram_buffer *buffer =
+		use_alt ? prz->alt_buffer : prz->buffer;
+
+	atomic_set(&buffer->start, 0);
+	atomic_set(&buffer->size, 0);
+
+	/*
+	 * The alternate buffer is read-only, we don't need to
+	 * update the ecc
+	 */
+	if (!use_alt)
+		persistent_ram_update_header_ecc(prz);
 }
 
 static void *persistent_ram_vmap(phys_addr_t start, size_t size,
@@ -453,25 +480,55 @@ static void *persistent_ram_iomap(phys_addr_t start, size_t size,
 	return va;
 }
 
-static int persistent_ram_buffer_map(phys_addr_t start, phys_addr_t size,
-		struct persistent_ram_zone *prz, int memtype)
+static int _persistent_ram_buffer_map(phys_addr_t start, phys_addr_t size,
+				     int memtype, void **vaddr)
 {
-	prz->paddr = start;
-	prz->size = size;
-
 	if (pfn_valid(start >> PAGE_SHIFT))
-		prz->vaddr = persistent_ram_vmap(start, size, memtype);
+		*vaddr = persistent_ram_vmap(start, size, memtype);
 	else
-		prz->vaddr = persistent_ram_iomap(start, size, memtype);
+		*vaddr = persistent_ram_iomap(start, size, memtype);
 
-	if (!prz->vaddr) {
+	if (!*vaddr) {
 		pr_err("%s: Failed to map 0x%llx pages at 0x%llx\n", __func__,
 			(unsigned long long)size, (unsigned long long)start);
 		return -ENOMEM;
 	}
+	return 0;
+}
 
+static int persistent_ram_buffer_map(phys_addr_t start, phys_addr_t size,
+				     struct persistent_ram_zone *prz,
+				     int memtype)
+{
+	int ret;
+
+	ret = _persistent_ram_buffer_map(start, size, memtype, &prz->vaddr);
+	if (ret)
+		return ret;
+
+	prz->paddr = start;
+	prz->size = size;
+	prz->memtype = memtype;
 	prz->buffer = prz->vaddr;
 	prz->buffer_size = size - sizeof(struct persistent_ram_buffer);
+
+	return 0;
+}
+
+static int persistent_ram_buffer_map_alt(struct persistent_ram_zone *prz)
+{
+	phys_addr_t alt_start = prz->alt_paddr;
+	int ret;
+
+	if (!alt_start)
+		return -ENOMEM;
+
+	ret = _persistent_ram_buffer_map(alt_start, prz->size, prz->memtype,
+					 &prz->alt_vaddr);
+	if (ret)
+		return ret;
+
+	prz->alt_buffer = prz->alt_vaddr;
 
 	return 0;
 }
@@ -480,6 +537,7 @@ static int persistent_ram_post_init(struct persistent_ram_zone *prz, u32 sig,
 				    struct persistent_ram_ecc_info *ecc_info)
 {
 	int ret;
+	struct persistent_ram_buffer *buffer = prz->buffer;
 
 	ret = persistent_ram_init_ecc(prz, ecc_info);
 	if (ret)
@@ -488,29 +546,29 @@ static int persistent_ram_post_init(struct persistent_ram_zone *prz, u32 sig,
 	sig ^= PERSISTENT_RAM_SIG;
 
 	if (prz->buffer->sig == sig) {
-		if (buffer_size(prz) == 0) {
+		if (buffer_size(buffer) == 0) {
 			pr_debug("found existing empty buffer\n");
 			return 0;
 		}
 
-		if (buffer_size(prz) > prz->buffer_size ||
-		    buffer_start(prz) > buffer_size(prz))
+		if (buffer_size(buffer) > prz->buffer_size ||
+		    buffer_start(buffer) > buffer_size(buffer))
 			pr_info("found existing invalid buffer, size %zu, start %zu\n",
-				buffer_size(prz), buffer_start(prz));
+				buffer_size(buffer), buffer_start(buffer));
 		else {
 			pr_debug("found existing buffer, size %zu, start %zu\n",
-				 buffer_size(prz), buffer_start(prz));
-			persistent_ram_save_old(prz);
+				 buffer_size(buffer), buffer_start(buffer));
+			persistent_ram_save_old(prz, 0);
 			return 0;
 		}
 	} else {
 		pr_debug("no valid data in buffer (sig = 0x%08x)\n",
-			 prz->buffer->sig);
+			 buffer->sig);
 	}
 
 	/* Rewind missing or invalid memory area. */
 	prz->buffer->sig = sig;
-	persistent_ram_zap(prz);
+	persistent_ram_zap(prz, 0);
 
 	return 0;
 }
@@ -530,11 +588,22 @@ void persistent_ram_free(struct persistent_ram_zone *prz)
 		}
 		prz->vaddr = NULL;
 	}
+
+	if (prz->alt_vaddr) {
+		if (pfn_valid(prz->alt_paddr >> PAGE_SHIFT)) {
+			vunmap(prz->alt_vaddr);
+		} else {
+			iounmap(prz->alt_vaddr);
+			release_mem_region(prz->alt_paddr, prz->size);
+		}
+		prz->alt_vaddr = NULL;
+	}
 	persistent_ram_free_old(prz);
 	kfree(prz);
 }
 
-struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
+struct persistent_ram_zone *persistent_ram_new(phys_addr_t start,
+			phys_addr_t alt_start, size_t size,
 			u32 sig, struct persistent_ram_ecc_info *ecc_info,
 			unsigned int memtype, u32 flags)
 {
@@ -554,6 +623,7 @@ struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
 	ret = persistent_ram_buffer_map(start, size, prz, memtype);
 	if (ret)
 		goto err;
+	prz->alt_paddr = alt_start;
 
 	ret = persistent_ram_post_init(prz, sig, ecc_info);
 	if (ret)

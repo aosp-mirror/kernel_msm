@@ -120,6 +120,10 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 {
 	int32_t rc = 0;
 	int i = 0;
+	uint32_t cam_snesor_slave_addr = 0;
+	uint32_t cam_sensor_id = 0;
+	uint32_t cam_power_aurora_v2 = 0;
+	uint32_t hw_version = 0;
 	struct cam_sensor_board_info *sensordata = NULL;
 	struct device_node *of_node = s_ctrl->of_node;
 	struct cam_hw_soc_info *soc_info = &s_ctrl->soc_info;
@@ -226,11 +230,49 @@ static int32_t cam_sensor_driver_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 		sensordata->pos_yaw = 360;
 	}
 
+	if (of_property_read_u32(of_node, "override-slave-addr",
+		&cam_snesor_slave_addr) >= 0) {
+		s_ctrl->override_info.sensor_slave_addr =
+			(uint16_t)cam_snesor_slave_addr;
+		CAM_INFO(CAM_SENSOR, "sensor slave address override, 0x%x",
+			s_ctrl->override_info.sensor_slave_addr);
+	}
+	if (of_property_read_u32(of_node, "override-sensor-id",
+		&cam_sensor_id) >= 0) {
+		s_ctrl->override_info.sensor_id =
+			(uint16_t)cam_sensor_id;
+		CAM_INFO(CAM_SENSOR, "sensor id override, 0x%x",
+			s_ctrl->override_info.sensor_id);
+	}
+	if (of_property_read_u32(of_node, "power-up-v-custom1",
+		&cam_power_aurora_v2) >= 0) {
+		s_ctrl->sensordata->power_info.cam_power_aurora_v2 =
+			(uint8_t)cam_power_aurora_v2;
+		CAM_INFO(CAM_SENSOR, "Is front camera of aurora v2= %d",
+			s_ctrl->sensordata->power_info.cam_power_aurora_v2);
+	}
+
+	if (of_property_read_u32(of_node, "hw-version",
+			&hw_version) >= 0) {
+		s_ctrl->hw_version = hw_version;
+	}
+
 	return rc;
 
 FREE_SENSOR_DATA:
 	kfree(sensordata);
 	return rc;
+}
+
+static void msm_sensor_fill_peer_ir_info(struct cam_sensor_ctrl_t *s_ctrl)
+{
+	s_ctrl->peer_ir_info.cci_client->sid = 0x60;
+	s_ctrl->peer_ir_info.cci_client->cci_device = 0;
+	s_ctrl->peer_ir_info.cci_client->retries = 3;
+	s_ctrl->peer_ir_info.cci_client->id_map = 0;
+	s_ctrl->peer_ir_info.cci_client->i2c_freq_mode = I2C_FAST_MODE;
+	s_ctrl->peer_ir_info.cci_client->cci_i2c_master =
+		(s_ctrl->soc_info.index == IR_MASTER ? 1 : 0);
 }
 
 int32_t msm_sensor_init_default_params(struct cam_sensor_ctrl_t *s_ctrl)
@@ -241,6 +283,10 @@ int32_t msm_sensor_init_default_params(struct cam_sensor_ctrl_t *s_ctrl)
 			s_ctrl);
 		return -EINVAL;
 	}
+
+	if (s_ctrl->soc_info.index == IR_MASTER ||
+		s_ctrl->soc_info.index == IR_SLAVE)
+		s_ctrl->peer_ir_info.master_type = CCI_MASTER;
 
 	CAM_DBG(CAM_SENSOR,
 		"master_type: %d", s_ctrl->io_master_info.master_type);
@@ -253,6 +299,15 @@ int32_t msm_sensor_init_default_params(struct cam_sensor_ctrl_t *s_ctrl)
 		} else {
 			s_ctrl->io_master_info.cci_client->cci_device
 				= s_ctrl->cci_num;
+		}
+
+		/* Fill up peer IR io info */
+		if (s_ctrl->peer_ir_info.master_type == CCI_MASTER) {
+			s_ctrl->peer_ir_info.cci_client = kzalloc(sizeof(
+				struct cam_sensor_cci_client), GFP_KERNEL);
+			if (!(s_ctrl->io_master_info.cci_client))
+				return -ENOMEM;
+			msm_sensor_fill_peer_ir_info(s_ctrl);
 		}
 
 	} else if (s_ctrl->io_master_info.master_type == I2C_MASTER) {

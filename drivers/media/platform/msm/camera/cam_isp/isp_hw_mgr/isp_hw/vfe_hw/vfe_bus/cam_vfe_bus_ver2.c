@@ -925,9 +925,18 @@ static int cam_vfe_bus_acquire_wm(
 	if (rsrc_data->index < 3) {
 		/* Write master 0-2 refers to RDI 0/ RDI 1/RDI 2 */
 		switch (rsrc_data->format) {
+		case CAM_FORMAT_MIPI_RAW_10:
+			rsrc_data->width =
+				ALIGNUP((rsrc_data->width * 10 + 7) / 8, 16);
+			rsrc_data->stride = rsrc_data->width;
+			rsrc_data->height = rsrc_data->height;
+			rsrc_data->pack_fmt = 0x0;
+			rsrc_data->en_cfg = 0x1;
+			CAM_DBG(CAM_ISP, "RAW_10: w=%d, h=%d", rsrc_data->width,
+				rsrc_data->height);
+			break;
 		case CAM_FORMAT_MIPI_RAW_6:
 		case CAM_FORMAT_MIPI_RAW_8:
-		case CAM_FORMAT_MIPI_RAW_10:
 		case CAM_FORMAT_MIPI_RAW_12:
 		case CAM_FORMAT_MIPI_RAW_14:
 		case CAM_FORMAT_MIPI_RAW_16:
@@ -2877,7 +2886,6 @@ static int cam_vfe_bus_update_wm(void *priv, void *cmd_args,
 
 		/* For initial configuration program all bus registers */
 		val = io_cfg->planes[i].plane_stride;
-		CAM_DBG(CAM_ISP, "before stride %d", val);
 		val = ALIGNUP(val, 16);
 		if (val != io_cfg->planes[i].plane_stride &&
 			val != wm_data->stride)
@@ -2886,7 +2894,7 @@ static int cam_vfe_bus_update_wm(void *priv, void *cmd_args,
 				io_cfg->planes[i].plane_stride,
 				val);
 
-		if (wm_data->index >= 3) {
+		if ((wm_data->index >= 3) || !(wm_data->en_cfg & 0x2)) {
 			CAM_VFE_ADD_REG_VAL_PAIR(reg_val_pair, j,
 				wm_data->hw_regs->stride,
 				io_cfg->planes[i].plane_stride);

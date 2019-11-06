@@ -67,6 +67,14 @@ Subnode common properties for OLEDB and AB/IBB regulator devices.
 	Definition: A boolean property to specify that the pull down control
 		    for AB/IBB needs to be configured during AOD mode.
 
+Subnode properties for OLEDB regulator device.
+
+- qcom,default-vout-override:
+	Usage:      optional
+	Value type: <empty>
+	Definition: A boolean property to specify that voltage override should
+		    happen after non-standby mode change.
+
 Example:
 
 pm8150a_amoled: oledb@e000 {

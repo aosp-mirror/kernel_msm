@@ -328,6 +328,95 @@ static struct tzdbg_log_t *g_qsee_log;
 static dma_addr_t coh_pmem;
 static uint32_t debug_rw_buf_size;
 
+enum boot_slot_type {
+	BOOT_SLOT_A,
+	BOOT_SLOT_B,
+	BOOT_SLOT_NONE
+};
+
+enum dp_status_type {
+	DP_NOT_IN_LIST,
+	DP_IN_LIST,
+	DP_NONE
+};
+
+enum secure_boot_type {
+	SECURE_BOOT_PRODUCTION,
+	SECURE_BOOT_NONE
+};
+
+static enum boot_slot_type boot_slot = BOOT_SLOT_NONE;
+
+static int __init boot_slot_setup(char *str)
+{
+	if (!strncmp(str, "_a", 2))
+		boot_slot = BOOT_SLOT_A;
+	else if (!strncmp(str, "_b", 2))
+		boot_slot = BOOT_SLOT_B;
+	return 1;
+}
+__setup("androidboot.slot_suffix=", boot_slot_setup);
+
+static enum dp_status_type parse_dp_status(char *dp_string)
+{
+	if (dp_string == NULL)
+		return DP_NONE;
+
+	if (!strncmp(dp_string, "enabled(not-in-list)", 20))
+		return DP_NOT_IN_LIST;
+	else if (!strncmp(dp_string, "enabled(in-list)", 16))
+		return DP_IN_LIST;
+	else
+		return DP_NONE;
+}
+
+static enum dp_status_type dp_status_a = DP_NONE;
+
+static int __init dp_status_a_setup(char *str)
+{
+	dp_status_a = parse_dp_status(str);
+	return 1;
+}
+__setup("androidboot.dp_info_a=", dp_status_a_setup);
+
+static enum dp_status_type dp_status_b = DP_NONE;
+
+static int __init dp_status_b_setup(char *str)
+{
+	dp_status_b = parse_dp_status(str);
+	return 1;
+}
+__setup("androidboot.dp_info_b=", dp_status_b_setup);
+
+static enum secure_boot_type secure_boot = SECURE_BOOT_NONE;
+
+static int __init secure_boot_setup(char *str)
+{
+	if (!strncmp(str, "PRODUCTION", 10))
+		secure_boot = SECURE_BOOT_PRODUCTION;
+	return 1;
+}
+__setup("androidboot.secure_boot=", secure_boot_setup);
+
+static inline bool can_dump_tz_log_dp(enum dp_status_type dp_status)
+{
+	return dp_status == DP_NONE || dp_status == DP_IN_LIST;
+}
+
+static inline bool can_dump_tz_log(void)
+{
+	if (secure_boot == SECURE_BOOT_NONE)
+		return true;
+	else if (secure_boot == SECURE_BOOT_PRODUCTION) {
+		if (boot_slot == BOOT_SLOT_A)
+			return can_dump_tz_log_dp(dp_status_a);
+		else if (boot_slot == BOOT_SLOT_B)
+			return can_dump_tz_log_dp(dp_status_b);
+	}
+
+	return false;
+}
+
 /*
  * Debugfs data structure and functions
  */
@@ -791,9 +880,12 @@ static ssize_t tzdbgfs_read(struct file *file, char __user *buf,
 
 	if (*tz_id == TZDBG_BOOT || *tz_id == TZDBG_RESET ||
 		*tz_id == TZDBG_INTERRUPT || *tz_id == TZDBG_GENERAL ||
-		*tz_id == TZDBG_VMID || *tz_id == TZDBG_LOG)
+		*tz_id == TZDBG_VMID || *tz_id == TZDBG_LOG) {
+		if (!can_dump_tz_log())
+			return len;
 		memcpy_fromio((void *)tzdbg.diag_buf, tzdbg.virt_iobase,
 						debug_rw_buf_size);
+	}
 
 	if (*tz_id == TZDBG_HYP_GENERAL || *tz_id == TZDBG_HYP_LOG)
 		memcpy_fromio((void *)tzdbg.hyp_diag_buf, tzdbg.hyp_virt_iobase,

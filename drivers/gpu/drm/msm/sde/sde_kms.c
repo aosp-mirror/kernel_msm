@@ -57,6 +57,8 @@
 #define MEM_PROTECT_SD_CTRL_SWITCH 0x18
 #define MDP_DEVICE_ID            0x1A
 
+#define PANEL_INFO_CLASS_NAME "panel_info"
+
 static const char * const iommu_ports[] = {
 		"mdp_0",
 };
@@ -101,6 +103,11 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms);
 static int _sde_kms_mmu_init(struct sde_kms *sde_kms);
 static int _sde_kms_register_events(struct msm_kms *kms,
 		struct drm_mode_object *obj, u32 event, bool en);
+
+static int panel_info_dev_create(struct sde_kms *sde_kms);
+static void panel_info_dev_release(struct sde_kms *sde_kms);
+static struct class *panel_info_class;
+
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
@@ -367,9 +374,32 @@ static void _sde_debugfs_destroy(struct sde_kms *sde_kms)
 static int sde_kms_enable_vblank(struct msm_kms *kms, struct drm_crtc *crtc)
 {
 	int ret = 0;
+	struct sde_kms *sde_kms;
+	struct msm_drm_private *priv;
+	struct sde_crtc *sde_crtc;
+	struct drm_encoder *drm_enc;
+
+	sde_kms = to_sde_kms(kms);
+	priv = sde_kms->dev->dev_private;
+	sde_crtc = to_sde_crtc(crtc);
 
 	SDE_ATRACE_BEGIN("sde_kms_enable_vblank");
+
+	if (sde_crtc->vblank_requested == false) {
+		SDE_ATRACE_BEGIN("sde_encoder_trigger_early_wakeup");
+		drm_for_each_encoder(drm_enc, crtc->dev)
+			sde_encoder_trigger_early_wakeup(drm_enc);
+
+		if (sde_kms->first_kickoff) {
+			sde_power_scale_reg_bus(&priv->phandle,
+					sde_kms->core_client,
+					VOTE_INDEX_HIGH, false);
+		}
+		SDE_ATRACE_END("sde_encoder_trigger_early_wakeup");
+	}
+
 	ret = sde_crtc_vblank(crtc, true);
+
 	SDE_ATRACE_END("sde_kms_enable_vblank");
 
 	return ret;
@@ -954,24 +984,6 @@ static int _sde_kms_splash_mem_put(struct sde_kms *sde_kms,
 	return rc;
 }
 
-static int _sde_kms_unmap_all_splash_regions(struct sde_kms *sde_kms)
-{
-	int i = 0;
-	int ret = 0;
-
-	if (!sde_kms)
-		return -EINVAL;
-
-	for (i = 0; i < sde_kms->splash_data.num_splash_displays; i++) {
-		ret = _sde_kms_splash_mem_put(sde_kms,
-				sde_kms->splash_data.splash_display[i].splash);
-		if (ret)
-			return ret;
-	}
-
-	return ret;
-}
-
 static int _sde_kms_get_blank(struct drm_crtc_state *crtc_state,
 			      struct drm_connector_state *conn_state)
 {
@@ -1006,35 +1018,58 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 	struct drm_connector *connector;
 	struct drm_connector_state *old_conn_state;
 	struct drm_crtc_state *old_crtc_state;
-	int i, old_mode, new_mode;
+	int i, old_mode, new_mode, old_fps, new_fps;
 
 	for_each_connector_in_state(old_state, connector, old_conn_state, i) {
 		if (!connector->state->crtc)
 			continue;
 
+		new_fps = connector->state->crtc->state->mode.vrefresh;
 		new_mode = _sde_kms_get_blank(connector->state->crtc->state,
 					      connector->state);
 		if (old_conn_state->crtc) {
 			old_crtc_state = drm_atomic_get_existing_crtc_state(
 					old_state, old_conn_state->crtc);
+
+			old_fps = old_crtc_state->mode.vrefresh;
 			old_mode = _sde_kms_get_blank(old_crtc_state,
 						      old_conn_state);
 		} else {
+			old_fps = 0;
 			old_mode = MSM_DRM_BLANK_POWERDOWN;
 		}
 
-		if (old_mode != new_mode) {
+		if ((old_mode != new_mode) || (old_fps != new_fps)) {
 			struct msm_drm_notifier notifier_data;
 
-			pr_debug("power mode change detected %d->%d\n",
-				 old_mode, new_mode);
+			pr_debug("change detected (power mode %d->%d, fps %d->%d)\n",
+				 old_mode, new_mode, old_fps, new_fps);
 
 			notifier_data.data = &new_mode;
 			notifier_data.id = connector->state->crtc->index;
+			notifier_data.refresh_rate = new_fps;
 
 			msm_drm_notifier_call_chain(event, &notifier_data);
 		}
 	}
+}
+
+static int _sde_kms_unmap_all_splash_regions(struct sde_kms *sde_kms)
+{
+	int i = 0;
+	int ret = 0;
+
+	if (!sde_kms)
+		return -EINVAL;
+
+	for (i = 0; i < sde_kms->splash_data.num_splash_displays; i++) {
+		ret = _sde_kms_splash_mem_put(sde_kms,
+				sde_kms->splash_data.splash_display[i].splash);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
 }
 
 static void sde_kms_prepare_commit(struct msm_kms *kms,
@@ -1088,6 +1123,8 @@ static void sde_kms_prepare_commit(struct msm_kms *kms,
 	 * transitions prepare below if any transtions is required.
 	 */
 	sde_kms_prepare_secure_transition(kms, state);
+
+	_sde_kms_drm_check_dpms(state, MSM_DRM_EARLY_EVENT_BLANK);
 end:
 	SDE_ATRACE_END("prepare_commit");
 
@@ -1414,9 +1451,162 @@ static void _sde_kms_release_displays(struct sde_kms *sde_kms)
 	sde_kms->wb_displays = NULL;
 	sde_kms->wb_display_count = 0;
 
+	panel_info_dev_release(sde_kms);
 	kfree(sde_kms->dsi_displays);
 	sde_kms->dsi_displays = NULL;
 	sde_kms->dsi_display_count = 0;
+}
+
+static ssize_t panel_vendor_name_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+
+	display = dev_get_drvdata(dev);
+	panel = display->panel;
+
+	if (!display || !panel || !panel->vendor_info.name || !buf) {
+		pr_err("Failed to show vendor name\n");
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", panel->vendor_info.name);
+}
+
+static ssize_t serial_number_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+
+	display = dev_get_drvdata(dev);
+	panel = display->panel;
+
+	if (!display || !panel || !panel->vendor_info.is_sn || !buf) {
+		pr_err("Failed to show SN\n");
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", panel->vendor_info.sn);
+}
+
+static ssize_t panel_extinfo_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct dsi_display *display;
+	struct dsi_panel *panel;
+	const struct dsi_panel_vendor_info *vendor_info;
+	int i, written;
+
+	display = dev_get_drvdata(dev);
+	if (unlikely(!display || !display->panel || !buf))
+		return -EINVAL;
+
+	panel = display->panel;
+	vendor_info = &panel->vendor_info;
+	if (!vendor_info->extinfo_read) {
+		pr_err("Failed to show Ext info\n");
+		return 0;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	written = 0;
+	for (i = 0; i < vendor_info->extinfo_read && written < PAGE_SIZE; i++) {
+		written += scnprintf(buf + written, PAGE_SIZE - written,
+				     "0x%02X ", vendor_info->extinfo[i]);
+	}
+	mutex_unlock(&panel->panel_lock);
+	if (!written)
+		return -EFAULT;
+	/* replace last space with a line return */
+	buf[written - 1] = '\n';
+	buf[written] = '\0';
+
+	return written;
+}
+
+struct device_attribute dev_attr_panel_vendor_name =
+			__ATTR_RO_MODE(panel_vendor_name, 0400);
+struct device_attribute dev_attr_serial_number =
+			__ATTR_RO_MODE(serial_number, 0400);
+struct device_attribute dev_attr_panel_ext_info =
+			__ATTR_RO_MODE(panel_extinfo, 0400);
+
+static struct attribute *panel_info_dev_attrs[] = {
+	&dev_attr_panel_vendor_name.attr,
+	&dev_attr_serial_number.attr,
+	&dev_attr_panel_ext_info.attr,
+	NULL
+};
+
+
+static const struct attribute_group panel_info_dev_group = {
+	.attrs = panel_info_dev_attrs,
+};
+
+static const struct attribute_group *panel_info_dev_groups[] = {
+	&panel_info_dev_group,
+	NULL
+};
+
+static int panel_info_dev_create(struct sde_kms *sde_kms)
+{
+	struct dsi_display *display;
+	int i;
+
+	if (panel_info_class && !IS_ERR(panel_info_class))
+		return 0;
+
+	panel_info_class = class_create(THIS_MODULE, PANEL_INFO_CLASS_NAME);
+	if (!panel_info_class || IS_ERR(panel_info_class))
+		return -EINVAL;
+
+	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
+		display = (struct dsi_display *)sde_kms->dsi_displays[i];
+		display->panel_info_dev =
+			device_create_with_groups(panel_info_class,
+						  &display->pdev->dev,
+						  0,
+						  display,
+						  panel_info_dev_groups,
+						  "panel%d",
+						  i);
+		if (!display->panel_info_dev || IS_ERR(display->panel_info_dev))
+			goto error;
+	}
+	return 0;
+error:
+	while (--i >= 0) {
+		display = (struct dsi_display *)sde_kms->dsi_displays[i];
+		device_unregister(display->panel_info_dev);
+		display->panel_info_dev = NULL;
+	}
+
+	class_destroy(panel_info_class);
+	panel_info_class = NULL;
+
+	return -EINVAL;
+}
+
+static void panel_info_dev_release(struct sde_kms *sde_kms)
+{
+	struct dsi_display *display;
+	int i;
+
+	if (!panel_info_class || IS_ERR(panel_info_class))
+		return;
+
+	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
+		display = (struct dsi_display *)sde_kms->dsi_displays[i];
+		device_unregister(display->panel_info_dev);
+		display->panel_info_dev = NULL;
+	}
+	class_destroy(panel_info_class);
+	panel_info_class = NULL;
 }
 
 /**
@@ -1450,6 +1640,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.cmd_transfer = dsi_display_cmd_transfer,
 		.cont_splash_config = dsi_display_cont_splash_config,
 		.get_panel_vfp = dsi_display_get_panel_vfp,
+		.set_idle_hint = dsi_display_set_idle_hint,
 	};
 	static const struct sde_connector_ops wb_ops = {
 		.post_init =    sde_wb_connector_post_init,
@@ -1501,6 +1692,7 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 	}
 
 	/* dsi */
+	panel_info_dev_create(sde_kms);
 	for (i = 0; i < sde_kms->dsi_display_count &&
 		priv->num_encoders < max_encoders; ++i) {
 		display = sde_kms->dsi_displays[i];

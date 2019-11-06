@@ -26,6 +26,7 @@
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
 #include <linux/tick.h>
+#include <linux/wakeup_reason.h>
 #include <linux/suspend.h>
 #include <linux/pm_qos.h>
 #include <linux/of_platform.h>
@@ -48,6 +49,7 @@
 #include "lpm-levels.h"
 #include <trace/events/power.h>
 #include "../clk/clk.h"
+#include "../soc/qcom/msm_bus/msm_bus_core.h"
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_low_power.h>
 #include <linux/gpio.h>
@@ -56,6 +58,8 @@
 #define PSCI_POWER_STATE(reset) (reset << 30)
 #define PSCI_AFFINITY_LEVEL(lvl) ((lvl & 0x3) << 24)
 #define BIAS_HYST (bias_hyst * NSEC_PER_MSEC)
+
+#define MAX_S2IDLE_CPU_ATTEMPTS  32   /* divide by # cpus for max suspends */
 
 enum {
 	MSM_LPM_LVL_DBG_SUSPEND_LIMITS = BIT(0),
@@ -1106,10 +1110,15 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		 * This debug information is useful to know which are the
 		 * clocks that are enabled and preventing the system level
 		 * LPMs(XO and Vmin).
+		 * Prints have also been enabled in the bus driver to dump
+		 * the list of active  bus requests while going into suspend.
+		 * Any active bus request can block system sleep and this
+		 * helps to debug CXSD wedge issues.
 		 */
-		if (!from_idle)
-			clock_debug_print_enabled(true);
-
+		if (!from_idle) {
+			clock_debug_print_enabled(false);
+			msm_bus_dbg_suspend_print_clients();
+		}
 		cpu = get_next_online_cpu(from_idle);
 		cpumask_copy(&cpumask, cpumask_of(cpu));
 		clear_predict_history();
@@ -1478,6 +1487,10 @@ exit:
 static void lpm_cpuidle_s2idle(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int idx)
 {
+	static DEFINE_SPINLOCK(s2idle_lock);
+	static struct cpumask idling_cpus;
+	static s2idle_sleep_attempts;
+	static bool s2idle_aborted;
 	struct lpm_cpu *cpu = per_cpu(cpu_lpm, dev->cpu);
 	const struct cpumask *cpumask = get_cpu_mask(dev->cpu);
 	bool success = false;
@@ -1491,6 +1504,28 @@ static void lpm_cpuidle_s2idle(struct cpuidle_device *dev,
 		return;
 	}
 
+	spin_lock(&s2idle_lock);
+	if (cpumask_empty(&idling_cpus)) {
+		s2idle_sleep_attempts = 0;
+		s2idle_aborted = false;
+	} else if (s2idle_aborted) {
+		spin_unlock(&s2idle_lock);
+		return;
+	}
+
+	cpumask_or(&idling_cpus, &idling_cpus, cpumask);
+	if (++s2idle_sleep_attempts > MAX_S2IDLE_CPU_ATTEMPTS) {
+		s2idle_aborted = true;
+	}
+	spin_unlock(&s2idle_lock);
+
+	if (s2idle_aborted) {
+		pr_err("Aborting s2idle suspend: too many iterations\n");
+		log_bad_wake_reason("s2idle soft watchdog");
+		pm_system_wakeup();
+		goto exit;
+	}
+
 	cpu_prepare(cpu, idx, true);
 	cluster_prepare(cpu->parent, cpumask, idx, false, 0);
 
@@ -1498,6 +1533,11 @@ static void lpm_cpuidle_s2idle(struct cpuidle_device *dev,
 
 	cluster_unprepare(cpu->parent, cpumask, idx, false, 0, success);
 	cpu_unprepare(cpu, idx, true);
+
+exit:
+	spin_lock(&s2idle_lock);
+	cpumask_andnot(&idling_cpus, &idling_cpus, cpumask);
+	spin_unlock(&s2idle_lock);
 }
 
 #ifdef CONFIG_CPU_IDLE_MULTIPLE_DRIVERS

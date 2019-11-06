@@ -64,7 +64,6 @@ static const struct drm_prop_enum_list e_qsync_mode[] = {
 	{SDE_RM_QSYNC_CONTINUOUS_MODE,	"continuous"},
 };
 
-
 int sde_connector_trigger_event(void *drm_connector,
 		uint32_t event_idx, uint32_t instance_idx,
 		uint32_t data0, uint32_t data1,
@@ -494,6 +493,7 @@ static int _sde_connector_update_dirty_properties(
 
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
 		dsi_display = c_conn->display;
+
 		if (dsi_display && dsi_display->panel)
 			bl_config = &dsi_display->panel->bl_config;
 	}
@@ -608,6 +608,7 @@ void sde_connector_helper_bridge_pre_enable(struct drm_connector *connector)
 		return;
 
 	c_conn = to_sde_connector(connector);
+
 	c_conn->last_panel_power_mode = SDE_MODE_DPMS_ON;
 }
 
@@ -621,6 +622,7 @@ void sde_connector_helper_bridge_post_enable(struct drm_connector *connector)
 		return;
 
 	c_conn = to_sde_connector(connector);
+
 	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
 		dsi_display = c_conn->display;
 
@@ -629,6 +631,7 @@ void sde_connector_helper_bridge_post_enable(struct drm_connector *connector)
 	}
 
 	c_conn->panel_dead = false;
+
 	if (!bl_config) {
 		SDE_ERROR("Invalid params bl_config null\n");
 		return;
@@ -640,10 +643,12 @@ void sde_connector_helper_bridge_post_enable(struct drm_connector *connector)
 	 * So delay backlight update to these panels until the
 	 * first frame commit is received from the HW.
 	 */
-	if (bl_config->bl_update == BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
-		sde_encoder_wait_for_event(c_conn->encoder,
-				MSM_ENC_TX_COMPLETE);
-	bl_config->allow_bl_update = true;
+	if (!bl_config->allow_bl_update) {
+		if (bl_config->bl_update == BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
+			sde_encoder_wait_for_event(c_conn->encoder,
+						   MSM_ENC_TX_COMPLETE);
+		bl_config->allow_bl_update = true;
+	}
 
 	if (bl_config->bl_device)
 		backlight_update_status(bl_config->bl_device);
@@ -821,10 +826,13 @@ sde_connector_atomic_duplicate_state(struct drm_connector *connector)
 		return NULL;
 	}
 
+	mutex_lock(&c_conn->mode_info_lock);
 	/* duplicate value helper */
 	msm_property_duplicate_state(&c_conn->property_info,
 			c_oldstate, c_state,
 			&c_state->property_state, c_state->property_values);
+
+	mutex_unlock(&c_conn->mode_info_lock);
 
 	__drm_atomic_helper_connector_duplicate_state(connector,
 			&c_state->base);
@@ -1396,6 +1404,18 @@ int sde_connector_get_panel_vfp(struct drm_connector *connector,
 		SDE_ERROR("Failed get_panel_vfp %d\n", vfp);
 
 	return vfp;
+}
+
+void sde_connector_set_idle_hint(struct drm_connector *connector, bool is_idle)
+{
+	struct sde_connector *c_conn;
+
+	if (unlikely(!connector))
+		return;
+
+	c_conn = to_sde_connector(connector);
+	if (c_conn->ops.set_idle_hint)
+		c_conn->ops.set_idle_hint(c_conn->display, is_idle);
 }
 
 static int _sde_debugfs_conn_cmd_tx_open(struct inode *inode, struct file *file)
@@ -2108,6 +2128,7 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	}
 
 	mutex_init(&c_conn->lock);
+	mutex_init(&c_conn->mode_info_lock);
 
 	rc = drm_mode_connector_attach_encoder(&c_conn->base, encoder);
 	if (rc) {

@@ -117,7 +117,7 @@ static struct clk_fixed_factor dp_link_clk_divsel_ten = {
 		.parent_names =
 			(const char *[]){ "dp_vco_clk" },
 		.num_parents = 1,
-		.flags = (CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT),
+		.flags = CLK_SET_RATE_PARENT,
 		.ops = &clk_fixed_factor_ops,
 	},
 };
@@ -131,7 +131,6 @@ static struct clk_fixed_factor dp_vco_divsel_two_clk_src = {
 		.parent_names =
 			(const char *[]){ "dp_vco_clk" },
 		.num_parents = 1,
-		.flags = (CLK_GET_RATE_NOCACHE),
 		.ops = &clk_fixed_factor_ops,
 	},
 };
@@ -145,7 +144,6 @@ static struct clk_fixed_factor dp_vco_divsel_four_clk_src = {
 		.parent_names =
 			(const char *[]){ "dp_vco_clk" },
 		.num_parents = 1,
-		.flags = (CLK_GET_RATE_NOCACHE),
 		.ops = &clk_fixed_factor_ops,
 	},
 };
@@ -159,7 +157,6 @@ static struct clk_fixed_factor dp_vco_divsel_six_clk_src = {
 		.parent_names =
 			(const char *[]){ "dp_vco_clk" },
 		.num_parents = 1,
-		.flags = (CLK_GET_RATE_NOCACHE),
 		.ops = &clk_fixed_factor_ops,
 	},
 };
@@ -231,7 +228,7 @@ static struct clk_regmap_mux dp_vco_divided_clk_src_mux = {
 					"dp_vco_divsel_six_clk_src"},
 			.num_parents = 3,
 			.ops = &mux_clk_ops,
-			.flags = (CLK_GET_RATE_NOCACHE | CLK_SET_RATE_PARENT),
+			.flags = CLK_SET_RATE_PARENT,
 		},
 	},
 };

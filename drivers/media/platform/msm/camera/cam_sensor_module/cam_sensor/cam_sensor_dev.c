@@ -132,6 +132,95 @@ static int cam_sensor_init_subdev_params(struct cam_sensor_ctrl_t *s_ctrl)
 	return rc;
 }
 
+static ssize_t set_strobe_type_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = dev_get_drvdata(dev);
+	int rc, value;
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc)
+		return rc;
+
+	if (value > STROBE_NONE)
+		return -EINVAL;
+
+	s_ctrl->strobeType = value;
+
+	return count;
+}
+
+static ssize_t set_ir_slave_cci_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = dev_get_drvdata(dev);
+	int rc, value;
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc)
+		return rc;
+
+	if (value != 0 && value != 1)
+		return -EINVAL;
+
+	if (s_ctrl->soc_info.index == IR_SLAVE)
+		s_ctrl->cci_i2c_master = value;
+
+	return count;
+}
+
+static ssize_t sensor_write_byte_store(struct device *dev,
+	struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct cam_sensor_ctrl_t *s_ctrl = dev_get_drvdata(dev);
+	int rc, value;
+	uint32_t addr;
+	uint32_t data;
+	struct cam_sensor_i2c_reg_setting write_setting;
+	struct cam_sensor_i2c_reg_array reg_settings;
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc < 0)
+		return rc;
+	if ((value & 0xFF000000) != 0) {
+		dev_err(dev, "value %x out of boundary", value);
+		return -EINVAL;
+	}
+
+	addr = (value >> 8) & 0xFFFF;
+	data = value & 0xFF;
+	reg_settings.reg_addr = addr;
+	reg_settings.reg_data = data;
+	reg_settings.delay = 0;
+	write_setting.reg_setting = &reg_settings;
+	write_setting.addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
+	write_setting.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	write_setting.size = 1;
+	write_setting.delay = 0;
+
+	rc = camera_io_dev_write(&s_ctrl->io_master_info, &write_setting);
+	if (rc < 0)
+		return rc;
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(set_strobe_type);
+static DEVICE_ATTR_WO(set_ir_slave_cci);
+static DEVICE_ATTR_WO(sensor_write_byte);
+
+static struct attribute *cam_sensor_dev_attrs[] = {
+	&dev_attr_set_strobe_type.attr,
+	&dev_attr_set_ir_slave_cci.attr,
+	&dev_attr_sensor_write_byte.attr,
+	NULL
+};
+
+ATTRIBUTE_GROUPS(cam_sensor_dev);
+
 static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
@@ -233,6 +322,7 @@ static int cam_sensor_platform_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(&(s_ctrl->v4l2_dev_str.sd), NULL);
 	devm_kfree(&pdev->dev, s_ctrl);
+	sysfs_remove_groups(&pdev->dev.kobj, cam_sensor_dev_groups);
 
 	return 0;
 }
@@ -292,6 +382,9 @@ static int32_t cam_sensor_driver_platform_probe(
 	s_ctrl->is_probe_succeed = 0;
 	s_ctrl->last_flush_req = 0;
 
+	s_ctrl->override_info.sensor_slave_addr = 0;
+	s_ctrl->override_info.sensor_id = 0;
+
 	/*fill in platform device*/
 	s_ctrl->pdev = pdev;
 
@@ -333,9 +426,19 @@ static int32_t cam_sensor_driver_platform_probe(
 	s_ctrl->bridge_intf.ops.link_setup = cam_sensor_establish_link;
 	s_ctrl->bridge_intf.ops.apply_req = cam_sensor_apply_request;
 	s_ctrl->bridge_intf.ops.flush_req = cam_sensor_flush_request;
+	s_ctrl->bridge_intf.ops.set_strobe = cam_sensor_set_strobe;
+	s_ctrl->bridge_intf.ops.tag_laser = cam_sensor_tag_laser_type;
 
 	s_ctrl->sensordata->power_info.dev = &pdev->dev;
 	platform_set_drvdata(pdev, s_ctrl);
+
+	rc = sysfs_create_groups(&pdev->dev.kobj, cam_sensor_dev_groups);
+	if (rc < 0)
+		goto unreg_subdev;
+
+	for (i = 0; i < CAM_SENSOR_GPIO_IRQ_MAX; i++)
+		s_ctrl->cam_sensor_irq[i] = 0;
+
 	s_ctrl->sensor_state = CAM_SENSOR_INIT;
 
 	return rc;

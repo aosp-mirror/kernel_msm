@@ -745,7 +745,8 @@ static void arm_lpae_free_pgtable(struct io_pgtable *iop)
 	struct arm_lpae_io_pgtable *data = io_pgtable_to_data(iop);
 
 	__arm_lpae_free_pgtable(data, ARM_LPAE_START_LVL(data), data->pgd);
-	__arm_lpae_free_pgtable(data, ARM_LPAE_START_LVL(data),
+	if (data->pgd_ttbr1)
+		__arm_lpae_free_pgtable(data, ARM_LPAE_START_LVL(data),
 				data->pgd_ttbr1);
 	kfree(data);
 }
@@ -1313,6 +1314,8 @@ arm_64_lpae_alloc_pgtable_s2(struct io_pgtable_cfg *cfg, void *cookie)
 					   cfg, cookie);
 	if (!data->pgd)
 		goto out_free_data;
+
+	data->pgd_ttbr1 = NULL;
 
 	/* Ensure the empty pgd is visible before any actual TTBR write */
 	wmb();

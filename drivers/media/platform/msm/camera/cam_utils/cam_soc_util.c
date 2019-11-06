@@ -1329,7 +1329,8 @@ int cam_soc_util_regulator_enable(struct regulator *rgltr,
 
 	rc = regulator_enable(rgltr);
 	if (rc) {
-		CAM_ERR(CAM_UTIL, "%s regulator_enable failed", rgltr_name);
+		CAM_ERR(CAM_UTIL, "%s regulator_enable failed: %d", rgltr_name,
+			rc);
 		return rc;
 	}
 

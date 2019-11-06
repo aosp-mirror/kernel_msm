@@ -1825,8 +1825,8 @@ static int flash_led_psy_notifier_call(struct notifier_block *nb,
 	if (ev != PSY_EVENT_PROP_CHANGED)
 		return NOTIFY_OK;
 
-	if (!strcmp(psy->desc->name, "bms")) {
-		led->bms_psy = power_supply_get_by_name("bms");
+	if (!strcmp(psy->desc->name, "battery")) {
+		led->bms_psy = power_supply_get_by_name("battery");
 		if (!led->bms_psy)
 			pr_err("Failed to get bms power_supply\n");
 		else
@@ -2846,7 +2846,7 @@ static int qpnp_flash_led_probe(struct platform_device *pdev)
 		}
 	}
 
-	led->bms_psy = power_supply_get_by_name("bms");
+	led->bms_psy = power_supply_get_by_name("battery");
 	if (!led->bms_psy) {
 		rc = flash_led_psy_register_notifier(led);
 		if (rc < 0) {
