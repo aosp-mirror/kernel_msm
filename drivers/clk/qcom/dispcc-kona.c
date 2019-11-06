@@ -1547,6 +1547,8 @@ static int disp_cc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_mm regulator\n");
 		return PTR_ERR(vdd_mm.regulator[0]);
 	}
+	vdd_mm.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mm, vdd_mm.num_levels - 1);
 
 	dispcc_bus_id = msm_bus_scale_register_client(&clk_debugfs_scale_table);
 	if (!dispcc_bus_id) {
@@ -1575,11 +1577,18 @@ static int disp_cc_kona_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void dispcc_kona_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_mm, vdd_mm.num_levels - 1);
+}
+
 static struct platform_driver disp_cc_kona_driver = {
 	.probe = disp_cc_kona_probe,
 	.driver = {
 		.name = "disp_cc-kona",
 		.of_match_table = disp_cc_kona_match_table,
+		.sync_state = dispcc_kona_sync_state,
 	},
 };
 
