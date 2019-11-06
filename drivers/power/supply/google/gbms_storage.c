@@ -219,7 +219,8 @@ int gbms_storage_register_internal(struct gbms_storage_desc *desc,
 		index,
 		dupes, refs);
 
-	gbms_providers_count += 1;
+	if (index == gbms_providers_count)
+		gbms_providers_count += 1;
 
 #ifdef CONFIG_DEBUG_FS
 	if (!IS_ERR_OR_NULL(rootdir) && name) {
