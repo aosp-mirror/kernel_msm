@@ -15,6 +15,7 @@
 #include "rmnet_private.h"
 #include "rmnet_map.h"
 #include "rmnet_descriptor.h"
+#include "rmnet_genl.h"
 #include <soc/qcom/rmnet_qmi.h>
 #include <soc/qcom/qmi_rmnet.h>
 
@@ -699,6 +700,16 @@ int rmnet_get_powersave_notif(void *port)
 	return ((struct rmnet_port *)port)->data_format & RMNET_FORMAT_PS_NOTIF;
 }
 EXPORT_SYMBOL(rmnet_get_powersave_notif);
+
+struct net_device *rmnet_get_real_dev(void *port)
+{
+	if (port)
+		return ((struct rmnet_port *)port)->dev;
+
+	return NULL;
+}
+EXPORT_SYMBOL(rmnet_get_real_dev);
+
 #endif
 
 /* Startup/Shutdown */
@@ -716,6 +727,8 @@ static int __init rmnet_init(void)
 		unregister_netdevice_notifier(&rmnet_dev_notifier);
 		return rc;
 	}
+	rmnet_core_genl_init();
+
 	return rc;
 }
 
@@ -723,6 +736,7 @@ static void __exit rmnet_exit(void)
 {
 	unregister_netdevice_notifier(&rmnet_dev_notifier);
 	rtnl_link_unregister(&rmnet_link_ops);
+	rmnet_core_genl_deinit();
 }
 
 module_init(rmnet_init)

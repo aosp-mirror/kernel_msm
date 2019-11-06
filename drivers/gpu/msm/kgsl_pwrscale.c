@@ -1012,6 +1012,9 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 		data->bus.ib = &pwr->bus_ib[0];
 		data->bus.index = &pwr->bus_index[0];
 		data->bus.width = pwr->bus_width;
+		if (!kgsl_of_property_read_ddrtype(device->pdev->dev.of_node,
+			"qcom,bus-accesses", &data->bus.max))
+			data->bus.floating = false;
 	} else
 		data->bus.num = 0;
 
@@ -1041,6 +1044,12 @@ int kgsl_pwrscale_init(struct device *dev, const char *governor)
 		 * frequency.
 		 */
 		ret = dev_pm_opp_of_add_table(device->busmondev);
+		/*
+		 * Disable OPP which are not supported as per GPU freq plan.
+		 * This is need to ensure freq_table specified in bus_profile
+		 * above matches OPP table.
+		 */
+		kgsl_pwrctrl_disable_unused_opp(device, device->busmondev);
 		if (!ret)
 			bus_devfreq = devfreq_add_device(device->busmondev,
 				&pwrscale->bus_profile.profile, "gpubw_mon",

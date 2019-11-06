@@ -656,12 +656,28 @@ static void rmnet_map_gso_stamp(struct sk_buff *skb,
 				struct rmnet_map_coal_metadata *coal_meta)
 {
 	struct skb_shared_info *shinfo = skb_shinfo(skb);
+
+	if (coal_meta->trans_proto == IPPROTO_TCP)
+		shinfo->gso_type = (coal_meta->ip_proto == 4) ?
+				   SKB_GSO_TCPV4 : SKB_GSO_TCPV6;
+	else
+		shinfo->gso_type = SKB_GSO_UDP_L4;
+
+	shinfo->gso_size = coal_meta->data_len;
+	shinfo->gso_segs = coal_meta->pkt_count;
+}
+
+/* Handles setting up the partial checksum in the skb. Sets the transport
+ * checksum to the pseudoheader checksum and sets the csum offload metadata
+ */
+static void rmnet_map_partial_csum(struct sk_buff *skb,
+				   struct rmnet_map_coal_metadata *coal_meta)
+{
 	unsigned char *data = skb->data;
 	__sum16 pseudo;
 	u16 pkt_len = skb->len - coal_meta->ip_len;
-	bool ipv4 = coal_meta->ip_proto == 4;
 
-	if (ipv4) {
+	if (coal_meta->ip_proto == 4) {
 		struct iphdr *iph = (struct iphdr *)data;
 
 		pseudo = ~csum_tcpudp_magic(iph->saddr, iph->daddr,
@@ -678,20 +694,16 @@ static void rmnet_map_gso_stamp(struct sk_buff *skb,
 		struct tcphdr *tp = (struct tcphdr *)(data + coal_meta->ip_len);
 
 		tp->check = pseudo;
-		shinfo->gso_type = (ipv4) ? SKB_GSO_TCPV4 : SKB_GSO_TCPV6;
 		skb->csum_offset = offsetof(struct tcphdr, check);
 	} else {
 		struct udphdr *up = (struct udphdr *)(data + coal_meta->ip_len);
 
 		up->check = pseudo;
-		shinfo->gso_type = SKB_GSO_UDP_L4;
 		skb->csum_offset = offsetof(struct udphdr, check);
 	}
 
 	skb->ip_summed = CHECKSUM_PARTIAL;
 	skb->csum_start = skb->data + coal_meta->ip_len - skb->head;
-	shinfo->gso_size = coal_meta->data_len;
-	shinfo->gso_segs = coal_meta->pkt_count;
 }
 
 static void
@@ -704,6 +716,7 @@ __rmnet_map_segment_coal_skb(struct sk_buff *coal_skb,
 	struct rmnet_priv *priv = netdev_priv(coal_skb->dev);
 	__sum16 *check = NULL;
 	u32 alloc_len;
+	bool zero_csum = false;
 
 	/* We can avoid copying the data if the SKB we got from the lower-level
 	 * drivers was nonlinear.
@@ -735,6 +748,8 @@ __rmnet_map_segment_coal_skb(struct sk_buff *coal_skb,
 
 		uh->len = htons(skbn->len);
 		check = &uh->check;
+		if (coal_meta->ip_proto == 4 && !uh->check)
+			zero_csum = true;
 	}
 
 	/* Push IP header and update necessary fields */
@@ -755,8 +770,9 @@ __rmnet_map_segment_coal_skb(struct sk_buff *coal_skb,
 	}
 
 	/* Handle checksum status */
-	if (likely(csum_valid)) {
-		skbn->ip_summed = CHECKSUM_UNNECESSARY;
+	if (likely(csum_valid) || zero_csum) {
+		/* Set the partial checksum information */
+		rmnet_map_partial_csum(skbn, coal_meta);
 	} else if (check) {
 		/* Unfortunately, we have to fake a bad checksum here, since
 		 * the original bad value is lost by the hardware. The only
@@ -852,6 +868,7 @@ static void rmnet_map_segment_coal_skb(struct sk_buff *coal_skb,
 	u8 pkt, total_pkt = 0;
 	u8 nlo;
 	bool gro = coal_skb->dev->features & NETIF_F_GRO_HW;
+	bool zero_csum = false;
 
 	memset(&coal_meta, 0, sizeof(coal_meta));
 
@@ -913,12 +930,15 @@ static void rmnet_map_segment_coal_skb(struct sk_buff *coal_skb,
 		uh = (struct udphdr *)((u8 *)iph + coal_meta.ip_len);
 		coal_meta.trans_len = sizeof(*uh);
 		coal_meta.trans_header = uh;
+		/* Check for v4 zero checksum */
+		if (coal_meta.ip_proto == 4 && !uh->check)
+			zero_csum = true;
 	} else {
 		priv->stats.coal.coal_trans_invalid++;
 		return;
 	}
 
-	if (rmnet_map_v5_csum_buggy(coal_hdr)) {
+	if (rmnet_map_v5_csum_buggy(coal_hdr) && !zero_csum) {
 		rmnet_map_move_headers(coal_skb);
 		/* Mark as valid if it checks out */
 		if (rmnet_map_validate_csum(coal_skb, &coal_meta))
@@ -938,8 +958,10 @@ static void rmnet_map_segment_coal_skb(struct sk_buff *coal_skb,
 		coal_meta.data_len = ntohs(coal_hdr->nl_pairs[0].pkt_len);
 		coal_meta.data_len -= coal_meta.ip_len + coal_meta.trans_len;
 		coal_meta.pkt_count = coal_hdr->nl_pairs[0].num_packets;
-		if (coal_meta.pkt_count > 1)
+		if (coal_meta.pkt_count > 1) {
+			rmnet_map_partial_csum(coal_skb, &coal_meta);
 			rmnet_map_gso_stamp(coal_skb, &coal_meta);
+		}
 
 		__skb_queue_tail(list, coal_skb);
 		return;
@@ -1255,6 +1277,7 @@ static void rmnet_free_agg_pages(struct rmnet_port *port)
 	struct rmnet_agg_page *agg_page, *idx;
 
 	list_for_each_entry_safe(agg_page, idx, &port->agg_list, list) {
+		list_del(&agg_page->list);
 		put_page(agg_page->page);
 		kfree(agg_page);
 	}
@@ -1314,6 +1337,7 @@ static struct rmnet_agg_page *__rmnet_alloc_agg_pages(struct rmnet_port *port)
 	}
 
 	agg_page->page = page;
+	INIT_LIST_HEAD(&agg_page->list);
 
 	return agg_page;
 }
