@@ -1,0 +1,310 @@
+#! /bin/sh
+# SPDX-License-Identifier: GPL-2.0
+#
+# (c) 2019, Google
+progname="${0##*/}"
+
+# Add instrumentation to module_init and probe functions.
+
+USAGE="USAGE: ${progname} [dir|file]
+
+Add debug instrumentation to module_init and probe functions."
+
+if [ X"--help" = X"${1}" -o X"{-h}" = X"${1}" ]; then
+  echo "${USAGE}" >&2
+  exit
+fi
+DIR=.
+if [ 1 = ${#} ]; then
+  DIR=${1}
+  shift
+fi
+if [ 0 != ${#} ]; then
+  echo "Unexpected Argument: ${*}" >&2
+  echo >&2
+  echo "${USAGE}" >&2
+  exit 1
+fi
+
+# A _real_ embedded tab character
+TAB="`echo | tr '\n' '\t'`"
+# A _real_ embedded escape character
+ESCAPE="`echo | tr '\n' '\033'`"
+# Colours
+RED="${ESCAPE}[38;5;196m"
+BLUE="${ESCAPE}[35m"
+NORMAL="${ESCAPE}[0m"
+
+TMP=`mktemp -d`
+
+# ${file} ${call} and ${symbol} input
+SYMBOLS=" "
+add_debug_printk()
+{
+  message="printk(KERN_WARNING \"${file##*/}:"
+  if [ -z "${call#select}" ]; then
+    # We need uniqueness for discovery, so instead of truth of __func__ to
+    # cover any of our mistakes(!), we select the expectation.
+    message+="${symbol}: ENTER\\\\n\");"
+  else
+    message+="%s:${call}: ENTER\\\\n\", __func__);"
+  fi
+  if grep "${TAB}${message%%\\*}" ${file} >/dev/null; then
+    if [ "${SYMBOLS}" == "${SYMBOLS#* ${symbol}:${call#select}}" ]; then
+      echo INFO: already ${file} instrumented ${call#select} ${symbol} >&2
+      SYMBOLS="${SYMBOLS}${symbol}:${call} "
+    fi
+    return
+  fi
+  if [ "device_initcall" = "${call}" -o "module_init" = "${call}" -o "module_exit" = "${call}" ] &&
+     grep "${TAB}printk(KERN_WARNING \"${file##*/}:%s:\(builtin\|module\)_[a-z]*_driver: ENTER" ${file} >/dev/null; then
+    if [ "${SYMBOLS}" == "${SYMBOLS#* ${symbol}:${call#select}}" ]; then
+      echo INFO: maybe already ${file} instrumented ${call#select} ${symbol} >&2
+    fi
+    return
+  fi
+  sed "/^\(static \)\{0,1\}.* ${symbol}(/ {
+         N
+         s/^\(static \)\{0,1\}\(.* ${symbol}(\)\(void\)\{0,1\}) {[ ${TAB}]*}\(\n\)/\1\2\3)\4{\4${TAB}${message}\4}\4/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(\n${TAB}\)\(kfree(\|DBG(\|return[ ${TAB}]\|if (\|platform_driver_\|class_destroy(\|pr_info(\|[a-z_0-9]*_register\(_drivers\|_simple\)\{0,1\}(\|[a-z_0-9]*_\(un\|de\)register\(_drivers\|_simple\)\{0,1\}(\|[a-z+_0-9]*_driver(\)/\1${message}&/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(\n${TAB}\)\(DBG(\|return[ ${TAB}]\|if (\|platform_driver_\|pr_info(\|[a-z_0-9]*_register\(_drivers\|_simple\)\{0,1\}(\|[a-z_0-9]*_\(un\|de\)register\(_drivers\|_simple\)\{0,1\}(\)/\1${message}&/
+         t exit
+         s/\(static void .*\)\(\n${TAB}\)\([a-z].*\)\2}\$/\1\2${message}\2\3\2}/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         t exit
+         N
+         /printk(KERN_WARNING \"${file##*/}:/ b exit
+         s/\(.*\)\(\n${TAB}\)\(.*\n\)\2/&${message}\2/
+         : exit
+       }
+       s/^builtin_\([a-z]*\)_driver(\(${symbol}\));\$/static int __init \2_init(void)\n{\n${TAB}${message}\n${TAB}return \1_driver_register(\&\2);\n}\ndevice_initcall(\2_init);/
+       s/^module_\([a-z]*\)_driver(\(${symbol}\));\$/static int __init \2_init(void)\n{\n${TAB}${message}\n${TAB}return \1_driver_register(\&\2);\n}\nmodule_init(\2_init);\n\nstatic void __exit \2_exit(void)\n{\n${TAB}${message}\n${TAB}\1_driver_unregister(\&\2);\n}\nmodule_exit(\2_exit);/
+       " ${file} > ${TMP}/${file##*/} &&
+    ! cmp -s ${file} ${TMP}/${file##*/} &&
+    cp ${TMP}/${file##*/} ${file} &&
+    (
+      echo INFO: modified ${file} to instrument ${call#select} ${symbol} >&2
+      echo ${symbol}
+    ) ||
+    (
+      files=`grep -lr "^\(static \)\{0,1\}[^ ${TAB}][ %{TAB}_a-zA-Z0-9]* ${symbol}(" ${DIR} |
+               sed -e '/[.]h$/d' -e 's@^[.]/@@'`
+      if [ X"${file}" != X"${files}" ]; then
+        echo "${ORANGE}WARNING${NORMAL}: ${symbol} is in ${files}" >&2
+        if [ 1 -eq `echo ${files} | wc -w` ]; then
+          file=${files}
+          add_debug_printk
+          exit
+        fi
+      fi
+      if [ "${SYMBOLS}" == "${SYMBOLS#* ${symbol}:${call#select}}" ]; then
+        echo "${RED}ERROR${NORMAL}: failed to modify ${file} to instrument" ${call#select} ${symbol} >&2
+      fi
+      false
+    )
+    ret=${?}
+    rm ${TMP}/${file##*/}
+    if [ 0 -eq ${ret} ]; then
+      SYMBOLS="${SYMBOLS}${symbol}:${call} "
+    fi
+    return ${ret}
+}
+
+# module_init, module_exit, late_initcall ...
+(
+  grep -Hr '^\(builtin_[a-z]*_driver\|module_[a-z]*_driver\|module_\(init\|exit\)\|[a-z]*_initcall\)(' ${DIR} |
+    sed -n 's@^[.]/@@
+            s/^\([^:]*\):\(builtin_[a-z]*_driver\|module_[a-z]*_driver\|module_init\|module_exit\|[a-z]*_initcall\)(\([^)]*\));$/\1 \2 \3/p' |
+    sort -u
+  find ${DIR} -name '*.c' |
+    while read file; do
+      sed -n "/.* [a-z_0-9]*(void)\$/ {
+                : loop
+                N
+                /^[^\n]* [a-z_0-9]*(void)\n.*\n}\$/ {
+                  /.*platform_\(driver\|device\)_\(un\)\{0,1\}register([&][^)]*).*/ {
+                    s@^[^\n]* \([a-z_0-9]*\)(void)\n.*@${file} select \1@p
+                    b exit
+                  }
+                  /.*[ ${TAB}]_[a-z]_\(un\)\{0,1\}register_driver([&][^, ${TAB})]*).*/ {
+                    s@^[^\n]* \([a-z_0-9]*\)(void)\n.*@${file} select \1@p
+                    b exit
+                  }
+                  /.*i2c_\(add\|del\)_driver([&][^)]*).*/ {
+                    s@^[^\n]* \([a-z_0-9]*\)(void)\n.*@${file} select \1@p
+                  }
+                  b exit
+                }
+                b loop
+              }
+              : exit" ${file}
+    done |
+      sort -u
+) |
+  while read file call symbol; do
+    if ! add_debug_printk && [ "${SYMBOLS}" == "${SYMBOLS#* ${symbol}:${call#select}}" ]; then
+      echo FAILED
+    fi
+
+    if [ "${call}" != "${call#builtin_*_driver}" -o "${call}" != "${call#module_*_driver}" ]; then
+      symbol=${symbol}_init
+    fi
+    call=probe
+    sed -n "/\(static \)\{0,1\}.* ${symbol}(/,/^}/ {
+              s/.*platform_\(driver\|device\)_register([&]\([^)]*\)).*/struct platform_\1 \2/p
+              s/.*[ ${TAB}]\(_[a-z]\)_register_driver([&]\([^, ${TAB})]*\)).*/struct \1_driver \2/p
+              s/.*i2c_add_driver([&]\([^)]*\)).*/struct i2c_driver \1/p
+            }
+            s/\(builtin\|module\)_\([a-z]*_driver\)(\([^)]*\));/struct \2 \3/p" ${file} |
+      sort -u |
+      while read struct; do
+        sed -n "/\(static \)\{0,1\}${struct} = {/,/^};/ {
+                  s/^[ ${TAB}]*[.]probe[ ${TAB}]*=[ ${TAB}]*\([^ ${TAB}]*\),\$/\1/p
+                }" ${file} |
+          sort -u |
+          while read symbol; do
+            if ! add_debug_printk && [ "${SYMBOLS}" == "${SYMBOLS#* ${symbol}:${call} }" ]; then
+              echo FAILED
+            fi
+          done
+      done
+  done |
+    sort -u |
+    tee ${TMP}/list |
+    grep '^FAILED' >/dev/null
+ret=${?}
+SYMBOLS=`grep -v '^FAILED$' ${TMP}/list`
+
+rm -rf ${TMP}
+
+if [ 0 -ne ${ret} ]; then
+  echo "DONE" >&2
+
+  AUTHOR_NAME="`git config user.name`"
+  AUTHOR_EMAIL="`git config user.email`"
+  if [ -z "${AUTHOR_EMAIL}" ]; then
+    AUTHOR_EMAIL="`${USER}@google.com`"
+  fi
+  if [ -z "${AUTHOR_NAME}" ]; then
+    convert_ldap_to_name() {
+      echo "${1##*/}" |
+        sed "s@[-_]@ @g
+             s@   *@ @g
+             s@\(saravana\)k@\1 kannan@
+             s@salyzyn@mark &@
+             s@hridya@& valsaraju@
+             s@\(will\)\(mcvicker\)@\1 \2@
+             s@q\(perret\)@quentin \1@
+             s@\(connor\)o@\1 O\'Brien@
+             s@t\(kjos\)@todd \1@
+             s@ss\(patil\)@sandeep \1@
+             s@s\(muckle\)@steve \1@
+             s@\(nick\)\(chung\)@\1 \2@
+             s@rurumi\(hong\)@alex \1@
+             s@\(hsinyi\)\(tseng\)@\1 \2@" |
+        sed 's@\(^\| \)a@\1A@g
+             s@\(^\| \)b@\1B@g
+             s@\(^\| \)c@\1C@g
+             s@\(^\| \)d@\1D@g
+             s@\(^\| \)e@\1E@g
+             s@\(^\| \)f@\1F@g
+             s@\(^\| \)g@\1G@g
+             s@\(^\| \)h@\1H@g
+             s@\(^\| \)i@\1I@g
+             s@\(^\| \)j@\1J@g
+             s@\(^\| \)k@\1K@g
+             s@\(^\| \)l@\1L@g
+             s@\(^\| \)m@\1M@g
+             s@\(^\| \)n@\1N@g
+             s@\(^\| \)o@\1O@g
+             s@\(^\| \)p@\1P@g
+             s@\(^\| \)q@\1Q@g
+             s@\(^\| \)r@\1R@g
+             s@\(^\| \)s@\1S@g
+             s@\(^\| \)t@\1T@g
+             s@\(^\| \)u@\1U@g
+             s@\(^\| \|Mc\)v@\1V@g
+             s@\(^\| \)w@\1W@g
+             s@\(^\| \)x@\1X@g
+             s@\(^\| \)y@\1Y@g
+             s@\(^\| \)z@\1Z@g'
+    }
+    AUTHOR_NAME="`convert_ldap_to_name ${USER}`"
+  fi
+
+  git commit -a -m "GKI: DEBUG: add instrumentation to init and probe functions
+
+Automatically generated by ${0}
+
+The following symbols are instrumented:
+`echo \"${SYMBOLS}\" |
+   sed 's/^/ - /'`
+
+Signed-off-by: ${AUTHOR_NAME} <${AUTHOR_EMAIL}>
+Test: compile" ||
+    echo "${RED}ERROR${NORMAL}: failed to commit changes to git" >&2
+  exit
+fi
+echo "${RED}FAILED${NORMAL}: could not complete task" >&2
+exit 1
