@@ -99,7 +99,7 @@ extern struct qmi_elem_info data_ep_id_type_v01_ei[];
 
 void *qmi_rmnet_has_dfc_client(struct qmi_info *qmi);
 
-#ifdef CONFIG_QCOM_QMI_DFC
+#if IS_ENABLED(CONFIG_QCOM_QMI_DFC)
 struct rmnet_flow_map *
 qmi_rmnet_get_flow_map(struct qos_info *qos_info,
 		       u32 flow_id, int ip_type);
@@ -176,7 +176,7 @@ static inline void dfc_qmap_client_exit(void *dfc_data)
 }
 #endif
 
-#ifdef CONFIG_QCOM_QMI_POWER_COLLAPSE
+#if IS_ENABLED(CONFIG_QCOM_QMI_POWER_COLLAPSE)
 int
 wda_qmi_client_init(void *port, struct svc_info *psvc, struct qmi_info *qmi);
 void wda_qmi_client_exit(void *wda_data);

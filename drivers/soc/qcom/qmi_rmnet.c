@@ -41,7 +41,7 @@ unsigned int rmnet_wq_frequency __read_mostly = 1000;
 					1 : rmnet_wq_frequency/10) * (HZ/100))
 #define NO_DELAY (0x0000 * HZ)
 
-#ifdef CONFIG_QCOM_QMI_DFC
+#if IS_ENABLED(CONFIG_QCOM_QMI_DFC)
 static unsigned int qmi_rmnet_scale_factor = 5;
 #endif
 
@@ -122,7 +122,7 @@ qmi_rmnet_has_pending(struct qmi_info *qmi)
 	return 0;
 }
 
-#ifdef CONFIG_QCOM_QMI_DFC
+#if IS_ENABLED(CONFIG_QCOM_QMI_DFC)
 static void
 qmi_rmnet_clean_flow_list(struct qmi_info *qmi, struct net_device *dev,
 			  struct qos_info *qos)
@@ -669,7 +669,7 @@ bool qmi_rmnet_all_flows_enabled(struct net_device *dev)
 }
 EXPORT_SYMBOL(qmi_rmnet_all_flows_enabled);
 
-#ifdef CONFIG_QCOM_QMI_DFC
+#if IS_ENABLED(CONFIG_QCOM_QMI_DFC)
 void qmi_rmnet_burst_fc_check(struct net_device *dev,
 			      int ip_type, u32 mark, unsigned int len)
 {
@@ -780,7 +780,7 @@ void qmi_rmnet_qos_exit(struct net_device *dev, void *qos)
 EXPORT_SYMBOL(qmi_rmnet_qos_exit);
 #endif
 
-#ifdef CONFIG_QCOM_QMI_POWER_COLLAPSE
+#if IS_ENABLED(CONFIG_QCOM_QMI_POWER_COLLAPSE)
 static struct workqueue_struct  *rmnet_ps_wq;
 static struct rmnet_powersave_work *rmnet_work;
 static bool rmnet_work_quit;
