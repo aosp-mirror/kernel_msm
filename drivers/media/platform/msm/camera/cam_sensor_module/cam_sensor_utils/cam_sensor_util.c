@@ -175,8 +175,6 @@ int32_t cam_sensor_handle_random_write(
 		cam_cmd_i2c_random_wr->header.addr_type;
 	i2c_list->i2c_settings.data_type =
 		cam_cmd_i2c_random_wr->header.data_type;
-	i2c_list->i2c_settings.slave_addr =
-		cam_cmd_i2c_random_wr->header.slave_addr;
 
 	for (cnt = 0; cnt < (cam_cmd_i2c_random_wr->header.count);
 		cnt++) {
@@ -773,54 +771,6 @@ int32_t msm_camera_fill_vreg_params(
 			if (j == num_vreg)
 				power_setting[i].seq_val = INVALID_VREG;
 			break;
-		case SENSOR_CUSTOM_REG3:
-			for (j = 0; j < num_vreg; j++) {
-
-				if (strcmp(soc_info->rgltr_name[j],
-					"cam_v_custom3") != 0)
-					continue;
-
-				CAM_DBG(CAM_SENSOR,
-					"i:%d j:%d cam_vcustom3", i, j);
-				power_setting[i].seq_val = j;
-
-				if (VALIDATE_VOLTAGE(
-					soc_info->rgltr_min_volt[j],
-					soc_info->rgltr_max_volt[j],
-					power_setting[i].config_val)) {
-					soc_info->rgltr_min_volt[j] =
-					soc_info->rgltr_max_volt[j] =
-					power_setting[i].config_val;
-				}
-				break;
-			}
-			if (j == num_vreg)
-				power_setting[i].seq_val = INVALID_VREG;
-			break;
-		case SENSOR_CUSTOM_REG4:
-			for (j = 0; j < num_vreg; j++) {
-
-				if (strcmp(soc_info->rgltr_name[j],
-					"cam_v_custom4") != 0)
-					continue;
-
-				CAM_DBG(CAM_SENSOR,
-					"i:%d j:%d cam_vcustom4", i, j);
-				power_setting[i].seq_val = j;
-
-				if (VALIDATE_VOLTAGE(
-					soc_info->rgltr_min_volt[j],
-					soc_info->rgltr_max_volt[j],
-					power_setting[i].config_val)) {
-					soc_info->rgltr_min_volt[j] =
-					soc_info->rgltr_max_volt[j] =
-					power_setting[i].config_val;
-				}
-				break;
-			}
-			if (j == num_vreg)
-				power_setting[i].seq_val = INVALID_VREG;
-			break;
 		default:
 			break;
 		}
@@ -873,8 +823,7 @@ int cam_sensor_util_request_gpio_table(
 				 * apply new gpios, outout a error message
 				 * for driver bringup debug
 				 */
-				CAM_WARN(CAM_SENSOR,
-					"gpio %d:%s request fails (OK for dual camera)",
+				CAM_ERR(CAM_SENSOR, "gpio %d:%s request fails",
 					gpio_tbl[i].gpio, gpio_tbl[i].label);
 			}
 		}
@@ -1634,8 +1583,7 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 			ctrl->pinctrl_info.pinctrl,
 			ctrl->pinctrl_info.gpio_state_active);
 		if (ret)
-			CAM_WARN(CAM_SENSOR,
-				"cannot set pin to active state (OK for dual camera)");
+			CAM_ERR(CAM_SENSOR, "cannot set pin to active state");
 	}
 
 	ret = cam_res_mgr_shared_pinctrl_select_state(true);
@@ -1755,8 +1703,6 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 		case SENSOR_VAF_PWDM:
 		case SENSOR_CUSTOM_REG1:
 		case SENSOR_CUSTOM_REG2:
-		case SENSOR_CUSTOM_REG3:
-		case SENSOR_CUSTOM_REG4:
 			if (power_setting->seq_val == INVALID_VREG)
 				break;
 
@@ -1793,21 +1739,6 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 					soc_info->rgltr_max_volt[vreg_idx],
 					soc_info->rgltr_op_mode[vreg_idx],
 					soc_info->rgltr_delay[vreg_idx]);
-
-				if (ctrl->cam_power_aurora_v2 == 1 &&
-					power_setting->seq_type == SENSOR_VIO) {
-					rc =
-					cam_soc_util_regulator_enable(
-						regulator_get(
-						soc_info->dev,
-						"cam_v_custom1"),
-						"cam_v_custom1",
-						1800000,
-						1800000,
-						0,
-						0);
-				}
-
 				if (rc) {
 					CAM_ERR(CAM_SENSOR,
 						"Reg Enable failed for %s",
@@ -1888,8 +1819,6 @@ power_up_failed:
 		case SENSOR_VAF_PWDM:
 		case SENSOR_CUSTOM_REG1:
 		case SENSOR_CUSTOM_REG2:
-		case SENSOR_CUSTOM_REG3:
-		case SENSOR_CUSTOM_REG4:
 			if (power_setting->seq_val < num_vreg) {
 				CAM_DBG(CAM_SENSOR, "Disable Regulator");
 				vreg_idx = power_setting->seq_val;
@@ -1901,20 +1830,6 @@ power_up_failed:
 					soc_info->rgltr_max_volt[vreg_idx],
 					soc_info->rgltr_op_mode[vreg_idx],
 					soc_info->rgltr_delay[vreg_idx]);
-
-				if (ctrl->cam_power_aurora_v2 == 1 &&
-					power_setting->seq_type == SENSOR_VIO) {
-					rc =
-					cam_soc_util_regulator_disable(
-						regulator_get(
-						soc_info->dev,
-						"cam_v_custom1"),
-						"cam_v_custom1",
-						1800000,
-						1800000,
-						0,
-						0);
-				}
 
 				if (rc) {
 					CAM_ERR(CAM_SENSOR,
@@ -2072,8 +1987,6 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 		case SENSOR_VAF_PWDM:
 		case SENSOR_CUSTOM_REG1:
 		case SENSOR_CUSTOM_REG2:
-		case SENSOR_CUSTOM_REG3:
-		case SENSOR_CUSTOM_REG4:
 			if (pd->seq_val == INVALID_VREG)
 				break;
 
@@ -2091,21 +2004,6 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 					soc_info->rgltr_max_volt[ps->seq_val],
 					soc_info->rgltr_op_mode[ps->seq_val],
 					soc_info->rgltr_delay[ps->seq_val]);
-
-					if (ctrl->cam_power_aurora_v2 == 1 &&
-						pd->seq_type == SENSOR_VIO) {
-						ret =
-						cam_soc_util_regulator_disable(
-							regulator_get(
-							soc_info->dev,
-							"cam_v_custom1"),
-							"cam_v_custom1",
-							1800000,
-							1800000,
-							0,
-							0);
-					}
-
 					if (ret) {
 						CAM_ERR(CAM_SENSOR,
 						"Reg: %s disable failed",

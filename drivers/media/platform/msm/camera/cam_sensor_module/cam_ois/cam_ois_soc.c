@@ -48,15 +48,6 @@ static int cam_ois_get_dt_data(struct cam_ois_ctrl_t *o_ctrl)
 		return rc;
 	}
 
-	if (of_property_read_u32(of_node, "ois-version",
-		&o_ctrl->ois_version) < 0) {
-		/* Set default ois version to latest */
-		CAM_WARN(CAM_OIS,
-			"failed to parse ois version, set to default");
-		o_ctrl->ois_version = 2;
-	}
-	CAM_INFO(CAM_OIS, "ois version %d", o_ctrl->ois_version);
-
 	if (!soc_info->gpio_data) {
 		CAM_INFO(CAM_OIS, "No GPIO found");
 		return 0;

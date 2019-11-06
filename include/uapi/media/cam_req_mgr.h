@@ -38,7 +38,6 @@
 #define CAM_REQ_MGR_MAX_HANDLES           64
 #define CAM_REQ_MGR_MAX_HANDLES_V2        128
 #define MAX_LINKS_PER_SESSION             2
-#define MAX_LINKS_PER_SESSION             4
 
 /* V4L event type which user space will subscribe to */
 #define V4L_EVENT_CAM_REQ_MGR_EVENT       (V4L2_EVENT_PRIVATE_START + 0)
@@ -47,7 +46,6 @@
 #define V4L_EVENT_CAM_REQ_MGR_SOF            0
 #define V4L_EVENT_CAM_REQ_MGR_ERROR          1
 #define V4L_EVENT_CAM_REQ_MGR_SOF_BOOT_TS    2
-#define V4L_EVENT_CAM_REQ_MGR_VSYNC_TS       3
 
 /* SOF Event status */
 #define CAM_REQ_MGR_SOF_EVENT_SUCCESS           0
@@ -78,33 +76,6 @@
  */
 #define CAM_REQ_MGR_SYNC_MODE_NO_SYNC   0
 #define CAM_REQ_MGR_SYNC_MODE_SYNC      1
-
-enum laser_tag_type {
-	LASER_TAG_NONE,
-	LASER_TAG_FLOOD,
-	LASER_TAG_DOT
-};
-
-/**
- * Notify laser safety ic status to user space
- * NO_ERROR: No error detected
- * LENS_CRACK : ITO-C/ITO-R detected lens crack and laser is been disabled
- * LASER_OPERATION_FAULT : Multiple reason caused laser is been killed.
- *                         1. Over current
- *                         2. Over pulse width
- *                         3. Dot/Flood strobe stacked
- * TEMPERATURE_TOO_HIGH : Temperature too high and laser is beend disabled
- * TEMPERATURE_TOO_LOW : Temperature too low and laser is beend disabled
- * HUMIDITY_TOO_HIGH : Humidity too high and laser is beend disabled
- */
-enum safety_ic_error_type {
-	NO_ERROR,
-	LENS_CRACK,
-	LASER_OPERATION_FAULT,
-	TEMPERATURE_TOO_HIGH,
-	TEMPERATURE_TOO_LOW,
-	HUMIDITY_TOO_HIGH
-};
 
 /**
  * struct cam_req_mgr_event_data
@@ -460,8 +431,6 @@ struct cam_req_mgr_error_msg {
  * @timestamp: timestamp of the frame
  * @link_hdl: link handle associated with this message
  * @sof_status: sof status success or fail
- * @laser_tag: tag is the frame captured with dot or flood
- * @safety_ic_status: laser safety ic status
  */
 struct cam_req_mgr_frame_msg {
 	uint64_t request_id;
@@ -469,8 +438,6 @@ struct cam_req_mgr_frame_msg {
 	uint64_t timestamp;
 	int32_t  link_hdl;
 	uint32_t sof_status;
-	enum laser_tag_type laser_tag;
-	enum safety_ic_error_type safety_ic_status;
 };
 
 /**

@@ -274,19 +274,3 @@ void cam_req_mgr_workq_destroy(struct cam_req_mgr_core_workq **crm_workq)
 		*crm_workq = NULL;
 	}
 }
-
-void cam_req_mgr_workq_flush(struct cam_req_mgr_core_workq **crm_workq)
-{
-	struct workqueue_struct   *job;
-	CAM_DBG(CAM_CRM, "flush workque %pK", crm_workq);
-	if (!crm_workq)
-		return;
-
-	if (!(*crm_workq))
-		return;
-
-	if ((*crm_workq)->job) {
-		job = (*crm_workq)->job;
-		flush_workqueue(job);
-	}
-}

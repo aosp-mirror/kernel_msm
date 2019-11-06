@@ -424,8 +424,7 @@ int cam_res_mgr_gpio_request(struct device *dev, uint gpio,
 	if (!found) {
 		rc = gpio_request_one(gpio, flags, label);
 		if (rc) {
-			CAM_WARN(CAM_RES,
-				"gpio %d:%s request fails (OK for dual camera)",
+			CAM_ERR(CAM_RES, "gpio %d:%s request fails",
 				gpio, label);
 			return rc;
 		}

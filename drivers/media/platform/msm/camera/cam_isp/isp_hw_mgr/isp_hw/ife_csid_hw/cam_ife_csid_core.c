@@ -2906,14 +2906,14 @@ static int cam_ife_csid_init_hw(void *hw_priv,
 	rc = cam_ife_csid_reset_retain_sw_reg(csid_hw);
 	if (rc < 0) {
 		CAM_ERR(CAM_ISP, "CSID: Failed in SW reset");
-		cam_ife_csid_disable_hw(csid_hw);
-		goto end;
 	}
+
+	if (rc)
+		cam_ife_csid_disable_hw(csid_hw);
 
 	spin_lock_irqsave(&csid_hw->lock_state, flags);
 	csid_hw->device_enabled = 1;
 	spin_unlock_irqrestore(&csid_hw->lock_state, flags);
-
 end:
 	mutex_unlock(&csid_hw->hw_info->hw_mutex);
 	return rc;
@@ -3300,10 +3300,6 @@ static int cam_ife_csid_process_cmd(void *hw_priv,
 		break;
 	case CAM_IFE_CSID_SET_SENSOR_DIMENSION_CFG:
 		rc = cam_ife_csid_set_sensor_dimension(csid_hw, cmd_args);
-	case CAM_IFE_CSID_ENABLE_IRQ:
-		rc = cam_soc_util_irq_enable(&csid_hw->hw_info->soc_info);
-		if (rc < 0)
-			CAM_ERR(CAM_ISP, "IRQ enable failed");
 		break;
 	default:
 		CAM_ERR(CAM_ISP, "CSID:%d unsupported cmd:%d",

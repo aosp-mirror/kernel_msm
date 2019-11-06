@@ -22,7 +22,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/leds-qpnp-flash.h>
-#include <linux/thermal.h>
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-event.h>
@@ -41,17 +40,13 @@
 
 #define CAMX_FLASH_DEV_NAME "cam-flash-dev"
 
-#define CAM_FLASH_PIPELINE_DELAY 2
+#define CAM_FLASH_PIPELINE_DELAY 1
 
 #define FLASH_DRIVER_I2C "i2c_flash"
 
 #define CAM_FLASH_PACKET_OPCODE_INIT                 0
 #define CAM_FLASH_PACKET_OPCODE_SET_OPS              1
 #define CAM_FLASH_PACKET_OPCODE_NON_REALTIME_SET_OPS 2
-#define CAM_FLASH_THERMAL_INITIAL_LEVEL              0
-#define CAM_FLASH_THERMAL_MITIGATION_LEVEL           3
-#define CAM_FLASH_THERMAL_MITIGATION_COUNT \
-(CAM_FLASH_THERMAL_MITIGATION_LEVEL + 1)
 
 struct cam_flash_ctrl;
 
@@ -218,13 +213,6 @@ struct cam_flash_ctrl {
 	struct camera_io_master             io_master_info;
 	struct i2c_data_settings            i2c_data;
 	uint32_t                            last_flush_req;
-	/* Thermal settings */
-	struct thermal_cooling_device       *cdev;
-	int                                 thermal_current_level;
-	int    max_current_under_mitigation[CAM_FLASH_THERMAL_MITIGATION_COUNT];
-	struct delayed_work                 init_work;
-	const char                          *cooling_name;
-	const char                          *bcl_flash_node;
 };
 
 int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg);

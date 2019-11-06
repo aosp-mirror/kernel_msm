@@ -35,7 +35,6 @@
 /* Default frame rate is 30 */
 #define DEFAULT_FRAME_DURATION 33333333
 
-#define SYNC_LINK_TIME_DIFF_MAX   8000000
 #define SYNC_LINK_SOF_CNT_MAX_LMT 1
 
 #define MAXIMUM_LINKS_PER_SESSION  4
@@ -230,7 +229,6 @@ struct cam_req_mgr_slot {
 	int32_t               idx;
 	int32_t               skip_idx;
 	enum crm_slot_status  status;
-	uint64_t              apply_timestamp;
 	int32_t               recover;
 	int64_t               req_id;
 	int32_t               sync_mode;
@@ -348,9 +346,8 @@ struct cam_req_mgr_core_link {
 	spinlock_t                           link_state_spin_lock;
 	uint32_t                             subscribe_event;
 	uint32_t                             trigger_mask;
-	struct cam_req_mgr_core_link        *sync_links[MAX_LINKS_PER_SESSION];
-	int32_t                              sync_links_num;
-	int32_t                              sync_link_sof_skip_cnt;
+	struct cam_req_mgr_core_link        *sync_link;
+	bool                                 sync_link_sof_skip;
 	int32_t                              open_req_cnt;
 	uint32_t                             last_flush_id;
 	atomic_t                             is_used;
@@ -497,11 +494,3 @@ int cam_req_mgr_dump_request(struct cam_dump_req_cmd *dump_req);
 
 #endif
 
-/**
- * cam_req_mgr_tag_laser()
- * @brief: find laser type with corresponding frame
- * @msg: SOF message
- */
-int cam_req_mgr_tag_laser(struct cam_req_mgr_message *msg);
-
-#endif

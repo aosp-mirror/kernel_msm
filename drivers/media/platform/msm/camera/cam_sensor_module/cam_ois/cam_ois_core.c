@@ -25,9 +25,6 @@
 static bool ois_debug;
 module_param(ois_debug, bool, 0644);
 
-#define OIS_WIDE_SID (0x76 >> 1)
-#define OIS_TELE_SID (0x78 >> 1)
-
 int cam_ois_calibration(struct cam_ois_ctrl_t *o_ctrl,
 	stReCalib *cal_result)
 {
@@ -446,15 +443,6 @@ release_firmware:
 
 /**
  * cam_ois_shift_data_enqueue - enqueue shift data to ring buffer
- * @time_readout:       ctrl structure
- * @shift_x:            shift in x
- * @shift_y:            shift in y
- * @buffer:             rint buffer
- *
- * Returns success or failure
- */
-static int cam_ois_shift_data_enqueue(int64_t time_readout, int16_t shift_x,
-	int16_t shift_y, struct cam_ois_ctrl_t *o_ctrl)
  * @o_shift_data:       ois shift data
  * @o_ctrl:             ctrl structure
  *
@@ -476,15 +464,11 @@ static int cam_ois_shift_data_enqueue(struct cam_ois_shift *o_shift_data,
 		struct cam_ois_shift *pb =
 			&o_ctrl->buf.buffer[o_ctrl->buf.write_pos];
 
-		pb->time_readout = time_readout;
-		pb->ois_shift_x = shift_x;
-		pb->ois_shift_y = shift_y;
 		pb->time_readout = o_shift_data->time_readout;
 		pb->ois_shift_x = o_shift_data->ois_shift_x;
 		pb->ois_shift_y = o_shift_data->ois_shift_y;
 		pb->af_shift_z = o_shift_data->af_shift_z;
 		pb->af_ois_xtalk_z = o_shift_data->af_ois_xtalk_z;
-		pb->af_lop1 = o_shift_data->af_lop1;
 		o_ctrl->buf.write_pos++;
 		if (o_ctrl->buf.write_pos == CAM_OIS_SHIFT_DATA_BUFFER_SIZE) {
 			o_ctrl->buf.write_pos = 0;
@@ -503,32 +487,14 @@ static int cam_ois_shift_data_enqueue(struct cam_ois_shift *o_shift_data,
  */
 static void cam_ois_read_work(struct work_struct *work)
 {
-	uint8_t buf[8] = { 0 };
-	int32_t rc = 0;
-	int16_t shift_x, shift_y;
-	struct timespec ts;
-	int64_t time_readout;
-	struct cam_ois_timer_t *ois_timer_in;
-
-	ois_timer_in = container_of(work, struct cam_ois_timer_t, g_work);
-	get_monotonic_boottime(&ts);
-	rc = camera_io_dev_read_seq(&ois_timer_in->o_ctrl->io_master_info,
-		0xE001, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
-		CAMERA_SENSOR_I2C_TYPE_WORD, 6);
 	uint8_t buf[12] = { 0 };
 	int32_t rc = 0;
 	struct timespec ts;
 	struct cam_ois_shift ois_shift_data;
 	struct cam_ois_timer_t *ois_timer_in;
-	int8_t y_sign;
 
 	ois_timer_in = container_of(work, struct cam_ois_timer_t, g_work);
 	get_monotonic_boottime(&ts);
-
-	/* later ois module change the magnetic polarity,
-	 * sign of y axis needs to be corrected
-	 */
-	y_sign = ois_timer_in->o_ctrl->ois_version == 2 ? -1 : 1;
 
 	if (ois_debug) {
 		rc = camera_io_dev_read_seq(
@@ -537,15 +503,6 @@ static void cam_ois_read_work(struct work_struct *work)
 			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
 		CAM_INFO(CAM_OIS,
 			"[0xE003] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
-			buf[6], buf[7]);
-
-		rc = camera_io_dev_read_seq(
-			&ois_timer_in->o_ctrl->io_master_info,
-			0xE005, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
-			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
-		CAM_INFO(CAM_OIS,
-			"[0xE005] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
 			buf[6], buf[7]);
 	}
@@ -572,21 +529,11 @@ static void cam_ois_read_work(struct work_struct *work)
 			CAMERA_SENSOR_I2C_TYPE_WORD, 2);
 		ois_timer_in->o_ctrl->buf.af_read_times = 0;
 	}
-	if (rc != 0) {
-		ois_timer_in->i2c_fail_count++;
-		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
-			++ois_timer_in->i2c_fail_count);
-	rc = camera_io_dev_read_seq(
-		&ois_timer_in->o_ctrl->io_master_info,
-		0x0764, &buf[8], CAMERA_SENSOR_I2C_TYPE_WORD,
-		CAMERA_SENSOR_I2C_TYPE_WORD, 2);
 
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
 		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
 			++ois_timer_in->i2c_fail_count);
-			++ois_timer_in->i2c_fail_count);
-			ois_timer_in->i2c_fail_count);
 		if (ois_timer_in->i2c_fail_count >= MAX_FAIL_CNT) {
 			CAM_ERR(CAM_OIS, "Too many i2c failed. Stop timer.");
 			ois_timer_in->ois_timer_state = CAM_OIS_TIME_ERROR;
@@ -595,12 +542,6 @@ static void cam_ois_read_work(struct work_struct *work)
 	}
 
 	ois_timer_in->i2c_fail_count = 0;
-	time_readout = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
-	shift_x = (int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
-	shift_y = (int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
-
-	rc = cam_ois_shift_data_enqueue(time_readout, shift_x,
-		shift_y, ois_timer_in->o_ctrl);
 	ois_shift_data.time_readout =
 		(int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
 	ois_shift_data.ois_shift_x =
@@ -611,10 +552,6 @@ static void cam_ois_read_work(struct work_struct *work)
 		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
 	ois_shift_data.af_ois_xtalk_z =
 		(int16_t)(((uint16_t)buf[10] << 8) + (uint16_t)buf[11]);
-		(int16_t)((((uint16_t)buf[2] << 8) + (uint16_t)buf[3])
-		* y_sign);
-	ois_shift_data.af_lop1 =
-		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
 
 	rc = cam_ois_shift_data_enqueue(&ois_shift_data, ois_timer_in->o_ctrl);
 	if (rc != 0)
@@ -698,7 +635,6 @@ static int cam_ois_start_shift_reader(struct cam_ois_ctrl_t *o_ctrl)
 	// set worker function and work queue
 	INIT_WORK(&o_ctrl->timer.g_work, cam_ois_read_work);
 	o_ctrl->timer.ois_wq = create_workqueue("ois_wq");
-	o_ctrl->timer.ois_wq = alloc_workqueue("ois_wq", WQ_HIGHPRI, 1);
 	if (!o_ctrl->timer.ois_wq) {
 		CAM_ERR(CAM_OIS, "ois_wq create failed.");
 		return -EFAULT;
@@ -744,10 +680,6 @@ static int cam_ois_get_shift(struct cam_ois_ctrl_t *o_ctrl,
 	write_pos = o_ctrl->buf.write_pos;
 	if (o_ctrl->buf.is_full) {
 		query_size = CAM_OIS_SHIFT_DATA_BUFFER_SIZE - write_pos;
-		memcpy(&buf[0], &o_ctrl->buf.buffer[write_pos], query_size);
-		if (write_pos > 0)
-			memcpy(&buf[query_size], &o_ctrl->buf.buffer[0],
-				write_pos);
 		memcpy(&buf[0], &o_ctrl->buf.buffer[write_pos],
 			query_size * sizeof(struct cam_ois_shift));
 		if (write_pos > 0)
@@ -757,7 +689,6 @@ static int cam_ois_get_shift(struct cam_ois_ctrl_t *o_ctrl,
 	} else {
 		query_size = write_pos;
 		if (query_size != 0)
-			memcpy(buf, o_ctrl->buf.buffer, query_size);
 			memcpy(buf, o_ctrl->buf.buffer,
 				query_size * sizeof(struct cam_ois_shift));
 	}
@@ -848,36 +779,6 @@ static int cam_ois_util_validate_packet(struct cam_packet *packet)
 	}
 
 	return 0;
-}
-
-static void cam_ois_tele_standby(struct cam_ois_ctrl_t *o_ctrl)
-{
-	uint32_t rc = 0;
-	enum camera_sensor_i2c_type addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
-	enum camera_sensor_i2c_type data_type = CAMERA_SENSOR_I2C_TYPE_DWORD;
-	struct cam_sensor_i2c_reg_array servo_setting = {0xF010, 0x70000, 0, 0};
-	struct cam_sensor_i2c_reg_array standby_setting = {0xF01F, 0x2, 0, 0};
-	struct cam_sensor_i2c_reg_setting write_setting = {&servo_setting, 1,
-		addr_type, data_type, 0, OIS_TELE_SID};
-	uint32_t delay_ms = 3;
-	uint32_t orig_sid = o_ctrl->io_master_info.cci_client->sid;
-	uint32_t orig_master =
-		o_ctrl->io_master_info.cci_client->cci_i2c_master;
-
-	o_ctrl->io_master_info.cci_client->sid = OIS_TELE_SID;
-	o_ctrl->io_master_info.cci_client->cci_i2c_master = 1;
-	rc |= camera_io_dev_poll(&(o_ctrl->io_master_info),
-		0xF100, 0, 0, addr_type, data_type, delay_ms);
-	rc |= camera_io_dev_write(&(o_ctrl->io_master_info), &write_setting);
-	rc |= camera_io_dev_poll(&(o_ctrl->io_master_info),
-		0xF100, 0, 0, addr_type, data_type, delay_ms);
-	write_setting.reg_setting = &standby_setting;
-	rc |= camera_io_dev_write(&(o_ctrl->io_master_info), &write_setting);
-
-	if (rc != 0)
-		CAM_WARN(CAM_UTIL, "%s failed rc %d", __func__, rc);
-	o_ctrl->io_master_info.cci_client->sid = orig_sid;
-	o_ctrl->io_master_info.cci_client->cci_i2c_master = orig_master;
 }
 
 /**
@@ -1083,10 +984,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			}
 		}
 
-		/* OIS-tele enters standby mode on OIS-wide init */
-		if (o_ctrl->io_master_info.cci_client->sid == OIS_WIDE_SID)
-			cam_ois_tele_standby(o_ctrl);
-
 		rc = delete_request(&o_ctrl->i2c_init_data);
 		if (rc < 0) {
 			CAM_WARN(CAM_OIS,
@@ -1148,30 +1045,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			CAM_ERR(CAM_OIS,
 				"More than one cmd buf found in shift_get");
 			return -EINVAL;
-		if (rc < 0) {
-			CAM_ERR(CAM_OIS,
-				"Failed start shift reader, rc: %d", rc);
-			goto rel_pkt;
-		}
-		break;
-	case CAM_OIS_PACKET_OPCODE_SHIFT_READER_STOP:
-		rc = cam_ois_stop_shift_reader(o_ctrl);
-		if (rc < 0) {
-			CAM_ERR(CAM_OIS,
-				"Failed stop shift reader, rc: %d", rc);
-			goto rel_pkt;
-		}
-		break;
-	case CAM_OIS_PACKET_OPCODE_SHIFT_GET:
-	case CAM_OIS_PACKET_OPCODE_READ:
-		rc = cam_ois_util_validate_packet(csl_packet);
-		if (rc < 0)
-			goto rel_pkt;
-		if (csl_packet->num_cmd_buf != 1) {
-			CAM_ERR(CAM_OIS,
-				"More than one cmd buf found in shift_get");
-			rc = -EINVAL;
-			goto rel_pkt;
 		}
 
 		offset = (uint32_t *)((uint8_t *)&csl_packet->payload +
@@ -1182,8 +1055,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			CAM_ERR(CAM_OIS,
 				"Empty cmd buf found in shift_get");
 			return -EINVAL;
-			rc = -EINVAL;
-			goto rel_pkt;
 		}
 
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
@@ -1195,15 +1066,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		if (!generic_ptr) {
 			CAM_ERR(CAM_OIS, "invalid generic_ptr");
 			return -EINVAL;
-			goto rel_pkt;
-		}
-		if (!generic_ptr) {
-			CAM_ERR(CAM_OIS, "invalid generic_ptr");
-			if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
-				CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
-					cmd_desc[i].mem_handle);
-			rc = -EINVAL;
-			goto rel_pkt;
 		}
 		offset = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
@@ -1222,20 +1084,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 	case CAM_OIS_PACKET_OPCODE_CALIBRATION:
 		if (cam_ois_util_validate_packet(csl_packet))
 			return -EINVAL;
-
-		if (cam_mem_put_cpu_buf(cmd_desc->mem_handle))
-			CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
-				cmd_desc[i].mem_handle);
-
-		if (rc < 0) {
-			CAM_ERR(CAM_OIS, "Failed to get ois data");
-			goto rel_pkt;
-		}
-		break;
-	case CAM_OIS_PACKET_OPCODE_CALIBRATION:
-		rc = cam_ois_util_validate_packet(csl_packet);
-		if (rc < 0)
-			goto rel_pkt;
 		offset = (uint32_t *)((uint8_t *)&csl_packet->payload +
 			csl_packet->cmd_buf_offset);
 		cmd_desc = (struct cam_cmd_buf_desc *)offset;
@@ -1248,24 +1096,12 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		if (!generic_ptr) {
 			CAM_ERR(CAM_OIS, "invalid generic_ptr");
 			return -EINVAL;
-			goto rel_pkt;
-		}
-		if (!generic_ptr) {
-			CAM_ERR(CAM_OIS, "invalid generic_ptr");
-			if (cam_mem_put_cpu_buf(cmd_desc[0].mem_handle))
-				CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
-					cmd_desc[i].mem_handle);
-			rc = -EINVAL;
-			goto rel_pkt;
 		}
 		offset = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 		cal_rc = (int32_t *)offset;
 		cal_result = (stReCalib *)(offset + 1);
 		*cal_rc = cam_ois_calibration(o_ctrl, cal_result);
-		if (cam_mem_put_cpu_buf(cmd_desc[0].mem_handle))
-			CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
-				cmd_desc[i].mem_handle);
 		break;
 	default:
 		CAM_ERR(CAM_OIS, "Invalid Opcode: %d",
@@ -1278,11 +1114,9 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		goto rel_pkt;
 
 rel_cmd_buf:
-	if (cmd_desc) {
-		if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
-			CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
-				cmd_desc[i].mem_handle);
-	}
+	if (cam_mem_put_cpu_buf(cmd_desc[i].mem_handle))
+		CAM_WARN(CAM_OIS, "Failed to put cpu buf: 0x%x",
+			cmd_desc[i].mem_handle);
 pwr_dwn:
 	cam_ois_power_down(o_ctrl);
 rel_pkt:

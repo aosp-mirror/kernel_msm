@@ -235,7 +235,6 @@ struct cci_device {
 	uint32_t irq_status1;
 	spinlock_t lock_status;
 	bool is_burst_read;
-	struct mutex mutex;
 	uint32_t irqs_disabled;
 	struct mutex init_mutex;
 };

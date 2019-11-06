@@ -150,8 +150,6 @@ enum msm_camera_power_seq_type {
 	SENSOR_STANDBY,
 	SENSOR_CUSTOM_GPIO1,
 	SENSOR_CUSTOM_GPIO2,
-	SENSOR_CUSTOM_REG3,
-	SENSOR_CUSTOM_REG4,
 	SENSOR_SEQ_TYPE_MAX,
 };
 
@@ -284,7 +282,6 @@ struct cam_sensor_i2c_reg_setting {
 	enum camera_sensor_i2c_type addr_type;
 	enum camera_sensor_i2c_type data_type;
 	unsigned short delay;
-	unsigned short slave_addr;
 };
 
 struct i2c_settings_list {
@@ -316,7 +313,6 @@ struct cam_sensor_power_ctrl_t {
 	struct msm_camera_gpio_num_info *gpio_num_info;
 	struct msm_pinctrl_info pinctrl_info;
 	uint8_t cam_pinctrl_status;
-	uint8_t cam_power_aurora_v2;
 };
 
 struct cam_camera_slave_info {
@@ -324,11 +320,6 @@ struct cam_camera_slave_info {
 	uint16_t sensor_id_reg_addr;
 	uint16_t sensor_id;
 	uint16_t sensor_id_mask;
-};
-
-struct cam_sensor_override_info {
-	uint16_t sensor_slave_addr;
-	uint16_t sensor_id;
 };
 
 struct msm_sensor_init_params {
@@ -388,8 +379,6 @@ enum msm_camera_vreg_name_t {
 	CAM_VAF,
 	CAM_V_CUSTOM1,
 	CAM_V_CUSTOM2,
-	CAM_V_CUSTOM3,
-	CAM_V_CUSTOM4,
 	CAM_VREG_MAX,
 };
 

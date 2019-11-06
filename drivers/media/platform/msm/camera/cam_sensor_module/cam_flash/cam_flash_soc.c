@@ -85,13 +85,16 @@ static int32_t cam_get_source_node_info(
 				&fctrl->flash_trigger[i]);
 
 			if (soc_private->is_wled_flash) {
-				if (wled_flash_led_prepare(
+				rc = wled_flash_led_prepare(
 					fctrl->flash_trigger[i],
 					QUERY_MAX_CURRENT,
-					&soc_private->flash_max_current[i])) {
+					&soc_private->flash_max_current[i]);
+				if (rc) {
 					CAM_ERR(CAM_FLASH,
-					"WLED FLASH max_current read fail");
+					"WLED FLASH max_current read fail: %d",
+						rc);
 					of_node_put(flash_src_node);
+					rc = 0;
 					continue;
 				}
 			} else {
@@ -108,17 +111,24 @@ static int32_t cam_get_source_node_info(
 			}
 
 			/* Read operational-current */
-			if (of_property_read_u32(flash_src_node,
+			rc = of_property_read_u32(flash_src_node,
 				"qcom,current-ma",
-				&soc_private->flash_op_current[i]))
+				&soc_private->flash_op_current[i]);
+			if (rc) {
 				CAM_INFO(CAM_FLASH, "op-current: read failed");
+				rc = 0;
+			}
 
 			/* Read max-duration */
-			if (of_property_read_u32(flash_src_node,
+			rc = of_property_read_u32(flash_src_node,
 				"qcom,duration-ms",
-				&soc_private->flash_max_duration[i]))
+				&soc_private->flash_max_duration[i]);
+			if (rc) {
 				CAM_INFO(CAM_FLASH,
-					"max-duration prop unavailable");
+					"max-duration prop unavailable: %d",
+					rc);
+				rc = 0;
+			}
 			of_node_put(flash_src_node);
 
 			CAM_DBG(CAM_FLASH, "MainFlashMaxCurrent[%d]: %d",
@@ -187,11 +197,14 @@ static int32_t cam_get_source_node_info(
 			}
 
 			/* Read operational-current */
-			if (of_property_read_u32(torch_src_node,
+			rc = of_property_read_u32(torch_src_node,
 				"qcom,current-ma",
-				&soc_private->torch_op_current[i]) < 0)
+				&soc_private->torch_op_current[i]);
+			if (rc < 0) {
 				CAM_WARN(CAM_FLASH,
-					"op-current prop unavailable");
+					"op-current prop unavailable: %d", rc);
+				rc = 0;
+			}
 
 			of_node_put(torch_src_node);
 
@@ -199,40 +212,8 @@ static int32_t cam_get_source_node_info(
 				i, soc_private->torch_max_current[i]);
 		}
 	}
-	if (of_find_property(of_node, "thermal-mitigation", &count)) {
-		count /= sizeof(uint32_t);
-		if (count != (CAM_FLASH_THERMAL_MITIGATION_COUNT)) {
-			CAM_WARN(CAM_FLASH,
-				"thermal-mitigation level not matched:%d",
-				count);
-			return -EINVAL;
-		}
-		rc = of_property_read_u32_array(of_node, "thermal-mitigation",
-			fctrl->max_current_under_mitigation, count);
-		if (rc < 0) {
-			CAM_WARN(CAM_FLASH,
-				 "thermal-mitigation array unavailable");
-			return rc;
-		}
-	} else {
-		CAM_WARN(CAM_FLASH, "thermal-mitigation prop unavailable");
-		return -ENODEV;
-	}
-	rc = of_property_read_string(of_node, "cooling-name",
-				     &fctrl->cooling_name);
-	if (rc < 0) {
-		CAM_WARN(CAM_FLASH, "cooling name not found");
-		return rc;
-	}
 
-	rc = of_property_read_string(of_node, "bcl-node-name",
-				     &fctrl->bcl_flash_node);
-	if (rc < 0) {
-		CAM_WARN(CAM_FLASH, "bcl node not found");
-		return rc;
-	}
-
-	return 0;
+	return rc;
 }
 
 int cam_flash_get_dt_data(struct cam_flash_ctrl *fctrl,
