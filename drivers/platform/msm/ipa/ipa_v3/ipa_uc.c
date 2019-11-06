@@ -1255,6 +1255,7 @@ free_cmd:
 	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa3_uc_setup_event_ring);
 
 int ipa3_uc_quota_monitor(uint64_t quota)
 {
@@ -1327,6 +1328,7 @@ free_cmd:
 
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa3_uc_quota_monitor);
 
 int ipa3_uc_bw_monitor(struct ipa_wdi_bw_info *info)
 {
@@ -1443,6 +1445,7 @@ free_cmd:
 
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa3_uc_bw_monitor);
 
 int ipa3_set_wlan_tx_info(struct ipa_wdi_tx_info *info)
 {
