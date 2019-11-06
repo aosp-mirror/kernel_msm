@@ -188,7 +188,7 @@ config QCOM_QMI_HELPERS
 	  doing this from a kernel driver.
 
 config QCOM_QMI_RMNET
-	bool "QTI QMI Rmnet Helpers"
+	tristate "QTI QMI Rmnet Helpers"
 	depends on QCOM_QMI_HELPERS
 	depends on RMNET
 	help
@@ -198,7 +198,7 @@ config QCOM_QMI_RMNET
 	  and power save features.
 
 config QCOM_QMI_DFC
-	bool "Enable burst mode flow control"
+	tristate "Enable burst mode flow control"
 	depends on QCOM_QMI_RMNET
 	help
 	  Say y here to enable support for burst mode data flow control.
@@ -210,7 +210,7 @@ config QCOM_QMI_DFC
 source "drivers/soc/qcom/rmnet_ctl/Kconfig"
 
 config QCOM_QMI_POWER_COLLAPSE
-	bool "Enable power save features"
+	tristate "Enable power save features"
 	depends on QCOM_QMI_RMNET
 	help
 	  Say y here to enable support for power save features.
