@@ -305,7 +305,5 @@ struct rt5514_priv {
 };
 
 int rt5514_set_gpio(int gpio, bool output);
-void rt5514_watchdog_handler(void);
-extern struct regmap *rt5514_g_i2c_regmap;
 
 #endif /* __RT5514_H__ */

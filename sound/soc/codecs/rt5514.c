@@ -36,8 +36,6 @@
 #include "rt5514-spi.h"
 #endif
 
-struct regmap *rt5514_g_i2c_regmap;
-EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
 struct rt5514_priv *g_rt5514;
 
 static const struct reg_sequence rt5514_i2c_patch[] = {
@@ -790,7 +788,6 @@ void rt5514_watchdog_handler(void)
 
 	rt5514_dsp_enable(g_rt5514, false, true);
 }
-EXPORT_SYMBOL_GPL(rt5514_watchdog_handler);
 
 static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
@@ -1786,6 +1783,9 @@ static int rt5514_probe(struct snd_soc_component *component)
 		return -EPROBE_DEFER;
 
 	rt5514->component = component;
+
+	// setup watchdog handler for SPI driver
+	rt5514_watchdog_handler_cb = rt5514_watchdog_handler;
 
 	return 0;
 }

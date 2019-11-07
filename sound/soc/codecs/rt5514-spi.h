@@ -71,4 +71,7 @@ struct _dbgBuf_Mem {
 int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len);
 int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len);
 
+extern void (*rt5514_watchdog_handler_cb)(void);
+extern struct regmap *rt5514_g_i2c_regmap;
+
 #endif /* __RT5514_SPI_H__ */

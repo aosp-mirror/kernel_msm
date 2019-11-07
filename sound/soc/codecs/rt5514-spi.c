@@ -38,6 +38,11 @@
 
 #define DRV_NAME "rt5514-spi"
 
+void (*rt5514_watchdog_handler_cb)(void) = NULL;
+EXPORT_SYMBOL_GPL(rt5514_watchdog_handler_cb);
+struct regmap *rt5514_g_i2c_regmap;
+EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
+
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
 static struct wakeup_source rt5514_spi_ws;
@@ -777,7 +782,8 @@ static void rt5514_spi_start_work(struct work_struct *work)
 	struct snd_card *card;
 
 	if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
-		rt5514_watchdog_handler();
+		if (rt5514_watchdog_handler_cb)
+			rt5514_watchdog_handler_cb();
 		return;
 	}
 
