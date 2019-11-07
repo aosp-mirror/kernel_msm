@@ -289,6 +289,7 @@ struct rt5514_priv {
 	struct snd_soc_component *component;
 	struct regmap *i2c_regmap, *regmap;
 	struct clk *mclk;
+	struct gpio_desc *gpiod_reset;
 	int sysclk;
 	int sysclk_src;
 	int lrck;
@@ -304,5 +305,7 @@ struct rt5514_priv {
 };
 
 int rt5514_set_gpio(int gpio, bool output);
+void rt5514_watchdog_handler(void);
+extern struct regmap *rt5514_g_i2c_regmap;
 
 #endif /* __RT5514_H__ */

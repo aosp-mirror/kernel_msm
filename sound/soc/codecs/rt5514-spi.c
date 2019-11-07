@@ -33,6 +33,7 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 
+#include "rt5514.h"
 #include "rt5514-spi.h"
 
 #define DRV_NAME "rt5514-spi"
@@ -200,6 +201,128 @@ static struct snd_soc_dai_driver rt5514_spi_dai[] = {
 		},
 	},
 };
+
+static const unsigned int rt5514_regdump_table1[] = {
+	0x18000000, 0x18000004, 0x18000008, 0x1800000c, 0x18000010,
+	0x18000014, 0x18000020, 0x18000024, 0x18000028, 0x1800002c,
+	0x18000030, 0x18000034, 0x18000038, 0x18000040, 0x18000044,
+	0x18000050, 0x18000100, 0x18000104, 0x18000108, 0x1800010c,
+	0x18000110, 0x18000114, 0x18000120, 0x18000124, 0x18000128,
+	0x1800012c, 0x18000130, 0x18000134, 0x18000138, 0x18000140,
+	0x18000144, 0x18000150, 0x18000200, 0x18000204, 0x18000208,
+	0x1800020c, 0x18000210, 0x18000214, 0x18000220, 0x18000224,
+	0x18000228, 0x1800022c, 0x18000230, 0x18000234, 0x18000238,
+	0x18000240, 0x18000244, 0x18000250, 0x18000300, 0x18000304,
+	0x18000308, 0x1800030c, 0x18000310, 0x18000314, 0x18000320,
+	0x18000324, 0x18000328, 0x1800032c, 0x18000330, 0x18000334,
+	0x18000338, 0x18000340, 0x18000344, 0x18000350, 0x18000400,
+	0x18000404, 0x18000408, 0x1800040c, 0x18000410, 0x18000414,
+	0x18000420, 0x18000424, 0x18000428, 0x1800042c, 0x18000430,
+	0x18000434, 0x18000438, 0x18000450, 0x18000454, 0x18000500,
+	0x18000504, 0x18000508, 0x1800050c, 0x18000510, 0x18000514,
+	0x18000520, 0x18000524, 0x18000528, 0x1800052c, 0x18000530,
+	0x18000534, 0x18000538, 0x18000550, 0x18000554, 0x18000600,
+	0x18000604, 0x18000608, 0x1800060c, 0x18000610, 0x18000614,
+	0x18000620, 0x18000624, 0x18000628, 0x1800062c, 0x18000630,
+	0x18000634, 0x18000638, 0x18000650, 0x18000654, 0x18000700,
+	0x18000704, 0x18000708, 0x1800070c, 0x18000710, 0x18000714,
+	0x18000720, 0x18000724, 0x18000728, 0x1800072c, 0x18000730,
+	0x18000734, 0x18000738, 0x18000750, 0x18000754, 0x18001000,
+	0x18001004, 0x18001008, 0x1800100c, 0x18001010, 0x18001014,
+	0x18001018, 0x1800101c, 0x18001020, 0x18001024, 0x18001024,
+	0x18001028, 0x1800102c, 0x18001030, 0x18001034, 0x18001038,
+	0x1800103c, 0x18001040, 0x18001044, 0x18001100, 0x18001104,
+	0x18001108, 0x1800110c, 0x18001110, 0x18001114, 0x18001118,
+	0x1800111c, 0x18001200, 0x18001204, 0x18001300, 0x18001304,
+	0x18001308, 0x1800130c, 0x18001310, 0x18001310, 0x18001310,
+};
+
+static const unsigned int rt5514_regdump_table2[] = {
+	0x18002000, 0x18002004, 0x18002008, 0x18002010, 0x18002014,
+	0x18002018, 0x1800201c, 0x18002020, 0x18002024, 0x18002028,
+	0x1800202c, 0x18002030, 0x18002034, 0x18002038, 0x1800203c,
+	0x18002040, 0x18002044, 0x18002048, 0x1800204c, 0x18002050,
+	0x18002054, 0x18002058, 0x1800205c, 0x18002060, 0x18002064,
+	0x18002068, 0x1800206c, 0x18002070, 0x18002074, 0x18002078,
+	0x1800207c, 0x18002080, 0x18002084, 0x18002088, 0x1800208c,
+	0x18002090, 0x18002094, 0x180020a0, 0x180020a4, 0x180020ac,
+	0x180020b0, 0x180020b4, 0x180020b8, 0x180020bc, 0x180020c0,
+	0x180020c4, 0x180020d0, 0x180020d4, 0x180020d8, 0x18002100,
+	0x18002104, 0x18002108, 0x18002110, 0x18002114, 0x18002118,
+	0x1800211c, 0x18002120, 0x18002124, 0x18002128, 0x1800212c,
+	0x18002140, 0x18002144, 0x18002148, 0x1800214c, 0x18002160,
+	0x18002164, 0x18002168, 0x1800216c, 0x18002170, 0x18002174,
+	0x18002180, 0x18002184, 0x18002190, 0x18002194, 0x18002198,
+	0x180021a0, 0x180021a4, 0x180021a8, 0x18002200, 0x18002204,
+	0x18002208, 0x1800220c, 0x18002210, 0x18002214, 0x18002218,
+	0x1800221c, 0x18002220, 0x18002224, 0x18002228, 0x1800222c,
+	0x18002230, 0x18002240, 0x18002250, 0x18002254, 0x18002258,
+	0x18002260, 0x18002264, 0x18002268, 0x18002d00, 0x18002d04,
+	0x18002d08, 0x18002e00, 0x18002e04, 0x18002f00, 0x18002f04,
+	0x18002f08, 0x18002f10, 0x18002f14, 0x18002fa0, 0x18002fa4,
+	0x18002fa8, 0x18002fac, 0x18002fb0, 0x18002fb4, 0x18002fb8,
+	0x18002fbc, 0x18002fc0, 0x18002fc4, 0x18002fc8, 0x18002fcc,
+	0x18002fd0, 0x18002fd4, 0x18002fd8, 0x18002fdc, 0x18002fe0,
+	0x18002fe4, 0x18002fe8, 0x18002fec, 0x18002ff0, 0x18002ff4,
+};
+static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
+{
+	struct _dbgBuf_Mem dbgbuf;
+	unsigned int i, val[5];
+
+	regmap_read(rt5514_g_i2c_regmap, 0x18002f04, &val[0]);
+
+	if (!(val[0] & 0x2))
+		return false;
+
+	rt5514_spi_burst_read(RT5514_DBG_BUF_ADDR, (u8 *)&dbgbuf,
+		RT5514_DBG_BUF_SIZE);
+
+	dev_err(rt5514_dsp->dev, "[DSP Dump]");
+	for (i = 0; i < RT5514_DBG_BUF_CNT; i++)
+		dev_err(&rt5514_spi->dev, "[%02x][%06x][%08x]\n",
+			dbgbuf.unit[i].id, dbgbuf.unit[i].ts,
+			dbgbuf.unit[i].val);
+	dev_err(rt5514_dsp->dev, "[%08x][%08x]\n",
+		dbgbuf.reserve, dbgbuf.idx);
+
+	dev_err(rt5514_dsp->dev, "[Reg Dump]");
+	for (i = 0; i < ARRAY_SIZE(rt5514_regdump_table1); i += 5) {
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table1[i],
+				&val[0]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table1[i + 1],
+				&val[1]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table1[i + 2],
+				&val[2]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table1[i + 3],
+				&val[3]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table1[i + 4],
+				&val[4]);
+		dev_err(rt5514_dsp->dev, "[%08x][%08x][%08x][%08x][%08x]",
+			val[0], val[1], val[2], val[3], val[4]);
+	}
+
+	dev_err(rt5514_dsp->dev, "==================================================");
+
+	regmap_write(rt5514_g_i2c_regmap, 0xfafafafa, 0x00000001);
+	for (i = 0; i < ARRAY_SIZE(rt5514_regdump_table2); i += 5) {
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table2[i],
+				&val[0]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table2[i + 1],
+				&val[1]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table2[i + 2],
+				&val[2]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table2[i + 3],
+				&val[3]);
+		regmap_read(rt5514_g_i2c_regmap, rt5514_regdump_table2[i + 4],
+				&val[4]);
+		dev_err(rt5514_dsp->dev, "[%08x][%08x][%08x][%08x][%08x]",
+			val[0], val[1], val[2], val[3], val[4]);
+	}
+	regmap_write(rt5514_g_i2c_regmap, 0xfafafafa, 0x00000000);
+
+	return true;
+}
 
 static void rt5514_spi_copy_work_0(struct work_struct *work)
 {
@@ -652,6 +775,11 @@ static void rt5514_spi_start_work(struct work_struct *work)
 	struct rt5514_dsp *rt5514_dsp =
 		container_of(work, struct rt5514_dsp, start_work.work);
 	struct snd_card *card;
+
+	if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
+		rt5514_watchdog_handler();
+		return;
+	}
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 	if (rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm)

@@ -52,6 +52,22 @@ enum {
 	RT5514_DSP_STREAM_ADC,
 };
 
+#define RT5514_DBG_BUF_ADDR 0x4ff60000
+#define RT5514_DBG_BUF_SIZE 0x100
+#define RT5514_DBG_BUF_CNT  0x1f // (DBG_BUF_SIZE-2*4)/8
+
+struct _dbgBuf_Unit {
+	unsigned int id : 8;
+	unsigned int ts : 24;
+	unsigned int val;
+};
+
+struct _dbgBuf_Mem {
+	struct _dbgBuf_Unit unit[RT5514_DBG_BUF_CNT];
+	unsigned int reserve;
+	unsigned int idx;
+};
+
 int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len);
 int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len);
 
