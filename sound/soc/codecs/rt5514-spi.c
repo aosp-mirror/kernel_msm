@@ -45,6 +45,11 @@
 #define WAKEUP_TIMEOUT	5000
 #define MAX_STREAM_FLAG	3
 
+void (*rt5514_watchdog_handler_cb)(void) = NULL;
+EXPORT_SYMBOL_GPL(rt5514_watchdog_handler_cb);
+struct regmap *rt5514_g_i2c_regmap;
+EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
+
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
 static struct mutex switch_lock;
@@ -973,7 +978,8 @@ static void rt5514_spi_start_work(struct work_struct *work) {
 
 	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
-			rt5514_watchdog_handler();
+			if (rt5514_watchdog_handler_cb)
+			rt5514_watchdog_handler_cb();
 			return;
 		}
 	}

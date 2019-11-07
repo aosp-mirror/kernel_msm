@@ -39,8 +39,6 @@
 #include <linux/codec-misc.h>
 #endif
 
-struct regmap *rt5514_g_i2c_regmap;
-EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
 struct rt5514_priv *g_rt5514;
 const struct reg_sequence *rt5514_i2c_patch;
 
@@ -1052,7 +1050,6 @@ void rt5514_watchdog_handler(void)
 	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
 		RT5514_AD_AD_MUTE, 0x0);
 }
-EXPORT_SYMBOL_GPL(rt5514_watchdog_handler);
 
 static void rt5514_reload_firmware(struct rt5514_priv *rt5514)
 {
@@ -2491,6 +2488,9 @@ static int rt5514_probe(struct snd_soc_codec *codec)
 	snd_soc_dapm_sync(dapm);
 
 	rt5514->codec = codec;
+
+	// setup watchdog handler for SPI driver
+	rt5514_watchdog_handler_cb = rt5514_watchdog_handler;
 
 	return 0;
 }
