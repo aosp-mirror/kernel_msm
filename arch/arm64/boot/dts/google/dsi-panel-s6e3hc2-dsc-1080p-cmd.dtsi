@@ -14,6 +14,11 @@
 &mdss_mdp {
 	dsi_s6e3hc2_dsc_1080p_cmd: qcom,mdss_dsi_s6e3hc2_dsc_1080p_cmd {
 		qcom,mdss-dsi-panel-name = "s6e3hc2 amoled 5.96 cmd mode panel";
+		google,mdss-dsi-panel-vendor = "SAMSUNG";
+		google,mdss-dsi-panel-sn-location = <0xA1 6 7>;
+		google,mdss-dsi-panel-vendor-extinfo-loc = <0xDA 0 1>,
+							   <0xDB 0 1>,
+							   <0xDC 0 1>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-physical-type = "oled";
 		qcom,dsi-ctrl-num = <0>;
