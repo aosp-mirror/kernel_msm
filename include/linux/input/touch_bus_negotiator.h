@@ -31,6 +31,11 @@ struct tbn_context {
 	struct device *dev;
 	struct qmi_handle qmi_handle;
 	struct mutex service_lock;
+	struct work_struct request_work;
+	struct work_struct release_work;
+	struct workqueue_struct *qmi_wq;
+	struct completion bus_requested;
+	struct completion bus_released;
 	bool connected;
 };
 

@@ -181,12 +181,6 @@ static void ipu_adapter_frc_clock_ungate(struct device *dev)
 	abc_pcie_config_read(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
 			&val);
 
-	/* If the isolation override has already been enabled then there is
-	 * nothing to do here.
-	 */
-	if ((val & PMU_IPU_CORE_ISO_EN) == 0)
-		return;
-
 	val &= ~(PMU_IPU_CORE_ISO_EN);
 	abc_pcie_config_write(PMU_IPU_POWER_CTL_OVERRIDE0, sizeof(uint32_t),
 			val);
