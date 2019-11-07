@@ -534,12 +534,12 @@ static long msm_buf_mngr_subdev_ioctl(struct v4l2_subdev *sd,
 	}
 	switch (cmd) {
 	case VIDIOC_MSM_BUF_MNGR_IOCTL_CMD: {
-		struct msm_camera_private_ioctl_arg k_ioctl, *ptr;
+		struct msm_camera_private_ioctl_arg k_ioctl;
+		struct msm_buf_mngr_info buf_info, *tmp = NULL;
 
 		if (!arg)
 			return -EINVAL;
-		ptr = arg;
-		k_ioctl = *ptr;
+		k_ioctl = *((struct msm_camera_private_ioctl_arg *)arg);
 		switch (k_ioctl.id) {
 		case MSM_CAMERA_BUF_MNGR_IOCTL_ID_GET_BUF_BY_IDX: {
 
@@ -547,21 +547,14 @@ static long msm_buf_mngr_subdev_ioctl(struct v4l2_subdev *sd,
 				return -EINVAL;
 			if (!k_ioctl.ioctl_ptr)
 				return -EINVAL;
-#ifndef CONFIG_COMPAT
-			{
-			struct msm_buf_mngr_info buf_info, *tmp = NULL;
-			if (!is_compat_task()) {
-				MSM_CAM_GET_IOCTL_ARG_PTR(&tmp,
-					&k_ioctl.ioctl_ptr, sizeof(tmp));
-				if (copy_from_user(&buf_info,
-					(void __user *)tmp,
-					sizeof(struct msm_buf_mngr_info))) {
-					return -EFAULT;
-				}
-				k_ioctl.ioctl_ptr = (uintptr_t)&buf_info;
+			MSM_CAM_GET_IOCTL_ARG_PTR(&tmp,
+				&k_ioctl.ioctl_ptr, sizeof(tmp));
+			if (copy_from_user(&buf_info,
+				(void __user *)tmp,
+				sizeof(struct msm_buf_mngr_info))) {
+				return -EFAULT;
 			}
-			}
-#endif
+			k_ioctl.ioctl_ptr = (uintptr_t)&buf_info;
 			argp = &k_ioctl;
 			rc = msm_cam_buf_mgr_ops(cmd, argp);
 			}
