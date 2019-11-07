@@ -572,6 +572,10 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 	int rc = 0;
 	uint32_t chipid = 0;
 	struct cam_camera_slave_info *slave_info;
+#ifdef CONFIG_CAMERA_PROBE_SPEC_CHECK
+	uint32_t spec_version = 0;
+	uint8_t special_sensor = 0;
+#endif
 
 	slave_info = &(s_ctrl->sensordata->slave_info);
 
@@ -580,6 +584,18 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 			 slave_info);
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_CAMERA_PROBE_SPEC_CHECK
+	/* Only check for IMX355 sensor */
+	if ( ((slave_info->sensor_id & 0x8000) == 0x8000) &&
+		((slave_info->sensor_id & 0x7FFF) == 0x355) ) {
+		slave_info->sensor_id &= 0x7FFF;
+		special_sensor = 0x1;
+	}
+	CAM_INFO(CAM_SENSOR,
+		"[PROBE_SPEC_CHECK] special_sensor:0x%x, expected sensor_id:0x%x",
+		special_sensor, slave_info->sensor_id);
+#endif
 
 	rc = camera_io_dev_read(
 		&(s_ctrl->io_master_info),
@@ -594,6 +610,34 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 				chipid, slave_info->sensor_id);
 		return -ENODEV;
 	}
+
+#ifdef CONFIG_CAMERA_PROBE_SPEC_CHECK
+	/* Only check for IMX355 sensor */
+	if (slave_info->sensor_id == 0x355) {
+		rc = camera_io_dev_read(
+			&(s_ctrl->io_master_info),
+			0x0A0F,
+			&spec_version, CAMERA_SENSOR_I2C_TYPE_WORD,
+			CAMERA_SENSOR_I2C_TYPE_BYTE);
+
+		spec_version = spec_version >> 4;
+		CAM_INFO(CAM_SENSOR, "[PROBE_SPEC_CHECK] spec_version : 0x%x",
+			spec_version);
+
+		if ( (special_sensor == 0x01) &&
+			(spec_version == 0x01) ) {
+			CAM_INFO(CAM_SENSOR,
+				"[PROBE_SPEC_CHECK]Probe failed: Try to probe the special sensor, but hw is normal sensor.");
+			rc = -ENODEV;
+		} else if ( (special_sensor == 0x00) &&
+			(spec_version == 0x02) ) {
+			CAM_INFO(CAM_SENSOR,
+				"[PROBE_SPEC_CHECK]Probe failed: Try to probe the normal sensor, but hw is special sensor.");
+			rc = -ENODEV;
+		}
+	}
+#endif
+
 	return rc;
 }
 
