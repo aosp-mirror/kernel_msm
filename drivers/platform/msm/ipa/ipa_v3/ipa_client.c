@@ -1063,7 +1063,8 @@ static int ipa3_stop_ul_chan_with_data_drain(u32 qmi_req_id,
 	if (!stop_in_proc)
 		goto exit;
 
-	if (remove_delay && ep->ep_delay_set == true) {
+	/* Remove delay only if stop channel success*/
+	if (remove_delay && ep->ep_delay_set == true && !stop_in_proc) {
 		memset(&ep_cfg_ctrl, 0, sizeof(struct ipa_ep_cfg_ctrl));
 		ep_cfg_ctrl.ipa_ep_delay = false;
 		result = ipa3_cfg_ep_ctrl(clnt_hdl,
@@ -1144,7 +1145,7 @@ disable_force_clear_and_exit:
 	if (should_force_clear)
 		ipa3_disable_force_clear(qmi_req_id);
 exit:
-	if (remove_delay && ep->ep_delay_set == true) {
+	if (remove_delay && ep->ep_delay_set == true && !stop_in_proc) {
 		memset(&ep_cfg_ctrl, 0, sizeof(struct ipa_ep_cfg_ctrl));
 		ep_cfg_ctrl.ipa_ep_delay = false;
 		result = ipa3_cfg_ep_ctrl(clnt_hdl,
@@ -1426,6 +1427,9 @@ int ipa3_release_gsi_channel(u32 clnt_hdl)
 
 	if (!ep->keep_ipa_awake)
 		IPA_ACTIVE_CLIENTS_INC_EP(ipa3_get_client_mapping(clnt_hdl));
+
+	/* Set the disconnect in progress flag to avoid calling cb.*/
+	atomic_set(&ep->disconnect_in_progress, 1);
 
 	gsi_res = gsi_dealloc_channel(ep->gsi_chan_hdl);
 	if (gsi_res != GSI_STATUS_SUCCESS) {
@@ -1734,9 +1738,7 @@ int ipa3_clear_endpoint_delay(u32 clnt_hdl)
 	/* Set disconnect in progress flag so further flow control events are
 	 * not honored.
 	 */
-	spin_lock(&ipa3_ctx->disconnect_lock);
-	ep->disconnect_in_progress = true;
-	spin_unlock(&ipa3_ctx->disconnect_lock);
+	atomic_set(&ep->disconnect_in_progress, 1);
 
 	/* If flow is disabled at this point, restore the ep state.*/
 	ep_ctrl.ipa_ep_delay = false;
@@ -1746,6 +1748,52 @@ int ipa3_clear_endpoint_delay(u32 clnt_hdl)
 	IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 
 	IPADBG("client (ep: %d) removed ep delay\n", clnt_hdl);
+
+	return 0;
+}
+
+/**
+ * ipa3_get_aqc_gsi_stats() - Query AQC gsi stats from uc
+ * @stats:	[inout] stats blob from client populated by driver
+ *
+ * Returns:	0 on success, negative on failure
+ *
+ * @note Cannot be called from atomic context
+ *
+ */
+int ipa3_get_aqc_gsi_stats(struct ipa_uc_dbg_ring_stats *stats)
+{
+	int i;
+
+	if (!ipa3_ctx->aqc_ctx.dbg_stats.uc_dbg_stats_mmio) {
+		IPAERR("bad parms NULL aqc_gsi_stats_mmio\n");
+		return -EINVAL;
+	}
+	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
+	for (i = 0; i < MAX_AQC_CHANNELS; i++) {
+		stats->ring[i].ringFull = ioread32(
+			ipa3_ctx->aqc_ctx.dbg_stats.uc_dbg_stats_mmio
+			+ i * IPA3_UC_DEBUG_STATS_OFF +
+			IPA3_UC_DEBUG_STATS_RINGFULL_OFF);
+		stats->ring[i].ringEmpty = ioread32(
+			ipa3_ctx->aqc_ctx.dbg_stats.uc_dbg_stats_mmio
+			+ i * IPA3_UC_DEBUG_STATS_OFF +
+			IPA3_UC_DEBUG_STATS_RINGEMPTY_OFF);
+		stats->ring[i].ringUsageHigh = ioread32(
+			ipa3_ctx->aqc_ctx.dbg_stats.uc_dbg_stats_mmio
+			+ i * IPA3_UC_DEBUG_STATS_OFF +
+			IPA3_UC_DEBUG_STATS_RINGUSAGEHIGH_OFF);
+		stats->ring[i].ringUsageLow = ioread32(
+			ipa3_ctx->aqc_ctx.dbg_stats.uc_dbg_stats_mmio
+			+ i * IPA3_UC_DEBUG_STATS_OFF +
+			IPA3_UC_DEBUG_STATS_RINGUSAGELOW_OFF);
+		stats->ring[i].RingUtilCount = ioread32(
+			ipa3_ctx->aqc_ctx.dbg_stats.uc_dbg_stats_mmio
+			+ i * IPA3_UC_DEBUG_STATS_OFF +
+			IPA3_UC_DEBUG_STATS_RINGUTILCOUNT_OFF);
+	}
+	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
+
 
 	return 0;
 }
