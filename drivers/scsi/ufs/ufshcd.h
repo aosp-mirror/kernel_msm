@@ -1027,6 +1027,12 @@ struct ufs_hba {
 
 	#define UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8		0x40000
 
+	/*
+	 * This quirk needs to be enabled if the host controller advertises
+	 * inline encryption support but it doesn't work correctly.
+	 */
+	#define UFSHCD_QUIRK_BROKEN_CRYPTO			0x80000
+
 	unsigned int quirks;	/* Deviations from standard UFSHCI spec. */
 
 	/* Device deviations from standard UFS device spec. */
