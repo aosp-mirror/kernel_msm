@@ -1540,6 +1540,7 @@ static void iaxxx_fw_update_work(struct kthread_work *work)
 	}
 
 	/* Read debug/crash log address after fw boot */
+	iaxxx_dump_ssplogs(priv);
 	iaxxx_crashlog_header_read(priv);
 
 	dev_info(dev, "%s: done\n", __func__);
@@ -1652,8 +1653,6 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 	}
 
 	mutex_lock(&priv->crashdump_lock);
-	/* To do - dump ssp memory only in case of SSP crash. */
-	iaxxx_dump_ssplogs(priv);
 	iaxxx_reset_check_sbl_mode(priv);
 	iaxxx_dump_crashlogs(priv);
 	mutex_unlock(&priv->crashdump_lock);

@@ -227,11 +227,13 @@ static int circ_to_user(struct iaxxx_circ_buf *circ, char __user *buf,
 /* Add end-point node to source list */
 static void iaxxx_tunnel_src_list_add_endpoint(
 		struct iaxxx_tunnel_data *t_intf_priv,
-		struct iaxxx_tunnel_ep *tnl_src_node)
+		struct iaxxx_tunnel_ep *tnl_src_node,
+		int ep_id)
 {
 	spin_lock(&t_intf_priv->src_list_lock);
 	list_add_tail(&tnl_src_node->src_head_list,
 			&t_intf_priv->src_list);
+	atomic_set(&t_intf_priv->src_enable_id[ep_id], 1);
 	spin_unlock(&t_intf_priv->src_list_lock);
 }
 
@@ -252,6 +254,7 @@ static void iaxxx_tunnel_src_list_del_endpoint(
 		if (tnl_src_node->tnl_ep.tunlEP == ep_id) {
 			list_del(position);
 			kvfree(tnl_src_node);
+			atomic_set(&t_intf_priv->src_enable_id[ep_id], 0);
 			goto exit;
 		}
 	}
@@ -516,10 +519,6 @@ static void adjust_tunnels(struct iaxxx_tunnel_data *t_intf_priv,
 				t_intf_priv->tunnel_first_attach = false;
 
 			t_intf_priv->create[id] = (struct timespec) {0};
-
-			iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, id);
-
-			atomic_set(&t_intf_priv->src_enable_id[id], 0);
 
 			while (tnl_count < TNLMAX) {
 				if (atomic_read(
@@ -1030,12 +1029,11 @@ int iaxxx_tunnel_setup(struct iaxxx_tunnel_client *client, uint32_t src,
 		tnl_src_node->tnl_ep.tunlEncode = encode;
 
 		/* Add tunnel endpoint to tunnel src list */
-		iaxxx_tunnel_src_list_add_endpoint(t_intf_priv, tnl_src_node);
+		iaxxx_tunnel_src_list_add_endpoint(t_intf_priv,
+			tnl_src_node, id);
 
 		getnstimeofday(&t_intf_priv->create[id]);
 		t_intf_priv->printed[id] = false;
-
-		atomic_set(&t_intf_priv->src_enable_id[id], 1);
 	}
 
 	set_bit(id, &client->tid_flag);
@@ -1084,6 +1082,7 @@ int iaxxx_tunnel_term(struct iaxxx_tunnel_client *client, uint32_t src,
 	}
 
 	if (atomic_dec_return(&t_intf_priv->tunnel_ref_cnt[id]) == 0) {
+		iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, id);
 		clear_bit(id, &t_intf_priv->flags);
 		if (mode == TNL_SYNC_MODE)
 			clear_bit(id, &t_intf_priv->flags_sync_mode);
@@ -1592,7 +1591,6 @@ static void iaxxx_tunnel_stop(struct iaxxx_tunnel_data *t_intf_priv)
 		test_and_clear_bit(i, &t_intf_priv->flags_sync_mode);
 		test_and_clear_bit(i, &t_intf_priv->flags);
 		iaxxx_tunnel_src_list_del_endpoint(t_intf_priv, i);
-		atomic_set(&t_intf_priv->src_enable_id[i], 0);
 	}
 	t_intf_priv->tunnel_total_packet_no = 0;
 	t_intf_priv->tunnel_magic_errcnt = 0;
