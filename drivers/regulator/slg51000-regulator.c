@@ -439,9 +439,14 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 static int slg51000_config_tuning(struct slg51000 *chip)
 {
 	int ret;
-	const u8 sw_test_mode_vals[] = {
+	const u8 sw_test_mode_on_vals[] = {
 		SLG51000_SW_TEST_MODE_1_ON, SLG51000_SW_TEST_MODE_2_ON,
 		SLG51000_SW_TEST_MODE_3_ON, SLG51000_SW_TEST_MODE_4_ON,
+	};
+
+	const u8 sw_test_mode_off_vals[] = {
+		SLG51000_SW_TEST_MODE_1_OFF, SLG51000_SW_TEST_MODE_2_OFF,
+		SLG51000_SW_TEST_MODE_3_OFF, SLG51000_SW_TEST_MODE_4_OFF,
 	};
 
 	if (chip == NULL) {
@@ -449,17 +454,27 @@ static int slg51000_config_tuning(struct slg51000 *chip)
 		return -EINVAL;
 	}
 
-	// set software test mode
+	// enter software test mode
 	ret = slg51000_regmap_bulk_write(chip->regmap, SLG51000_SW_TEST_MODE_1,
-			sw_test_mode_vals, ARRAY_SIZE(sw_test_mode_vals));
+			sw_test_mode_on_vals,
+			ARRAY_SIZE(sw_test_mode_on_vals));
 	if (ret < 0) {
-		dev_err(chip->dev, "Failed to set software test mode\n");
+		dev_err(chip->dev, "Failed to enter software test mode\n");
 		return ret;
 	}
 
 	ret = slg51000_regmap_write(chip->regmap, SLG51000_LDO3_CONF1, 0x28);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to set LDO3_CONF1\n");
+		return ret;
+	}
+
+	// exit software test mode
+	ret = slg51000_regmap_bulk_write(chip->regmap, SLG51000_SW_TEST_MODE_1,
+			sw_test_mode_off_vals,
+			ARRAY_SIZE(sw_test_mode_off_vals));
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to exit software test mode\n");
 		return ret;
 	}
 
