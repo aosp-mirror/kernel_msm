@@ -31,6 +31,7 @@
 #define SLG51000_SW_TEST_MODE_2                 0x111b
 #define SLG51000_SW_TEST_MODE_3                 0x111c
 #define SLG51000_SW_TEST_MODE_4                 0x111d
+#define SLG51000_LDO_HP_STARTUP_ILIM            0x1133
 #define SLG51000_IO_GPIO1_CONF                  0x1500
 #define SLG51000_IO_GPIO2_CONF                  0x1501
 #define SLG51000_IO_GPIO3_CONF                  0x1502
@@ -288,6 +289,26 @@
 #define SLG51000_SW_TEST_MODE_2_ON              0x53
 #define SLG51000_SW_TEST_MODE_3_ON              0x54
 #define SLG51000_SW_TEST_MODE_4_ON              0x4d
+
+/* SLG51000_LDO_HP_STARTUP_ILIM = 0x1133 */
+/* unset [7:5] and keep [4:0] for original value */
+#define SLG51000_LDO_HP_STARTUP_ILIM_ORI_MASK   (0xFF >> 3)
+/* set [7:5] for 240mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_0_MASK     (0x00 << 5)
+/* set [7:5] for 11mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_1_MASK     (0x01 << 5)
+/* set [7:5] for 31mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_2_MASK     (0x02 << 5)
+/* set [7:5] for 48mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_3_MASK     (0x03 << 5)
+/* set [7:5] for 72mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_4_MASK     (0x04 << 5)
+/* set [7:5] for 91mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_5_MASK     (0x05 << 5)
+/* set [7:5] for 116mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_6_MASK     (0x06 << 5)
+/* set [7:5] for 136mA */
+#define SLG51000_LDO_HP_STARTUP_ILIM_7_MASK     (0x07 << 5)
 
 /* SLG51000_IO_GPIO1_CONF ~ SLG51000_IO_GPIO5_CONF =
  * 0x1500, 0x1501, 0x1502, 0x1503, 0x1504
