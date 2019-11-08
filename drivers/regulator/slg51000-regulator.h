@@ -286,9 +286,13 @@
 
 /* SLG51000_SW_TEST_MODE = 0x111a */
 #define SLG51000_SW_TEST_MODE_1_ON              0x45
+#define SLG51000_SW_TEST_MODE_1_OFF             0x00
 #define SLG51000_SW_TEST_MODE_2_ON              0x53
+#define SLG51000_SW_TEST_MODE_2_OFF             0x00
 #define SLG51000_SW_TEST_MODE_3_ON              0x54
+#define SLG51000_SW_TEST_MODE_3_OFF             0x00
 #define SLG51000_SW_TEST_MODE_4_ON              0x4d
+#define SLG51000_SW_TEST_MODE_4_OFF             0x00
 
 /* SLG51000_LDO_HP_STARTUP_ILIM = 0x1133 */
 /* unset [7:5] and keep [4:0] for original value */
