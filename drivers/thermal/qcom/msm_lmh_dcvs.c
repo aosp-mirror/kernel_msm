@@ -533,6 +533,7 @@ static int limits_dcvs_probe(struct platform_device *pdev)
 	cpumask_t mask = { CPU_BITS_NONE };
 	const __be32 *addr;
 	bool no_cdev_register = false;
+	unsigned long max_limit = 0;
 
 	for_each_possible_cpu(cpu) {
 		cpu_node = of_cpu_device_node_get(cpu);
@@ -572,12 +573,13 @@ static int limits_dcvs_probe(struct platform_device *pdev)
 	cpumask_copy(&hw->core_map, &mask);
 	cpumask_clear(&hw->online_mask);
 	hw->cdev_registered = 0;
+	limits_dcvs_get_freq_limits(hw);
 	for_each_cpu(cpu, &hw->core_map) {
 		hw->cdev_data[idx].cdev = NULL;
 		hw->cdev_data[idx].max_freq = U32_MAX;
 		hw->cdev_data[idx].min_freq = 0;
-		hw->max_freq[idx] = U32_MAX;
-		hw->min_freq[idx] = 0;
+		if (max_limit < hw->max_freq[idx])
+			max_limit = hw->max_freq[idx];
 		idx++;
 	}
 	ret = of_property_read_u32(dn, "qcom,affinity", &affinity);
@@ -620,7 +622,7 @@ static int limits_dcvs_probe(struct platform_device *pdev)
 	 */
 	hw->temp_limits[LIMITS_TRIP_HI] = INT_MAX;
 	hw->temp_limits[LIMITS_TRIP_ARM] = 0;
-	hw->hw_freq_limit = U32_MAX;
+	hw->hw_freq_limit = max_limit;
 	snprintf(hw->sensor_name, sizeof(hw->sensor_name), "limits_sensor-%02d",
 			affinity);
 	tzdev = thermal_zone_of_sensor_register(&pdev->dev, 0, hw,
