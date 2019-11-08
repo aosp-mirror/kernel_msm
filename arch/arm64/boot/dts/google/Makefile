@@ -17,11 +17,13 @@ lito-bramble-proto1_6-overlay.dtbo-base := qcom-base/lito.dtb
 dtbo-$(CONFIG_BOARD_REDFIN) += \
 	lito-redfin-dev1.0-overlay.dtbo \
 	lito-redfin-proto-sop-overlay.dtbo \
-	lito-redfin-proto-overlay.dtbo
+	lito-redfin-proto-overlay.dtbo \
+	lito-redfin-proto1_1-overlay.dtbo
 
 lito-redfin-dev1.0-overlay.dtbo-base := qcom-base/lito.dtb
 lito-redfin-proto-sop-overlay.dtbo-base := qcom-base/lito.dtb
 lito-redfin-proto-overlay.dtbo-base := qcom-base/lito.dtb
+lito-redfin-proto1_1-overlay.dtbo-base := qcom-base/lito.dtb
 
 endif
 
