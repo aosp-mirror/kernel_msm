@@ -213,6 +213,14 @@
 	};
 };
 
+&qupv3_se9_i2c {
+	status = "ok";
+	google_eeprom: m24c08@50 {
+		compatible = "stchip,m24c08";
+		reg = <0x50>;
+	};
+};
+
 &tlmm {
 	ext_fg_alert {
 		ext_fg_alert_sleep: ext_fg_alert_sleep {
