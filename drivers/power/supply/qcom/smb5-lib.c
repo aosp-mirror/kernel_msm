@@ -7253,6 +7253,7 @@ static void jeita_update_work(struct work_struct *work)
 	struct device_node *node = chg->dev->of_node;
 	struct device_node *batt_node, *pnode;
 	union power_supply_propval val;
+	union power_supply_propval batt_type;
 	int rc, tmp[2], max_fcc_ma, max_fv_uv;
 	u32 jeita_hard_thresholds[2];
 
@@ -7277,8 +7278,16 @@ static void jeita_update_work(struct work_struct *work)
 	if (val.intval <= 0)
 		return;
 
+	rc = smblib_get_prop_from_bms(chg,
+			POWER_SUPPLY_PROP_BATTERY_TYPE, &batt_type);
+	if (rc < 0) {
+		smblib_err(chg, "Failed to get batt-type rc=%d\n", rc);
+		goto out;
+	}
+	pr_info("battery type=%s\n", batt_type.strval);
+
 	pnode = of_batterydata_get_best_profile(batt_node,
-					val.intval / 1000, NULL);
+					val.intval / 1000, batt_type.strval);
 	if (IS_ERR(pnode)) {
 		rc = PTR_ERR(pnode);
 		smblib_err(chg, "Failed to detect valid battery profile %d\n",

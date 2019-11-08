@@ -31,6 +31,7 @@
 #include <linux/pmic-voter.h>
 #include <linux/iio/consumer.h>
 #include <linux/qpnp/qpnp-revid.h>
+#include <linux/platform_data/at24.h>
 #include <uapi/linux/qg.h>
 #include <uapi/linux/qg-profile.h>
 #include "fg-alg.h"
@@ -41,6 +42,7 @@
 #include "qg-soc.h"
 #include "qg-battery-profile.h"
 #include "qg-defs.h"
+#include "../google/google_bms.h"
 
 static int qg_debug_mask;
 module_param_named(
@@ -2951,10 +2953,11 @@ static int get_batt_id_ohm(struct qpnp_qg *chip, u32 *batt_id_ohm)
 	return 0;
 }
 
+#define BATT_TYPE_UNKNOWN	"unknown"
 static int qg_load_battery_profile(struct qpnp_qg *chip)
 {
 	struct device_node *node = chip->dev->of_node;
-	struct device_node *profile_node;
+	struct device_node *profile_node = NULL;
 	int rc, tuple_len, len, i, avail_age_level = 0;
 
 	chip->batt_node = of_find_node_by_name(node, "qcom,battery-data");
@@ -2983,9 +2986,27 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 			chip->batt_age_level = avail_age_level;
 		}
 	} else {
-		profile_node = of_batterydata_get_best_profile(chip->batt_node,
-					chip->batt_id_ohm / 1000,
-					chip->dt.batt_type_name);
+		char *batt_type;
+
+		batt_type = (chip->dt.batt_type_name == NULL) ?
+			    (char *)chip->batt_gpn :
+			    (char *)chip->dt.batt_type_name;
+
+		if (batt_type != NULL)
+			profile_node = of_batterydata_get_best_profile(
+						chip->batt_node,
+						chip->batt_id_ohm / 1000,
+						batt_type);
+
+		/* Loading the unknown profile
+		 * 1. if loading best profile by batt_type is fail
+		 * 2. if batt_type is NULL
+		 */
+		if (profile_node == NULL)
+			profile_node = of_batterydata_get_best_profile(
+						chip->batt_node,
+						chip->batt_id_ohm / 1000,
+						BATT_TYPE_UNKNOWN);
 	}
 
 	if (IS_ERR(profile_node)) {
@@ -4511,6 +4532,48 @@ static int qpnp_qg_resume(struct device *dev)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_GOOGLE_BMS)
+#define MAX_DEFER_CNT	10
+static int qg_get_batt_type(struct qpnp_qg *chip)
+{
+	static int defer_cnt;
+	bool defer;
+	int rc = 0;
+
+	chip->batt_gpn = kzalloc(BATT_EEPROM_TAG_BGPN_LEN + 1, GFP_KERNEL);
+
+	if (chip->batt_gpn == NULL) {
+		pr_err("Failed to get battery type, rc=%d\n", rc);
+		return 0;
+	}
+
+	*((char *)chip->batt_gpn + BATT_EEPROM_TAG_BGPN_LEN) = '\0';
+
+	rc = gbms_storage_read(GBMS_TAG_BGPN, (void *)chip->batt_gpn,
+			       BATT_EEPROM_TAG_BGPN_LEN);
+
+	if (rc < 0) {
+		kfree(chip->batt_gpn);
+		chip->batt_gpn = NULL;
+	}
+
+	defer = (rc == -EPROBE_DEFER) ||
+		(rc == -EINVAL);
+
+	if (defer) {
+		defer_cnt++;
+
+		if (defer_cnt <= MAX_DEFER_CNT)
+			return -EPROBE_DEFER;
+	}
+
+	pr_info("eeprom ID=%s, len=%d, defer_cnt=%d\n",
+		chip->batt_gpn, rc, defer_cnt);
+
+	return 0;
+}
+#endif /* CONFIG_GOOGLE_BMS */
+
 static const struct dev_pm_ops qpnp_qg_pm_ops = {
 	.suspend_noirq	= qpnp_qg_suspend_noirq,
 	.resume_noirq	= qpnp_qg_resume_noirq,
@@ -4526,6 +4589,15 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
+
+#if IS_ENABLED(CONFIG_GOOGLE_BMS)
+	rc = qg_get_batt_type(chip);
+	if (rc < 0) {
+		pr_err("Failed to get battery type, rc=%d\n", rc);
+		devm_kfree(&pdev->dev, chip);
+		return rc;
+	}
+#endif /* CONFIG_GOOGLE_BMS */
 
 	chip->regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!chip->regmap) {

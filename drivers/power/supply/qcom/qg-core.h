@@ -182,6 +182,9 @@ struct qpnp_qg {
 	struct iio_channel	*batt_therm_chan;
 	struct iio_channel	*batt_id_chan;
 
+	/* GPN in eeprom*/
+	const char		*batt_gpn;
+
 	/* soc params */
 	int			catch_up_soc;
 	int			maint_soc;
