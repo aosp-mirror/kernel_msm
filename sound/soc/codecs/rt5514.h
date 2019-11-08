@@ -248,6 +248,8 @@
 #define RT5514_FIRMWARE3	"rt5514_dsp_fw3.bin"
 #define RT5514_FIRMWARE4	"rt5514_dsp_fw4.bin"
 
+#define RT5514_SPI_SWITCH_GPIO	5
+
 #define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
 
 /* System Clock Source */
@@ -296,7 +298,7 @@ struct rt5514_priv {
 	int pll_src;
 	int pll_in;
 	int pll_out;
-	int dsp_enabled, dsp_enabled_last, dsp_test;
+	int dsp_enabled, dsp_enabled_last, dsp_test, spi_switch;
 	int dsp_adc_enabled, dsp_buffer_channel;
 	u8 *hotword_model_buf, *musdet_model_buf;
 	unsigned int hotword_model_len, musdet_model_len;
