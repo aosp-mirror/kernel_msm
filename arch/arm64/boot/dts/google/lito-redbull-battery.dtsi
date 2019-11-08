@@ -203,3 +203,11 @@
 		google,gbms-providers = "batt_eeprom";
 	};
 };
+
+&qupv3_se9_i2c {
+	status = "ok";
+	google_eeprom: m24c08@50 {
+		compatible = "stchip,m24c08";
+		reg = <0x50>;
+	};
+};
