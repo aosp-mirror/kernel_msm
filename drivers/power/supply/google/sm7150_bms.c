@@ -1309,8 +1309,6 @@ static int bms_probe(struct platform_device *pdev)
 	/* Register the power supply */
 	bms_psy_cfg.drv_data = bms;
 	bms_psy_cfg.of_node = bms->dev->of_node;
-	bms_psy_cfg.supplied_to = NULL;
-	bms_psy_cfg.num_supplicants = 0;
 	bms->psy = devm_power_supply_register(bms->dev, &sm7150_psy_desc,
 			&bms_psy_cfg);
 	if (IS_ERR(bms->psy)) {

@@ -209,6 +209,9 @@ static void qg_notify_charger(struct qpnp_qg *chip)
 	if (!chip->profile_loaded)
 		return;
 
+	/*
+	 * FIX_ME, b/139264914, don't set charger in qg, it should set by
+	 * google_charger
 	prop.intval = chip->bp.float_volt_uv;
 	rc = power_supply_set_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
@@ -228,6 +231,7 @@ static void qg_notify_charger(struct qpnp_qg *chip)
 	}
 
 	pr_debug("Notified charger on float voltage and FCC\n");
+	 */
 
 	rc = power_supply_get_property(chip->batt_psy,
 			POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
@@ -243,7 +247,7 @@ static bool is_batt_available(struct qpnp_qg *chip)
 	if (chip->batt_psy)
 		return true;
 
-	chip->batt_psy = power_supply_get_by_name("battery");
+	chip->batt_psy = power_supply_get_by_name("sm7150_bms");
 	if (!chip->batt_psy)
 		return false;
 
@@ -2061,9 +2065,21 @@ static int qg_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		pval->intval = chip->sys_soc;
+		/*
+		 * FIX_ME, b/139264914, to be compatible with other fuel gauge
+		 * for google_battery supporting
+		 */
+		pval->intval *= 255;
+		pval->intval /= 100;
 		break;
 	case POWER_SUPPLY_PROP_REAL_CAPACITY:
 		rc = qg_get_battery_capacity_real(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		if (chip->batt_psy)
+			rc = power_supply_get_property(chip->batt_psy,
+						       POWER_SUPPLY_PROP_HEALTH,
+						       pval);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 		rc = qg_get_battery_voltage(chip, &pval->intval);
@@ -2171,6 +2187,19 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_BATT_AGE_LEVEL:
 		pval->intval = chip->batt_age_level;
 		break;
+	/* b/139264914: FIX_ME */
+	case POWER_SUPPLY_PROP_PRESENT:
+		pval->intval = 1;
+		break;
+	case POWER_SUPPLY_PROP_STATUS:
+		if (chip->batt_psy)
+			rc = power_supply_get_property(chip->batt_psy,
+						       POWER_SUPPLY_PROP_STATUS,
+						       pval);
+		break;
+	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
+		rc = -ENODATA;
+		break;
 	default:
 		pr_debug("Unsupported property %d\n", psp);
 		break;
@@ -2199,6 +2228,7 @@ static int qg_property_is_writeable(struct power_supply *psy,
 static enum power_supply_property qg_psy_props[] = {
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_CAPACITY_RAW,
+	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_REAL_CAPACITY,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
@@ -2232,6 +2262,8 @@ static enum power_supply_property qg_psy_props[] = {
 	POWER_SUPPLY_PROP_POWER_NOW,
 	POWER_SUPPLY_PROP_SCALE_MODE_EN,
 	POWER_SUPPLY_PROP_BATT_AGE_LEVEL,
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_STATUS,
 };
 
 static const struct power_supply_desc qg_psy_desc = {
