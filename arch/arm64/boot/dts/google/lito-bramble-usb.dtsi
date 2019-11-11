@@ -62,7 +62,8 @@
 
 &usb2_phy0 {
 	qcom,param-override-seq =
-		<0xcc 0x70>;
+		<0x67 0x6C
+		0xcc 0x70>;
 };
 
 &usb_qmp_dp_phy {
