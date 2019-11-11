@@ -9,6 +9,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+#include <dt-bindings/usb/pd.h>
 
 &pm6150_gpios {
 	ext_5v_vbus {
@@ -86,4 +87,31 @@
 		 0x22 0x210>; /* PWR_CTRL1 */
 
 
+};
+
+&pm6150_pdphy {
+	usb_con: connector {
+		compatible = "usb-c-connector";
+		label = "USB-C";
+		data-role = "dual";
+		power-role = "dual";
+		try-power-role = "sink";
+		self-powered;
+		source-pdos = <PDO_FIXED(5000, 900,
+					PDO_FIXED_SUSPEND
+					| PDO_FIXED_USB_COMM
+					| PDO_FIXED_DATA_SWAP
+					| PDO_FIXED_DUAL_ROLE)>;
+		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM
+						| PDO_FIXED_DATA_SWAP
+						| PDO_FIXED_DUAL_ROLE)
+				PDO_FIXED(9000, 2200, 0)>;
+		op-sink-microwatt = <2500000>;
+		sink-vdos = <VDO_IDH(IDH_USB_HOST | IDH_USB_DEVICE,
+					IDH_PTYPE_PERIPH,
+					IDH_PTYPE_HOST,
+					0x18D1)
+				VDO_CERT(0x0)
+				VDO_PRODUCT(0x4EE1, 0x0)>;
+	};
 };
