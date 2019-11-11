@@ -1,5 +1,5 @@
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-dtbo-$(CONFIG_BOARD_BRAMBLE) += \
+dtbo-bramble += \
 	lito-bramble-dev1.0-overlay.dtbo \
 	lito-bramble-dev1.1-overlay.dtbo \
 	lito-bramble-proto-overlay.dtbo \
@@ -35,7 +35,7 @@ lito-v2-bramble_m-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-bramble_m-evt1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
 
-dtbo-$(CONFIG_BOARD_REDFIN) += \
+dtbo-redfin += \
 	lito-redfin-dev1.0-overlay.dtbo \
 	lito-redfin-proto-sop-overlay.dtbo \
 	lito-redfin-proto-overlay.dtbo \

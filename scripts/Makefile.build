@@ -62,6 +62,12 @@ endif
 ifneq ($(dtbo-y),)
 include scripts/Makefile.dtbo
 endif
+ifneq ($(dtbo-bramble),)
+include scripts/Makefile.dtbo
+endif
+ifneq ($(dtbo-redfin),)
+include scripts/Makefile.dtbo
+endif
 
 ifndef obj
 $(warning kbuild: Makefile.build is included improperly)
