@@ -29,6 +29,7 @@
 #include "sm7150-sunfish-fingerprint.dtsi"
 #include "sm7150-sunfish-touch-common.dtsi"
 #include "sm7150-sunfish-touch-proto.dtsi"
+#include "sm7150-sunfish-battery.dtsi"
 
 &tlmm {
 	goog,ignored-gpios = <59 60 61 62>;
@@ -72,12 +73,6 @@
 			compatible = "msm-imem-gplatform_data";
 			reg = <0xf94 8>;
 		};
-	};
-
-	mtp_batterydata: qcom,battery-data {
-		qcom,batt-id-range-pct = <15>;
-		#include "qcom-base/qg-batterydata-alium-3600mah.dtsi"
-		#include "qcom-base/qg-batterydata-mlp466076-3200mah.dtsi"
 	};
 };
 
@@ -316,86 +311,6 @@
 
 &sde_dp {
 	qcom,dp-aux-switch = <&fsa4480>;
-};
-
-&pm6150_qg {
-	qcom,battery-data = <&mtp_batterydata>;
-	qcom,qg-iterm-ma = <100>;
-	qcom,hold-soc-while-full;
-	qcom,linearize-soc;
-	qcom,cl-feedback-on;
-};
-
-&pm6150_charger {
-	io-channels = <&pm6150_vadc ADC_USB_IN_V_16>,
-		      <&pm6150_vadc ADC_USB_IN_I>,
-		      <&pm6150_vadc ADC_CHG_TEMP>,
-		      <&pm6150_vadc ADC_DIE_TEMP>,
-		      <&pm6150l_vadc ADC_AMUX_THM1_PU2>,
-		      <&pm6150_vadc ADC_SBUx>,
-		      <&pm6150_vadc ADC_VPH_PWR>;
-	io-channel-names = "usb_in_voltage",
-			   "usb_in_current",
-			   "chg_temp",
-			   "die_temp",
-			   "conn_temp",
-			   "sbux_res",
-			   "vph_voltage";
-	qcom,battery-data = <&mtp_batterydata>;
-	qcom,auto-recharge-soc = <98>;
-	qcom,step-charging-enable;
-	qcom,sw-jeita-enable;
-	qcom,fcc-stepping-enable;
-	qcom,suspend-input-on-debug-batt;
-	qcom,sec-charger-config = <3>;
-	qcom,thermal-mitigation = <4200000 3500000 3000000
-			2500000 2000000 1500000 1000000 500000>;
-	dpdm-supply = <&qusb_phy0>;
-	qcom,charger-temp-max = <800>;
-	qcom,smb-temp-max = <800>;
-};
-
-&pm6150_gpios {
-	smb_stat {
-		smb_stat_default: smb_stat_default {
-			pins = "gpio3";
-			function = "normal";
-			input-enable;
-			bias-pull-down;
-			power-source = <0>;
-		};
-	};
-};
-
-&qupv3_se9_i2c {
-	status = "ok";
-	#include "qcom-base/smb1390.dtsi"
-	#include "qcom-base/smb1355.dtsi"
-};
-
-&smb1355 {
-	/delete-property/ interrupts;
-	interrupts = <0x0 0xc2 0x0 IRQ_TYPE_LEVEL_LOW>;
-	status = "ok";
-};
-
-&smb1355_charger {
-	status = "ok";
-};
-
-&smb1390 {
-	/delete-property/ interrupts;
-	interrupts = <0x0 0xc2 0x0 IRQ_TYPE_LEVEL_LOW>;
-	pinctrl-names = "default";
-	pinctrl-0 = <&smb_stat_default>;
-	status = "ok";
-};
-
-&smb1390_charger {
-	compatible = "qcom,smb1390-charger-psy";
-	io-channels = <&pm6150l_vadc ADC_AMUX_THM2>;
-	io-channel-names = "cp_die_temp";
-	status = "ok";
 };
 
 &pm6150l_gpios {

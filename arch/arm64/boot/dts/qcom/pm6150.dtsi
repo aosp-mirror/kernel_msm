@@ -212,6 +212,9 @@
 
 			qcom,chgr@1000 {
 				reg = <0x1000 0x100>;
+/* FIXME: b/144553297
+ * It looks like /delete-property/ in sm7150-sunfish-battery.dtsi
+ * cannot overlay the node. Temporarily disable it here.
 				interrupts =
 					<0x0 0x10 0x0 IRQ_TYPE_EDGE_RISING>,
 					<0x0 0x10 0x1 IRQ_TYPE_EDGE_RISING>,
@@ -230,6 +233,7 @@
 						  "fg-fvcal-qualified",
 						  "vph-alarm",
 						  "vph-drop-prechg";
+*/
 			};
 
 			qcom,dcdc@1100 {
@@ -256,6 +260,9 @@
 
 			qcom,batif@1200 {
 				reg = <0x1200 0x100>;
+/* FIXME: b/144553297
+ * It looks like /delete-property/ in sm7150-sunfish-battery.dtsi
+ * cannot overlay the node. Temporarily disable it here.
 				interrupts =
 					<0x0 0x12 0x0 IRQ_TYPE_EDGE_RISING>,
 					<0x0 0x12 0x2 IRQ_TYPE_EDGE_BOTH>,
@@ -272,6 +279,7 @@
 						  "bat-terminal-missing",
 						  "buck-oc",
 						  "vph-ov";
+*/
 			};
 
 			qcom,usb@1300 {
