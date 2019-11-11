@@ -21,23 +21,15 @@
 #include "sm7150-sunfish-audio.dtsi"
 #include "sm7150-sunfish-display.dtsi"
 #include "sm7150-sunfish-usb.dtsi"
-#include "sm7150-sunfish-touch-dev.dtsi"
+
 
 / {
-	model = "Google Inc. MSM sm7150 Sunfish DEV";
+	model = "Google Inc. MSM sm7150 Sunfish DEV1.2";
 	compatible = "qcom,sdmmagpie-idp", "qcom,sdmmagpie", "qcom,idp";
 	qcom,msm-id = <365 0x0>;
-	qcom,board-id = <0x0e0005 0>;
+	qcom,board-id = <0x0e0205 0>;
 };
 
 &lpi_tlmm {
 	goog,ignored-gpios = <0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17>;
-};
-
-&dsi_sofef00_sdc_1080p_cmd_display {
-	qcom,dsi-display-active;
-};
-
-&dsi_sofef01_sdc_1080p_cmd_display {
-	/delete-property/ qcom,dsi-display-active;
 };
