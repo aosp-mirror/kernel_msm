@@ -4742,7 +4742,7 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 		goto error_close_mmu;
 
 	status = kgsl_allocate_global(device, &device->scratch,
-		PAGE_SIZE, 0, 0, "scratch");
+		PAGE_SIZE, 0, KGSL_MEMDESC_RANDOM, "scratch");
 	if (status != 0)
 		goto error_free_memstore;
 
