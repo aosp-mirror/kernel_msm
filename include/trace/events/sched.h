@@ -1706,6 +1706,28 @@ TRACE_EVENT(sched_group_energy,
 		  __entry->grp_idle_idx, __entry->new_capacity)
 );
 
+TRACE_EVENT(sched_capacity_update,
+
+	TP_PROTO(int cpu),
+
+	TP_ARGS(cpu),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, cpu			)
+		__field(unsigned int, capacity			)
+		__field(unsigned int, capacity_orig		)
+	),
+
+	TP_fast_assign(
+		__entry->cpu			= cpu;
+		__entry->capacity		= capacity_of(cpu);
+		__entry->capacity_orig		= capacity_orig_of(cpu);
+	),
+
+	TP_printk("cpu=%d capacity=%u capacity_orig=%u",
+		__entry->cpu, __entry->capacity, __entry->capacity_orig)
+);
+
 /*
  * Tracepoint for schedtune_tasks_update
  */

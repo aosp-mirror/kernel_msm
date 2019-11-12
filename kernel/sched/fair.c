@@ -8909,12 +8909,16 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 	unsigned long max_capacity;
 	int max_cap_cpu;
 	unsigned long flags;
+	bool update = false;
 
 	capacity *= arch_scale_max_freq_capacity(sd, cpu);
 	capacity >>= SCHED_CAPACITY_SHIFT;
 
 	capacity = min(capacity, thermal_cap(cpu));
-	cpu_rq(cpu)->cpu_capacity_orig = capacity;
+	if (cpu_rq(cpu)->cpu_capacity_orig != capacity) {
+		cpu_rq(cpu)->cpu_capacity_orig = capacity;
+		update = true;
+	}
 
 	mcc = &cpu_rq(cpu)->rd->max_cpu_capacity;
 
@@ -8943,7 +8947,13 @@ skip_unlock: __attribute__ ((unused));
 	if (!capacity)
 		capacity = 1;
 
-	cpu_rq(cpu)->cpu_capacity = capacity;
+	if (cpu_rq(cpu)->cpu_capacity != capacity) {
+		cpu_rq(cpu)->cpu_capacity = capacity;
+		update = true;
+	}
+	if (update)
+		trace_sched_capacity_update(cpu);
+
 	if (!sd->child) {
 		sdg->sgc->capacity = capacity;
 		sdg->sgc->max_capacity = capacity;
