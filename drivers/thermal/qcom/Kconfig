@@ -51,7 +51,7 @@ config QTI_BCL_PMIC5
 	  reached.
 
 config QTI_BCL_SOC_DRIVER
-	bool "QTI Battery state of charge sensor driver"
+	tristate "QTI Battery state of charge sensor driver"
 	depends on THERMAL_OF
 	help
 	  This driver registers battery state of charge as a sensor with
