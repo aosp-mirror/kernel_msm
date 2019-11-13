@@ -31,7 +31,7 @@ config QTI_VIRTUAL_SENSOR
 	  determine the virtual sensor temperature.
 
 config QTI_QMI_SENSOR
-	bool "QTI QMI sensor driver"
+	tristate "QTI QMI sensor driver"
 	depends on QCOM_QMI_HELPERS && THERMAL_OF
 	help
 	   This enables to list the QTI remote subsystem temperature sensors.
