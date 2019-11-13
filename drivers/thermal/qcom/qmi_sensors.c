@@ -719,4 +719,7 @@ static struct platform_driver qmi_sens_device_driver = {
 	},
 };
 
-builtin_platform_driver(qmi_sens_device_driver);
+module_platform_driver(qmi_sens_device_driver);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("QTI QMI sensor driver");
