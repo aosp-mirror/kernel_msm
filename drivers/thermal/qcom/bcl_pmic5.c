@@ -665,4 +665,7 @@ static struct platform_driver bcl_driver = {
 	},
 };
 
-builtin_platform_driver(bcl_driver);
+module_platform_driver(bcl_driver);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("BCL driver for BCL peripherals in PMIC5");
