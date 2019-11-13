@@ -61,7 +61,7 @@ config QTI_BCL_SOC_DRIVER
 	  If you want this support, you should say Y here.
 
 config QTI_QMI_COOLING_DEVICE
-	bool "QTI QMI cooling devices"
+	tristate "QTI QMI cooling devices"
 	depends on QCOM_QMI_HELPERS && THERMAL_OF
 	help
 	   This enables the QTI remote subsystem cooling devices. These cooling
