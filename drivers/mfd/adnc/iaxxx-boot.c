@@ -23,7 +23,7 @@
 #include "iaxxx-btp.h"
 #include <linux/mfd/adnc/iaxxx-core.h>
 
-#define IAXXX_CHUNK_SIZE 32768
+#define IAXXX_CHUNK_SIZE 8192
 #define IAXXX_REDUCED_CHUNK_SIZE 4096
 
 /* Firmware and hardware configuration files */

@@ -37,6 +37,11 @@
 #define DSI_WRITE_CMD_BUF(dsi, cmd) \
 	(IS_ERR_VALUE(mipi_dsi_dcs_write_buffer(dsi, cmd, ARRAY_SIZE(cmd))))
 
+#define S6E3HC2_DEFAULT_FPS 60
+
+static const u8 unlock_cmd[] = { 0xF0, 0x5A, 0x5A };
+static const u8 lock_cmd[]   = { 0xF0, 0xA5, 0xA5 };
+
 struct panel_switch_funcs {
 	struct panel_switch_data *(*create)(struct dsi_panel *panel);
 	void (*destroy)(struct panel_switch_data *pdata);
@@ -805,6 +810,20 @@ static void s6e3hc2_gamma_update(struct panel_switch_data *pdata,
 	}
 }
 
+static void s6e3hc2_gamma_update_reg_locked(struct panel_switch_data *pdata,
+				 const struct dsi_display_mode *mode)
+{
+	struct dsi_panel *panel = pdata->panel;
+	struct mipi_dsi_device *dsi = &panel->mipi_device;
+
+	if (unlikely(!mode))
+		return;
+
+	DSI_WRITE_CMD_BUF(dsi, unlock_cmd);
+	s6e3hc2_gamma_update(pdata, mode);
+	DSI_WRITE_CMD_BUF(dsi, lock_cmd);
+}
+
 static bool s6e3hc2_is_gamma_available(struct dsi_panel *panel)
 {
 	struct mipi_dsi_device *dsi = &panel->mipi_device;
@@ -1252,8 +1271,6 @@ static int s6e3hc2_gamma_read_tables(struct panel_switch_data *pdata)
 	struct s6e3hc2_switch_data *sdata;
 	const struct dsi_display_mode *mode;
 	struct mipi_dsi_device *dsi;
-	const u8 unlock_cmd[] = { 0xF0, 0x5A, 0x5A };
-	const u8 lock_cmd[]   = { 0xF0, 0xA5, 0xA5 };
 	int i, rc = 0;
 
 	if (unlikely(!pdata || !pdata->panel))
@@ -1537,8 +1554,6 @@ static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 {
 	struct dsi_panel *panel = pdata->panel;
 	struct mipi_dsi_device *dsi = &panel->mipi_device;
-	const u8 unlock_cmd[] = { 0xF0, 0x5A, 0x5A };
-	const u8 lock_cmd[]   = { 0xF0, 0xA5, 0xA5 };
 
 	if (!mode)
 		return;
@@ -1586,15 +1601,19 @@ int s6e3hc2_send_nolp_cmds(struct dsi_panel *panel)
 static int s6e3hc2_post_enable(struct panel_switch_data *pdata)
 {
 	struct s6e3hc2_switch_data *sdata;
+	const struct dsi_display_mode *mode;
 
 	if (unlikely(!pdata || !pdata->panel))
 		return -ENOENT;
 
 	sdata = container_of(pdata, struct s6e3hc2_switch_data, base);
+	mode = pdata->panel->cur_mode;
 
 	kthread_flush_work(&sdata->gamma_work);
 	if (sdata->gamma_state == GAMMA_STATE_UNINITIALIZED)
 		kthread_queue_work(&pdata->worker, &sdata->gamma_work);
+	else if (mode && mode->timing.refresh_rate != S6E3HC2_DEFAULT_FPS)
+		s6e3hc2_gamma_update_reg_locked(pdata, mode);
 
 	return 0;
 }
