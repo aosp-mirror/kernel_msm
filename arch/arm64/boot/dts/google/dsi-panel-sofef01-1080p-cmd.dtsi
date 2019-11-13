@@ -128,7 +128,7 @@
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-panel-phy-timings = [
-					00 24 09 09 26 24 09
+					00 23 09 09 26 24 09
 					09 06 02 04 00 1D 19
 				];
 
