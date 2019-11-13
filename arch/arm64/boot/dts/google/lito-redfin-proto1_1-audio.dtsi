@@ -10,6 +10,14 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+&reset_pin_bottom_default {
+	status = "disabled";
+};
+
+&irq_pin_top_default {
+	status = "disabled";
+};
+
 &pm7250b_gpios {
 	reset_pin_bottom_default1_1: reset_pin_bottom_default {
 		pins = "gpio11";
@@ -29,12 +37,10 @@
 	};
 };
 
-
-&reset_pin_bottom_default {
-	status = "disabled";
+&cs35l41_l {
+	pinctrl-0 = <&reset_pin_top_default &irq_pin_top_default1_1>;
 };
 
-&irq_pin_top_default {
-	status = "disabled";
-
+&cs35l41_r {
+	pinctrl-0 = <&reset_pin_bottom_default1_1 &irq_pin_bottom_default>;
 };
