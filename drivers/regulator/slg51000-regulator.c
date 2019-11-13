@@ -74,6 +74,8 @@ static const struct slg51000_evt_sta es_reg[SLG51000_MAX_EVT_REGISTER] = {
 static const struct regmap_range slg51000_writeable_ranges[] = {
 	regmap_reg_range(SLG51000_SYSCTL_MATRIX_CONF_A,
 			 SLG51000_SYSCTL_MATRIX_CONF_A),
+	regmap_reg_range(SLG51000_LDO_HP_STARTUP_ILIM,
+			 SLG51000_LDO_HP_STARTUP_ILIM),
 	regmap_reg_range(SLG51000_LDO1_VSEL, SLG51000_LDO1_VSEL),
 	regmap_reg_range(SLG51000_LDO1_MINV, SLG51000_LDO1_MAXV),
 	regmap_reg_range(SLG51000_LDO1_IRQ_MASK, SLG51000_LDO1_IRQ_MASK),
@@ -114,6 +116,8 @@ static const struct regmap_range slg51000_readable_ranges[] = {
 	regmap_reg_range(SLG51000_SYSCTL_REFGEN_CONF_C,
 			 SLG51000_SYSCTL_UVLO_CONF_A),
 	regmap_reg_range(SLG51000_SYSCTL_FAULT_LOG1, SLG51000_SYSCTL_IRQ_MASK),
+	regmap_reg_range(SLG51000_LDO_HP_STARTUP_ILIM,
+			 SLG51000_LDO_HP_STARTUP_ILIM),
 	regmap_reg_range(SLG51000_IO_GPIO1_CONF, SLG51000_IO_GPIO_STATUS),
 	regmap_reg_range(SLG51000_LUTARRAY_LUT_VAL_0,
 			 SLG51000_LUTARRAY_LUT_VAL_11),
@@ -442,6 +446,7 @@ static int slg51000_regulator_init(struct slg51000 *chip)
 static int slg51000_config_tuning(struct slg51000 *chip)
 {
 	int ret;
+	unsigned int ldo_hp_startup_current;
 	const u8 sw_test_mode_vals[] = {
 		SLG51000_SW_TEST_MODE_1_ON, SLG51000_SW_TEST_MODE_2_ON,
 		SLG51000_SW_TEST_MODE_3_ON, SLG51000_SW_TEST_MODE_4_ON,
@@ -482,6 +487,24 @@ static int slg51000_config_tuning(struct slg51000 *chip)
 			SLG51000_LUTARRAY_LUT_VAL_3, 0xea);
 	if (ret < 0) {
 		dev_err(chip->dev, "Failed to set LUTARRAY_LUT_VAL_3\n");
+		return ret;
+	}
+
+	// set startup current limit
+	ret = slg51000_regmap_read(chip->regmap,
+			SLG51000_LDO_HP_STARTUP_ILIM, &ldo_hp_startup_current);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to get LDO_HP_STARTUP_ILIM\n");
+		return ret;
+	}
+
+	ldo_hp_startup_current &= SLG51000_LDO_HP_STARTUP_ILIM_ORI_MASK;
+	ldo_hp_startup_current |= SLG51000_LDO_HP_STARTUP_ILIM_0_MASK;
+
+	ret = slg51000_regmap_write(chip->regmap,
+			SLG51000_LDO_HP_STARTUP_ILIM, ldo_hp_startup_current);
+	if (ret < 0) {
+		dev_err(chip->dev, "Failed to set LDO_HP_STARTUP_ILIM\n");
 		return ret;
 	}
 
