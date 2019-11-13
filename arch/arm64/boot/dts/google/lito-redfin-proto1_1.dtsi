@@ -12,5 +12,5 @@
  */
 
 #include "lito-redfin.dtsi"
-#include "lito-redfin-camera-sensor.dtsi"
+#include "lito-redfin-camera-sensor-v2.dtsi"
 #include "lito-redfin-proto1_1-audio.dtsi"
