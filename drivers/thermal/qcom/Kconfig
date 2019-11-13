@@ -40,7 +40,7 @@ config QTI_QMI_SENSOR
 	   framework when the threshold is reached.
 
 config QTI_BCL_PMIC5
-	bool "BCL driver for BCL peripherals in PMIC5"
+	tristate "BCL driver for BCL peripherals in PMIC5"
 	depends on SPMI && THERMAL_OF
 	help
 	  Say Y here to enable this BCL driver for PMIC5. This driver
