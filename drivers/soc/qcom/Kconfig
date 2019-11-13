@@ -802,7 +802,7 @@ config QMP_DEBUGFS_CLIENT
 	  to Alway On processor using QMP transport.
 
 config QCOM_CDSP_RM
-	bool "CDSP request manager"
+	tristate "CDSP request manager"
 	depends on QCOM_GLINK
 	help
 	  This driver serves CDSP requests for CPU L3 clock and CPU QoS thus
