@@ -47,8 +47,7 @@ static void tmc_etr_sg_read_pos(loff_t *ppos,
 				size_t bytes, bool noirq, size_t *len,
 				char **bufpp)
 {
-	uint32_t i = 0;
-	u64 rwp;
+	uint32_t rwp, i = 0;
 	uint32_t blk_num, sg_tbl_num, blk_num_loc, read_off;
 	uint32_t *virt_pte, *virt_st_tbl;
 	void *virt_blk;
@@ -87,7 +86,7 @@ static void tmc_etr_sg_read_pos(loff_t *ppos,
 	*bufpp = (char *)(virt_blk + read_off);
 
 	if (noirq) {
-		rwp = tmc_read_rwp(tmcdrvdata);
+		rwp = readl_relaxed(tmcdrvdata->base + TMC_RWP);
 		tmc_etr_sg_rwp_pos(tmcdrvdata, rwp);
 		if (tmcdrvdata->sg_blk_num == blk_num &&
 		    rwp >= (phys_pte + read_off))
