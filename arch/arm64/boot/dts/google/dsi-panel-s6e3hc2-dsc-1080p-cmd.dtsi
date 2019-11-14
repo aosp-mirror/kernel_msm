@@ -13,6 +13,8 @@
 
 &mdss_mdp {
 	dsi_s6e3hc2_dsc_1080p_cmd: qcom,mdss_dsi_s6e3hc2_dsc_1080p_cmd {
+		compatible = "google,dsi_s6e3hc2_gamma";
+
 		qcom,mdss-dsi-panel-name = "s6e3hc2 amoled 5.96 cmd mode panel";
 		google,mdss-dsi-panel-vendor = "SAMSUNG";
 		google,mdss-dsi-panel-sn-location = <0xA1 6 7>;
