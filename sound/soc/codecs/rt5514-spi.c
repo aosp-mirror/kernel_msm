@@ -380,7 +380,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 			sizeof(buf));
 		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 |
 					buf[3] << 24;
-		if ((cur_wp & 0xfff00000) != 0x4ff00000) {
+		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
 				msecs_to_jiffies(50));
 			goto done;
@@ -478,7 +478,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 			sizeof(buf));
 		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 |
 					buf[3] << 24;
-		if ((cur_wp & 0xfff00000) != 0x4ff00000) {
+		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
 				msecs_to_jiffies(50));
 			goto done;
@@ -574,7 +574,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	rt5514_spi_burst_read(rt5514_dsp->buf_rp_addr[2], (u8 *)&buf,
 		sizeof(buf));
 	cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-	if ((cur_wp & 0xfff00000) != 0x4ff00000) {
+	if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
 			msecs_to_jiffies(50));
 		goto done;
@@ -715,15 +715,15 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 		rt5514_spi_burst_read(base_addr, (u8 *)&buf, sizeof(buf));
 		rt5514_dsp->buf_base[stream_flag - 1] =
 			buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-		if ((rt5514_dsp->buf_base[stream_flag - 1] & 0xfff00000) !=
-			0x4ff00000)
+		if ((rt5514_dsp->buf_base[stream_flag - 1] & 0xffe00000) !=
+			0x4fe00000)
 			continue;
 
 		rt5514_spi_burst_read(limit_addr, (u8 *)&buf, sizeof(buf));
 		rt5514_dsp->buf_limit[stream_flag - 1] =
 			buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-		if ((rt5514_dsp->buf_limit[stream_flag - 1] & 0xfff00000) !=
-			0x4ff00000)
+		if ((rt5514_dsp->buf_limit[stream_flag - 1] & 0xffe00000) !=
+			0x4fe00000)
 			continue;
 
 		if (rt5514_dsp->buf_limit[stream_flag - 1] % 8)
@@ -734,8 +734,8 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 			(u8 *)&buf, sizeof(buf));
 		rt5514_dsp->buf_rp[stream_flag - 1] =
 			buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-		if ((rt5514_dsp->buf_rp[stream_flag - 1] & 0xfff00000) !=
-			0x4ff00000)
+		if ((rt5514_dsp->buf_rp[stream_flag - 1] & 0xffe00000) !=
+			0x4fe00000)
 			continue;
 		else
 			break;

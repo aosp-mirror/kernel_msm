@@ -65,7 +65,7 @@ static const struct reg_sequence rt5514_i2c_patch[] = {
 
 static const struct reg_sequence rt5514_patch[] = {
 	{RT5514_DIG_IO_CTRL,		0x00000040},
-	{RT5514_CLK_CTRL1,		0x38020041},
+	{RT5514_CLK_CTRL1,		0x380200c1},
 	{RT5514_SRC_CTRL,		0x44000eee},
 	{RT5514_ANA_CTRL_LDO10,		0x00028704},
 	{RT5514_ANA_CTRL_ADCFED,	0x00000800},
@@ -93,7 +93,7 @@ static const struct reg_default rt5514_reg[] = {
 	{RT5514_SRC_CTRL,		0x44000eee},
 	{RT5514_DOWNFILTER2_CTRL1,	0x0000882f},
 	{RT5514_PLL_SOURCE_CTRL,	0x00000004},
-	{RT5514_CLK_CTRL1,		0x38020041},
+	{RT5514_CLK_CTRL1,		0x380200c1},
 	{RT5514_CLK_CTRL2,		0x00000000},
 	{RT5514_PLL3_CALIB_CTRL1,	0x00400200},
 	{RT5514_PLL3_CALIB_CTRL5,	0x40220012},
@@ -116,6 +116,8 @@ static const struct reg_default rt5514_reg[] = {
 	{RT5514_ANA_CTRL_INBUF,		0x00000143},
 	{RT5514_ANA_CTRL_VREF,		0x00008d50},
 	{RT5514_ANA_CTRL_PLL3,		0x0000000e},
+	{RT5514_ANA_CTRL_PLL2_1,	0x00000000},
+	{RT5514_ANA_CTRL_PLL2_2,	0x00030220},
 	{RT5514_ANA_CTRL_PLL1_1,	0x00000000},
 	{RT5514_ANA_CTRL_PLL1_2,	0x00030220},
 	{RT5514_DMIC_LP_CTRL,		0x00000000},
@@ -310,7 +312,7 @@ static int rt5514_dsp_frame_flag_get(struct snd_kcontrol *kcontrol,
 
 	rt5514_spi_burst_read(RT5514_BUFFER_MUSIC_WP, (u8 *)&buf, sizeof(buf));
 	value_spi = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
-	if ((value_spi & 0xfff00000) != 0x4ff00000) {
+	if ((value_spi & 0xffe00000) != 0x4fe00000) {
 		ucontrol->value.integer.value[0] = 0;
 		return 0;
 	}
@@ -318,7 +320,7 @@ static int rt5514_dsp_frame_flag_get(struct snd_kcontrol *kcontrol,
 	msleep(20);
 
 	regmap_read(rt5514->i2c_regmap, RT5514_BUFFER_MUSIC_WP, &value_i2c);
-	if ((value_i2c & 0xfff00000) != 0x4ff00000) {
+	if ((value_i2c & 0xffe00000) != 0x4fe00000) {
 		ucontrol->value.integer.value[0] = 0;
 		return 0;
 	}
@@ -549,10 +551,10 @@ watchdog:
 		rt5514_enable_dsp_prepare(rt5514);
 		rt5514_dsp_func_select(rt5514);
 
-		request_firmware(&fw, RT5514_FIRMWARE1, codec->dev);
+		request_firmware(&fw, rt5514->fw_name[0], codec->dev);
 		if (fw) {
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
-			rt5514_spi_burst_write(0x4ff60000, fw->data,
+			rt5514_spi_burst_write(rt5514->fw_addr[0], fw->data,
 				((fw->size/8)+1)*8);
 #else
 			dev_err(codec->dev, "There is no SPI driver for"
@@ -562,10 +564,10 @@ watchdog:
 			fw = NULL;
 		}
 
-		request_firmware(&fw, RT5514_FIRMWARE2, codec->dev);
+		request_firmware(&fw, rt5514->fw_name[1], codec->dev);
 		if (fw) {
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
-			rt5514_spi_burst_write(0x4ffc0000, fw->data,
+			rt5514_spi_burst_write(rt5514->fw_addr[1], fw->data,
 				((fw->size/8)+1)*8);
 #else
 			dev_err(codec->dev, "There is no SPI driver for"
@@ -579,7 +581,7 @@ watchdog:
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 			int ret;
 
-			ret = rt5514_spi_burst_write(0x4ffaa800,
+			ret = rt5514_spi_burst_write(rt5514->fw_addr[2],
 				rt5514->hotword_model_buf,
 				((rt5514->hotword_model_len / 8) + 1) * 8);
 			if (ret) {
@@ -592,11 +594,11 @@ watchdog:
 				"No SPI driver for loading firmware\n");
 #endif
 		} else {
-			request_firmware(&fw, RT5514_FIRMWARE3,
+			request_firmware(&fw, rt5514->fw_name[2],
 					 codec->dev);
 			if (fw) {
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
-				rt5514_spi_burst_write(0x4ffaa800,
+				rt5514_spi_burst_write(rt5514->fw_addr[2],
 					fw->data,
 					((fw->size/8)+1)*8);
 #else
@@ -612,7 +614,7 @@ watchdog:
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 			int ret;
 
-			ret = rt5514_spi_burst_write(0x4ffb4800,
+			ret = rt5514_spi_burst_write(rt5514->fw_addr[3],
 				rt5514->musdet_model_buf,
 				((rt5514->musdet_model_len / 8) + 1) * 8);
 			if (ret) {
@@ -625,11 +627,11 @@ watchdog:
 				"No SPI driver for loading firmware\n");
 #endif
 		} else {
-			request_firmware(&fw, RT5514_FIRMWARE4,
+			request_firmware(&fw, rt5514->fw_name[3],
 					 codec->dev);
 			if (fw) {
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
-				rt5514_spi_burst_write(0x4ffb4800,
+				rt5514_spi_burst_write(rt5514->fw_addr[3],
 					fw->data,
 					((fw->size/8)+1)*8);
 #else
@@ -642,8 +644,8 @@ watchdog:
 		}
 
 		if (rt5514->dsp_test) {
-			if (rt5514_fw_validate(rt5514, RT5514_FIRMWARE1,
-				0x4ff60000)) {
+			if (rt5514_fw_validate(rt5514, rt5514->fw_name[0],
+				rt5514->fw_addr[0])) {
 				rt5514->dsp_enabled = 0;
 				regmap_multi_reg_write(rt5514->i2c_regmap,
 					rt5514_i2c_patch,
@@ -653,8 +655,8 @@ watchdog:
 				return 0;
 			}
 
-			if (rt5514_fw_validate(rt5514, RT5514_FIRMWARE2,
-				0x4ffc0000)) {
+			if (rt5514_fw_validate(rt5514, rt5514->fw_name[1],
+				rt5514->fw_addr[1])) {
 				rt5514->dsp_enabled = 0;
 				regmap_multi_reg_write(rt5514->i2c_regmap,
 					rt5514_i2c_patch,
@@ -664,8 +666,8 @@ watchdog:
 				return 0;
 			}
 
-			if (rt5514_fw_validate(rt5514, RT5514_FIRMWARE3,
-				0x4ffaa800)) {
+			if (rt5514_fw_validate(rt5514, rt5514->fw_name[2],
+				rt5514->fw_addr[2])) {
 				rt5514->dsp_enabled = 0;
 				regmap_multi_reg_write(rt5514->i2c_regmap,
 					rt5514_i2c_patch,
@@ -675,8 +677,8 @@ watchdog:
 				return 0;
 			}
 
-			if (rt5514_fw_validate(rt5514, RT5514_FIRMWARE4,
-				0x4ffb4800)) {
+			if (rt5514_fw_validate(rt5514, rt5514->fw_name[3],
+				rt5514->fw_addr[3])) {
 				rt5514->dsp_enabled = 0;
 				regmap_multi_reg_write(rt5514->i2c_regmap,
 					rt5514_i2c_patch,
@@ -876,11 +878,8 @@ static int rt5514_hw_ver_get(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
-	unsigned int val;
 
-	regmap_read(rt5514->regmap, RT5514_VENDOR_ID1, &val);
-
-	ucontrol->value.integer.value[0] = ((val & 80) == 80);
+	ucontrol->value.integer.value[0] = rt5514->v_p;
 
 	return 0;
 }
@@ -983,7 +982,7 @@ static int rt5514_ambient_payload_put(struct snd_kcontrol *kcontrol,
 	regmap_read(rt5514->i2c_regmap, 0x18002fd8, &rt5514->payload.size);
 	regmap_read(rt5514->i2c_regmap, 0x18002fdc, &rt5514->payload.status);
 
-	if ((payload_addr & 0xfff00000) == 0x4ff00000)
+	if ((payload_addr & 0xffe00000) == 0x4fe00000)
 		rt5514_spi_burst_read(payload_addr, (u8 *)&rt5514->payload.data,
 			AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE);
 
@@ -997,10 +996,10 @@ static int rt5514_ambient_payload_get(struct snd_kcontrol *kcontrol,
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 	int ret = 0;
 
-	if (size != sizeof(RT5514_PAYLOAD))
+	if (size != sizeof(struct _payload_st))
 		return -EINVAL;
 
-	if (copy_to_user(bytes, &rt5514->payload, sizeof(RT5514_PAYLOAD))) {
+	if (copy_to_user(bytes, &rt5514->payload, sizeof(struct _payload_st))) {
 		dev_warn(component->dev, "%s(), copy_to_user fail\n", __func__);
 		ret = -EFAULT;
 	}
@@ -1017,17 +1016,17 @@ static int rt5514_ambient_process_payload_get(struct snd_kcontrol *kcontrol,
 	int ret = 0;
 	unsigned int payload_addr;
 
-	if (size != sizeof(RT5514_PAYLOAD))
+	if (size != sizeof(struct _payload_st))
 		return -EINVAL;
 
 	regmap_read(rt5514->i2c_regmap, 0x18002fe0, &payload_addr);
 	regmap_read(rt5514->i2c_regmap, 0x18002fe4, &rt5514->payload.size);
 
-	if ((payload_addr & 0xfff00000) == 0x4ff00000)
+	if ((payload_addr & 0xffe00000) == 0x4fe00000)
 		rt5514_spi_burst_read(payload_addr, (u8 *)&rt5514->payload.data,
 			AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE);
 
-	if (copy_to_user(bytes, &rt5514->payload, sizeof(RT5514_PAYLOAD))) {
+	if (copy_to_user(bytes, &rt5514->payload, sizeof(struct _payload_st))) {
 		dev_warn(codec->dev, "%s(), copy_to_user fail\n", __func__);
 		ret = -EFAULT;
 	}
@@ -1077,9 +1076,9 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_hw_ver_get, NULL),
 	SOC_SINGLE_EXT("HW Reset", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_hw_reset_get, rt5514_hw_reset_set),
-	SND_SOC_BYTES_TLV("Ambient Payload", sizeof(RT5514_PAYLOAD),
+	SND_SOC_BYTES_TLV("Ambient Payload", sizeof(struct _payload_st),
 		rt5514_ambient_payload_get, rt5514_ambient_payload_put),
-	SND_SOC_BYTES_TLV("Ambient Process Payload", sizeof(RT5514_PAYLOAD),
+	SND_SOC_BYTES_TLV("Ambient Process Payload", sizeof(struct _payload_st),
 		rt5514_ambient_process_payload_get, NULL),
 	SOC_SINGLE_EXT("SPI Switch", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_spi_switch_get, rt5514_spi_switch_put),
@@ -1182,13 +1181,25 @@ static int rt5514_set_dmic_clk(struct snd_soc_dapm_widget *w,
 	return idx;
 }
 
-static int rt5514_is_sys_clk_from_pll(struct snd_soc_dapm_widget *source,
+static int rt5514_is_sys_clk_from_pll1(struct snd_soc_dapm_widget *source,
 			 struct snd_soc_dapm_widget *sink)
 {
 	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(source->dapm);
 	struct rt5514_priv *rt5514 = snd_soc_codec_get_drvdata(codec);
 
-	if (rt5514->sysclk_src == RT5514_SCLK_S_PLL1)
+	if (rt5514->sysclk_src == RT5514_SCLK_S_PLL && !rt5514->v_p)
+		return 1;
+	else
+		return 0;
+}
+
+static int rt5514_is_sys_clk_from_pll2(struct snd_soc_dapm_widget *source,
+			 struct snd_soc_dapm_widget *sink)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(source->dapm);
+	struct rt5514_priv *rt5514 = snd_soc_codec_get_drvdata(codec);
+
+	if (rt5514->sysclk_src == RT5514_SCLK_S_PLL && rt5514->v_p)
 		return 1;
 	else
 		return 0;
@@ -1277,10 +1288,16 @@ static const struct snd_soc_dapm_widget rt5514_dapm_widgets[] = {
 	SND_SOC_DAPM_SUPPLY("ADCR Power", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 	SND_SOC_DAPM_SUPPLY("PLL1 LDO ENABLE", RT5514_ANA_CTRL_PLL1_2,
-		RT5514_EN_LDO_PLL1_BIT, 0, NULL, 0),
+		RT5514_EN_LDO_PLL_BIT, 0, NULL, 0),
 	SND_SOC_DAPM_SUPPLY("PLL1 LDO", RT5514_PWR_ANA2,
 		RT5514_POW_PLL1_LDO_BIT, 0, NULL, 0),
 	SND_SOC_DAPM_SUPPLY("PLL1", RT5514_PWR_ANA2, RT5514_POW_PLL1_BIT, 0,
+		NULL, 0),
+	SND_SOC_DAPM_SUPPLY("PLL2 LDO ENABLE", RT5514_ANA_CTRL_PLL2_2,
+		RT5514_EN_LDO_PLL_BIT, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("PLL2 LDO", RT5514_PWR_ANA2,
+		RT5514_POW_PLL2_LDO_BIT, 0, NULL, 0),
+	SND_SOC_DAPM_SUPPLY("PLL2", RT5514_PWR_ANA2, RT5514_POW_PLL2_BIT, 0,
 		NULL, 0),
 	SND_SOC_DAPM_SUPPLY_S("ASRC AD1", 1, RT5514_CLK_CTRL2,
 		RT5514_CLK_AD0_ASRC_EN_BIT, 0, NULL, 0),
@@ -1372,6 +1389,9 @@ static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
 	{ "PLL1 LDO", NULL, "PLL1 LDO ENABLE" },
 	{ "PLL1", NULL, "PLL1 LDO" },
 
+	{ "PLL2 LDO", NULL, "PLL2 LDO ENABLE" },
+	{ "PLL2", NULL, "PLL2 LDO" },
+
 	{ "Stereo1 ADC MIXL", NULL, "Sto1 ADC MIXL" },
 	{ "Stereo1 ADC MIXR", NULL, "Sto1 ADC MIXR" },
 
@@ -1379,7 +1399,8 @@ static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
 	{ "Stereo1 ADC MIX", NULL, "Stereo1 ADC MIXR" },
 	{ "Stereo1 ADC MIX", NULL, "adc stereo1 filter",
 		rt5514_is_not_dsp_enabled },
-	{ "adc stereo1 filter", NULL, "PLL1", rt5514_is_sys_clk_from_pll },
+	{ "adc stereo1 filter", NULL, "PLL1", rt5514_is_sys_clk_from_pll1 },
+	{ "adc stereo1 filter", NULL, "PLL2", rt5514_is_sys_clk_from_pll2 },
 	{ "adc stereo1 filter", NULL, "ASRC AD1", rt5514_i2s_use_asrc },
 
 	{ "Stereo2 DMIC Mux", "DMIC1", "DMIC1" },
@@ -1397,7 +1418,8 @@ static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
 	{ "Stereo2 ADC MIX", NULL, "Stereo2 ADC MIXR" },
 	{ "Stereo2 ADC MIX", NULL, "adc stereo2 filter",
 		rt5514_is_not_dsp_enabled },
-	{ "adc stereo2 filter", NULL, "PLL1", rt5514_is_sys_clk_from_pll },
+	{ "adc stereo2 filter", NULL, "PLL1", rt5514_is_sys_clk_from_pll1 },
+	{ "adc stereo2 filter", NULL, "PLL2", rt5514_is_sys_clk_from_pll2 },
 	{ "adc stereo2 filter", NULL, "ASRC AD2", rt5514_i2s_use_asrc },
 
 	{ "AIF1TX", NULL, "Stereo1 ADC MIX"},
@@ -1600,7 +1622,7 @@ static int rt5514_set_dai_sysclk(struct snd_soc_dai *dai,
 		reg_val |= RT5514_CLK_SYS_PRE_SEL_MCLK;
 		break;
 
-	case RT5514_SCLK_S_PLL1:
+	case RT5514_SCLK_S_PLL:
 		reg_val |= RT5514_CLK_SYS_PRE_SEL_PLL;
 		break;
 
@@ -1648,14 +1670,26 @@ static int rt5514_set_dai_pll(struct snd_soc_dai *dai, int pll_id, int source,
 		return 0;
 
 	switch (source) {
-	case RT5514_PLL1_S_MCLK:
-		regmap_update_bits(rt5514->regmap, RT5514_PLL_SOURCE_CTRL,
-			RT5514_PLL_1_SEL_MASK, RT5514_PLL_1_SEL_MCLK);
+	case RT5514_PLL_S_MCLK:
+		if (rt5514->v_p)
+			regmap_update_bits(rt5514->regmap,
+				RT5514_PLL_SOURCE_CTRL,
+				RT5514_PLL_2_SEL_MASK, RT5514_PLL_2_SEL_MCLK);
+		else
+			regmap_update_bits(rt5514->regmap,
+				RT5514_PLL_SOURCE_CTRL,
+				RT5514_PLL_1_SEL_MASK, RT5514_PLL_1_SEL_MCLK);
 		break;
 
-	case RT5514_PLL1_S_BCLK:
-		regmap_update_bits(rt5514->regmap, RT5514_PLL_SOURCE_CTRL,
-			RT5514_PLL_1_SEL_MASK, RT5514_PLL_1_SEL_SCLK);
+	case RT5514_PLL_S_BCLK:
+		if (rt5514->v_p)
+			regmap_update_bits(rt5514->regmap,
+				RT5514_PLL_SOURCE_CTRL,
+				RT5514_PLL_2_SEL_MASK, RT5514_PLL_2_SEL_SCLK);
+		else
+			regmap_update_bits(rt5514->regmap,
+				RT5514_PLL_SOURCE_CTRL,
+				RT5514_PLL_1_SEL_MASK, RT5514_PLL_1_SEL_SCLK);
 		break;
 
 	default:
@@ -1673,13 +1707,23 @@ static int rt5514_set_dai_pll(struct snd_soc_dai *dai, int pll_id, int source,
 		pll_code.m_bp, (pll_code.m_bp ? 0 : pll_code.m_code),
 		pll_code.n_code, pll_code.k_code);
 
-	regmap_write(rt5514->regmap, RT5514_ANA_CTRL_PLL1_1,
-		pll_code.k_code << RT5514_PLL_K_SFT |
-		pll_code.n_code << RT5514_PLL_N_SFT |
-		(pll_code.m_bp ? 0 : pll_code.m_code) << RT5514_PLL_M_SFT);
-	regmap_update_bits(rt5514->regmap, RT5514_ANA_CTRL_PLL1_2,
-		RT5514_PLL_M_BP, pll_code.m_bp << RT5514_PLL_M_BP_SFT);
-
+	if (rt5514->v_p) {
+		regmap_write(rt5514->regmap, RT5514_ANA_CTRL_PLL2_1,
+			pll_code.k_code << RT5514_PLL_K_SFT |
+			pll_code.n_code << RT5514_PLL_N_SFT |
+			(pll_code.m_bp ? 0 : pll_code.m_code)
+				<< RT5514_PLL_M_SFT);
+		regmap_update_bits(rt5514->regmap, RT5514_ANA_CTRL_PLL2_2,
+			RT5514_PLL_M_BP, pll_code.m_bp << RT5514_PLL_M_BP_SFT);
+	} else {
+		regmap_write(rt5514->regmap, RT5514_ANA_CTRL_PLL1_1,
+			pll_code.k_code << RT5514_PLL_K_SFT |
+			pll_code.n_code << RT5514_PLL_N_SFT |
+			(pll_code.m_bp ? 0 : pll_code.m_code)
+				<< RT5514_PLL_M_SFT);
+		regmap_update_bits(rt5514->regmap, RT5514_ANA_CTRL_PLL1_2,
+			RT5514_PLL_M_BP, pll_code.m_bp << RT5514_PLL_M_BP_SFT);
+	}
 	rt5514->pll_in = freq_in;
 	rt5514->pll_out = freq_out;
 	rt5514->pll_src = source;
@@ -1982,6 +2026,28 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 		dev_err(&i2c->dev,
 			"Device with ID register %x is not rt5514\n", val);
 		return -ENODEV;
+	}
+
+	regmap_read(rt5514->regmap, RT5514_VENDOR_ID1, &val);
+	if (val == 0x80) {
+		rt5514->v_p = true;
+		rt5514->fw_name[0] = RT5514P_FIRMWARE1;
+		rt5514->fw_name[1] = RT5514P_FIRMWARE2;
+		rt5514->fw_name[2] = RT5514P_FIRMWARE3;
+		rt5514->fw_name[3] = RT5514P_FIRMWARE4;
+		rt5514->fw_addr[0] = 0x4fe00000;
+		rt5514->fw_addr[1] = 0x4ff00000;
+		rt5514->fw_addr[2] = 0x4fe98000;
+		rt5514->fw_addr[3] = 0x4fea8000;
+	} else {
+		rt5514->fw_name[0] = RT5514_FIRMWARE1;
+		rt5514->fw_name[1] = RT5514_FIRMWARE2;
+		rt5514->fw_name[2] = RT5514_FIRMWARE3;
+		rt5514->fw_name[3] = RT5514_FIRMWARE4;
+		rt5514->fw_addr[0] = 0x4ff60000;
+		rt5514->fw_addr[1] = 0x4ffc0000;
+		rt5514->fw_addr[2] = 0x4ffaa800;
+		rt5514->fw_addr[3] = 0x4ffb4800;
 	}
 
 	ret = regmap_multi_reg_write(rt5514->i2c_regmap, rt5514_i2c_patch,
