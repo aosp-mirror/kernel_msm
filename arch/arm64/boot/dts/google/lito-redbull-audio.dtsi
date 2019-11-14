@@ -244,7 +244,7 @@
 		#sound-dai-cells = <1>;
 		compatible = "realtek,rt5514";
 		reg = <0x57>;
-		reset-gpios = <&rt5514_reset>;
+		reset-gpio = <&tlmm 91 0>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&audio_ldo1>, <&rt5514_reset>;
 	};
