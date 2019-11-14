@@ -1063,7 +1063,7 @@ struct gsi_chan_info {
 	uint64_t evt_rp;
 };
 
-#ifdef CONFIG_GSI
+#if IS_ENABLED(CONFIG_GSI)
 /**
  * gsi_register_device - Peripheral should call this function to
  * register itself with GSI before invoking any other APIs
