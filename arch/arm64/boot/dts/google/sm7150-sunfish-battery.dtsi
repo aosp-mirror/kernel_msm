@@ -15,7 +15,9 @@
 &soc {
 	sunfish_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
-		#include "batterydata-qcom-s5-swd-atl.dtsi"
+		#include "batterydata-qcom-s5-SWD-ATL.dtsi"
+		#include "batterydata-qcom-s5-SWD-LSN.dtsi"
+		#include "batterydata-qcom-s5-unknown.dtsi"
 	};
 };
 

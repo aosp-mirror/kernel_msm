@@ -1,13 +1,12 @@
-
-qcom,4197910_Google_Sunwoda_3080mAH_PM7150 {
-	/* 4197910_Google_Sunwoda_3080mAH_PM7150_averaged_MasterSlave_Oct30th2019 */
+qcom,4197910_Google_S5_SWD_ATL_3080mAH_PM7150 {
+	/* 4197910_Google_S5_SWD_ATL_3080mAH_PM7150_averaged_MasterSlave_Oct30th2019 */
 	qcom,max-voltage-uv = <4450000>;
 	qcom,fg-cc-cv-threshold-uv = <4440000>;
 	qcom,fastchg-current-ma = <1500>;
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <3440>;
 	qcom,battery-therm-kohm = <10>;
-	qcom,battery-type = "4197910_Google_Sunwoda_3080mAH_PM7150_averaged_MasterSlave_Oct30th2019";
+	qcom,battery-type = "8230015901";
 	qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {
