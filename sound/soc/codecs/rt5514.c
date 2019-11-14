@@ -531,6 +531,7 @@ static int rt5514_dsp_enable(struct rt5514_priv *rt5514, bool is_adc,
 {
 	struct snd_soc_component *component = rt5514->component;
 	const struct firmware *fw = NULL;
+	unsigned int val = 0;
 
 	if (is_watchdog)
 		goto watchdog;
@@ -754,18 +755,58 @@ watchdog:
 
 		usleep_range(10000, 10005);
 
-		if (rt5514->dsp_adc_enabled) {
-			regmap_write(rt5514->i2c_regmap, RT5514_DSP_FUNC,
-				RT5514_DSP_FUNC_WOV_SENSOR);
+		if (is_watchdog &&
+			snd_soc_component_get_bias_level(component)) {
+			if (rt5514->dsp_adc_enabled) {
+				regmap_write(rt5514->i2c_regmap,
+					RT5514_DSP_FUNC,
+					RT5514_DSP_FUNC_WOV_I2S_SENSOR);
+			} else {
+				if (rt5514->dsp_enabled < 5)
+					regmap_write(rt5514->i2c_regmap,
+						RT5514_DSP_FUNC,
+						RT5514_DSP_FUNC_WOV_I2S);
+				else
+					regmap_write(rt5514->i2c_regmap,
+						RT5514_DSP_FUNC,
+						RT5514_DSP_FUNC_I2S);
+			}
+			regmap_read(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+				&val);
+			regmap_write(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+				val);
+			regmap_read(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+				&val);
+			regmap_write(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+				val);
+			regmap_read(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+				&val);
+			regmap_write(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+				val);
+			regmap_read(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+				&val);
+			regmap_write(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+				val);
+			regmap_read(rt5514->regmap, RT5514_DOWNFILTER2_CTRL1,
+				&val);
+			regmap_write(rt5514->regmap, RT5514_DOWNFILTER2_CTRL1,
+				val);
+
 		} else {
-			if (rt5514->dsp_enabled < 5)
+			if (rt5514->dsp_adc_enabled) {
 				regmap_write(rt5514->i2c_regmap,
 					RT5514_DSP_FUNC,
-					RT5514_DSP_FUNC_WOV);
-			else
-				regmap_write(rt5514->i2c_regmap,
-					RT5514_DSP_FUNC,
-					RT5514_DSP_FUNC_SUSPEND);
+					RT5514_DSP_FUNC_WOV_SENSOR);
+			} else {
+				if (rt5514->dsp_enabled < 5)
+					regmap_write(rt5514->i2c_regmap,
+						RT5514_DSP_FUNC,
+						RT5514_DSP_FUNC_WOV);
+				else
+					regmap_write(rt5514->i2c_regmap,
+						RT5514_DSP_FUNC,
+						RT5514_DSP_FUNC_SUSPEND);
+			}
 		}
 
 		regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
@@ -953,7 +994,7 @@ static int rt5514_hw_reset_set(struct snd_kcontrol *kcontrol,
 		gpiod_set_value(rt5514->gpiod_reset, 0);
 		usleep_range(1000, 2000);
 		gpiod_set_value(rt5514->gpiod_reset, 1);
-		rt5514_dsp_enable(g_rt5514, false, true);
+		rt5514_dsp_enable(rt5514, false, true);
 	}
 
 	return 0;
@@ -1090,11 +1131,91 @@ static int rt5514_ambient_process_payload_get(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+	u8 *buf1, *buf2;
+	int ret;
+
+	if (!rt5514->v_p) {
+		ucontrol->value.integer.value[0] = 2;
+		return 0;
+	}
+
+	regmap_multi_reg_write(rt5514->i2c_regmap,
+		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+	rt5514_enable_dsp_prepare(rt5514);
+
+	buf1 = kmalloc(0xb8000, GFP_KERNEL);
+	if (!buf1) {
+		ucontrol->value.integer.value[0] = 3;
+		return 0;
+	}
+
+	buf2 = kmalloc(0xb8000, GFP_KERNEL);
+	if (!buf2) {
+		ucontrol->value.integer.value[0] = 3;
+		kfree(buf1);
+		return 0;
+	}
+
+	dev_info(component->dev, "Test 1 IMEM 0\n");
+	memset(buf1, 0, 0x18000);
+	rt5514_spi_burst_write(0x4ff00000, buf1, 0x18000);
+	rt5514_spi_burst_read(0x4ff00000, buf2, 0x18000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0x18000);
+	if (ret)
+		goto failed;
+
+	dev_info(component->dev, "Test 2 IMEM 1\n");
+	memset(buf1, 0xff, 0x18000);
+	rt5514_spi_burst_write(0x4ff00000, buf1, 0x18000);
+	rt5514_spi_burst_read(0x4ff00000, buf2, 0x18000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0x18000);
+	if (ret)
+		goto failed;
+
+	dev_info(component->dev, "Test 3 DMEM 0\n");
+	memset(buf1, 0, 0xb8000);
+	rt5514_spi_burst_write(0x4fe00000, buf1, 0xb8000);
+	rt5514_spi_burst_read(0x4fe00000, buf2, 0xb8000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0xb8000);
+	if (ret)
+		goto failed;
+
+	dev_info(component->dev, "Test 4 DMEM 1\n");
+	memset(buf1, 0xff, 0xb8000);
+	rt5514_spi_burst_write(0x4fe00000, buf1, 0xb8000);
+	rt5514_spi_burst_read(0x4fe00000, buf2, 0xb8000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0xb8000);
+
+	dev_info(component->dev, "Test done\n");
+
+failed:
+
+	regmap_multi_reg_write(rt5514->i2c_regmap,
+		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+	rt5514_dsp_enable(rt5514, false, true);
+	ucontrol->value.integer.value[0] = !!ret;
+
+	kfree(buf1);
+	kfree(buf2);
+
+	return 0;
+}
+
 static const char * const dmic_divider_rate_txt[] = {
 	"1.024K", "1.536K", "2.048K", "3.072K",
 };
 
 static SOC_ENUM_SINGLE_EXT_DECL(dmic_divider_rate, dmic_divider_rate_txt);
+
+static const char * const rt5514_mem_test_txt[] = {
+	"PASS", "FAIL", "NOT_SUPPORT", "OUT_OF_MEMORY",
+};
+static SOC_ENUM_SINGLE_EXT_DECL(rt5514_mem_test, rt5514_mem_test_txt);
 
 
 static const struct snd_kcontrol_new rt5514_snd_controls[] = {
@@ -1134,6 +1255,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_dsp_frame_flag_get, NULL),
 	SOC_SINGLE_EXT("DSP Test", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_dsp_test_get, rt5514_dsp_test_put),
+	SOC_ENUM_EXT("Mem Test", rt5514_mem_test,
+		rt5514_mem_test_get, NULL),
 	/* 0 => Stereo ; 1 => Mono */
 	SOC_SINGLE_EXT("DSP Buffer Channel", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_dsp_buf_ch_get, rt5514_dsp_buf_ch_put),
