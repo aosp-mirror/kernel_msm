@@ -25,6 +25,8 @@
 #include "mdss_dsi.h"
 #include "mdss_smmu.h"
 
+static DEFINE_MUTEX(boost_mode_lock);
+
 /*
  * mipi dsi buf mechanism
  */
@@ -944,4 +946,19 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 
 		pr_info("%s: boost off!\n", __func__);
 	}
+}
+
+void mdss_dsi_boost_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, u32 enabled)
+{
+	mutex_lock(&boost_mode_lock);
+	if (ctrl->boost_mode_state != enabled) {
+		if (enabled != 0) {
+			mdss_dsi_brightness_boost_on(ctrl);
+			ctrl->boost_mode_state = 1;
+		} else {
+			mdss_dsi_brightness_boost_off(ctrl);
+			ctrl->boost_mode_state = 0;
+		}
+	}
+	mutex_unlock(&boost_mode_lock);
 }

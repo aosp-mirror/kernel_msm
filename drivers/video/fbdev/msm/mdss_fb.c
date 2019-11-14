@@ -94,8 +94,6 @@ static u32 mdss_fb_pseudo_palette[16] = {
 
 static struct msm_mdp_interface *mdp_instance;
 
-static bool g_boost_mode;
-
 static int mdss_fb_register(struct msm_fb_data_type *mfd);
 static int mdss_fb_open(struct fb_info *info, int user);
 static int mdss_fb_release(struct fb_info *info, int user);
@@ -554,13 +552,7 @@ static void __mdss_fb_boost_mode_work(struct work_struct *work)
 		return;
 	}
 
-	if (!mfd->activate_boost) {
-		mdss_dsi_brightness_boost_off(ctrl);
-		g_boost_mode = 0;
-	} else {
-		mdss_dsi_brightness_boost_on(ctrl);
-		g_boost_mode = 1;
-	}
+	mdss_dsi_boost_mode_enable(ctrl, mfd->activate_boost);
 }
 
 static ssize_t mdss_fb_get_fps_info(struct device *dev,
@@ -948,7 +940,18 @@ static ssize_t mdss_fb_get_boost_mode(struct device *dev,
 {
 	int ret;
 
-	ret = scnprintf(buf, PAGE_SIZE, "%d\n", g_boost_mode);
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+
+	ctrl = container_of(dev_get_platdata(&mfd->pdev->dev),
+				struct mdss_dsi_ctrl_pdata, panel_data);
+	if (!ctrl) {
+		pr_err("%s: DSI ctrl not available\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = scnprintf(buf, PAGE_SIZE, "%d\n", ctrl->boost_mode_state);
 
 	return ret;
 }

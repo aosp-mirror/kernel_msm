@@ -136,6 +136,7 @@ void mdss_dsi_set_tear_off(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_switch_page(struct mdss_dsi_ctrl_pdata *ctrl, char page);
 void mdss_dsi_brightness_boost_on(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl);
+void mdss_dsi_boost_mode_enable(struct mdss_dsi_ctrl_pdata *ctrl, u32 enabled);
 
 struct dcs_cmd_req *mdss_dsi_cmdlist_get(struct mdss_dsi_ctrl_pdata *ctrl,
 				int from_mdp);

@@ -268,6 +268,11 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	if (ctrl->idle == enable)
 		return;
 
+	if (ctrl->hbm_off_cmds.blen > 0) {
+		if (enable)
+			mdss_dsi_boost_mode_enable(ctrl, 0);
+	}
+
 	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
@@ -1043,6 +1048,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
+
+	if (ctrl->hbm_off_cmds.blen > 0)
+		mdss_dsi_boost_mode_enable(ctrl, 0);
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);

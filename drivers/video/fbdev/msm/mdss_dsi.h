@@ -577,6 +577,7 @@ struct mdss_dsi_ctrl_pdata {
 	/* in-cell touch panel display state params */
 	char read_back_param[1];
 	char id3_code[1]; //for Module/Driver ID
+	bool boost_mode_state;
 };
 
 struct dsi_status_data {
