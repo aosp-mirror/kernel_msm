@@ -7,7 +7,7 @@ qcom,4157757_Google_b5_Desay_3750mAH_PM7250 {
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <3440>;
 	qcom,battery-therm-kohm = <10>;
-	qcom,battery-type = "Desay_3750mAH_PM7250_Sep5th2019";
+	qcom,battery-type = "8230019801";
 	qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {

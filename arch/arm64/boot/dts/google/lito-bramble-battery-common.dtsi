@@ -15,7 +15,10 @@
 &soc {
 	bramble_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
-		#include "batterydata-qcom-b5-Desay-ATL.dtsi"
+		#include "batterydata-qcom-b5-Desay-ATL-3800.dtsi"
+		#include "batterydata-qcom-b5-Desay-COS-3800.dtsi"
+		#include "batterydata-qcom-b5-Desay-ATL-3750.dtsi"
+		#include "batterydata-qcom-b5-unknown.dtsi"
 	};
 };
 
