@@ -402,6 +402,33 @@ static int rt5514_spi_switch_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rt5514_mic_delay_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = (long)rt5514->mic_delay;
+
+	return 0;
+}
+
+static int rt5514_mic_delay_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+	struct soc_multi_mixer_control *mc;
+
+	mc = (struct soc_multi_mixer_control *)(kcontrol->private_value);
+	if (ucontrol->value.integer.value[0] >= 0 &&
+		ucontrol->value.integer.value[0] <= mc->max)
+		rt5514->mic_delay =
+			(unsigned long)ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
 static int rt5514_memcmp(struct rt5514_priv *rt5514, const void *cs,
 		const void *ct, size_t count)
 {
@@ -1309,6 +1336,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_ambient_process_payload_get, NULL),
 	SOC_SINGLE_EXT("SPI Switch", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_spi_switch_get, rt5514_spi_switch_put),
+	SOC_SINGLE_EXT("Mic Delay ms", SND_SOC_NOPM, 0, 1000, 0,
+		rt5514_mic_delay_get, rt5514_mic_delay_put),
 };
 
 /* ADC Mixer*/
@@ -1446,6 +1475,19 @@ static int rt5514_is_not_dsp_enabled(struct snd_soc_dapm_widget *source,
 	return !(rt5514->dsp_enabled | rt5514->dsp_adc_enabled);
 }
 
+static int rt5514_dmic_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+	struct rt5514_priv *rt5514 = snd_soc_codec_get_drvdata(codec);
+
+	unsigned long delay_us = rt5514->mic_delay * 1000;
+	if (event & SND_SOC_DAPM_PRE_PMU && delay_us > 0)
+		usleep_range(delay_us, delay_us + 100);
+
+	return 0;
+}
+
 static const struct snd_soc_dapm_widget rt5514_dapm_widgets[] = {
 	/* Input Lines */
 	SND_SOC_DAPM_INPUT("DMIC1L"),
@@ -1558,7 +1600,8 @@ static const struct snd_soc_dapm_widget rt5514_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("Stereo2 ADC MIX", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 	/* Audio Interface */
-	SND_SOC_DAPM_AIF_OUT("AIF1TX", "AIF1 Capture", 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_OUT_E("AIF1TX", "AIF1 Capture", 0, SND_SOC_NOPM, 0, 0,
+		rt5514_dmic_event, SND_SOC_DAPM_PRE_PMU),
 };
 
 static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
@@ -2308,6 +2351,8 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 	rt5514->dsp_buffer_channel = 1;
 
 	rt5514->spi_switch = 0;
+
+	rt5514->mic_delay = 0;
 
 	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
 

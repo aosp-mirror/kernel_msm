@@ -326,6 +326,7 @@ struct rt5514_priv {
 	bool is_streaming;
 	bool need_reload;
 	struct mutex stream_lock;
+	unsigned long mic_delay;
 };
 
 int rt5514_set_gpio(int gpio, bool output);
