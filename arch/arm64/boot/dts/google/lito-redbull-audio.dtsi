@@ -551,7 +551,7 @@
 
 &qupv3_se9_i2c {
 	status= "ok";
-	qcom,clk-freq-out = <1000000>;
+	qcom,clk-freq-out = <400000>;
 
 	cs35l41_l: cs35l41@40 {
 		#sound-dai-cells = <1>;
