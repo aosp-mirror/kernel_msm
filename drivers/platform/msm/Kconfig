@@ -54,7 +54,7 @@ config SPS_SUPPORT_NDP_BAM
 	  BAM.
 
 config GSI
-	bool "GSI support"
+	tristate "GSI support"
 	help
 	  This driver provides the transport needed to talk to the
 	  IPA core. It replaces the BAM transport used previously.
