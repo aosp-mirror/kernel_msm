@@ -235,6 +235,8 @@ int gbms_storage_register_internal(struct gbms_storage_desc *desc,
 int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
 			  void *ptr)
 {
+	if (!desc)
+		return -EINVAL;
 	if (!gbms_storage_init_done)
 		return -EPROBE_DEFER;
 
