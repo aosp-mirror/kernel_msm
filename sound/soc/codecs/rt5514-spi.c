@@ -364,6 +364,13 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 		goto done;
 	}
 
+	/* check if hw has space for one period_size */
+	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
+		schedule_delayed_work(&rt5514_dsp->copy_work_0,
+			msecs_to_jiffies(50));
+		goto done;
+	}
+
 	if (rt5514_dsp->buf_size[0] % period_bytes)
 		rt5514_dsp->buf_size[0] =
 			(rt5514_dsp->buf_size[0] / period_bytes) * period_bytes;
@@ -455,6 +462,13 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 		goto done;
 	}
 
+	/* check if hw has space for one period_size */
+	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
+		schedule_delayed_work(&rt5514_dsp->copy_work_1,
+			msecs_to_jiffies(50));
+		goto done;
+	}
+
 	if (rt5514_dsp->buf_size[1] % period_bytes)
 		rt5514_dsp->buf_size[1] =
 			(rt5514_dsp->buf_size[1] / period_bytes) * period_bytes;
@@ -541,6 +555,13 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	runtime = rt5514_dsp->substream[2]->runtime;
 	period_bytes = snd_pcm_lib_period_bytes(rt5514_dsp->substream[2]);
 	if (!period_bytes) {
+		schedule_delayed_work(&rt5514_dsp->copy_work_2,
+			msecs_to_jiffies(50));
+		goto done;
+	}
+
+	/* check if hw has space for one period_size */
+	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
 			msecs_to_jiffies(50));
 		goto done;
@@ -684,6 +705,7 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 	 * support spi burst read perfectly. So we use the spi burst read
 	 * individually to make sure the data correctly.
 	 */
+
 	while (retry_cnt < RT5514_SPI_RETRY_CNT) {
 		/* sleep 10 ms if need retry*/
 		if (retry_cnt)
@@ -772,12 +794,16 @@ static void rt5514_spi_start_work(struct work_struct *work) {
 		return;
 	}
 
+	mutex_lock(&rt5514_dsp->dma_lock);
 	if (rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm)
 		card = rt5514_dsp->substream[0]->pcm->card;
 	else if (rt5514_dsp->substream[1] && rt5514_dsp->substream[1]->pcm)
 		card = rt5514_dsp->substream[1]->pcm->card;
-	else
+	else {
+		mutex_unlock(&rt5514_dsp->dma_lock);
 		return;
+	}
+	mutex_unlock(&rt5514_dsp->dma_lock);
 
 	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, false);
@@ -789,10 +815,14 @@ static void rt5514_spi_adc_start(struct work_struct *work)
 		container_of(work, struct rt5514_dsp, adc_work.work);
 	struct snd_card *card;
 
+	mutex_lock(&rt5514_dsp->dma_lock);
 	if (rt5514_dsp->substream[2] && rt5514_dsp->substream[2]->pcm)
 		card = rt5514_dsp->substream[2]->pcm->card;
-	else
+	else {
+		mutex_unlock(&rt5514_dsp->dma_lock);
 		return;
+	}
+	mutex_unlock(&rt5514_dsp->dma_lock);
 
 	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, true);
@@ -1042,6 +1072,7 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 
 	__pm_relax(&rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
+
 	return true;
 }
 EXPORT_SYMBOL_GPL(rt5514_spi_burst_read);
@@ -1103,6 +1134,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 
 	__pm_relax(&rt5514_spi_ws);
 	mutex_unlock(&spi_lock);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(rt5514_spi_burst_write);
