@@ -1177,6 +1177,20 @@ static struct device_node *parse_msm_bus_name(struct device_node *np,
 	return bus_dev_np;
 }
 
+/* Force ignore of any qcom properties. */
+static struct device_node *parse_qcom_any(struct device_node *np,
+					  const char *prop_name, int index)
+{
+	if (index || strncmp(prop_name, "qcom,", strlen("qcom,")))
+		return NULL;
+
+	/*
+	 * Returning np will cause this property to be matched and then
+	 * ignored.
+	 */
+	return np;
+}
+
 /**
  * struct supplier_bindings - Property parsing functions for suppliers
  *
@@ -1206,13 +1220,14 @@ DEFINE_SIMPLE_PROP(io_channels, "io-channel", "#io-channel-cells")
 DEFINE_SUFFIX_PROP(regulators, "-supply", NULL)
 
 static const struct supplier_bindings of_supplier_bindings[] = {
+	{ .parse_prop = parse_msm_bus_name, },
+	{ .parse_prop = parse_qcom_any, },
 	{ .parse_prop = parse_clocks, },
 	{ .parse_prop = parse_interconnects, },
 	{ .parse_prop = parse_iommus, },
 	{ .parse_prop = parse_mboxes, },
 	{ .parse_prop = parse_io_channels, },
 	{ .parse_prop = parse_regulators, },
-	{ .parse_prop = parse_msm_bus_name, },
 	{}
 };
 
