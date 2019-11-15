@@ -69,7 +69,7 @@ config NFC_NQ
           resides in the usermode and it has no other NFC dependencies.
 
 config NFC_ST21NFC
-        bool "ST Microelectronics ST21NFC NFC Controller Driver"
+        tristate "ST Microelectronics ST21NFC NFC Controller Driver"
         depends on I2C
         help
           ST Microelectronics ST21NFC Near Field Communication controller support.
