@@ -4,7 +4,7 @@
 #
 config MEM_SHARE_QMI_SERVICE
        depends on QCOM_QMI_HELPERS
-       bool "Shared Heap for external processors"
+       tristate "Shared Heap for external processors"
        help
 		Memory Share Kernel QTI Messaging Interface Service
 		receives requests from Modem Processor Sub System
