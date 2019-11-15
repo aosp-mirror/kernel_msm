@@ -560,6 +560,7 @@ void msm_trigger_wdog_bite(void)
 	while (1)
 		udelay(1);
 }
+EXPORT_SYMBOL_GPL(msm_trigger_wdog_bite);
 
 static void print_wdog_data(struct msm_watchdog_data *wdog_dd)
 {
