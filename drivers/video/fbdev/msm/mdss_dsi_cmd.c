@@ -936,7 +936,7 @@ void mdss_dsi_brightness_boost_off(struct mdss_dsi_ctrl_pdata *ctrl)
 				ctrl->read_back_param[0]);
 
 		//write back to HBM off command flow
-		hbm_off_cmds->cmds[12].payload[1] = ctrl->read_back_param[0];
+		hbm_off_cmds->cmds[9].payload[1] = ctrl->read_back_param[0];
 	}
 
 	if (hbm_off_cmds->cmd_cnt) {
