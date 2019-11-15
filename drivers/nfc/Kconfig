@@ -75,7 +75,7 @@ config NFC_ST21NFC
           ST Microelectronics ST21NFC Near Field Communication controller support.
 
 config ESE_ST54J
-        bool "ST Microelectronics ST54J ESE driver"
+        tristate "ST Microelectronics ST54J ESE driver"
         depends on SPI && NFC_ST21NFC
         help
           ST Microelectronics ST54J ESE Near Field Communication controller support.
