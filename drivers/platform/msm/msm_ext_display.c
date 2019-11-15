@@ -529,6 +529,7 @@ end:
 	mutex_unlock(&ext_disp->lock);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(msm_ext_disp_register_intf);
 
 int msm_ext_disp_deregister_intf(struct platform_device *pdev,
 		struct msm_ext_disp_init_data *init_data)
@@ -567,6 +568,7 @@ end:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(msm_ext_disp_deregister_intf);
 
 static int msm_ext_disp_probe(struct platform_device *pdev)
 {
