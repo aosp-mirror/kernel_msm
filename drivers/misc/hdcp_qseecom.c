@@ -888,6 +888,7 @@ bool hdcp2_feature_supported(void *data)
 error:
 	return supported;
 }
+EXPORT_SYMBOL_GPL(hdcp2_feature_supported);
 
 static int hdcp2_app_session_init(struct hdcp2_handle *handle)
 {
@@ -1404,11 +1405,13 @@ void *hdcp1_init(void)
 error:
 	return handle;
 }
+EXPORT_SYMBOL_GPL(hdcp1_init);
 
 void hdcp1_deinit(void *data)
 {
 	kfree(data);
 }
+EXPORT_SYMBOL_GPL(hdcp1_deinit);
 
 static int hdcp1_count_ones(u8 *array, u8 len)
 {
@@ -1628,6 +1631,7 @@ bool hdcp1_feature_supported(void *data)
 error:
 	return supported;
 }
+EXPORT_SYMBOL_GPL(hdcp1_feature_supported);
 
 int hdcp1_set_enc(void *data, bool enable)
 {
@@ -1681,6 +1685,7 @@ int hdcp1_set_enc(void *data, bool enable)
 	pr_debug("success\n");
 	return 0;
 }
+EXPORT_SYMBOL_GPL(hdcp1_set_enc);
 
 int hdcp1_start(void *data, u32 *aksv_msb, u32 *aksv_lsb)
 {
@@ -1726,6 +1731,7 @@ key_error:
 error:
 	return rc;
 }
+EXPORT_SYMBOL_GPL(hdcp1_start);
 
 void hdcp1_stop(void *data)
 {
@@ -1743,3 +1749,4 @@ void hdcp1_stop(void *data)
 
 	hdcp1_app_unload(hdcp1_handle);
 }
+EXPORT_SYMBOL_GPL(hdcp1_stop);
