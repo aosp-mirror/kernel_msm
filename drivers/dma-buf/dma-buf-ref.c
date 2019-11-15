@@ -80,6 +80,7 @@ void dma_buf_ref_mod(struct dma_buf *dmabuf, int nr)
 
 	dma_buf_ref_insert_handle(dmabuf, handle, nr);
 }
+EXPORT_SYMBOL_GPL(dma_buf_ref_mod);
 
 /**
  * Called with dmabuf->lock held
