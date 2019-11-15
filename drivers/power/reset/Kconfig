@@ -101,6 +101,8 @@ config POWER_RESET_HISI
 config POWER_RESET_MSM
 	bool "Qualcomm MSM power-off driver"
 	depends on ARCH_QCOM
+	depends on POWER_RESET_QCOM!=m
+	depends on POWER_RESET_QCOM!=y
 	help
 	  Power off and restart support for Qualcomm boards.
 
@@ -140,9 +142,8 @@ config POWER_RESET_LTC2952
 	  down via the LTC2952. Bindings are made in the device tree.
 
 config POWER_RESET_QCOM
-	bool "Qualcomm Technologies, Inc. MSM power-off driver"
+	tristate "Qualcomm Technologies, Inc. MSM power-off driver"
 	depends on ARCH_MSM || ARCH_QCOM
-	depends on POWER_RESET
 	help
 	  Power off and restart support for Qualcomm Technologies, Inc. boards.
 	  This driver supports board power down and restart using PMIC PS_HOLD.
