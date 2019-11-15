@@ -112,6 +112,7 @@ struct qmi_elem_info mem_alloc_generic_req_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_alloc_generic_req_msg_data_v01_ei);
 
 struct qmi_elem_info mem_alloc_generic_resp_msg_data_v01_ei[] = {
 	{
@@ -183,6 +184,7 @@ struct qmi_elem_info mem_alloc_generic_resp_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_alloc_generic_resp_msg_data_v01_ei);
 
 struct qmi_elem_info mem_free_generic_req_msg_data_v01_ei[] = {
 	{
@@ -247,6 +249,7 @@ struct qmi_elem_info mem_free_generic_req_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_free_generic_req_msg_data_v01_ei);
 
 struct qmi_elem_info mem_free_generic_resp_msg_data_v01_ei[] = {
 	{
@@ -266,6 +269,7 @@ struct qmi_elem_info mem_free_generic_resp_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_free_generic_resp_msg_data_v01_ei);
 
 struct qmi_elem_info mem_query_size_req_msg_data_v01_ei[] = {
 	{
@@ -301,6 +305,7 @@ struct qmi_elem_info mem_query_size_req_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_query_size_req_msg_data_v01_ei);
 
 struct qmi_elem_info mem_query_size_resp_msg_data_v01_ei[] = {
 	{
@@ -338,3 +343,4 @@ struct qmi_elem_info mem_query_size_resp_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_query_size_resp_msg_data_v01_ei);
