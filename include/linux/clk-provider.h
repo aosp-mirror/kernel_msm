@@ -360,6 +360,9 @@ struct clk_vdd_class {
 		.lock = __MUTEX_INITIALIZER(_name.lock) \
 	}
 
+int clk_vote_vdd_level(struct clk_vdd_class *vdd_class, int level);
+int clk_unvote_vdd_level(struct clk_vdd_class *vdd_class, int level);
+
 /**
  * struct clk_hw - handle for traversing from a struct clk to its corresponding
  * hardware-specific structure.  struct clk_hw should be declared within struct
