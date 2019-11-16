@@ -91,6 +91,8 @@ struct chg_drv {
 	int checked_ov_cnt;
 	int checked_tier_switch_cnt;
 
+	int plugged;
+
 	int chg_mode;
 	int fv_uv;
 	int disable_charging;
@@ -353,7 +355,7 @@ static void chg_work(struct work_struct *work)
 	int usb_present, wlc_online = 0;
 	int vbatt_idx = chg_drv->vbatt_idx, fv_uv = chg_drv->fv_uv, temp_idx;
 	int update_interval = chg_drv->chg_profile.update_interval;
-	int batt_status;
+	int plugged, batt_status;
 	bool rerun_work = false;
 	int disable_charging;
 	int disable_pwrsrc;
@@ -364,6 +366,21 @@ static void chg_work(struct work_struct *work)
 	usb_present = PSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT);
 	if (wlc_psy)
 		wlc_online = PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
+
+	plugged = usb_present || wlc_online;
+	if (chg_drv->plugged != plugged) {
+		int ret = 0;
+
+		/* only after boot */
+		if (chg_drv->plugged != -1) {
+			ret = PSY_SET_PROP(bat_psy,
+					   POWER_SUPPLY_PROP_BATT_CE_CTRL,
+					   plugged);
+		}
+
+		if (ret == 0)
+			chg_drv->plugged = plugged;
+	}
 
 	/* If no power source, disable charging and exit */
 	if (!usb_present && !wlc_online) {
@@ -1312,6 +1329,7 @@ static void google_charger_init_work(struct work_struct *work)
 	chg_drv->charge_start_level = DEFAULT_CHARGE_START_LEVEL;
 
 	reset_chg_drv_state(chg_drv);
+	chg_drv->plugged = -1;
 
 	chg_drv->psy_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&chg_drv->psy_nb);
