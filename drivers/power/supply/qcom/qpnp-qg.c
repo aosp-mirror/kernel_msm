@@ -465,8 +465,24 @@ static int qg_process_fifo(struct qpnp_qg *chip, u32 fifo_length)
 		chip->kdata.fifo[j].interval = sample_interval;
 		chip->kdata.fifo[j].count = sample_count;
 
-		chip->last_fifo_v_uv = chip->kdata.fifo[j].v;
 		chip->last_fifo_i_ua = chip->kdata.fifo[j].i;
+
+		chip->fifo_count++;
+		/* sub the oldest fifo data */
+		chip->vbat_fifo_avg -=
+				chip->vbat_fifo_now[chip->fifo_count - 1];
+		chip->vbat_fifo_avg += chip->kdata.fifo[j].v;
+		chip->vbat_fifo_now[chip->fifo_count - 1] =
+				chip->kdata.fifo[j].v;
+		if ((chip->fifo_count == chip->dt.fvss_fifo_count) &&
+		    !chip->vbat_fifo_acc)
+			chip->vbat_fifo_acc = true;
+		if (chip->vbat_fifo_acc){
+			chip->last_fifo_v_uv =
+				 div_u64(chip->vbat_fifo_avg,
+					 chip->dt.fvss_fifo_count);
+			chip->fifo_count %= chip->dt.fvss_fifo_count;
+		}
 
 		qg_dbg(chip, QG_DEBUG_FIFO, "FIFO %d raw_v=%d uV=%d raw_i=%d uA=%d interval=%d count=%d\n",
 					j, fifo_v,
@@ -532,8 +548,21 @@ static int qg_process_accumulator(struct qpnp_qg *chip)
 	if (chip->kdata.fifo_length == MAX_FIFO_LENGTH)
 		chip->kdata.fifo_length = MAX_FIFO_LENGTH - 1;
 
-	chip->last_fifo_v_uv = chip->kdata.fifo[index].v;
 	chip->last_fifo_i_ua = chip->kdata.fifo[index].i;
+
+	chip->fifo_count++;
+	/* sub the oldest fifo data */
+	chip->vbat_fifo_avg -= chip->vbat_fifo_now[chip->fifo_count - 1];
+	chip->vbat_fifo_avg += chip->kdata.fifo[index].v;
+	chip->vbat_fifo_now[chip->fifo_count - 1] = chip->kdata.fifo[index].v;
+	if ((chip->fifo_count == chip->dt.fvss_fifo_count) &&
+	    !chip->vbat_fifo_acc)
+		chip->vbat_fifo_acc = true;
+	if (chip->vbat_fifo_acc){
+		chip->last_fifo_v_uv = div_u64(chip->vbat_fifo_avg,
+					       chip->dt.fvss_fifo_count);
+		chip->fifo_count %= chip->dt.fvss_fifo_count;
+	}
 
 	if (chip->kdata.fifo_length == 1)	/* Only accumulator data */
 		chip->kdata.seq_no = chip->seq_no++ % U32_MAX;
@@ -2199,6 +2228,9 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		rc = -ENODATA;
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_FIFO:
+		pval->intval = chip->last_fifo_v_uv;
+		break;
 	default:
 		pr_debug("Unsupported property %d\n", psp);
 		break;
@@ -2263,6 +2295,7 @@ static enum power_supply_property qg_psy_props[] = {
 	POWER_SUPPLY_PROP_BATT_AGE_LEVEL,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_VOLTAGE_FIFO,
 };
 
 static const struct power_supply_desc qg_psy_desc = {
@@ -3800,6 +3833,7 @@ static int qg_alg_init(struct qpnp_qg *chip)
 #define DEFAULT_SYS_MIN_VOLT_MV		2800
 #define DEFAULT_FAST_CHG_S2_FIFO_LENGTH	1
 #define DEFAULT_FVSS_VBAT_MV		3500
+#define DEFAULT_FVSS_FIFO_COUNT		1
 #define DEFAULT_FVSS_INTERVAL_MS	10000
 static int qg_parse_dt(struct qpnp_qg *chip)
 {
@@ -4105,6 +4139,13 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 			chip->dt.fvss_vbat_mv = DEFAULT_FVSS_VBAT_MV;
 		else
 			chip->dt.fvss_vbat_mv = temp;
+
+		rc = of_property_read_u32(node,
+				"qcom,fvss-fifo-count", &temp);
+		if (rc < 0)
+			chip->dt.fvss_fifo_count = DEFAULT_FVSS_FIFO_COUNT;
+		else
+			chip->dt.fvss_fifo_count = temp;
 
 		rc = of_property_read_u32(node,
 				"google,fvss-interval-ms", &temp);
@@ -4490,6 +4531,10 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	chip->esr_actual = -EINVAL;
 	chip->esr_nominal = -EINVAL;
 	chip->batt_age_level = -EINVAL;
+	chip->vbat_fifo_avg = 0;
+	chip->fifo_count = 0;
+	chip->last_fifo_v_uv = 0;
+	chip->vbat_fifo_acc = false;
 
 	rc = qg_alg_init(chip);
 	if (rc < 0) {

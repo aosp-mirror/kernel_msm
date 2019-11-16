@@ -473,6 +473,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(adapter_cc_mode),
 	POWER_SUPPLY_ATTR(skin_health),
 	POWER_SUPPLY_ATTR(dead_battery),
+	POWER_SUPPLY_ATTR(voltage_fifo),
 	/* Capacity Estimation */
 	POWER_SUPPLY_ATTR(delta_cc_sum),
 	POWER_SUPPLY_ATTR(delta_vfsoc_sum),
