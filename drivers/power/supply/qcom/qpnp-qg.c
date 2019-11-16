@@ -1199,6 +1199,10 @@ static void process_udata_work(struct work_struct *work)
 	if (chip->udata.param[QG_CC_SOC].valid)
 		chip->cc_soc = chip->udata.param[QG_CC_SOC].data;
 
+	if (chip->udata.param[QG_CHARGE_COUNTER].valid)
+		chip->charge_counter =
+				chip->udata.param[QG_CHARGE_COUNTER].data;
+
 	if (chip->udata.param[QG_BATT_SOC].valid)
 		chip->batt_soc = chip->udata.param[QG_BATT_SOC].data;
 
@@ -1659,6 +1663,21 @@ static int qg_get_cc_soc(void *data, int *cc_soc)
 		return -EINVAL;
 
 	*cc_soc = chip->cc_soc;
+
+	return 0;
+}
+
+static int qg_get_cc(void *data, int *cc)
+{
+	struct qpnp_qg *chip = data;
+
+	if (!chip)
+		return -ENODEV;
+
+	if (chip->charge_counter == INT_MIN)
+		return -EINVAL;
+
+	*cc = chip->charge_counter;
 
 	return 0;
 }
@@ -2261,6 +2280,9 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_FIFO:
 		pval->intval = chip->last_fifo_v_uv;
 		break;
+	case POWER_SUPPLY_PROP_CC_UAH:
+		rc = qg_get_cc(chip, &pval->intval);
+		break;
 	default:
 		pr_debug("Unsupported property %d\n", psp);
 		break;
@@ -2326,6 +2348,7 @@ static enum power_supply_property qg_psy_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_VOLTAGE_FIFO,
+	POWER_SUPPLY_PROP_CC_UAH,
 };
 
 static const struct power_supply_desc qg_psy_desc = {

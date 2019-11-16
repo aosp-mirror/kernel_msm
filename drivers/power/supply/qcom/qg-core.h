@@ -176,6 +176,7 @@ struct qpnp_qg {
 	int			pon_soc;
 	int			batt_soc;
 	int			cc_soc;
+	int			charge_counter;
 	int			full_soc;
 	int			sys_soc;
 	int			last_adj_ssoc;
