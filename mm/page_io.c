@@ -111,13 +111,12 @@ static void swap_slot_free_notify(struct page *page)
 	if (disk->fops->swap_slot_free_notify) {
 		swp_entry_t entry;
 		unsigned long offset;
-
 		entry.val = page_private(page);
 		offset = swp_offset(entry);
-
-		SetPageDirty(page);
-		disk->fops->swap_slot_free_notify(sis->bdev,
-				offset);
+		if (swap_count(sis->swap_map[offset]) == 1) {
+			SetPageDirty(page);
+			disk->fops->swap_slot_free_notify(sis->bdev, offset);
+		}
 	}
 }
 
