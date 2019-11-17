@@ -21,9 +21,35 @@
 	google,fcc-max-ua = <2800000>;
 };
 
+&vendor {
+	f2_maxim_config: maxim,config {
+		maxim,f2-22k {
+			maxim,batt-id-kohm = <22>;
+			maxim,capacity-rcomp0 = <0x1067>; /* LSN */
+		};
+		maxim,f2-47k {
+			maxim,batt-id-kohm = <47>;
+			maxim,capacity-rcomp0 = <0x1067>; /* LSN */
+		};
+		maxim,f2-100k {
+			maxim,batt-id-kohm = <100>;
+			maxim,capacity-rcomp0 = <0x1078>; /* LWN */
+		};
+		maxim,f2-33k {
+			maxim,batt-id-kohm = <33>;
+			maxim,capacity-rcomp0 = <0x1078>; /* LWN */
+		};
+	};
+};
+
 &max1720x_fg {
 	google,cap-tsettle = <3>;
 	google,cap-filt-length = <12>;
+
+	maxim,capacity-design = <2800>;
+	maxim,capacity-tempco = <0x223c>;
+	maxim,capacity-stable = <50>;
+	maxim,capacity-drop = <100>;
 
 	maxim,n_regval_1730x_ver_por = /bits/ 8 <0xcc 0x01>;
 	maxim,n_regval_1730x_ver = /bits/ 8 <0xcc 0x00>;
@@ -39,6 +65,7 @@
 	maxim,n_regval_1720x =  /bits/ 16 <
 		0xA7 0x223C	/* nTempCo Register */
 	>;
+
 	maxim,fix-vempty;
 };
 

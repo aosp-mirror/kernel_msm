@@ -81,6 +81,7 @@
 
 	/* read resistorID from the charger */
 	maxim,bat-power-supply = "charger";
+	maxim,batt-id-range-pct = <15>;
 
 	maxim,nconvgcfg-temp-hysteresis = <10>;
 	maxim,nconvgcfg-temp-limits = /bits/ 16
