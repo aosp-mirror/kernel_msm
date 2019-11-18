@@ -730,9 +730,9 @@ static int cs35l41_put_output_dev(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
-	struct soc_enum		*soc_enum;
-	unsigned int		i = ucontrol->value.enumerated.item[0];
+	struct cs35l41_private *cs35l41;
+	struct soc_enum *soc_enum;
+	unsigned int i = ucontrol->value.enumerated.item[0];
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -769,8 +769,8 @@ static int cs35l41_get_output_dev(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
-	int			ret = 0;
+	struct cs35l41_private *cs35l41;
+	int ret = 0;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1000,7 +1000,7 @@ static int cs35l41_get_vol(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1014,7 +1014,7 @@ static int cs35l41_put_vol(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 	int ret = 0;
 
 	component = snd_soc_kcontrol_component(kcontrol);
@@ -1037,7 +1037,7 @@ static int cs35l41_get_ramp_status(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1052,7 +1052,7 @@ static int cs35l41_put_ramp_status(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1066,7 +1066,7 @@ static int cs35l41_get_manual_ramp(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1081,7 +1081,7 @@ static int cs35l41_put_manual_ramp(struct snd_kcontrol *kcontrol,
 				   struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1120,7 +1120,7 @@ static int cs35l41_get_init_attenuation(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1133,7 +1133,7 @@ static int cs35l41_put_init_attenuation(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1152,7 +1152,7 @@ static int cs35l41_get_knee_attenuation(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1165,7 +1165,7 @@ static int cs35l41_put_knee_attenuation(struct snd_kcontrol *kcontrol,
 					struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1184,7 +1184,7 @@ static int cs35l41_get_ramp_end_time(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1197,7 +1197,7 @@ static int cs35l41_put_ramp_end_time(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1216,7 +1216,7 @@ static int cs35l41_get_auto_ramp_timeout(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1230,7 +1230,7 @@ static int cs35l41_put_auto_ramp_timeout(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -1263,7 +1263,7 @@ static int cs35l41_put_ramp_knee_time(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_component *component;
-	struct cs35l41_private	*cs35l41;
+	struct cs35l41_private *cs35l41;
 
 	component = snd_soc_kcontrol_component(kcontrol);
 	cs35l41 = snd_soc_component_get_drvdata(component);
@@ -2123,7 +2123,6 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 	asp_wl = params_width(params);
 	asp_width = params_physical_width(params);
 
-
 	cs35l41->reset_cache.asp_wl = asp_wl;
 	cs35l41->reset_cache.asp_width = asp_width;
 	if (i < ARRAY_SIZE(cs35l41_fs_rates))
@@ -2548,7 +2547,7 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 {
 	struct cs35l41_private *cs35l41 =
 		snd_soc_component_get_drvdata(component);
-	struct snd_kcontrol_new	*kcontrol;
+	struct snd_kcontrol_new *kcontrol;
 	int ret = 0;
 
 	component->regmap = cs35l41->regmap;
@@ -2572,7 +2571,7 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 		kcontrol->info = snd_soc_info_enum_double;
 		kcontrol->get = cs35l41_fast_switch_file_get;
 		kcontrol->put = cs35l41_fast_switch_file_put;
-		kcontrol->private_value	=
+		kcontrol->private_value =
 				  (unsigned long)&cs35l41->fast_switch_enum;
 		ret = snd_soc_add_component_controls(component, kcontrol, 1);
 		if (ret < 0)
