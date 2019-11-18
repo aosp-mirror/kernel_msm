@@ -45,6 +45,7 @@
 #define DEFAULT_BATT_FAKE_CAPACITY		50
 #define DEFAULT_BATT_UPDATE_INTERVAL		30000
 #define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
+#define DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD	550
 
 #define MSC_ERROR_UPDATE_INTERVAL		5000
 #define MSC_DEFAULT_UPDATE_INTERVAL		30000
@@ -158,6 +159,9 @@ struct batt_drv {
 	int fg_status;
 	int batt_fast_update_cnt;
 	u32 batt_update_interval;
+	/* update high temperature in time */
+	int batt_temp;
+	u32 batt_update_high_temp_threshold;
 	/* triger for recharge logic next update from charger */
 	bool batt_full;
 	struct batt_ssoc_state ssoc_state;
@@ -2194,7 +2198,7 @@ static void google_battery_work(struct work_struct *work)
 	int update_interval = batt_drv->batt_update_interval;
 	const int prev_ssoc = ssoc_get_capacity(ssoc_state);
 	bool notify_psy_changed = false;
-	int fg_status, ret;
+	int fg_status, ret, batt_temp;
 
 	pr_debug("battery work item\n");
 
@@ -2244,6 +2248,16 @@ static void google_battery_work(struct work_struct *work)
 	}
 
 	/* TODO: poll other data here if needed */
+
+	batt_temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP, &ret);
+	if (ret < 0) {
+		pr_err("unable to get batt_temp, ret=%d", ret);
+	} else if (batt_temp != batt_drv->batt_temp) {
+		batt_drv->batt_temp = batt_temp;
+		if (batt_drv->batt_temp >
+		    batt_drv->batt_update_high_temp_threshold)
+			notify_psy_changed = true;
+	}
 
 	mutex_unlock(&batt_drv->batt_lock);
 
@@ -2775,6 +2789,12 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->batt_update_interval = DEFAULT_BATT_UPDATE_INTERVAL;
 
+	ret = of_property_read_u32(batt_drv->device->of_node,
+				   "google,update-high-temp-threshold",
+				   &batt_drv->batt_update_high_temp_threshold);
+	if (ret < 0)
+		batt_drv->batt_update_high_temp_threshold =
+					DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD;
 	/* override setting google,battery-roundtrip = 0 in device tree */
 	batt_drv->disable_votes =
 		of_property_read_bool(batt_drv->device->of_node,
