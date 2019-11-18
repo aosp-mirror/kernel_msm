@@ -2761,6 +2761,8 @@ static int gbatt_get_capacity_level(struct batt_ssoc_state *ssoc_state,
 	return capacity_level;
 }
 
+#define HIGH_TEMP_UPDATE_THRESHOLD 550
+
 /* poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
  */
@@ -2773,7 +2775,7 @@ static void google_battery_work(struct work_struct *work)
 	int update_interval = batt_drv->batt_update_interval;
 	const int prev_ssoc = ssoc_get_capacity(ssoc_state);
 	bool notify_psy_changed = false;
-	int fg_status, ret;
+	int fg_status, ret, batt_temp;
 
 	pr_debug("battery work item\n");
 
@@ -2860,6 +2862,12 @@ static void google_battery_work(struct work_struct *work)
 
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
 	dump_ssoc_state(ssoc_state, batt_drv->log);
+
+	batt_temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP, &ret);
+	if (ret < 0)
+		pr_err("unable to get batt_temp, ret=%d", ret);
+	else if (batt_temp > HIGH_TEMP_UPDATE_THRESHOLD)
+		notify_psy_changed = true;
 
 	if (notify_psy_changed)
 		power_supply_changed(batt_drv->psy);
