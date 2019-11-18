@@ -121,3 +121,7 @@
 &usb0 {
 	google,switch-vbus = <250>;
 };
+
+&pm6150_charger {
+	qcom,typec-legacy-rp-icl;
+};
