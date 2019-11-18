@@ -210,6 +210,7 @@
 #define IPA_FLT_L2TP_INNER_IP_TYPE	(1ul << 25)
 #define IPA_FLT_L2TP_INNER_IPV4_DST_ADDR (1ul << 26)
 #define IPA_FLT_IS_PURE_ACK		(1ul << 27)
+#define IPA_FLT_VLAN_ID			(1ul << 28)
 
 /**
  * maximal number of NAT PDNs in the PDN config table
@@ -379,9 +380,13 @@ enum ipa_client_type {
 	IPA_CLIENT_MHI_PRIME_RMNET_CONS		= 99,
 
 	IPA_CLIENT_MHI_PRIME_DPL_PROD		= 100,
+	/* RESERVED CONS                        = 101, */
+
+	IPA_CLIENT_AQC_ETHERNET_PROD		= 102,
+	IPA_CLIENT_AQC_ETHERNET_CONS		= 103,
 };
 
-#define IPA_CLIENT_MAX (IPA_CLIENT_MHI_PRIME_DPL_PROD + 1)
+#define IPA_CLIENT_MAX (IPA_CLIENT_AQC_ETHERNET_CONS + 1)
 
 #define IPA_CLIENT_WLAN2_PROD IPA_CLIENT_A5_WLAN_AMPDU_PROD
 #define IPA_CLIENT_Q6_DL_NLO_DATA_PROD IPA_CLIENT_Q6_DL_NLO_DATA_PROD
@@ -401,6 +406,8 @@ enum ipa_client_type {
 #define IPA_CLIENT_MHI_PRIME_RMNET_PROD IPA_CLIENT_MHI_PRIME_RMNET_PROD
 #define IPA_CLIENT_MHI_PRIME_RMNET_CONS IPA_CLIENT_MHI_PRIME_RMNET_CONS
 #define IPA_CLIENT_MHI_PRIME_DPL_PROD IPA_CLIENT_MHI_PRIME_DPL_PROD
+#define IPA_CLIENT_AQC_ETHERNET_PROD IPA_CLIENT_AQC_ETHERNET_PROD
+#define IPA_CLIENT_AQC_ETHERNET_CONS IPA_CLIENT_AQC_ETHERNET_CONS
 
 #define IPA_CLIENT_IS_APPS_CONS(client) \
 	((client) == IPA_CLIENT_APPS_LAN_CONS || \
@@ -809,6 +816,7 @@ enum ipa_hw_type {
  * @u.v6.src_addr_mask: src address mask
  * @u.v6.dst_addr: dst address val
  * @u.v6.dst_addr_mask: dst address mask
+ * @vlan_id: vlan id value
  */
 struct ipa_rule_attrib {
 	uint32_t attrib_mask;
@@ -849,6 +857,7 @@ struct ipa_rule_attrib {
 			uint32_t dst_addr_mask[4];
 		} v6;
 	} u;
+	uint16_t vlan_id;
 };
 
 /*! @brief The maximum number of Mask Equal 32 Eqns */
