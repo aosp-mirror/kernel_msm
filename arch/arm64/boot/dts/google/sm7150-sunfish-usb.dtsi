@@ -22,8 +22,6 @@
 };
 
 &soc {
-	ext-vbus-supply = <&ext_5v_boost>;
-
 	ext_5v_boost: ext_5v_boost {
 		compatible = "regulator-tps";
 		regulator-name = "ext_5v_boost";
@@ -90,6 +88,10 @@
 };
 
 &pm6150_pdphy {
+	google,ext_vbus-supported;
+	google,maxpower-switch;
+	ext-vbus-supply = <&ext_5v_boost>;
+
 	usb_con: connector {
 		compatible = "usb-c-connector";
 		label = "USB-C";
@@ -114,4 +116,8 @@
 				VDO_CERT(0x0)
 				VDO_PRODUCT(0x4EE1, 0x0)>;
 	};
+};
+
+&usb0 {
+	google,switch-vbus = <250>;
 };
