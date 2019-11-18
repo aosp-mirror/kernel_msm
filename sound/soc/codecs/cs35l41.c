@@ -3087,7 +3087,7 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 		usleep_range(4000, 5000);
 	} while (ret < 0 && --retries > 0);
 
-	if (retries < 0)
+	if (retries <= 0)
 		dev_err(cs35l41->dev, "Failed to exit from hibernate\n");
 	else
 		dev_dbg(cs35l41->dev, "cs35l41 restored in %d attempts\n",

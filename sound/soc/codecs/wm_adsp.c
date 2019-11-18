@@ -1601,7 +1601,7 @@ static int wm_adsp_create_control(struct wm_adsp *dsp,
 		ctl->subname = NULL;
 	if (!ctl->subname) {
 		ret = -ENOMEM;
-		goto err_ctl;
+		goto err_ctl_name;
 	}
 	ctl->enabled = 1;
 	ctl->set = 0;
