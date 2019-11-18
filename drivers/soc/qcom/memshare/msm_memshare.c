@@ -946,8 +946,28 @@ static struct platform_driver memshare_pchild = {
 	},
 };
 
-module_platform_driver(memshare_pdriver);
-module_platform_driver(memshare_pchild);
+static int __init memshare_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&memshare_pdriver);
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&memshare_pchild);
+	if (ret)
+		platform_driver_unregister(&memshare_pdriver);
+
+	return ret;
+}
+module_init(memshare_init);
+
+static void __exit memshare_exit(void)
+{
+	platform_driver_unregister(&memshare_pchild);
+	platform_driver_unregister(&memshare_pdriver);
+}
+module_exit(memshare_exit);
 
 MODULE_DESCRIPTION("Mem Share QMI Service Driver");
 MODULE_LICENSE("GPL v2");
