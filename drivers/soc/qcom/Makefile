@@ -30,7 +30,6 @@ obj-$(CONFIG_QCOM_SCM)  +=      scm.o
 obj-$(CONFIG_QCOM_EARLY_RANDOM) += early_random.o
 obj-$(CONFIG_MSM_SPSS_UTILS) += spss_utils.o
 obj-$(CONFIG_QTEE_SHM_BRIDGE) += qtee_shmbridge.o
-obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_MSM_CORE_HANG_DETECT) += core_hang_detect.o
 obj-$(CONFIG_MSM_GLADIATOR_HANG_DETECT) += gladiator_hang_detect.o
 obj-$(CONFIG_MSM_GLADIATOR_ERP) += gladiator_erp.o
@@ -57,7 +56,9 @@ ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	obj-y += microdump_collector.o
 endif
 obj-$(CONFIG_QCOM_EUD) += eud.o
-obj-$(CONFIG_SOC_BUS) += socinfo.o
+obj-$(CONFIG_SOC_BUS) += qcom_socinfo.o
+qcom_socinfo-objs += socinfo.o
+qcom_socinfo-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_QCOM_WATCHDOG_V2) += watchdog_v2.o
 obj-$(CONFIG_QCOM_SDM845_LLCC) += llcc-sdm845.o
 CFLAGS_rpmh-rsc.o := -I$(src)
