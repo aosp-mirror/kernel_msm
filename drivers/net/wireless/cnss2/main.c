@@ -271,6 +271,7 @@ EXPORT_SYMBOL(cnss_wlan_enable);
 int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 {
 	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
 
 	if (plat_priv->device_id == QCA6174_DEVICE_ID)
 		return 0;
@@ -278,7 +279,10 @@ int cnss_wlan_disable(struct device *dev, enum cnss_driver_mode mode)
 	if (test_bit(QMI_BYPASS, &plat_priv->ctrl_params.quirks))
 		return 0;
 
-	return cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+	ret = cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+	cnss_bus_free_qdss_mem(plat_priv);
+
+	return ret;
 }
 EXPORT_SYMBOL(cnss_wlan_disable);
 
@@ -1310,6 +1314,7 @@ static int cnss_cold_boot_cal_done_hdlr(struct cnss_plat_data *plat_priv,
 	}
 
 	cnss_wlfw_wlan_mode_send_sync(plat_priv, CNSS_OFF);
+	cnss_bus_free_qdss_mem(plat_priv);
 	cnss_release_antenna_sharing(plat_priv);
 	cnss_bus_dev_shutdown(plat_priv);
 	msleep(COLD_BOOT_CAL_SHUTDOWN_DELAY_MS);
@@ -1864,6 +1869,47 @@ int cnss_minidump_add_region(struct cnss_plat_data *plat_priv,
 	ret = msm_minidump_add_region(&md_entry);
 	if (ret)
 		cnss_pr_err("Failed to add mini dump region, err = %d\n", ret);
+
+	return ret;
+}
+
+int cnss_minidump_remove_region(struct cnss_plat_data *plat_priv,
+				enum cnss_fw_dump_type type, int seg_no,
+				void *va, phys_addr_t pa, size_t size)
+{
+	struct md_region md_entry;
+	int ret;
+
+	switch (type) {
+	case CNSS_FW_IMAGE:
+		snprintf(md_entry.name, sizeof(md_entry.name), "FBC_%X",
+			 seg_no);
+		break;
+	case CNSS_FW_RDDM:
+		snprintf(md_entry.name, sizeof(md_entry.name), "RDDM_%X",
+			 seg_no);
+		break;
+	case CNSS_FW_REMOTE_HEAP:
+		snprintf(md_entry.name, sizeof(md_entry.name), "RHEAP_%X",
+			 seg_no);
+		break;
+	default:
+		cnss_pr_err("Unknown dump type ID: %d\n", type);
+		return -EINVAL;
+	}
+
+	md_entry.phys_addr = pa;
+	md_entry.virt_addr = (uintptr_t)va;
+	md_entry.size = size;
+	md_entry.id = MSM_DUMP_DATA_CNSS_WLAN;
+
+	cnss_pr_dbg("Remove mini dump region: %s, va: %pK, pa: %pa, size: 0x%zx\n",
+		    md_entry.name, va, &pa, size);
+
+	ret = msm_minidump_remove_region(&md_entry);
+	if (ret)
+		cnss_pr_err("Failed to remove mini dump region, err = %d\n",
+			    ret);
 
 	return ret;
 }

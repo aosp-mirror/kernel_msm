@@ -139,6 +139,52 @@ struct image_info {
 	u32 entries;
 };
 
+/* rddm header info */
+
+#define MAX_RDDM_TABLE_SIZE 6
+
+/**
+ * struct rddm_table_info - rddm table info
+ * @base_address - Start offset of the file
+ * @actual_phys_address - phys addr offset of file
+ * @size - size of file
+ * @description - file description
+ * @file_name - name of file
+ */
+struct rddm_table_info {
+	u64 base_address;
+	u64 actual_phys_address;
+	u64 size;
+	char description[20];
+	char file_name[20];
+};
+
+/**
+ * struct rddm_header - rddm header
+ * @version - header ver
+ * @header_size - size of header
+ * @rddm_table_info - array of rddm table info
+ */
+struct rddm_header {
+	u32 version;
+	u32 header_size;
+	struct rddm_table_info table_info[MAX_RDDM_TABLE_SIZE];
+};
+
+/**
+ * struct file_info - keeping track of file info while traversing the rddm
+ * table header
+ * @file_offset - current file offset
+ * @seg_idx - mhi buf seg array index
+ * @rem_seg_len - remaining length of the segment containing current file
+ */
+struct file_info {
+	u8 *file_offset;
+	u32 file_size;
+	u32 seg_idx;
+	u32 rem_seg_len;
+};
+
 /**
  * struct mhi_controller - Master controller structure for external modem
  * @dev: Device associated with this controller
@@ -267,6 +313,7 @@ struct mhi_controller {
 	enum mhi_dev_state dev_state;
 	enum mhi_dev_state saved_dev_state;
 	bool wake_set;
+	bool ignore_override;
 	atomic_t dev_wake;
 	atomic_t alloc_size;
 	atomic_t pending_pkts;
@@ -283,7 +330,6 @@ struct mhi_controller {
 	/* worker for different state transitions */
 	struct work_struct st_worker;
 	struct work_struct fw_worker;
-	struct work_struct syserr_worker;
 	struct work_struct low_priority_worker;
 	wait_queue_head_t state_event;
 
@@ -327,6 +373,7 @@ struct mhi_controller {
 	enum MHI_DEBUG_LEVEL log_lvl;
 
 	/* controller specific data */
+	bool power_down;
 	void *priv_data;
 	void *log_buf;
 	struct dentry *dentry;
@@ -690,6 +737,12 @@ int mhi_download_rddm_img(struct mhi_controller *mhi_cntrl, bool in_panic);
 int mhi_force_rddm_mode(struct mhi_controller *mhi_cntrl);
 
 /**
+ * mhi_dump_sfr - Print SFR string from RDDM table.
+ * @mhi_cntrl: MHI controller
+ */
+void mhi_dump_sfr(struct mhi_controller *mhi_cntrl);
+
+/**
  * mhi_get_remote_time_sync - Get external soc time relative to local soc time
  * using MMIO method.
  * @mhi_dev: Device associated with the channels
@@ -788,7 +841,12 @@ void mhi_debug_reg_dump(struct mhi_controller *mhi_cntrl);
 
 #else
 
-#define MHI_VERB(fmt, ...)
+#define MHI_VERB(fmt, ...) do { \
+		if (mhi_cntrl->log_buf && \
+		    (mhi_cntrl->log_lvl <= MHI_MSG_LVL_VERBOSE)) \
+			ipc_log_string(mhi_cntrl->log_buf, "[D][%s] " fmt, \
+				       __func__, ##__VA_ARGS__); \
+} while (0)
 
 #endif
 

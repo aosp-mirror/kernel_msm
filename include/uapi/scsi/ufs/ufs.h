@@ -19,6 +19,9 @@ enum flag_idn {
 	QUERY_FLAG_IDN_PERMANENTLY_DISABLE_FW_UPDATE    = 0x0B,
 	/* use one reserved bit */
 	QUERY_FLAG_IDN_MANUAL_GC_CONT                   = 0x0E,
+	QUERY_FLAG_IDN_WB_EN                            = 0x0E,
+	QUERY_FLAG_IDN_WB_BUFF_FLUSH_EN                 = 0x0F,
+	QUERY_FLAG_IDN_WB_BUFF_FLUSH_DURING_HIBERN8     = 0x10,
 };
 
 /* Attribute idn for Query requests */
@@ -49,6 +52,10 @@ enum attr_idn {
 	QUERY_ATTR_IDN_REF_CLK_GATING_WAIT_TIME	= 0x17,
 	/* use one reserved bit */
 	QUERY_ATTR_IDN_MANUAL_GC_STATUS         = 0x17,
+	QUERY_ATTR_IDN_WB_FLUSH_STATUS	        = 0x1C,
+	QUERY_ATTR_IDN_AVAIL_WB_BUFF_SIZE       = 0x1D,
+	QUERY_ATTR_IDN_WB_BUFF_LIFE_TIME_EST    = 0x1E,
+	QUERY_ATTR_IDN_CURR_WB_BUFF_SIZE        = 0x1F,
 };
 
 #define QUERY_ATTR_IDN_BOOT_LU_EN_MAX	0x02

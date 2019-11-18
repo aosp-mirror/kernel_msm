@@ -5266,22 +5266,20 @@ cfg80211_inform_bss_frame(struct wiphy *wiphy,
  * @bssid: transmitter BSSID
  * @max_bssid: max BSSID indicator, taken from Multiple BSSID element
  * @mbssid_index: BSSID index, taken from Multiple BSSID index element
- * @new_bssid_addr: address of the resulting BSSID
+ * @new_bssid: calculated nontransmitted BSSID
  */
 static inline void cfg80211_gen_new_bssid(const u8 *bssid, u8 max_bssid,
-					  u8 mbssid_index, u8 *new_bssid_addr)
+					  u8 mbssid_index, u8 *new_bssid)
 {
-	u64 bssid_tmp, new_bssid;
-	u64 lsb_n;
+	u64 bssid_u64 = ether_addr_to_u64(bssid);
+	u64 mask = GENMASK_ULL(max_bssid - 1, 0);
+	u64 new_bssid_u64;
 
-	bssid_tmp = ether_addr_to_u64(bssid);
+	new_bssid_u64 = bssid_u64 & ~mask;
 
-	lsb_n = bssid_tmp & ((1 << max_bssid) - 1);
-	new_bssid = bssid_tmp;
-	new_bssid &= ~((1 << max_bssid) - 1);
-	new_bssid |= (lsb_n + mbssid_index) % (1 << max_bssid);
+	new_bssid_u64 |= ((bssid_u64 & mask) + mbssid_index) & mask;
 
-	u64_to_ether_addr(new_bssid, new_bssid_addr);
+	u64_to_ether_addr(new_bssid_u64, new_bssid);
 }
 
 /**
@@ -6887,6 +6885,21 @@ void cfg80211_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info);
 int cfg80211_external_auth_request(struct net_device *netdev,
 				   struct cfg80211_external_auth_params *params,
 				   gfp_t gfp);
+
+/**
+ * cfg80211_iftype_allowed - check whether the interface can be allowed
+ * @wiphy: the wiphy
+ * @iftype: interface type
+ * @is_4addr: use_4addr flag, must be '0' when check_swif is '1'
+ * @check_swif: check iftype against software interfaces
+ *
+ * Check whether the interface is allowed to operate; additionally, this API
+ * can be used to check iftype against the software interfaces when
+ * check_swif is '1'.
+ */
+bool cfg80211_iftype_allowed(struct wiphy *wiphy, enum nl80211_iftype iftype,
+			     bool is_4addr, u8 check_swif);
+
 
 /* Logging, debugging and troubleshooting/diagnostic helpers. */
 
