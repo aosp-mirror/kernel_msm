@@ -479,6 +479,38 @@ static int cam_ois_shift_data_enqueue(struct cam_ois_shift *o_shift_data,
 }
 
 /**
+ * read_af_lens_position - function of read af lens position
+ * @io_master_info:     Information about the communication master
+ * @pData:              The af position data read out
+ *
+ * Returns success or failure
+ */
+static int read_af_lens_position(struct camera_io_master *io_master_info,
+	uint32_t *pData)
+{
+	int rc = 0;
+	uint16_t orig_slave_addr = io_master_info->cci_client->sid;
+	uint32_t data = 0;
+	uint32_t addr = 0x0A;
+
+	io_master_info->cci_client->sid = 0xE4 >> 1;
+
+	rc = camera_io_dev_read(io_master_info, addr,
+		&data, CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_WORD);
+
+	io_master_info->cci_client->sid = orig_slave_addr;
+
+	if (rc < 0) {
+	    CAM_ERR(CAM_OIS,"%s failed(non-fatal): %d\n", __func__, rc);
+	} else {
+		*pData = data;
+	}
+
+	return rc;
+}
+
+/**
  * cam_ois_read_work - worker function of read timer
  * @work:       work
  *
@@ -491,6 +523,7 @@ static void cam_ois_read_work(struct work_struct *work)
 	struct timespec ts;
 	struct cam_ois_shift ois_shift_data;
 	struct cam_ois_timer_t *ois_timer_in;
+	uint32_t af_pos = 0;
 
 	ois_timer_in = container_of(work, struct cam_ois_timer_t, g_work);
 	get_monotonic_boottime(&ts);
@@ -515,11 +548,8 @@ static void cam_ois_read_work(struct work_struct *work)
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 	}
 
-	rc = camera_io_dev_read_seq(
-		&ois_timer_in->o_ctrl->io_master_info,
-		0x0764, &buf[8], CAMERA_SENSOR_I2C_TYPE_WORD,
-		CAMERA_SENSOR_I2C_TYPE_WORD, 2);
-
+	rc = read_af_lens_position(&ois_timer_in->o_ctrl->io_master_info,
+		&af_pos);
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
 		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
@@ -538,8 +568,7 @@ static void cam_ois_read_work(struct work_struct *work)
 		(int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
 	ois_shift_data.ois_shift_y =
 		(int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
-	ois_shift_data.af_lop1 =
-		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
+	ois_shift_data.af_lop1 = af_pos;
 
 	rc = cam_ois_shift_data_enqueue(&ois_shift_data, ois_timer_in->o_ctrl);
 	if (rc != 0)
