@@ -29,7 +29,7 @@ struct msm_rtb_platform_data {
 	unsigned int size;
 };
 
-#if defined(CONFIG_QCOM_RTB)
+#if IS_ENABLED(CONFIG_QCOM_RTB)
 /*
  * returns 1 if data was logged, 0 otherwise
  */
@@ -40,6 +40,8 @@ int uncached_logk_pc(enum logk_event_type log_type, void *caller,
  * returns 1 if data was logged, 0 otherwise
  */
 int uncached_logk(enum logk_event_type log_type, void *data);
+
+extern void set_uncached_logk_func(int (*fn)(enum logk_event_type, void *));
 
 #define ETB_WAYPOINT  do { \
 				BRANCH_TO_NEXT_ISTR; \

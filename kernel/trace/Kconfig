@@ -99,7 +99,8 @@ config IPC_LOGGING
 	  If in doubt, say no.
 
 config QCOM_RTB
-	bool "Register tracing"
+	tristate "Register tracing"
+	depends on TRACING
 	help
 	  Enable the kernel to trace every kernel function. This is done
 	  Add support for logging different events to a small uncached

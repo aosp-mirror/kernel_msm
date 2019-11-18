@@ -226,11 +226,10 @@ int notrace uncached_logk_pc(enum logk_event_type log_type, void *caller,
 }
 EXPORT_SYMBOL(uncached_logk_pc);
 
-noinline int notrace uncached_logk(enum logk_event_type log_type, void *data)
+noinline int notrace _uncached_logk(enum logk_event_type log_type, void *data)
 {
 	return uncached_logk_pc(log_type, __builtin_return_address(0), data);
 }
-EXPORT_SYMBOL(uncached_logk);
 
 static int msm_rtb_probe(struct platform_device *pdev)
 {
@@ -347,6 +346,8 @@ static int msm_rtb_probe(struct platform_device *pdev)
 	// Target to backup msm_rtb.rtb address for bootloader parser
 	memcpy_toio(imem_base, &msm_rtb, sizeof(struct msm_rtb_state));
 	iounmap(imem_base);
+
+	set_uncached_logk_func(_uncached_logk);
 
 	return 0;
 }

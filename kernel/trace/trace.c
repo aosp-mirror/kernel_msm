@@ -8675,3 +8675,24 @@ __init static int tracing_set_default_clock(void)
 }
 late_initcall_sync(tracing_set_default_clock);
 #endif
+
+#if IS_ENABLED(CONFIG_QCOM_RTB)
+
+static int (*__uncached_logk_func)(enum logk_event_type log_type, void *data);
+
+int uncached_logk(enum logk_event_type log_type, void *data)
+{
+	if (__uncached_logk_func)
+		return __uncached_logk_func(log_type, data);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(uncached_logk);
+
+void set_uncached_logk_func(int (*fn)(enum logk_event_type, void *))
+{
+	__uncached_logk_func = fn;
+}
+EXPORT_SYMBOL_GPL(set_uncached_logk_func);
+
+#endif
