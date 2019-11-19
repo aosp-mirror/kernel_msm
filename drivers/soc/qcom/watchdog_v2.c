@@ -532,7 +532,7 @@ static int msm_watchdog_remove(struct platform_device *pdev)
 	return 0;
 }
 
-void msm_trigger_wdog_bite(void)
+void _msm_trigger_wdog_bite(void)
 {
 	if (!wdog_data)
 		return;
@@ -560,7 +560,7 @@ void msm_trigger_wdog_bite(void)
 	while (1)
 		udelay(1);
 }
-EXPORT_SYMBOL_GPL(msm_trigger_wdog_bite);
+EXPORT_SYMBOL_GPL(_msm_trigger_wdog_bite);
 
 static void print_wdog_data(struct msm_watchdog_data *wdog_dd)
 {
