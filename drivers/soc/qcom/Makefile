@@ -56,7 +56,7 @@ ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	obj-y += microdump_collector.o
 endif
 obj-$(CONFIG_QCOM_EUD) += eud.o
-obj-$(CONFIG_SOC_BUS) += qcom_socinfo.o
+obj-$(CONFIG_QCOM_SOCINFO) += qcom_socinfo.o
 qcom_socinfo-objs += socinfo.o
 qcom_socinfo-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_QCOM_WATCHDOG_V2) += watchdog_v2.o

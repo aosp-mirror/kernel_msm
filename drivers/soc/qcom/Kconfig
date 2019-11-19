@@ -873,3 +873,8 @@ config MODEMSMEM
 	---help---
 	Enable to pass device information and other data to shared memory for
 	the modem subsystem
+
+config QCOM_SOCINFO
+	tristate "Qualcomm socinfo driver"
+	depends on SOC_BUS
+	default ARCH_QCOM
