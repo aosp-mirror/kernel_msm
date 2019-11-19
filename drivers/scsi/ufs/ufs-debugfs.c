@@ -853,6 +853,7 @@ void ufsdbg_pr_buf_to_std(struct ufs_hba *hba, int offset, int num_regs,
 		size -= BUFF_LINE_SIZE/sizeof(u32);
 	}
 }
+EXPORT_SYMBOL_GPL(ufsdbg_pr_buf_to_std);
 
 static int ufsdbg_host_regs_show(struct seq_file *file, void *data)
 {
