@@ -63,6 +63,8 @@
 #include <linux/debugfs.h>
 #include <linux/userfaultfd_k.h>
 
+#include <trace/events/kmem.h>
+
 #include <asm/io.h>
 #include <asm/pgalloc.h>
 #include <asm/uaccess.h>
@@ -131,6 +133,10 @@ static int __init init_zero_pfn(void)
 }
 core_initcall(init_zero_pfn);
 
+void mm_trace_rss_stat(int member, long count)
+{
+	trace_rss_stat(member, count);
+}
 
 #if defined(SPLIT_RSS_COUNTING)
 
