@@ -365,3 +365,6 @@ static struct platform_driver msm_rtb_driver = {
 	},
 };
 module_platform_driver(msm_rtb_driver);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Msm Rtb");
