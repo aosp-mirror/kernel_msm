@@ -276,7 +276,7 @@ void finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
 }
 EXPORT_SYMBOL(finish_wait);
 
-int autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
+int __sched autoremove_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
 {
 	int ret = default_wake_function(wait, mode, sync, key);
 
@@ -311,7 +311,7 @@ static inline bool is_kthread_should_stop(void)
  * remove_wait_queue(&wq, &wait);
  *
  */
-long wait_woken(wait_queue_t *wait, unsigned mode, long timeout)
+long __sched wait_woken(wait_queue_t *wait, unsigned mode, long timeout)
 {
 	set_current_state(mode); /* A */
 	/*
@@ -335,7 +335,7 @@ long wait_woken(wait_queue_t *wait, unsigned mode, long timeout)
 }
 EXPORT_SYMBOL(wait_woken);
 
-int woken_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
+int __sched woken_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
 {
 	/*
 	 * Although this function is called under waitqueue lock, LOCK
@@ -351,7 +351,7 @@ int woken_wake_function(wait_queue_t *wait, unsigned mode, int sync, void *key)
 }
 EXPORT_SYMBOL(woken_wake_function);
 
-int wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *arg)
+int __sched wake_bit_function(wait_queue_t *wait, unsigned mode, int sync, void *arg)
 {
 	struct wait_bit_key *key = arg;
 	struct wait_bit_queue *wait_bit
