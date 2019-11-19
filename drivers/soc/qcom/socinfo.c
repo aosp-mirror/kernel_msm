@@ -1383,8 +1383,6 @@ static int __init socinfo_init_sysfs(void)
 	return 0;
 }
 
-late_initcall(socinfo_init_sysfs);
-
 static void socinfo_print(void)
 {
 	uint32_t f_maj = SOCINFO_VERSION_MAJOR(socinfo_format);
@@ -1626,6 +1624,11 @@ int __init socinfo_init(void)
 	arch_read_hardware_id = msm_read_hardware_id;
 	socinfo_init_done = true;
 
+	socinfo_init_sysfs();
+
 	return 0;
 }
 subsys_initcall(socinfo_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Qualcomm Socinfo driver");

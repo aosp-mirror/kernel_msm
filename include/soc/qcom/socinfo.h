@@ -40,6 +40,38 @@
 
 #define machine_is_msm8974()	of_machine_is_compatible("qcom,msm8974")
 
+#ifdef MODULE
+#define early_machine_is_msm8916()	\
+	of_machine_is_compatible("qcom,msm8916")
+#define early_machine_is_apq8084()	\
+	of_machine_is_compatible("qcom,apq8084")
+#define early_machine_is_msm8996()	\
+	of_machine_is_compatible("qcom,msm8996")
+#define early_machine_is_msm8996_auto()	\
+	of_machine_is_compatible("qcom,msm8996-cdp")
+#define early_machine_is_sm8150()	\
+	of_machine_is_compatible("qcom,sm8150")
+#define early_machine_is_sa8150()	\
+	of_machine_is_compatible("qcom,sa8150")
+#define early_machine_is_kona()	\
+	of_machine_is_compatible("qcom,kona")
+#define early_machine_is_lito()	\
+	of_machine_is_compatible("qcom,lito")
+#define early_machine_is_bengal()	\
+	of_machine_is_compatible("qcom,bengal")
+#define early_machine_is_lagoon()	\
+	of_machine_is_compatible("qcom,lagoon")
+#define early_machine_is_sdmshrike()	\
+	of_machine_is_compatible("qcom,sdmshrike")
+#define early_machine_is_sm6150()	\
+	of_machine_is_compatible("qcom,sm6150")
+#define early_machine_is_qcs405()	\
+	of_machine_is_compatible("qcom,qcs405")
+#define early_machine_is_sdxprairie()	\
+	of_machine_is_compatible("qcom,sdxprairie")
+#define early_machine_is_sdmmagpie()	\
+	of_machine_is_compatible("qcom,sdmmagpie")
+#else
 #define early_machine_is_msm8916()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msm8916")
 #define early_machine_is_apq8084()	\
@@ -70,6 +102,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdxprairie")
 #define early_machine_is_sdmmagpie()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdmmagpie")
+#endif
+
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
