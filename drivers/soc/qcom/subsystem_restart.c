@@ -1412,6 +1412,7 @@ void notify_proxy_vote(struct device *device)
 	if (dev)
 		notify_each_subsys_device(&dev, 1, SUBSYS_PROXY_VOTE, NULL);
 }
+EXPORT_SYMBOL_GPL(notify_proxy_vote);
 
 void notify_proxy_unvote(struct device *device)
 {
@@ -1420,6 +1421,7 @@ void notify_proxy_unvote(struct device *device)
 	if (dev)
 		notify_each_subsys_device(&dev, 1, SUBSYS_PROXY_UNVOTE, NULL);
 }
+EXPORT_SYMBOL_GPL(notify_proxy_unvote);
 
 void notify_before_auth_and_reset(struct device *device)
 {
@@ -1429,7 +1431,7 @@ void notify_before_auth_and_reset(struct device *device)
 		notify_each_subsys_device(&dev, 1,
 			SUBSYS_BEFORE_AUTH_AND_RESET, NULL);
 }
-
+EXPORT_SYMBOL_GPL(notify_before_auth_and_reset);
 
 static int subsys_device_open(struct inode *inode, struct file *file)
 {
