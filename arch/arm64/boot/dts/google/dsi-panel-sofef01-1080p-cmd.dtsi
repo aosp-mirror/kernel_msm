@@ -12,6 +12,7 @@
 
 &mdss_mdp {
 	dsi_sofef01_sdc_1080p_cmd: qcom,mdss_dsi_sofef01_sdc_1080p_cmd {
+		compatible = "google,dsi_binned_lp";
 		qcom,mdss-dsi-panel-name = "sofef01 cmd mode dsi sdc panel";
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-physical-type = "oled";
@@ -93,8 +94,58 @@
 					15 01 00 00 00 00 02 F4 01
 					39 01 00 00 78 00 03 F0 A5 A5
 				];
+				qcom,mdss-dsi-lp1-command = [
+					/* Display Off */
+					05 01 00 00 00 00 01 28
+					/* HLPM on: 50nit */
+					15 01 00 00 11 00 02 53 22
+				];
+				qcom,mdss-dsi-nolp-command = [
+					/* Display Off */
+					05 01 00 00 00 00 01 28
+					/* HLPM off */
+					15 01 00 00 22 00 02 53 20
+					/* Display On */
+					05 01 00 00 00 00 01 29
+				];
 				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					/* Display Off */
+					05 01 00 00 00 00 01 28
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "low";
+				google,dsi-lp-brightness-threshold = <10>;
+				google,dsi-lp-command = [
+					/* HLPM on: 10nit */
+					15 01 00 00 00 00 02 53 23
+					/* Display On */
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@2 {
+				label = "high";
+				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-command = [
+					/* HLPM on: 50nit */
+					15 01 00 00 00 00 02 53 22
+					/* Display On */
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
 	};
