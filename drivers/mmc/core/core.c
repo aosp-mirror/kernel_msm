@@ -3830,3 +3830,8 @@ subsys_initcall(mmc_init);
 module_exit(mmc_exit);
 
 MODULE_LICENSE("GPL");
+
+EXPORT_TRACEPOINT_SYMBOL_GPL(sdhci_msm_resume);
+EXPORT_TRACEPOINT_SYMBOL_GPL(sdhci_msm_runtime_resume);
+EXPORT_TRACEPOINT_SYMBOL_GPL(sdhci_msm_runtime_suspend);
+EXPORT_TRACEPOINT_SYMBOL_GPL(sdhci_msm_suspend);
