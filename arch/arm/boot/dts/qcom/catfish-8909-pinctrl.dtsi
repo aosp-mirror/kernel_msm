@@ -24,12 +24,12 @@
 			blsp1_uart2_sleep: blsp1_uart2_sleep {
 				mux {
 					pins = "gpio20", "gpio21", "gpio111", "gpio112";
-					function = "gpio";
+					function = "blsp_uart2";
 				};
 				config {
 					pins = "gpio20", "gpio21", "gpio111", "gpio112";
 					drive-strength = <2>;
-					bias-pull-down;
+					bias-disable;
 				};
 			};
 		};
