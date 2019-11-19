@@ -414,7 +414,7 @@ config MSM_SUBSYSTEM_RESTART
 config MSM_PIL
 	bool "Peripheral image loading"
 	select FW_LOADER
-	default n
+	depends on MSM_SUBSYSTEM_RESTART
 	help
 	  Some peripherals need to be loaded into memory before they can be
 	  brought out of reset.

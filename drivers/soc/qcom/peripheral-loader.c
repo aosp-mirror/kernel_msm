@@ -33,7 +33,6 @@
 
 #include <linux/uaccess.h>
 #include <asm/setup.h>
-#define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_pil_event.h>
 
 #include "peripheral-loader.h"
@@ -65,7 +64,7 @@
 static void __iomem *pil_info_base;
 static struct md_global_toc *g_md_toc;
 
-void *pil_ipc_log;
+extern void *pil_ipc_log;
 
 /**
  * proxy_timeout - Override for proxy vote timeouts
@@ -75,8 +74,6 @@ void *pil_ipc_log;
  */
 static int proxy_timeout_ms = -1;
 module_param(proxy_timeout_ms, int, 0644);
-
-static bool disable_timeouts;
 
 static struct workqueue_struct *pil_wq;
 
@@ -1432,11 +1429,6 @@ EXPORT_SYMBOL(pil_free_memory);
 
 static DEFINE_IDA(pil_ida);
 
-bool is_timeout_disabled(void)
-{
-	return disable_timeouts;
-}
-
 static int collect_aux_minidump_ids(struct pil_desc *desc)
 {
 	u32 id;
@@ -1621,6 +1613,8 @@ static struct notifier_block pil_pm_notifier = {
 	.notifier_call = pil_pm_notify,
 };
 
+extern void disable_pil_timeouts(void);
+
 static int __init msm_pil_init(void)
 {
 	struct device_node *np;
@@ -1644,7 +1638,7 @@ static int __init msm_pil_init(void)
 	}
 	if (__raw_readl(pil_info_base) == 0x53444247) {
 		pr_info("pil: pil-imem set to disable pil timeouts\n");
-		disable_timeouts = true;
+		disable_pil_timeouts();
 	}
 	for (i = 0; i < resource_size(&res)/sizeof(u32); i++)
 		writel_relaxed(0, pil_info_base + (i * sizeof(u32)));
