@@ -750,8 +750,8 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 			FB_BLANK_UNBLANK;
 	bd->props.state = state;
 
-	mutex_unlock(&bd->ops_lock);
 	backlight_update_status(bd);
+	mutex_unlock(&bd->ops_lock);
 
 	return 0;
 }
