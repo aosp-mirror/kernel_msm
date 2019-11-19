@@ -4,7 +4,8 @@ dtbo-$(CONFIG_BOARD_BRAMBLE) += \
 	lito-bramble-dev1.1-overlay.dtbo \
 	lito-bramble-proto-overlay.dtbo \
 	lito-bramble-proto1_1-overlay.dtbo \
-	lito-bramble-proto1_6-overlay.dtbo
+	lito-bramble-proto1_6-overlay.dtbo \
+	lito-bramble-evt-overlay.dtbo
 
 
 lito-bramble-dev1.0-overlay.dtbo-base := qcom-base/lito.dtb
@@ -12,6 +13,7 @@ lito-bramble-dev1.1-overlay.dtbo-base := qcom-base/lito.dtb
 lito-bramble-proto-overlay.dtbo-base := qcom-base/lito.dtb
 lito-bramble-proto1_1-overlay.dtbo-base := qcom-base/lito.dtb
 lito-bramble-proto1_6-overlay.dtbo-base := qcom-base/lito.dtb
+lito-bramble-evt-overlay.dtbo-base := qcom-base/lito.dtb
 
 
 dtbo-$(CONFIG_BOARD_REDFIN) += \
