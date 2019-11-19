@@ -439,9 +439,6 @@ static ssize_t out_mode_store(struct device *dev,
 		drvdata->out_mode = TMC_ETR_OUT_MODE_MEM;
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
-		coresight_cti_map_trigout(drvdata->cti_flush, 3, 0);
-		coresight_cti_map_trigin(drvdata->cti_reset, 2, 0);
-
 		tmc_etr_bam_disable(drvdata);
 		usb_qdss_close(drvdata->usbch);
 	} else if (!strcmp(str, str_tmc_etr_out_mode[TMC_ETR_OUT_MODE_USB])) {
@@ -461,9 +458,6 @@ static ssize_t out_mode_store(struct device *dev,
 		tmc_etr_disable_hw(drvdata);
 		drvdata->out_mode = TMC_ETR_OUT_MODE_USB;
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-
-		coresight_cti_unmap_trigout(drvdata->cti_flush, 3, 0);
-		coresight_cti_unmap_trigin(drvdata->cti_reset, 2, 0);
 
 		drvdata->usbch = usb_qdss_open("qdss", drvdata,
 					       usb_notifier);
@@ -674,7 +668,6 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	struct resource *res = &adev->res;
 	struct coresight_desc desc = { 0 };
 	struct device_node *np = adev->dev.of_node;
-	struct coresight_cti_data *ctidata;
 
 	pdata = of_get_coresight_platform_data(dev, np);
 	if (IS_ERR(pdata)) {
@@ -723,19 +716,6 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 	if (ret) {
 		dev_err(dev, "TMC SMMU init failed, err =%d\n", ret);
 		goto out;
-	}
-
-	ctidata = of_get_coresight_cti_data(dev, adev->dev.of_node);
-	if (IS_ERR(ctidata)) {
-		dev_err(dev, "invalid cti data\n");
-	} else if (ctidata && ctidata->nr_ctis == 2) {
-		drvdata->cti_flush = coresight_cti_get(ctidata->names[0]);
-		if (IS_ERR(drvdata->cti_flush))
-			dev_err(dev, "failed to get flush cti\n");
-
-		drvdata->cti_reset = coresight_cti_get(ctidata->names[1]);
-		if (IS_ERR(drvdata->cti_reset))
-			dev_err(dev, "failed to get reset cti\n");
 	}
 
 	if (of_property_read_bool(drvdata->dev->of_node, "qcom,force-reg-dump"))

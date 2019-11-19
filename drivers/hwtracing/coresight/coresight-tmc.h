@@ -25,7 +25,6 @@
 #include <linux/amba/bus.h>
 #include <linux/usb_bam.h>
 #include <linux/usb/usb_qdss.h>
-#include <linux/coresight-cti.h>
 
 #define TMC_RSZ			0x004
 #define TMC_STS			0x00c
@@ -218,8 +217,6 @@ struct tmc_drvdata {
 	struct usb_qdss_ch	*usbch;
 	struct tmc_etr_bam_data	*bamdata;
 	bool			sticky_enable;
-	struct coresight_cti	*cti_flush;
-	struct coresight_cti	*cti_reset;
 	struct dma_iommu_mapping *iommu_mapping;
 	bool			force_reg_dump;
 };
