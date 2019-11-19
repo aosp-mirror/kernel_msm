@@ -11,6 +11,7 @@
  * GNU General Public License for more details.
  */
 &qupv3_se7_i2c {
+	pinctrl-1 = <&qupv3_se7_i2c_active>;
 	status = "ok";
 	st21nfc: st21nfc@08 {
 		compatible = "st,st21nfc";
