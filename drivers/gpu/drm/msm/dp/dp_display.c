@@ -78,6 +78,7 @@ struct dp_display_private {
 	atomic_t aborted;
 
 	struct platform_device *pdev;
+	struct usbpd *pd;
 	struct device_node *aux_switch_node;
 	struct dentry *root;
 	struct completion notification_comp;
@@ -909,6 +910,27 @@ static int dp_display_usbpd_configure_cb(struct device *dev)
 		goto end;
 	}
 
+	/*
+	 * When dp is connected during boot, there is a chance that
+	 * configure_cb is called before drm probe is finished and
+	 * cause host_init failure. Here we poll the value of
+	 * poll_enabled and wait until drm driver is ready.
+	 */
+	if (!dp->dp_display.drm_dev->mode_config.poll_enabled) {
+		const int poll_timeout = 10000;
+		int i;
+
+		for (i = 0; !dp->dp_display.drm_dev->mode_config.poll_enabled &&
+				i < poll_timeout; i++)
+			usleep_range(1000, 1100);
+
+		if (i == poll_timeout) {
+			pr_err("driver is not loaded\n");
+			rc = -ENODEV;
+			goto end;
+		}
+	}
+
 	if (!dp->debug->sim_mode && !dp->parser->no_aux_switch
 	    && !dp->parser->gpio_aux_switch) {
 		rc = dp->aux->aux_switch(dp->aux, true, dp->hpd->orientation);
@@ -1000,7 +1022,7 @@ static int dp_display_handle_disconnect(struct dp_display_private *dp)
 	}
 
 	mutex_lock(&dp->session_lock);
-	if (rc && dp->power_on)
+	if (dp->power_on)
 		dp_display_clean(dp);
 
 	dp_display_host_deinit(dp);
@@ -1046,10 +1068,8 @@ static int dp_display_usbpd_disconnect_cb(struct device *dev)
 		goto end;
 	}
 
-	mutex_lock(&dp->session_lock);
 	if (dp->debug->psm_enabled && dp->core_initialized)
 		dp->link->psm_config(dp->link, &dp->panel->link_info, true);
-	mutex_unlock(&dp->session_lock);
 
 	dp_display_disconnect_sync(dp);
 
@@ -1297,6 +1317,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	}
 
 	g_dp_display->is_mst_supported = dp->parser->has_mst;
+	g_dp_display->no_mst_encoder = dp->parser->no_mst_encoder;
 
 	dp->catalog = dp_catalog_get(dev, dp->parser);
 	if (IS_ERR(dp->catalog)) {
@@ -1389,7 +1410,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	cb->disconnect = dp_display_usbpd_disconnect_cb;
 	cb->attention  = dp_display_usbpd_attention_cb;
 
-	dp->hpd = dp_hpd_get(dev, dp->parser, &dp->catalog->hpd, cb);
+	dp->hpd = dp_hpd_get(dev, dp->parser, &dp->catalog->hpd, dp->pd, cb);
 	if (IS_ERR(dp->hpd)) {
 		rc = PTR_ERR(dp->hpd);
 		pr_err("failed to initialize hpd, rc = %d\n", rc);
@@ -2156,6 +2177,28 @@ static int dp_display_create_workqueue(struct dp_display_private *dp)
 	return 0;
 }
 
+static int dp_display_usbpd_get(struct dp_display_private *dp)
+{
+	int rc = 0;
+	char const *phandle = "qcom,dp-usbpd-detection";
+
+	dp->pd = devm_usbpd_get_by_phandle(&dp->pdev->dev, phandle);
+	if (IS_ERR(dp->pd)) {
+		rc = PTR_ERR(dp->pd);
+
+		/*
+		 * If the pd handle is not present(if return is -ENXIO) then the
+		 * platform might be using a direct hpd connection from sink.
+		 * So, return success in this case.
+		 */
+		if (rc == -ENXIO)
+			return 0;
+
+		pr_err("usbpd phandle failed (%ld)\n", PTR_ERR(dp->pd));
+	}
+	return rc;
+}
+
 static int dp_display_fsa4480_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
@@ -2611,6 +2654,10 @@ static int dp_display_probe(struct platform_device *pdev)
 	memset(&dp->mst, 0, sizeof(dp->mst));
 	atomic_set(&dp->aborted, 0);
 
+	rc = dp_display_usbpd_get(dp);
+	if (rc)
+		goto error;
+
 	rc = dp_display_init_aux_switch(dp);
 	if (rc) {
 		rc = -EPROBE_DEFER;
@@ -2700,6 +2747,9 @@ int dp_display_get_num_of_displays(void)
 
 int dp_display_get_num_of_streams(void)
 {
+	if (g_dp_display->no_mst_encoder)
+		return 0;
+
 	return DP_STREAM_MAX;
 }
 

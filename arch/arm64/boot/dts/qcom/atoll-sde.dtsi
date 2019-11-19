@@ -40,8 +40,6 @@
 		clock-max-rate = <0 0 0 460000000 19200000 460000000
 						460000000>;
 
-		sde-vdd-supply = <&mdss_core_gdsc>;
-
 		/* interrupt config */
 		interrupts = <GIC_SPI 83 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-controller;
@@ -234,20 +232,6 @@
 			qcom,sde-dspp-dither = <0x82c 0x00010007>;
 		};
 
-		qcom,platform-supply-entries {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-		qcom,platform-supply-entry@0 {
-				reg = <0>;
-				qcom,supply-name = "sde-vdd";
-				qcom,supply-min-voltage = <0>;
-				qcom,supply-max-voltage = <0>;
-				qcom,supply-enable-load = <0>;
-				qcom,supply-disable-load = <0>;
-			};
-		};
-
 		smmu_sde_sec: qcom,smmu_sde_sec_cb {
 			compatible = "qcom,smmu_sde_sec";
 			iommus = <&apps_smmu 0x801 0x0>;
@@ -274,6 +258,38 @@
 				<1 590 0 150000>,
 				<1 590 0 300000>;
 		};
+
+		qcom,sde-limits {
+			qcom,sde-linewidth-limits{
+				qcom,sde-limit-name = "sspp_linewidth_usecases";
+				qcom,sde-limit-cases = "vig", "dma", "scale";
+				qcom,sde-limit-ids= <0x1 0x2 0x4>;
+				qcom,sde-limit-values = <0x1 4096>,
+							<0x5 2560>,
+							<0x2 2160>;
+			};
+			qcom,sde-bw-limits{
+				qcom,sde-limit-name = "sde_bwlimit_usecases";
+				qcom,sde-limit-cases = "per_vig_pipe",
+							"per_dma_pipe",
+							"total_max_bw",
+							"camera_concurrency",
+							"cwb_concurrency";
+				qcom,sde-limit-ids = <0x1 0x2 0x4 0x8 0x10>;
+				qcom,sde-limit-values = <0x1 2600000>,
+							<0x11 2600000>,
+							<0x9 2600000>,
+							<0x19 2600000>,
+							<0x2 2600000>,
+							<0x12 2600000>,
+							<0xa 2600000>,
+							<0x1a 2600000>,
+							<0x4 5800000>,
+							<0x14 5500000>,
+							<0xc 4400000>,
+							<0x1c 3900000>;
+			};
+		};
 	};
 
 	sde_rscc: qcom,sde_rscc@af20000 {
@@ -283,7 +299,6 @@
 			<0xaf30000 0x3fd4>;
 		reg-names = "drv", "wrapper";
 		qcom,sde-rsc-version = <3>;
-		status = "disabled";
 
 		qcom,sde-dram-channels = <2>;
 
@@ -528,7 +543,10 @@
 		qcom,aux-cfg8-settings = [40 bb];
 		qcom,aux-cfg9-settings = [44 03];
 
-		qcom,max-pclk-frequency-khz = <675000>;
+		qcom,max-pclk-frequency-khz = <337500>;
+		qcom,max-hdisplay = <2560>;
+		qcom,max-vdisplay = <1600>;
+		qcom,no-mst-encoder;
 
 	clocks =	<&clock_dispcc DISP_CC_MDSS_DP_AUX_CLK>,
 			<&clock_gcc GCC_USB3_PRIM_PHY_PIPE_CLK>,

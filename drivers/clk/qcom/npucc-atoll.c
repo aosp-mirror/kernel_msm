@@ -37,10 +37,12 @@
 
 #define F(f, s, h, m, n) { (f), (s), (2 * (h) - 1), (m), (n) }
 
-#define CRC_SID_FSM_CTRL		0x100c
+#define CRC_SID_FSM_CTRL		0x11a0
 #define CRC_SID_FSM_CTRL_SETTING	0x800000
-#define CRC_MND_CFG			0x1010
+#define CRC_MND_CFG			0x11a4
 #define CRC_MND_CFG_SETTING		0x15011
+
+#define NPU_FUSE_OFFSET			0x4
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 
@@ -103,7 +105,7 @@ static const char * const npu_cc_parent_names_1[] = {
 
 static const struct parent_map npu_cc_parent_map_2[] = {
 	{ P_BI_TCXO, 0 },
-	{ P_NPU_Q6SS_PLL_OUT_MAIN, 1 },
+	{ P_NPU_Q6SS_PLL_OUT_MAIN, 2 },
 	{ P_CORE_BI_PLL_TEST_SE, 7 },
 };
 
@@ -118,7 +120,7 @@ static struct pll_vco fabia_vco[] = {
 	{ 125000000, 1000000000, 1 },
 };
 
-static const struct alpha_pll_config npu_cc_pll0_config = {
+static struct alpha_pll_config npu_cc_pll0_config = {
 	.l = 0x1C,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00002067,
@@ -132,6 +134,7 @@ static struct clk_alpha_pll npu_cc_pll0 = {
 	.vco_table = fabia_vco,
 	.num_vco = ARRAY_SIZE(fabia_vco),
 	.type = FABIA_PLL,
+	.config = &npu_cc_pll0_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_pll0",
@@ -169,7 +172,7 @@ static struct clk_alpha_pll_postdiv npu_cc_pll0_out_even = {
 	},
 };
 
-static const struct alpha_pll_config npu_cc_pll1_config = {
+static struct alpha_pll_config npu_cc_pll1_config = {
 	.l = 0xF,
 	.frac = 0xA000,
 	.config_ctl_val = 0x20485699,
@@ -184,6 +187,7 @@ static struct clk_alpha_pll npu_cc_pll1 = {
 	.vco_table = fabia_vco,
 	.num_vco = ARRAY_SIZE(fabia_vco),
 	.type = FABIA_PLL,
+	.config = &npu_cc_pll1_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_pll1",
@@ -221,7 +225,7 @@ static struct clk_alpha_pll_postdiv npu_cc_pll1_out_even = {
 	},
 };
 
-static const struct alpha_pll_config npu_q6ss_pll_config = {
+static struct alpha_pll_config npu_q6ss_pll_config = {
 	.l = 0xD,
 	.frac = 0x555,
 	.config_ctl_val = 0x20485699,
@@ -236,6 +240,7 @@ static struct clk_alpha_pll npu_q6ss_pll = {
 	.vco_table = fabia_vco,
 	.num_vco = ARRAY_SIZE(fabia_vco),
 	.type = FABIA_PLL,
+	.config = &npu_q6ss_pll_config,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_q6ss_pll",
@@ -273,6 +278,17 @@ static const struct freq_tbl ftbl_npu_cc_cal_hm0_clk_src[] = {
 	F(515000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
 	F(650000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
 	F(800000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
+	{ }
+};
+
+static const struct freq_tbl ftbl_npu_cc_cal_hm0_clk_no_crc_src[] = {
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(100000000, P_NPU_CC_CRC_DIV, 2, 0, 0),
+	F(200000000, P_NPU_CC_CRC_DIV, 2, 0, 0),
+	F(400000000, P_NPU_CC_CRC_DIV, 2, 0, 0),
+	F(515000000, P_NPU_CC_CRC_DIV, 2, 0, 0),
+	F(650000000, P_NPU_CC_CRC_DIV, 2, 0, 0),
+	F(800000000, P_NPU_CC_CRC_DIV, 2, 0, 0),
 	{ }
 };
 
@@ -341,6 +357,7 @@ static const struct freq_tbl ftbl_npu_dsp_core_clk_src[] = {
 	F(300000000, P_NPU_Q6SS_PLL_OUT_MAIN, 1, 0, 0),
 	F(400000000, P_NPU_Q6SS_PLL_OUT_MAIN, 1, 0, 0),
 	F(500000000, P_NPU_Q6SS_PLL_OUT_MAIN, 1, 0, 0),
+	F(600000000, P_NPU_Q6SS_PLL_OUT_MAIN, 1, 0, 0),
 	F(660000000, P_NPU_Q6SS_PLL_OUT_MAIN, 1, 0, 0),
 	F(800000000, P_NPU_Q6SS_PLL_OUT_MAIN, 1, 0, 0),
 	{ }
@@ -352,6 +369,7 @@ static struct clk_rcg2 npu_dsp_core_clk_src = {
 	.hid_width = 5,
 	.parent_map = npu_cc_parent_map_2,
 	.freq_tbl = ftbl_npu_dsp_core_clk_src,
+	.enable_safe_config = true,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "npu_dsp_core_clk_src",
 		.parent_names = npu_cc_parent_names_2,
@@ -525,6 +543,10 @@ static struct clk_branch npu_cc_dsp_axi_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_dsp_axi_clk",
+			.parent_names = (const char *[]){
+				"gcc_npu_axi_clk"
+			},
+			.num_parents = 1,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -551,6 +573,10 @@ static struct clk_branch npu_cc_noc_axi_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_noc_axi_clk",
+			.parent_names = (const char *[]){
+				"gcc_npu_axi_clk"
+			},
+			.num_parents = 1,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -564,6 +590,10 @@ static struct clk_branch npu_cc_noc_dma_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_noc_dma_clk",
+			.parent_names = (const char *[]){
+				"gcc_npu_dma_clk"
+			},
+			.num_parents = 1,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -701,9 +731,23 @@ static const struct of_device_id npu_cc_atoll_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, npu_cc_atoll_match_table);
 
-static int enable_npu_crc(struct regmap *regmap, struct regulator *npu_gdsc)
+static int enable_npu_crc(struct platform_device *pdev, struct regmap *regmap,
+			struct regulator *npu_gdsc)
 {
+	struct resource *res;
+	void __iomem *base;
+	u32 fuse_val, fuse1_val;
 	int ret;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "efuse");
+	base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	fuse_val = readl_relaxed(base) & GENMASK(31, 27);
+	fuse1_val = readl_relaxed(base + NPU_FUSE_OFFSET) & GENMASK(2, 0);
+
+	devm_iounmap(&pdev->dev, base);
 
 	/* Set npu_cc_cal_hm0_clk to the lowest supported frequency */
 	clk_set_rate(npu_cc_cal_hm0_clk.clkr.hw.clk,
@@ -724,9 +768,19 @@ static int enable_npu_crc(struct regmap *regmap, struct regulator *npu_gdsc)
 		return ret;
 	}
 
-	/* Enable MND RC */
-	regmap_write(regmap, CRC_MND_CFG, CRC_MND_CFG_SETTING);
-	regmap_write(regmap, CRC_SID_FSM_CTRL, CRC_SID_FSM_CTRL_SETTING);
+	if (fuse_val || fuse1_val) {
+		regmap_write(regmap, CRC_MND_CFG, 0x0);
+		regmap_write(regmap, CRC_SID_FSM_CTRL, 0x0);
+
+		npu_cc_crc_div.div = 1;
+		npu_cc_cal_hm0_clk_src.freq_tbl =
+					ftbl_npu_cc_cal_hm0_clk_no_crc_src;
+	} else {
+		/* Enable MND RC */
+		regmap_write(regmap, CRC_MND_CFG, CRC_MND_CFG_SETTING);
+		regmap_write(regmap, CRC_SID_FSM_CTRL,
+						CRC_SID_FSM_CTRL_SETTING);
+	}
 
 	/* Wait for 16 cycles before continuing */
 	udelay(1);
@@ -783,7 +837,7 @@ static int npu_clocks_atoll_probe(struct platform_device *pdev,
 	}
 
 	if (!strcmp("cc", desc->config->name)) {
-		ret = enable_npu_crc(regmap, npu_gdsc);
+		ret = enable_npu_crc(pdev, regmap, npu_gdsc);
 		if (ret) {
 			dev_err(&pdev->dev,
 				"Failed to enable CRC for NPU cal RCG\n");

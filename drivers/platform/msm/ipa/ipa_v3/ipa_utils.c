@@ -2471,6 +2471,12 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			IPA_DPS_HPS_SEQ_TYPE_DMA_ONLY,
 			QMB_MASTER_SELECT_DDR,
 			{ 7, 9, 20, 24, IPA_EE_AP, GSI_ESCAPE_BUF_ONLY, 0 } },
+	[IPA_4_5_MHI][IPA_CLIENT_APPS_WAN_PROD]	  = {
+			true, IPA_v4_5_MHI_GROUP_DDR,
+			true,
+			IPA_DPS_HPS_SEQ_TYPE_2ND_PKT_PROCESS_PASS_NO_DEC_UCP,
+			QMB_MASTER_SELECT_DDR,
+			{ 2, 7, 16, 32, IPA_EE_AP, GSI_SMART_PRE_FETCH, 7 } },
 	[IPA_4_5_MHI][IPA_CLIENT_Q6_WAN_PROD]		= {
 			true, IPA_v4_5_MHI_GROUP_DDR,
 			true,
@@ -2527,7 +2533,13 @@ static const struct ipa_ep_configuration ipa3_ep_mapping
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
 			QMB_MASTER_SELECT_DDR,
 			{ 16, 10, 9, 9, IPA_EE_AP, GSI_ESCAPE_BUF_ONLY, 0 } },
-	[IPA_4_5][IPA_CLIENT_USB_DPL_CONS]        = {
+	[IPA_4_5_MHI][IPA_CLIENT_APPS_WAN_CONS]       = {
+			true, IPA_v4_5_MHI_GROUP_DDR,
+			false,
+			IPA_DPS_HPS_SEQ_TYPE_INVALID,
+			QMB_MASTER_SELECT_DDR,
+			{ 25, 16, 9, 9, IPA_EE_AP, GSI_ESCAPE_BUF_ONLY, 0 } },
+	[IPA_4_5_MHI][IPA_CLIENT_USB_DPL_CONS]        = {
 			true, IPA_v4_5_MHI_GROUP_DDR,
 			false,
 			IPA_DPS_HPS_SEQ_TYPE_INVALID,
@@ -6664,6 +6676,7 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_get_smmu_params = ipa3_get_smmu_params;
 	api_ctrl->ipa_is_vlan_mode = ipa3_is_vlan_mode;
 	api_ctrl->ipa_pm_is_used = ipa3_pm_is_used;
+	api_ctrl->ipa_get_lan_rx_napi = ipa3_get_lan_rx_napi;
 	api_ctrl->ipa_wigig_uc_init = ipa3_wigig_uc_init;
 	api_ctrl->ipa_conn_wigig_rx_pipe_i = ipa3_conn_wigig_rx_pipe_i;
 	api_ctrl->ipa_conn_wigig_client_i = ipa3_conn_wigig_client_i;
@@ -6675,6 +6688,14 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 		ipa3_register_client_callback;
 	api_ctrl->ipa_deregister_client_callback =
 		ipa3_deregister_client_callback;
+	api_ctrl->ipa_uc_debug_stats_alloc =
+		ipa3_uc_debug_stats_alloc;
+	api_ctrl->ipa_uc_debug_stats_dealloc =
+		ipa3_uc_debug_stats_dealloc;
+	api_ctrl->ipa_get_gsi_stats =
+		ipa3_get_gsi_stats;
+	api_ctrl->ipa_get_prot_id =
+		ipa3_get_prot_id;
 	return 0;
 }
 
@@ -7221,15 +7242,11 @@ static int __ipa3_stop_gsi_channel(u32 clnt_hdl)
 				client_type);
 		}
 	}
-	if (IPA_CLIENT_IS_PROD(ep->client)) {
-		IPADBG("Calling gsi_stop_channel ch:%lu\n",
-			ep->gsi_chan_hdl);
-		res = gsi_stop_channel(ep->gsi_chan_hdl);
-		IPADBG("gsi_stop_channel ch: %lu returned %d\n",
-			ep->gsi_chan_hdl, res);
-		return res;
-	}
 
+	/*
+	 * Apply the GSI stop retry logic if GSI returns err code to retry.
+	 * Apply the retry logic for ipa_client_prod as well as ipa_client_cons.
+	 */
 	for (i = 0; i < IPA_GSI_CHANNEL_STOP_MAX_RETRY; i++) {
 		IPADBG("Calling gsi_stop_channel ch:%lu\n",
 			ep->gsi_chan_hdl);
@@ -8158,3 +8175,98 @@ u32 ipa3_get_r_rev_version(void)
 
 	return r_rev;
 }
+
+/**
+ * ipa3_get_gsi_stats() - Query gsi stats from uc
+ * @prot_id: IPA_HW_FEATURE_OFFLOAD protocol id
+ * @stats:	[inout] stats blob from client populated by driver
+ *
+ * @note Cannot be called from atomic context
+ *
+ */
+void ipa3_get_gsi_stats(int prot_id,
+	struct ipa_uc_dbg_ring_stats *stats)
+{
+	switch (prot_id) {
+	case IPA_HW_PROTOCOL_AQC:
+		stats->num_ch = MAX_AQC_CHANNELS;
+		ipa3_get_aqc_gsi_stats(stats);
+		break;
+	case IPA_HW_PROTOCOL_11ad:
+		break;
+	case IPA_HW_PROTOCOL_WDI:
+		stats->num_ch = MAX_WDI2_CHANNELS;
+		ipa3_get_wdi_gsi_stats(stats);
+		break;
+	case IPA_HW_PROTOCOL_WDI3:
+		stats->num_ch = MAX_WDI3_CHANNELS;
+		ipa3_get_wdi3_gsi_stats(stats);
+		break;
+	case IPA_HW_PROTOCOL_ETH:
+		break;
+	case IPA_HW_PROTOCOL_MHIP:
+		stats->num_ch = MAX_MHIP_CHANNELS;
+		ipa3_get_mhip_gsi_stats(stats);
+		break;
+	case IPA_HW_PROTOCOL_USB:
+		stats->num_ch = MAX_USB_CHANNELS;
+		ipa3_get_usb_gsi_stats(stats);
+		break;
+	default:
+		IPAERR("unsupported HW feature %d\n", prot_id);
+	}
+}
+
+/**
+ * ipa3_get_prot_id() - Query gsi protocol id
+ * @client: ipa_client_type
+ *
+ * return the prot_id based on the client type,
+ * return -EINVAL when no such mapping exists.
+ */
+int ipa3_get_prot_id(enum ipa_client_type client)
+{
+	int prot_id = -EINVAL;
+
+	switch (client) {
+	case IPA_CLIENT_AQC_ETHERNET_CONS:
+	case IPA_CLIENT_AQC_ETHERNET_PROD:
+		prot_id = IPA_HW_PROTOCOL_AQC;
+		break;
+	case IPA_CLIENT_MHI_PRIME_TETH_PROD:
+	case IPA_CLIENT_MHI_PRIME_TETH_CONS:
+	case IPA_CLIENT_MHI_PRIME_RMNET_PROD:
+	case IPA_CLIENT_MHI_PRIME_RMNET_CONS:
+		prot_id = IPA_HW_PROTOCOL_MHIP;
+		break;
+	case IPA_CLIENT_WLAN1_PROD:
+	case IPA_CLIENT_WLAN1_CONS:
+		prot_id = IPA_HW_PROTOCOL_WDI;
+		break;
+	case IPA_CLIENT_WLAN2_PROD:
+	case IPA_CLIENT_WLAN2_CONS:
+		prot_id = IPA_HW_PROTOCOL_WDI3;
+		break;
+	case IPA_CLIENT_USB_PROD:
+	case IPA_CLIENT_USB_CONS:
+		prot_id = IPA_HW_PROTOCOL_USB;
+		break;
+	case IPA_CLIENT_ETHERNET_PROD:
+	case IPA_CLIENT_ETHERNET_CONS:
+		prot_id = IPA_HW_PROTOCOL_ETH;
+		break;
+	case IPA_CLIENT_WIGIG_PROD:
+	case IPA_CLIENT_WIGIG1_CONS:
+	case IPA_CLIENT_WIGIG2_CONS:
+	case IPA_CLIENT_WIGIG3_CONS:
+	case IPA_CLIENT_WIGIG4_CONS:
+		prot_id = IPA_HW_PROTOCOL_11ad;
+		break;
+	default:
+		IPAERR("unknown prot_id for client %d\n",
+			client);
+	}
+
+	return prot_id;
+}
+

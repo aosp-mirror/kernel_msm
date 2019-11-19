@@ -25,6 +25,7 @@ struct mhi_buf_info;
  * enum MHI_CB - MHI callback
  * @MHI_CB_IDLE: MHI entered idle state
  * @MHI_CB_PENDING_DATA: New data available for client to process
+ * @MHI_CB_DTR_SIGNAL: DTR signaling update
  * @MHI_CB_LPM_ENTER: MHI host entered low power mode
  * @MHI_CB_LPM_EXIT: MHI host about to exit low power mode
  * @MHI_CB_EE_RDDM: MHI device entered RDDM execution enviornment
@@ -35,6 +36,7 @@ struct mhi_buf_info;
 enum MHI_CB {
 	MHI_CB_IDLE,
 	MHI_CB_PENDING_DATA,
+	MHI_CB_DTR_SIGNAL,
 	MHI_CB_LPM_ENTER,
 	MHI_CB_LPM_EXIT,
 	MHI_CB_EE_RDDM,
@@ -44,7 +46,7 @@ enum MHI_CB {
 };
 
 /**
- * enum MHI_DEBUG_LEVL - various debugging level
+ * enum MHI_DEBUG_LEVEL - various debugging level
  */
 enum MHI_DEBUG_LEVEL {
 	MHI_MSG_LVL_VERBOSE,
@@ -52,6 +54,7 @@ enum MHI_DEBUG_LEVEL {
 	MHI_MSG_LVL_ERROR,
 	MHI_MSG_LVL_CRITICAL,
 	MHI_MSG_LVL_MASK_ALL,
+	MHI_MSG_LVL_MAX,
 };
 
 /**

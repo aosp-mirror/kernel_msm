@@ -69,10 +69,10 @@ struct pl_data {
 	struct votable		*cp_ilim_votable;
 	struct votable		*cp_disable_votable;
 	struct votable		*fcc_main_votable;
+	struct votable		*cp_slave_disable_votable;
 	struct delayed_work	status_change_work;
 	struct work_struct	pl_disable_forever_work;
 	struct work_struct	pl_taper_work;
-	struct delayed_work	pl_awake_work;
 	struct delayed_work	fcc_stepper_work;
 	bool			taper_work_running;
 	struct power_supply	*main_psy;
@@ -81,6 +81,7 @@ struct pl_data {
 	struct power_supply	*usb_psy;
 	struct power_supply	*dc_psy;
 	struct power_supply	*cp_master_psy;
+	struct power_supply	*cp_slave_psy;
 	int			charge_type;
 	int			total_settled_ua;
 	int			pl_settled_ua;
@@ -93,6 +94,8 @@ struct pl_data {
 	int			parallel_step_fcc_count;
 	int			parallel_step_fcc_residual;
 	int			step_fcc;
+	int			override_main_fcc_ua;
+	int			total_fcc_ua;
 	u32			wa_flags;
 	struct class		qcom_batt_class;
 	struct wakeup_source	*pl_ws;
@@ -135,6 +138,11 @@ enum {
 	RESTRICT_CHG_CURRENT,
 	FCC_STEPPING_IN_PROGRESS,
 };
+
+enum {
+	PARALLEL_INPUT_MODE,
+	PARALLEL_OUTPUT_MODE,
+};
 /*********
  * HELPER*
  *********/
@@ -147,24 +155,82 @@ static bool is_cp_available(struct pl_data *chip)
 	return !!chip->cp_master_psy;
 }
 
-static bool cp_ilim_boost_enabled(struct pl_data *chip)
+static int cp_get_parallel_mode(struct pl_data *chip, int mode)
 {
-	union power_supply_propval pval = {-1, };
+	union power_supply_propval pval = {-EINVAL, };
+	int rc = -EINVAL;
 
-	if (is_cp_available(chip))
-		power_supply_get_property(chip->cp_master_psy,
+	if (!is_cp_available(chip))
+		return -EINVAL;
+
+	switch (mode) {
+	case PARALLEL_INPUT_MODE:
+		rc = power_supply_get_property(chip->cp_master_psy,
+				POWER_SUPPLY_PROP_PARALLEL_MODE, &pval);
+		break;
+	case PARALLEL_OUTPUT_MODE:
+		rc = power_supply_get_property(chip->cp_master_psy,
 				POWER_SUPPLY_PROP_PARALLEL_OUTPUT_MODE, &pval);
+		break;
+	default:
+		pr_err("Invalid mode request %d\n", mode);
+		break;
+	}
 
-	return pval.intval == POWER_SUPPLY_PL_OUTPUT_VPH;
+	if (rc < 0)
+		pr_err("Failed to read CP topology for mode=%d rc=%d\n",
+				mode, rc);
+
+	return pval.intval;
 }
 
+/*
+ * Adapter CC Mode: ILIM over-ridden explicitly, below takes no effect.
+ *
+ * Adapter CV mode: Configuration of ILIM for different topology is as below:
+ * MID-VPH:
+ *	SMB1390 ILIM: independent of FCC and based on the AICL result or
+ *			PD advertised current,  handled directly in SMB1390
+ *			driver.
+ * MID-VBAT:
+ *	 SMB1390 ILIM: based on minimum of FCC portion of SMB1390 or ICL.
+ * USBIN-VBAT:
+ *	SMB1390 ILIM: based on FCC portion of SMB1390 and independent of ICL.
+ */
 static void cp_configure_ilim(struct pl_data *chip, const char *voter, int ilim)
 {
+	int rc, fcc;
+	union power_supply_propval pval = {0, };
+
+	if (!is_cp_available(chip))
+		return;
+
+	if (cp_get_parallel_mode(chip, PARALLEL_OUTPUT_MODE)
+					== POWER_SUPPLY_PL_OUTPUT_VPH)
+		return;
+
+	rc = power_supply_get_property(chip->cp_master_psy,
+				POWER_SUPPLY_PROP_MIN_ICL, &pval);
+	if (rc < 0)
+		return;
+
 	if (!chip->cp_ilim_votable)
 		chip->cp_ilim_votable = find_votable("CP_ILIM");
 
-	if (!cp_ilim_boost_enabled(chip) && chip->cp_ilim_votable)
-		vote(chip->cp_ilim_votable, voter, true, ilim);
+	if (chip->cp_ilim_votable) {
+		fcc = get_effective_result_locked(chip->fcc_votable);
+		/*
+		 * If FCC >= (2 * MIN_ICL) then it is safe to enable CP
+		 * with MIN_ICL.
+		 * Configure ILIM as follows:
+		 * if request_ilim < MIN_ICL cofigure ILIM to MIN_ICL.
+		 * otherwise configure ILIM to requested_ilim.
+		 */
+		if ((fcc >= (pval.intval * 2)) && (ilim < pval.intval))
+			vote(chip->cp_ilim_votable, voter, true, pval.intval);
+		else
+			vote(chip->cp_ilim_votable, voter, true, ilim);
+	}
 }
 
 /*******
@@ -562,6 +628,28 @@ out:
 static void get_fcc_stepper_params(struct pl_data *chip, int main_fcc_ua,
 			int parallel_fcc_ua)
 {
+	int main_set_fcc_ua, total_fcc_ua;
+
+	if (is_override_vote_enabled_locked(chip->fcc_main_votable)) {
+		/*
+		 * FCC stepper params need re-calculation in override mode
+		 * only if there is change in Main or total FCC
+		 */
+
+		main_set_fcc_ua = get_effective_result_locked(
+							chip->fcc_main_votable);
+		total_fcc_ua = main_fcc_ua + parallel_fcc_ua;
+
+		if ((main_set_fcc_ua != chip->override_main_fcc_ua)
+				|| (total_fcc_ua != chip->total_fcc_ua)) {
+			chip->override_main_fcc_ua = main_set_fcc_ua;
+			chip->total_fcc_ua = total_fcc_ua;
+			parallel_fcc_ua = (total_fcc_ua
+						- chip->override_main_fcc_ua);
+		} else {
+			goto skip_fcc_step_update;
+		}
+	}
 	/* Read current FCC of main charger */
 	chip->main_fcc_ua = get_effective_result(chip->fcc_main_votable);
 	chip->main_step_fcc_dir = (main_fcc_ua > chip->main_fcc_ua) ?
@@ -578,6 +666,7 @@ static void get_fcc_stepper_params(struct pl_data *chip, int main_fcc_ua,
 	chip->parallel_step_fcc_residual = abs((parallel_fcc_ua -
 				chip->slave_fcc_ua)) % FCC_STEP_SIZE_UA;
 
+skip_fcc_step_update:
 	if (chip->parallel_step_fcc_count || chip->parallel_step_fcc_residual
 		|| chip->main_step_fcc_count || chip->main_step_fcc_residual)
 		chip->step_fcc = 1;
@@ -713,7 +802,9 @@ static int pl_fcc_vote_callback(struct votable *votable, void *data,
 {
 	struct pl_data *chip = data;
 	int master_fcc_ua = total_fcc_ua, slave_fcc_ua = 0;
+	int main_fcc_ua = 0, cp_fcc_ua = 0, fcc_thr_ua = 0, rc;
 	union power_supply_propval pval = {0, };
+	bool is_cc_mode = false;
 
 	if (total_fcc_ua < 0)
 		return 0;
@@ -724,21 +815,65 @@ static int pl_fcc_vote_callback(struct votable *votable, void *data,
 	if (!chip->cp_disable_votable)
 		chip->cp_disable_votable = find_votable("CP_DISABLE");
 
-	if (chip->cp_disable_votable) {
-		if (cp_ilim_boost_enabled(chip)) {
-			power_supply_get_property(chip->cp_master_psy,
+	if (!chip->cp_master_psy)
+		chip->cp_master_psy =
+			power_supply_get_by_name("charge_pump_master");
+
+	if (!chip->cp_slave_psy)
+		chip->cp_slave_psy = power_supply_get_by_name("cp_slave");
+
+	if (!chip->cp_slave_disable_votable)
+		chip->cp_slave_disable_votable =
+			find_votable("CP_SLAVE_DISABLE");
+
+	if (!chip->usb_psy)
+		chip->usb_psy = power_supply_get_by_name("usb");
+
+	if (chip->usb_psy) {
+		rc = power_supply_get_property(chip->usb_psy,
+					POWER_SUPPLY_PROP_ADAPTER_CC_MODE,
+					&pval);
+		if (rc < 0)
+			pr_err("Couldn't get PPS CC mode status rc=%d\n", rc);
+		else
+			is_cc_mode = pval.intval;
+	}
+
+	if (chip->cp_master_psy) {
+		rc = power_supply_get_property(chip->cp_master_psy,
 					POWER_SUPPLY_PROP_MIN_ICL, &pval);
+		if (rc < 0)
+			pr_err("Couldn't get MIN ICL threshold rc=%d\n", rc);
+		else
+			fcc_thr_ua = is_cc_mode ? (3 * pval.intval) :
+							(4 * pval.intval);
+	}
+
+	if (chip->fcc_main_votable)
+		main_fcc_ua =
+			get_effective_result_locked(chip->fcc_main_votable);
+
+	if (main_fcc_ua < 0)
+		main_fcc_ua = 0;
+
+	cp_fcc_ua = total_fcc_ua - main_fcc_ua;
+	if (cp_fcc_ua > 0) {
+		if (chip->cp_slave_psy && chip->cp_slave_disable_votable) {
 			/*
-			 * With ILIM boost feature ILIM configuration is
-			 * independent of battery FCC, disable CP if FCC/2
-			 * falls below MIN_ICL supported by CP.
+			 * Disable Slave CP if FCC share
+			 * falls below threshold.
 			 */
-			if ((total_fcc_ua / 2) < pval.intval)
-				vote(chip->cp_disable_votable, FCC_VOTER,
-						true, 0);
-			else
-				vote(chip->cp_disable_votable, FCC_VOTER,
-						false, 0);
+			vote(chip->cp_slave_disable_votable, FCC_VOTER,
+				(cp_fcc_ua < fcc_thr_ua), 0);
+		}
+
+		if (chip->cp_disable_votable) {
+			/*
+			 * Disable Master CP if FCC share
+			 * falls below 2 * min ICL threshold.
+			 */
+			vote(chip->cp_disable_votable, FCC_VOTER,
+			     (cp_fcc_ua < (2 * pval.intval)), 0);
 		}
 	}
 
@@ -757,10 +892,6 @@ static int pl_fcc_vote_callback(struct votable *votable, void *data,
 
 	rerun_election(chip->pl_disable_votable);
 	/* When FCC changes, trigger psy changed event for CC mode */
-	if (!chip->cp_master_psy)
-		chip->cp_master_psy =
-			power_supply_get_by_name("charge_pump_master");
-
 	if (chip->cp_master_psy)
 		power_supply_changed(chip->cp_master_psy);
 
@@ -925,8 +1056,7 @@ static void fcc_stepper_work(struct work_struct *work)
 stepper_exit:
 	chip->main_fcc_ua = main_fcc;
 	chip->slave_fcc_ua = parallel_fcc;
-
-	cp_configure_ilim(chip, FCC_VOTER, chip->main_fcc_ua / 2);
+	cp_configure_ilim(chip, FCC_VOTER, chip->slave_fcc_ua / 2);
 
 	if (reschedule_ms) {
 		schedule_delayed_work(&chip->fcc_stepper_work,
@@ -1079,7 +1209,10 @@ static int usb_icl_vote_callback(struct votable *votable, void *data,
 
 	vote(chip->pl_disable_votable, ICL_CHANGE_VOTER, false, 0);
 
-	cp_configure_ilim(chip, ICL_CHANGE_VOTER, icl_ua);
+	/* Configure ILIM based on AICL result only if input mode is USBMID */
+	if (cp_get_parallel_mode(chip, PARALLEL_INPUT_MODE)
+					== POWER_SUPPLY_PL_USBMID_USBMID)
+		cp_configure_ilim(chip, ICL_CHANGE_VOTER, icl_ua);
 
 	return 0;
 }
@@ -1097,21 +1230,13 @@ static void pl_disable_forever_work(struct work_struct *work)
 		vote(chip->hvdcp_hw_inov_dis_votable, PL_VOTER, false, 0);
 }
 
-static void pl_awake_work(struct work_struct *work)
-{
-	struct pl_data *chip = container_of(work,
-			struct pl_data, pl_awake_work.work);
-
-	vote(chip->pl_awake_votable, PL_VOTER, false, 0);
-}
-
 static int pl_disable_vote_callback(struct votable *votable,
 		void *data, int pl_disable, const char *client)
 {
 	struct pl_data *chip = data;
 	union power_supply_propval pval = {0, };
 	int master_fcc_ua = 0, total_fcc_ua = 0, slave_fcc_ua = 0;
-	int rc = 0;
+	int rc = 0, cp_ilim;
 	bool disable = false;
 
 	if (!is_main_available(chip))
@@ -1154,10 +1279,6 @@ static int pl_disable_vote_callback(struct votable *votable,
 	total_fcc_ua = get_effective_result_locked(chip->fcc_votable);
 
 	if (chip->pl_mode != POWER_SUPPLY_PL_NONE && !pl_disable) {
-		/* keep system awake to talk to slave charger through i2c */
-		cancel_delayed_work_sync(&chip->pl_awake_work);
-		vote(chip->pl_awake_votable, PL_VOTER, true, 0);
-
 		rc = validate_parallel_icl(chip, &disable);
 		if (rc < 0)
 			return rc;
@@ -1295,7 +1416,10 @@ static int pl_disable_vote_callback(struct votable *votable,
 			/* main psy gets all share */
 			vote(chip->fcc_main_votable, MAIN_FCC_VOTER, true,
 								total_fcc_ua);
-			cp_configure_ilim(chip, FCC_VOTER, total_fcc_ua / 2);
+			cp_ilim = total_fcc_ua - get_effective_result_locked(
+							chip->fcc_main_votable);
+			if (cp_ilim > 0)
+				cp_configure_ilim(chip, FCC_VOTER, cp_ilim / 2);
 
 			/* reset parallel FCC */
 			chip->slave_fcc_ua = 0;
@@ -1306,16 +1430,19 @@ static int pl_disable_vote_callback(struct votable *votable,
 			if (chip->step_fcc) {
 				vote(chip->pl_awake_votable, FCC_STEPPER_VOTER,
 					true, 0);
+				/*
+				 * Configure ILIM above min ILIM of CP to
+				 * ensure CP is not disabled due to ILIM vote.
+				 * Later FCC stepper will take to ILIM to
+				 * target value.
+				 */
+				cp_configure_ilim(chip, FCC_VOTER, 0);
 				schedule_delayed_work(&chip->fcc_stepper_work,
 					0);
 			}
 		}
 
 		rerun_election(chip->fv_votable);
-
-		cancel_delayed_work_sync(&chip->pl_awake_work);
-		schedule_delayed_work(&chip->pl_awake_work,
-						msecs_to_jiffies(5000));
 	}
 
 	/* notify parallel state change */
@@ -1781,7 +1908,6 @@ int qcom_batt_init(int smb_version)
 	INIT_DELAYED_WORK(&chip->status_change_work, status_change_work);
 	INIT_WORK(&chip->pl_taper_work, pl_taper_work);
 	INIT_WORK(&chip->pl_disable_forever_work, pl_disable_forever_work);
-	INIT_DELAYED_WORK(&chip->pl_awake_work, pl_awake_work);
 	INIT_DELAYED_WORK(&chip->fcc_stepper_work, fcc_stepper_work);
 
 	rc = pl_register_notifier(chip);
@@ -1839,7 +1965,6 @@ void qcom_batt_deinit(void)
 	cancel_delayed_work_sync(&chip->status_change_work);
 	cancel_work_sync(&chip->pl_taper_work);
 	cancel_work_sync(&chip->pl_disable_forever_work);
-	cancel_delayed_work_sync(&chip->pl_awake_work);
 	cancel_delayed_work_sync(&chip->fcc_stepper_work);
 
 	power_supply_unreg_notifier(&chip->nb);

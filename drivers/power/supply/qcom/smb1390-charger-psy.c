@@ -187,6 +187,7 @@ struct smb1390 {
 	struct votable		*cp_awake_votable;
 	struct votable		*slave_disable_votable;
 	struct votable		*usb_icl_votable;
+	struct votable		*fcc_main_votable;
 
 	/* power supplies */
 	struct power_supply	*cps_psy;
@@ -211,6 +212,7 @@ struct smb1390 {
 	u32			max_temp_alarm_degc;
 	u32			max_cutoff_soc;
 	u32			pl_output_mode;
+	u32			pl_input_mode;
 	u32			cp_role;
 	enum isns_mode		current_capability;
 	bool			batt_soc_validated;
@@ -882,13 +884,38 @@ static int smb1390_slave_disable_vote_cb(struct votable *votable, void *data,
 			      int disable, const char *client)
 {
 	struct smb1390 *chip = data;
-	int rc;
+	int rc = 0, ilim_ua = 0;
 
 	rc = smb1390_masked_write(chip, CORE_CONTROL1_REG, CMD_EN_SL_BIT,
 					disable ? 0 : CMD_EN_SL_BIT);
-	if (rc < 0)
+	if (rc < 0) {
 		pr_err("Couldn't %s slave rc=%d\n",
 				disable ? "disable" : "enable", rc);
+		return rc;
+	}
+
+	/* Re-distribute ILIM to Master CP when Slave is disabled */
+	if (disable && (chip->ilim_votable)) {
+		ilim_ua = get_effective_result_locked(chip->ilim_votable);
+		if (ilim_ua > MAX_ILIM_UA)
+			ilim_ua = MAX_ILIM_UA;
+
+		if (ilim_ua < 500000) {
+			smb1390_dbg(chip, PR_INFO, "ILIM too low, not re-distributing, ilim=%duA\n",
+								ilim_ua);
+			return 0;
+		}
+
+		rc = smb1390_set_ilim(chip,
+		      DIV_ROUND_CLOSEST(ilim_ua - 500000, 100000));
+		if (rc < 0) {
+			pr_err("Failed to set ILIM, rc=%d\n", rc);
+			return rc;
+		}
+
+		smb1390_dbg(chip, PR_INFO, "Master ILIM set to %duA\n",
+								ilim_ua);
+	}
 
 	return rc;
 }
@@ -899,6 +926,7 @@ static int smb1390_ilim_vote_cb(struct votable *votable, void *data,
 	struct smb1390 *chip = data;
 	union power_supply_propval pval = {0, };
 	int rc = 0;
+	bool slave_enabled = false;
 
 	if (!is_psy_voter_available(chip) || chip->suspended)
 		return -EAGAIN;
@@ -917,7 +945,17 @@ static int smb1390_ilim_vote_cb(struct votable *votable, void *data,
 			ilim_uA);
 		vote(chip->disable_votable, ILIM_VOTER, true, 0);
 	} else {
+		/* Disable Slave CP if ILIM is < 2 * min ILIM */
 		if (is_cps_available(chip)) {
+			vote(chip->slave_disable_votable, ILIM_VOTER,
+				(ilim_uA < (2 * chip->min_ilim_ua)), 0);
+
+			if (get_effective_result(chip->slave_disable_votable)
+									== 0)
+				slave_enabled = true;
+		}
+
+		if (slave_enabled) {
 			ilim_uA /= 2;
 			pval.intval = DIV_ROUND_CLOSEST(ilim_uA - 500000,
 					100000);
@@ -936,7 +974,8 @@ static int smb1390_ilim_vote_cb(struct votable *votable, void *data,
 			return rc;
 		}
 
-		smb1390_dbg(chip, PR_INFO, "ILIM set to %duA\n", ilim_uA);
+		smb1390_dbg(chip, PR_INFO, "ILIM set to %duA slave_enabled%d\n",
+						ilim_uA, slave_enabled);
 		vote(chip->disable_votable, ILIM_VOTER, false, 0);
 	}
 
@@ -1001,6 +1040,36 @@ static int smb1390_notifier_cb(struct notifier_block *nb,
 #define ILIM_NR			10
 #define ILIM_DR			8
 #define ILIM_FACTOR(ilim)	((ilim * ILIM_NR) / ILIM_DR)
+
+static void smb1390_configure_ilim(struct smb1390 *chip, int mode)
+{
+	int rc;
+	union power_supply_propval pval = {0, };
+
+	/* PPS adapter reply on the current advertised by the adapter */
+	if ((chip->pl_output_mode == POWER_SUPPLY_PL_OUTPUT_VPH)
+			&& (mode == POWER_SUPPLY_CP_PPS)) {
+		rc = power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_PD_CURRENT_MAX, &pval);
+		if (rc < 0)
+			pr_err("Couldn't get PD CURRENT MAX rc=%d\n", rc);
+		else
+			vote(chip->ilim_votable, ICL_VOTER,
+					true, ILIM_FACTOR(pval.intval));
+	}
+
+	/* QC3.0/Wireless adapter rely on the settled AICL for USBMID_USBMID */
+	if ((chip->pl_input_mode == POWER_SUPPLY_PL_USBMID_USBMID)
+			&& (mode == POWER_SUPPLY_CP_HVDCP3)) {
+		rc = power_supply_get_property(chip->usb_psy,
+				POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED, &pval);
+		if (rc < 0)
+			pr_err("Couldn't get usb aicl rc=%d\n", rc);
+		else
+			vote(chip->ilim_votable, ICL_VOTER, true, pval.intval);
+	}
+}
+
 static void smb1390_status_change_work(struct work_struct *work)
 {
 	struct smb1390 *chip = container_of(work, struct smb1390,
@@ -1011,9 +1080,13 @@ static void smb1390_status_change_work(struct work_struct *work)
 	if (!is_psy_voter_available(chip))
 		goto out;
 
-	if (!smb1390_is_adapter_cc_mode(chip))
-		vote(chip->disable_votable, SOC_LEVEL_VOTER,
-		     smb1390_is_batt_soc_valid(chip) ? false : true, 0);
+	/*
+	 * If batt soc is not valid upon bootup, but becomes
+	 * valid due to the battery discharging later, remove
+	 * vote from SOC_LEVEL_VOTER.
+	 */
+	if (smb1390_is_batt_soc_valid(chip))
+		vote(chip->disable_votable, SOC_LEVEL_VOTER, false, 0);
 
 	rc = power_supply_get_property(chip->usb_psy,
 			POWER_SUPPLY_PROP_SMB_EN_MODE, &pval);
@@ -1050,28 +1123,7 @@ static void smb1390_status_change_work(struct work_struct *work)
 						pval.intval);
 		} else {
 			vote(chip->ilim_votable, WIRELESS_VOTER, false, 0);
-			if ((chip->pl_output_mode == POWER_SUPPLY_PL_OUTPUT_VPH)
-				&& (pval.intval == POWER_SUPPLY_CP_PPS)) {
-				rc = power_supply_get_property(chip->usb_psy,
-					POWER_SUPPLY_PROP_PD_CURRENT_MAX,
-					&pval);
-				if (rc < 0)
-					pr_err("Couldn't get PD CURRENT MAX rc=%d\n",
-							rc);
-				else
-					vote(chip->ilim_votable, ICL_VOTER,
-						true, ILIM_FACTOR(pval.intval));
-			} else {
-				rc = power_supply_get_property(chip->usb_psy,
-					POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
-					&pval);
-				if (rc < 0)
-					pr_err("Couldn't get usb aicl rc=%d\n",
-							rc);
-				else
-					vote(chip->ilim_votable, ICL_VOTER,
-							true, pval.intval);
-			}
+			smb1390_configure_ilim(chip, pval.intval);
 		}
 
 		/*
@@ -1142,11 +1194,14 @@ static int smb1390_validate_slave_chg_taper(struct smb1390 *chip, int fcc_uA)
 		smb1390_dbg(chip, PR_INFO, "Set Master ILIM to MAX, post Slave disable in taper, fcc=%d\n",
 									fcc_uA);
 		vote_override(chip->ilim_votable, CC_MODE_VOTER,
-						true, MAX_ILIM_DUAL_CP_UA);
+				smb1390_is_adapter_cc_mode(chip),
+				MAX_ILIM_DUAL_CP_UA);
+
 		if (chip->usb_icl_votable)
 			vote_override(chip->usb_icl_votable,
 				      TAPER_MAIN_ICL_LIMIT_VOTER,
-				      true, chip->cc_mode_taper_main_icl_ua);
+				      smb1390_is_adapter_cc_mode(chip),
+				      chip->cc_mode_taper_main_icl_ua);
 	}
 
 	return rc;
@@ -1156,10 +1211,19 @@ static void smb1390_taper_work(struct work_struct *work)
 {
 	struct smb1390 *chip = container_of(work, struct smb1390, taper_work);
 	union power_supply_propval pval = {0, };
-	int rc, fcc_uA, delta_fcc_uA;
+	int rc, fcc_uA, delta_fcc_uA, main_fcc_ua = 0;
 
 	if (!is_psy_voter_available(chip))
 		goto out;
+
+	if (!chip->fcc_main_votable)
+		chip->fcc_main_votable = find_votable("FCC_MAIN");
+
+	if (chip->fcc_main_votable)
+		main_fcc_ua = get_effective_result(chip->fcc_main_votable);
+
+	if (main_fcc_ua < 0)
+		main_fcc_ua = 0;
 
 	chip->taper_entry_fv = get_effective_result(chip->fv_votable);
 	while (true) {
@@ -1189,14 +1253,15 @@ static void smb1390_taper_work(struct work_struct *work)
 			smb1390_dbg(chip, PR_INFO, "taper work reducing FCC to %duA\n",
 				fcc_uA);
 			vote(chip->fcc_votable, CP_VOTER, true, fcc_uA);
-			rc = smb1390_validate_slave_chg_taper(chip, fcc_uA);
+			rc = smb1390_validate_slave_chg_taper(chip, (fcc_uA -
+							      main_fcc_ua));
 			if (rc < 0) {
 				pr_err("Couldn't Disable slave in Taper, rc=%d\n",
 				       rc);
 				goto out;
 			}
 
-			if (fcc_uA < (chip->min_ilim_ua * 2)) {
+			if ((fcc_uA - main_fcc_ua) < (chip->min_ilim_ua * 2)) {
 				vote(chip->disable_votable, TAPER_END_VOTER,
 								true, 0);
 				/*
@@ -1237,6 +1302,7 @@ static enum power_supply_property smb1390_charge_pump_props[] = {
 	POWER_SUPPLY_PROP_PARALLEL_OUTPUT_MODE,
 	POWER_SUPPLY_PROP_MIN_ICL,
 	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_PARALLEL_MODE,
 };
 
 static int smb1390_get_prop(struct power_supply *psy,
@@ -1336,6 +1402,9 @@ static int smb1390_get_prop(struct power_supply *psy,
 		val->strval = (chip->pmic_rev_id->rev4 > 2) ? "SMB1390_V3" :
 								"SMB1390_V2";
 		break;
+	case POWER_SUPPLY_PROP_PARALLEL_MODE:
+		val->intval = chip->pl_input_mode;
+		break;
 	default:
 		smb1390_dbg(chip, PR_MISC, "charge pump power supply get prop %d not supported\n",
 			prop);
@@ -1366,7 +1435,7 @@ static int smb1390_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CP_ILIM:
 		if (chip->ilim_votable)
 			vote_override(chip->ilim_votable, CC_MODE_VOTER,
-							true, val->intval);
+					(val->intval > 0), val->intval);
 		break;
 	default:
 		smb1390_dbg(chip, PR_MISC, "charge pump power supply set prop %d not supported\n",
@@ -1436,7 +1505,7 @@ static int smb1390_parse_dt(struct smb1390 *chip)
 			rc = PTR_ERR(chip->iio.die_temp_chan);
 			if (rc != -EPROBE_DEFER)
 				dev_err(chip->dev,
-					"cp_die_temp channel unavailable %ld\n",
+					"cp_die_temp channel unavailable %d\n",
 					rc);
 			chip->iio.die_temp_chan = NULL;
 			return rc;
@@ -1462,7 +1531,13 @@ static int smb1390_parse_dt(struct smb1390 *chip)
 	of_property_read_u32(chip->dev->of_node, "qcom,parallel-output-mode",
 			&chip->pl_output_mode);
 
-	chip->cp_slave_thr_taper_ua = chip->min_ilim_ua * 3;
+	/* Default parallel input configuration is USBMID connection */
+	chip->pl_input_mode = POWER_SUPPLY_PL_USBMID_USBMID;
+	of_property_read_u32(chip->dev->of_node, "qcom,parallel-input-mode",
+			&chip->pl_input_mode);
+
+	chip->cp_slave_thr_taper_ua = smb1390_is_adapter_cc_mode(chip) ?
+			(3 * chip->min_ilim_ua) : (4 * chip->min_ilim_ua);
 	of_property_read_u32(chip->dev->of_node, "qcom,cp-slave-thr-taper-ua",
 			      &chip->cp_slave_thr_taper_ua);
 

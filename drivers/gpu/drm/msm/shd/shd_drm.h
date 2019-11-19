@@ -20,6 +20,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
 #include "msm_drv.h"
+#include "dsi_display.h"
 
 struct shd_mode_info {
 	int x_offset;
@@ -48,9 +49,11 @@ struct shd_display_base {
 	int connector_type;
 	bool mst_port;
 	bool enabled;
+	bool enable_changed;
 };
 
 struct shd_display {
+	struct dsi_display dsi_base;
 	struct drm_device *drm_dev;
 	const char *name;
 	const char *display_type;
@@ -68,6 +71,7 @@ struct shd_display {
 	struct list_head head;
 
 	bool enabled;
+	bool enable_changed;
 };
 
 /* drm internal header */
@@ -78,5 +82,9 @@ void drm_minor_release(struct drm_minor *minor);
 void *sde_encoder_phys_shd_init(enum sde_intf_type type,
 			u32 controller_id, void *phys_init_params);
 
+/* helper for seamless plane handoff */
+u32 shd_get_shared_crtc_mask(struct drm_crtc *crtc);
+void shd_skip_shared_plane_update(struct drm_plane *plane,
+			struct drm_crtc *crtc);
 
 #endif /* _SHD_DRM_H_ */
