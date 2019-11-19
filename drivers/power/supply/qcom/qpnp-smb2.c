@@ -1635,6 +1635,7 @@ static int smb2_init_hw(struct smb2 *chip)
 	 * AICL configuration:
 	 * start from min and AICL ADC disable
 	 */
+	rc = smblib_write(chg, USBIN_CURRENT_LIMIT_CFG_REG, 0x18);//600ma
 	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
 			USBIN_AICL_START_AT_MAX_BIT
 				| USBIN_AICL_ADC_EN_BIT, 0);
