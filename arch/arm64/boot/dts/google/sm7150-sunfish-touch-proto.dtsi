@@ -29,7 +29,7 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&touch_power_default &touch_irq_default
-				&touch_reset_default &touch_switch_default>;
+				 &touch_switch_default>;
 
 		st,irq-gpio = <&tlmm 9 0>;
 		st,reset-gpio = <&tlmm 8 0>;
