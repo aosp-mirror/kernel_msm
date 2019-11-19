@@ -403,4 +403,6 @@ module_init(memory_dump_v2_init);
 #else
 pure_initcall(mem_dump_init);
 #endif
+
 MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Memory Dump V2");
