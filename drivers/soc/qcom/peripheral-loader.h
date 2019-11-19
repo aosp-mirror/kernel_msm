@@ -14,8 +14,6 @@ struct device;
 struct module;
 struct pil_priv;
 
-extern void *pil_ipc_log;
-
 #define pil_ipc(__msg, ...) \
 do { \
 	if (pil_ipc_log) \
