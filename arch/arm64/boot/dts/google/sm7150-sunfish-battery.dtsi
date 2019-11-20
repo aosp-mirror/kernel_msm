@@ -88,6 +88,10 @@
 			compatible = "google,sm7150_bms";
 			google,psy-name = "sm7150_bms";
 
+			pinctrl-names = "default";
+			pinctrl-0 = <&usb_otp_en_default>;
+			google,otp_en = <&pm6150_gpios 2 GPIO_ACTIVE_LOW>;
+
 			io-channels = <&pm6150_vadc ADC_BAT_THERM_PU2>,
 				      <&pm6150_vadc ADC_BAT_ID_PU2>;
 			io-channel-names = "batt-therm",
@@ -186,5 +190,37 @@
 		/* Must maintain < 1/15 duty cycle */
 		google,polling-freq = <3>;
 		#cooling-cells = <2>;
+	};
+};
+
+&tlmm {
+	ext_fg_alert {
+		ext_fg_alert_sleep: ext_fg_alert_sleep {
+			mux {
+				pins = "gpio66";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio66";
+				drive-strength = <2>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
+	};
+};
+
+&pm6150_gpios {
+	usb_otp_en {
+		usb_otp_en_default: usb_otp_en_default {
+			pins = "gpio2";
+			function = "normal";
+			qcom,drive-strength = <2>;
+			power-source = <0>;
+			bias-disable;
+			output-low;
+			input-disable;
+		};
 	};
 };
