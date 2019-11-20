@@ -303,7 +303,6 @@ config MSM_VIDEOCC_KONA
 
 config MSM_DISPCC_KONA
 	tristate "KONA Display Clock Controller"
-	select SDM_GCC_KONA
 	depends on COMMON_CLK_QCOM
 	help
 	  Support for the display clock controller on Qualcomm Technologies, Inc
@@ -339,7 +338,6 @@ config MSM_DEBUGCC_KONA
 config MSM_NPUCC_KONA
 	tristate "KONA NPU Clock Controller"
 	depends on COMMON_CLK_QCOM
-	select MSM_GCC_KONA
 	help
 	  Support for the NPU clock controller on Qualcomm Technologies, Inc.
 	  KONA devices.
