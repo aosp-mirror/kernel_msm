@@ -1,6 +1,9 @@
 KERNEL_DIR=private/msm-google
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.bramble.no-cfi
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.bramble.common.clang
+
+# Override the defconfig
 DEFCONFIG=bramble-gki_defconfig
+POST_DEFCONFIG_CMDS="check_defconfig"
 
 if [ ! -z "$BUILD_BOOT_IMG" ]; then
 BUILD_INITRAMFS=1
