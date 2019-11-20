@@ -1715,6 +1715,7 @@ int qcom_ice_setup_ice_hw(const char *storage_type, int enable)
 	else
 		return disable_ice_setup(ice_dev);
 }
+EXPORT_SYMBOL_GPL(qcom_ice_setup_ice_hw);
 
 struct list_head *get_ice_dev_list(void)
 {
