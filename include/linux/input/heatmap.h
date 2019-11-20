@@ -20,6 +20,12 @@ struct v4l2_heatmap {
 	size_t width;
 	size_t height;
 
+	/* The 'frame' storage is managed by the heatmap module.
+	 * The data inside frame is written inside read_frame(..)
+	 * and is read inside heatmap_read(..).
+	 */
+	strength_t *frame;
+
 	struct v4l2_fract timeperframe;
 
 	/* Used to protect access to the buffer queue */
@@ -28,11 +34,13 @@ struct v4l2_heatmap {
 	struct list_head heatmap_buffer_list;
 
 	/*
-	 * Function read_frame must be provided by the driver
-	 * It should return true on successful heatmap read
-	 * and false on failure
+	 * Function read_frame must be provided by the driver.
+	 * This function should write the video frame into the
+	 * 'frame' field of struct v4l2_heatmap.
+	 * It should return 'true' on successful heatmap read
+	 * and 'false' on failure.
 	 */
-	bool (*read_frame)(struct v4l2_heatmap *v4l2, strength_t *data);
+	bool (*read_frame)(struct v4l2_heatmap *v4l2);
 };
 
 int heatmap_probe(struct v4l2_heatmap *v4l2);
