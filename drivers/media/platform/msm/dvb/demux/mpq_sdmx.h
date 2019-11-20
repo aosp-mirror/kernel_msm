@@ -234,7 +234,7 @@ struct sdmx_filter_status {
 };
 #pragma pack(pop, sdmx)
 
-#ifdef CONFIG_QSEECOM
+#if IS_ENABLED(CONFIG_QSEECOM)
 
 int sdmx_open_session(int *session_handle);
 
