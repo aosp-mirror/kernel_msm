@@ -354,3 +354,7 @@
 		status = "disabled";
 	};
 };
+
+&cam_cci1 {
+	status = "disabled";
+};
