@@ -1750,3 +1750,5 @@ void hdcp1_stop(void *data)
 	hdcp1_app_unload(hdcp1_handle);
 }
 EXPORT_SYMBOL_GPL(hdcp1_stop);
+
+MODULE_LICENSE("GPL v2");
