@@ -654,7 +654,7 @@ config QCOM_GLINK_PKT
 	  some glink packets channel.
 
 config QCOM_SMP2P_SLEEPSTATE
-	bool "SMP2P Sleepstate notifier"
+	tristate "SMP2P Sleepstate notifier"
 	depends on QCOM_SMP2P
 	help
 	  When this option is enabled, notifications are sent to remote procs
