@@ -382,4 +382,6 @@ static struct platform_driver msm_rpmstats_driver = {
 		.of_match_table = rpm_stats_table,
 	},
 };
-builtin_platform_driver(msm_rpmstats_driver);
+module_platform_driver(msm_rpmstats_driver);
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM RPMH Statistics driver");
