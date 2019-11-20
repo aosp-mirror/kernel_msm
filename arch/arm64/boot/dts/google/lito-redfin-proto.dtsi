@@ -13,3 +13,4 @@
 
 #include "lito-redfin.dtsi"
 #include "lito-redfin-camera-sensor.dtsi"
+#include "lito-redfin-pac193x.dtsi"
