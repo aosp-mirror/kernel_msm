@@ -149,7 +149,7 @@ void tmc_enable_hw(struct tmc_drvdata *drvdata)
 
 void tmc_disable_hw(struct tmc_drvdata *drvdata)
 {
-	drvdata->enable = false;
+	drvdata->enable = true;
 	writel_relaxed(0x0, drvdata->base + TMC_CTL);
 }
 
