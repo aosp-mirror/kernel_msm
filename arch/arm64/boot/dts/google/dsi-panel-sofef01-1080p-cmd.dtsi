@@ -14,6 +14,11 @@
 	dsi_sofef01_sdc_1080p_cmd: qcom,mdss_dsi_sofef01_sdc_1080p_cmd {
 		compatible = "google,dsi_binned_lp";
 		qcom,mdss-dsi-panel-name = "sofef01 cmd mode dsi sdc panel";
+		google,mdss-dsi-panel-vendor = "SAMSUNG";
+		google,mdss-dsi-panel-sn-location = <0xA1 3 5>;
+		google,mdss-dsi-panel-vendor-extinfo-loc = <0xDA 0 1>,
+							   <0xDB 0 1>,
+							   <0xDC 0 1>;
 		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
 		qcom,mdss-dsi-panel-physical-type = "oled";
 		qcom,mdss-dsi-virtual-channel-id = <0>;
