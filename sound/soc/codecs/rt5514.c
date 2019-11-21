@@ -310,7 +310,9 @@ static int rt5514_dsp_frame_flag_get(struct snd_kcontrol *kcontrol,
 	u8 buf[8];
 	unsigned int value_spi, value_i2c;
 
+	rt5514_spi_request_switch(spi_switch_mask_load, 1);
 	rt5514_spi_burst_read(RT5514_BUFFER_MUSIC_WP, (u8 *)&buf, sizeof(buf));
+	rt5514_spi_request_switch(spi_switch_mask_load, 0);
 	value_spi = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 	if ((value_spi & 0xffe00000) != 0x4fe00000) {
 		ucontrol->value.integer.value[0] = 0;
@@ -830,8 +832,9 @@ void rt5514_watchdog_handler(void)
 		regmap_multi_reg_write(rt5514_g_i2c_regmap,
 			rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
 	}
-
+	rt5514_spi_request_switch(spi_switch_mask_load, 1);
 	rt5514_dsp_enable(g_rt5514, false, true);
+	rt5514_spi_request_switch(spi_switch_mask_load, 0);
 }
 EXPORT_SYMBOL_GPL(rt5514_watchdog_handler);
 
@@ -848,7 +851,10 @@ static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 		rt5514->dsp_enabled_last = rt5514->dsp_enabled;
 		rt5514->dsp_enabled = ucontrol->value.integer.value[0];
 
+		rt5514_spi_request_switch(spi_switch_mask_load, 1);
 		rt5514_dsp_enable(rt5514, false, false);
+		rt5514_spi_request_switch(spi_switch_mask_load, 0);
+
 	} else {
 		if (rt5514->dsp_enabled | rt5514->dsp_adc_enabled) {
 			if (!ucontrol->value.integer.value[0] &&
@@ -912,7 +918,9 @@ static int rt5514_dsp_adc_put(struct snd_kcontrol *kcontrol,
 
 	if (snd_soc_component_get_bias_level(component) == SND_SOC_BIAS_OFF) {
 		rt5514->dsp_adc_enabled = ucontrol->value.integer.value[0];
+		rt5514_spi_request_switch(spi_switch_mask_load, 1);
 		rt5514_dsp_enable(rt5514, true, false);
+		rt5514_spi_request_switch(spi_switch_mask_load, 0);
 	} else {
 		if (rt5514->dsp_enabled) {
 			rt5514->dsp_adc_enabled =
@@ -994,7 +1002,9 @@ static int rt5514_hw_reset_set(struct snd_kcontrol *kcontrol,
 		gpiod_set_value(rt5514->gpiod_reset, 0);
 		usleep_range(1000, 2000);
 		gpiod_set_value(rt5514->gpiod_reset, 1);
+		rt5514_spi_request_switch(spi_switch_mask_load, 1);
 		rt5514_dsp_enable(rt5514, false, true);
+		rt5514_spi_request_switch(spi_switch_mask_load, 0);
 	}
 
 	return 0;
@@ -1080,9 +1090,12 @@ static int rt5514_ambient_payload_put(struct snd_kcontrol *kcontrol,
 	regmap_read(rt5514->i2c_regmap, 0x18002fd8, &rt5514->payload.size);
 	regmap_read(rt5514->i2c_regmap, 0x18002fdc, &rt5514->payload.status);
 
-	if ((payload_addr & 0xffe00000) == 0x4fe00000)
+	if ((payload_addr & 0xffe00000) == 0x4fe00000) {
+		rt5514_spi_request_switch(spi_switch_mask_load, 1);
 		rt5514_spi_burst_read(payload_addr, (u8 *)&rt5514->payload.data,
 			AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE);
+		rt5514_spi_request_switch(spi_switch_mask_load, 0);
+	}
 
 	return ret;
 }
@@ -1119,9 +1132,12 @@ static int rt5514_ambient_process_payload_get(struct snd_kcontrol *kcontrol,
 	regmap_read(rt5514->i2c_regmap, 0x18002fe0, &payload_addr);
 	regmap_read(rt5514->i2c_regmap, 0x18002fe4, &rt5514->payload.size);
 
-	if ((payload_addr & 0xffe00000) == 0x4fe00000)
+	if ((payload_addr & 0xffe00000) == 0x4fe00000) {
+		rt5514_spi_request_switch(spi_switch_mask_load, 1);
 		rt5514_spi_burst_read(payload_addr, (u8 *)&rt5514->payload.data,
 			AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE);
+		rt5514_spi_request_switch(spi_switch_mask_load, 0);
+	}
 
 	if (copy_to_user(bytes, &rt5514->payload, sizeof(struct _payload_st))) {
 		dev_warn(component->dev, "%s(), copy_to_user fail\n", __func__);
@@ -1162,6 +1178,7 @@ static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
 	}
 
 	dev_info(component->dev, "Test 1 IMEM 0\n");
+	rt5514_spi_request_switch(spi_switch_mask_load, 1);
 	memset(buf1, 0, 0x18000);
 	rt5514_spi_burst_write(0x4ff00000, buf1, 0x18000);
 	rt5514_spi_burst_read(0x4ff00000, buf2, 0x18000);
@@ -1194,10 +1211,10 @@ static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
 	dev_info(component->dev, "Test done\n");
 
 failed:
-
 	regmap_multi_reg_write(rt5514->i2c_regmap,
 		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
 	rt5514_dsp_enable(rt5514, false, true);
+	rt5514_spi_request_switch(spi_switch_mask_load, 0);
 	ucontrol->value.integer.value[0] = !!ret;
 
 	kfree(buf1);
@@ -2269,8 +2286,6 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 				    ARRAY_SIZE(rt5514_patch));
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
-
-	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
 
 	rt5514->divider_param = DIVIDER_1_P536;
 
