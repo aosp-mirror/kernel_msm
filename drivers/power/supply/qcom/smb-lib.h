@@ -358,6 +358,8 @@ struct smb_charger {
 	bool			disable_stat_sw_override;
 	bool			in_chg_lock;
 	bool			fcc_stepper_enable;
+	bool			vzn_retailmode_charging;
+	int			is_retailmode;
 
 	/* workaround flag */
 	u32			wa_flags;

@@ -198,6 +198,14 @@ module_param_named(
 	audio_headset_drp_wait_ms, __audio_headset_drp_wait_ms, int, 0600
 );
 
+static bool is_VZN = true;
+static int __init get_sku_cmdline(char *buff)
+{
+	is_VZN = (strcmp(buff, "EFC4") == 0) ? true : false;
+	return 0;
+}
+early_param("androidboot.sku", get_sku_cmdline);
+
 #define MICRO_1P5A		1500000
 #define MICRO_P1A		100000
 #define OTG_DEFAULT_DEGLITCH_TIME_MS	50
@@ -336,6 +344,9 @@ static int smb2_parse_dt(struct smb2 *chip)
 
 	chg->fcc_stepper_enable = of_property_read_bool(node,
 					"qcom,fcc-stepping-enable");
+
+	chg->vzn_retailmode_charging = of_property_read_bool(node,
+					"qcom,vzn-retailmode-charging");
 
 	return 0;
 }
@@ -968,6 +979,43 @@ static int smb2_init_dc_psy(struct smb2 *chip)
 	return 0;
 }
 
+#define UPPER_SOC	35
+#define LOWER_SOC	30
+static void smb2_check_and_limit_soc(struct smb_charger *chg, int soc)
+{
+	int rc;
+	u8 val;
+
+	if (!chg->is_retailmode || !is_VZN)
+		return;
+
+	rc = smblib_read(chg, CHARGING_ENABLE_CMD_REG, &val);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't read CHARGING_ENABLE_CMD_REG rc=%d\n",
+			rc);
+		return;
+	}
+
+	if (soc >= UPPER_SOC && val > 0) {
+		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
+					CHARGING_ENABLE_CMD_BIT, 0);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't write CHARGING_ENABLE_CMD_REG rc=%d\n",
+				rc);
+			return;
+		}
+	} else if (soc <= LOWER_SOC && val == 0) {
+		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
+				CHARGING_ENABLE_CMD_BIT,
+				CHARGING_ENABLE_CMD_BIT);
+		if (rc < 0) {
+			dev_err(chg->dev, "Couldn't write CHARGING_ENABLE_CMD_REG rc=%d\n",
+				rc);
+			return;
+		}
+	}
+}
+
 /*************************
  * BATT PSY REGISTRATION *
  *************************/
@@ -1005,6 +1053,7 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	POWER_SUPPLY_PROP_RESTRICTED_CHARGING,
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -1033,6 +1082,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		rc = smblib_get_prop_batt_capacity(chg, val);
+		//VZN retail mode charging control
+		if (chg->vzn_retailmode_charging)
+			smb2_check_and_limit_soc(chg, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		rc = smblib_get_prop_system_temp_level(chg, val);
@@ -1121,6 +1173,9 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE:
 		val->intval = chg->fcc_stepper_enable;
+		break;
+	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
+		val->intval = chg->is_retailmode;
 		break;
 	default:
 		pr_err("batt power supply prop %d not supported\n", psp);
@@ -1223,6 +1278,9 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 		chg->die_health = val->intval;
 		power_supply_changed(chg->batt_psy);
 		break;
+	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
+		chg->is_retailmode = val->intval;
+		break;
 	default:
 		rc = -EINVAL;
 	}
@@ -1245,6 +1303,7 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STEP_CHARGING_ENABLED:
 	case POWER_SUPPLY_PROP_SW_JEITA_ENABLED:
 	case POWER_SUPPLY_PROP_DIE_HEALTH:
+	case POWER_SUPPLY_PROP_RESTRICTED_CHARGING:
 		return 1;
 	default:
 		break;
@@ -2359,6 +2418,7 @@ static int smb2_probe(struct platform_device *pdev)
 	chg->die_health = -EINVAL;
 	chg->name = "PMI";
 	chg->audio_headset_drp_wait_ms = &__audio_headset_drp_wait_ms;
+	chg->is_retailmode = 0;
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {
