@@ -1077,6 +1077,87 @@ static int rt5514_ambient_process_payload_get(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+	u8 *buf1, *buf2;
+	int ret;
+
+	if (!rt5514->v_p) {
+		ucontrol->value.integer.value[0] = 2;
+		return 0;
+	}
+
+	regmap_multi_reg_write(rt5514->i2c_regmap,
+		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+	rt5514_enable_dsp_prepare(rt5514);
+
+	buf1 = kmalloc(0xb8000, GFP_KERNEL);
+	if (!buf1) {
+		ucontrol->value.integer.value[0] = 3;
+		return 0;
+	}
+
+	buf2 = kmalloc(0xb8000, GFP_KERNEL);
+	if (!buf2) {
+		ucontrol->value.integer.value[0] = 3;
+		kfree(buf1);
+		return 0;
+	}
+
+	dev_info(component->dev, "Test 1 IMEM 0\n");
+	memset(buf1, 0, 0x18000);
+	rt5514_spi_burst_write(0x4ff00000, buf1, 0x18000);
+	rt5514_spi_burst_read(0x4ff00000, buf2, 0x18000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0x18000);
+	if (ret)
+		goto failed;
+
+	dev_info(component->dev, "Test 2 IMEM 1\n");
+	memset(buf1, 0xff, 0x18000);
+	rt5514_spi_burst_write(0x4ff00000, buf1, 0x18000);
+	rt5514_spi_burst_read(0x4ff00000, buf2, 0x18000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0x18000);
+	if (ret)
+		goto failed;
+
+	dev_info(component->dev, "Test 3 DMEM 0\n");
+	memset(buf1, 0, 0xb8000);
+	rt5514_spi_burst_write(0x4fe00000, buf1, 0xb8000);
+	rt5514_spi_burst_read(0x4fe00000, buf2, 0xb8000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0xb8000);
+	if (ret)
+		goto failed;
+
+	dev_info(component->dev, "Test 4 DMEM 1\n");
+	memset(buf1, 0xff, 0xb8000);
+	rt5514_spi_burst_write(0x4fe00000, buf1, 0xb8000);
+	rt5514_spi_burst_read(0x4fe00000, buf2, 0xb8000);
+	ret = rt5514_memcmp(rt5514, buf1, buf2, 0xb8000);
+
+	dev_info(component->dev, "Test done\n");
+
+failed:
+
+	regmap_multi_reg_write(rt5514->i2c_regmap,
+		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+	rt5514_dsp_enable(rt5514, false, true);
+	ucontrol->value.integer.value[0] = !!ret;
+
+	kfree(buf1);
+	kfree(buf2);
+
+	return 0;
+}
+
+static const char * const rt5514_mem_test_txt[] = {
+	"PASS", "FAIL", "NOT_SUPPORT", "OUT_OF_MEMORY",
+};
+static SOC_ENUM_SINGLE_EXT_DECL(rt5514_mem_test, rt5514_mem_test_txt);
+
+
 static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 	SOC_DOUBLE_TLV("MIC Boost Volume", RT5514_ANA_CTRL_MICBST,
 		RT5514_SEL_BSTL_SFT, RT5514_SEL_BSTR_SFT, 8, 0, bst_tlv),
@@ -1112,6 +1193,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_dsp_frame_flag_get, NULL),
 	SOC_SINGLE_EXT("DSP Test", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_dsp_test_get, rt5514_dsp_test_put),
+	SOC_ENUM_EXT("Mem Test", rt5514_mem_test,
+		rt5514_mem_test_get, NULL),
 	/* 0 => Stereo ; 1 => Mono */
 	SOC_SINGLE_EXT("DSP Buffer Channel", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_dsp_buf_ch_get, rt5514_dsp_buf_ch_put),
