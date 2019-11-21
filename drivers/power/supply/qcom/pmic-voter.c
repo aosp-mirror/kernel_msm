@@ -498,6 +498,7 @@ out:
 	unlock_votable(votable);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(vote);
 
 /**
  * vote_override() -
@@ -599,6 +600,7 @@ out:
 	else
 		return NULL;
 }
+EXPORT_SYMBOL_GPL(find_votable);
 
 static int force_active_get(void *data, u64 *val)
 {
