@@ -959,6 +959,7 @@ void clk_zonda_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	regmap_update_bits(regmap, PLL_MODE(pll),
 				 PLL_RESET_N, PLL_RESET_N);
 }
+EXPORT_SYMBOL_GPL(clk_zonda_pll_configure);
 
 static int clk_zonda_pll_enable(struct clk_hw *hw)
 {
@@ -1684,6 +1685,7 @@ void clk_lucid_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	regmap_update_bits(regmap, PLL_MODE(pll),
 				 PLL_RESET_N, PLL_RESET_N);
 }
+EXPORT_SYMBOL_GPL(clk_lucid_pll_configure);
 
 static int alpha_pll_lucid_enable(struct clk_hw *hw)
 {
