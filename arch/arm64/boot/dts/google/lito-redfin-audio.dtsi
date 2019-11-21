@@ -30,6 +30,8 @@
 
 	qcom,codec-max-aux-devs = <0>;
 	/delete-property/ qcom,codec-aux-devs;
+
+	audio_hac-amp-gpios = <&tlmm 5 0>;
 };
 
 &cdc_dmic01_gpios {
