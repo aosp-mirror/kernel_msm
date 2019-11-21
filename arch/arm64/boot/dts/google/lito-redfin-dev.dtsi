@@ -14,6 +14,31 @@
 #include "lito-redfin.dtsi"
 #include "lito-redfin-camera-sensor.dtsi"
 
+&pm7250b_gpios {
+	/delete-node/ disp_pins;
+};
+
+&pm8150l_gpios {
+	disp_pins {
+		disp_pins_default: disp_pins_default {
+			pins = "gpio8";
+			function = "normal";
+			qcom,drive-strength = <2>;
+			power-source = <1>;
+			bias-disable;
+			output-low;
+		};
+	};
+};
+
 &sde_dsi {
 	qcom,dsi-default-panel = <&dsi_sofef00_sdc_1080p_cmd>;
+};
+
+&dsi_s6e3hc2_dsc_1080p_cmd {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};
+
+&dsi_sim_vid {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
 };
