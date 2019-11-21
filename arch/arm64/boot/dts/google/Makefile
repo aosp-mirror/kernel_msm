@@ -16,6 +16,13 @@ lito-bramble-proto1_6-overlay.dtbo-base := qcom-base/lito.dtb
 lito-bramble-evt-overlay.dtbo-base := qcom-base/lito.dtb
 
 
+dtbo-$(CONFIG_BOARD_BRAMBLE) += \
+	lito-bramble_m-proto-overlay.dtbo
+
+
+lito-bramble_m-proto-overlay.dtbo-base := qcom-base/lito.dtb
+
+
 dtbo-$(CONFIG_BOARD_REDFIN) += \
 	lito-redfin-dev1.0-overlay.dtbo \
 	lito-redfin-proto-sop-overlay.dtbo \
