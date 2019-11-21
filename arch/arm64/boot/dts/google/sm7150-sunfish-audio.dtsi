@@ -325,14 +325,13 @@
 		ter_tdm_sleep: ter_tdm_sleep {
 			mux {
 				pins = "gpio53";
-				function = "gpio";
+				function = "ter_mi2s";
 			};
 
 			config {
 				pins = "gpio53";
 				drive-strength = <2>;   /* 2 mA */
-				bias-pull-down;         /* PULL DOWN */
-				input-enable;
+				bias-disable;
 			};
 		};
 
@@ -354,14 +353,13 @@
 		ter_tdm_ws_sleep: ter_tdm_ws_sleep {
 			mux {
 				pins = "gpio54";
-				function = "gpio";
+				function = "ter_mi2s";
 			};
 
 			config {
 				pins = "gpio54";
 				drive-strength = <2>;   /* 2 mA */
-				bias-pull-down;         /* PULL DOWN */
-				input-enable;
+				bias-disable;
 			};
 		};
 
@@ -383,14 +381,13 @@
 		ter_tdm_dout_sleep: ter_tdm_dout_sleep {
 			mux {
 				pins = "gpio56";
-				function = "gpio";
+				function = "ter_mi2s";
 			};
 
 			config {
 				pins = "gpio56";
 				drive-strength = <2>;   /* 2 mA */
-				bias-pull-down;         /* PULL DOWN */
-				input-enable;
+				bias-disable;
 			};
 		};
 
@@ -412,14 +409,13 @@
 		ter_tdm_din_sleep: ter_tdm_din_sleep {
 			mux {
 				pins = "gpio55";
-				function = "gpio";
+				function = "ter_mi2s";
 			};
 
 			config {
 				pins = "gpio55";
 				drive-strength = <2>;   /* 2 mA */
-				bias-pull-down;         /* PULL DOWN */
-				input-enable;
+				bias-disable;
 			};
 		};
 
