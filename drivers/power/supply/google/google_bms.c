@@ -50,6 +50,7 @@ const char *gbms_chg_type_s(int cgh_type)
 		return "<err>";
 	return psy_chgt_str[cgh_type];
 }
+EXPORT_SYMBOL_GPL(gbms_chg_type_s);
 
 static const char *psy_chgs_str[] = {
 	"Unknown", "Charging", "Discharging", "Not Charging", "Full"
@@ -61,6 +62,7 @@ const char *gbms_chg_status_s(int chg_status)
 		return "<err>";
 	return psy_chgs_str[chg_status];
 }
+EXPORT_SYMBOL_GPL(gbms_chg_status_s);
 
 
 const char *gbms_chg_ev_adapter_s(int adapter)
@@ -73,6 +75,7 @@ const char *gbms_chg_ev_adapter_s(int adapter)
 		return "<err>";
 	return chg_ev_adapter_type_str[adapter];
 }
+EXPORT_SYMBOL_GPL(gbms_chg_ev_adapter_s);
 
 /* convert C rates to current. Caller can account for tolerances reducing
  * battery_capacity. fv_uv_resolution is used to create discrete steps.
@@ -102,6 +105,7 @@ void gbms_init_chg_table(struct gbms_chg_profile *profile, u32 capacity_ma)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(gbms_init_chg_table);
 
 /* configure standard device charge profile properties */
 static int gbms_read_cccm_limits(struct gbms_chg_profile *profile,
@@ -244,12 +248,14 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(gbms_init_chg_profile_internal);
 
 void gbms_free_chg_profile(struct gbms_chg_profile *profile)
 {
 	kfree(profile->cccm_limits);
 	profile->cccm_limits = 0;
 }
+EXPORT_SYMBOL_GPL(gbms_free_chg_profile);
 
 /* NOTE: I should really pass the scale */
 void gbms_dump_raw_profile(const struct gbms_chg_profile *profile, int scale)
@@ -280,6 +286,7 @@ void gbms_dump_raw_profile(const struct gbms_chg_profile *profile, int scale)
 		gbms_info(profile, "%s\n", buff);
 	}
 }
+EXPORT_SYMBOL_GPL(gbms_dump_raw_profile);
 
 int gbms_msc_round_fv_uv(const struct gbms_chg_profile *profile,
 			   int vtier, int fv_uv)
@@ -299,6 +306,7 @@ int gbms_msc_round_fv_uv(const struct gbms_chg_profile *profile,
 
 	return result;
 }
+EXPORT_SYMBOL_GPL(gbms_msc_round_fv_uv);
 
 /* charge profile idx based on the battery temperature
  * TODO: return -1 when temperature is lower than profile->temp_limits[0] or
@@ -314,6 +322,7 @@ int gbms_msc_temp_idx(const struct gbms_chg_profile *profile, int temp)
 
 	return temp_idx;
 }
+EXPORT_SYMBOL_GPL(gbms_msc_temp_idx);
 
 /* Compute the step index given the battery voltage
  * When selecting an index need to make sure that headroom for the tier voltage
@@ -341,6 +350,7 @@ int gbms_msc_voltage_idx(const struct gbms_chg_profile *profile, int vbatt)
 
 	return vbatt_idx;
 }
+EXPORT_SYMBOL_GPL(gbms_msc_voltage_idx);
 
 uint8_t gbms_gen_chg_flags(int chg_status, int chg_type)
 {
@@ -375,6 +385,7 @@ int gbms_cycle_count_cstr_bc(char *buf, size_t size,
 
 	return len;
 }
+EXPORT_SYMBOL_GPL(gbms_cycle_count_cstr_bc);
 
 /* parse the result of gbms_cycle_count_cstr_bc() back to array */
 int gbms_cycle_count_sscan_bc(u16 *ccount, int bcnt, const char *buff)
@@ -400,3 +411,4 @@ int gbms_cycle_count_sscan_bc(u16 *ccount, int bcnt, const char *buff)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(gbms_cycle_count_sscan_bc);
