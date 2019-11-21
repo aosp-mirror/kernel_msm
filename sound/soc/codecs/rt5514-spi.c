@@ -32,15 +32,19 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
+#include <linux/of_gpio.h>
 
-#include "rt5514.h"
 #include "rt5514-spi.h"
+#include "rt5514.h"
 
 #define DRV_NAME "rt5514-spi"
 
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
+static struct mutex switch_lock;
 static struct wakeup_source rt5514_spi_ws;
+static int spi_switch_mask;
+static int handshake_gpio, handshake_ack_gpio;
 
 struct rt5514_dsp {
 	struct device *dev;
@@ -265,6 +269,7 @@ static const unsigned int rt5514_regdump_table2[] = {
 	0x18002fd0, 0x18002fd4, 0x18002fd8, 0x18002fdc, 0x18002fe0,
 	0x18002fe4, 0x18002fe8, 0x18002fec, 0x18002ff0, 0x18002ff4,
 };
+
 static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 {
 	struct _dbgBuf_Mem dbgbuf;
@@ -275,8 +280,10 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	if (!(val[0] & 0x2))
 		return false;
 
+	rt5514_spi_request_switch(spi_switch_mask_load, 1);
 	rt5514_spi_burst_read(RT5514_DBG_BUF_ADDR, (u8 *)&dbgbuf,
 		RT5514_DBG_BUF_SIZE);
+	rt5514_spi_request_switch(spi_switch_mask_load, 0);
 
 	dev_err(rt5514_dsp->dev, "[DSP Dump]");
 	for (i = 0; i < RT5514_DBG_BUF_CNT; i++)
@@ -324,6 +331,59 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	return true;
 }
 
+void rt5514_spi_request_switch(int mask, bool is_require)
+{
+	int timeout = 10; /* 100 ms = 10 x 10ms */
+	int previous_mask = spi_switch_mask;
+	bool skip_handshake = false;
+
+	if (handshake_gpio <= 0 || handshake_ack_gpio <= 0) {
+		pr_warn("%s: failed to get handshake gpio, \
+			skip handshaking before switch", __func__);
+		skip_handshake = true;
+	}
+
+	mutex_lock(&switch_lock);
+	if (is_require) {
+		spi_switch_mask |= mask;
+	} else {
+		spi_switch_mask &= ~mask;
+	}
+
+	if (!previous_mask == !spi_switch_mask) {
+		mutex_unlock(&switch_lock);
+		return;
+	}
+
+	if (spi_switch_mask > 0) {
+		pr_info("%s: on (mask=%2x)", __func__, spi_switch_mask);
+		mutex_unlock(&switch_lock);
+		if (!skip_handshake) {
+			/* Set handshake GPIO */
+			gpio_set_value(handshake_gpio, 1);
+			/* Wait for handshake ack */
+			while (gpio_get_value(handshake_ack_gpio) == 1 &&
+				timeout > 0) {
+				usleep_range(10000, 10010); /* 10ms */
+				timeout--;
+			}
+			if (timeout == 0) {
+				pr_warn("%s: Timeout! Force switch", __func__);
+			}
+		}
+		/* Set switch pin back */
+		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 0);
+	} else {
+		pr_info("%s: off (mask=%2x)", __func__, spi_switch_mask);
+		mutex_unlock(&switch_lock);
+		/* Set switch pin to CHRE */
+		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 1);
+		/* Set handshake GPIO */
+		if (!skip_handshake)
+			gpio_set_value(handshake_gpio, 0);
+	}
+}
+
 static void rt5514_spi_copy_work_0(struct work_struct *work)
 {
 	struct rt5514_dsp *rt5514_dsp =
@@ -334,14 +394,19 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	u8 buf[8];
 
 	mutex_lock(&rt5514_dsp->dma_lock);
+
+	rt5514_spi_request_switch(spi_switch_mask_work_0, 1);
+
 	if (!rt5514_dsp->substream[0]) {
 		dev_err(rt5514_dsp->dev, "No pcm0 substream\n");
+		rt5514_spi_request_switch(spi_switch_mask_work_0, 0);
 		goto done;
 	}
 
 	runtime = rt5514_dsp->substream[0]->runtime;
 	period_bytes = snd_pcm_lib_period_bytes(rt5514_dsp->substream[0]);
 	if (!period_bytes) {
+		rt5514_spi_request_switch(spi_switch_mask_work_0, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_0,
 			msecs_to_jiffies(50));
 		goto done;
@@ -349,6 +414,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 
 	/* check if hw has space for one period_size */
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
+		rt5514_spi_request_switch(spi_switch_mask_work_0, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_0,
 			msecs_to_jiffies(50));
 		goto done;
@@ -365,6 +431,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 |
 					buf[3] << 24;
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
+			rt5514_spi_request_switch(spi_switch_mask_work_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
 				msecs_to_jiffies(50));
 			goto done;
@@ -379,6 +446,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 				(cur_wp - rt5514_dsp->buf_base[0]);
 
 		if (remain_data < period_bytes) {
+			rt5514_spi_request_switch(spi_switch_mask_work_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
 				msecs_to_jiffies(50));
 			goto done;
@@ -417,7 +485,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 
 	snd_pcm_period_elapsed(rt5514_dsp->substream[0]);
 
-	schedule_delayed_work(&rt5514_dsp->copy_work_0, msecs_to_jiffies(10));
+	schedule_delayed_work(&rt5514_dsp->copy_work_0, msecs_to_jiffies(0));
 
 done:
 	mutex_unlock(&rt5514_dsp->dma_lock);
@@ -433,14 +501,19 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	u8 buf[8];
 
 	mutex_lock(&rt5514_dsp->dma_lock);
+
+	rt5514_spi_request_switch(spi_switch_mask_work_1, 1);
+
 	if (!rt5514_dsp->substream[1]) {
 		dev_err(rt5514_dsp->dev, "No pcm1 substream\n");
+		rt5514_spi_request_switch(spi_switch_mask_work_1, 0);
 		goto done;
 	}
 
 	runtime = rt5514_dsp->substream[1]->runtime;
 	period_bytes = snd_pcm_lib_period_bytes(rt5514_dsp->substream[1]);
 	if (!period_bytes) {
+		rt5514_spi_request_switch(spi_switch_mask_work_1, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_1,
 			msecs_to_jiffies(50));
 		goto done;
@@ -448,6 +521,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 
 	/* check if hw has space for one period_size */
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
+		rt5514_spi_request_switch(spi_switch_mask_work_1, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_1,
 			msecs_to_jiffies(50));
 		goto done;
@@ -464,6 +538,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 |
 					buf[3] << 24;
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
+			rt5514_spi_request_switch(spi_switch_mask_work_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
 				msecs_to_jiffies(50));
 			goto done;
@@ -478,6 +553,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 				(cur_wp - rt5514_dsp->buf_base[1]);
 
 		if (remain_data < period_bytes) {
+			rt5514_spi_request_switch(spi_switch_mask_work_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
 				msecs_to_jiffies(50));
 			goto done;
@@ -516,7 +592,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 
 	snd_pcm_period_elapsed(rt5514_dsp->substream[1]);
 
-	schedule_delayed_work(&rt5514_dsp->copy_work_1, msecs_to_jiffies(10));
+	schedule_delayed_work(&rt5514_dsp->copy_work_1, msecs_to_jiffies(0));
 
 done:
 	mutex_unlock(&rt5514_dsp->dma_lock);
@@ -532,14 +608,19 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	u8 buf[8];
 
 	mutex_lock(&rt5514_dsp->dma_lock);
+
+	rt5514_spi_request_switch(spi_switch_mask_work_2, 1);
+
 	if (!rt5514_dsp->substream[2]) {
 		dev_err(rt5514_dsp->dev, "No pcm2 substream\n");
+		rt5514_spi_request_switch(spi_switch_mask_work_2, 0);
 		goto done;
 	}
 
 	runtime = rt5514_dsp->substream[2]->runtime;
 	period_bytes = snd_pcm_lib_period_bytes(rt5514_dsp->substream[2]);
 	if (!period_bytes) {
+		rt5514_spi_request_switch(spi_switch_mask_work_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
 			msecs_to_jiffies(50));
 		goto done;
@@ -547,6 +628,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 
 	/* check if hw has space for one period_size */
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
+		rt5514_spi_request_switch(spi_switch_mask_work_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
 			msecs_to_jiffies(50));
 		goto done;
@@ -561,6 +643,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 		sizeof(buf));
 	cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 	if ((cur_wp & 0xffe00000) != 0x4fe00000) {
+		rt5514_spi_request_switch(spi_switch_mask_work_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
 			msecs_to_jiffies(50));
 		goto done;
@@ -574,6 +657,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 			(cur_wp - rt5514_dsp->buf_base[2]);
 
 	if (remain_data < period_bytes) {
+		rt5514_spi_request_switch(spi_switch_mask_work_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
 			msecs_to_jiffies(50));
 		goto done;
@@ -611,7 +695,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 
 	snd_pcm_period_elapsed(rt5514_dsp->substream[2]);
 
-	schedule_delayed_work(&rt5514_dsp->copy_work_2, msecs_to_jiffies(10));
+	schedule_delayed_work(&rt5514_dsp->copy_work_2, msecs_to_jiffies(0));
 
 done:
 	mutex_unlock(&rt5514_dsp->dma_lock);
@@ -792,8 +876,11 @@ static void rt5514_spi_start_work(struct work_struct *work)
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
+	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0)) {
+		rt5514_spi_request_switch(spi_switch_mask_copy, 1);
 		rt5514_schedule_copy(rt5514_dsp, false);
+		rt5514_spi_request_switch(spi_switch_mask_copy, 0);
+	}
 }
 
 static void rt5514_spi_adc_start(struct work_struct *work)
@@ -811,8 +898,11 @@ static void rt5514_spi_adc_start(struct work_struct *work)
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
+	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0)) {
+		rt5514_spi_request_switch(spi_switch_mask_copy, 1);
 		rt5514_schedule_copy(rt5514_dsp, true);
+		rt5514_spi_request_switch(spi_switch_mask_copy, 0);
+	}
 }
 
 static irqreturn_t rt5514_spi_irq(int irq, void *data)
@@ -1142,9 +1232,12 @@ EXPORT_SYMBOL_GPL(rt5514_spi_burst_write);
 static int rt5514_spi_probe(struct spi_device *spi)
 {
 	int ret;
+	struct device_node *np = spi->dev.of_node;
+	int retry_count;
 
 	rt5514_spi = spi;
 	mutex_init(&spi_lock);
+	mutex_init(&switch_lock);
 	wakeup_source_init(&rt5514_spi_ws, "rt5514-spi");
 
 	ret = devm_snd_soc_register_component(&spi->dev,
@@ -1155,6 +1248,54 @@ static int rt5514_spi_probe(struct spi_device *spi)
 		dev_err(&spi->dev, "Failed to register component.\n");
 		return ret;
 	}
+
+	spi_switch_mask = 0;
+	handshake_gpio = of_get_named_gpio(np, "handshake-gpio", 0);
+
+	if (!gpio_is_valid(handshake_gpio)) {
+		dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
+			"handshake-gpio", np->full_name, handshake_gpio);
+		handshake_gpio = 66; /* default handshake pin */
+	}
+	dev_info(&rt5514_spi->dev, "handshake gpio %d property %s\n",
+		handshake_gpio, np->full_name);
+
+	ret = gpio_request(handshake_gpio, "handshake-gpio");
+	retry_count = 10;
+	while (ret && retry_count > 0) {
+		ret = gpio_request(handshake_gpio, "handshake-gpio");
+		if (ret)
+			dev_err(&rt5514_spi->dev,
+				"%s Failed to reguest handshake GPIO: %d\n",
+				__func__, ret);
+		retry_count--;
+	}
+	if (!ret)
+		gpio_direction_output(handshake_gpio, 1);
+
+	handshake_ack_gpio = of_get_named_gpio(np, "handshake-ack-gpio", 0);
+
+	if (!gpio_is_valid(handshake_ack_gpio)) {
+		dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
+			"handshake-ack-gpio", np->full_name,
+			handshake_ack_gpio);
+		handshake_ack_gpio = 11; /* default ack pin */
+	}
+	dev_info(&rt5514_spi->dev, "handshake ack gpio %d property %s\n",
+		handshake_ack_gpio, np->full_name);
+
+	ret = gpio_request(handshake_ack_gpio, "handshake-ack-gpio");
+	retry_count = 10;
+	while (ret && retry_count > 0) {
+		ret = gpio_request(handshake_ack_gpio, "handshake-ack-gpio");
+		if (ret)
+			dev_err(&rt5514_spi->dev,
+				"%s Failed to reguest handshake ack GPIO: %d\n",
+				__func__, ret);
+		retry_count--;
+	}
+	if (!ret)
+		gpio_direction_input(handshake_ack_gpio);
 
 	device_init_wakeup(&spi->dev, true);
 
