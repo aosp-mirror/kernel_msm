@@ -1883,7 +1883,6 @@ static int flash_led_psy_notifier_call(struct notifier_block *nb,
 		return NOTIFY_OK;
 
 	if (!strcmp(psy->desc->name, "bms")) {
-		led->bms_psy = power_supply_get_by_name("bms");
 		if (!led->bms_psy)
 			pr_err("Failed to get bms power_supply\n");
 		else
@@ -3136,6 +3135,8 @@ sysfs_fail:
 unreg_notifier:
 	power_supply_unreg_notifier(&led->nb);
 error_switch_register:
+	if (led->bms_psy)
+		power_supply_put(led->bms_psy);
 	while (i > 0)
 		led_classdev_unregister(&led->snode[--i].cdev);
 	i = led->num_fnodes;
@@ -3169,6 +3170,12 @@ static int qpnp_flash_led_remove(struct platform_device *pdev)
 		led_classdev_unregister(&led->fnode[--i].cdev);
 
 	power_supply_unreg_notifier(&led->nb);
+	if (led->bms_psy)
+		power_supply_put(led->bms_psy);
+	if (led->main_psy)
+		power_supply_put(led->main_psy);
+	if (led->usb_psy)
+		power_supply_put(led->usb_psy);
 	return 0;
 }
 
