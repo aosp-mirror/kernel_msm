@@ -17,4 +17,5 @@ KERNEL_CMDLINE="console=ttyMSM0,115200n8 androidboot.console=ttyMSM0 printk.devk
 fi
 MODULES_OPTIONS="
 options service_locator enable=1
+options msm_drm dsi_display0=qcom,mdss_dsi_sofef01_sdc_1080p_cmd:
 "
