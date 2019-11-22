@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017,2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1207,6 +1207,11 @@ static void qdf_mem_debug_exit(void) {}
 void *qdf_mem_malloc(size_t size)
 {
 	void *ptr;
+
+	if (!size || size > QDF_MEM_MAX_MALLOC) {
+		qdf_err("Cannot malloc %zu bytes", size);
+		return NULL;
+	}
 
 	ptr = qdf_mem_prealloc_get(size);
 	if (ptr)
