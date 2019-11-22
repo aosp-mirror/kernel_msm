@@ -16,6 +16,7 @@
 &sde_dsi {
 	vddio-supply = <&pm6150_l13>;    /* PP1800_PANEL */
 	vdda-3p3-supply = <&pm6150l_l7>; /* PP3000_VCI */
+	lab-supply = <&ab_vreg>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
 	qcom,platform-reset-gpio = <&pm6150l_gpios 9 0>;
 	qcom,dsi-display-list =
@@ -61,6 +62,14 @@
 
 &pm6150l_wled {
 	status = "disabled";
+};
+
+&ab_vreg {
+	qcom,aod-pd-control;
+};
+
+&ibb_vreg {
+	qcom,aod-pd-control;
 };
 
 &dsi_sim_vid {
