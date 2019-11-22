@@ -591,6 +591,7 @@ static void socket_read_work_fn(struct work_struct *work)
 		socket_close_channel(info);
 		if (info->port_type == PORT_TYPE_SERVER)
 			socket_init_work_fn(&info->init_work);
+		diag_ws_release();
 		return;
 	}
 
