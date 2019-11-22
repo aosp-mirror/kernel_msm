@@ -41,7 +41,6 @@
 #include <asm/sysreg.h>
 #include <asm/thread_info.h>
 #include <asm/virt.h>
-#include <asm-generic/export.h>
 
 #include "efi-header.S"
 
@@ -460,7 +459,6 @@ ENDPROC(__primary_switched)
 
 ENTRY(kimage_vaddr)
 	.quad		_text - TEXT_OFFSET
-EXPORT_SYMBOL_GPL(kimage_vaddr)
 
 /*
  * If we're fortunate enough to boot at EL2, ensure that the world is

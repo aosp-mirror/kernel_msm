@@ -56,6 +56,7 @@
 #include <asm/tlb.h>
 #include <asm/alternative.h>
 
+EXPORT_SYMBOL_GPL(kimage_vaddr);
 EXPORT_SYMBOL_GPL(swapper_pg_dir);
 EXPORT_SYMBOL_GPL(_stext);
 EXPORT_SYMBOL_GPL(_end);
