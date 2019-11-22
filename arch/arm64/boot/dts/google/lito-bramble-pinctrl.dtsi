@@ -11,13 +11,28 @@
  * GNU General Public License for more details.
  */
 
-#include "lito-redbull-common.dtsi"
-#include "lito-bramble-audio.dtsi"
-#include "lito-bramble-thermal.dtsi"
-#include "lito-bramble-usb.dtsi"
-#include "lito-bramble-nfc.dtsi"
-#include "lito-bramble-ese.dtsi"
-#include "lito-bramble-haptics.dtsi"
-#include "lito-bramble-rainbow.dtsi"
-#include "lito-bramble-display.dtsi"
-#include "lito-bramble-pinctrl.dtsi"
+&cci1_active{
+	mux {
+		pins = "gpio19", "gpio20";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio19", "gpio20";
+		input-enable;
+		bias-pull-down;
+	};
+};
+
+&cci1_suspend {
+	mux {
+		pins = "gpio19", "gpio20";
+		function = "gpio";
+	};
+
+	config {
+		pins = "gpio19", "gpio20";
+		input-enable;
+		bias-pull-down;
+	};
+};
