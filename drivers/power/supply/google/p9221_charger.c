@@ -735,7 +735,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->alignment = -1;
 	charger->alignment_capable = false;
 	charger->mfg = 0;
-	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+	schedule_work(&charger->uevent_work);
 
 	p9221_icl_ramp_reset(charger);
 	del_timer(&charger->vrect_timer);
@@ -768,7 +768,7 @@ static void p9221_vrect_timer_handler(unsigned long data)
 	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
 
 	if (charger->align == POWER_SUPPLY_ALIGN_CHECKING) {
-		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+		schedule_work(&charger->uevent_work);
 		charger->align = POWER_SUPPLY_ALIGN_MOVE;
 		logbuffer_log(charger->log, "align: state: %s",
 			      align_status_str[charger->align]);
@@ -788,7 +788,7 @@ static void p9221_align_timer_handler(unsigned long data)
 {
 	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
 
-	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+	schedule_work(&charger->uevent_work);
 	charger->align = POWER_SUPPLY_ALIGN_ERROR;
 	logbuffer_log(charger->log, "align: timeout no IRQ");
 }
@@ -968,7 +968,7 @@ no_scaling:
 	}
 
 	if (charger->alignment != charger->alignment_last) {
-		kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+		schedule_work(&charger->uevent_work);
 		logbuffer_log(charger->log,
 			      "align: alignment=%i. op_freq=%u. current_avg=%u",
 			     charger->alignment, wlc_freq,
@@ -1385,12 +1385,11 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	cancel_delayed_work(&charger->dcin_pon_work);
 
 	charger->alignment_capable = false;
-	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 	charger->align = POWER_SUPPLY_ALIGN_CENTERED;
 	charger->alignment = -1;
 	logbuffer_log(charger->log, "align: state: %s",
 		      align_status_str[charger->align]);
-	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+	schedule_work(&charger->uevent_work);
 }
 
 static int p9221_has_dc_in(struct p9221_charger_data *charger)
@@ -2902,12 +2901,12 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 
 	if (charger->align != POWER_SUPPLY_ALIGN_MOVE) {
 		if (charger->align != POWER_SUPPLY_ALIGN_CHECKING)
-			kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+			schedule_work(&charger->uevent_work);
 		charger->align = POWER_SUPPLY_ALIGN_CHECKING;
 		charger->align_count++;
 
 		if (charger->align_count > WLC_ALIGN_IRQ_THRESHOLD) {
-			kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+			schedule_work(&charger->uevent_work);
 			charger->align = POWER_SUPPLY_ALIGN_MOVE;
 		}
 		logbuffer_log(charger->log, "align: state: %s",
@@ -2927,6 +2926,14 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 	pm_stay_awake(charger->dev);
 
 	return IRQ_HANDLED;
+}
+
+static void p9221_uevent_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, uevent_work);
+
+	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 }
 
 static int p9221_parse_dt(struct device *dev,
@@ -3243,6 +3250,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
 	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
 	INIT_DELAYED_WORK(&charger->dcin_pon_work, p9221_dcin_pon_work);
+	INIT_WORK(&charger->uevent_work, p9221_uevent_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
 		   p9221_icl_ramp_alarm_cb);
 
@@ -3392,6 +3400,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->icl_ramp_work);
 	cancel_delayed_work_sync(&charger->dcin_pon_work);
 	cancel_delayed_work_sync(&charger->align_work);
+	cancel_work_sync(&charger->uevent_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);
 	del_timer_sync(&charger->vrect_timer);
 	del_timer_sync(&charger->align_timer);

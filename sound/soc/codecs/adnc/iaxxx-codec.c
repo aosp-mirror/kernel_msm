@@ -6213,7 +6213,8 @@ static const struct snd_kcontrol_new iaxxx_snd_controls[] = {
 		.info = iaxxx_ip_pdm_clk_src_info,
 		.get = iaxxx_ip_pdm_clk_src_get,
 		.put = iaxxx_ip_pdm_clk_src_put
-	}
+	},
+	SOC_SINGLE("PCM0 Loopback En", IAXXX_AO_PCM_MX2_ADDR, 0, 1, 0),
 };
 
 static int iaxxxcore_enable_i2srx(struct snd_soc_dapm_widget *w,

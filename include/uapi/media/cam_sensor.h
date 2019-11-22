@@ -37,6 +37,11 @@ struct rainbow_config {
 	uint32_t             reg_data[MAX_RAINBOW_CONFIG_SIZE];
 } __attribute__((packed));
 
+struct silego_self_test_result {
+	enum silego_self_test_result_type result;
+	bool is_cracked;
+} __attribute__((packed));
+
 #define RAINBOW_CONFIG \
 	_IOWR('R', 1, struct rainbow_config)
 
@@ -44,7 +49,7 @@ struct rainbow_config {
 	_IOWR('R', 1, bool)
 
 #define LM36011_SILEGO_SELF_TEST \
-	_IOWR('R', 1, enum silego_self_test_result_type)
+	_IOWR('R', 1, struct silego_self_test_result)
 
 /**
  * struct cam_sensor_query_cap - capabilities info for sensor

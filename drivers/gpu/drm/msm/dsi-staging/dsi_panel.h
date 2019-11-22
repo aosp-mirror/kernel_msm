@@ -77,6 +77,13 @@ enum dsi_panel_physical_type {
 	DSI_DISPLAY_PANEL_TYPE_MAX,
 };
 
+enum hbm_mode_type {
+	HBM_MODE_OFF = 0,
+	HBM_MODE_ON,
+	HBM_MODE_SV,
+	HBM_MODE_MAX,
+};
+
 struct dsi_dfps_capabilities {
 	enum dsi_dfps_type type;
 	u32 min_refresh_rate;
@@ -309,7 +316,8 @@ struct dsi_panel {
 
 	/* the following set of members are guarded by panel_lock */
 	bool vr_mode;
-	bool hbm_mode;
+	enum hbm_mode_type hbm_mode;
+	bool hbm_pending_irc_on;
 };
 
 /**
@@ -339,6 +347,7 @@ struct dsi_panel_funcs {
 	int (*wakeup)(struct dsi_panel *);
 	int (*pre_lp1)(struct dsi_panel *);
 	int (*update_hbm)(struct dsi_panel *);
+	int (*update_irc)(struct dsi_panel *, bool);
 	int (*send_nolp)(struct dsi_panel *);
 };
 
@@ -484,8 +493,8 @@ int dsi_panel_get_sn(struct dsi_panel *panel);
 int dsi_panel_get_vendor_extinfo(struct dsi_panel *panel);
 
 /* Set/get high brightness mode */
-int dsi_panel_update_hbm(struct dsi_panel *panel, bool enable);
-bool dsi_panel_get_hbm(struct dsi_panel *panel);
+int dsi_panel_update_hbm(struct dsi_panel *panel, enum hbm_mode_type);
+enum hbm_mode_type dsi_panel_get_hbm(struct dsi_panel *panel);
 
 int dsi_panel_switch_init(struct dsi_panel *panel);
 void dsi_panel_switch_destroy(struct dsi_panel *panel);
