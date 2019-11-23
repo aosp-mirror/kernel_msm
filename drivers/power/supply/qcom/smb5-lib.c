@@ -6088,7 +6088,7 @@ increment:
 	icl = min(chg->wls_icl_ua, icl + DCIN_ICL_STEP_UA);
 	icl_save = icl;
 
-	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, icl);
+	rc = vote(chg->dc_icl_votable, DCIN_AICL_VOTER, true, icl);
 	if (rc < 0)
 		goto unlock;
 
@@ -6177,7 +6177,7 @@ static void dcin_icl_decrement(struct smb_charger *chg)
 		icl -= DCIN_ICL_STEP_UA;
 
 		smblib_dbg(chg, PR_WLS, "icl: %d mA\n", (icl / 1000));
-		rc = smblib_set_charge_param(chg, &chg->param.dc_icl, icl);
+		rc = vote(chg->dc_icl_votable, DCIN_AICL_VOTER, true, icl);
 		if (rc < 0) {
 			smblib_err(chg, "setting DCIN ICL failed: %d\n", rc);
 			return;
@@ -6263,8 +6263,8 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 
 		/* Reset DCIN ICL to 100 mA */
 		mutex_lock(&chg->dcin_aicl_lock);
-		rc = smblib_set_charge_param(chg, &chg->param.dc_icl,
-				DCIN_ICL_MIN_UA);
+		rc = vote(chg->dc_icl_votable,
+			  DCIN_AICL_VOTER, true, DCIN_ICL_MIN_UA);
 		mutex_unlock(&chg->dcin_aicl_lock);
 		if (rc < 0)
 			return IRQ_HANDLED;
