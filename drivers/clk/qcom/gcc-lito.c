@@ -2662,6 +2662,8 @@ static int gcc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	vdd_cx_ao.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx_ao");
 	if (IS_ERR(vdd_cx_ao.regulator[0])) {
@@ -2670,6 +2672,8 @@ static int gcc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx_ao regulator\n");
 		return PTR_ERR(vdd_cx_ao.regulator[0]);
 	}
+	vdd_cx_ao.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx_ao, vdd_cx_ao.num_levels - 1);
 
 	ret = qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks,
 			ARRAY_SIZE(gcc_dfs_clocks));
@@ -2691,11 +2695,19 @@ static int gcc_lito_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void gcc_lito_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+	clk_unvote_vdd_level(&vdd_cx_ao, vdd_cx_ao.num_levels - 1);
+}
+
 static struct platform_driver gcc_lito_driver = {
 	.probe	= gcc_lito_probe,
 	.driver	= {
 		.name = "gcc-lito",
 		.of_match_table = gcc_lito_match_table,
+		.sync_state = gcc_lito_sync_state,
 	},
 };
 
