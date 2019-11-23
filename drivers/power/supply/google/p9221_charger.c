@@ -261,6 +261,7 @@ static int p9221_reg_read_cooked(struct p9221_charger_data *charger,
 
 	if (p9221_reg_is_8_bit(charger, reg)) {
 		u8 data8 = 0;
+
 		ret = p9221_reg_read_8(charger, reg, &data8);
 		data = data8;
 	} else {
@@ -314,7 +315,8 @@ static int p9221_reg_write_16(struct p9221_charger_data *charger, u16 reg,
 	return p9221_reg_write_n(charger, reg, &val, 2);
 }
 
-static int p9221_reg_write_8(struct p9221_charger_data *charger, u16 reg, u8 val)
+static int p9221_reg_write_8(struct p9221_charger_data *charger, u16 reg,
+			     u8 val)
 {
 	return p9221_reg_write_n(charger, reg, &val, 1);
 }
@@ -428,8 +430,8 @@ static void p9221_write_fod(struct p9221_charger_data *charger)
 		goto no_fod;
 
 	while (retries) {
-		char s[fod_count * 3 + 1];
-		u8 fod_read[fod_count];
+		char s[P9221R5_NUM_FOD * 3 + 1];
+		u8 fod_read[P9221R5_NUM_FOD];
 
 		dev_info(&charger->client->dev, "Writing %s FOD (n=%d reg=%02x try=%d)\n",
 			 epp ? "EPP" : "BPP", fod_count, P9221R5_FOD_REG,
@@ -754,9 +756,10 @@ static void p9221_tx_work(struct work_struct *work)
 	sysfs_notify(&charger->dev->kobj, NULL, "txdone");
 }
 
-static void p9221_vrect_timer_handler(unsigned long data)
+static void p9221_vrect_timer_handler(struct timer_list *t)
 {
-	struct p9221_charger_data *charger = (struct p9221_charger_data *)data;
+	struct p9221_charger_data *charger = from_timer(charger,
+							t, vrect_timer);
 
 	dev_info(&charger->client->dev,
 		 "timeout waiting for VRECT, online=%d\n", charger->online);
@@ -1659,10 +1662,12 @@ static ssize_t p9221_add_reg_buffer(struct p9221_charger_data *charger,
 		ret = p9221_reg_read_cooked(charger, reg, &val);
 	else if (width == 16) {
 		u16 val16 = 0;
+
 		ret = p9221_reg_read_16(charger, reg, &val16);
 		val = val16;
 	} else {
 		u8 val8 = 0;
+
 		ret = p9221_reg_read_8(charger, reg, &val8);
 		val = val8;
 	}
@@ -1964,8 +1969,8 @@ static ssize_t p9221_show_addr(struct device *dev,
 }
 
 static ssize_t p9221_store_addr(struct device *dev,
-			        struct device_attribute *attr,
-			        const char *buf, size_t count)
+				struct device_attribute *attr,
+				const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct p9221_charger_data *charger = i2c_get_clientdata(client);
@@ -2032,9 +2037,10 @@ static ssize_t p9221_store_data(struct device *dev,
 	if (!data)
 		return -ENOMEM;
 
-	strcpy(data, buf);
-	while(data && i < charger->count) {
+	strlcpy(data, buf, sizeof(data));
+	while (data && i < charger->count) {
 		char *d = strsep(&data, " ");
+
 		if (*d) {
 			ret = kstrtou8(d, 16, &reg[i]);
 			if (ret)
@@ -2417,6 +2423,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 		if (ret < 0)
 			return ret;
 
+		msleep(10);
 		/* write 0x0000 to 0x34, check 0x4C reads back as 0x04 */
 		ret = p9221_reg_write_16(charger, P9382A_STATUS_REG, 0);
 		if (ret == 0)
@@ -2959,7 +2966,7 @@ static int p9221_parse_dt(struct device *dev,
 		ret = of_property_read_u8_array(node, "fod", pdata->fod,
 						pdata->fod_num);
 		if (ret == 0) {
-			char buf[pdata->fod_num * 3 + 1];
+			char buf[P9221R5_NUM_FOD * 3 + 1];
 
 			p9221_hex_str(pdata->fod, pdata->fod_num, buf,
 				      pdata->fod_num * 3 + 1, false);
@@ -2983,7 +2990,7 @@ static int p9221_parse_dt(struct device *dev,
 		ret = of_property_read_u8_array(node, "fod_epp", pdata->fod_epp,
 						pdata->fod_epp_num);
 		if (ret == 0) {
-			char buf[pdata->fod_epp_num * 3 + 1];
+			char buf[P9221R5_NUM_FOD * 3 + 1];
 
 			p9221_hex_str(pdata->fod_epp, pdata->fod_epp_num, buf,
 				      pdata->fod_epp_num * 3 + 1, false);
@@ -3168,8 +3175,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->resume_complete = true;
 	mutex_init(&charger->io_lock);
 	mutex_init(&charger->cmd_lock);
-	setup_timer(&charger->vrect_timer, p9221_vrect_timer_handler,
-		    (unsigned long)charger);
+	timer_setup(&charger->vrect_timer, p9221_vrect_timer_handler, 0);
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
 	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
@@ -3238,7 +3244,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 
 	ret = devm_request_threaded_irq(
 		&client->dev, charger->pdata->irq_int, NULL,
-		p9221_irq_thread, IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+		p9221_irq_thread, IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 		"p9221-irq", charger);
 	if (ret) {
 		dev_err(&client->dev, "Failed to request IRQ\n");
