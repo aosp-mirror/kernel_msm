@@ -2319,7 +2319,7 @@ static int smb5_init_dc_peripheral(struct smb_charger *chg)
 		return 0;
 
 	/* Set DCIN ICL to 100 mA */
-	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, DCIN_ICL_MIN_UA);
+	rc = vote(chg->dc_icl_votable, DCIN_AICL_VOTER, true, DCIN_ICL_MIN_UA);
 	if (rc < 0) {
 		dev_err(chg->dev, "Couldn't set dc_icl rc=%d\n", rc);
 		return rc;
