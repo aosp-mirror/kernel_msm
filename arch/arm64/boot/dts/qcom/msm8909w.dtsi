@@ -117,14 +117,14 @@
 	cpu0-2-step {
 		trips {
 			cpu0-2-step-trip {
-				temperature = <60000>;
+				temperature = <85000>;
 			};
 		};
 	};
 	cpu1-3-step {
 		trips {
 			cpu1-3-step-trip {
-				temperature = <60000>;
+				temperature = <85000>;
 			};
 		};
 	};
@@ -137,7 +137,7 @@
 		wake-capable-sensor;
 		trips {
 			cpu_freq_trip: cpu-freq-trip {
-				temperature = <40000>;
+				temperature = <44000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
