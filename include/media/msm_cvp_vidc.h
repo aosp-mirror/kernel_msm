@@ -37,7 +37,7 @@ struct cvp_kmd_usecase_desc {
 #define VIDEO_NONREALTIME 1
 #define VIDEO_REALTIME 5
 
-#ifdef CONFIG_MSM_CVP_V4L2
+#if IS_ENABLED(CONFIG_MSM_CVP_V4L2)
 void *msm_cvp_open(int core_id, int session_type);
 int msm_cvp_close(void *instance);
 int msm_cvp_private(void *cvp_inst, unsigned int cmd, struct cvp_kmd_arg *arg);
