@@ -1073,6 +1073,8 @@ static int npu_cc_lito_probe(struct platform_device *pdev)
 									ret);
 		return ret;
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	ret = npu_clocks_lito_probe(pdev, &npu_cc_lito_desc);
 	if (ret < 0) {
@@ -1101,11 +1103,18 @@ static int npu_cc_lito_probe(struct platform_device *pdev)
 
 }
 
+static void npu_cc_lito_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+}
+
 static struct platform_driver npu_cc_lito_driver = {
 	.probe = npu_cc_lito_probe,
 	.driver = {
 		.name = "lito_npucc",
 		.of_match_table = npu_cc_lito_match_table,
+		.sync_state = npu_cc_lito_sync_state,
 	},
 };
 
