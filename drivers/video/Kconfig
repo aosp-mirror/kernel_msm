@@ -47,3 +47,15 @@ endif
 
 
 endmenu
+
+config MSM_VIDC_V4L2
+	tristate "Support MSM techpack/video device"
+	depends on QCOM_LLCC
+	---help---
+	  The device is represented by an out-of-tree video driver
+	  in techpack/video.  This config represents the truth regarding
+	  the state of the video driver.
+
+	  Default is technically n, but the out of tree driver overrides
+	  that to y.  But if this configuration is m, then the out of tree
+	  driver will respect that configuration.
