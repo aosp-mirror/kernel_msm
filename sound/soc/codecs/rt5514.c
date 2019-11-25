@@ -1414,6 +1414,15 @@ static int rt5514_is_not_dsp_enabled(struct snd_soc_dapm_widget *source,
 	return !(rt5514->dsp_enabled | rt5514->dsp_adc_enabled);
 }
 
+static int rt5514_dmic_event(struct snd_soc_dapm_widget *w,
+				 struct snd_kcontrol *k, int event)
+{
+	if (event & SND_SOC_DAPM_PRE_PMU)
+		usleep_range(85000, 85100);
+
+	return 0;
+}
+
 static const struct snd_soc_dapm_widget rt5514_dapm_widgets[] = {
 	/* Input Lines */
 	SND_SOC_DAPM_INPUT("DMIC1L"),
@@ -1526,7 +1535,8 @@ static const struct snd_soc_dapm_widget rt5514_dapm_widgets[] = {
 	SND_SOC_DAPM_PGA("Stereo2 ADC MIX", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 	/* Audio Interface */
-	SND_SOC_DAPM_AIF_OUT("AIF1TX", "AIF1 Capture", 0, SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_AIF_OUT_E("AIF1TX", "AIF1 Capture", 0, SND_SOC_NOPM, 0, 0,
+		rt5514_dmic_event, SND_SOC_DAPM_PRE_PMU),
 };
 
 static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
