@@ -11,11 +11,7 @@
  * GNU General Public License for more details.
  */
 
-/*
- * Rename bmr_w_therm to rcam_therm
- */
 &pm7250b_vadc {
-	/delete-node/ bmr_w_therm@53;
 	rcam_therm@53 {
 		reg = <ADC_GPIO2_PU2>;
 		label = "rcam_therm";
@@ -25,15 +21,11 @@
 	};
 };
 
-/*
- * Rename bmr_w_therm to rcam_therm
- */
 &pm7250b_adc_tm {
 	io-channels = <&pm7250b_vadc ADC_AMUX_THM1_PU2>,
 			<&pm7250b_vadc ADC_AMUX_THM3_PU2>,
 			<&pm7250b_vadc ADC_GPIO2_PU2>;
 
-	/delete-node/ bmr_w_therm@53;
 	rcam_therm@53 {
 		reg = <ADC_GPIO2_PU2>;
 		qcom,ratiometric;
@@ -41,14 +33,7 @@
 	};
 };
 
-/*
- * Rename bmr_e_therm to wifi_therm
- * Rename pa_therm1 to rf_back_therm
- */
 &pm8150_vadc {
-	/delete-node/ pa_therm1@4d;
-	/delete-node/ bmr_e_therm@4e;
-
 	wifi_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
 		label = "wifi_therm";
@@ -66,17 +51,10 @@
 	};
 };
 
-/*
- * Rename bmr_e_therm to wifi_therm
- * Rename pa_therm1 to rf_back_therm
- */
 &pm8150_adc_tm {
 	io-channels = <&pm8150_vadc ADC_XO_THERM_PU2>,
 			<&pm8150_vadc ADC_AMUX_THM1_PU2>,
 			<&pm8150_vadc ADC_AMUX_THM2_PU2>;
-
-	/delete-node/ pa_therm1@4d;
-	/delete-node/ bmr_e_therm@4e;
 
 	wifi_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
@@ -91,15 +69,7 @@
 	};
 };
 
-/*
- * Rename pa_therm2 to rf_front_therm
- * Rename bmr_n_therm to sdm_therm
- * Remove msm_skin_therm1 since Bramble does not have this thermistor.
- */
 &pm8150l_vadc {
-	/delete-node/ pa_therm2@4d;
-	/delete-node/ bmr_n_therm@4f;
-	/delete-node/ msm_skin_therm1@4e;
 
 	rf_front_therm@4d {
 		reg = <ADC_AMUX_THM1_PU2>;
@@ -118,18 +88,9 @@
 	};
 };
 
-/*
- * Rename pa_therm2 to rf_front_therm
- * Rename bmr_n_therm to sdm_therm
- * Remove msm_skin_therm1 since Bramble does not have this thermistor.
- */
 &pm8150l_adc_tm {
 	io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
 			<&pm8150l_vadc ADC_AMUX_THM3_PU2>;
-
-	/delete-node/ pa_therm2@4d;
-	/delete-node/ bmr_n_therm@4f;
-	/delete-node/ msm_skin_therm1@4e;
 
 	/* Channel nodes */
 	rf_front_therm@4d {
@@ -145,14 +106,6 @@
 	};
 };
 
-/*
- * Rename pa-therm2-usr to rf-front-therm
- * Rename pa-therm1-usr to rf-back-therm
- * Rename mmw-pa1-usr to sdm-therm
- * Rename mmw-pa2-usr to rcam-therm
- * Rename mmw-pa3-usr to wifi-therm
- * Remove msm-s-therm-usr since Bramble does not have this thermistor.
- */
 &thermal_zones {
 	rf-front-therm {
 		polling-delay-passive = <0>;
@@ -242,29 +195,5 @@
 				type = "passive";
 			};
 		};
-	};
-
-	msm-s-therm-usr {
-		status = "disabled";
-	};
-
-	mmw-pa1-usr {
-		status = "disabled";
-	};
-
-	mmw-pa2-usr {
-		status = "disabled";
-	};
-
-	mmw-pa3-usr {
-		status = "disabled";
-	};
-
-	pa-therm1-usr {
-		status = "disabled";
-	};
-
-	pa-therm2-usr {
-		status = "disabled";
 	};
 };
