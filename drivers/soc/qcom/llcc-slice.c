@@ -410,6 +410,7 @@ int qcom_llcc_probe(struct platform_device *pdev,
 
 	return ret;
 }
-
 EXPORT_SYMBOL_GPL(qcom_llcc_probe);
+
 MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("QC LLCC");
