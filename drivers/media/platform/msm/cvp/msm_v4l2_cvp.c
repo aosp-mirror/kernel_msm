@@ -578,13 +578,19 @@ static int __init msm_cvp_init(void)
 	cvp_driver->frame_cache = KMEM_CACHE(msm_cvp_frame, 0);
 	cvp_driver->frame_buf_cache = KMEM_CACHE(msm_cvp_frame_buf, 0);
 	cvp_driver->internal_buf_cache = KMEM_CACHE(msm_cvp_internal_buffer, 0);
-
+#ifdef MSM_CVP_V4L2_MODULE
+	rc = cvp_dsp_device_init();
+	if (rc)
+		msm_cvp_exit();
+#endif
 	return rc;
 }
 
 static void __exit msm_cvp_exit(void)
 {
-
+#ifdef MSM_CVP_V4L2_MODULE
+	cvp_dsp_device_exit();
+#endif
 	kmem_cache_destroy(cvp_driver->msg_cache);
 	kmem_cache_destroy(cvp_driver->fence_data_cache);
 	kmem_cache_destroy(cvp_driver->frame_cache);

@@ -92,5 +92,10 @@ int cvp_dsp_deregister_buffer(uint32_t session_id, uint32_t buff_fd,
 			uint32_t buff_offset, uint32_t buff_index,
 			uint32_t buff_fd_iova);
 
+#ifdef CONFIG_MSM_CVP_V4L2_MODULE
+int __init cvp_dsp_device_init(void);
+void __exit cvp_dsp_device_exit(void);
+#endif
+
 #endif // MSM_CVP_DSP_H
 
