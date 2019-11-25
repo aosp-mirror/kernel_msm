@@ -520,7 +520,7 @@ static struct rpmsg_driver cvp_dsp_rpmsg_client = {
 	},
 };
 
-static int __init cvp_dsp_device_init(void)
+int __init cvp_dsp_device_init(void)
 {
 	struct cvp_dsp_apps *me = &gfa_cv;
 	int err;
@@ -551,10 +551,12 @@ register_bail:
 	return err;
 }
 
-static void __exit cvp_dsp_device_exit(void)
+void __exit cvp_dsp_device_exit(void)
 {
 	struct cvp_dsp_apps *me = &gfa_cv;
 
+	if (me->cvp_shutdown == STATUS_DEINIT)
+		return;
 	me->cvp_shutdown = STATUS_DEINIT;
 	me->cdsp_state = STATUS_DEINIT;
 	mutex_destroy(&me->smd_mutex);
@@ -564,7 +566,10 @@ static void __exit cvp_dsp_device_exit(void)
 		unregister_rpmsg_driver(&cvp_dsp_rpmsg_client);
 }
 
+#ifndef CONFIG_MSM_CVP_V4L2_MODULE
 late_initcall(cvp_dsp_device_init);
 module_exit(cvp_dsp_device_exit);
+#endif
 
 MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM CVP DSP");
