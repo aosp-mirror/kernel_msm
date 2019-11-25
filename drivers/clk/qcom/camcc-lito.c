@@ -2345,6 +2345,8 @@ static int cam_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_mx regulator\n");
 		return PTR_ERR(vdd_mx.regulator[0]);
 	}
+	vdd_mx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
 
 	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(vdd_cx.regulator[0])) {
@@ -2353,6 +2355,8 @@ static int cam_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	regmap = qcom_cc_map(pdev, &cam_cc_lito_desc);
 	if (IS_ERR(regmap)) {
@@ -2384,11 +2388,19 @@ static int cam_cc_lito_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void cam_cc_lito_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+}
+
 static struct platform_driver cam_cc_lito_driver = {
 	.probe = cam_cc_lito_probe,
 	.driver = {
 		.name = "lito-camcc",
 		.of_match_table = cam_cc_lito_match_table,
+		.sync_state = cam_cc_lito_sync_state,
 	},
 };
 
