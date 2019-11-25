@@ -371,6 +371,7 @@ int synx_signal(s32 synx_obj, u32 status)
 
 	return synx_signal_core(row, status);
 }
+EXPORT_SYMBOL_GPL(synx_signal);
 
 int synx_merge(s32 *synx_objs, u32 num_objs, s32 *synx_merged)
 {
@@ -488,6 +489,7 @@ int synx_release(s32 synx_obj)
 
 	return synx_release_core(row);
 }
+EXPORT_SYMBOL_GPL(synx_release);
 
 int synx_wait(s32 synx_obj, u64 timeout_ms)
 {
@@ -527,6 +529,7 @@ int synx_wait(s32 synx_obj, u64 timeout_ms)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(synx_wait);
 
 int synx_bind(s32 synx_obj, struct synx_external_desc external_sync)
 {
@@ -706,6 +709,7 @@ int synx_import(s32 synx_obj, u32 import_key, s32 *new_synx_obj)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(synx_import);
 
 int synx_export(s32 synx_obj, u32 *import_key)
 {
