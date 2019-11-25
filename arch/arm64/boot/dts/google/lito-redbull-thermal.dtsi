@@ -11,12 +11,12 @@
  * GNU General Public License for more details.
  */
 
-/*
- * Rename charger_skin_therm to charger_therm
- * Remove camera_flash_therm since Bramble/Redfin does not have this thermistor.
- */
 &pm7250b_vadc {
+	/* Disable redundant QCT default settings */
+	/delete-node/ bmr_s_therm;
 	/delete-node/ charger_skin_therm@4d;
+	/delete-node/ conn_therm@4f;
+	/delete-node/ bmr_w_therm@53;
 	/delete-node/ camera_flash_therm@55;
 
 	charger_therm@4d {
@@ -36,17 +36,15 @@
 	};
 };
 
-/*
- * Rename charger_skin_therm to charger_therm
- * Remove camera_flash_therm since Bramble/Redfin does not have this thermistor.
- */
 &pm7250b_adc_tm {
 	io-channels = <&pm7250b_vadc ADC_AMUX_THM1_PU2>,
 			<&pm7250b_vadc ADC_AMUX_THM3_PU2>,
 			<&pm7250b_vadc ADC_GPIO2_PU2>;
 
+	/* Disable redundant QCT default settings */
 	/delete-node/ charger_skin_therm@4d;
 	/delete-node/ bmr_w_therm@53;
+	/delete-node/ bmr_s_therm@54;
 	/delete-node/ camera_flash_therm@55;
 
 	/* Channel nodes */
@@ -63,11 +61,35 @@
 	};
 };
 
-/*
- * Rename charger-therm-usr to charger-therm
- * Remove camera_flash_therm since Bramble/Redfin does not have this thermistor.
- */
+/* Disable redundant QCT default settings */
+&pm7250b_gpios {
+	/delete-node/ bmr_s_therm;
+};
+
+&pm8150_vadc {
+	/delete-node/ pa_therm1@4d;
+	/delete-node/ bmr_e_therm@4e;
+};
+
+&pm8150_adc_tm {
+	/delete-node/ pa_therm1@4d;
+	/delete-node/ bmr_e_therm@4e;
+};
+
+&pm8150l_vadc {
+	/delete-node/ pa_therm2@4d;
+	/delete-node/ msm_skin_therm1@4e;
+	/delete-node/ bmr_n_therm@4f;
+};
+
+&pm8150l_adc_tm {
+	/delete-node/ pa_therm2@4d;
+	/delete-node/ msm_skin_therm1@4e;
+	/delete-node/ bmr_n_therm@4f;
+};
+
 &thermal_zones {
+	/* Bring up common thermal zones for Redfin and Bramble */
 	usbc-therm {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
@@ -113,12 +135,69 @@
 		};
 	};
 
+	/* Remove redundant QCT thermal zones */
+	camera-therm-usr {
+		status = "disabled";
+	};
+
 	charger-therm-usr {
 		status = "disabled";
 	};
 
-	camera-therm-usr {
+	mmw-pa1-usr {
 		status = "disabled";
 	};
-};
 
+	mmw-pa2-usr {
+		status = "disabled";
+	};
+
+	mmw-pa3-usr {
+		status = "disabled";
+	};
+
+	mmw-pa4-usr {
+		status = "disabled";
+	};
+
+	msm-s-therm-usr {
+		status = "disabled";
+	};
+
+	pa-therm1-usr {
+		status = "disabled";
+	};
+
+	pa-therm2-usr {
+		status = "disabled";
+	};
+
+	/* Disable QCT default BCL throttling */
+	soc {
+		disable-thermal-zone;
+	};
+
+	pm7250b-bcl-lvl0 {
+		disable-thermal-zone;
+	};
+
+	pm7250b-bcl-lvl1 {
+		disable-thermal-zone;
+	};
+
+	pm7250b-bcl-lvl2 {
+		disable-thermal-zone;
+	};
+
+	pm8150l-bcl-lvl0 {
+		disable-thermal-zone;
+	};
+
+	pm8150l-bcl-lvl1 {
+		disable-thermal-zone;
+	};
+
+	pm8150l-bcl-lvl2 {
+		disable-thermal-zone;
+	};
+};
