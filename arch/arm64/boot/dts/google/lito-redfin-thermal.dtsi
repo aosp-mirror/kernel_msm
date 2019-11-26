@@ -11,11 +11,7 @@
  * GNU General Public License for more details.
  */
 
-/*
- * Rename bmr_w_therm to mmw_side_therm
- */
 &pm7250b_vadc {
-	/delete-node/ bmr_w_therm@53;
 	disp_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
 		label = "disp_therm";
@@ -39,7 +35,6 @@
 			<&pm7250b_vadc ADC_AMUX_THM3_PU2>,
 			<&pm7250b_vadc ADC_GPIO2_PU2>;
 
-	/delete-node/ bmr_w_therm@53;
 	disp_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
 		qcom,ratiometric;
@@ -53,13 +48,7 @@
 	};
 };
 
-/*
- * Rename bmr_e_therm to disp_conn_therm
- * Rename pa_therm1 to pa_therm_1
- */
 &pm8150_vadc {
-	/delete-node/ bmr_e_therm@4e;
-	/delete-node/ pa_therm1@4d;
 
 	disp_conn_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
@@ -78,17 +67,10 @@
 	};
 };
 
-/*
- * Rename bmr_e_therm to disp_conn_therm
- * Rename pa_therm1 to pa_therm_1
- */
 &pm8150_adc_tm {
 	io-channels = <&pm8150_vadc ADC_XO_THERM_PU2>,
 			<&pm8150_vadc ADC_AMUX_THM1_PU2>,
 			<&pm8150_vadc ADC_AMUX_THM2_PU2>;
-
-	/delete-node/ bmr_e_therm@4e;
-	/delete-node/ pa_therm1@4d;
 
 	disp_conn_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
@@ -103,16 +85,7 @@
 	};
 };
 
-/*
- * Rename pa_therm2 to skin_therm
- * Rename msm_skin_therm to sdm_therm
- * Rename bmr_n_therm@4f to wifi_therm
- */
 &pm8150l_vadc {
-	/delete-node/ pa_therm2@4d;
-	/delete-node/ msm_skin_therm1@4e;
-	/delete-node/ bmr_n_therm@4f;
-
 	skin_therm@4d {
 		reg = <ADC_AMUX_THM1_PU2>;
 		label = "skin_therm";
@@ -138,19 +111,10 @@
 	};
 };
 
-/*
- * Rename pa_therm2 to skin_therm
- * Rename msm_skin_therm1 to sdm_therm
- * Rename bmr_n_therm@4f to wifi_therm
- */
 &pm8150l_adc_tm {
 	io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
 			<&pm8150l_vadc ADC_AMUX_THM2_PU2>,
 			<&pm8150l_vadc ADC_AMUX_THM3_PU2>;
-
-	/delete-node/ pa_therm2@4d;
-	/delete-node/ msm_skin_therm1@4e;
-	/delete-node/ bmr_n_therm@4f;
 
 	/* Channel nodes */
 	skin_therm@4d {
@@ -172,14 +136,6 @@
 	};
 };
 
-/*
- * Rename pa-therm1-usr to pa-therm1
- * Rename pa-therm2-usr to skin-therm
- * Rename mmw-pa1-usr to wifi-therm
- * Rename mmw-pa2-usr to mmw-side-therm
- * Rename mmw-pa3-usr to disp-conn-therm
- * Rename msm-s-therm-usr to sdm-therm
- */
 &thermal_zones {
 	skin-therm {
 		polling-delay-passive = <0>;
@@ -299,29 +255,5 @@
 				type = "passive";
 			};
 		};
-	};
-
-	pa-therm1-usr {
-		status = "disabled";
-	};
-
-	pa-therm2-usr {
-		status = "disabled";
-	};
-
-	mmw-pa1-usr {
-		status = "disabled";
-	};
-
-	mmw-pa2-usr {
-		status = "disabled";
-	};
-
-	mmw-pa3-usr {
-		status = "disabled";
-	};
-
-	msm-s-therm-usr {
-		status = "disabled";
 	};
 };
