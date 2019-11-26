@@ -44,3 +44,10 @@
 &cs35l41_r {
 	pinctrl-0 = <&reset_pin_bottom_default1_1 &irq_pin_bottom_default>;
 };
+
+/* Software workaround (b/141315426) */
+&qupv3_se9_i2c {
+	cs35l41@40 {
+		cirrus,invert-pcm;
+	};
+};

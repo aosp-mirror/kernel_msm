@@ -11,7 +11,9 @@
  * GNU General Public License for more details.
  */
 
-#include "lito-redfin.dtsi"
-#include "lito-redfin-camera-sensor.dtsi"
-#include "lito-redfin-pac193x.dtsi"
-#include "lito-redfin-proto-audio.dtsi"
+/* Software workaround (b/141315426) */
+&qupv3_se9_i2c {
+	cs35l41@40 {
+		cirrus,invert-pcm;
+	};
+};
