@@ -42,6 +42,7 @@
 #include <linux/spi/spi.h>
 #include <linux/err.h>
 #include <linux/firmware.h>
+#include <linux/timekeeping.h>
 
 #include "wm_adsp.h"
 #include "cs35l41.h"
@@ -515,7 +516,7 @@ static int cs35l41_fast_switch_file_get(struct snd_kcontrol *kcontrol,
 
 static const DECLARE_TLV_DB_RANGE(dig_vol_tlv,
 		0, 0, TLV_DB_SCALE_ITEM(TLV_DB_GAIN_MUTE, 0, 1),
-		1, 913, TLV_DB_MINMAX_ITEM(-10200, 1200));
+		1, CS35L41_MAX_PCM_VOL, TLV_DB_MINMAX_ITEM(-10200, 1200));
 static DECLARE_TLV_DB_SCALE(amp_gain_tlv, 0, 1, 1);
 
 static const struct snd_kcontrol_new dre_ctrl =
@@ -650,6 +651,70 @@ static int cs35l41_set_csplmboxcmd(struct cs35l41_private *cs35l41,
 	return ret;
 }
 
+static void cs35l41_abort_ramp(struct cs35l41_private *cs35l41)
+{
+	if (!work_busy(&cs35l41->vol_ctl.ramp_work))
+		return;
+	atomic_set(&cs35l41->vol_ctl.ramp_abort, 1);
+	cancel_work_sync(&cs35l41->vol_ctl.ramp_work);
+	flush_workqueue(cs35l41->vol_ctl.ramp_wq);
+	atomic_set(&cs35l41->vol_ctl.ramp_abort, 0);
+}
+
+static int cs35l41_put_output_dev(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+	struct soc_enum		*soc_enum;
+	unsigned int		i = ucontrol->value.enumerated.item[0];
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	soc_enum = (struct soc_enum *)kcontrol->private_value;
+
+	if (i >= soc_enum->items) {
+		dev_err(component->dev,
+			"Invalid mixer input (%u)\n", i);
+		return -EINVAL;
+	}
+
+	if (atomic_read(&cs35l41->vol_ctl.playback) &&
+	    cs35l41->vol_ctl.auto_ramp_timeout > 0 &&
+	    cs35l41->vol_ctl.output_dev == CS35L41_OUTPUT_DEV_RCV &&
+	    soc_enum->values[i] == CS35L41_OUTPUT_DEV_SPK) {
+		/*
+		 * While audio is playing,
+		 * auto volume ramp is enabled,
+		 * output device changes from RCV to SPK.
+		 * In this case, perform volume ramp.
+		 */
+		cs35l41_abort_ramp(cs35l41);
+		queue_work(cs35l41->vol_ctl.ramp_wq,
+			   &cs35l41->vol_ctl.ramp_work);
+	}
+
+	cs35l41->vol_ctl.output_dev = soc_enum->values[i];
+
+	return 0;
+}
+
+static int cs35l41_get_output_dev(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+	int			ret = 0;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.enumerated.item[0] = cs35l41->vol_ctl.output_dev;
+
+	return ret;
+}
+
 static const char * const cs35l41_pcm_source_texts[] = {"ASP", "DSP"};
 static const unsigned int cs35l41_pcm_source_values[] = {0x08, 0x32};
 static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_pcm_source_enum,
@@ -730,9 +795,435 @@ static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_dsprx2_enum,
 static const struct snd_kcontrol_new dsp_rx2_mux =
 	SOC_DAPM_ENUM("DSPRX2 SRC", cs35l41_dsprx2_enum);
 
+static void cs35l41_set_vol(int vol, struct cs35l41_private *cs35l41)
+{
+	unsigned int val;
+	int ret;
+
+	mutex_lock(&cs35l41->vol_ctl.vol_mutex);
+
+	if (vol < 0 || vol > CS35L41_MAX_PCM_VOL) {
+		dev_err(cs35l41->dev,
+			"Invalid PCM VOLUME %d\n", vol);
+		goto exit;
+	}
+
+	if (vol < CS35L41_ZERO_PCM_VOL)
+		/* PCM Volume is attenuation */
+		val = (unsigned int)(vol + CS35L41_AMP_PCM_VOL_MUTE);
+	else
+		/* CS35L41_ZERO_PCM_VOL <= dig_vol <= CS35L41_MAX_PCM_VOL */
+		val = (unsigned int)(vol - CS35L41_ZERO_PCM_VOL);
+	ret = regmap_update_bits(cs35l41->regmap, CS35L41_AMP_DIG_VOL_CTRL,
+				 CS35L41_AMP_PCM_VOL_MASK,
+				 val << CS35L41_AMP_PCM_VOL_SHIFT);
+	if (ret < 0)
+		dev_err(cs35l41->dev,
+			"Failed to set PCM VOLUME %d\n", ret);
+
+exit:
+	mutex_unlock(&cs35l41->vol_ctl.vol_mutex);
+}
+
+static int cs35l41_vol_ramp0(struct cs35l41_private *cs35l41,
+			     long final_x, long init_y, long final_y)
+{
+	long curr_x = 0;
+	long curr_y = init_y;
+	long delta_x = final_x;
+	long delta_y = final_y - init_y;
+	long step_x, step_y;
+	int ret = 0;
+
+	if (final_x < 0 || final_y < 0 || init_y < 0) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	step_y = 1;	/* 1/8 dB, min IC supported step */
+	step_x = delta_x / delta_y;	/* in micro-second */
+	if (step_x == 0)
+		/* Take care of case where delta_x < delta_y */
+		step_x = 1;
+
+	dev_dbg(cs35l41->dev, "vol ramp delta x:%ld delta y:%ld step x:%ld\n",
+		delta_x, delta_y, step_x);
+	while (1) {
+		if (atomic_read(&cs35l41->vol_ctl.ramp_abort)) {
+			ret = -EINTR;
+			goto exit;
+		}
+		if (curr_x >= final_x) {
+			/* Delay is complete */
+			cs35l41_set_vol((int)final_y, cs35l41);
+			break;
+		}
+		if (curr_y == final_y) {
+			/* Volume ramp is completed */
+			usleep_range(final_x - curr_x, final_x - curr_x + 1);
+			break;
+		}
+		cs35l41_set_vol((int)curr_y, cs35l41);
+		curr_y += step_y;
+		curr_x += step_x;
+		usleep_range(step_x, step_x + 1);
+	}
+exit:
+	return ret;
+}
+
+static void cs35l41_vol_ramp(struct work_struct *wk)
+{
+	struct cs35l41_vol_ctl *vol_ctl;
+	struct cs35l41_private *cs35l41;
+	long final_x_knee, final_x_end;
+	long init_y_knee, init_y_end, final_y_end;
+	int ret = 0;
+
+	vol_ctl = container_of(wk, struct cs35l41_vol_ctl, ramp_work);
+	cs35l41 = container_of(vol_ctl, struct cs35l41_private, vol_ctl);
+	atomic_set(&cs35l41->vol_ctl.vol_ramp, 1);
+	/*
+	 * vol_ramp must be true at this point,
+	 * which guarantee ramp_init_att, ramp_knee_att,
+	 * ramp_knee_time, ramp_end_time cannot be changed
+	 */
+	final_x_knee = (long)(cs35l41->vol_ctl.ramp_knee_time) * 1000;	/* us */
+	final_x_end = (long)(cs35l41->vol_ctl.ramp_end_time) * 1000;
+	/* 1/8 dB minimum step */
+	init_y_knee = (long)(cs35l41->vol_ctl.dig_vol -
+			     cs35l41->vol_ctl.ramp_init_att * 8);
+	if (init_y_knee < 0)
+		/* Hit floor */
+		init_y_knee = 0;
+	init_y_end = (long)(cs35l41->vol_ctl.dig_vol -
+			    cs35l41->vol_ctl.ramp_knee_att * 8);
+	if (init_y_end < 0)
+		/* Hit floor */
+		init_y_end = 0;
+	final_y_end = (long)cs35l41->vol_ctl.dig_vol;
+	if (final_y_end < 0)
+		/* Hit floor */
+		final_y_end = 0;
+	ret = cs35l41_vol_ramp0(cs35l41, final_x_knee, init_y_knee, init_y_end);
+	if (ret == -EINTR) {
+		/* Abort ramp */
+		cs35l41_set_vol(cs35l41->vol_ctl.dig_vol, cs35l41);
+		goto exit;
+	}
+	ret = cs35l41_vol_ramp0(cs35l41, final_x_end, init_y_end, final_y_end);
+	if (ret == -EINTR) {
+		/* Abort ramp */
+		cs35l41_set_vol(cs35l41->vol_ctl.dig_vol, cs35l41);
+		goto exit;
+	}
+exit:
+	atomic_set(&cs35l41->vol_ctl.vol_ramp, 0);
+	/* Make manual ramp one-shot */
+	atomic_set(&cs35l41->vol_ctl.manual_ramp, 0);
+}
+
+static int cs35l41_get_vol(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = (long)cs35l41->vol_ctl.dig_vol;
+
+	return 0;
+}
+
+static int cs35l41_put_vol(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+	int ret = 0;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > CS35L41_MAX_PCM_VOL)
+		return -EINVAL;
+
+	if (atomic_read(&cs35l41->vol_ctl.vol_ramp) == 0) {
+		cs35l41->vol_ctl.dig_vol =
+			(int)ucontrol->value.integer.value[0];
+		cs35l41_set_vol(cs35l41->vol_ctl.dig_vol, cs35l41);
+	}
+
+	return ret;
+}
+
+static int cs35l41_get_ramp_status(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] =
+		(long)atomic_read(&cs35l41->vol_ctl.vol_ramp);
+
+	return 0;
+}
+
+static int cs35l41_put_ramp_status(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	dev_info(cs35l41->dev,
+		 "Volume ramp status cannot be set\n");
+	return 0;
+}
+
+static int cs35l41_get_manual_ramp(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] =
+		(long)atomic_read(&cs35l41->vol_ctl.manual_ramp);
+
+	return 0;
+}
+
+static int cs35l41_put_manual_ramp(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > 1)
+		return -EINVAL;
+
+	if (atomic_read(&cs35l41->vol_ctl.manual_ramp) == 0 &&
+	    ucontrol->value.integer.value[0] == 1) {
+		/* Rising edge */
+		if (atomic_read(&cs35l41->vol_ctl.playback)) {
+			/* Stop existing ramp and start new ramp */
+			cs35l41_abort_ramp(cs35l41);
+			queue_work(cs35l41->vol_ctl.ramp_wq,
+				   &cs35l41->vol_ctl.ramp_work);
+		}
+		/*
+		 * In else case,
+		 * let DAPM event handle ramp on playback start.
+		 */
+	} else if (atomic_read(&cs35l41->vol_ctl.manual_ramp) == 1 &&
+		   ucontrol->value.integer.value[0] == 0) {
+		/* Falling edge */
+		if (atomic_read(&cs35l41->vol_ctl.playback))
+			/* Stop existing ramp */
+			cs35l41_abort_ramp(cs35l41);
+	}
+	atomic_set(&cs35l41->vol_ctl.manual_ramp,
+		   ucontrol->value.integer.value[0]);
+
+	return 0;
+}
+
+static int cs35l41_get_init_attenuation(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = (long)cs35l41->vol_ctl.ramp_init_att;
+	return 0;
+}
+
+static int cs35l41_put_init_attenuation(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > CS35L41_MAX_VOL_ATT)
+		return -EINVAL;
+
+	if (atomic_read(&cs35l41->vol_ctl.vol_ramp) == 0)
+		cs35l41->vol_ctl.ramp_init_att =
+			(int)ucontrol->value.integer.value[0];
+	return 0;
+}
+
+static int cs35l41_get_knee_attenuation(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = (long)cs35l41->vol_ctl.ramp_knee_att;
+	return 0;
+}
+
+static int cs35l41_put_knee_attenuation(struct snd_kcontrol *kcontrol,
+					struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > CS35L41_MAX_VOL_ATT)
+		return -EINVAL;
+
+	if (atomic_read(&cs35l41->vol_ctl.vol_ramp) == 0)
+		cs35l41->vol_ctl.ramp_knee_att =
+			(int)ucontrol->value.integer.value[0];
+	return 0;
+}
+
+static int cs35l41_get_ramp_end_time(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = (long)cs35l41->vol_ctl.ramp_end_time;
+	return 0;
+}
+
+static int cs35l41_put_ramp_end_time(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > CS35L41_MAX_AUTO_RAMP_TIMEOUT)
+		return -EINVAL;
+
+	if (atomic_read(&cs35l41->vol_ctl.vol_ramp) == 0)
+		cs35l41->vol_ctl.ramp_end_time =
+			(unsigned int)ucontrol->value.integer.value[0];
+	return 0;
+}
+
+static int cs35l41_get_auto_ramp_timeout(struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] =
+		(long)cs35l41->vol_ctl.auto_ramp_timeout;
+	return 0;
+}
+
+static int cs35l41_put_auto_ramp_timeout(struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > CS35L41_MAX_AUTO_RAMP_TIMEOUT)
+		return -EINVAL;
+
+	cs35l41->vol_ctl.auto_ramp_timeout =
+		(unsigned int)ucontrol->value.integer.value[0];
+
+	return 0;
+}
+
+static int cs35l41_get_ramp_knee_time(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] =
+		(long)cs35l41->vol_ctl.ramp_knee_time;
+	return 0;
+}
+
+static int cs35l41_put_ramp_knee_time(struct snd_kcontrol *kcontrol,
+				      struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private	*cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] < 0 ||
+	    ucontrol->value.integer.value[0] > CS35L41_MAX_AUTO_RAMP_TIMEOUT)
+		return -EINVAL;
+
+	if (atomic_read(&cs35l41->vol_ctl.vol_ramp) == 0)
+		cs35l41->vol_ctl.ramp_knee_time =
+			(unsigned int)ucontrol->value.integer.value[0];
+	return 0;
+}
+
+static const char * const cs35l41_output_dev_text[] = {
+	"Speaker",
+	"Receiver",
+};
+
+/* Ensure SPK and RCV defined values match array index */
+static const unsigned int cs35l41_output_dev_val[] = {
+	CS35L41_OUTPUT_DEV_SPK,
+	CS35L41_OUTPUT_DEV_RCV,
+};
+
+static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_output_dev, SND_SOC_NOPM, 0, 0,
+				  cs35l41_output_dev_text,
+				  cs35l41_output_dev_val);
+
 static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
-	SOC_SINGLE_SX_TLV("Digital PCM Volume", CS35L41_AMP_DIG_VOL_CTRL,
-		      3, 0x4CF, 0x391, dig_vol_tlv),
+	SOC_SINGLE_RANGE_EXT_TLV("Digital PCM Volume", SND_SOC_NOPM, 0, 0,
+				 CS35L41_MAX_PCM_VOL, 0, cs35l41_get_vol,
+				 cs35l41_put_vol, dig_vol_tlv),
 	SOC_SINGLE_TLV("AMP PCM Gain", CS35L41_AMP_GAIN_CTRL, 5, 0x14, 0,
 			amp_gain_tlv),
 	SOC_SINGLE_RANGE("ASPTX1 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 0,
@@ -766,6 +1257,30 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_SINGLE("AMP Enable", CS35L41_PWR_CTRL2, 0, 1, 0),
 	WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
 	WM_ADSP_FW_CONTROL("DSP1", 0),
+	SOC_SINGLE_BOOL_EXT("Safety Volume Ramp Status", 0,
+			    cs35l41_get_ramp_status, cs35l41_put_ramp_status),
+	SOC_SINGLE_BOOL_EXT("Manual Ramp Control", 0,
+			    cs35l41_get_manual_ramp, cs35l41_put_manual_ramp),
+	SOC_SINGLE_EXT("Initial Ramp Volume Attenuation",
+		       SND_SOC_NOPM, 0, CS35L41_MAX_VOL_ATT, 0,
+		       cs35l41_get_init_attenuation,
+		       cs35l41_put_init_attenuation),
+	SOC_SINGLE_EXT("Knee Ramp Volume Attenuation",
+		       SND_SOC_NOPM, 0, CS35L41_MAX_VOL_ATT, 0,
+		       cs35l41_get_knee_attenuation,
+		       cs35l41_put_knee_attenuation),
+	SOC_SINGLE_EXT("Ramp Knee Time", SND_SOC_NOPM, 0,
+		       CS35L41_MAX_AUTO_RAMP_TIMEOUT, 0,
+		       cs35l41_get_ramp_knee_time, cs35l41_put_ramp_knee_time),
+	SOC_SINGLE_EXT("Ramp End Time", SND_SOC_NOPM, 0,
+		       CS35L41_MAX_AUTO_RAMP_TIMEOUT, 0,
+		       cs35l41_get_ramp_end_time, cs35l41_put_ramp_end_time),
+	SOC_SINGLE_EXT("Auto Ramp Safety Timeout", SND_SOC_NOPM, 0,
+		       CS35L41_MAX_AUTO_RAMP_TIMEOUT, 0,
+		       cs35l41_get_auto_ramp_timeout,
+		       cs35l41_put_auto_ramp_timeout),
+	SOC_VALUE_ENUM_EXT("Audio Output Device", cs35l41_output_dev,
+			   cs35l41_get_output_dev, cs35l41_put_output_dev),
 };
 
 static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
@@ -1052,6 +1567,40 @@ static const struct reg_sequence cs35l41_pdn_patch[] = {
 	{0x00000040, 0x00000033},
 };
 
+static bool cs35l41_need_auto_vol_ramp(struct cs35l41_private *cs35l41)
+{
+	bool ramp = false;
+	ktime_t curr_timestamp;
+	s64 dev_timeout = (s64)cs35l41->vol_ctl.auto_ramp_timeout * 1000000;
+	s64 elapsed_time;
+
+	if (cs35l41->vol_ctl.prev_active_dev == CS35L41_OUTPUT_DEV_RCV &&
+	    cs35l41->vol_ctl.output_dev == CS35L41_OUTPUT_DEV_SPK) {
+		if (cs35l41->vol_ctl.auto_ramp_timeout == 0) {
+			/* Never ramp */
+		} else if (cs35l41->vol_ctl.auto_ramp_timeout ==
+			   CS35L41_MAX_AUTO_RAMP_TIMEOUT) {
+			/* Always ramp */
+			ramp = true;
+		} else {
+			/*
+			 * Guaranteed:
+			 * 0 < auto_ramp_timeout < CS35L41_MAX_AUTO_RAMP_TIMEOUT
+			 */
+			curr_timestamp = ktime_get();
+			elapsed_time = (s64)curr_timestamp -
+				(s64)cs35l41->vol_ctl.dev_timestamp;
+			if (elapsed_time < dev_timeout)
+				ramp = true;
+			dev_dbg(cs35l41->dev,
+				"elapsed_time:%lld dev_timeout:%lld\n",
+				elapsed_time, dev_timeout);
+		}
+	}
+
+	return ramp;
+}
+
 static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		struct snd_kcontrol *kcontrol, int event)
 {
@@ -1105,6 +1654,13 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 			}
 			ret = cs35l41_set_csplmboxcmd(cs35l41, mboxcmd);
 		}
+
+		atomic_set(&cs35l41->vol_ctl.playback, 1);
+		if (atomic_read(&cs35l41->vol_ctl.manual_ramp) ||
+		    cs35l41_need_auto_vol_ramp(cs35l41))
+			/* Enable volume ramp */
+			queue_work(cs35l41->vol_ctl.ramp_wq,
+				   &cs35l41->vol_ctl.ramp_work);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		if (cs35l41->dsp.running) {
@@ -1144,6 +1700,15 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
 					cs35l41_pdn_patch,
 					ARRAY_SIZE(cs35l41_pdn_patch));
+		atomic_set(&cs35l41->vol_ctl.playback, 0);
+		cs35l41_abort_ramp(cs35l41);
+		cs35l41->vol_ctl.prev_active_dev = cs35l41->vol_ctl.output_dev;
+		if (cs35l41->vol_ctl.output_dev == CS35L41_OUTPUT_DEV_RCV &&
+		    cs35l41->vol_ctl.auto_ramp_timeout > 0 &&
+		    cs35l41->vol_ctl.auto_ramp_timeout <
+		    CS35L41_MAX_AUTO_RAMP_TIMEOUT)
+			/* Auto Receiver Timeout is used */
+			cs35l41->vol_ctl.dev_timestamp = ktime_get();
 		break;
 	default:
 		dev_err(cs35l41->dev, "Invalid event = 0x%x\n", event);
@@ -2353,6 +2918,23 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	}
 
 	irq_pol = cs35l41_irq_gpio_config(cs35l41);
+
+	mutex_init(&cs35l41->vol_ctl.vol_mutex);
+	cs35l41->vol_ctl.dig_vol = 0;
+	cs35l41->vol_ctl.ramp_init_att = 0;
+	cs35l41->vol_ctl.ramp_knee_att = 0;
+	cs35l41->vol_ctl.ramp_knee_time = 0;
+	cs35l41->vol_ctl.ramp_end_time = 0;
+	atomic_set(&cs35l41->vol_ctl.playback, 0);
+	atomic_set(&cs35l41->vol_ctl.vol_ramp, 0);
+	atomic_set(&cs35l41->vol_ctl.manual_ramp, 0);
+	atomic_set(&cs35l41->vol_ctl.ramp_abort, 0);
+	cs35l41->vol_ctl.auto_ramp_timeout = 0;
+	cs35l41->vol_ctl.output_dev = CS35L41_OUTPUT_DEV_SPK;
+	cs35l41->vol_ctl.prev_active_dev = CS35L41_OUTPUT_DEV_SPK;
+	cs35l41->vol_ctl.ramp_wq =
+		create_singlethread_workqueue("cs35l41_ramp");
+	INIT_WORK(&cs35l41->vol_ctl.ramp_work, cs35l41_vol_ramp);
 
 	ret = devm_request_threaded_irq(cs35l41->dev, cs35l41->irq, NULL,
 			cs35l41_irq, IRQF_ONESHOT | IRQF_SHARED | irq_pol,
