@@ -85,3 +85,14 @@
 &clock_audio_va_2 {
 	status = "disabled";
 };
+
+/* Software workaround (b/143266999) */
+&qupv3_se9_i2c {
+	cs35l41@40 {
+		cirrus,fwname-use-revid;
+	};
+
+	cs35l41@41 {
+		cirrus,fwname-use-revid;
+	};
+};
