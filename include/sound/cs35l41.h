@@ -52,6 +52,19 @@ struct cs35l41_platform_data {
 	struct classh_cfg classh_config;
 };
 
+struct cs35l41_rst_cache {
+	bool extclk_cfg;
+	int asp_width;
+	int asp_wl;
+	int asp_fmt;
+	int lrclk_fmt;
+	int sclk_fmt;
+	int slave_mode;
+	int fs_cfg;
+};
+
+#define CS35L41_CTR_CACHE_SIZE 9
+
 struct cs35l41_vol_ctl {
 	struct workqueue_struct *ramp_wq;
 	struct work_struct ramp_work;
@@ -105,6 +118,8 @@ struct cs35l41_private {
 	struct delayed_work hb_work;
 	struct workqueue_struct *wq;
 	struct mutex hb_lock;
+	struct cs35l41_rst_cache reset_cache;
+	struct reg_sequence ctl_cache[CS35L41_CTR_CACHE_SIZE];
 	struct mutex rate_lock;
 	struct mutex force_int_lock;
 	struct cs35l41_vol_ctl vol_ctl;
