@@ -2246,6 +2246,9 @@ static int cs35l41_component_set_sysclk(struct snd_soc_component *component,
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
+	regmap_update_bits(cs35l41->regmap,
+			   CS35L41_SP_RATE_CTRL, 0x3F,
+			   cs35l41->extclk_cfg);
 	regmap_update_bits(cs35l41->regmap, CS35L41_PLL_CLK_CTRL,
 			CS35L41_PLL_OPENLOOP_MASK,
 			1 << CS35L41_PLL_OPENLOOP_SHIFT);
