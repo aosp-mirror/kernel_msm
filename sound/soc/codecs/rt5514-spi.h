@@ -35,6 +35,12 @@
 #define RT5514_DSP_WOV_TYPE		0x18002fac
 #define RT5514_DSP_FUNC			0x18002fb0
 
+#define SPI_SWITCH_MASK_WORK_0 (1 << 0)
+#define SPI_SWITCH_MASK_WORK_1 (1 << 1)
+#define SPI_SWITCH_MASK_WORK_2 (1 << 2)
+#define SPI_SWITCH_MASK_COPY   (1 << 3)
+#define SPI_SWITCH_MASK_LOAD   (1 << 4)
+
 /* SPI Command */
 enum {
 	RT5514_SPI_CMD_16_READ = 0,
@@ -70,5 +76,6 @@ typedef struct _dbgBuf_Mem {
 
 int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len);
 int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len);
+void rt5514_spi_request_switch(int mask, bool is_require);
 
 #endif /* __RT5514_SPI_H__ */
