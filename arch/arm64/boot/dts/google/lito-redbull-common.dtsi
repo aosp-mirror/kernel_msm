@@ -151,7 +151,7 @@
 	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off
 					&sdc1_rclk_off>;
 
-	status = "ok";
+	status = "disabled";
 };
 
 &sdhc_2 {
@@ -169,7 +169,7 @@
 
 	cd-gpios = <&tlmm 69 GPIO_ACTIVE_LOW>;
 
-	status = "ok";
+	status = "disabled";
 };
 
 &pm8150a_amoled {
