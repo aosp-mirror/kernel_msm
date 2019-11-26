@@ -2123,6 +2123,11 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 	asp_wl = params_width(params);
 	asp_width = params_physical_width(params);
 
+	if (asp_wl > 24) {
+		dev_err(cs35l41->dev, "asp_wl: %d is over 24", asp_wl);
+		asp_wl = 24;
+	}
+
 	cs35l41->reset_cache.asp_wl = asp_wl;
 	cs35l41->reset_cache.asp_width = asp_width;
 	if (i < ARRAY_SIZE(cs35l41_fs_rates))
