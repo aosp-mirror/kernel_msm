@@ -154,6 +154,10 @@ static const unsigned char cs35l41_bst_k2_table[4][5] = {
 static const unsigned char cs35l41_bst_slope_table[4] = {
 					0x75, 0x6B, 0x3B, 0x28};
 
+static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41);
+static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41);
+static int cs35l41_restore(struct cs35l41_private *cs35l41);
+
 static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		       struct snd_kcontrol *kcontrol, int event)
 {
@@ -175,6 +179,16 @@ static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		return 0;
 	case SND_SOC_DAPM_PRE_PMD:
 		if (cs35l41->halo_booted == false) {
+			cancel_delayed_work(&cs35l41->hb_work);
+			mutex_lock(&cs35l41->hb_lock);
+			cs35l41_exit_hibernate(cs35l41);
+			mutex_unlock(&cs35l41->hb_lock);
+
+			if (cs35l41->amp_hibernate !=
+						CS35L41_HIBERNATE_INCOMPATIBLE)
+				cs35l41->amp_hibernate =
+						CS35L41_HIBERNATE_NOT_LOADED;
+
 			wm_adsp_early_event(w, kcontrol, event);
 			wm_adsp_event(w, kcontrol, event);
 		}
@@ -1578,10 +1592,6 @@ static const struct reg_sequence cs35l41_pdn_patch[] = {
 	{0x00000040, 0x000000CC},
 	{0x00000040, 0x00000033},
 };
-
-static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41);
-static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41);
-static int cs35l41_restore(struct cs35l41_private *cs35l41);
 
 static void cs35l41_hibernate_work(struct work_struct *work)
 {
