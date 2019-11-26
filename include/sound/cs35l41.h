@@ -63,8 +63,6 @@ struct cs35l41_rst_cache {
 	int fs_cfg;
 };
 
-#define CS35L41_CTR_CACHE_SIZE 9
-
 struct cs35l41_vol_ctl {
 	struct workqueue_struct *ramp_wq;
 	struct work_struct ramp_work;
@@ -119,10 +117,10 @@ struct cs35l41_private {
 	struct workqueue_struct *wq;
 	struct mutex hb_lock;
 	struct cs35l41_rst_cache reset_cache;
-	struct reg_sequence ctl_cache[CS35L41_CTR_CACHE_SIZE];
 	struct mutex rate_lock;
 	struct mutex force_int_lock;
 	struct cs35l41_vol_ctl vol_ctl;
+	unsigned int ctl_cache[CS35L41_CTRL_CACHE_SIZE];
 };
 
 int cs35l41_probe(struct cs35l41_private *cs35l41,

@@ -58,18 +58,6 @@ struct cs35l41_pll_sysclk_config {
 	int clk_cfg;
 };
 
-struct reg_sequence cs35l41_ctl_cache[] = {
-	{CS35L41_DAC_PCM1_SRC,		0},
-	{CS35L41_DSP1_RX1_SRC,		0},
-	{CS35L41_DSP1_RX2_SRC,		0},
-	{CS35L41_ASP_TX1_SRC,		0},
-	{CS35L41_ASP_TX2_SRC,		0},
-	{CS35L41_ASP_TX3_SRC,		0},
-	{CS35L41_ASP_TX4_SRC,		0},
-	{CS35L41_SP_FRAME_TX_SLOT,	0},
-	{CS35L41_AMP_GAIN_CTRL,		0}
-};
-
 static const struct cs35l41_pll_sysclk_config cs35l41_pll_sysclk[] = {
 	{ 32768,	0x00 },
 	{ 8000,		0x01 },
@@ -2936,9 +2924,10 @@ static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
-	for (i = 0; i < ARRAY_SIZE(cs35l41->ctl_cache); i++)
-		regmap_read(cs35l41->regmap, cs35l41->ctl_cache[i].reg,
-			    &cs35l41->ctl_cache[i].def);
+	/* read all ctl regs */
+	for (i = 0; i < CS35L41_CTRL_CACHE_SIZE; i++)
+		regmap_read(cs35l41->regmap, cs35l41_ctl_cache_regs[i],
+			    &cs35l41->ctl_cache[i]);
 
 	/* Disable interrupts */
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
@@ -2957,6 +2946,8 @@ static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
 
 	regmap_write(cs35l41->regmap, CS35L41_CSPL_MBOX_CMD_DRV,
 			CSPL_MBOX_CMD_HIBERNATE);
+
+	regcache_cache_only(cs35l41->regmap, true);
 
 	cs35l41->amp_hibernate = CS35L41_HIBERNATE_STANDBY;
 	return 0;
@@ -2977,13 +2968,20 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 {
 	int timeout = 10, ret;
 	unsigned int status;
-	int retries = 5;
+	int retries = 5, i;
 
 	dev_dbg(cs35l41->dev, "%s: hibernate state %d\n",
 		__func__, cs35l41->amp_hibernate);
 
 	if (cs35l41->amp_hibernate != CS35L41_HIBERNATE_STANDBY)
 		return 0;
+
+	/* update any regs that changed while in cache-only mode */
+	for (i = 0; i < CS35L41_CTRL_CACHE_SIZE; i++)
+		regmap_read(cs35l41->regmap, cs35l41_ctl_cache_regs[i],
+			    &cs35l41->ctl_cache[i]);
+
+	regcache_cache_only(cs35l41->regmap, false);
 
 	do {
 		do {
@@ -3033,8 +3031,15 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 
 	cs35l41->amp_hibernate = CS35L41_HIBERNATE_AWAKE;
 
+	/* invalidate all cached values which have now been reset */
 	regcache_drop_region(cs35l41->regmap, CS35L41_DEVID,
 					CS35L41_MIXER_NGATE_CH2_CFG);
+
+	/* sync all control regs to cache value */
+	for (i = 0; i < CS35L41_CTRL_CACHE_SIZE; i++)
+		regmap_write(cs35l41->regmap,
+				cs35l41_ctl_cache_regs[i],
+				cs35l41->ctl_cache[i]);
 
 	retries = 5;
 
@@ -3059,7 +3064,7 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 /* Restore amp state after hibernate */
 static int cs35l41_restore(struct cs35l41_private *cs35l41)
 {
-	int ret, i;
+	int ret;
 	u32 regid, reg_revid, mtl_revid, chipid_match;
 
 	ret = regmap_read(cs35l41->regmap, CS35L41_DEVID, &regid);
@@ -3229,12 +3234,6 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 			CS35L41_GLOBAL_FS_MASK,
 			cs35l41->reset_cache.fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
 
-
-	for (i = 0; i < ARRAY_SIZE(cs35l41->ctl_cache); i++)
-		regmap_write(cs35l41->regmap,
-				cs35l41->ctl_cache[i].reg,
-				cs35l41->ctl_cache[i].def);
-
 	return 0;
 }
 
@@ -3349,9 +3348,6 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		ret = -ENODEV;
 		goto err;
 	}
-
-	memcpy(&cs35l41->ctl_cache, cs35l41_ctl_cache,
-		 sizeof(cs35l41->ctl_cache));
 
 	irq_pol = cs35l41_irq_gpio_config(cs35l41);
 
