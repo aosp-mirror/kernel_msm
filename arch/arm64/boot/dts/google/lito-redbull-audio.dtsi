@@ -502,6 +502,13 @@
 
 };
 
+&tdm_quin_tx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <0>;
+
+};
+
 &pm7250b_gpios {
 	irq_pin_top_default: irq_pin_top_default {
 		pins = "gpio5";
@@ -561,6 +568,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&reset_pin_top_default &irq_pin_top_default>;
 
+		cirrus,asp-sdout-hiz = <3>;
+
 		cirrus,boost-peak-milliamp = <3700>;
 		cirrus,boost-ind-nanohenry = <1000>;
 		cirrus,boost-cap-microfarad = <15>;
@@ -587,6 +596,8 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&reset_pin_bottom_default &irq_pin_bottom_default>;
+
+		cirrus,asp-sdout-hiz = <3>;
 
 		cirrus,boost-peak-milliamp = <3700>;
 		cirrus,boost-ind-nanohenry = <1000>;
