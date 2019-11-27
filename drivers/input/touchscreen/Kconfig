@@ -31,6 +31,15 @@ config TOUCHSCREEN_TBN
 	  To compile this driver as a module, choose M here: the module will be
 	  called touch_bus_negotiator.
 
+config TOUCHSCREEN_OFFLOAD
+	tristate "Touchscreen algorithm offload"
+	help
+	  Say Y here to enable touchscreen algorithm offload. This module allows
+	  the touchscreen driver to feed heatmap data into a char device to be
+	  consumed by a client outside the kernel.
+
+	  If unsure, say N.
+
 config TOUCHSCREEN_88PM860X
 	tristate "Marvell 88PM860x touchscreen"
 	depends on MFD_88PM860X
