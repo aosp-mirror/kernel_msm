@@ -50,6 +50,7 @@
 &sde_dsi {
 	vddio-supply = <&L1C>;
 	vdd-supply = <&L16A>;
+	lab-supply = <&ab_vreg>;
 	qcom,platform-te-gpio = <&tlmm 10 0>;
 };
 
@@ -67,6 +68,14 @@
 
 &pm8150l_wled {
 	status = "disabled";
+};
+
+&ab_vreg {
+	qcom,aod-pd-control;
+};
+
+&ibb_vreg {
+	qcom,aod-pd-control;
 };
 
 &dsi_sofef00_sdc_1080p_cmd {
