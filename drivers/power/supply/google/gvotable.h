@@ -74,7 +74,7 @@ int gvotable_get_current_reason(struct election *el,
 				int max_reason_len);
 
 int gvotable_set_default(struct election *el, void *default_val);
-int gvotable_election_set_name(struct election *el,const char *name);
+int gvotable_election_set_name(struct election *el, const char *name);
 int gvotable_use_default(struct election *el, bool default_is_enabled);
 
 int gvotable_dump_votes(struct election *el,
