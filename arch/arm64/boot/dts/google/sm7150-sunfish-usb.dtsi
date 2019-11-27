@@ -42,6 +42,8 @@
 };
 
 &qusb_phy0 {
+	skip_efuse_reg;
+
 	qcom,qusb-phy-init-seq =
 		/* <value reg_offset> */
 		<0x23 0x210 /* PWR_CTRL1 */
