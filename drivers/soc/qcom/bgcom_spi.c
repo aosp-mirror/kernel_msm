@@ -821,6 +821,9 @@ int bgcom_resume(void *handle)
 	if (handle == NULL)
 		return -EINVAL;
 
+	if (!atomic_read(&bg_is_spi_active))
+		return -ECANCELED;
+
 	cntx = (struct bg_context *)handle;
 
 	/* if client is outside bgcom scope and
@@ -840,10 +843,6 @@ int bgcom_resume(void *handle)
 	mutex_lock(&bg_resume_mutex);
 	if (bg_spi->bg_state == BGCOM_STATE_ACTIVE)
 		goto unlock;
-	if (!atomic_read(&bg_is_spi_active)) {
-		pr_err("DEBUG: BGcom internal resume\n");
-		atomic_set(&bg_is_spi_active, 1);
-	}
 	enable_irq(bg_irq);
 	do {
 		if (is_bg_resume(handle)) {
