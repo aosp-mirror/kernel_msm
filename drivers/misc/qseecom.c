@@ -449,6 +449,26 @@ static int get_qseecom_keymaster_status(char *str)
 	get_option(&str, &qseecom.is_apps_region_protected);
 	return 1;
 }
+
+#ifdef CONFIG_QSEECOM_MODULE
+#undef __setup
+/* Good for only one __setup per source file */
+#define __setup(str, func)                                                     \
+	static void parse_cmdline(void)                                        \
+	{                                                                      \
+		extern char *saved_command_line;                               \
+		size_t len = strlen(saved_command_line);                       \
+		size_t len_token = strlen(str);                                \
+		char *cp = strnstr(saved_command_line, str, len);              \
+		if (cp)                                                        \
+			func(cp + len_token);                                  \
+	}
+#else
+static inline void parse_cmdline(void)
+{
+}
+#endif
+
 __setup("androidboot.keymaster=", get_qseecom_keymaster_status);
 
 
@@ -9718,6 +9738,7 @@ static struct platform_driver qseecom_plat_driver = {
 
 static int qseecom_init(void)
 {
+	parse_cmdline();
 	return platform_driver_register(&qseecom_plat_driver);
 }
 
