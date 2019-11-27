@@ -214,3 +214,111 @@
 &msm_poweroff {
 	qcom,force-warm-reboot-on-thermal-shutdown;
 };
+
+&tpdm_npu_dpm {
+	status = "disabled";
+};
+
+&tpdm_npu_llm {
+	status = "disabled";
+};
+
+&tpdm_swao0 {
+	status = "disabled";
+};
+
+&tpdm_swao1 {
+	status = "disabled";
+};
+
+&tpdm_dcc {
+	status = "disabled";
+};
+
+&tpdm_vsense {
+	status = "disabled";
+};
+
+&tpdm_prng {
+	status = "disabled";
+};
+
+&tpdm_pimem {
+	status = "disabled";
+};
+
+&tpdm_qm {
+	status = "disabled";
+};
+
+&tpdm_dlct {
+	status = "disabled";
+};
+
+&tpdm_ipcc {
+	status = "disabled";
+};
+
+&tpdm_nav {
+	status = "disabled";
+};
+
+&tpdm_turing {
+	status = "disabled";
+};
+
+&tpdm_llm_turing {
+	status = "disabled";
+};
+
+&tpdm_compute0 {
+	status = "disabled";
+};
+
+&tpdm_compute1 {
+	status = "disabled";
+};
+
+&tpdm_npu {
+	status = "disabled";
+};
+
+&tpdm_ddr {
+	status = "disabled";
+};
+
+&tpdm_ddr {
+	status = "disabled";
+};
+
+&tpdm_mdss {
+	status = "disabled";
+};
+
+&tpdm_dl_mm {
+	status = "disabled";
+};
+
+&tpdm_modem_0 {
+	status = "disabled";
+};
+
+&tpdm_olc {
+	status = "disabled";
+};
+
+&tpdm_apss {
+	status = "disabled";
+};
+
+&tpdm_llm_silver {
+	status = "disabled";
+};
+
+&tpdm_llm_gold {
+	status = "disabled";
+};
+
+&tpdm_lpass {
+	status = "disabled";
+};
