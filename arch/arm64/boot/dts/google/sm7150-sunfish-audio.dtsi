@@ -97,6 +97,8 @@
 
 	audio_ldo1-gpios = <&pm6150_gpios 6 0>;
 	audio_ldo2-gpios = <&pm6150_gpios 7 0>;
+	dcvdd-supply = <&pm6150l_s8>;
+	rt5514,regulator_dcvdd = "dcvdd";
 
 	qcom,wsa-max-devs = <0>;
 	/delete-property/ qcom,wsa-devs;
@@ -573,6 +575,14 @@
 		&ter_tdm_din_active &ter_tdm_dout_active>;
 	pinctrl-1 = <&ter_tdm_sleep &ter_tdm_ws_sleep
 		&ter_tdm_din_sleep &ter_tdm_dout_sleep>;
+};
+
+&pm6150l_s8 {
+	regulator-min-microvolt = <1200000>;
+	regulator-max-microvolt = <1730000>;
+	qcom,init-voltage = <1352000>;
+	regulator-always-on;
+	status = "ok";
 };
 
 &qupv3_se2_i2c {
