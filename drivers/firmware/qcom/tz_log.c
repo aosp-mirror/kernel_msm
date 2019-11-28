@@ -824,7 +824,7 @@ static int _disp_hyp_log_stats(size_t count)
 				tzdbg.hyp_diag_buf->ring_off);
 
 	return __disp_hyp_log_stats(log_ptr, &log_start,
-			tzdbg.hyp_debug_rw_buf_size, count, TZDBG_HYP_LOG);
+			tzdbg.hyp_diag_buf->log_len, count, TZDBG_HYP_LOG);
 }
 
 static int _disp_qsee_log_stats(size_t count)
