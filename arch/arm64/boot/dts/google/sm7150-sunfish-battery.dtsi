@@ -34,12 +34,7 @@
 			   "conn_temp",
 			   "sbux_res",
 			   "vph_voltage";
-	qcom,auto-recharge-soc = <98>;
-	qcom,step-charging-enable;
-	qcom,sw-jeita-enable;
-	qcom,fcc-stepping-enable;
-	qcom,suspend-input-on-debug-batt;
-	qcom,sec-charger-config = <3>;
+	qcom,auto-recharge-soc = <97>;
 	qcom,thermal-mitigation = <4200000 3500000 3000000
 			2500000 2000000 1500000 1000000 500000>;
 	dpdm-supply = <&qusb_phy0>;
