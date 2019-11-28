@@ -4616,6 +4616,18 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 			hdd_wait_for_sme_close_sesion(hdd_ctx, adapter, false);
 		break;
 
+	case QDF_MONITOR_MODE:
+		wlan_hdd_scan_abort(adapter);
+		hdd_deregister_tx_flow_control(adapter);
+
+		/*
+		 * It is possible that the caller of this function does not
+		 * wish to close the session
+		 */
+		if (bCloseSession)
+			hdd_wait_for_sme_close_sesion(hdd_ctx, adapter, true);
+		break;
+
 	case QDF_SAP_MODE:
 		hdd_ipa_flush(hdd_ctx);
 

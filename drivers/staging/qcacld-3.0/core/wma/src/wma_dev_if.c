@@ -711,9 +711,10 @@ QDF_STATUS wma_vdev_detach(tp_wma_handle wma_handle,
 	if (iface->type == WMI_VDEV_TYPE_STA)
 		wma_pno_stop(wma_handle, vdev_id);
 
-	/* P2P Device */
-	if ((iface->type == WMI_VDEV_TYPE_AP) &&
-	    (iface->sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_DEVICE)) {
+	if (((iface->type == WMI_VDEV_TYPE_AP) &&
+	    (iface->sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_DEVICE)) ||
+	    (iface->type == WMI_VDEV_TYPE_OCB) ||
+	    (iface->type == WMI_VDEV_TYPE_MONITOR)) {
 		status = wma_self_peer_remove(wma_handle,
 					pdel_sta_self_req_param, generateRsp);
 		if ((status != QDF_STATUS_SUCCESS) && generateRsp) {
