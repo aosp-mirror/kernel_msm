@@ -153,5 +153,77 @@
 				google,dsi-lp-command-state = "dsi_lp_mode";
 			};
 		};
+
+		google,hbm-ranges {
+			google,dsi-hbm-exit-command = [
+				/* Disable high brightness and enable
+				 * brightness dimming
+				 */
+				15 01 00 00 00 00 02 53 28
+			];
+			google,dsi-hbm-exit-num-dimming-frames = <32>;
+			google,dsi-hbm-exit-dimming-stop-command = [
+				/* Disable high brightness and disable
+				 * brightness dimming
+				 */
+				15 01 00 00 00 00 02 53 20
+			];
+			google,dsi-hbm-commands-state = "dsi_lp_mode";
+
+			hbm-range@0 {
+				google,dsi-hbm-range-brightness-threshold = <1>;
+
+				google,dsi-hbm-range-bl-min-level = <0x4>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+				google,dsi-hbm-range-entry-command = [
+					/* Disable high brightness and enable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 28
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Disable high brightness and disable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 20
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			hbm-range@1 {
+				/* Normal brightness mode covers ~2 to 450
+				 * nits, using panel brightness values up to
+				 * 0x3ff. HBM extends the range to 700 nits,
+				 * and remaps user brightness 1-255 to cover
+				 * this extended range. In this extended range,
+				 * 450 nits / 0x3ff corresponds to user
+				 * brightness 164. Panel brightness is
+				 * adjustable in the 470-700 nit segment.
+				 */
+				google,dsi-hbm-range-brightness-threshold =
+					<164>;
+
+				google,dsi-hbm-range-bl-min-level = <0x0>;
+				google,dsi-hbm-range-bl-max-level = <0x194>;
+
+				google,dsi-hbm-range-entry-command = [
+					/* Enable high brightness and
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 E8
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Enable high brightness and disable
+					 * brightness dimming
+					 */
+					15 01 00 00 00 00 02 53 E0
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+		};
 	};
 };
