@@ -243,7 +243,7 @@ static void qg_notify_charger(struct qpnp_qg *chip)
 		return;
 
 	/*
-	 * FIX_ME, b/139264914, don't set charger in qg, it should set by
+	 * Don't set charger in qg, it should set by
 	 * google_charger
 	prop.intval = chip->bp.float_volt_uv;
 	rc = power_supply_set_property(chip->batt_psy,
@@ -2271,11 +2271,16 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_BATT_AGE_LEVEL:
 		pval->intval = chip->batt_age_level;
 		break;
-	/* b/139264914: FIX_ME */
 	case POWER_SUPPLY_PROP_PRESENT:
-		pval->intval = 1;
+		if (chip->batt_psy)
+			rc = power_supply_get_property(chip->batt_psy,
+						      POWER_SUPPLY_PROP_PRESENT,
+						      pval);
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
+		if (chip->battery_missing)
+			pval->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+
 		if (chip->batt_psy)
 			rc = power_supply_get_property(chip->batt_psy,
 						       POWER_SUPPLY_PROP_STATUS,
