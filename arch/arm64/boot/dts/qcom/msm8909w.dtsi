@@ -137,7 +137,7 @@
 		wake-capable-sensor;
 		trips {
 			cpu_freq_trip: cpu-freq-trip {
-				temperature = <40000>;
+				temperature = <50000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
