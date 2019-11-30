@@ -697,12 +697,13 @@ static void fg_set_fv_compensation(struct fg_chip *chip, int vfloat_comp)
 		delta = (vfloat - vfloat_comp) / FV_STEP;
 		if (((vfloat - vfloat_comp) % FV_STEP) != 0)
 			delta++;
-		pr_debug("delta = %d, fv_comp_formula: %d - %d = %d\n", delta, vfloat, vfloat_comp, vfloat - vfloat_comp);
-
-		rc = fg_write(chip, CHGR_JEITA_FVCOMP_CFG_REG, &delta, 1);
-		if (rc < 0)
-			pr_err("Couldn't write CHGR_JEITA_FVCOMP_CFG_REG\n");
 	}
+
+	pr_debug("delta = %d, fv_comp_formula: %d - %d = %d\n",
+			delta, vfloat, vfloat_comp, vfloat - vfloat_comp);
+	rc = fg_write(chip, CHGR_JEITA_FVCOMP_CFG_REG, &delta, 1);
+	if (rc < 0)
+		pr_err("Couldn't write CHGR_JEITA_FVCOMP_CFG_REG\n");
 }
 
 //JEITA CC = Fast Charge Current - DATA x 25mA
@@ -725,12 +726,13 @@ static void fg_set_cc_compensation(struct fg_chip *chip, int current_comp)
 		delta = (fast_curret - current_comp) / (CC_STEP);
 		if (((fast_curret - current_comp) % CC_STEP) != 0)
 			delta++;
-		pr_debug("delta = %d, cc_comp_formula: %d - %d = %d\n", delta, fast_curret, current_comp, fast_curret - current_comp);
-
-		rc = fg_write(chip, CHGR_JEITA_CCCOMP_CFG_REG, &delta, 1);
-		if (rc < 0)
-			pr_err("Couldn't write CHGR_JEITA_CCCOMP_CFG_REG\n");
 	}
+
+	pr_debug("delta = %d, cc_comp_formula: %d - %d = %d\n", delta,
+			fast_curret, current_comp, fast_curret - current_comp);
+	rc = fg_write(chip, CHGR_JEITA_CCCOMP_CFG_REG, &delta, 1);
+	if (rc < 0)
+		pr_err("Couldn't write CHGR_JEITA_CCCOMP_CFG_REG\n");
 }
 
 static void fg_set_jeita_fv_cc_compensation(struct fg_chip *chip, int temp)
