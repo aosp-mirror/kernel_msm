@@ -264,7 +264,6 @@
 #define RT5514P_FIRMWARE4	"rt5514p_dsp_fw4.bin"
 
 #define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
-#define RT5514_SPI_SWITCH_GPIO	5
 
 #define DIVIDER_1_P024		1024000
 #define DIVIDER_1_P536		1536000
@@ -328,7 +327,5 @@ struct rt5514_priv {
 	char *fw_name[4];
 	unsigned int fw_addr[4];
 };
-
-int rt5514_set_gpio(int gpio, bool output);
 
 #endif /* __RT5514_H__ */
