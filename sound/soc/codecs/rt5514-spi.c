@@ -404,6 +404,7 @@ void rt5514_spi_request_switch(int mask, bool is_require)
 			gpio_set_value(handshake_gpio, 0);
 	}
 }
+EXPORT_SYMBOL_GPL(rt5514_spi_request_switch);
 
 static void rt5514_spi_copy_work_0(struct work_struct *work)
 {
