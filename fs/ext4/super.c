@@ -1111,6 +1111,9 @@ static int ext4_drop_inode(struct inode *inode)
 static void ext4_i_callback(struct rcu_head *head)
 {
 	struct inode *inode = container_of(head, struct inode, i_rcu);
+
+	fscrypt_free_inode(inode);
+
 	kmem_cache_free(ext4_inode_cachep, EXT4_I(inode));
 }
 
@@ -1339,11 +1342,6 @@ static bool ext4_dummy_context(struct inode *inode)
 	return DUMMY_ENCRYPTION_ENABLED(EXT4_SB(inode->i_sb));
 }
 
-static inline bool ext4_is_encrypted(struct inode *inode)
-{
-	return IS_ENCRYPTED(inode);
-}
-
 static const struct fscrypt_operations ext4_cryptops = {
 	.key_prefix		= "ext4:",
 	.get_context		= ext4_get_context,
@@ -1351,7 +1349,6 @@ static const struct fscrypt_operations ext4_cryptops = {
 	.dummy_context		= ext4_dummy_context,
 	.empty_dir		= ext4_empty_dir,
 	.max_namelen		= EXT4_NAME_LEN,
-	.is_encrypted       = ext4_is_encrypted,
 };
 #endif
 
