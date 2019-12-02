@@ -436,6 +436,7 @@ int msm_dma_unmap_all_for_dev(struct device *dev)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(msm_dma_unmap_all_for_dev);
 
 /*
  * Only to be called by ION code when a buffer is freed
