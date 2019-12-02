@@ -14,7 +14,7 @@ static inline bool fscrypt_should_be_processed_by_ice(const struct inode *inode)
 {
 	if (!inode->i_sb->s_cop)
 		return false;
-	if (!inode->i_sb->s_cop->is_encrypted((struct inode *)inode))
+	if (!IS_ENCRYPTED((struct inode *)inode))
 		return false;
 
 	return fscrypt_using_hardware_encryption(inode);
