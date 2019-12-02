@@ -80,5 +80,7 @@ void rt5514_spi_request_switch(int mask, bool is_require);
 
 extern void (*rt5514_watchdog_handler_cb)(void);
 extern struct regmap *rt5514_g_i2c_regmap;
+#define RT5514_SPI_SWITCH_GPIO	5
+int rt5514_set_gpio(int gpio, bool output);
 
 #endif /* __RT5514_SPI_H__ */

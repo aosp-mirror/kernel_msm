@@ -127,23 +127,6 @@ static const struct reg_default rt5514_reg[] = {
 	{RT5514_VENDOR_ID2,		0x10ec5514},
 };
 
-int rt5514_set_gpio(int gpio, bool output)
-{
-	switch (gpio) {
-	case 5:
-		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002070,
-			1 << 8, 1 << 8);
-		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002074,
-			1 << 21 | 1 << 22, output << 21 | 1 << 22);
-		break;
-
-	default:
-		break;
-	}
-	return 0;
-}
-EXPORT_SYMBOL_GPL(rt5514_set_gpio);
-
 static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 {
 	/* Reset */

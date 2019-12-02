@@ -35,7 +35,6 @@
 #include <linux/of_gpio.h>
 
 #include "rt5514-spi.h"
-#include "rt5514.h"
 
 #define DRV_NAME "rt5514-spi"
 
@@ -335,6 +334,23 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 
 	return true;
 }
+
+int rt5514_set_gpio(int gpio, bool output)
+{
+	switch (gpio) {
+	case RT5514_SPI_SWITCH_GPIO:
+		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002070,
+			1 << 8, 1 << 8);
+		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002074,
+			1 << 21 | 1 << 22, output << 21 | 1 << 22);
+		break;
+
+	default:
+		break;
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(rt5514_set_gpio);
 
 void rt5514_spi_request_switch(int mask, bool is_require)
 {
