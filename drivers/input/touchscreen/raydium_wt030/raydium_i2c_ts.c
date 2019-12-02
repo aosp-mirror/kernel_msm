@@ -47,6 +47,8 @@
 #include "raydium_i2c_ts.h"
 #if defined(CONFIG_TOUCHSCREEN_RM_TS_U128BLX01)
 #include "rad_fw_u128blx01.h"
+#elif defined(CONFIG_TOUCHSCREEN_RM_TS_U128BLX02)
+#include "rad_fw_u128blx02.h"
 #elif defined(CONFIG_TOUCHSCREEN_RM_TS_H120BLX01)
 #include "rad_fw_h120blx01.h"
 #endif
@@ -2774,6 +2776,8 @@ raydium_i2c_raw_data_store(struct device *dev,
 		goto exit_error;
 	}
 
+	g_u8_resetflag = true;
+
 	w_data[RAYDIUM_HOST_CMD_POS] = RAYDIUM_HOST_CMD_NO_OP;
 	w_data[RAYDIUM_FT_CMD_POS] = g_uc_raw_data_type;
 
@@ -2785,6 +2789,10 @@ raydium_i2c_raw_data_store(struct device *dev,
 		goto exit_error;
 	}
 
+	if (g_uc_raw_data_type == 0) {
+		usleep(5000);
+		g_u8_resetflag = false;
+	}
 exit_error:
 	kfree(free_token);
 	kfree(free_temp_buf);
@@ -3931,7 +3939,34 @@ exit:
 	return i32_ret;
 }
 #endif
+#ifdef HOST_NOTIFY_EN
+int raydium_notify_function(struct raydium_ts_data *ts,
+	unsigned short u16_display_mode)
+{
+	int i32_ret = 0;
+	unsigned char u8_rbuffer[4];
 
+	mutex_lock(&ts->lock);
+	if (u8_i2c_mode == PDA2_MODE) {
+		i32_ret = raydium_i2c_pda2_set_page(ts->client,
+						RAYDIUM_PDA2_PAGE_0);
+		if (i32_ret < 0)
+			goto exit;
+		memset(u8_rbuffer, 0, sizeof(u8_rbuffer));
+
+		u8_rbuffer[0] = RAYDIUM_HOST_CMD_DISPLAY_MODE;
+		u8_rbuffer[2] = (unsigned char) (u16_display_mode & 0x00ff);
+		u8_rbuffer[3] = (unsigned char) ((u16_display_mode & 0xff00)
+									>> 8);
+		i32_ret = raydium_i2c_pda2_write(ts->client,
+				RAYDIUM_PDA2_HOST_CMD_ADDR, u8_rbuffer, 4);
+	}
+exit:
+	mutex_unlock(&ts->lock);
+	pr_info("[touch]raydium_notify_function\n");
+	return i32_ret;
+}
+#endif
 
 
 static int
@@ -4288,24 +4323,28 @@ raydium_work_handler(struct work_struct *work)
 			}
 		} else if (raydium_ts->blank == FB_BLANK_VSYNC_SUSPEND
 		   || raydium_ts->blank == FB_BLANK_POWERDOWN) {
-			input_mt_slot(raydium_ts->input_dev, 0);
-			input_mt_report_slot_state(
+			if (tp_status[POS_GESTURE_STATUS] ==
+						RAYDIUM_WAKE_UP) {
+				input_mt_slot(raydium_ts->input_dev, 0);
+				input_mt_report_slot_state(
 					raydium_ts->input_dev, MT_TOOL_FINGER,
 								1);
-			input_report_abs(raydium_ts->input_dev,
+				input_report_abs(raydium_ts->input_dev,
 						ABS_MT_POSITION_X, 100);
-			input_report_abs(raydium_ts->input_dev,
+				input_report_abs(raydium_ts->input_dev,
 						ABS_MT_POSITION_Y, 100);
-			input_sync(raydium_ts->input_dev);
-			usleep(1000);
-			input_mt_slot(raydium_ts->input_dev, 0);
-			input_mt_report_slot_state(raydium_ts->input_dev,
-						MT_TOOL_FINGER, 0);
-			input_mt_report_pointer_emulation(
-						raydium_ts->input_dev, false);
-			input_sync(raydium_ts->input_dev);
-			g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
-			pr_info("[touch]display wake up\n");
+				input_sync(raydium_ts->input_dev);
+				usleep(1000);
+				input_mt_slot(raydium_ts->input_dev, 0);
+				input_mt_report_slot_state(
+					raydium_ts->input_dev, MT_TOOL_FINGER,
+								0);
+				input_mt_report_pointer_emulation(
+					raydium_ts->input_dev, false);
+				input_sync(raydium_ts->input_dev);
+				g_uc_gesture_status = RAYDIUM_GESTURE_DISABLE;
+				pr_info("[touch]display wake up\n");
+			}
 		}
 	}
 #else
@@ -4762,6 +4801,9 @@ fb_notifier_callback(struct notifier_block *self, unsigned long event,
 			g_uc_pre_palm_status = 0;
 			raydium_ts->is_palm = 0;
 #endif
+#ifdef HOST_NOTIFY_EN
+			raydium_notify_function(raydium_ts, ACTIVE_MODE);
+#endif
 			raydium_ts_resume(&raydium_ts->client->dev);
 			break;
 
@@ -4772,6 +4814,9 @@ fb_notifier_callback(struct notifier_block *self, unsigned long event,
 			g_uc_pre_palm_status = 0;
 			raydium_ts->is_palm = 0;
 #endif
+#ifdef HOST_NOTIFY_EN
+			raydium_notify_function(raydium_ts, SLEEP_MODE);
+#endif
 			raydium_ts_suspend(&raydium_ts->client->dev);
 			break;
 
@@ -4781,6 +4826,9 @@ fb_notifier_callback(struct notifier_block *self, unsigned long event,
 			/* clear palm status */
 			g_uc_pre_palm_status = 0;
 			raydium_ts->is_palm = 0;
+#endif
+#ifdef HOST_NOTIFY_EN
+			raydium_notify_function(raydium_ts, AMBIENT_MODE);
 #endif
 			raydium_ts_suspend(&raydium_ts->client->dev);
 			break;

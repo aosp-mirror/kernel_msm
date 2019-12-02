@@ -21,7 +21,7 @@
 #define I2C_VTG_MIN_UV    1800000
 #define I2C_VTG_MAX_UV    1800000
 
-#define RAYDIUM_VER     0x0012
+#define RAYDIUM_VER     0x0013
 
 #if defined(CONFIG_TOUCHSCREEN_RM_TS)
 /* IC timing control arguments */
@@ -68,6 +68,7 @@
 
 #define RAYDIUM_PALM_MODE_DISABLE    0x00
 #define RAYDIUM_PALM_MODE_ENABLE     0x01
+#define RAYDIUM_WAKE_UP              0x02
 
 #define RAYDIUM_TEST_FW	0x80
 #define RAYDIUM_TEST_PARA	0x40
@@ -110,6 +111,7 @@
 /* Raydium host cmd */
 #define RAYDIUM_HOST_CMD_NO_OP              0x00
 #define RAYDIUM_HOST_CMD_PWR_SLEEP          0x30
+#define RAYDIUM_HOST_CMD_DISPLAY_MODE       0x33
 #define RAYDIUM_HOST_CMD_CALIBRATION        0x5C
 #define RAYDIUM_HOST_CMD_TP_MODE            0x60
 #define RAYDIUM_HOST_CMD_FT_MODE            0x61
@@ -159,6 +161,7 @@
 /* Gesture switch */
 #define GESTURE_EN
 #define ESD_SOLUTION_EN
+#define HOST_NOTIFY_EN
 
 #define MSM_NEW_VER
 
