@@ -1415,6 +1415,24 @@ failed:
 	return 0;
 }
 
+static int rt5514_ambient_hotword_version_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+	unsigned int version;
+
+	regmap_write(rt5514->i2c_regmap, 0x18002fd0, 0x1 << 28);
+	regmap_write(rt5514->i2c_regmap, 0x18001014, 2);
+
+	msleep(20);
+
+	regmap_read(rt5514->i2c_regmap, 0x18002fd4, &version);
+	ucontrol->value.integer.value[0] = version;
+
+	return 0;
+}
+
 static const char * const rt5514_mem_test_txt[] = {
 	"PASS", "FAIL", "NOT_SUPPORT", "OUT_OF_MEMORY",
 };
@@ -1473,6 +1491,9 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_ambient_payload_get, rt5514_ambient_payload_put),
 	SND_SOC_BYTES_TLV("Ambient Process Payload", sizeof(struct _payload_st),
 		rt5514_ambient_process_payload_get, NULL),
+	SOC_SINGLE_EXT("Ambient Hotword Version", SND_SOC_NOPM,
+		0, 0x7fffffff, 0,
+		rt5514_ambient_hotword_version_get, NULL),
 	SOC_SINGLE_EXT("SPI Switch", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_spi_switch_get, rt5514_spi_switch_put),
 	SOC_SINGLE_EXT("Mic Delay ms", SND_SOC_NOPM, 0, 1000, 0,
