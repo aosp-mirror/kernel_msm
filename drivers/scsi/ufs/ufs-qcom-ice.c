@@ -62,6 +62,7 @@ void ufs_qcom_ice_print_regs(struct ufs_qcom_host *qcom_host)
 	    qcom_host->ice.vops->debug)
 		qcom_host->ice.vops->debug(qcom_host->ice.pdev);
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_print_regs);
 
 static void ufs_qcom_ice_error_cb(void *host_ctrl, u32 error)
 {
@@ -169,6 +170,7 @@ int ufs_qcom_ice_get_dev(struct ufs_qcom_host *qcom_host)
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_get_dev);
 
 static void ufs_qcom_ice_cfg_work(struct work_struct *work)
 {
@@ -247,6 +249,7 @@ int ufs_qcom_ice_init(struct ufs_qcom_host *qcom_host)
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_init);
 
 static inline bool ufs_qcom_is_data_cmd(char cmd_op, bool is_write)
 {
@@ -350,6 +353,7 @@ int ufs_qcom_ice_req_setup(struct ufs_qcom_host *qcom_host,
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_req_setup);
 
 /**
  * ufs_qcom_ice_cfg_start() - starts configuring UFS's ICE registers
@@ -538,6 +542,7 @@ int ufs_qcom_ice_cfg_start(struct ufs_qcom_host *qcom_host,
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_cfg_start);
 
 /**
  * ufs_qcom_ice_cfg_end() - finishes configuring UFS's ICE registers
@@ -568,6 +573,7 @@ int ufs_qcom_ice_cfg_end(struct ufs_qcom_host *qcom_host, struct request *req)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_cfg_end);
 
 /**
  * ufs_qcom_ice_reset() - resets UFS-ICE interface and ICE device
@@ -615,6 +621,7 @@ int ufs_qcom_ice_reset(struct ufs_qcom_host *qcom_host)
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_reset);
 
 /**
  * ufs_qcom_ice_resume() - resumes UFS-ICE interface and ICE device from power
@@ -658,6 +665,7 @@ int ufs_qcom_ice_resume(struct ufs_qcom_host *qcom_host)
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_resume);
 
 /**
  * ufs_qcom_ice_suspend() - suspends UFS-ICE interface and ICE device
@@ -700,6 +708,7 @@ int ufs_qcom_ice_suspend(struct ufs_qcom_host *qcom_host)
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_suspend);
 
 /**
  * ufs_qcom_ice_get_status() - returns the status of an ICE transaction
@@ -757,3 +766,4 @@ int ufs_qcom_ice_get_status(struct ufs_qcom_host *qcom_host, int *ice_status)
 out:
 	return err;
 }
+EXPORT_SYMBOL_GPL(ufs_qcom_ice_get_status);

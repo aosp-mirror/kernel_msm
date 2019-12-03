@@ -35,7 +35,7 @@ struct esoc_desc {
 	void *priv;
 };
 
-#ifdef CONFIG_ESOC_CLIENT
+#if IS_ENABLED(CONFIG_ESOC_CLIENT)
 /* Can return probe deferral */
 struct esoc_desc *devm_register_esoc_client(struct device *dev,
 							const char *name);

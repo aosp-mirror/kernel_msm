@@ -959,6 +959,7 @@ static struct platform_driver gdsc_driver = {
 	.driver = {
 		.name = "gdsc",
 		.of_match_table = gdsc_match_table,
+		.sync_state = regulator_sync_state,
 	},
 };
 

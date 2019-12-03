@@ -2377,7 +2377,7 @@ static const struct cqhci_host_ops sdhci_msm_cqhci_ops = {
 	.dumpregs		= sdhci_msm_cqe_sdhci_dumpregs,
 };
 
-#ifdef CONFIG_MMC_CQHCI
+#if IS_ENABLED(CONFIG_MMC_CQHCI)
 static int sdhci_msm_cqe_add_host(struct sdhci_host *host,
 				struct platform_device *pdev)
 {

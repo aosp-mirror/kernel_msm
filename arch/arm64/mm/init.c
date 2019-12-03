@@ -56,6 +56,14 @@
 #include <asm/tlb.h>
 #include <asm/alternative.h>
 
+EXPORT_SYMBOL_GPL(kimage_vaddr);
+EXPORT_SYMBOL_GPL(swapper_pg_dir);
+EXPORT_SYMBOL_GPL(_stext);
+EXPORT_SYMBOL_GPL(_end);
+EXPORT_SYMBOL_GPL(_einittext);
+EXPORT_SYMBOL_GPL(_sinittext);
+EXPORT_SYMBOL_GPL(_etext);
+
 /*
  * We need to be able to catch inadvertent references to memstart_addr
  * that occur (potentially in generic code) before arm64_memblock_init()
@@ -320,6 +328,7 @@ static void __init arm64_memory_present(void)
 
 static phys_addr_t memory_limit = PHYS_ADDR_MAX;
 phys_addr_t bootloader_memory_limit;
+EXPORT_SYMBOL_GPL(bootloader_memory_limit);
 
 #ifdef CONFIG_OVERRIDE_MEMORY_LIMIT
 static void __init update_memory_limit(void)

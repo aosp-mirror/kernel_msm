@@ -188,7 +188,7 @@ config ARM_RK3399_DMC_DEVFREQ
           from hardware.
 
 config ARM_QCOM_DEVFREQ_FW
-	bool "Qualcomm Technologies Inc. DEVFREQ FW driver"
+	tristate "Qualcomm Technologies Inc. DEVFREQ FW driver"
 	depends on ARCH_QCOM
 	select DEVFREQ_GOV_PERFORMANCE
 	select DEVFREQ_GOV_POWERSAVE
@@ -212,7 +212,7 @@ config DEVFREQ_SIMPLE_DEV
 	  clock APIs and don't have any form of status reporting.
 
 config QCOM_DEVFREQ_DEVBW
-	bool "Qualcomm Technologies Inc. DEVFREQ device for device master <-> slave IB/AB BW voting"
+	tristate "Qualcomm Technologies Inc. DEVFREQ device for device master <-> slave IB/AB BW voting"
 	depends on ARCH_QCOM
 	select DEVFREQ_GOV_PERFORMANCE
 	select DEVFREQ_GOV_POWERSAVE

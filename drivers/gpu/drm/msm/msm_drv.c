@@ -663,7 +663,7 @@ err_unref_drm_dev:
 /*
  * DRM operations:
  */
-#ifdef CONFIG_QCOM_KGSL
+#if IS_ENABLED(CONFIG_QCOM_KGSL)
 static void load_gpu(struct drm_device *dev)
 {
 }
@@ -1223,7 +1223,7 @@ static int add_components_mdp(struct device *mdp_dev,
 
 static int compare_name_mdp(struct device *dev, void *data)
 {
-	return (strnstr(dev_name(dev), "mdp") != NULL);
+	return (strnstr(dev_name(dev), "mdp", strlen(dev_name(dev))) != NULL);
 }
 
 static int add_display_components(struct device *dev,
@@ -1282,7 +1282,7 @@ static const struct of_device_id msm_gpu_match[] = {
 	{ },
 };
 
-#ifdef CONFIG_QCOM_KGSL
+#if IS_ENABLED(CONFIG_QCOM_KGSL)
 static int add_gpu_components(struct device *dev,
 					      struct component_match **matchptr)
 {
@@ -1383,7 +1383,7 @@ static struct platform_driver msm_platform_driver = {
 	},
 };
 
-#ifdef CONFIG_QCOM_KGSL
+#if IS_ENABLED(CONFIG_QCOM_KGSL)
 void __init adreno_register(void)
 {
 }

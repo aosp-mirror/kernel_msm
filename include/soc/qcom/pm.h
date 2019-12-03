@@ -19,7 +19,7 @@ struct latency_level {
 	const char *level_name;
 };
 
-#ifdef CONFIG_MSM_PM
+#if IS_ENABLED(CONFIG_MSM_PM)
 
 s32 msm_cpuidle_get_deep_idle_latency(void);
 

@@ -419,6 +419,8 @@ static int gpu_cc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
 	if (IS_ERR(vdd_mx.regulator[0])) {
@@ -427,6 +429,8 @@ static int gpu_cc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_mx regulator\n");
 		return PTR_ERR(vdd_mx.regulator[0]);
 	}
+	vdd_mx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
 
 	clk_lucid_pll_configure(&gpu_cc_pll1, regmap, &gpu_cc_pll1_config);
 
@@ -446,11 +450,19 @@ static int gpu_cc_kona_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void gpu_cc_kona_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+	clk_unvote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
+}
+
 static struct platform_driver gpu_cc_kona_driver = {
 	.probe = gpu_cc_kona_probe,
 	.driver = {
 		.name = "gpu_cc-kona",
 		.of_match_table = gpu_cc_kona_match_table,
+		.sync_state = gpu_cc_kona_sync_state,
 	},
 };
 

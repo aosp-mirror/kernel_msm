@@ -52,7 +52,7 @@ static inline const char *hdcp2_app_cmd_str(enum hdcp2_app_cmd cmd)
 	}
 }
 
-#ifdef CONFIG_HDCP_QSEECOM
+#if IS_ENABLED(CONFIG_HDCP_QSEECOM)
 void *hdcp1_init(void);
 void hdcp1_deinit(void *data);
 bool hdcp1_feature_supported(void *data);

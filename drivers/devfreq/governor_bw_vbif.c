@@ -50,6 +50,7 @@ void devfreq_vbif_register_callback(getbw_func func, void *data)
 	extern_get_bw = func;
 	extern_get_bw_data = data;
 }
+EXPORT_SYMBOL_GPL(devfreq_vbif_register_callback);
 
 int devfreq_vbif_update_bw(void)
 {
@@ -64,6 +65,7 @@ int devfreq_vbif_update_bw(void)
 	mutex_unlock(&df_lock);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(devfreq_vbif_update_bw);
 
 static int devfreq_vbif_ev_handler(struct devfreq *devfreq,
 					unsigned int event, void *data)
@@ -121,7 +123,15 @@ static struct devfreq_governor devfreq_vbif = {
 
 static int __init devfreq_vbif_init(void)
 {
-	return devfreq_add_governor(&devfreq_vbif);
+	int ret = devfreq_add_governor(&devfreq_vbif);
+	if (!ret) {
+		pr_info("%s: VBIF GPUBW governor registered.\n", __func__);
+	} else {
+		pr_err("%s: VBIF GPUBW governor registration failed!\n",
+		       __func__);
+	}
+	return ret;
+
 }
 subsys_initcall(devfreq_vbif_init);
 

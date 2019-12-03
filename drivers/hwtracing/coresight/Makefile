@@ -4,10 +4,11 @@
 #
 obj-$(CONFIG_CORESIGHT) += coresight.o coresight-etm-perf.o
 obj-$(CONFIG_OF) += of_coresight.o
-obj-$(CONFIG_CORESIGHT_LINK_AND_SINK_TMC) += coresight-tmc.o \
-					     coresight-tmc-etf.o \
-					     coresight-tmc-etr.o \
-					     coresight-byte-cntr.o
+obj-$(CONFIG_CORESIGHT_LINK_AND_SINK_TMC) += coresight-link-sink-tmc.o
+coresight-link-sink-tmc-objs += coresight-tmc.o
+coresight-link-sink-tmc-objs += coresight-tmc-etf.o
+coresight-link-sink-tmc-objs += coresight-tmc-etr.o
+coresight-link-sink-tmc-objs += coresight-byte-cntr.o
 obj-$(CONFIG_CORESIGHT_SINK_TPIU) += coresight-tpiu.o
 obj-$(CONFIG_CORESIGHT_SINK_ETBV10) += coresight-etb10.o
 obj-$(CONFIG_CORESIGHT_LINKS_AND_SINKS) += coresight-funnel.o \

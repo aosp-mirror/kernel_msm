@@ -23,6 +23,8 @@
 #define TSENS_CTRL_ADDR(n)			(n)
 #define TSENS_TM_SN_STATUS(n)			((n) + 0xa0)
 
+#define TSENS_DRIVER_NAME			"msm-tsens"
+
 #define ONE_PT_CALIB		0x1
 #define ONE_PT_CALIB2		0x2
 #define TWO_PT_CALIB		0x3
@@ -94,7 +96,7 @@ struct tsens_device;
 #define	TSENS_DUMP(x...)		pr_info(x)
 #endif
 
-#if defined(CONFIG_THERMAL_TSENS)
+#if IS_ENABLED(CONFIG_THERMAL_TSENS)
 int tsens2xxx_dbg(struct tsens_device *data, u32 id, u32 dbg_type, int *temp);
 #else
 static inline int tsens2xxx_dbg(struct tsens_device *data, u32 id,

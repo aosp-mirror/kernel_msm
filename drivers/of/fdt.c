@@ -104,6 +104,7 @@ int of_fdt_get_ddrtype(void)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(of_fdt_get_ddrtype);
 
 /**
  * of_fdt_is_compatible - Return true if given node from the given blob has

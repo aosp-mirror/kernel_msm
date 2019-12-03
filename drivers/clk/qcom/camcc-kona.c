@@ -2763,6 +2763,8 @@ static int cam_cc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_mx regulator\n");
 		return PTR_ERR(vdd_mx.regulator[0]);
 	}
+	vdd_mx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
 
 	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
 	if (IS_ERR(vdd_mm.regulator[0])) {
@@ -2771,6 +2773,8 @@ static int cam_cc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_mm regulator\n");
 		return PTR_ERR(vdd_mm.regulator[0]);
 	}
+	vdd_mm.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mm, vdd_mm.num_levels - 1);
 
 	camcc_bus_id = msm_bus_scale_register_client(&clk_debugfs_scale_table);
 	if (!camcc_bus_id) {
@@ -2806,11 +2810,19 @@ static int cam_cc_kona_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void cam_cc_kona_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
+	clk_unvote_vdd_level(&vdd_mm, vdd_mm.num_levels - 1);
+}
+
 static struct platform_driver cam_cc_kona_driver = {
 	.probe = cam_cc_kona_probe,
 	.driver = {
 		.name = "cam_cc-kona",
 		.of_match_table = cam_cc_kona_match_table,
+		.sync_state = cam_cc_kona_sync_state,
 	},
 };
 

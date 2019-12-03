@@ -3,7 +3,7 @@
 # External soc control infrastructure and drivers
 #
 menuconfig ESOC
-	bool "External SOCs Control"
+	tristate "External SOCs Control"
 	help
 	  External SOCs can be powered on and monitored by user
 	  space or kernel drivers. Additionally they can be controlled
@@ -13,7 +13,7 @@ menuconfig ESOC
 if ESOC
 
 config ESOC_DEV
-	bool "ESOC userspace interface"
+	tristate "ESOC userspace interface"
 	help
 	  Say yes here to enable a userspace representation of the control
 	  link. Userspace can register a request engine or a command engine
@@ -21,7 +21,7 @@ config ESOC_DEV
 	  control link.
 
 config ESOC_CLIENT
-	bool "ESOC client interface"
+	tristate "ESOC client interface"
 	depends on OF
 	help
 	  Say yes here to enable client interface for external socs.
@@ -38,7 +38,7 @@ config ESOC_DEBUG
 	  logging information could be helpful to trace it.
 
 config ESOC_MDM_4x
-	bool "Add support for external modems"
+	tristate "Add support for external modems"
 	help
 	  In some QTI boards, an external modem such as mdm9x55 or sdx50m
 	  is connected to a primary msm. The primary soc can control/monitor

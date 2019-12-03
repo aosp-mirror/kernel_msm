@@ -1,0 +1,354 @@
+#! /bin/sh
+# SPDX-License-Identifier: GPL-2.0
+#
+# (c) 2019, Google
+progname="${0##*/}"
+
+# Change to EXPORT_SYMBOL, EXPORT_SYMBOL_GPL or other namespace variant default
+EXPORT_SYMBOL=${EXPORT_SYMBOL_GPL:-${progname#add_}}
+
+USAGE="USAGE: ${progname} [--no-skip-arch] < kernel_build_error_log
+       ${progname} [--no-skip-arch] kernel_build_error_log
+       grep /<module>[.]ko build_error_log | ${progname} [--no-skip-arch]
+       ${EDITOR:-vi} \`${progname} [--no-skip-arch] < kernel_build_error_log\`
+
+To acquire the kernel_build_error_log eg:
+\$ ./build_sm8250.sh -j50 2>&1 | tee kernel_build_error_log
+
+To only create commit related to symbols needed for cam_spec.ko module:
+\$ grep /cam_spec[.]ko kernel_build_error_log | ${progname}
+
+The script will only affect the current directory level and downward,
+this allows one to segregate the adjusted content.  Any symbols that
+are needed outside the range of that directory will result in errors
+and the git commit phase will not be performed.
+
+Add ${EXPORT_SYMBOL} for any noted missing symbols, output the list of files
+modified to stdout (so it can be passed to an editor command line should you
+need to check or adjust the results). Automatically commit the list of files
+into git.
+
+Deals as simply as it can to handle __trace_<symbols>, sorting the result.
+
+Keep in mind exports can change, be added or subtracted, and that preliminary
+work may expose or remove required symbols to resolve during later work.  As
+such this script only adds, so you may need to revert the results and try
+again to get the most up to date set.  By making this part automated it can
+deal with the tens or thousands of exports that need to be discovered or
+added.  If you need to adjust a subsystem, run this script in the subsystem
+directory, and it will only adjust from that point downwards leaving other
+higher up trees alone."
+
+if [ X"--help" = X"${1}" -o X"{-h}" = X"${1}" ]; then
+  echo "${USAGE}" >&2
+  exit
+fi
+skip_arch=true
+if [ X"--no-skip-arch" = X"${1}" ]; then
+  skip_arch=false
+  shift
+fi
+INPUT=
+if [ 1 = ${#} ]; then
+  INPUT=${1}
+  shift
+fi
+if [ 0 != ${#} ]; then
+  echo "Unexpected Argument: ${*}" >&2
+  echo >&2
+  echo "${USAGE}" >&2
+  exit 1
+fi
+
+# A _real_ embedded tab character
+TAB="`echo | tr '\n' '\t'`"
+# A _real_ embedded escape character
+ESCAPE="`echo | tr '\n' '\033'`"
+# Colours
+RED="${ESCAPE}[38;5;196m"
+BLUE="${ESCAPE}[35m"
+NORMAL="${ESCAPE}[0m"
+
+# Common grep/sed regex expressions
+STRUCT_TYPE="struct[ ${TAB}][^ ${TAB}]\{1,\}"
+VAR_TYPE="\(${STRUCT_TYPE}\|bool\|char\|int\|long\|long long\|u\{0,1\}int[0-9]*t\)[ ${TAB}]\{1,\}[*]\{0,1\}"
+STRUCT_TYPE="${STRUCT_TYPE}[ ${TAB}]\{1,\}[*]\{0,1\}"
+
+# Files that exports should never exist, or need to be carefully considered
+skip_arch_files() {
+  if ${skip_arch}; then
+    grep -v '\(^\|^[^:]*/\)arch/[^a][^r][^m][^:]*:'
+  else
+    cat -
+  fi
+}
+
+# Following sucks in all the data from stdin or ${INPUT}
+#  Check for depmod output (undefined!) or built-in kernel complaints (undefined
+#  references).  The later is not advised because it means the kernel may be
+#  dependent on a module, we collect it to provide a signal for future work.
+echo "Reading symbols" >&2
+MODULES="`
+  sed -n \
+      -e 's/^ERROR: "\([^"]*\)" [[]\(.*[.]ko\)[]] undefined!$/\1 \2/p' \
+      -e 's/^[^:]*:[0-9]*: undefined reference to \`\([^'\'']*\)'\''$/\1/p' \
+      ${INPUT} |
+    sort -u`"
+SYMBOLS="`echo \"${MODULES}\" | sed 's/ .*$//' | sort -u`"
+if [ -z "${SYMBOLS}" ]; then
+  echo "${BLUE}WARNING${NORMAL}: no symbols found" >&2
+  exit
+fi
+
+SYMBOLS_PLUS_TRACE="${SYMBOLS}"
+TRACE_MODULES="`echo \"${MODULES}\" |
+                  sed -n 's/__tracepoint_.* //p' |
+                  sort -u`"
+TRACE_MODULES_2=
+c=`echo "${TRACE_MODULES}" | wc -l`
+if [ 1 -eq ${c} ];then
+  TRACE_MODULES="${TRACE_MODULES%/*.ko}"
+  if [ -z "${INPUT}" ]; then
+    TRACE_MODULES_2=*
+  else
+    TRACE_MODULES_2=${INPUT}
+  fi
+elif [ -z "${INPUT}" ]; then
+  TRACE_MODULES=*
+else
+  TRACE_MODULES=${INPUT}
+fi
+TRACE_FILE="`grep -rl '^#define CREATE_TRACE_POINTS' ${TRACE_MODULES}`"
+if [ -z "${TRACE_FILE}" -a -n "${TRACE_MODULES_2}" ]; then
+  TRACE_FILE="`grep -rl '^#define CREATE_TRACE_POINTS' ${TRACE_MODULES_2}`"
+fi
+c=0
+if [ -n "${TRACE_FILE}" ]; then
+  c=`echo "${TRACE_FILE}" | wc -l`
+fi
+if [ 1 -eq ${c} ]; then
+  SYMBOLS_PLUS_TRACE="${SYMBOLS}
+`echo \"${SYMBOLS}\" |
+   sed -n 's/^__tracepoint_\(.*\)/EXPORT_TRACEPOINT_SYMBOL_GPL(\1);/p'`"
+else
+  TRACE_FILE=
+fi
+
+echo "Finding symbols in the current tree" >&2
+DATA="`grep -Fr \"${SYMBOLS_PLUS_TRACE}\" * |
+         grep \"^[^:]*[.][cS]:[^ ${TAB}]\" |
+         skip_arch_files`"
+echo "Editing the files that contain the symbols" >&2
+TMP=`mktemp -d`
+for s in ${SYMBOLS}; do
+  # Already there?
+  if echo "${DATA}" |
+       grep "EXPORT_\(TRACEPOINT_SYMBOL_GPL*(${s#__tracepoint_}\|SYMBOL\(_GPL\)*(${s}\))" >/dev/null; then
+    echo INFO: ${s} found and already exported >&2
+    continue
+  fi
+  m="`echo \"${DATA}\" | grep \"^[^:]*:\([^ ${TAB}].*[ *]\|\)${s}(\"`"
+  c=0
+  if [ -n "${m}" ]; then
+    c=`echo "${m}" | wc -l`
+  fi
+  if [ 0 -eq ${c} ]; then
+    m="`echo \"${DATA}\" | grep \"^[^:]*:\(const[ ${TAB}]\{1,\}\|\)${STRUCT_TYPE}${s}\([[][]]\|\) = {\"`"
+    c=0
+    if [ -n "${m}" ]; then
+      c=`echo "${m}" | wc -l`
+    fi
+    if [ 0 -eq ${c} ]; then
+      m="`echo \"${DATA}\" | grep \"^[^:]*:\(const[ ${TAB}]\{1,\}\|\)${VAR_TYPE}${s}[\[ ${TAB};=]\"`"
+      c=0
+      if [ -n "${m}" ]; then
+        c=`echo "${m}" | wc -l`
+      fi
+      if [ 0 -eq ${c} ]; then
+        if [ -z "${TRACE_FILE}" -o "${s}" = "${s#__tracepoint_}" ]; then
+          echo "${RED}ERROR${NORMAL}: ${s} not found" >&2
+          if [ "${s}" != "${s#__tracepoint_}" -o "${s}" = "${s#__}" ]; then
+            echo FAILED
+          else
+            echo "${RED}WARNING${NORMAL}: ${s} might be a linker variable? skipping marking as failure" >&2
+          fi
+        else
+          echo ${TRACE_FILE} ${s}
+        fi
+      elif [ 1 -eq ${c} ]; then
+        echo "${DATA}" |
+          sed -n "s/^\([^:]*\):\(const[ $TAB]\{1,\}\|\)${VAR_TYPE}${s}.*/\1 ${s}/p"
+      else
+        echo "${RED}ERROR${NORMAL}: ${c} matches: ${m}" | tr '\n' '&' >&2
+        echo FAILED
+      fi
+    elif [ 1 -eq ${c} ]; then
+      echo "${DATA}" |
+        sed -n "s/^\([^:]*\):\(const[ $TAB]\{1,\}\|\)${STRUCT_TYPE}\(${s}\)\([[][]]\|\) = {.*/\1 \3/p"
+    else
+      echo "${RED}ERROR${NORMAL}: ${c} matches: ${m}" | tr '\n' '&' >&2
+      echo FAILED
+    fi
+  elif [ 1 -eq ${c} ]; then
+    echo "${DATA}" |
+      sed -n "s/^\([^:]*\):\([^ ${TAB}].*[ *]\|\)\(${s}\)(.*/\1 \3/p"
+  else
+    echo "${RED}ERROR${NORMAL}: ${c} matches: ${m}" | tr '\n' '&' >&2
+    echo FAILED
+  fi
+done |
+  sort -u |
+  while read F s; do
+    if [ "FAILED" = "${F}" ]; then
+      echo FAILED
+      continue
+    fi
+    if [ "${s}" != "${s#__tracepoint_}" ]; then
+      sed "\$ {
+             /^[^E]/ {
+               a \
+
+             }
+             a \
+               newEXPORT_TRACEPOINT_SYMBOL_GPL(${s#__tracepoint_});
+           }" ${F}
+    else
+      cat ${F}
+    fi |
+    sed "/^\([^ ${TAB}].*[ *]\|\)${s}(/ {
+           : loop1
+           N
+           /\(\n}\);*$/ {
+             s//\1/
+             a \
+               new${EXPORT_SYMBOL}(${s});
+             b next1
+           }
+           b loop1
+           : next1
+         }
+         /^\(const[ ${TAB}]\{1,\}\|\)${STRUCT_TYPE}${s}\([[][]]\|\)[ ${TAB}]*=[ ${TAB}]*{/ {
+           : loop2
+           N
+           /\n};$/ {
+             a \
+               new${EXPORT_SYMBOL}(${s});
+             b next2
+           }
+           b loop2
+           : next2
+         }
+         /^\(const[ ${TAB}]\{1,\}\|\)${VAR_TYPE}${s}\(\([[][]]\|\)[ ${TAB}]*=.*\|\);/ {
+           a \
+             new${EXPORT_SYMBOL}(${s});
+         }
+         /^\(const[ ${TAB}]\{1,\}\|\)${VAR_TYPE}${s}\([[][]]\|\)[ ${TAB}]*=[ ${TAB}]*{\{0,1\}\$/ {
+           : loop3
+           N
+           /;$/ {
+             a \
+               new${EXPORT_SYMBOL}(${s});
+             b next3
+           }
+           b loop3
+           : next3
+         }" |
+      sed '/^newEXPORT/ {
+             s//EXPORT/
+             N
+             : loop
+             N
+             s/\(\n\)\n$/\1/
+             t loop
+           }' >${TMP}/${F##*/} &&
+      ! cmp -s ${F} ${TMP}/${F##*/} &&
+      [ -s ${TMP}/${F##*/} ] &&
+      cp ${TMP}/${F##*/} ${F} &&
+      echo INFO: export ${s} in ${F} >&2 ||
+      (
+        echo "${RED}ERROR${NORMAL}: export ${s} in ${F}" >&2
+        echo FAILED
+      )
+    echo ${F}
+    rm ${TMP}/${F##*/}
+  done >${TMP}/${progname}.out
+FILES="`grep -v '^FAILED$' ${TMP}/${progname}.out | sort -u`"
+echo "${FILES}"
+grep '^FAILED$' ${TMP}/${progname}.out >/dev/null
+ret=${?}
+rm -rf ${TMP}
+if [ 0 -ne ${ret} ]; then
+  echo "DONE" >&2
+  if [ -z "${FILES}" ]; then
+    exit
+  fi
+
+  AUTHOR_NAME="`git config user.name`"
+  AUTHOR_EMAIL="`git config user.email`"
+  if [ -z "${AUTHOR_EMAIL}" ]; then
+    AUTHOR_EMAIL="`${USER}@google.com`"
+  fi
+  if [ -z "${AUTHOR_NAME}" ]; then
+    convert_ldap_to_name() {
+      echo "${1##*/}" |
+        sed "s@[-_]@ @g
+             s@   *@ @g
+             s@\(saravana\)k@\1 kannan@
+             s@salyzyn@mark &@
+             s@hridya@& valsaraju@
+             s@\(will\)\(mcvicker\)@\1 \2@
+             s@q\(perret\)@quentin \1@
+             s@\(connor\)o@\1 O\'Brien@
+             s@t\(kjos\)@todd \1@
+             s@ss\(patil\)@sandeep \1@
+             s@s\(muckle\)@steve \1@
+             s@\(nick\)\(chung\)@\1 \2@
+             s@rurumi\(hong\)@alex \1@
+             s@\(hsinyi\)\(tseng\)@\1 \2@" |
+        sed 's@\(^\| \)a@\1A@g
+             s@\(^\| \)b@\1B@g
+             s@\(^\| \)c@\1C@g
+             s@\(^\| \)d@\1D@g
+             s@\(^\| \)e@\1E@g
+             s@\(^\| \)f@\1F@g
+             s@\(^\| \)g@\1G@g
+             s@\(^\| \)h@\1H@g
+             s@\(^\| \)i@\1I@g
+             s@\(^\| \)j@\1J@g
+             s@\(^\| \)k@\1K@g
+             s@\(^\| \)l@\1L@g
+             s@\(^\| \)m@\1M@g
+             s@\(^\| \)n@\1N@g
+             s@\(^\| \)o@\1O@g
+             s@\(^\| \)p@\1P@g
+             s@\(^\| \)q@\1Q@g
+             s@\(^\| \)r@\1R@g
+             s@\(^\| \)s@\1S@g
+             s@\(^\| \)t@\1T@g
+             s@\(^\| \)u@\1U@g
+             s@\(^\| \|Mc\)v@\1V@g
+             s@\(^\| \)w@\1W@g
+             s@\(^\| \)x@\1X@g
+             s@\(^\| \)y@\1Y@g
+             s@\(^\| \)z@\1Z@g'
+    }
+    AUTHOR_NAME="`convert_ldap_to_name ${USER}`"
+  fi
+
+  git commit ${FILES} -m "GKI: add missing exports for <edit>=m for <edit>
+
+<edit>
+
+Automatically generated by ${0##*/}
+
+The following symbols are exported:
+`echo \"${SYMBOLS}\" |
+   sed 's/^/ - /'`
+
+Signed-off-by: ${AUTHOR_NAME} <${AUTHOR_EMAIL}>
+Test: compile" ||
+    echo "${RED}ERROR${NORMAL}: failed to commit changes to git" >&2
+  exit
+fi
+echo "${RED}FAILED${NORMAL}: could not complete task" >&2
+exit 1

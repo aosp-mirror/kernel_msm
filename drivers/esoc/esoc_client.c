@@ -199,3 +199,12 @@ int esoc_unregister_client_hook(struct esoc_desc *desc,
 	return -EINVAL;
 }
 EXPORT_SYMBOL(esoc_unregister_client_hook);
+
+static int __init esoc_client_init(void)
+{
+	notify_esoc_clients_cb = notify_esoc_clients;
+	return 0;
+}
+module_init(esoc_client_init);
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("ESOC client interface");

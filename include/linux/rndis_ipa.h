@@ -49,7 +49,12 @@ struct ipa_usb_init_params {
 	bool skip_ep_cfg;
 };
 
-#ifdef CONFIG_RNDIS_IPA
+#if IS_ENABLED(CONFIG_RNDIS_IPA)
+
+#if defined(CONFIG_IPA3_MODULE)
+int rndis_ipa_init_module(void);
+void rndis_ipa_cleanup_module(void);
+#endif
 
 int rndis_ipa_init(struct ipa_usb_init_params *params);
 

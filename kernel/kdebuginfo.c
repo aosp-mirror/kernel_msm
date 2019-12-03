@@ -180,3 +180,5 @@ static int __init kdebuginfo_init(void)
 	return 0;
 }
 device_initcall(kdebuginfo_init);
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Append bootloader log to ramoops");

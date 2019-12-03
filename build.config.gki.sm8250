@@ -1,0 +1,6 @@
+KERNEL_DIR=private/msm-google
+
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.sm8250.common
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.sm8250.common.clang
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.sm8250.no-cfi

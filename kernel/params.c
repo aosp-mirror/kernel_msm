@@ -955,6 +955,7 @@ static int __init param_sysfs_init(void)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(module_kset);
 subsys_initcall(param_sysfs_init);
 
 #endif /* CONFIG_SYSFS */

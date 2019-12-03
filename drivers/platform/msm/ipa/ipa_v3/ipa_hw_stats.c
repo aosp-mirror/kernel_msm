@@ -1390,6 +1390,7 @@ int ipa_get_flt_rt_stats(struct ipa_ioc_flt_rt_query *query)
 
 	return __ipa_get_flt_rt_stats(query);
 }
+EXPORT_SYMBOL_GPL(ipa_get_flt_rt_stats);
 
 
 static int __ipa_set_flt_rt_stats(int index, struct ipa_flt_rt_stats stats)
@@ -1501,6 +1502,7 @@ int ipa_set_flt_rt_stats(int index, struct ipa_flt_rt_stats stats)
 
 	return __ipa_set_flt_rt_stats(index, stats);
 }
+EXPORT_SYMBOL_GPL(ipa_set_flt_rt_stats);
 
 int ipa_init_drop_stats(u32 pipe_bitmask)
 {

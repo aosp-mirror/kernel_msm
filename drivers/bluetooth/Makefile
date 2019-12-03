@@ -29,11 +29,12 @@ obj-$(CONFIG_BT_QCA)		+= btqca.o
 obj-$(CONFIG_BT_HCIUART_NOKIA)	+= hci_nokia.o
 
 obj-$(CONFIG_BT_HCIRSI)		+= btrsi.o
-obj-$(CONFIG_MSM_BT_POWER)	+= bluetooth-power.o
-obj-$(CONFIG_BTFM_SLIM)		+= btfm_slim.o
-obj-$(CONFIG_BTFM_SLIM)		+= btfm_slim_codec.o
-obj-$(CONFIG_BTFM_SLIM_WCN3990)	+= btfm_slim_slave.o
-obj-$(CONFIG_BT_SLIM_QCA6390)	+= btfm_slim_slave.o
+obj-$(CONFIG_MSM_BT_POWER)	+= bluetooth_power.o
+bluetooth_power-objs		+= bluetooth-power.o
+bluetooth_power-$(CONFIG_BTFM_SLIM)	+= btfm_slim.o
+bluetooth_power-$(CONFIG_BTFM_SLIM)	+= btfm_slim_codec.o
+bluetooth_power-$(CONFIG_BTFM_SLIM_WCN3990)	+= btfm_slim_slave.o
+bluetooth_power-$(CONFIG_BT_SLIM_QCA6390)	+= btfm_slim_slave.o
 
 btmrvl-y			:= btmrvl_main.o
 btmrvl-$(CONFIG_DEBUG_FS)	+= btmrvl_debugfs.o

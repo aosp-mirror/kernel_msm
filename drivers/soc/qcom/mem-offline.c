@@ -629,3 +629,4 @@ static int __init mem_module_init(void)
 }
 
 subsys_initcall(mem_module_init);
+MODULE_LICENSE("GPL v2");

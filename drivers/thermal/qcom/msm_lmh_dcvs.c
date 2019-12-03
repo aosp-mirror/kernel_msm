@@ -33,8 +33,6 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/lmh.h>
-#undef CREATE_TRACE_POINTS
-#include <trace/events/power.h>
 
 #define LIMITS_DCVSH			0x10
 #define LIMITS_NODE_DCVS		0x44435653
@@ -717,3 +715,4 @@ static struct platform_driver limits_dcvs_driver = {
 	},
 };
 builtin_platform_driver(limits_dcvs_driver);
+MODULE_LICENSE("GPL v2");

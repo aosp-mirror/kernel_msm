@@ -2385,3 +2385,4 @@ module_platform_driver(wled_driver);
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. SPMI PMIC WLED driver");
 MODULE_LICENSE("GPL v2");
+MODULE_SOFTDEP("pre: devfreq_qcom_fw");

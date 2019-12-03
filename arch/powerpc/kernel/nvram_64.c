@@ -125,7 +125,7 @@ static size_t oops_data_sz;
 #define MEM_LEVEL 4
 static struct z_stream_s stream;
 
-#ifdef CONFIG_PSTORE
+#if IS_ENABLED(CONFIG_PSTORE)
 #ifdef CONFIG_PPC_POWERNV
 static struct nvram_os_partition skiboot_partition = {
 	.name = "ibm,skiboot",
@@ -376,7 +376,7 @@ static int zip_oops(size_t text_len)
 	return 0;
 }
 
-#ifdef CONFIG_PSTORE
+#if IS_ENABLED(CONFIG_PSTORE)
 static int nvram_pstore_open(struct pstore_info *psi)
 {
 	/* Reset the iterator to start reading partitions again */

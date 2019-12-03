@@ -5,7 +5,9 @@
 
 #include <linux/ipa_mhi.h>
 #include <linux/ipa_uc_offload.h>
+#include <linux/ipa_usb.h>
 #include <linux/ipa_wdi3.h>
+#include <linux/rndis_ipa.h>
 #include "ipa_common_i.h"
 
 #ifndef _IPA_API_H_
@@ -484,7 +486,7 @@ struct ipa_api_controller {
 	int (*ipa_get_prot_id)(enum ipa_client_type client);
 };
 
-#ifdef CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA3)
 int ipa3_plat_drv_probe(struct platform_device *pdev_p,
 	struct ipa_api_controller *api_ctrl,
 	const struct of_device_id *pdrv_match);

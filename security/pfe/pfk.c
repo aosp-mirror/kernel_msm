@@ -524,6 +524,7 @@ int pfk_fbe_clear_key(const unsigned char *key, size_t key_size,
 		pr_err("Clear key error: ret value %d\n", ret);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(pfk_fbe_clear_key);
 
 /**
  * Flush key table on storage core reset. During core reset key configuration

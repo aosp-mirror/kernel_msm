@@ -192,7 +192,7 @@ config INPUT_KEYRESET
 	  Say Y here if you want to reboot when some keys are pressed;
 
 config INPUT_KEYDEBUG
-	bool "Long Press Key Debugging"
+	tristate "Long Press Key Debugging"
 	depends on INPUT
 	select INPUT_KEYCOMBO
 	---help---

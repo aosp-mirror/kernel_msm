@@ -7,6 +7,7 @@
 #define __QTI_LMH_H__
 
 #include <linux/platform_device.h>
+#include <trace/events/power.h>
 
 int lmh_debug_register(struct platform_device *pdev);
 

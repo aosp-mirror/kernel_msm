@@ -1437,6 +1437,7 @@ int synx_initialize(struct synx_initialization_params *params)
 			params->name);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(synx_initialize);
 
 int synx_uninitialize(void)
 {
@@ -1449,6 +1450,7 @@ int synx_uninitialize(void)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(synx_uninitialize);
 
 int synx_register_ops(const struct synx_register_params *params)
 {
@@ -1485,6 +1487,7 @@ int synx_register_ops(const struct synx_register_params *params)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(synx_register_ops);
 
 int synx_deregister_ops(const struct synx_register_params *params)
 {

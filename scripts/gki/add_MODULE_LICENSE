@@ -1,0 +1,110 @@
+#! /bin/sh
+# SPDX-License-Identifier: GPL-2.0
+#
+# (c) 2019, Google
+progname="${0##*/}"
+
+USAGE="USAGE: ${progname} < kernel_build_error_log
+       ${progname} kernel_build_error_log
+
+Add MODULE_LICENSE to all the files.
+
+Must be performed in the root directory."
+
+if [ X"--help" = X"${1}" -o X"{-h}" = X"${1}" ]; then
+  echo "${USAGE}" >&2
+  exit
+fi
+INPUT=
+if [ 1 = ${#} ]; then
+  INPUT=${1}
+  shift
+fi
+if [ 0 != ${#} ]; then
+  echo "Unexpected Argument: ${*}" >&2
+  echo >&2
+  echo "${USAGE}" >&2
+  exit 1
+fi
+
+convert_to_module_name() {
+  echo "${1##*/}" |
+    sed 's@[-_]@ @g
+         s@   *@ @g
+         s@^btfm @BTFM @
+         s@ irq\( \|$\)@ IRQ\1@g
+         s@ io\( \|$\)@ I/O\1@g
+         s@ mem\( \|$\)@ memory\1@g
+         s@ hw\( \|$\)@ hardware\1@g
+         s@ jpeg\( \|$\)@ JPEG\1@g
+         s@ mgr$@ manager@
+         s@ util$@ utilities@
+         s@\(^\| \)a@\1A@g
+         s@\(^\| \)b@\1B@g
+         s@\(^\| \)c@\1C@g
+         s@\(^\| \)d@\1D@g
+         s@\(^\| \)e@\1E@g
+         s@\(^\| \)f@\1F@g
+         s@\(^\| \)g@\1G@g
+         s@\(^\| \)h@\1H@g
+         s@\(^\| \)i@\1I@g
+         s@\(^\| \)j@\1J@g
+         s@\(^\| \)k@\1K@g
+         s@\(^\| \)l@\1L@g
+         s@\(^\| \)m@\1M@g
+         s@\(^\| \)n@\1N@g
+         s@\(^\| \)o@\1O@g
+         s@\(^\| \)p@\1P@g
+         s@\(^\| \)q@\1Q@g
+         s@\(^\| \)r@\1R@g
+         s@\(^\| \)s@\1S@g
+         s@\(^\| \)t@\1T@g
+         s@\(^\| \)u@\1U@g
+         s@\(^\| \)v@\1V@g
+         s@\(^\| \)w@\1W@g
+         s@\(^\| \)x@\1X@g
+         s@\(^\| \)y@\1Y@g
+         s@\(^\| \)z@\1Z@g'
+}
+
+sed -n \
+    's/WARNING: modpost: missing MODULE_LICENSE() in \(.*\)[.]o$/\1/p' \
+    ${INPUT} |
+  sort -u |
+  while read f; do
+    F=${f}.c
+    if [ ! -f "${F}" ]; then
+      F=${f%${f##*/}}`echo ${f##*/} | tr -- - _`.c
+      if [ ! -f "${F}" ]; then
+        F=${F%.c}_core.c
+        if [ ! -f "${F}" ]; then
+          F=${f%${f##*/}}`echo ${f##*/} | tr _ -`.c
+          if [ ! -f "${F}" ]; then
+            F=${F%.c}_core.c
+            if [ ! -f "${F}" ]; then
+              echo WARNING: ${f}.c not found, needs a MODULE_LICENSE >&2
+              continue
+            fi
+          fi
+        fi
+      fi
+    fi
+    if grep MODULE_LICENSE ${F} >/dev/null 2>/dev/null; then
+      echo INFO: MODULE_LICENSE already present in ${F} >&2
+      continue
+    fi
+    module="`convert_to_module_name ${f}`"
+    if [ -z "${module}" ]; then
+      echo ERROR: ${f} can not be converted into a module name >&2
+      continue
+    fi
+    sed -i "\${
+        a \\
+\\
+MODULE_LICENSE(\"GPL v2\");\\
+MODULE_DESCRIPTION(\"${module}\");
+      }" ${F} &&
+    echo INFO: Added MODULE_LICENSE to ${F} >&2 ||
+    echo ERROR: Failed to add MODULE_LICENSE to ${F} >&2
+  done
+

@@ -386,3 +386,5 @@ int find_subsys(const char *pd_path, char *subsys)
 	return 0;
 }
 EXPORT_SYMBOL(find_subsys);
+
+MODULE_LICENSE("GPL v2");

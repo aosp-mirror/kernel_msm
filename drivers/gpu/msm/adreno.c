@@ -845,6 +845,8 @@ MODULE_DEVICE_TABLE(platform, adreno_id_table);
 
 static const struct of_device_id adreno_match_table[] = {
 	{ .compatible = "qcom,kgsl-3d0", .data = &device_3d0 },
+	{ .compatible = "qcom,gpu-gmu" },
+	{ .compatible = "qcom,kgsl-smmu-v2" },
 	{}
 };
 
@@ -1365,6 +1367,15 @@ static int adreno_probe(struct platform_device *pdev)
 	of_id = of_match_device(adreno_match_table, &pdev->dev);
 	if (!of_id)
 		return -EINVAL;
+
+	/*
+	 * The gmu and the kgsl-iommu device shouldn't be left hanging as an
+	 * unprobed device. So hacking up to just probe it without doing
+	 * anything.
+	 */
+	if (!strcmp(of_id->compatible, "qcom,gpu-gmu") ||
+	    !strcmp(of_id->compatible, "qcom,kgsl-smmu-v2"))
+		return 0;
 
 	adreno_dev = (struct adreno_device *) of_id->data;
 	device = KGSL_DEVICE(adreno_dev);
@@ -3943,19 +3954,29 @@ static int __init kgsl_3d_init(void)
 {
 	int ret;
 
-	ret = platform_driver_register(&kgsl_bus_platform_driver);
+	ret = kgsl_core_init();
 	if (ret)
 		return ret;
 
+	ret = platform_driver_register(&kgsl_bus_platform_driver);
+	if (ret) {
+		kgsl_core_exit();
+		return ret;
+	}
+
 	ret = platform_driver_register(&adreno_platform_driver);
-	if (ret)
+	if (ret) {
+		kgsl_core_exit();
 		platform_driver_unregister(&kgsl_bus_platform_driver);
+	}
 
 	return ret;
 }
 
 static void __exit kgsl_3d_exit(void)
 {
+	kgsl_core_exit();
+
 	platform_driver_unregister(&adreno_platform_driver);
 	platform_driver_unregister(&kgsl_bus_platform_driver);
 }
@@ -3966,3 +3987,4 @@ module_exit(kgsl_3d_exit);
 MODULE_DESCRIPTION("3D Graphics driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:kgsl_3d");
+MODULE_SOFTDEP("pre: msm_drm");

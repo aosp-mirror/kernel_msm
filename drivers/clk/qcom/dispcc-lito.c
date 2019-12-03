@@ -1132,6 +1132,8 @@ static int disp_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	clk_lucid_pll_configure(&disp_cc_pll0, regmap, &disp_cc_pll0_config);
 
@@ -1145,11 +1147,18 @@ static int disp_cc_lito_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void disp_cc_lito_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+}
+
 static struct platform_driver disp_cc_lito_driver = {
 	.probe = disp_cc_lito_probe,
 	.driver = {
 		.name = "lito-dispcc",
 		.of_match_table = disp_cc_lito_match_table,
+		.sync_state = disp_cc_lito_sync_state,
 	},
 };
 

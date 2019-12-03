@@ -3001,7 +3001,7 @@ static struct platform_driver ipa_ipa_mpm_driver = {
  *
  * Return: None
  */
-static int __init ipa_mpm_init(void)
+int __init ipa_mpm_init(void)
 {
 	IPA_MPM_DBG("register ipa_mpm platform device\n");
 	return platform_driver_register(&ipa_ipa_mpm_driver);
@@ -3173,6 +3173,8 @@ int ipa3_mpm_enable_adpl_over_odl(bool enable)
 	return ret;
 }
 
+#ifndef CONFIG_IPA3_MODULE
 late_initcall(ipa_mpm_init);
+#endif
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MHI Proxy Manager Driver");

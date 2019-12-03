@@ -111,6 +111,8 @@ struct diag_mhi_info diag_mhi[NUM_MHI_DEV][NUM_MHI_CHAN] = {
 	}
 
 };
+EXPORT_SYMBOL_GPL(diag_mhi);
+
 static int get_id_from_token(int token)
 {
 	int ch_idx = 0;
@@ -894,6 +896,7 @@ fail:
 	diag_mhi_dev_exit(dev_idx, ch);
 	return -ENOMEM;
 }
+EXPORT_SYMBOL_GPL(diag_mhi_init);
 
 void diag_mhi_exit(void)
 {
@@ -941,3 +944,4 @@ void diag_register_with_mhi(void)
 
 	mhi_driver_register(&diag_mhi_driver);
 }
+EXPORT_SYMBOL_GPL(diag_register_with_mhi);

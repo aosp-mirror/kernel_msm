@@ -355,6 +355,7 @@ int hyp_assign_table(struct sg_table *table,
 	return __hyp_assign_table(table, source_vm_list, source_nelems,
 				  dest_vmids, dest_perms, dest_nelems, false);
 }
+EXPORT_SYMBOL_GPL(hyp_assign_table);
 
 int try_hyp_assign_table(struct sg_table *table,
 			u32 *source_vm_list, int source_nelems,

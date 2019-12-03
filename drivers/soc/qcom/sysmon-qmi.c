@@ -686,3 +686,6 @@ void sysmon_notifier_unregister(struct subsys_desc *desc)
 	kfree(data);
 }
 EXPORT_SYMBOL(sysmon_notifier_unregister);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM System Monitor communication driver");

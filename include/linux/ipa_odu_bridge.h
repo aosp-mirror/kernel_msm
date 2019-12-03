@@ -45,7 +45,7 @@ struct ipa_bridge_init_params {
 	void (*wakeup_request)(void *cl_priv);
 };
 
-#ifdef CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA3)
 
 int ipa_bridge_init(struct ipa_bridge_init_params *params, u32 *hdl);
 
@@ -110,7 +110,7 @@ static inline int ipa_bridge_cleanup(u32 hdl)
 #endif /* CONFIG_IPA3 */
 
 /* Below API is deprecated. Please use the API above */
-# if defined CONFIG_IPA || defined CONFIG_IPA3
+# if IS_ENABLED(CONFIG_IPA) || IS_ENABLED(CONFIG_IPA3)
 
 int odu_bridge_init(struct odu_bridge_params *params);
 

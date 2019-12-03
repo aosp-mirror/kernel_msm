@@ -158,6 +158,7 @@ err1:
 	platform_device_put(xhci);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(dwc3_host_init);
 
 void dwc3_host_exit(struct dwc3 *dwc)
 {
@@ -167,3 +168,4 @@ void dwc3_host_exit(struct dwc3 *dwc)
 			  dev_name(dwc->dev));
 	platform_device_unregister(dwc->xhci);
 }
+EXPORT_SYMBOL_GPL(dwc3_host_exit);
