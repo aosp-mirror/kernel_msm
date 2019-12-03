@@ -1328,7 +1328,7 @@ static int max1720x_fixup_dxacc(int plugged,
 
 /* Tempco and rcomp0 must remain within the following limits to avoid capacity
  * drift. Note that tempco has a hi and low limit (one byte).
- * (RCOMP0 > INI_RCOMP0 * 1.1) or (RCOMP0 < 0.7 * INI_RCOMP0)
+ * (RCOMP0 > INI_RCOMP0 * 1.4) or (RCOMP0 < 0.7 * INI_RCOMP0)
  * (TempCoHot >INI_TempCoHot * 1.4) or (TempCoHot < 0.7 * INI_TempCoHot)
  * (TempCoCold >INI_TempCoCold * 1.4) or (TempCoCold < 0.7 * INI_TempCoCold)
  */
@@ -1337,46 +1337,55 @@ static int max1720x_fixup_dxacc(int plugged,
 #define MAXIM_TEMPCO_LIM_HI	140
 #define MAXIM_TEMPCO_LIM_LO	70
 
+static u8 comp_check(int value, int scale, int lim_low, int lim_high)
+{
+	if ((value * scale) < lim_low) {
+		value = lim_low / scale;
+	} else if ((value * scale) > lim_high) {
+		value = lim_high / scale;
+		if (value > 0xff)
+			value = 0xff;
+	}
+
+	return value;
+}
+
 /* 0 no changes, >0 changes */
 static bool max1720x_comp_check(u16 *new_rcomp0, u16 *new_tempco,
 				const struct max1720x_chip *chip)
 {
 	const u16 rcomp0 = *new_rcomp0;
+	const int ini_rcomp0_lob = chip->ini_rcomp0 & 0xff;
+	int rcomp0_lob = rcomp0 & 0xff;
 	const u16 tempco = *new_tempco;
-	const int ini_rcomp0 = chip->ini_rcomp0;
 	const int ini_tc_lob = chip->ini_tempco & 0xff;
 	const int ini_tc_hib = (chip->ini_tempco >> 8) & 0xff;
 	int tc_hib = (tempco >> 8) & 0xff;
 	int tc_lob = tempco & 0xff;
 
-	if ((rcomp0 * 100) > (ini_rcomp0 * MAXIM_RCOMP0_LIM_HI))
-		*new_rcomp0 = (ini_rcomp0 * MAXIM_RCOMP0_LIM_HI) / 100;
-	else if ((rcomp0 * 100) < (ini_rcomp0 * MAXIM_RCOMP0_LIM_LO))
-		*new_rcomp0 = (ini_rcomp0 * MAXIM_RCOMP0_LIM_LO) / 100;
+	rcomp0_lob = comp_check(rcomp0_lob, 100,
+				ini_rcomp0_lob * MAXIM_RCOMP0_LIM_LO,
+				ini_rcomp0_lob * MAXIM_RCOMP0_LIM_HI);
 
-	pr_debug("rcomp0=%d min=%d max=%d\n",
-		 rcomp0 * 100,
-		(ini_rcomp0 * MAXIM_RCOMP0_LIM_LO),
-		(ini_rcomp0 * MAXIM_RCOMP0_LIM_HI));
+	pr_debug("rcomp0=%x rcomp0_lob=%x->%x min=%x max=%x\n",
+		 rcomp0, (rcomp0 & 0xff), rcomp0_lob,
+		 (ini_rcomp0_lob * MAXIM_RCOMP0_LIM_LO) / 100,
+		 (ini_rcomp0_lob * MAXIM_RCOMP0_LIM_HI) / 100);
 
-	if ((tc_lob * 100) > (ini_tc_lob * MAXIM_TEMPCO_LIM_HI))
-		tc_lob = (ini_tc_lob * MAXIM_TEMPCO_LIM_HI) / 100;
-	else if ((tc_lob * 100) < (ini_tc_lob * MAXIM_TEMPCO_LIM_LO))
-		tc_lob = (ini_tc_lob * MAXIM_TEMPCO_LIM_LO) / 100;
+	*new_rcomp0 = (rcomp0 & 0xff00) | (rcomp0_lob & 0xff);
 
-	if ((tc_hib * 100) > (ini_tc_hib * MAXIM_TEMPCO_LIM_HI))
-		tc_hib = (ini_tc_hib * MAXIM_TEMPCO_LIM_HI) / 100;
-	else if ((tc_hib * 100) < (ini_tc_hib * MAXIM_TEMPCO_LIM_LO))
-		tc_hib = (ini_tc_hib * MAXIM_TEMPCO_LIM_LO) / 100;
+	tc_lob = comp_check(tc_lob, 100, ini_tc_lob * MAXIM_TEMPCO_LIM_LO,
+			    ini_tc_lob * MAXIM_TEMPCO_LIM_HI);
+	tc_hib = comp_check(tc_hib, 100, ini_tc_hib * MAXIM_TEMPCO_LIM_LO,
+			    ini_tc_hib * MAXIM_TEMPCO_LIM_HI);
 
-	pr_debug("tc_lob=%d min=%d max=%d\n",
-		 tc_lob * 100,
-		(ini_tc_lob * MAXIM_RCOMP0_LIM_LO),
-		(ini_tc_lob * MAXIM_RCOMP0_LIM_HI));
-	pr_debug("tc_hib=%d min=%d max=%d\n",
-		 tc_hib * 100,
-		(tc_hib * MAXIM_RCOMP0_LIM_LO),
-		(tc_hib * MAXIM_RCOMP0_LIM_HI));
+	pr_debug("tempco=%x tempco_lob=%x->%x min=%x max=%x, tempco_hib=%x->%x min=%x max=%x\n",
+		 tempco, tempco & 0xff, tc_lob,
+		 (ini_tc_lob * MAXIM_TEMPCO_LIM_LO) / 100,
+		 (ini_tc_lob * MAXIM_TEMPCO_LIM_HI) / 100,
+		 (tempco >> 8) & 0xff, tc_hib,
+		 (ini_tc_hib * MAXIM_TEMPCO_LIM_LO) / 100,
+		 (ini_tc_hib * MAXIM_TEMPCO_LIM_HI) / 100);
 
 	*new_tempco = (tc_hib << 8) | (tc_lob);
 
