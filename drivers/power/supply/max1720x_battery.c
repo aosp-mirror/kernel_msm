@@ -1313,7 +1313,7 @@ static int max1720x_fixup_dxacc(int plugged,
 	for (loops = 0; loops < 3; loops++) {
 		err = max1720x_fixup_update(chip->regmap, MAX1720X_DQACC,
 					    dqacc, dpacc);
-		if (err == -EIO || err >= 0)
+		if (err == -EIO || err > 0)
 			break;
 
 		/* arbitrary delay between attempts */
@@ -1323,7 +1323,7 @@ static int max1720x_fixup_dxacc(int plugged,
 	dev_info(chip->dev, "Fix capacity:%d->%d, ddqacc=0x%x dpacc=0x%x retries=%d (%d)\n",
 		fullcapnom, new_capacity, dqacc, dpacc, loops, err);
 
-	return err;
+	return (loops== 3) ? -ETIMEDOUT : err;
 }
 
 /* Tempco and rcomp0 must remain within the following limits to avoid capacity
@@ -1411,7 +1411,7 @@ static int max1720x_fixup_comp(int plugged, const struct max1720x_chip *chip)
 					    MAX1720X_RCOMP0,
 					    new_rcomp0,
 					    new_tempco);
-		if (err == -EIO || err >= 0)
+		if (err == -EIO || err > 0)
 			break;
 
 		/* arbitrary delay between attempts */
@@ -1422,7 +1422,7 @@ static int max1720x_fixup_comp(int plugged, const struct max1720x_chip *chip)
 		 "Fix rcomp0=0x%x->0x%x tempco:0x%x->0x%x, retries=%d, (%d)\n",
 		 data[0], new_rcomp0, data[1], new_tempco, loops, err);
 
-	return err;
+	return (loops== 3) ? -ETIMEDOUT : err;
 }
 
 static void max1720x_fixup_capacity(int plugged, struct max1720x_chip *chip)
