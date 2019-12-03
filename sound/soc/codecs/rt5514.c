@@ -1155,7 +1155,7 @@ static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
 	u8 *buf1, *buf2;
 	int ret;
 
-	if (!rt5514->v_p) {
+	if (!rt5514->v_p || !rt5514->dsp_test) {
 		ucontrol->value.integer.value[0] = 2;
 		return 0;
 	}
