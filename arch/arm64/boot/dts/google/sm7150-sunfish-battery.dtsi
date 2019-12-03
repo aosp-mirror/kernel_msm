@@ -76,6 +76,8 @@
 	qcom,qg-iterm-ma = <460>;
 	qcom,vbatt-cutoff-mv = <3300>;
 	qcom,vbatt-empty-mv = <2800>;
+	qcom,fvss-enable;
+	qcom,fvss-vbatt-mv = <3450>;
 };
 
 &spmi_bus {
