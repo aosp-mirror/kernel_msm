@@ -70,6 +70,8 @@
 	qcom,fvss-vbatt-mv = <3420>;
 	qcom,fvss-fifo-count = <10>;
 	google,fvss-interval-ms = <5000>;
+	qcom,s3-entry-ibat-ua = <14640>;
+	qcom,qg-sleep-config;
 };
 
 &spmi_bus {
