@@ -2053,6 +2053,7 @@ static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_memnoc_gfx_clk",
 			.ops = &clk_branch2_ops,
+			.flags = CLK_DONT_HOLD_STATE,
 		},
 	},
 };
@@ -2066,6 +2067,7 @@ static struct clk_branch gcc_gpu_snoc_dvm_gfx_clk = {
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_snoc_dvm_gfx_clk",
 			.ops = &clk_branch2_ops,
+			.flags = CLK_DONT_HOLD_STATE,
 		},
 	},
 };
@@ -4383,6 +4385,8 @@ static int gcc_kona_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Unable to get vdd_mm regulator\n");
 		return PTR_ERR(vdd_mm.regulator[0]);
 	}
+	vdd_mm.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mm, vdd_mm.num_levels - 1);
 
 	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(vdd_cx.regulator[0])) {
@@ -4391,6 +4395,8 @@ static int gcc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	vdd_cx_ao.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx_ao");
 	if (IS_ERR(vdd_cx_ao.regulator[0])) {
@@ -4399,6 +4405,8 @@ static int gcc_kona_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx_ao regulator\n");
 		return PTR_ERR(vdd_cx_ao.regulator[0]);
 	}
+	vdd_cx_ao.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx_ao, vdd_cx_ao.num_levels - 1);
 
 	ret = qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks,
 			ARRAY_SIZE(gcc_dfs_clocks));
@@ -4419,11 +4427,20 @@ static int gcc_kona_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void gcc_kona_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_mm, vdd_mm.num_levels - 1);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+	clk_unvote_vdd_level(&vdd_cx_ao, vdd_cx_ao.num_levels - 1);
+}
+
 static struct platform_driver gcc_kona_driver = {
 	.probe = gcc_kona_probe,
 	.driver = {
 		.name = "gcc-kona",
 		.of_match_table = gcc_kona_match_table,
+		.sync_state = gcc_kona_sync_state,
 	},
 };
 

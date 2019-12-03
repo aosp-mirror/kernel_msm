@@ -406,6 +406,7 @@ void create_pgtable_mapping(phys_addr_t start, phys_addr_t end)
 	__create_pgd_mapping(init_mm.pgd, start, virt, end - start,
 				PAGE_KERNEL, NULL, 0);
 }
+EXPORT_SYMBOL_GPL(create_pgtable_mapping);
 
 /*
  * This function can only be used to modify existing table entries,
@@ -1137,6 +1138,7 @@ int kern_addr_valid(unsigned long addr)
 
 	return pfn_valid(pte_pfn(pte));
 }
+EXPORT_SYMBOL_GPL(kern_addr_valid);
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 #if !ARM64_SWAPPER_USES_SECTION_MAPS
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,

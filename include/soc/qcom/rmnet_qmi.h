@@ -11,7 +11,7 @@
 
 void rmnet_map_tx_qmap_cmd(struct sk_buff *qmap_skb);
 
-#ifdef CONFIG_QCOM_QMI_RMNET
+#if IS_ENABLED(CONFIG_QCOM_QMI_RMNET)
 void *rmnet_get_qmi_pt(void *port);
 void *rmnet_get_qos_pt(struct net_device *dev);
 void *rmnet_get_rmnet_port(struct net_device *dev);

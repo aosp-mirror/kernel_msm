@@ -5,6 +5,7 @@
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
 
+#include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
@@ -559,3 +560,4 @@ probe_exit:
 	return ret;
 }
 EXPORT_SYMBOL(lmh_debug_register);
+MODULE_LICENSE("GPL v2");

@@ -10,9 +10,11 @@
 #include <linux/fdtable.h>
 #include <linux/io.h>
 #include <linux/ion.h>
+#include <linux/governor_msm_adreno_tz.h>
 #include <linux/mman.h>
 #include <linux/module.h>
 #include <linux/msm-bus.h>
+#include <linux/msm_adreno_devfreq.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/pm_runtime.h>
@@ -5165,7 +5167,7 @@ void kgsl_device_platform_remove(struct kgsl_device *device)
 }
 EXPORT_SYMBOL(kgsl_device_platform_remove);
 
-static void kgsl_core_exit(void)
+void kgsl_core_exit(void)
 {
 	kgsl_events_exit();
 	kgsl_core_debugfs_close();
@@ -5195,7 +5197,7 @@ static void kgsl_core_exit(void)
 		ARRAY_SIZE(kgsl_driver.devp));
 }
 
-static int __init kgsl_core_init(void)
+int __init kgsl_core_init(void)
 {
 	int result = 0;
 	struct sched_param param = { .sched_priority = 2 };
@@ -5241,6 +5243,9 @@ static int __init kgsl_core_init(void)
 		pr_err("kgsl: driver_register failed\n");
 		goto err;
 	}
+
+	msm_adreno_tz_notifiers.add = kgsl_devfreq_add_notifier;
+	msm_adreno_tz_notifiers.delete = kgsl_devfreq_del_notifier;
 
 	/* Make kobjects in the virtual device for storing statistics */
 
@@ -5293,9 +5298,3 @@ err:
 	kgsl_core_exit();
 	return result;
 }
-
-module_init(kgsl_core_init);
-module_exit(kgsl_core_exit);
-
-MODULE_DESCRIPTION("MSM GPU driver");
-MODULE_LICENSE("GPL v2");

@@ -176,11 +176,13 @@ ssize_t bldr_log_read(const void *lastk_buf, ssize_t lastk_size,
 	*ppos += total_len;
 	return total_len;
 }
+EXPORT_SYMBOL_GPL(bldr_log_read);
 
 ssize_t bldr_log_total_size(void)
 {
 	return bl_last_log_buf_size + bl_cur_log_buf_size;
 }
+EXPORT_SYMBOL_GPL(bldr_log_total_size);
 
 int bldr_log_setup(phys_addr_t bldr_phy_addr, size_t bldr_log_size,
 	bool is_last_bldr)
@@ -265,6 +267,7 @@ int bldr_log_init(void)
 
 	return num_reg;
 }
+EXPORT_SYMBOL_GPL(bldr_log_init);
 
 void bldr_log_release(void)
 {
@@ -308,3 +311,6 @@ static int __init proc_bldrlog_init(void)
 	return 0;
 }
 fs_initcall(proc_bldrlog_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Bootloader log appender");

@@ -591,7 +591,7 @@ static struct slim_driver btfm_slim_driver = {
 	.id_table = btfm_slim_id
 };
 
-static int __init btfm_slim_init(void)
+int __init btfm_slim_init(void)
 {
 	int ret;
 
@@ -602,14 +602,16 @@ static int __init btfm_slim_init(void)
 	return ret;
 }
 
-static void __exit btfm_slim_exit(void)
+void __exit btfm_slim_exit(void)
 {
 	BTFMSLIM_DBG("");
 	slim_driver_unregister(&btfm_slim_driver);
 }
 
+#if !defined(CONFIG_MSM_BT_POWER_MODULE)
 module_init(btfm_slim_init);
 module_exit(btfm_slim_exit);
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("BTFM Slimbus Slave driver");

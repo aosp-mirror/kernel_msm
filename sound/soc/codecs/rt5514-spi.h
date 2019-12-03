@@ -78,4 +78,9 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len);
 int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len);
 void rt5514_spi_request_switch(int mask, bool is_require);
 
+extern void (*rt5514_watchdog_handler_cb)(void);
+extern struct regmap *rt5514_g_i2c_regmap;
+#define RT5514_SPI_SWITCH_GPIO	5
+int rt5514_set_gpio(int gpio, bool output);
+
 #endif /* __RT5514_SPI_H__ */

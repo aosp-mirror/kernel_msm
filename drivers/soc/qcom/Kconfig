@@ -14,7 +14,7 @@ config QCOM_COMMAND_DB
 	  SoC specific identifier and information for the shared resources.
 
 config QCOM_MEM_OFFLINE
-	bool "Dynamic Memory Region Offline driver"
+	tristate "Dynamic Memory Region Offline driver"
 	depends on MEMORY_HOTPLUG
 	help
 	  Add support for DDR Self-Refresh power management through the dynamic
@@ -63,7 +63,7 @@ config QCOM_GLINK_SSR
 	  neighboring subsystems going up or down.
 
 config QCOM_CPUSS_DUMP
-	bool "CPU Subsystem Dumping support"
+	tristate "CPU Subsystem Dumping support"
 	help
 	  Add support to dump various hardware entities such as the instruction
 	  and data tlb's as well as the unified tlb, which are a part of the
@@ -188,7 +188,7 @@ config QCOM_QMI_HELPERS
 	  doing this from a kernel driver.
 
 config QCOM_QMI_RMNET
-	bool "QTI QMI Rmnet Helpers"
+	tristate "QTI QMI Rmnet Helpers"
 	depends on QCOM_QMI_HELPERS
 	depends on RMNET
 	help
@@ -198,7 +198,7 @@ config QCOM_QMI_RMNET
 	  and power save features.
 
 config QCOM_QMI_DFC
-	bool "Enable burst mode flow control"
+	tristate "Enable burst mode flow control"
 	depends on QCOM_QMI_RMNET
 	help
 	  Say y here to enable support for burst mode data flow control.
@@ -210,7 +210,7 @@ config QCOM_QMI_DFC
 source "drivers/soc/qcom/rmnet_ctl/Kconfig"
 
 config QCOM_QMI_POWER_COLLAPSE
-	bool "Enable power save features"
+	tristate "Enable power save features"
 	depends on QCOM_QMI_RMNET
 	help
 	  Say y here to enable support for power save features.
@@ -283,7 +283,7 @@ config QCOM_EARLY_RANDOM
 	 to get some random data to put in the pool. If unsure, say N.
 
 config QCOM_MEMORY_DUMP_V2
-	bool "QCOM Memory Dump V2 Support"
+	tristate "QCOM Memory Dump V2 Support"
 	help
 	  This enables memory dump feature. It allows various client
 	  subsystems to register respective dump regions. At the time
@@ -383,7 +383,7 @@ config MSM_TZ_SMMU
 	  If unsure, say N.
 
 config MSM_SERVICE_LOCATOR
-	bool "Service Locator"
+	tristate "Service Locator"
 	depends on QCOM_QMI_HELPERS
 	help
 	  The Service Locator provides a library to retrieve location
@@ -392,7 +392,7 @@ config MSM_SERVICE_LOCATOR
 	  that process domain will execute in.
 
 config MSM_SERVICE_NOTIFIER
-	bool "Service Notifier"
+	tristate "Service Notifier"
 	depends on MSM_SERVICE_LOCATOR && MSM_SUBSYSTEM_RESTART
 	help
 	  The Service Notifier provides a library for a kernel client to
@@ -431,7 +431,7 @@ config MSM_SYSMON_GLINK_COMM
 	  state-changes.
 
 config MSM_SYSMON_QMI_COMM
-       bool "MSM System Monitor communication support using QMI transport"
+       tristate "MSM System Monitor communication support using QMI transport"
        depends on QCOM_QMI_HELPERS && MSM_SUBSYSTEM_RESTART
        help
          This option adds support for MSM System Monitor APIs using the
@@ -537,7 +537,7 @@ config PANIC_ON_GLADIATOR_ERROR
 	  If unsure, say N.
 
 config QCOM_FSA4480_I2C
-	bool "Fairchild FSA4480 chip with I2C"
+	tristate "Fairchild FSA4480 chip with I2C"
 	select REGMAP_I2C
 	depends on I2C
 	help
@@ -547,7 +547,7 @@ config QCOM_FSA4480_I2C
 	  modes, changing orientation.
 
 config QCOM_WATCHDOG_V2
-	bool "QTI Watchdog Support"
+	tristate "QTI Watchdog Support"
 	depends on ARCH_QCOM
 	help
 	  This enables the watchdog module. It causes kernel panic if the
@@ -557,7 +557,7 @@ config QCOM_WATCHDOG_V2
 
 config QCOM_FORCE_WDOG_BITE_ON_PANIC
 	bool "QCOM force watchdog bite"
-	depends on QCOM_WATCHDOG_V2
+	depends on QCOM_WATCHDOG_V2=y
 	help
 	  This forces a watchdog bite when the device restarts due to a
 	  kernel panic. On certain MSM SoCs, this provides us
@@ -594,7 +594,7 @@ config  QCOM_BUS_CONFIG_RPMH
 
 config MSM_SPCOM
 	depends on QCOM_GLINK
-	bool "Secure Processor Communication over GLINK"
+	tristate "Secure Processor Communication over GLINK"
 	help
 	  spcom driver allows loading Secure Processor Applications and
 	  sending messages to Secure Processor Applications.
@@ -616,7 +616,7 @@ config QSEE_IPC_IRQ
 
 config MSM_SPSS_UTILS
 	depends on MSM_PIL
-	bool "Secure Processor Utilities"
+	tristate "Secure Processor Utilities"
 	help
 	  spss-utils driver selects Secure Processor firmware file name.
 	  The firmware file name for dev, test or production is selected
@@ -654,7 +654,7 @@ config QCOM_GLINK_PKT
 	  some glink packets channel.
 
 config QCOM_SMP2P_SLEEPSTATE
-	bool "SMP2P Sleepstate notifier"
+	tristate "SMP2P Sleepstate notifier"
 	depends on QCOM_SMP2P
 	help
 	  When this option is enabled, notifications are sent to remote procs
@@ -664,7 +664,7 @@ config QCOM_SMP2P_SLEEPSTATE
 	  processor.
 
 config QCOM_QDSS_BRIDGE
-	bool "Configure bridge driver for QTI/Qualcomm Technologies, Inc. MDM"
+	tristate "Configure bridge driver for QTI/Qualcomm Technologies, Inc. MDM"
 	depends on MHI_BUS
 	help
 	  The driver will help route diag traffic from modem side over the QDSS
@@ -681,10 +681,10 @@ config MSM_CDSP_LOADER
 	  Say M if you want to enable this module.
 
 config QTI_SYSTEM_PM
-	bool
+	tristate
 
 config QCOM_SMCINVOKE
-	bool "Secure QSEE Support"
+	tristate "Secure QSEE Support"
 	help
 	 Enable SMCInvoke driver which supports capability based secure
 	 communication between QTI Secure Execution Environment (QSEE)
@@ -704,7 +704,7 @@ config MSM_PM
 	select MSM_IDLE_STATS if DEBUG_FS
 	select CPU_IDLE_MULTIPLE_DRIVERS
 	select QTI_SYSTEM_PM if QCOM_RPMH
-	bool "Qualcomm Technologies, Inc. (QTI) Power Management Drivers"
+	tristate "Qualcomm Technologies, Inc. (QTI) Power Management Drivers"
 	help
 	  Platform specific power driver to manage cores and l2 low power
 	  modes. It interface with various system driver and put the cores
@@ -748,7 +748,7 @@ endif # MSM_IDLE_STATS
 endif # MSM_PM
 
 config QTI_RPM_STATS_LOG
-	bool "Qualcomm Technologies RPM Stats Driver"
+	tristate "Qualcomm Technologies RPM Stats Driver"
 	depends on QCOM_RPMH
 	help
 	  This option enables a driver which reads RPM messages from a shared
@@ -766,7 +766,7 @@ config QTI_DDR_STATS_LOG
 	  sysfs.
 
 config MSM_JTAGV8
-	bool "Debug and ETM trace support across power collapse for ARMv8"
+	tristate "Debug and ETM trace support across power collapse for ARMv8"
 	default y if CORESIGHT_SOURCE_ETM4X
 	help
 	  Enables support for debugging (specifically breakpoints) and ETM
@@ -859,7 +859,7 @@ config ICNSS_QMI
 	  over QMI channel.
 
 config MODEMSMEM
-	bool "Modem SMEM driver"
+	tristate "Modem SMEM driver"
 	default N
 	---help---
 	Enable to pass device information and other data to shared memory for

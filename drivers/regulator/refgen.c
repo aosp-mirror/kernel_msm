@@ -212,6 +212,7 @@ static struct platform_driver refgen_driver = {
 	.driver = {
 		.name = "qcom,refgen-regulator",
 		.of_match_table = refgen_match_table,
+		.sync_state = regulator_sync_state,
 	},
 };
 

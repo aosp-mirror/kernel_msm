@@ -229,7 +229,7 @@ struct ipa3_rmnet_context {
 
 extern struct ipa3_rmnet_context ipa3_rmnet_ctx;
 
-#ifdef CONFIG_RMNET_IPA3
+#if IS_ENABLED(CONFIG_RMNET_IPA3)
 
 int ipa3_qmi_service_init(uint32_t wan_platform_type);
 

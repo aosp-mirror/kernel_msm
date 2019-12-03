@@ -65,6 +65,8 @@ int msm_slim_get_ctrl(struct msm_slim_ctrl *dev)
 	return -ENODEV;
 #endif
 }
+EXPORT_SYMBOL(msm_slim_get_ctrl);
+
 void msm_slim_put_ctrl(struct msm_slim_ctrl *dev)
 {
 #ifdef CONFIG_PM
@@ -78,6 +80,7 @@ void msm_slim_put_ctrl(struct msm_slim_ctrl *dev)
 		pm_runtime_put_sync(dev->dev);
 #endif
 }
+EXPORT_SYMBOL(msm_slim_put_ctrl);
 
 irqreturn_t msm_slim_port_irq_handler(struct msm_slim_ctrl *dev, u32 pstat)
 {
@@ -126,6 +129,7 @@ irqreturn_t msm_slim_port_irq_handler(struct msm_slim_ctrl *dev, u32 pstat)
 	mb();
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL(msm_slim_port_irq_handler);
 
 int msm_slim_init_endpoint(struct msm_slim_ctrl *dev, struct msm_slim_endp *ep)
 {
@@ -373,6 +377,7 @@ int msm_slim_connect_pipe_port(struct msm_slim_ctrl *dev, u8 pn)
 	}
 	return ret;
 }
+EXPORT_SYMBOL(msm_slim_connect_pipe_port);
 
 int msm_alloc_port(struct slim_controller *ctrl, u8 pn)
 {
@@ -391,6 +396,7 @@ int msm_alloc_port(struct slim_controller *ctrl, u8 pn)
 	dev_dbg(dev->dev, "sps register bam error code:%x\n", ret);
 	return ret;
 }
+EXPORT_SYMBOL(msm_alloc_port);
 
 void msm_dealloc_port(struct slim_controller *ctrl, u8 pn)
 {
@@ -409,6 +415,7 @@ void msm_dealloc_port(struct slim_controller *ctrl, u8 pn)
 	if (endpoint->sps)
 		msm_slim_free_endpoint(endpoint);
 }
+EXPORT_SYMBOL(msm_dealloc_port);
 
 enum slim_port_err msm_slim_port_xfer_status(struct slim_controller *ctr,
 				u8 pn, phys_addr_t *done_buf, u32 *done_len)
@@ -433,6 +440,7 @@ enum slim_port_err msm_slim_port_xfer_status(struct slim_controller *ctr,
 	dev_dbg(dev->dev, "get iovec returned %d\n", ret);
 	return SLIM_P_INPROGRESS;
 }
+EXPORT_SYMBOL(msm_slim_port_xfer_status);
 
 static dma_addr_t msm_slim_iommu_map(struct msm_slim_ctrl *dev, void *buf_addr,
 			      u32 len)
@@ -527,6 +535,7 @@ int msm_slim_port_xfer(struct slim_controller *ctrl, u8 pn, void *buf,
 
 	return ret;
 }
+EXPORT_SYMBOL(msm_slim_port_xfer);
 
 /* Queue up Tx message buffer */
 static int msm_slim_post_tx_msgq(struct msm_slim_ctrl *dev, u8 *buf, int len)
@@ -683,6 +692,7 @@ u32 *msm_slim_manage_tx_msgq(struct msm_slim_ctrl *dev, bool getbuf,
 	spin_unlock_irqrestore(&dev->tx_buf_lock, flags);
 	return NULL;
 }
+EXPORT_SYMBOL(msm_slim_manage_tx_msgq);
 
 int msm_send_msg_buf(struct msm_slim_ctrl *dev, u32 *buf, u8 len, u32 tx_reg)
 {
@@ -699,6 +709,7 @@ int msm_send_msg_buf(struct msm_slim_ctrl *dev, u32 *buf, u8 len, u32 tx_reg)
 	}
 	return msm_slim_post_tx_msgq(dev, (u8 *)buf, len);
 }
+EXPORT_SYMBOL(msm_send_msg_buf);
 
 u32 *msm_get_msg_buf(struct msm_slim_ctrl *dev, int len,
 			struct completion *comp)
@@ -714,6 +725,7 @@ u32 *msm_get_msg_buf(struct msm_slim_ctrl *dev, int len,
 
 	return msm_slim_manage_tx_msgq(dev, true, comp, 0);
 }
+EXPORT_SYMBOL(msm_get_msg_buf);
 
 static void
 msm_slim_rx_msgq_event(struct msm_slim_ctrl *dev, struct sps_event_notify *ev)
@@ -914,6 +926,7 @@ sps_reg_event_failed:
 	sps_disconnect(endpoint->sps);
 	return ret;
 }
+EXPORT_SYMBOL(msm_slim_connect_endp);
 
 static int msm_slim_init_rx_msgq(struct msm_slim_ctrl *dev, u32 pipe_reg)
 {
@@ -1157,6 +1170,7 @@ init_msgq:
 
 	return 0;
 }
+EXPORT_SYMBOL(msm_slim_sps_init);
 
 void msm_slim_disconnect_endp(struct msm_slim_ctrl *dev,
 					struct msm_slim_endp *endpoint,
@@ -1167,6 +1181,7 @@ void msm_slim_disconnect_endp(struct msm_slim_ctrl *dev,
 		*msgq_flag = MSM_MSGQ_RESET;
 	}
 }
+EXPORT_SYMBOL(msm_slim_disconnect_endp);
 
 static int msm_slim_discard_rx_data(struct msm_slim_ctrl *dev,
 					struct msm_slim_endp *endpoint)
@@ -1214,6 +1229,7 @@ void msm_slim_deinit_ep(struct msm_slim_ctrl *dev,
 		msm_slim_remove_ep(dev, endpoint, msgq_flag);
 	}
 }
+EXPORT_SYMBOL(msm_slim_deinit_ep);
 
 static void msm_slim_sps_unreg_event(struct sps_pipe *sps)
 {
@@ -1250,6 +1266,7 @@ void msm_slim_sps_exit(struct msm_slim_ctrl *dev, bool dereg)
 	}
 	dev->port_nums = 0;
 }
+EXPORT_SYMBOL(msm_slim_sps_exit);
 
 /* Slimbus QMI Messaging */
 #define SLIMBUS_QMI_SELECT_INSTANCE_REQ_V01 0x0020
@@ -1694,6 +1711,7 @@ qmi_handle_init_failed:
 	devm_kfree(dev->dev, handle);
 	return rc;
 }
+EXPORT_SYMBOL(msm_slim_qmi_init);
 
 void msm_slim_qmi_exit(struct msm_slim_ctrl *dev)
 {
@@ -1704,6 +1722,7 @@ void msm_slim_qmi_exit(struct msm_slim_ctrl *dev)
 	devm_kfree(dev->dev, dev->qmi.handle);
 	dev->qmi.handle = NULL;
 }
+EXPORT_SYMBOL(msm_slim_qmi_exit);
 
 int msm_slim_qmi_power_request(struct msm_slim_ctrl *dev, bool active)
 {
@@ -1723,6 +1742,7 @@ int msm_slim_qmi_power_request(struct msm_slim_ctrl *dev, bool active)
 
 	return msm_slim_qmi_send_power_request(dev, &req);
 }
+EXPORT_SYMBOL(msm_slim_qmi_power_request);
 
 int msm_slim_qmi_check_framer_request(struct msm_slim_ctrl *dev)
 {
@@ -1760,6 +1780,7 @@ int msm_slim_qmi_check_framer_request(struct msm_slim_ctrl *dev)
 	}
 	return 0;
 }
+EXPORT_SYMBOL(msm_slim_qmi_check_framer_request);
 
 int msm_slim_qmi_deferred_status_req(struct msm_slim_ctrl *dev)
 {
@@ -1816,3 +1837,4 @@ int msm_slim_qmi_deferred_status_req(struct msm_slim_ctrl *dev)
 
 	return 0;
 }
+EXPORT_SYMBOL(msm_slim_qmi_deferred_status_req);

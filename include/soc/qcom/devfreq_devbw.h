@@ -8,7 +8,7 @@
 
 #include <linux/devfreq.h>
 
-#ifdef CONFIG_QCOM_DEVFREQ_DEVBW
+#if IS_ENABLED(CONFIG_QCOM_DEVFREQ_DEVBW)
 int devfreq_add_devbw(struct device *dev);
 int devfreq_remove_devbw(struct device *dev);
 int devfreq_suspend_devbw(struct device *dev);

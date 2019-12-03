@@ -68,7 +68,7 @@ struct memlat_hwmon {
 	bool should_ignore_df_monitor;
 };
 
-#ifdef CONFIG_DEVFREQ_GOV_MEMLAT
+#if IS_ENABLED(CONFIG_DEVFREQ_GOV_MEMLAT)
 int register_memlat(struct device *dev, struct memlat_hwmon *hw);
 int register_compute(struct device *dev, struct memlat_hwmon *hw);
 int update_memlat(struct memlat_hwmon *hw);

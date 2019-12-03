@@ -3042,7 +3042,8 @@ static inline void ipa_eth_exit(void) { }
 #endif // CONFIG_IPA_ETH
 int ipa3_get_gsi_chan_info(struct gsi_chan_info *gsi_chan_info,
 	unsigned long chan_hdl);
-#ifdef CONFIG_IPA3_MHI_PRIME_MANAGER
+#if IS_ENABLED(CONFIG_IPA3_MHI_PRIME_MANAGER)
+int ipa_mpm_init(void);
 int ipa_mpm_mhip_xdci_pipe_enable(enum ipa_usb_teth_prot prot);
 int ipa_mpm_mhip_xdci_pipe_disable(enum ipa_usb_teth_prot xdci_teth_prot);
 int ipa_mpm_notify_wan_state(struct wan_ioctl_notify_wan_state *state);
@@ -3086,13 +3087,17 @@ static inline int ipa3_get_mhip_gsi_stats(struct ipa_uc_dbg_ring_stats *stats)
 {
 	return 0;
 }
-
 static inline int ipa3_mpm_enable_adpl_over_odl(bool enable)
 {
 	return 0;
 }
 
 #endif /* CONFIG_IPA3_MHI_PRIME_MANAGER */
+
+#if IS_ENABLED(CONFIG_RMNET_IPA3) && defined(CONFIG_IPA3_MODULE)
+int ipa3_wwan_init(void);
+void ipa3_wwan_cleanup(void);
+#endif
 
 static inline void *alloc_and_init(u32 size, u32 init_val)
 {

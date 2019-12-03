@@ -513,6 +513,7 @@ power_attr(pm_hang);
 #endif
 
 struct kobject *power_kobj;
+EXPORT_SYMBOL_GPL(power_kobj);
 
 /**
  * state - control system sleep states.

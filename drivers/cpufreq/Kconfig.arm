@@ -300,7 +300,7 @@ config ARM_PXA2xx_CPUFREQ
 	  If in doubt, say N.
 
 config ARM_QCOM_CPUFREQ_HW
-	bool "QCOM CPUFreq HW driver"
+	tristate "QCOM CPUFreq HW driver"
 	depends on ARCH_QCOM
 	help
 	 Support for the CPUFreq HW driver.

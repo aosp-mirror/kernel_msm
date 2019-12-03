@@ -1,0 +1,17 @@
+DEFCONFIG=vendor/kona_defconfig
+EXT_MODULES=""
+BUILD_INITRAMFS=1
+MKBOOTIMG_PATH=tools/mkbootimg/mkbootimg.py
+VENDOR_RAMDISK_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-sm8250.img
+KERNEL_BINARY=Image.gz
+BOOT_IMAGE_HEADER_VERSION=2
+BASE_ADDRESS=0x00000000
+PAGE_SIZE=4096
+FILES+="
+arch/arm64/boot/Image.gz
+arch/arm64/boot/dts/vendor/qcom/kona.dtb
+arch/arm64/boot/dts/vendor/qcom/kona-v2.dtb
+"
+KERNEL_CMDLINE="console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 androidboot.hardware=qcom androidboot.console=ttyMSM0 androidboot.memcg=1 lpm_levels.sleep_disabled=1 video=vfb:640x400,bpp=32,memsize=3072000 msm_rtb.filter=0x237 service_locator.enable=1 androidboot.usbcontroller=a600000.dwc3 swiotlb=2048 loop.max_part=7 buildvariant=userdebug"
+MODULES_OPTIONS="options msm_drm dsi_display0=qcom,mdss_dsi_sw43404_amoled_wqhd_cmd:
+options service_locator enable=1"

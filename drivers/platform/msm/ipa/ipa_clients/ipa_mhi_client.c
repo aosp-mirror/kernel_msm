@@ -772,6 +772,7 @@ fail_pm_activate:
 	ipa_mhi_set_state(IPA_MHI_STATE_INITIALIZED);
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_start);
 
 /**
  * ipa_mhi_get_channel_context() - Get corresponding channel context
@@ -1473,6 +1474,7 @@ fail_start_channel:
 	IPA_ACTIVE_CLIENTS_DEC_EP(in->sys.client);
 	return -EPERM;
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_connect_pipe);
 
 /**
  * ipa_mhi_disconnect_pipe() - Disconnect pipe from IPA and reset corresponding
@@ -1543,6 +1545,7 @@ fail_reset_channel:
 	IPA_ACTIVE_CLIENTS_DEC_EP(ipa_get_client_mapping(clnt_hdl));
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_disconnect_pipe);
 
 static int ipa_mhi_suspend_channels(struct ipa_mhi_channel_ctx *channels,
 	int max_channels)
@@ -2028,6 +2031,7 @@ fail_suspend_dl_channel:
 	ipa_mhi_set_state(IPA_MHI_STATE_STARTED);
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_suspend);
 
 /**
  * ipa_mhi_resume() - Resume MHI accelerated channels
@@ -2111,6 +2115,7 @@ fail_pm_activate:
 	ipa_mhi_set_state(IPA_MHI_STATE_SUSPENDED);
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_resume);
 
 
 static int  ipa_mhi_destroy_channels(struct ipa_mhi_channel_ctx *channels,
@@ -2248,6 +2253,7 @@ void ipa_mhi_destroy(void)
 fail:
 	ipa_assert();
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_destroy);
 
 static void ipa_mhi_pm_cb(void *p, enum ipa_pm_cb_event event)
 {
@@ -2436,6 +2442,7 @@ fail_create_wq:
 fail_alloc_ctx:
 	return res;
 }
+EXPORT_SYMBOL_GPL(ipa_mhi_init);
 
 static void ipa_mhi_cache_dl_ul_sync_info(
 	struct ipa_config_req_msg_v01 *config_req)

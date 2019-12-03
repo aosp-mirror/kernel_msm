@@ -125,6 +125,7 @@ const struct reg_default cs35l41_reg[CS35L41_MAX_CACHE_REG] = {
 	{CS35L41_TEMP_CAL1,			0x00000000},
 	{CS35L41_TEMP_CAL2,			0x00000000},
 };
+EXPORT_SYMBOL_GPL(cs35l41_reg);
 
 bool cs35l41_readable_reg(struct device *dev, unsigned int reg)
 {
@@ -601,6 +602,7 @@ bool cs35l41_readable_reg(struct device *dev, unsigned int reg)
 		return false;
 	}
 }
+EXPORT_SYMBOL_GPL(cs35l41_readable_reg);
 
 bool cs35l41_precious_reg(struct device *dev, unsigned int reg)
 {
@@ -611,6 +613,7 @@ bool cs35l41_precious_reg(struct device *dev, unsigned int reg)
 		return false;
 	}
 }
+EXPORT_SYMBOL_GPL(cs35l41_precious_reg);
 
 bool cs35l41_volatile_reg(struct device *dev, unsigned int reg)
 {
@@ -712,6 +715,7 @@ bool cs35l41_volatile_reg(struct device *dev, unsigned int reg)
 		return false;
 	}
 }
+EXPORT_SYMBOL_GPL(cs35l41_volatile_reg);
 
 static const struct cs35l41_otp_packed_element_t
 					otp_map_1[CS35L41_NUM_OTP_ELEM] = {

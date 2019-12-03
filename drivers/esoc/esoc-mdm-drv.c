@@ -81,6 +81,7 @@ int esoc_set_boot_fail_action(struct esoc_clink *esoc_clink, u32 action)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(esoc_set_boot_fail_action);
 
 int esoc_set_n_pon_tries(struct esoc_clink *esoc_clink, u32 n_tries)
 {
@@ -102,6 +103,7 @@ int esoc_set_n_pon_tries(struct esoc_clink *esoc_clink, u32 n_tries)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(esoc_set_n_pon_tries);
 
 static int esoc_msm_restart_handler(struct notifier_block *nb,
 		unsigned long action, void *data)

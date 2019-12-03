@@ -1,0 +1,170 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# (c) 2019, Google
+progname="${0##*/}"
+
+USAGE="USAGE: ${progname} [dir]
+
+Call this when depmod breaks down, or when one needs a list of the symbols
+implicated in the circular dependency.
+
+Search current or dir directory for all kernel modules.  Itemize what they
+export, and what they import.  Discover links and report who fulfills them.
+Report any first order circular relationships and the symbols that got us
+into the situation.
+
+Standard output is of the form:
+
+module1.ko(symbols) -> module2.ko(symbols) -> module1.ko
+
+Leaves an annotated modules.dep file in the specified directory.
+
+TBA: higher order circular dependencies"
+
+if [ X"--help" = X"${1}" -o X"{-h}" = X"${1}" ]; then
+  echo "${USAGE}" >&2
+  exit
+fi
+DIR=.
+if [ 1 = ${#} ]; then
+  DIR=${1}
+  shift
+fi
+if [ 0 != ${#} ]; then
+  echo "Unexpected Argument: ${*}" >&2
+  echo >&2
+  echo "${USAGE}" >&2
+  exit 1
+fi
+
+# A _real_ embedded tab character
+TAB="`echo | tr '\n' '\t'`"
+
+#
+# Start Work
+#
+
+# Construct our version (symbols annoted as comments) of the modules.dep file.
+
+TMP=`mktemp -d`
+
+# Acquire a list of files that are modules
+find ${DIR%/} -name '*.ko' >${TMP}/modules
+
+# Fill symbols with file type symbol
+#  type is > for requires symbol
+#  type is < for supplies symbol
+#  type is pre for requires module (in symbol field)
+#  type is post for supplies module (in file field)
+
+# Mine for symbols
+xargs nm -o <${TMP}/modules |
+  sed "s@^${DIR%/}/@@" |
+  sed -n \
+      -e 's/^\([^:]*\):.* U \(.*\)/\1 > \2/p' \
+      -e 's/^\([^:]*\):.* [TD] \(.*\)/\1 < \2/p' >${TMP}/symbols
+if [ ! -s ${TMP}/symbols ]; then
+  rm -rf ${TMP}
+  echo ERROR: failed to find any .ko module files in the specified directory ${DIR%/}
+  exit 1
+fi
+
+# Mine for softdep pre
+  while read file; do
+    strings ${file} |
+      sed -n 's/^softdep=pre: \(.*\)/\1/p' |
+      tr ' ' '\n' |
+      sed "s@.*@${file#${DIR%/}/} pre &@"
+  done < ${TMP}/modules |
+  sort -u >>${TMP}/symbols
+
+# Mine for softdep post
+  while read file; do
+    strings ${file} |
+      sed -n 's/^softdep=post: \(.*\)/\1/p' |
+      tr ' ' '\n' |
+      sed "s@.*@$& post {file#${DIR%/}/}@"
+  done < ${TMP}/modules |
+  sort -u >>${TMP}/symbols
+
+# Translate symbols to annotated modules.dep
+(
+  sed -n 's/ > / /p' ${TMP}/symbols |
+    while read file symbol ; do
+      sed -n "s@^\(.*\) < ${symbol}\$@${file}: \1 # ${symbol}@p" ${TMP}/symbols
+    done
+  sed -n 's/ pre / /p' ${TMP}/symbols |
+    while read file softdep ; do
+      grep "/${softdep}[.]ko\$" ${TMP}/modules |
+        sed "s@^${DIR%/}/@@" |
+        while read source; do
+          echo "${file}: ${source} # pre:${softdep}"
+        done
+    done
+  sed -n 's/ post / /p' ${TMP}/symbols |
+    while read softdep source ; do
+      grep "/${softdep}[.]ko\$" ${TMP}/modules |
+        sed "s@^${DIR%/}/@@" |
+        while read file; do
+          echo "${file}: ${source} # post:${softdep}"
+        done
+    done
+) |
+  sort -u >${DIR%/}/modules.dep
+
+# Cleanup (already!)
+rm -rf ${TMP}
+
+# Evaluate first order dependencies from our annotated ${DIR}/modules.dep file.
+
+# squash adjacent lines with match for first symbols, merge second
+merge_second_symbols() {
+  sed ': loop
+       N
+       s/^\(.*(.*) -> .*(\)\(.*\)\().*\)\n\1\(.*\)\3/\1\2,\4\3/
+       t loop
+       h
+       s/\n.*//p
+       g
+       s/^[^\n]*\n//
+       t loop'
+}
+
+# squash adjacent lines with match for second symbols, merge first
+merge_first_symbols() {
+  sed ': loop
+       N
+       s/^\(.*(\)\(.*\)\() -> .*(.*).*\)\n\1\(.*\)\3/\1\2,\4\3/
+       t loop
+       h
+       s/\n.*//p
+       g
+       s/^[^\n]*\n//
+       t loop'
+}
+
+# squash adjacent lines with identical, but shifted one, circular dependencies
+merge_duplicates() {
+  sed ': loop
+       N
+       s/^\(.*\)\((.*)\) -> \(.*\)\((.*)\) -> \1\n\3\4 -> \1\2 -> \3$/\1\2 -> \3\4 -> \1/
+       t end
+       s/\n.*//p
+       g
+       s/^[^\n]*\n//
+       t loop
+       : end'
+}
+
+# Report the first order circular dependencies
+sed 's/://' ${DIR%/}/modules.dep |
+  while read file source comment symbol; do
+    sed -n "s@^${source}: ${file} # \(.*\)@${file}(${symbol}) -> ${source}(\1) -> ${file}@p" ${DIR%/}/modules.dep
+  done |
+  merge_second_symbols |
+  merge_first_symbols |
+  merge_duplicates |
+  sort -u
+
+# TBA: second order dependencies

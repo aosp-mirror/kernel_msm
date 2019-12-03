@@ -49,6 +49,7 @@ static const int required_gpios[] = {
 };
 
 void *ipc_log;
+EXPORT_SYMBOL_GPL(ipc_log);
 
 static void mdm_debug_gpio_show(struct mdm_ctrl *mdm)
 {
@@ -129,6 +130,7 @@ void mdm_disable_irqs(struct mdm_ctrl *mdm)
 		mdm->irq_mask |= IRQ_PBLRDY;
 	}
 }
+EXPORT_SYMBOL_GPL(mdm_disable_irqs);
 
 static void mdm_deconfigure_ipc(struct mdm_ctrl *mdm)
 {
@@ -412,6 +414,7 @@ void mdm_wait_for_status_low(struct mdm_ctrl *mdm, bool atomic)
 
 	mdm_toggle_soft_reset(mdm, atomic);
 }
+EXPORT_SYMBOL_GPL(mdm_wait_for_status_low);
 
 static void mdm_notify(enum esoc_notify notify, struct esoc_clink *esoc)
 {

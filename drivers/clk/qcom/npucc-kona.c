@@ -506,7 +506,7 @@ static struct clk_branch npu_cc_bto_core_clk = {
 				"npu_cc_xo_clk_src",
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -1263,6 +1263,8 @@ static int npu_cc_kona_probe(struct platform_device *pdev)
 				ret);
 		return ret;
 	}
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	ret = npu_clocks_kona_probe(pdev, &npu_cc_kona_desc);
 	if (ret < 0) {
@@ -1290,11 +1292,18 @@ static int npu_cc_kona_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void npucc_kona_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+	clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+}
+
 static struct platform_driver npu_cc_kona_driver = {
 	.probe = npu_cc_kona_probe,
 	.driver = {
 		.name = "npu_cc-kona",
 		.of_match_table = npu_cc_kona_match_table,
+		.sync_state = npucc_kona_sync_state,
 	},
 };
 

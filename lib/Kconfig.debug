@@ -1124,11 +1124,12 @@ choice
 	prompt "Perform Action on spinlock bug"
 	depends on DEBUG_SPINLOCK
 
-	default DEBUG_SPINLOCK_BITE_ON_BUG
+	default DEBUG_SPINLOCK_BITE_ON_BUG if QCOM_WATCHDOG_V2=y
+	default DEBUG_SPINLOCK_PANIC_ON_BUG if QCOM_WATCHDOG_V2!=y
 
 	config DEBUG_SPINLOCK_BITE_ON_BUG
 		bool "Cause a Watchdog Bite on Spinlock bug"
-		depends on QCOM_WATCHDOG_V2
+		depends on QCOM_WATCHDOG_V2=y
 		help
 		  On a spinlock bug, cause a watchdog bite so that we can get
 		  the precise state of the system captured at the time of spin

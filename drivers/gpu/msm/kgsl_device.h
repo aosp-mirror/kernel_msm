@@ -712,6 +712,10 @@ long kgsl_ioctl_copy_out(unsigned int kernel_cmd, unsigned int user_cmd,
 void kgsl_sparse_bind(struct kgsl_process_private *private,
 		struct kgsl_drawobj_sparse *sparse);
 
+
+int kgsl_core_init(void);
+void kgsl_core_exit(void);
+
 /**
  * kgsl_context_put() - Release context reference count
  * @context: Pointer to the KGSL context to be released

@@ -140,6 +140,7 @@ static struct ipa3_plat_drv_res ipa3_res = {0, };
 static struct clk *ipa3_clk;
 
 struct ipa3_context *ipa3_ctx;
+EXPORT_SYMBOL_GPL(ipa3_ctx);
 
 static struct {
 	bool present[IPA_SMMU_CB_MAX];

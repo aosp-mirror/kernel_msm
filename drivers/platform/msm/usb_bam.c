@@ -452,6 +452,7 @@ int usb_bam_alloc_fifos(enum usb_ctrl cur_bam, u8 idx)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(usb_bam_alloc_fifos);
 
 int usb_bam_free_fifos(enum usb_ctrl cur_bam, u8 idx)
 {
@@ -528,6 +529,7 @@ int usb_bam_free_fifos(enum usb_ctrl cur_bam, u8 idx)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(usb_bam_free_fifos);
 
 static int connect_pipe(enum usb_ctrl cur_bam, u8 idx, u32 *usb_pipe_idx,
 							unsigned long iova)
@@ -642,6 +644,7 @@ int get_qdss_bam_info(enum usb_ctrl cur_bam, u8 idx,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(get_qdss_bam_info);
 
 int usb_bam_connect(enum usb_ctrl cur_bam, int idx, u32 *bam_pipe_idx,
 						unsigned long iova)
@@ -698,6 +701,7 @@ int usb_bam_connect(enum usb_ctrl cur_bam, int idx, u32 *bam_pipe_idx,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(usb_bam_connect);
 
 int usb_bam_get_pipe_type(enum usb_ctrl bam_type, u8 idx,
 			  enum usb_bam_pipe_type *type)
@@ -952,6 +956,7 @@ int usb_bam_disconnect_pipe(enum usb_ctrl bam_type, u8 idx)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(usb_bam_disconnect_pipe);
 
 static void usb_bam_sps_events(enum sps_callback_case sps_cb_case, void *user)
 {

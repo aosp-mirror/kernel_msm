@@ -249,7 +249,6 @@ static struct rpmsg_driver glink_ssr_driver = {
 		.name = "glink_ssr",
 	},
 };
-module_rpmsg_driver(glink_ssr_driver);
 
 static int glink_probe_ssr_cb(struct notifier_block *this,
 			      unsigned long code, void *data)
@@ -420,6 +419,13 @@ static int __init glink_probe_init(void)
 	if (ret) {
 		pr_err("%s: glink_probe register failed %d\n",
 			__func__, ret);
+		return ret;
+	}
+
+	ret = register_rpmsg_driver(&glink_ssr_driver);
+	if (ret) {
+		pr_err("%s: glink_ssr register rpmsg failed %d\n",
+		       __func__, ret);
 		return ret;
 	}
 

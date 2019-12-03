@@ -754,6 +754,7 @@ int pmic_gpio_dump(struct seq_file *s)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(pmic_gpio_dump);
 #endif
 
 static void pmic_gpio_config_dbg_show(struct pinctrl_dev *pctldev,

@@ -23,7 +23,7 @@
 #include "diag_dci.h"
 #include "diag_ipc_logging.h"
 
-#ifdef CONFIG_MHI_BUS
+#if IS_ENABLED(CONFIG_MHI_BUS)
 #define diag_mdm_init		diag_mhi_init
 #else
 #define diag_mdm_init		diag_hsic_init

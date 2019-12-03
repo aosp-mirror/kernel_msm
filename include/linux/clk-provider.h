@@ -47,6 +47,7 @@
 					 * to first consumer that enables clk
 					 */
 #define CLK_IS_MEASURE          BIT(15) /* measure clock */
+#define CLK_DONT_HOLD_STATE	BIT(16) /* Don't hold state */
 
 struct clk;
 struct clk_hw;
@@ -358,6 +359,9 @@ struct clk_vdd_class {
 		.num_regulators = _num_regulators, \
 		.lock = __MUTEX_INITIALIZER(_name.lock) \
 	}
+
+int clk_vote_vdd_level(struct clk_vdd_class *vdd_class, int level);
+int clk_unvote_vdd_level(struct clk_vdd_class *vdd_class, int level);
 
 /**
  * struct clk_hw - handle for traversing from a struct clk to its corresponding
@@ -862,6 +866,7 @@ void devm_clk_unregister(struct device *dev, struct clk *clk);
 
 void clk_hw_unregister(struct clk_hw *hw);
 void devm_clk_hw_unregister(struct device *dev, struct clk_hw *hw);
+void clk_sync_state(struct device *dev);
 
 /* helper functions */
 const char *__clk_get_name(const struct clk *clk);

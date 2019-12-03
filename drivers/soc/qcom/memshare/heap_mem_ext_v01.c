@@ -2,6 +2,7 @@
 /* Copyright (c) 2013-2015, 2017-2019, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/module.h>
 #include <linux/soc/qcom/qmi.h>
 #include "heap_mem_ext_v01.h"
 
@@ -112,6 +113,7 @@ struct qmi_elem_info mem_alloc_generic_req_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_alloc_generic_req_msg_data_v01_ei);
 
 struct qmi_elem_info mem_alloc_generic_resp_msg_data_v01_ei[] = {
 	{
@@ -183,6 +185,7 @@ struct qmi_elem_info mem_alloc_generic_resp_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_alloc_generic_resp_msg_data_v01_ei);
 
 struct qmi_elem_info mem_free_generic_req_msg_data_v01_ei[] = {
 	{
@@ -247,6 +250,7 @@ struct qmi_elem_info mem_free_generic_req_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_free_generic_req_msg_data_v01_ei);
 
 struct qmi_elem_info mem_free_generic_resp_msg_data_v01_ei[] = {
 	{
@@ -266,6 +270,7 @@ struct qmi_elem_info mem_free_generic_resp_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_free_generic_resp_msg_data_v01_ei);
 
 struct qmi_elem_info mem_query_size_req_msg_data_v01_ei[] = {
 	{
@@ -301,6 +306,7 @@ struct qmi_elem_info mem_query_size_req_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_query_size_req_msg_data_v01_ei);
 
 struct qmi_elem_info mem_query_size_resp_msg_data_v01_ei[] = {
 	{
@@ -338,3 +344,7 @@ struct qmi_elem_info mem_query_size_resp_msg_data_v01_ei[] = {
 		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
+EXPORT_SYMBOL_GPL(mem_query_size_resp_msg_data_v01_ei);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Heap Memory Ext V01");

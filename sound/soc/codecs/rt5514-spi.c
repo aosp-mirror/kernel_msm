@@ -35,9 +35,13 @@
 #include <linux/of_gpio.h>
 
 #include "rt5514-spi.h"
-#include "rt5514.h"
 
 #define DRV_NAME "rt5514-spi"
+
+void (*rt5514_watchdog_handler_cb)(void) = NULL;
+EXPORT_SYMBOL_GPL(rt5514_watchdog_handler_cb);
+struct regmap *rt5514_g_i2c_regmap;
+EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
 
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
@@ -331,6 +335,23 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	return true;
 }
 
+int rt5514_set_gpio(int gpio, bool output)
+{
+	switch (gpio) {
+	case RT5514_SPI_SWITCH_GPIO:
+		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002070,
+			1 << 8, 1 << 8);
+		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002074,
+			1 << 21 | 1 << 22, output << 21 | 1 << 22);
+		break;
+
+	default:
+		break;
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(rt5514_set_gpio);
+
 void rt5514_spi_request_switch(int mask, bool is_require)
 {
 	int timeout = 10; /* 100 ms = 10 x 10ms */
@@ -383,6 +404,7 @@ void rt5514_spi_request_switch(int mask, bool is_require)
 			gpio_set_value(handshake_gpio, 0);
 	}
 }
+EXPORT_SYMBOL_GPL(rt5514_spi_request_switch);
 
 static void rt5514_spi_copy_work_0(struct work_struct *work)
 {
@@ -861,7 +883,8 @@ static void rt5514_spi_start_work(struct work_struct *work)
 	struct snd_card *card;
 
 	if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
-		rt5514_watchdog_handler();
+		if (rt5514_watchdog_handler_cb)
+			rt5514_watchdog_handler_cb();
 		return;
 	}
 

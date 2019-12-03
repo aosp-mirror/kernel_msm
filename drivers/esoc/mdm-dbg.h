@@ -5,7 +5,7 @@
 
 static bool debug_init_done;
 
-#ifndef CONFIG_ESOC_MDM_DBG_ENG
+#if !IS_ENABLED(CONFIG_ESOC_MDM_DBG_ENG)
 
 static inline bool dbg_check_cmd_mask(unsigned int cmd)
 {

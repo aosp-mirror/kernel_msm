@@ -3434,6 +3434,7 @@ u32 ipahal_read_reg_n(enum ipahal_reg_name reg, u32 n)
 	offset += ipahal_reg_objs[ipahal_ctx->hw_type][reg].n_ofst * n;
 	return ioread32(ipahal_ctx->base + offset);
 }
+EXPORT_SYMBOL_GPL(ipahal_read_reg_n);
 
 /*
  * ipahal_read_reg_mn() - Get mn parameterized reg value
@@ -3500,6 +3501,7 @@ void ipahal_write_reg_mn(enum ipahal_reg_name reg, u32 m, u32 n, u32 val)
 	offset += ipahal_reg_objs[ipahal_ctx->hw_type][reg].n_ofst * n;
 	iowrite32(val, ipahal_ctx->base + offset);
 }
+EXPORT_SYMBOL_GPL(ipahal_write_reg_mn);
 
 /*
  * ipahal_read_reg_n_fields() - Get the parsed value of n parameterized reg

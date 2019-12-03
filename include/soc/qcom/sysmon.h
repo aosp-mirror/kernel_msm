@@ -32,7 +32,7 @@ enum ssctl_ssr_event_driven_enum_type {
 	SSCTL_SSR_EVENT_DRIVEN_ENUM_TYPE_MAX_ENUM_VAL = 2147483647
 };
 
-#if defined(CONFIG_MSM_SYSMON_COMM) || defined(CONFIG_MSM_SYSMON_QMI_COMM)
+#if IS_ENABLED(CONFIG_MSM_SYSMON_COMM) || IS_ENABLED(CONFIG_MSM_SYSMON_QMI_COMM)
 extern int sysmon_send_event(struct subsys_desc *dest_desc,
 			struct subsys_desc *event_desc,
 			enum subsys_notif_type notif);

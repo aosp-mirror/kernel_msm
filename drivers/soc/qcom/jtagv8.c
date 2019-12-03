@@ -1001,3 +1001,6 @@ dbg_err:
 	return ret;
 }
 arch_initcall(msm_jtag_dbg_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("JTAG driver for ARM v8");

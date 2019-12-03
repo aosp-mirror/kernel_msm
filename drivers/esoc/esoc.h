@@ -98,6 +98,9 @@ struct esoc_clink {
 	struct esoc_client_hook *client_hook[ESOC_MAX_HOOKS];
 };
 
+extern void (*notify_esoc_clients_cb)(struct esoc_clink *esoc_clink, unsigned
+				      long evt);
+
 /**
  * struct esoc_clink_ops: Operations to control external soc
  * @cmd_exe: Execute control command
@@ -175,7 +178,7 @@ int esoc_clink_register_ssr(struct esoc_clink *esoc_clink);
 int esoc_clink_request_ssr(struct esoc_clink *esoc_clink);
 void esoc_clink_unregister_ssr(struct esoc_clink *esoc_clink);
 /* client notification */
-#ifdef CONFIG_ESOC_CLIENT
+#if IS_ENABLED(CONFIG_ESOC_CLIENT)
 void notify_esoc_clients(struct esoc_clink *esoc_clink, unsigned long evt);
 #else
 static inline void notify_esoc_clients(struct esoc_clink *esoc_clink,

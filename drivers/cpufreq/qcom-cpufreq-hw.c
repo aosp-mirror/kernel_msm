@@ -639,3 +639,4 @@ static int __init qcom_cpufreq_hw_init(void)
 subsys_initcall(qcom_cpufreq_hw_init);
 
 MODULE_DESCRIPTION("QCOM firmware-based CPU Frequency driver");
+MODULE_LICENSE("GPL v2");

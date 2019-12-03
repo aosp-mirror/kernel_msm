@@ -192,3 +192,16 @@ obj-$(CONFIG_UNISYS_VISORBUS)	+= visorbus/
 obj-$(CONFIG_SIOX)		+= siox/
 obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
+
+# RMNET driver
+ifneq (,$(filter-out undefined,$(CONFIG_RMNET)))
+ccflags-y += -Idrivers/net/ethernet/qualcomm/rmnet/
+endif
+obj-$(CONFIG_RMNET) += rmnet.o
+rmnet-objs += $(patsubst %,net/ethernet/qualcomm/rmnet/%,\
+	rmnet_config.o rmnet_vnd.o rmnet_handlers.o rmnet_map_data.o \
+	rmnet_map_command.o rmnet_descriptor.o rmnet_genl.o)
+
+rmnet-$(CONFIG_QCOM_QMI_RMNET) += soc/qcom/qmi_rmnet.o
+rmnet-$(CONFIG_QCOM_QMI_DFC) += soc/qcom/dfc_qmi.o soc/qcom/dfc_qmap.o
+rmnet-$(CONFIG_QCOM_QMI_POWER_COLLAPSE) += soc/qcom/wda_qmi.o

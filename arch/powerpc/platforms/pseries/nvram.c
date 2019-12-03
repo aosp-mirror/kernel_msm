@@ -36,7 +36,7 @@ static DEFINE_SPINLOCK(nvram_lock);
 #define NVRAM_RTAS_READ_TIMEOUT 5		/* seconds */
 static time64_t last_unread_rtas_event;		/* timestamp */
 
-#ifdef CONFIG_PSTORE
+#if IS_ENABLED(CONFIG_PSTORE)
 time64_t last_rtas_event;
 #endif
 
@@ -143,7 +143,7 @@ int nvram_write_error_log(char * buff, int length,
 						err_type, error_log_cnt);
 	if (!rc) {
 		last_unread_rtas_event = ktime_get_real_seconds();
-#ifdef CONFIG_PSTORE
+#if IS_ENABLED(CONFIG_PSTORE)
 		last_rtas_event = ktime_get_real_seconds();
 #endif
 	}

@@ -203,6 +203,7 @@ enum mhi_dev_state mhi_get_mhi_state(struct mhi_controller *mhi_cntrl)
 				     MHISTATUS_MHISTATE_SHIFT, &state);
 	return ret ? MHI_STATE_MAX : state;
 }
+EXPORT_SYMBOL_GPL(mhi_get_mhi_state);
 
 int mhi_queue_sclist(struct mhi_device *mhi_dev,
 		     struct mhi_chan *mhi_chan,

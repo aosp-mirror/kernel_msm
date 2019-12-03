@@ -4258,6 +4258,7 @@ int idle_cpu(int cpu)
 
 	return 1;
 }
+EXPORT_SYMBOL_GPL(idle_cpu);
 
 /**
  * available_idle_cpu - is a given CPU idle for enqueuing work.
@@ -5683,6 +5684,7 @@ void show_state_filter(unsigned long state_filter)
 	if (!state_filter)
 		debug_show_all_locks();
 }
+EXPORT_SYMBOL_GPL(show_state_filter);
 
 /**
  * init_idle - set up an idle thread for a given CPU
@@ -6210,6 +6212,7 @@ out:
 			    start_time, 1);
 	return ret_code;
 }
+EXPORT_SYMBOL_GPL(sched_isolate_cpu);
 
 /*
  * Note: The client calling sched_isolate_cpu() is repsonsible for ONLY
@@ -6254,6 +6257,7 @@ out:
 			    start_time, 0);
 	return ret_code;
 }
+EXPORT_SYMBOL_GPL(sched_unisolate_cpu_unlocked);
 
 int sched_unisolate_cpu(int cpu)
 {
@@ -6264,6 +6268,7 @@ int sched_unisolate_cpu(int cpu)
 	cpu_maps_update_done();
 	return ret_code;
 }
+EXPORT_SYMBOL_GPL(sched_unisolate_cpu);
 
 #endif /* CONFIG_HOTPLUG_CPU */
 
@@ -7869,6 +7874,7 @@ int set_task_boost(int boost, u64 period)
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(set_task_boost);
 
 #ifdef CONFIG_SCHED_WALT
 /*

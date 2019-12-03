@@ -3,7 +3,7 @@
  * Copyright (c) 2018, The Linux Foundation. All rights reserved.
  */
 
-#if defined(CONFIG_QTI_RPM_STATS_LOG)
+#if IS_ENABLED(CONFIG_QTI_RPM_STATS_LOG)
 
 void msm_rpmh_master_stats_update(void);
 

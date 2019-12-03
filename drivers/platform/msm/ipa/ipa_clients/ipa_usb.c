@@ -2554,7 +2554,7 @@ bad_params:
 }
 EXPORT_SYMBOL(ipa_usb_xdci_resume);
 
-static int __init ipa3_usb_init(void)
+int __init ipa3_usb_init(void)
 {
 	int i;
 	unsigned long flags;
@@ -2616,7 +2616,7 @@ ipa_usb_workqueue_fail:
 	return res;
 }
 
-static void ipa3_usb_exit(void)
+void __exit ipa3_usb_exit(void)
 {
 	IPA_USB_DBG_LOW("IPA_USB exit\n");
 
@@ -2679,8 +2679,10 @@ int ipa3_get_usb_gsi_stats(struct ipa_uc_dbg_ring_stats *stats)
 }
 
 
+#ifndef CONFIG_IPA3_MODULE /* served in ipa_api.c */
 arch_initcall(ipa3_usb_init);
 module_exit(ipa3_usb_exit);
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("IPA USB client driver");

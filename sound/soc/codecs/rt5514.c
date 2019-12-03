@@ -36,8 +36,6 @@
 #include "rt5514-spi.h"
 #endif
 
-struct regmap *rt5514_g_i2c_regmap;
-EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
 struct rt5514_priv *g_rt5514;
 
 static const struct reg_sequence rt5514_i2c_patch[] = {
@@ -128,23 +126,6 @@ static const struct reg_default rt5514_reg[] = {
 	{RT5514_VENDOR_ID1,		0x00000001},
 	{RT5514_VENDOR_ID2,		0x10ec5514},
 };
-
-int rt5514_set_gpio(int gpio, bool output)
-{
-	switch (gpio) {
-	case 5:
-		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002070,
-			1 << 8, 1 << 8);
-		regmap_update_bits(rt5514_g_i2c_regmap, 0x18002074,
-			1 << 21 | 1 << 22, output << 21 | 1 << 22);
-		break;
-
-	default:
-		break;
-	}
-	return 0;
-}
-EXPORT_SYMBOL_GPL(rt5514_set_gpio);
 
 static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 {
@@ -836,7 +817,6 @@ void rt5514_watchdog_handler(void)
 	rt5514_dsp_enable(g_rt5514, false, true);
 	rt5514_spi_request_switch(spi_switch_mask_load, 0);
 }
-EXPORT_SYMBOL_GPL(rt5514_watchdog_handler);
 
 static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
@@ -2055,6 +2035,9 @@ static int rt5514_probe(struct snd_soc_component *component)
 		return -EPROBE_DEFER;
 
 	rt5514->component = component;
+
+	// setup watchdog handler for SPI driver
+	rt5514_watchdog_handler_cb = rt5514_watchdog_handler;
 
 	return 0;
 }

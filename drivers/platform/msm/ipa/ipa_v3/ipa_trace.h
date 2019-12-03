@@ -84,6 +84,7 @@ TRACE_EVENT(
 	TP_printk("client=%lu", __entry->client)
 );
 
+#if IS_ENABLED(CONFIG_RMNET_IPA3)
 TRACE_EVENT(
 	rmnet_ipa_netifni3,
 
@@ -137,6 +138,7 @@ TRACE_EVENT(
 
 	TP_printk("rx_pkt_cnt=%lu", __entry->rx_pkt_cnt)
 );
+#endif
 
 TRACE_EVENT(
 	ipa3_rx_poll_num,

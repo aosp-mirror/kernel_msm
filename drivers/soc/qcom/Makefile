@@ -7,9 +7,6 @@ obj-$(CONFIG_QCOM_MDT_LOADER)	+= mdt_loader.o
 obj-$(CONFIG_QCOM_PM)	+=	spm.o
 obj-$(CONFIG_QCOM_QMI_HELPERS)	+= qmi_helpers.o
 qmi_helpers-y	+= qmi_encdec.o qmi_interface.o
-obj-$(CONFIG_QCOM_QMI_RMNET)	+= qmi_rmnet.o
-obj-$(CONFIG_QCOM_QMI_DFC)	+= dfc_qmi.o dfc_qmap.o
-obj-$(CONFIG_QCOM_QMI_POWER_COLLAPSE) += wda_qmi.o
 obj-$(CONFIG_QCOM_RMTFS_MEM)	+= rmtfs_mem.o
 obj-$(CONFIG_QCOM_RPMH)		+= qcom_rpmh.o
 qcom_rpmh-y			+= rpmh-rsc.o
@@ -93,7 +90,8 @@ ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD)   +=  rpm-smd-debug.o
 endif
 obj-$(CONFIG_QCOM_CDSP_RM) += cdsprm.o
-obj-$(CONFIG_ICNSS) += icnss.o
-obj-$(CONFIG_ICNSS_QMI) += icnss_qmi.o wlan_firmware_service_v01.o
+obj-$(CONFIG_ICNSS) += msm_icnss.o
+msm_icnss-objs += icnss.o
+msm_icnss-$(CONFIG_ICNSS_QMI) += icnss_qmi.o wlan_firmware_service_v01.o
 obj-$(CONFIG_RMNET_CTL) += rmnet_ctl/
 obj-$(CONFIG_MODEMSMEM) += modemsmem/

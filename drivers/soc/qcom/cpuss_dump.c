@@ -534,3 +534,4 @@ static void __exit cpuss_dump_exit(void)
 
 subsys_initcall(cpuss_dump_init);
 module_exit(cpuss_dump_exit)
+MODULE_LICENSE("GPL v2");

@@ -3402,6 +3402,7 @@ void ipa_assert(void)
 	pr_err("IPA: unrecoverable error has occurred, asserting\n");
 	BUG();
 }
+EXPORT_SYMBOL_GPL(ipa_assert);
 
 /**
  * ipa_rx_poll() - Poll the rx packets from IPA HW in the
@@ -3834,7 +3835,47 @@ static int __init ipa_module_init(void)
 	/* Register as a platform device driver */
 	return platform_driver_register(&ipa_plat_drv);
 }
+
+#if defined(CONFIG_IPA3_MODULE)
+static int __init ipa_components_init(void)
+{
+	int retval = 0;
+
+	retval = ipa3_usb_init();
+	if (retval) {
+		return retval;
+	}
+	retval = ipa_module_init();
+	if (retval) {
+		return retval;
+	}
+#if IS_ENABLED(CONFIG_RMNET_IPA3)
+	retval = ipa3_wwan_init();
+	if (retval) {
+		return retval;
+	}
+#endif
+#if IS_ENABLED(CONFIG_IPA3_MHI_PRIME_MANAGER)
+	retval = ipa_mpm_init();
+	if (retval) {
+		return retval;
+	}
+#endif
+#if IS_ENABLED(CONFIG_RNDIS_IPA)
+	retval = rndis_ipa_init_module();
+	if (retval) {
+		return retval;
+	}
+#endif
+	return retval;
+}
+#endif
+
+#ifndef CONFIG_IPA3_MODULE
 subsys_initcall(ipa_module_init);
+#else
+module_init(ipa_components_init);
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("IPA HW device driver");

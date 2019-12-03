@@ -69,13 +69,13 @@ config NFC_NQ
           resides in the usermode and it has no other NFC dependencies.
 
 config NFC_ST21NFC
-        bool "ST Microelectronics ST21NFC NFC Controller Driver"
+        tristate "ST Microelectronics ST21NFC NFC Controller Driver"
         depends on I2C
         help
           ST Microelectronics ST21NFC Near Field Communication controller support.
 
 config ESE_ST54J
-        bool "ST Microelectronics ST54J ESE driver"
+        tristate "ST Microelectronics ST54J ESE driver"
         depends on SPI && NFC_ST21NFC
         help
           ST Microelectronics ST54J ESE Near Field Communication controller support.

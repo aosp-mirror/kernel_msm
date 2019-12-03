@@ -807,3 +807,6 @@ static int __init msm_restart_init(void)
 	return platform_driver_register(&msm_restart_driver);
 }
 pure_initcall(msm_restart_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Msm Poweroff");

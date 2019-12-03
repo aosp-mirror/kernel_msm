@@ -12,8 +12,6 @@
 #include "tsens.h"
 #include "thermal_core.h"
 
-#define TSENS_DRIVER_NAME			"msm-tsens"
-
 #define TSENS_UPPER_LOWER_INTERRUPT_CTRL(n)		(n)
 #define TSENS_INTERRUPT_EN		BIT(0)
 

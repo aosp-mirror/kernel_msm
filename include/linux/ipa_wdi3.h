@@ -221,7 +221,7 @@ struct ipa_wdi_perf_profile {
 	u32 max_supported_bw_mbps;
 };
 
-#if defined CONFIG_IPA || defined CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA) || IS_ENABLED(CONFIG_IPA3)
 
 /**
  * ipa_wdi_init - Client should call this function to

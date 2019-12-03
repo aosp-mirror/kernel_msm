@@ -163,7 +163,7 @@ struct ipa_req_chan_out_params {
 	u32 db_reg_phs_addr_msb;
 };
 
-#ifdef CONFIG_IPA3
+#if IS_ENABLED(CONFIG_IPA3)
 
 /**
  * ipa_usb_init_teth_prot - Peripheral should call this function to initialize
@@ -278,6 +278,10 @@ int ipa_usb_xdci_suspend(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 int ipa_usb_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl,
 			enum ipa_usb_teth_prot teth_prot);
 
+#if defined(CONFIG_IPA3_MODULE)
+int ipa3_usb_init(void);
+void ipa3_usb_exit(void);
+#endif
 #else /* CONFIG_IPA3 */
 
 static inline int ipa_usb_init_teth_prot(enum ipa_usb_teth_prot teth_prot,
