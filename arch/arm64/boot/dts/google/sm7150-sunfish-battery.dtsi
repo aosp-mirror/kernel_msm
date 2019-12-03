@@ -164,6 +164,8 @@
 		google,res-filt-length = <10>;
 		/* enable cycle counts */
 		google,cycle-counts;
+		/* battery high temperature update threshold */
+		google,update-high-temp-threshold = <550>;
 
 		#thermal-sensor-cells = <0>;
 	};
