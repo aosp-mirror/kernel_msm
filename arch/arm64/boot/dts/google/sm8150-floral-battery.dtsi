@@ -183,6 +183,8 @@
 		/* rest charging */
 		google,chg-rest-rate = <10>;
 		google,chg-rest-soc = <80>;
+		/* battery high temperature update threshold */
+		google,update-high-temp-threshold = <550>;
 
 		#thermal-sensor-cells = <0>;
 	};
