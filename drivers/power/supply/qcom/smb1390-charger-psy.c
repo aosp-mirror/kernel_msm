@@ -872,6 +872,9 @@ static int smb1390_disable_vote_cb(struct votable *votable, void *data,
 		return rc;
 	}
 
+	smb1390_dbg(chip, PR_INFO, "client: %s, master: %s\n",
+			client, (disable ? "disabled" : "enabled"));
+
 	/* charging may have been disabled by ILIM; send uevent */
 	if (chip->cp_master_psy && (disable != chip->disabled))
 		power_supply_changed(chip->cp_master_psy);
@@ -893,6 +896,9 @@ static int smb1390_slave_disable_vote_cb(struct votable *votable, void *data,
 				disable ? "disable" : "enable", rc);
 		return rc;
 	}
+
+	smb1390_dbg(chip, PR_INFO, "client: %s, slave: %s\n",
+			client, (disable ? "disabled" : "enabled"));
 
 	/* Re-distribute ILIM to Master CP when Slave is disabled */
 	if (disable && (chip->ilim_votable)) {
@@ -974,7 +980,7 @@ static int smb1390_ilim_vote_cb(struct votable *votable, void *data,
 			return rc;
 		}
 
-		smb1390_dbg(chip, PR_INFO, "ILIM set to %duA slave_enabled%d\n",
+		smb1390_dbg(chip, PR_INFO, "ILIM set to %duA slave_enabled = %d\n",
 						ilim_uA, slave_enabled);
 		vote(chip->disable_votable, ILIM_VOTER, false, 0);
 	}
@@ -1103,6 +1109,12 @@ static void smb1390_status_change_work(struct work_struct *work)
 			goto out;
 		}
 
+		/*
+		 * Slave SMB1390 is not required for the power-rating of QC3
+		 */
+		if (pval.intval != POWER_SUPPLY_CP_HVDCP3)
+			vote(chip->slave_disable_votable, SRC_VOTER, false, 0);
+
 		/* Check for SOC threshold only once before enabling CP */
 		vote(chip->disable_votable, SRC_VOTER, false, 0);
 		if (!chip->batt_soc_validated) {
@@ -1160,6 +1172,7 @@ static void smb1390_status_change_work(struct work_struct *work)
 		}
 	} else {
 		chip->batt_soc_validated = false;
+		vote(chip->slave_disable_votable, SRC_VOTER, true, 0);
 		vote(chip->disable_votable, SRC_VOTER, true, 0);
 		vote(chip->disable_votable, TAPER_END_VOTER, false, 0);
 		vote(chip->fcc_votable, CP_VOTER, false, 0);
@@ -1574,6 +1587,8 @@ static int smb1390_create_votables(struct smb1390 *chip)
 	if (IS_ERR(chip->slave_disable_votable))
 		return PTR_ERR(chip->slave_disable_votable);
 
+	/* Keep slave SMB disabled */
+	vote(chip->slave_disable_votable, SRC_VOTER, true, 0);
 	/*
 	 * charge pump is initially disabled; this indirectly votes to allow
 	 * traditional parallel charging if present
