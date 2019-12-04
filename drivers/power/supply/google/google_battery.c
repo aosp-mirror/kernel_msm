@@ -46,6 +46,7 @@
 #define DEFAULT_BATT_FAKE_CAPACITY		50
 #define DEFAULT_BATT_UPDATE_INTERVAL		30000
 #define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
+#define DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD	550
 
 #define MSC_ERROR_UPDATE_INTERVAL		5000
 #define MSC_DEFAULT_UPDATE_INTERVAL		30000
@@ -193,6 +194,9 @@ struct batt_drv {
 	int fg_status;
 	int batt_fast_update_cnt;
 	u32 batt_update_interval;
+	/* update high temperature in time */
+	int batt_temp;
+	u32 batt_update_high_temp_threshold;
 	/* triger for recharge logic next update from charger */
 	bool batt_full;
 	struct batt_ssoc_state ssoc_state;
@@ -2859,6 +2863,16 @@ static void google_battery_work(struct work_struct *work)
 
 	/* TODO: poll other data here if needed */
 
+	batt_temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP, &ret);
+	if (ret < 0) {
+		pr_err("unable to get batt_temp, ret=%d", ret);
+	} else if (batt_temp != batt_drv->batt_temp) {
+		batt_drv->batt_temp = batt_temp;
+		if (batt_drv->batt_temp >
+		    batt_drv->batt_update_high_temp_threshold)
+			notify_psy_changed = true;
+	}
+
 	mutex_unlock(&batt_drv->batt_lock);
 
 	/* wait for timeout or state equal to CHARGING, FULL or UNKNOWN
@@ -2887,12 +2901,6 @@ static void google_battery_work(struct work_struct *work)
 
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
 	dump_ssoc_state(ssoc_state, batt_drv->log);
-
-	batt_temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP, &ret);
-	if (ret < 0)
-		pr_err("unable to get batt_temp, ret=%d", ret);
-	else if (batt_temp > HIGH_TEMP_UPDATE_THRESHOLD)
-		notify_psy_changed = true;
 
 	if (notify_psy_changed)
 		power_supply_changed(batt_drv->psy);
@@ -3420,6 +3428,12 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->batt_update_interval = DEFAULT_BATT_UPDATE_INTERVAL;
 
+	ret = of_property_read_u32(batt_drv->device->of_node,
+				   "google,update-high-temp-threshold",
+				   &batt_drv->batt_update_high_temp_threshold);
+	if (ret < 0)
+		batt_drv->batt_update_high_temp_threshold =
+					DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD;
 	/* charge statistics */
 	ret = of_property_read_u32(node, "google,chg-stats-qual-time",
 				   &batt_drv->ce_data.chg_sts_qual_time);
