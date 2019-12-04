@@ -154,4 +154,11 @@ struct ufs_dev_fix {
  */
 #define UFS_DEVICE_QUIRK_WAIT_AFTER_REF_CLK_UNGATE	(1 << 11)
 
+/*
+ * UFSv2.1 customized feature uses the same descriptor bit with write
+ * boost. Disable the check function to avoid triggering write boost
+ * unexpectedly.
+ */
+#define UFS_DEVICE_QUIRK_DISABLE_WRITE_BOOST	(1 << 12)
+
 #endif /* UFS_QUIRKS_H_ */

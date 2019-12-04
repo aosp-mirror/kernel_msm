@@ -1029,6 +1029,8 @@ static int ufsdbg_show_hba_show(struct seq_file *file, void *data)
 	seq_printf(file, "dl_pa_error_ind_received = %d\n",
 		   hba->ufs_stats.dl_err_cnt[UFS_EC_DL_PA_ERROR_IND_RECEIVED]);
 	seq_printf(file, "dme_err_cnt = %d\n", hba->ufs_stats.dme_err_cnt);
+	seq_printf(file, "d_ext_ufs_feature_sup = 0x%x\n",
+		   hba->dev_info.d_ext_ufs_feature_sup);
 
 	return 0;
 }
