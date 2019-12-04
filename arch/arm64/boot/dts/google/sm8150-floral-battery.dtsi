@@ -79,6 +79,8 @@
 	/* check for NV integrity */
 	maxim,enable-nv-check;
 
+	maxim,batt-id-range-pct = <15>;
+
 	maxim,nconvgcfg-temp-hysteresis = <10>;
 	maxim,nconvgcfg-temp-limits = /bits/ 16
 		<(-70) (-45) (-20) (-3) 14 30 55 80

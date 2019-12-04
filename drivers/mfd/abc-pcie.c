@@ -1488,6 +1488,7 @@ int dma_mblk_start(uint8_t chan, enum dma_data_direction dir,
 	int i;
 
 	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE) ||
+			(num_channels < 0) ||
 			(num_channels + chan >= ABC_DMA_MAX_CHAN))
 		return -EINVAL;
 
@@ -1590,7 +1591,8 @@ int dma_sblk_start(uint8_t chan, enum dma_data_direction dir,
 	u32 set_val;
 	unsigned long flags;
 
-	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE))
+	if (!(dir == DMA_FROM_DEVICE || dir == DMA_TO_DEVICE) ||
+			(chan >= ABC_DMA_MAX_CHAN))
 		return -EINVAL;
 
 	spin_lock_irqsave(&abc_dev->fsys_reg_lock, flags);
