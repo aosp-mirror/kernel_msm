@@ -630,6 +630,8 @@ static struct ufs_dev_fix ufs_fixups[] = {
 		UFS_DEVICE_QUIRK_HS_G1_TO_HS_G3_SWITCH),
 	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ16",
 		UFS_DEVICE_QUIRK_RECOVERY_FROM_DL_NAC_ERRORS),
+	UFS_FIX(UFS_ANY_VENDOR, UFS_ANY_MODEL,
+		UFS_DEVICE_QUIRK_DISABLE_WRITE_BOOST),
 
 	END_FIX
 };
@@ -9045,6 +9047,17 @@ void ufshcd_apply_pm_quirks(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL(ufshcd_apply_pm_quirks);
 
+void ufshcd_apply_ext_feature_quirks(struct ufs_hba *hba)
+{
+	if (ufshcd_wb_sup(hba) &&
+		hba->dev_info.quirks & UFS_DEVICE_QUIRK_DISABLE_WRITE_BOOST) {
+		dev_warn(hba->dev, "Disable write booster, while device supports");
+		hba->dev_info.d_ext_ufs_feature_sup &=
+			~UFS_DEV_WRITE_BOOSTER_SUP;
+	}
+}
+EXPORT_SYMBOL(ufshcd_apply_ext_feature_quirks);
+
 /**
  * ufshcd_set_dev_ref_clk - set the device bRefClkFreq
  * @hba: per-adapter instance
@@ -9262,6 +9275,7 @@ reinit:
 	ufshcd_tune_unipro_params(hba);
 
 	ufshcd_apply_pm_quirks(hba);
+	ufshcd_apply_ext_feature_quirks(hba);
 	if (card.wspecversion < 0x300) {
 		ret = ufshcd_set_vccq_rail_unused(hba,
 			(hba->dev_info.quirks & UFS_DEVICE_NO_VCCQ) ?
