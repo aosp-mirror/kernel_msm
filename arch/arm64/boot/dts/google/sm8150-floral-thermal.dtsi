@@ -83,13 +83,13 @@
 };
 
 &vbat_lvl1 {
-	temperature = <3000>;
+	temperature = <3100>;
 	hysteresis = <200>;
 	type = "passive";
 };
 
 &vbat_lvl2 {
-	temperature = <2800>;
+	temperature = <3000>;
 	hysteresis = <200>;
 	type = "passive";
 };
@@ -393,6 +393,18 @@
 
 	pm8150b-vbat-lvl1 {
 		cooling-maps {
+			vbat_cpu4 {
+				trip = <&vbat_lvl1>;
+				cooling-device =
+					<&CPU4 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			vbat_cpu5 {
+				trip = <&vbat_lvl1>;
+				cooling-device =
+					<&CPU5 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
 			vbat_cpu6 {
 				trip = <&vbat_lvl1>;
 				cooling-device =
@@ -527,7 +539,51 @@
 	bcl_virtual_sensor: bcl-virtual-sensor {
 	};
 
-	bcl-virt-extreme {
+	bcl-virt1 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		trips {
+			active_config1: active-config1 {
+				temperature = <2>;
+				hysteresis = <0>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			bcl_cpu4 {
+				trip = <&active_config1>;
+				cooling-device =
+					<&CPU4 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_cpu5 {
+				trip = <&active_config1>;
+				cooling-device =
+					<&CPU5 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_cpu6 {
+				trip = <&active_config1>;
+				cooling-device =
+					<&CPU6 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_cpu7 {
+				trip = <&active_config1>;
+				cooling-device =
+					<&CPU7 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_gpu {
+				trip = <&active_config1>;
+				cooling-device = <&msm_gpu THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+		};
+	};
+
+	bcl-virt2 {
 		polling-delay-passive = <100>;
 		polling-delay = <0>;
 		thermal-governor = "step_wise";
@@ -538,16 +594,53 @@
 				type = "passive";
 			};
 		};
+		cooling-maps {
+			bcl_cpu4 {
+				trip = <&active_config0>;
+				cooling-device =
+					<&CPU4 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_cpu5 {
+				trip = <&active_config0>;
+				cooling-device =
+					<&CPU5 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_cpu6 {
+				trip = <&active_config0>;
+				cooling-device =
+					<&CPU6 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_cpu7 {
+				trip = <&active_config0>;
+				cooling-device =
+					<&CPU7 THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+			bcl_gpu {
+				trip = <&active_config0>;
+				cooling-device = <&msm_gpu THERMAL_MAX_LIMIT
+					THERMAL_MAX_LIMIT>;
+			};
+		};
 	};
 
 };
 
 &bcl_virtual_sensor {
 
-	bcl-virt-extreme {
+	bcl-virt1 {
+		num_sensors = <2>;
+		coefficients = <(-3200) (-10000)>;
+		sensor-names = "pm8150b-vbat-lvl0", "battery";
+	};
+
+	bcl-virt2 {
 		num_sensors = <3>;
-		coefficients = <(-3200) 400 (-10000)>;
-		sensor-names = "pm8150b-vbat-lvl0", "bcl-cycle", "battery";
+		coefficients = <(-3100) 400 (-10000)>;
+		sensor-names = "pm8150b-vbat-lvl1", "bcl-cycle", "battery";
 	};
 
 };
