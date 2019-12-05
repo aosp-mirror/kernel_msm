@@ -42,18 +42,22 @@
 	b1_maxim_config: maxim,config {
 		maxim,b1-10k {
 			maxim,batt-id-kohm = <10>;
+			maxim,capacity-rcomp0 = <0x203f>; /* LSN / Desay */
 #include "batterydata-maxim-b1-10k.dtsi"
 		};
 		maxim,b1-22k {
 			maxim,batt-id-kohm = <22>;
+			maxim,capacity-rcomp0 = <0x203b>; /* LSN / Sunwoda */
 #include "batterydata-maxim-b1-22k.dtsi"
 		};
 		maxim,b1-47k {
 			maxim,batt-id-kohm = <47>;
+			maxim,capacity-rcomp0 = <0x203d>; /* ATL / Desay */
 #include "batterydata-maxim-b1-47k.dtsi"
 		};
 		maxim,b1-68k {
 			maxim,batt-id-kohm = <68>;
+			maxim,capacity-rcomp0 = <0x2048>; /* ATL / Sunwoda */
 #include "batterydata-maxim-b1-68k.dtsi"
 		};
 		maxim,b1-180k {
@@ -64,6 +68,12 @@
 };
 
 &max1720x_fg {
+	maxim,capacity-reset-cnt;
+	maxim,capacity-design = <2915>;
+	maxim,capacity-tempco = <0x2226>;
+	maxim,capacity-stable = <50>;
+	maxim,capacity-drop = <100>;
+
 	maxim,config = <&b1_maxim_config>;
 	maxim,n_regval =  /bits/ 16 <
 	    0x9C 0x0300 /* nIChgTerm = 240.0 mA */

@@ -43,24 +43,34 @@
 	c1_maxim_config: maxim,config {
 		maxim,c1-10k {
 			maxim,batt-id-kohm = <10>;
+			maxim,capacity-rcomp0 = <0x204d>; /* ATL / Desay */
 #include "batterydata-maxim-c1-10k.dtsi"
 		};
 		maxim,c1-47k {
 			maxim,batt-id-kohm = <47>;
+			maxim,capacity-rcomp0 = <0x2043>; /* ATL / Sunwoda */
 #include "batterydata-maxim-c1-47k.dtsi"
 		};
 		maxim,c1-68k {
 			maxim,batt-id-kohm = <68>;
+			maxim,capacity-rcomp0 = <0x204f>; /* COS / Sunwoda */
 #include "batterydata-maxim-c1-68k.dtsi"
 		};
 		maxim,c1-180k {
 			maxim,batt-id-kohm = <180>;
+			maxim,capacity-rcomp0 = <0x2046>; /* COS / Desay */
 #include "batterydata-maxim-c1-180k.dtsi"
 		};
 	};
 };
 
 &max1720x_fg {
+	maxim,capacity-reset-cnt;
+	maxim,capacity-design = <3430>;
+	maxim,capacity-tempco = <0x2826>;
+	maxim,capacity-stable = <50>;
+	maxim,capacity-drop = <100>;
+
 	maxim,config = <&c1_maxim_config>;
 	maxim,n_regval =  /bits/ 16 <
 	    0x9C 0x0380 /* nIChgTerm = 280.0 mA */
@@ -78,6 +88,7 @@
 	    0xBA 0xFF0A /* nNVCfg2: enT enSOC enMMT enMMV enMMC enVT enFC enIAvg CYCLESpSAVE=5.0 */
 	    0xB3 0x0D80 /* nDesignCap: 3456 mAh */
 	>;
+
 };
 
 &soc {

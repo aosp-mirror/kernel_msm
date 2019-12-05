@@ -48,6 +48,10 @@
 	reg = <0 0x99B00000 0 0x100000>;
 };
 
+&secure_display_memory {
+	size = <0x0 0x9000000>;
+};
+
 &reserved_memory {
 	debug_info: debug_info@0 {
 		compatible = "removed-dma-pool";
