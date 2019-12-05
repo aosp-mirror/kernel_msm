@@ -570,6 +570,11 @@ rrm_process_beacon_report_req(tpAniSirGlobal pMac,
 		reportingDetail : BEACON_REPORTING_DETAIL_ALL_FF_IE;
 
 	if (pBeaconReq->measurement_request.Beacon.RequestedInfo.present) {
+		if (!pBeaconReq->measurement_request.Beacon.RequestedInfo.
+		    num_requested_eids) {
+			pe_debug("802.11k BCN RPT: Requested num of EID is 0");
+			return eRRM_FAILURE;
+		}
 		pCurrentReq->request.Beacon.reqIes.pElementIds =
 			qdf_mem_malloc(sizeof(uint8_t) *
 				       pBeaconReq->measurement_request.Beacon.
@@ -578,6 +583,7 @@ rrm_process_beacon_report_req(tpAniSirGlobal pMac,
 			pe_err("Unable to allocate memory for request IEs buffer");
 			return eRRM_FAILURE;
 		}
+
 		pCurrentReq->request.Beacon.reqIes.num =
 			pBeaconReq->measurement_request.Beacon.RequestedInfo.
 			num_requested_eids;
@@ -585,6 +591,11 @@ rrm_process_beacon_report_req(tpAniSirGlobal pMac,
 			     pBeaconReq->measurement_request.Beacon.
 			     RequestedInfo.requested_eids,
 			     pCurrentReq->request.Beacon.reqIes.num);
+		pe_debug("802.11k BCN RPT: Requested EIDs: num:[%d]",
+			 pCurrentReq->request.Beacon.reqIes.num);
+		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_DEBUG,
+				pCurrentReq->request.Beacon.reqIes.pElementIds,
+				pCurrentReq->request.Beacon.reqIes.num);
 	}
 
 	if (pBeaconReq->measurement_request.Beacon.num_APChannelReport) {
