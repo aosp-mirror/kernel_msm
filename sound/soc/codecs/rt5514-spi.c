@@ -378,7 +378,6 @@ void rt5514_spi_request_switch(int mask, bool is_require)
 
 	if (spi_switch_mask > 0) {
 		pr_info("%s: on (mask=%2x)", __func__, spi_switch_mask);
-		mutex_unlock(&switch_lock);
 		if (!skip_handshake) {
 			/* Set handshake GPIO */
 			gpio_set_value(handshake_gpio, 1);
@@ -396,13 +395,13 @@ void rt5514_spi_request_switch(int mask, bool is_require)
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 0);
 	} else {
 		pr_info("%s: off (mask=%2x)", __func__, spi_switch_mask);
-		mutex_unlock(&switch_lock);
 		/* Set switch pin to CHRE */
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 1);
 		/* Set handshake GPIO */
 		if (!skip_handshake)
 			gpio_set_value(handshake_gpio, 0);
 	}
+	mutex_unlock(&switch_lock);
 }
 EXPORT_SYMBOL_GPL(rt5514_spi_request_switch);
 
@@ -731,6 +730,8 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 	unsigned int hotword_flag, musdet_flag, stream_flag;
 	int retry_cnt = 0;
 
+	rt5514_spi_request_switch(spi_switch_mask_copy, 1);
+
 	if (is_adc) {
 		stream_flag = RT5514_DSP_STREAM_ADC;
 		base_addr = RT5514_BUFFER_ADC_BASE;
@@ -765,7 +766,7 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 			memset(buf, 0, sizeof(buf));
 			rt5514_spi_burst_write(RT5514_MUSDET_FLAG, buf, 8);
 		} else {
-			return;
+			goto end;
 		}
 
 		if (stream_flag == RT5514_DSP_STREAM_HOTWORD) {
@@ -773,7 +774,7 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 				rt5514_dsp->stream_flag[0]) {
 				dev_err(rt5514_dsp->dev,
 					"No pcm0 substream or it is streaming\n");
-				return;
+				goto end;
 			}
 			rt5514_dsp->stream_flag[0] = stream_flag;
 			rt5514_dsp->get_size[0] = 0;
@@ -782,12 +783,12 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 				rt5514_dsp->stream_flag[1]) {
 				dev_err(rt5514_dsp->dev,
 					"No pcm1 substream or it is streaming\n");
-				return;
+				goto end;
 			}
 			rt5514_dsp->stream_flag[1] = stream_flag;
 			rt5514_dsp->get_size[1] = 0;
 		} else {
-			return;
+			goto end;
 		}
 	}
 
@@ -834,7 +835,7 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 
 	if (retry_cnt == RT5514_SPI_RETRY_CNT) {
 		pr_err("%s: Fail for address read", __func__);
-		return;
+		goto end;
 	}
 
 	rt5514_dsp->buf_rp[stream_flag - 1] += buf_ignore_size;
@@ -862,6 +863,9 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 		rt5514_dsp->buf_rp[stream_flag - 1] &&
 		rt5514_dsp->buf_size[stream_flag - 1]) {
 
+		/* switch to off before next spi schedule start*/
+		rt5514_spi_request_switch(spi_switch_mask_copy, 0);
+
 		if (is_adc)
 			schedule_delayed_work(&rt5514_dsp->copy_work_2,
 				msecs_to_jiffies(0));
@@ -871,9 +875,10 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 		else if (stream_flag == RT5514_DSP_STREAM_MUSDET)
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
 				msecs_to_jiffies(0));
-		else
-			return;
+		return;
 	}
+end:
+	rt5514_spi_request_switch(spi_switch_mask_copy, 0);
 }
 
 static void rt5514_spi_start_work(struct work_struct *work)
@@ -899,11 +904,8 @@ static void rt5514_spi_start_work(struct work_struct *work)
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0)) {
-		rt5514_spi_request_switch(spi_switch_mask_copy, 1);
+	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, false);
-		rt5514_spi_request_switch(spi_switch_mask_copy, 0);
-	}
 }
 
 static void rt5514_spi_adc_start(struct work_struct *work)
@@ -921,11 +923,8 @@ static void rt5514_spi_adc_start(struct work_struct *work)
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0)) {
-		rt5514_spi_request_switch(spi_switch_mask_copy, 1);
+	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, true);
-		rt5514_spi_request_switch(spi_switch_mask_copy, 0);
-	}
 }
 
 static irqreturn_t rt5514_spi_irq(int irq, void *data)
@@ -958,6 +957,9 @@ static int rt5514_spi_hw_params(struct snd_pcm_substream *substream,
 		snd_soc_component_get_drvdata(component);
 	int ret;
 
+	if (cpu_dai->id > 2)
+		return 0;
+
 	mutex_lock(&rt5514_dsp->dma_lock);
 	ret = snd_pcm_lib_alloc_vmalloc_buffer(substream,
 			params_buffer_bytes(hw_params));
@@ -981,6 +983,9 @@ static int rt5514_spi_hw_free(struct snd_pcm_substream *substream)
 		snd_soc_rtdcom_lookup(rtd, DRV_NAME);
 	struct rt5514_dsp *rt5514_dsp =
 		snd_soc_component_get_drvdata(component);
+
+	if (cpu_dai->id > 2)
+		return 0;
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 	rt5514_dsp->substream[cpu_dai->id] = NULL;
@@ -1030,10 +1035,21 @@ static const struct snd_pcm_ops rt5514_spi_pcm_ops = {
 static int rt5514_pcm_parse_dp(struct rt5514_dsp *rt5514_dsp,
 	struct device *dev)
 {
-	device_property_read_u32(dev, "realtek,musdet-ignore-ms",
-		&rt5514_dsp->musdet_ignore_ms);
-	device_property_read_u32(dev, "realtek,hotword-ignore-ms",
-		&rt5514_dsp->hotword_ignore_ms);
+	unsigned int val = ~0;
+
+	regmap_read(rt5514_g_i2c_regmap, 0x18002ff0, &val);
+
+	if (val == 0x80) {
+		device_property_read_u32(dev, "realtek,musdet-ignore-ms-5514p",
+			&rt5514_dsp->musdet_ignore_ms);
+		device_property_read_u32(dev, "realtek,hotword-ignore-ms-5514p",
+			&rt5514_dsp->hotword_ignore_ms);
+	} else {
+		device_property_read_u32(dev, "realtek,musdet-ignore-ms",
+			&rt5514_dsp->musdet_ignore_ms);
+		device_property_read_u32(dev, "realtek,hotword-ignore-ms",
+			&rt5514_dsp->hotword_ignore_ms);
+	}
 
 	return 0;
 }
@@ -1044,6 +1060,9 @@ static int rt5514_spi_pcm_probe(struct snd_soc_component *component)
 	struct snd_soc_dapm_context *dapm =
 				snd_soc_component_get_dapm(component);
 	int ret;
+
+	if (!rt5514_g_i2c_regmap)
+		return -EPROBE_DEFER;
 
 	rt5514_dsp = devm_kzalloc(component->dev, sizeof(*rt5514_dsp),
 			GFP_KERNEL);
