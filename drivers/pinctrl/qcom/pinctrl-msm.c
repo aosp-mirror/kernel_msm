@@ -1234,8 +1234,10 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	if (ignored_gpios_nr > 0) {
 		chip->ignored_gpios = kmalloc_array(ignored_gpios_nr,
 			sizeof(*chip->ignored_gpios), GFP_KERNEL);
-		if (!chip->ignored_gpios)
-			return -ENOMEM;
+		if (!chip->ignored_gpios) {
+			ret = -ENOMEM;
+			goto fail;
+		}
 		of_property_read_u32_array(chip->of_node, "goog,ignored-gpios",
 			chip->ignored_gpios,
 			ignored_gpios_nr);
@@ -1277,6 +1279,8 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 
 	return 0;
 fail:
+	kfree(pctrl->chip.ignored_gpios);
+	pctrl->chip.ignored_gpios = NULL;
 	gpiochip_remove(&pctrl->chip);
 	return ret;
 }
@@ -1456,7 +1460,8 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	pctrl->irq = platform_get_irq(pdev, 0);
 	if (pctrl->irq < 0) {
 		dev_err(&pdev->dev, "No interrupt defined for msmgpio\n");
-		return pctrl->irq;
+		ret = pctrl->irq;
+		goto fail;
 	}
 
 	pctrl->desc.owner = THIS_MODULE;
@@ -1470,12 +1475,15 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	pctrl->pctrl = devm_pinctrl_register(&pdev->dev, &pctrl->desc, pctrl);
 	if (IS_ERR(pctrl->pctrl)) {
 		dev_err(&pdev->dev, "Couldn't register pinctrl driver\n");
-		return PTR_ERR(pctrl->pctrl);
+		ret = PTR_ERR(pctrl->pctrl);
+		goto fail;
 	}
 
 	ret = msm_gpio_init(pctrl);
-	if (ret)
-		return ret;
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to init msm gpios\n");
+		goto fail;
+	}
 
 	platform_set_drvdata(pdev, pctrl);
 
@@ -1483,6 +1491,10 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	dev_dbg(&pdev->dev, "Probed Qualcomm pinctrl driver\n");
 
 	return 0;
+
+fail:
+	unregister_restart_handler(&pctrl->restart_nb);
+	return ret;
 }
 EXPORT_SYMBOL(msm_pinctrl_probe);
 
@@ -1491,6 +1503,7 @@ int msm_pinctrl_remove(struct platform_device *pdev)
 	struct msm_pinctrl *pctrl = platform_get_drvdata(pdev);
 
 	kfree(pctrl->chip.ignored_gpios);
+	pctrl->chip.ignored_gpios = NULL;
 	gpiochip_remove(&pctrl->chip);
 
 	unregister_restart_handler(&pctrl->restart_nb);
@@ -1499,4 +1512,7 @@ int msm_pinctrl_remove(struct platform_device *pdev)
 	return 0;
 }
 EXPORT_SYMBOL(msm_pinctrl_remove);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Qualcomm core pin ctrl driver");
 
