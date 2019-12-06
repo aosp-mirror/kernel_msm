@@ -9,6 +9,7 @@ function update_perf_config() {
     -d CMA_DEBUGFS \
     -d PM_DEBUG \
     -d DEBUG_PAGEALLOC \
+    -d SLUB_DEBUG_ON \
     -d SLUB_DEBUG_PANIC_ON \
     -d DEBUG_PAGEALLOC_ENABLE_DEFAULT \
     -d DEBUG_OBJECTS \
