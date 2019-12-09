@@ -3428,7 +3428,7 @@ struct arm_smmu_device *arm_smmu_get_by_fwnode(struct fwnode_handle *fwnode)
 	return dev ? dev_get_drvdata(dev) : NULL;
 }
 
-#ifdef CONFIG_MSM_TZ_SMMU
+#if IS_ENABLED(CONFIG_MSM_TZ_SMMU)
 static int msm_secure_smmu_map(struct iommu_domain *domain, unsigned long iova,
 			       phys_addr_t paddr, size_t size, int prot)
 {
@@ -4976,7 +4976,7 @@ static const struct of_device_id arm_smmu_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);
 
-#ifdef CONFIG_MSM_TZ_SMMU
+#if IS_ENABLED(CONFIG_MSM_TZ_SMMU)
 int register_iommu_sec_ptbl(void)
 {
 	struct device_node *np;
@@ -5260,7 +5260,9 @@ static int arm_smmu_legacy_bus_init(void)
 		arm_smmu_bus_init();
 	return 0;
 }
+#ifndef MODULE
 device_initcall_sync(arm_smmu_legacy_bus_init);
+#endif
 
 static int arm_smmu_device_remove(struct platform_device *pdev)
 {
@@ -5331,18 +5333,34 @@ static int __init arm_smmu_init(void)
 		return ret;
 
 	ret = platform_driver_register(&arm_smmu_driver);
-#ifdef CONFIG_MSM_TZ_SMMU
+	if (ret)
+		goto exit;
+#if IS_ENABLED(CONFIG_MSM_TZ_SMMU)
 	ret = register_iommu_sec_ptbl();
+	if (ret)
+		goto exit_sec_ptbl;
 #endif
 	registered = !ret;
 	trace_smmu_init(ktime_us_delta(ktime_get(), cur));
 
+#ifdef MODULE
+	arm_smmu_legacy_bus_init();
+#endif
+	return ret;
+
+#if IS_ENABLED(CONFIG_MSM_TZ_SMMU)
+exit_sec_ptbl:
+	platform_driver_unregister(&arm_smmu_driver);
+#endif
+exit:
+	platform_driver_unregister(&qsmmuv500_tbu_driver);
 	return ret;
 }
 
 static void __exit arm_smmu_exit(void)
 {
-	return platform_driver_unregister(&arm_smmu_driver);
+	platform_driver_unregister(&arm_smmu_driver);
+	platform_driver_unregister(&qsmmuv500_tbu_driver);
 }
 
 subsys_initcall(arm_smmu_init);
