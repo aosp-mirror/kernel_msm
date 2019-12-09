@@ -1179,6 +1179,7 @@ void fast_smmu_put_dma_cookie(struct iommu_domain *domain)
 	kfree(fast);
 	domain->iova_cookie = NULL;
 }
+EXPORT_SYMBOL_GPL(fast_smmu_put_dma_cookie);
 
 /**
  * fast_smmu_init_mapping
