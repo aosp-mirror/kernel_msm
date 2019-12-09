@@ -837,12 +837,38 @@ static int kgsl_suspend(struct device *dev)
 	pm_message_t arg = {0};
 	struct kgsl_device *device = dev_get_drvdata(dev);
 
+	/*
+	 * Hacking the gmu and kgsl-iommu devices to force probing caused an
+	 * issue with suspend/resume. Need to silently succeed for these devices
+	 * since suspend/resume is handled by the main kgsl device.
+	 */
+	if (dev->of_node && dev->of_node->name) {
+		if (!strcmp(dev->of_node->name, "qcom,gmu") ||
+		     !strcmp(dev->of_node->name, "qcom,kgsl-iommu")) {
+			pr_debug("kgsl: suspend is handled by kgsl device\n");
+			return 0;
+		}
+	}
+
 	return kgsl_suspend_device(device, arg);
 }
 
 static int kgsl_resume(struct device *dev)
 {
 	struct kgsl_device *device = dev_get_drvdata(dev);
+
+	/*
+	 * Hacking the gmu and kgsl-iommu devices to force probing caused an
+	 * issue with suspend/resume. Need to silently succeed for these devices
+	 * since suspend/resume is handled by the main kgsl device.
+	 */
+	if (dev->of_node && dev->of_node->name) {
+		if (!strcmp(dev->of_node->name, "qcom,gmu") ||
+		     !strcmp(dev->of_node->name, "qcom,kgsl-iommu")) {
+			pr_debug("kgsl: resume is handled by kgsl device\n");
+			return 0;
+		}
+	}
 
 	return kgsl_resume_device(device);
 }
