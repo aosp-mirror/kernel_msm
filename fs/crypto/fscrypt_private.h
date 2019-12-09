@@ -457,16 +457,12 @@ struct fscrypt_mode {
 	int logged_impl_name;
 };
 
+extern struct fscrypt_mode fscrypt_modes[];
+
 static inline bool is_private_mode(const struct fscrypt_mode *mode)
 {
 	/* Using inline encryption with ICE, rather than the crypto API? */
 	return mode->cipher_str == NULL;
-}
-
-static inline bool
-fscrypt_mode_supports_direct_key(const struct fscrypt_mode *mode)
-{
-	return mode->ivsize >= offsetofend(union fscrypt_iv, nonce);
 }
 
 extern struct crypto_skcipher *
