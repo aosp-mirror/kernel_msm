@@ -1829,6 +1829,7 @@ int report_iommu_fault(struct iommu_domain *domain, struct device *dev,
 EXPORT_SYMBOL_GPL(report_iommu_fault);
 
 struct dentry *iommu_debugfs_top;
+EXPORT_SYMBOL_GPL(iommu_debugfs_top);
 
 static int __init iommu_init(void)
 {

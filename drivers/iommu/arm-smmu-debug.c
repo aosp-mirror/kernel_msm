@@ -34,6 +34,7 @@ u32 arm_smmu_debug_tbu_testbus_select(void __iomem *tbu_base,
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_tbu_testbus_select);
 
 u32 arm_smmu_debug_tbu_testbus_output(void __iomem *tbu_base,
 			u32 testbus_version)
@@ -43,6 +44,7 @@ u32 arm_smmu_debug_tbu_testbus_output(void __iomem *tbu_base,
 
 	return readl_relaxed(tbu_base + offset);
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_tbu_testbus_output);
 
 u32 arm_smmu_debug_tcu_testbus_select(void __iomem *base,
 		void __iomem *tcu_base, enum tcu_testbus testbus,
@@ -67,11 +69,13 @@ u32 arm_smmu_debug_tcu_testbus_select(void __iomem *base,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_tcu_testbus_select);
 
 u32 arm_smmu_debug_tcu_testbus_output(void __iomem *base)
 {
 	return readl_relaxed(base + ARM_SMMU_TESTBUS);
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_tcu_testbus_output);
 
 static void arm_smmu_debug_dump_tbu_qns4_testbus(struct device *dev,
 			void __iomem *tbu_base, void __iomem *tcu_base,
@@ -229,11 +233,13 @@ void arm_smmu_debug_set_tnx_tcr_cntl(void __iomem *tbu_base, u64 val)
 {
 	writel_relaxed(val, tbu_base + ARM_SMMU_TNX_TCR_CNTL);
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_set_tnx_tcr_cntl);
 
 unsigned long arm_smmu_debug_get_tnx_tcr_cntl(void __iomem *tbu_base)
 {
 	return readl_relaxed(tbu_base + ARM_SMMU_TNX_TCR_CNTL);
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_get_tnx_tcr_cntl);
 
 void arm_smmu_debug_set_mask_and_match(void __iomem *tbu_base, u64 sel,
 					u64 mask, u64 match)
@@ -241,6 +247,7 @@ void arm_smmu_debug_set_mask_and_match(void __iomem *tbu_base, u64 sel,
 	writeq_relaxed(mask, tbu_base + ARM_SMMU_CAPTURE1_MASK(sel));
 	writeq_relaxed(match, tbu_base + ARM_SMMU_CAPTURE1_MATCH(sel));
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_set_mask_and_match);
 
 void arm_smmu_debug_get_mask_and_match(void __iomem *tbu_base, u64 *mask,
 					u64 *match)
@@ -254,6 +261,7 @@ void arm_smmu_debug_get_mask_and_match(void __iomem *tbu_base, u64 *mask,
 				ARM_SMMU_CAPTURE1_MATCH(i+1));
 	}
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_get_mask_and_match);
 
 void arm_smmu_debug_get_capture_snapshot(void __iomem *tbu_base,
 		u64 snapshot[NO_OF_CAPTURE_POINTS][REGS_PER_CAPTURE_POINT])
@@ -272,6 +280,7 @@ void arm_smmu_debug_get_capture_snapshot(void __iomem *tbu_base,
 				snapshot[i][j] = 0xdededede;
 	}
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_get_capture_snapshot);
 
 void arm_smmu_debug_clear_intr_and_validbits(void __iomem *tbu_base)
 {
@@ -281,6 +290,7 @@ void arm_smmu_debug_clear_intr_and_validbits(void __iomem *tbu_base)
 	val |= RESET_VALID;
 	writel_relaxed(val, tbu_base + ARM_SMMU_TNX_TCR_CNTL);
 }
+EXPORT_SYMBOL_GPL(arm_smmu_debug_clear_intr_and_validbits);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("ARM SMMU Debug");
