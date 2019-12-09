@@ -34,9 +34,9 @@
 };
 
 &pm8150_vadc {
-	wifi_therm@4e {
+	skin_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
-		label = "wifi_therm";
+		label = "skin_therm";
 		qcom,ratiometric;
 		qcom,hw-settle-time = <200>;
 		qcom,pre-scaling = <1 1>;
@@ -56,7 +56,7 @@
 			<&pm8150_vadc ADC_AMUX_THM1_PU2>,
 			<&pm8150_vadc ADC_AMUX_THM2_PU2>;
 
-	wifi_therm@4e {
+	skin_therm@4e {
 		reg = <ADC_AMUX_THM2_PU2>;
 		qcom,ratiometric;
 		qcom,hw-settle-time = <200>;
@@ -167,7 +167,7 @@
 		};
 	};
 
-	wifi-therm {
+	skin-therm {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
 		thermal-governor = "user_space";
@@ -182,7 +182,7 @@
 		};
 	};
 
-	wifi-therm-monitor {
+	skin-therm-monitor {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;
 		thermal-governor = "user_space";
