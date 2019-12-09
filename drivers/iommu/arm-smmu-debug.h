@@ -58,7 +58,7 @@ enum testbus_ops {
 #define INTR_CLR			(1 << 0)
 #define RESET_VALID			(1 << 7)
 
-#ifdef CONFIG_ARM_SMMU
+#if IS_ENABLED(CONFIG_ARM_SMMU)
 
 u32 arm_smmu_debug_tbu_testbus_select(void __iomem *tbu_base,
 		void __iomem *tcu_base, u32 testbus_version,
