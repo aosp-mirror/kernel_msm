@@ -2828,8 +2828,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 				break;
 			}
 
- 			pm_runtime_get_sync(otg->usb_phy->dev);
- 			msm_otg_start_peripheral(otg, 1);
+			pm_runtime_get_sync(otg->usb_phy->dev);
+			msm_otg_start_peripheral(otg, 1);
 			if (get_psy_type(motg) == POWER_SUPPLY_TYPE_USB_FLOAT ||
 				(get_psy_type(motg) == POWER_SUPPLY_TYPE_USB &&
 				motg->enable_sdp_check_timer)) {
@@ -2839,7 +2839,8 @@ static void msm_otg_sm_work(struct work_struct *w)
 					(phy->flags & PHY_SOFT_CONNECT) ?
 					SDP_CHECK_DELAY_MS :
 					SDP_CHECK_BOOT_DELAY_MS));
-			}			otg->state = OTG_STATE_B_PERIPHERAL;
+			}
+			otg->state = OTG_STATE_B_PERIPHERAL;
 		} else {
 			pr_debug("Cable disconnected\n");
 			msm_otg_dbg_log_event(phy, "RT: Cable DISC",
