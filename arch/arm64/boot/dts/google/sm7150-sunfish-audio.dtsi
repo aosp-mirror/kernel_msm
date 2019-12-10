@@ -641,5 +641,6 @@
 		spi-cpha;
 		realtek,hotword-ignore-ms = <1000>;
 		realtek,musdet-ignore-ms = <2000>;
+		realtek,en-2hosts = <1>;
 	};
 };
