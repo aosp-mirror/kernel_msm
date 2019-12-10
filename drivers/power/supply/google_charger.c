@@ -101,6 +101,7 @@ struct chg_drv {
 	int charge_stop_level;
 	int charge_start_level;
 	unsigned long last_cnt_time;
+	bool is_full;
 
 	struct taper_wa_struct taper;
 };
@@ -754,6 +755,18 @@ static void chg_work(struct work_struct *work)
 
 	/* DISCHARGING only when not connected */
 	batt_status = PSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_STATUS);
+
+	/* reset charger if status full but soc < 100%, except recharge */
+	if (batt_status == POWER_SUPPLY_STATUS_FULL) {
+		if (soc == chg_drv->charge_stop_level) {
+			chg_drv->is_full = true;
+		} else if (!chg_drv->is_full) {
+			pr_info("MSC_RESET: charge full in unexpected soc. reset chg\n");
+			reset_chg_drv_state(chg_drv);
+		}
+	} else {
+		chg_drv->is_full = false;
+	}
 
 	switch (batt_status) {
 	case POWER_SUPPLY_STATUS_DISCHARGING:
