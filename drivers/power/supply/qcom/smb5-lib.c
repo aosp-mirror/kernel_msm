@@ -4745,6 +4745,8 @@ void smblib_typec_irq_config(struct smb_charger *chg, bool en)
 }
 
 #define PR_LOCK_TIMEOUT_MS	1000
+#define OTG_CL_UA_HIGH		1500000
+#define OTG_CL_UA_LOW		1000000
 int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 				     const union power_supply_propval *val)
 {
@@ -4820,6 +4822,25 @@ int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		return -EINVAL;
 	}
 
+	/*
+	 * Set the OTG current limit back to default 1.5A
+	 * If port is going to be Source, the correct otg_cl has been set in
+	 * smblib_set_prop_typec_select_rp, thus skip the setting.
+	 */
+	if (val->intval != POWER_SUPPLY_TYPEC_PR_SOURCE &&
+	    chg->otg_cl_ua != OTG_CL_UA_HIGH) {
+		smblib_dbg(chg, PR_OTG, "OTG_CL_UA switching to %d",
+			   OTG_CL_UA_HIGH);
+
+		rc = smblib_set_charge_param(chg, &chg->param.otg_cl,
+					     OTG_CL_UA_HIGH);
+		if (rc < 0)
+			smblib_err(chg, "Couldn't set otg current limit rc=%d\n",
+				   rc);
+		else
+			chg->otg_cl_ua = OTG_CL_UA_HIGH;
+	}
+
 	rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
 				TYPEC_POWER_ROLE_CMD_MASK | TYPEC_TRY_MODE_MASK,
 				power_role);
@@ -4852,7 +4873,7 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 int smblib_set_prop_typec_select_rp(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
-	int rc;
+	int rc, ua;
 
 	if (!typec_in_src_mode(chg)) {
 		smblib_err(chg, "Couldn't set curr src: not in SRC mode\n");
@@ -4863,9 +4884,41 @@ int smblib_set_prop_typec_select_rp(struct smb_charger *chg,
 		rc = smblib_masked_write(chg, TYPE_C_CURRSRC_CFG_REG,
 				TYPEC_SRC_RP_SEL_MASK,
 				val->intval);
-		if (rc < 0)
+		if (rc < 0) {
 			smblib_err(chg, "Couldn't write to TYPE_C_CURRSRC_CFG rc=%d\n",
 					rc);
+			return rc;
+		}
+
+		/*
+		 * Everytime Rp is changed to RP_STD, it is safe to set the
+		 * current limit to 1A.
+		 */
+		ua = (val->intval == TYPEC_SRC_RP_STD) ? OTG_CL_UA_LOW
+						       : OTG_CL_UA_HIGH;
+
+		/*
+		 * If PD is active, Rp will be switched between Rp-1.5A and
+		 * Rp-3A. Currently we don't support SRC_CAP higher than 900 mA,
+		 * thus it is safe to set the current limit to 1A in this
+		 * situation. The change is supposed NOT to happen before
+		 * SRC_READY state because no Rp changes are expected before
+		 * that. (will keep Rp-1.5A from SRC_ATTACHED to SRC_READY)
+		 */
+		ua = chg->pd_active ? OTG_CL_UA_LOW : ua;
+
+		if (ua != chg->otg_cl_ua) {
+			smblib_dbg(chg, PR_OTG, "OTG_CL_UA switching to %d",
+				   ua);
+			rc = smblib_set_charge_param(chg, &chg->param.otg_cl,
+						     ua);
+			if (rc < 0)
+				smblib_err(chg, "Couldn't set otg current limit rc=%d\n",
+					   rc);
+			else
+				chg->otg_cl_ua = ua;
+		}
+
 		return rc;
 	}
 
@@ -6781,6 +6834,12 @@ irqreturn_t typec_state_change_irq_handler(int irq, void *data)
 			&& (typec_mode != chg->typec_mode))
 		smblib_handle_rp_change(chg, typec_mode);
 	chg->typec_mode = typec_mode;
+
+	/*
+	 * XXX: Don't need to switch back to default OTG CL for the cable
+	 * disconnect case because we will set to the right setting in the next
+	 * connection
+	 */
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: cc-state-change; Type-C %s detected\n",
 				smblib_typec_mode_name[chg->typec_mode]);
