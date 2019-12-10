@@ -56,8 +56,11 @@
 
 #define HISTORY_DEVICENAME "maxfg_history"
 
-#define BATTERY_FULLCAP_CYCLE_DROP	100
-#define BATTERY_FULLCAP_CYCLE_STABLE	-1
+#define BATTERY_DEFAULT_CYCLE_STABLE	0
+#define BATTERY_DEFAULT_CYCLE_FADE	0
+#define BATTERY_DEFAULT_CYCLE_BAND	10
+#define BATTERY_MAX_CYCLE_BAND		20
+
 #define MAX17201_FIXUP_UPDATE_DELAY_MS	10
 
 #define MAX1720X_GAUGE_TYPE	0
@@ -519,8 +522,9 @@ struct max1720x_chip {
 	int comp_update_count;
 	int dxacc_update_count;
 	u16 design_capacity;
-	int fullcap_cycle_stable;
-	int fullcap_cycle_drop;
+	int cycle_band;
+	int cycle_fade;
+	int cycle_stable;
 	int ini_rcomp0;
 	int ini_tempco;
 	/* Capacity Estimation */
@@ -2276,6 +2280,7 @@ static int max1720x_update_compare(struct regmap *map, int reg,
 	return (data[0] == data0) && (data[1] == data1);
 }
 
+/* 0 not updated, 1 updated, doesn't return IO errors */
 static int max1720x_update_capacity(struct regmap *map, u16 mixcap, u16 repcap,
 				    u16 fullcaprep)
 {
@@ -2304,42 +2309,50 @@ static int max1720x_update_capacity(struct regmap *map, u16 mixcap, u16 repcap,
 	return 1;
 }
 
+/* max 110% of design cap, max 60% of design cap for age model */
 #define MAX1720x_CC_UPPER_BOUND	110
-#define MAX1720x_CC_LOWER_BOUND	50
+#define MAX1720x_CC_LOWER_BOUND	60
 
-/* return <= 0 for no changes */
-static int max1720x_capacity_check(int *fullcapnom, int refcap, int cycle_count,
+/* return fullcapnom if no changes */
+static int max1720x_capacity_check(int fullcapnom, int cycle_count,
 				   const struct max1720x_chip *chip)
 {
-	const int upper_bound = (refcap * MAX1720x_CC_UPPER_BOUND) / 100;
-	const int lower_bound = (refcap * MAX1720x_CC_LOWER_BOUND) / 100;
+	const int fcn = fullcapnom;
+	int refcap, upper_bound, lower_bound;
 
-	if (!refcap)
-		return 0;
-	if (chip->fullcap_cycle_stable != -1 &&
-	    cycle_count < chip->fullcap_cycle_stable)
-		return 0;
-	pr_debug("fcn=%d min=%d max=%d cycle_count=%d\n",
-		 *fullcapnom, lower_bound, upper_bound,
-		 cycle_count);
+	if (!chip->design_capacity || cycle_count < chip->cycle_stable)
+		return fullcapnom;
 
-	/* absolute lower bound, cap capacity to it */
-	if (*fullcapnom < lower_bound) {
-		*fullcapnom = lower_bound;
-		return 1;
+	/* apply fade model to design capacity, bound to absolute min/max */
+	refcap = chip->design_capacity;
+	if (chip->cycle_fade) {
+		const int base_capacity = chip->design_capacity;
+
+		lower_bound = (base_capacity * MAX1720x_CC_LOWER_BOUND) / 100;
+		upper_bound = (base_capacity * MAX1720x_CC_UPPER_BOUND) / 100;
+
+		refcap -= (base_capacity * cycle_count) / chip->cycle_fade;
+		if (refcap < lower_bound)
+			refcap = lower_bound;
+		else if (refcap > upper_bound)
+			refcap = upper_bound;
+
+		pr_debug("refcap@%d=%d abs_min=%d abs_max=%d\n",
+			cycle_count, refcap, lower_bound, upper_bound);
 	}
 
-	if (*fullcapnom < upper_bound)
-		return 0;
+	/* bound FCN max to the target age. Will not operate on devices
+	 * that underestimate capacity.
+	 * NOTE: range decrease with cycle count
+	 */
+	upper_bound = (refcap * (100 + chip->cycle_band)) / 100;
+	if (fullcapnom > upper_bound)
+		fullcapnom = upper_bound;
 
-	/* cap to reference after cycle drop, upper bound before that */
-	if (cycle_count < chip->fullcap_cycle_drop ||
-	    chip->fullcap_cycle_drop < 0)
-		*fullcapnom = upper_bound;
-	else
-		*fullcapnom = refcap;
+	pr_debug("fullcapnom=%d->%d upper_bound=%d \n",
+		 fcn, fullcapnom, upper_bound);
 
-	return 1;
+	return fullcapnom;
 }
 
 /**
@@ -2349,10 +2362,10 @@ static int max1720x_capacity_check(int *fullcapnom, int refcap, int cycle_count,
 /* 1 changed, 0 no changes, < 0 error*/
 static int max1720x_fixup_dxacc(int plugged, struct max1720x_chip *chip)
 {
-	const int ref_capacity = chip->design_capacity;
-	u16 vfsoc = 0, repsoc = 0, fullcapnom, mixcap, repcap, fcrep;
-	int new_capacity, dqacc, dpacc;
-	int err, cycle_count, loops;
+	u16 temp, vfsoc = 0, repsoc = 0, fullcapnom, mixcap, repcap, fcrep;
+	int cycle_count, capacity, new_capacity;
+	int err, loops;
+	int dpacc, dqacc;
 
 	if (chip->design_capacity <= 0)
 		return 0;
@@ -2360,33 +2373,48 @@ static int max1720x_fixup_dxacc(int plugged, struct max1720x_chip *chip)
 	err = REGMAP_READ(chip->regmap, MAX1720X_FULLCAPNOM, &fullcapnom);
 	if (err < 0)
 		return err;
-	new_capacity = reg_to_micro_amp_h(fullcapnom, chip->RSense) / 1000;
+	capacity = reg_to_micro_amp_h(fullcapnom, chip->RSense) / 1000;
 
 	cycle_count = max1720x_get_cycle_count(chip);
 	if (cycle_count < 0)
 		return cycle_count;
 
-	/* return the expected FCN, if same as the old one won't overwrite */
-	err = max1720x_capacity_check(&new_capacity, ref_capacity, cycle_count,
-				      chip);
-	if (err <= 0) {
-		pr_debug("Fix capacity: fcn=%d ref=%d (%d)\n",
-			 fullcapnom, ref_capacity, err);
-		return err;
+	/* return the expected FCN, done if the same of th eold one */
+	new_capacity = max1720x_capacity_check(capacity, cycle_count, chip);
+	if (new_capacity == capacity)
+		return 0;
+
+	/* You can use a ratio of dPAcc = 0x190 ( = 25%) with dQACC with 64 mAh
+	 * LSB. Can make dPACC larger (ex 0xC80, 200%) and give dQAcc a smaller
+	 * LSB (FullCapNom >> 4, LSB = 8 mAh). The equation can be written a
+	 * (DesignCap * scale) >> 4 when writing the age-compensated value.
+	 */
+	fcrep = micro_amp_h_to_reg(new_capacity * 1000, chip->RSense);
+	dqacc = fcrep >> 4;
+	dpacc = 0xc80;
+
+	/* will not update if dqacc/dpacc is already in line */
+	err = REGMAP_READ(chip->regmap, MAX1720X_DQACC, &temp);
+	if (err == 0 && temp == dqacc) {
+		err = REGMAP_READ(chip->regmap, MAX1720X_DPACC, &temp);
+		if (err == 0 && temp == dpacc) {
+			pr_debug("Fix capacity: same dqacc=0x%x dpacc=0x%x\n",
+				 dqacc, dpacc);
+			return 0;
+		}
 	}
 
+	/* fast convergence, avoid ghost drain */
 	err = REGMAP_READ(chip->regmap, MAX1720X_VFSOC, &vfsoc);
 	if (err == 0)
 		err = REGMAP_READ(chip->regmap, MAX1720X_REPSOC, &repsoc);
 	if (err < 0) {
-		pr_warn("Fix capacity: fcn=%d ref=%d new=%d vfsoc=0x%x repsoc=0x%x (%d)\n",
-			fullcapnom, ref_capacity, new_capacity,
-			vfsoc, repsoc, err);
+		pr_warn("Fix capacity: fcn=%d new=%d vfsoc=0x%x repsoc=0x%x (%d)\n",
+			fullcapnom, new_capacity, vfsoc, repsoc, err);
 		return err;
 	}
 
 	/* vfsoc/repsoc perc, lsb = 1/256 */
-	fcrep = micro_amp_h_to_reg(new_capacity * 1000, chip->RSense);
 	mixcap = (((u32)vfsoc) * fcrep) / 25600;
 	repcap = (((u32)repsoc) * fcrep) / 25600;
 
@@ -2402,14 +2430,6 @@ static int max1720x_fixup_dxacc(int plugged, struct max1720x_chip *chip)
 
 	dev_info(chip->dev, "Fix capacity: fixing caps retries=%d (%d)\n",
 		 loops, err);
-
-	/* You can use a ratio of dPAcc = 0x190 ( = 25%) with dQACC with 64 mAh
-	 * LSB. Can make dPACC larger (ex 0xC80, 200%) and give dQAcc a smaller
-	 * LSB (FullCapNom >> 4, LSB = 8 mAh). The equation can be written a
-	 * (DesignCap * scale) >> 4 when writing the age-compensated value.
-	 */
-	dqacc = fcrep >> 4;
-	dpacc = 0xc80;
 
 	/* 3 loops suggested from vendor */
 	for (loops = 0; loops < 3; loops++) {
@@ -3706,22 +3726,31 @@ static int max17201_init_fix_capacity(struct max1720x_chip *chip)
 	ret = of_property_read_u32(chip->dev->of_node, "maxim,capacity-stable",
 				   &data32);
 	if (ret < 0)
-		chip->fullcap_cycle_stable = BATTERY_FULLCAP_CYCLE_STABLE;
+		chip->cycle_stable = BATTERY_DEFAULT_CYCLE_STABLE;
 	else
-		chip->fullcap_cycle_stable = data32;
+		chip->cycle_stable = data32;
 
-	ret = of_property_read_u32(chip->dev->of_node, "maxim,capacity-drop",
+	ret = of_property_read_u32(chip->dev->of_node, "maxim,capacity-fade",
 				   &data32);
 	if (ret < 0)
-		chip->fullcap_cycle_drop = BATTERY_FULLCAP_CYCLE_DROP;
+		chip->cycle_fade = BATTERY_DEFAULT_CYCLE_FADE;
 	else
-		chip->fullcap_cycle_drop = data32;
+		chip->cycle_fade = data32;
+
+	ret = of_property_read_u32(chip->dev->of_node, "maxim,capacity-band",
+				   &data32);
+	if (ret < 0) {
+		chip->cycle_band = BATTERY_DEFAULT_CYCLE_BAND;
+	} else {
+		chip->cycle_band = data32;
+		if (chip->cycle_band > BATTERY_MAX_CYCLE_BAND)
+			chip->cycle_band = BATTERY_MAX_CYCLE_BAND;
+	}
 
 
-	dev_info(chip->dev, "cnts=%d,%d des_cap=%d cap_sta=%d cap_drop=%d rcomp0=0x%x tempco=0x%x\n",
+	dev_info(chip->dev, "cnts=%d,%d dc=%d cap_sta=%d cap_fad=%d rcomp0=0x%x tempco=0x%x\n",
 		chip->comp_update_count, chip->dxacc_update_count,
-		chip->design_capacity, chip->fullcap_cycle_stable,
-		chip->fullcap_cycle_drop,
+		chip->design_capacity, chip->cycle_stable, chip->cycle_fade,
 		chip->ini_rcomp0, chip->ini_tempco);
 
 	return 0;
