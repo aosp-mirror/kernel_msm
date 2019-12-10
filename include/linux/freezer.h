@@ -71,6 +71,7 @@ extern bool set_freezable(void);
 
 #ifdef CONFIG_CGROUP_FREEZER
 extern bool cgroup_freezing(struct task_struct *task);
+extern bool cgroup_freezer_killable(struct task_struct *task);
 #else /* !CONFIG_CGROUP_FREEZER */
 static inline bool cgroup_freezing(struct task_struct *task)
 {
