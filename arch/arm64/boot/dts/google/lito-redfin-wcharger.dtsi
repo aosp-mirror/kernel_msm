@@ -53,9 +53,8 @@
 		};
 		config {
 			pins = "gpio100";
-			bias-disable;
+			bias-pull-up;
 			input-enable;
-			drive-open-drain;
 		};
 	};
 
