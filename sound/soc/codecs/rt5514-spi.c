@@ -43,6 +43,7 @@ static struct mutex switch_lock;
 static struct wakeup_source rt5514_spi_ws;
 static u32 spi_switch_mask;
 static int handshake_gpio, handshake_ack_gpio;
+static bool handshake_enable;
 
 struct rt5514_dsp {
 	struct device *dev;
@@ -357,6 +358,11 @@ void rt5514_spi_request_switch(int mask, bool is_require)
 		pr_warn("%s: failed to get handshake gpio, \
 			skip handshaking before switch", __func__);
 		skip_handshake = true;
+	}
+
+	if (!handshake_enable) {
+		pr_info("%s: switch disabled", __func__);
+		return;
 	}
 
 	mutex_lock(&switch_lock);
@@ -1234,6 +1240,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	struct device_node *np = spi->dev.of_node;
 	int retry_count;
 	bool skip_handshake = false;
+	u32 SPI_hosts_Ctl_enable = 0;
 
 	rt5514_spi = spi;
 	mutex_init(&spi_lock);
@@ -1315,6 +1322,14 @@ static int rt5514_spi_probe(struct spi_device *spi)
 				gpio_direction_input(handshake_ack_gpio);
 		}
 	}
+
+	device_property_read_u32(&spi->dev, "realtek,en-2hosts",
+				&SPI_hosts_Ctl_enable);
+
+	if (SPI_hosts_Ctl_enable)
+		handshake_enable = true;
+	else
+		handshake_enable = false;
 
 	device_init_wakeup(&spi->dev, true);
 
