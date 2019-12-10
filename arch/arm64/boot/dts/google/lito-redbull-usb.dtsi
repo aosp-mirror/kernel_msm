@@ -27,3 +27,7 @@
 &usb_qmp_dp_phy {
 	vdd-supply = <&vdda_usb_ss_dp_core>;
 };
+
+&pm7250b_charger {
+	qcom,otg-cl-ua = <1500000>;
+};
