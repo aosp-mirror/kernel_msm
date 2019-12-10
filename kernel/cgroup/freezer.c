@@ -35,6 +35,7 @@ enum freezer_state_flags {
 	CGROUP_FREEZING_SELF	= (1 << 1), /* this freezer is freezing */
 	CGROUP_FREEZING_PARENT	= (1 << 2), /* the parent freezer is freezing */
 	CGROUP_FROZEN		= (1 << 3), /* this and its descendants frozen */
+	CGROUP_FREEZER_KILLABLE = (1 << 4), /* frozen pocesses can be killed */
 
 	/* mask for all FREEZING flags */
 	CGROUP_FREEZING		= CGROUP_FREEZING_SELF | CGROUP_FREEZING_PARENT,
@@ -68,6 +69,17 @@ bool cgroup_freezing(struct task_struct *task)
 
 	rcu_read_lock();
 	ret = task_freezer(task)->state & CGROUP_FREEZING;
+	rcu_read_unlock();
+
+	return ret;
+}
+
+bool cgroup_freezer_killable(struct task_struct *task)
+{
+	bool ret;
+
+	rcu_read_lock();
+	ret = task_freezer(task)->state & CGROUP_FREEZER_KILLABLE;
 	rcu_read_unlock();
 
 	return ret;
@@ -111,9 +123,15 @@ static int freezer_css_online(struct cgroup_subsys_state *css)
 
 	freezer->state |= CGROUP_FREEZER_ONLINE;
 
-	if (parent && (parent->state & CGROUP_FREEZING)) {
-		freezer->state |= CGROUP_FREEZING_PARENT | CGROUP_FROZEN;
-		atomic_inc(&system_freezing_cnt);
+	if (parent) {
+		if (parent->state & CGROUP_FREEZER_KILLABLE)
+			freezer->state |= CGROUP_FREEZER_KILLABLE;
+
+		if (parent->state & CGROUP_FREEZING) {
+			freezer->state |= CGROUP_FREEZING_PARENT |
+					CGROUP_FROZEN;
+			atomic_inc(&system_freezing_cnt);
+		}
 	}
 
 	mutex_unlock(&freezer_mutex);
@@ -450,6 +468,45 @@ static u64 freezer_parent_freezing_read(struct cgroup_subsys_state *css,
 	return (bool)(freezer->state & CGROUP_FREEZING_PARENT);
 }
 
+static u64 freezer_killable_read(struct cgroup_subsys_state *css,
+				     struct cftype *cft)
+{
+	struct freezer *freezer = css_freezer(css);
+
+	return (bool)(freezer->state & CGROUP_FREEZER_KILLABLE);
+}
+
+static int freezer_killable_write(struct cgroup_subsys_state *css,
+				      struct cftype *cft, u64 val)
+{
+	struct freezer *freezer = css_freezer(css);
+
+	if (val > 1)
+		return -EINVAL;
+
+	mutex_lock(&freezer_mutex);
+
+	if (val == !!(freezer->state & CGROUP_FREEZER_KILLABLE))
+		goto out;
+
+	if (val)
+		freezer->state |= CGROUP_FREEZER_KILLABLE;
+	else
+		freezer->state &= ~CGROUP_FREEZER_KILLABLE;
+
+
+	/*
+	 * Let __refrigerator spin once for each task to set it into the
+	 * appropriate state.
+	 */
+	unfreeze_cgroup(freezer);
+
+out:
+	mutex_unlock(&freezer_mutex);
+
+	return 0;
+}
+
 static struct cftype files[] = {
 	{
 		.name = "state",
@@ -466,6 +523,12 @@ static struct cftype files[] = {
 		.name = "parent_freezing",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.read_u64 = freezer_parent_freezing_read,
+	},
+	{
+		.name = "killable",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.write_u64 = freezer_killable_write,
+		.read_u64 = freezer_killable_read,
 	},
 	{ }	/* terminate */
 };
