@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "lito-redfin-proto1_1.dtsi"
+
+/ {
+	model = "Google Inc. MSM sm7250 v2 Redfin PROTO1.1";
+	compatible = "google,redfin-sm7250", "qcom,sm7250";
+	qcom,msm-id = <400 0x20000>, <440 0x20000>;
+	qcom,board-id = <0x0b0405 0>;
+};
