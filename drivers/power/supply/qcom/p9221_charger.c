@@ -824,16 +824,19 @@ static void p9221_align_work(struct work_struct *work)
 			return;
 		}
 
+		/* No mfg update. Will check again on next schedule */
 		if (charger->mfg == 0)
 			return;
 
-		if ((charger->mfg == WLC_MFG_GOOGLE) && p9221_is_epp(charger))
-			charger->alignment_capable = true;
-		else {
+		if ((charger->mfg != WLC_MFG_GOOGLE) ||
+		    !p9221_is_epp(charger)) {
 			logbuffer_log(charger->log,
 				      "align: not align capable mfg: 0x%x",
 				      charger->mfg);
+			cancel_delayed_work(&charger->align_work);
+			return;
 		}
+		charger->alignment_capable = true;
 	}
 
 	if (charger->pdata->alignment_scalar == 0)
