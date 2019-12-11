@@ -876,7 +876,7 @@ static void acc_complete_setup_noop(struct usb_ep *ep, struct usb_request *req)
 int acc_ctrlrequest(struct usb_composite_dev *cdev,
 				const struct usb_ctrlrequest *ctrl)
 {
-	struct acc_dev	*dev;
+	struct acc_dev	*dev = _acc_dev;
 	int	value = -EOPNOTSUPP;
 	struct acc_hid_dev *hid;
 	int offset;
@@ -893,16 +893,13 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 	 */
 	if (!dev)
 		return -ENODEV;
+
 /*
 	printk(KERN_INFO "acc_ctrlrequest "
 			"%02x.%02x v%04x i%04x l%u\n",
 			b_requestType, b_request,
 			w_value, w_index, w_length);
 */
-	if (!_acc_dev)
-		return -ENODEV;
-
-	dev = _acc_dev;
 
 	pr_debug("%s: %02x.%02x v%04x i%04x l%u\n",
 		  __func__, b_requestType, b_request,
