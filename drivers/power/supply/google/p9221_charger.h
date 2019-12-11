@@ -318,6 +318,7 @@ struct p9221_charger_data {
 	int				mfg_check_count;
 	u16				mfg;
 	int				alignment_time;
+	u32				dc_icl_epp;
 	u32				current_filtered;
 	u32				current_sample_cnt;
 	struct delayed_work		dcin_pon_work;

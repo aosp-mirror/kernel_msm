@@ -695,7 +695,7 @@ static void p9221_abort_transfers(struct p9221_charger_data *charger)
  */
 static void p9221_vote_defaults(struct p9221_charger_data *charger)
 {
-	int ret;
+	int ret, ocp_icl;
 
 	if (!charger->dc_icl_votable) {
 		dev_err(&charger->client->dev,
@@ -709,8 +709,11 @@ static void p9221_vote_defaults(struct p9221_charger_data *charger)
 		dev_err(&charger->client->dev,
 			"Could not vote DC_ICL %d\n", ret);
 
+	ocp_icl = (charger->dc_icl_epp > 0) ?
+			charger->dc_icl_epp : P9221_DC_ICL_EPP_UA;
+
 	ret = vote(charger->dc_icl_votable, P9221_OCP_VOTER, true,
-			P9221_DC_ICL_EPP_UA);
+			ocp_icl);
 	if (ret)
 		dev_err(&charger->client->dev,
 			"Could not reset OCP DC_ICL voter %d\n", ret);
@@ -1298,6 +1301,9 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 
 	if (p9221_is_epp(charger))
 		icl = P9221_DC_ICL_EPP_UA;
+
+	if (charger->dc_icl_epp)
+		icl = charger->dc_icl_epp;
 
 	dev_info(&charger->client->dev, "Setting ICL %duA ramp=%d\n", icl,
 		 charger->icl_ramp);
@@ -2263,6 +2269,41 @@ static ssize_t p9221_force_epp(struct device *dev,
 
 static DEVICE_ATTR(force_epp, 0600, p9221_show_force_epp, p9221_force_epp);
 
+static ssize_t dc_icl_epp_show(struct device *dev,
+			       struct device_attribute *attr,
+			       char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->dc_icl_epp);
+}
+
+static ssize_t dc_icl_epp_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret = 0;
+	u32 ua;
+
+	ret = kstrtou32(buf, 10, &ua);
+	if (ret < 0)
+		return ret;
+
+	charger->dc_icl_epp = ua;
+
+	if (charger->dc_icl_votable && p9221_is_epp(charger)) {
+		vote(charger->dc_icl_votable,
+		     P9221_WLC_VOTER, true, charger->dc_icl_epp);
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(dc_icl_epp);
+
 static ssize_t p9221_show_dc_icl_bpp(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
@@ -2562,6 +2603,7 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_icl_ramp_delay_ms.attr,
 	&dev_attr_force_epp.attr,
 	&dev_attr_dc_icl_bpp.attr,
+	&dev_attr_dc_icl_epp.attr,
 	&dev_attr_rtx_sw.attr,
 	&dev_attr_rtx_boost.attr,
 	&dev_attr_rtx.attr,
@@ -3362,6 +3404,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	}
 
 	charger->dc_icl_bpp = 0;
+	charger->dc_icl_epp = 0;
 
 	/* valid chip_id [P9382A_CHIP_ID, P9221_CHIP_ID] or 0 */
 	online = p9221_get_chip_id(charger, &chip_id);
