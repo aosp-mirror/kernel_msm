@@ -262,6 +262,7 @@ struct p9221_charger_data {
 	struct power_supply		*wc_psy;
 	struct power_supply		*dc_psy;
 	struct votable			*dc_icl_votable;
+	struct votable			*dc_suspend_votable;
 	struct notifier_block		nb;
 	struct mutex			io_lock;
 	struct mutex			cmd_lock;

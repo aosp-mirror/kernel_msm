@@ -2467,7 +2467,28 @@ static ssize_t p9382_set_rtx(struct device *dev,
 		if (ret < 0)
 			return ret;
 
+		ret = vote(charger->dc_suspend_votable, P9221_WLC_VOTER, false, 0);
+		if (ret)
+			dev_err(&charger->client->dev,
+				"fail to enable dcin, ret=%d\n", ret);
 	} else if (buf[0] == '1') {
+		if (!charger->dc_suspend_votable) {
+			charger->dc_suspend_votable = find_votable("DC_SUSPEND");
+			if (!charger->dc_suspend_votable) {
+				dev_err(&charger->client->dev,
+					"Could not get DC_SUSPEND votable,"
+					"skip enable rTX mode\n");
+				return ret;
+			}
+		}
+		ret = vote(charger->dc_suspend_votable, P9221_WLC_VOTER, true, 0);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Could not vote DC_SUSPEND,"
+				"skip enable rTX mode %d\n", ret);
+			return ret;
+		}
+
 		ret = p9382_ben_cfg(charger, RTX_BEN_ON);
 		if (ret < 0)
 			return ret;
@@ -3291,6 +3312,13 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dc_icl_votable = find_votable("DC_ICL");
 	if (!charger->dc_icl_votable)
 		dev_warn(&charger->client->dev, "Could not find DC_ICL votable\n");
+
+	/*
+	 * Find the DC_SUSPEND, we use this to disable DCIN before enter RTx mode
+	 */
+	charger->dc_suspend_votable = find_votable("DC_SUSPEND");
+	if (!charger->dc_suspend_votable)
+		dev_warn(&charger->client->dev, "Could not find DC_SUSPEND votable\n");
 
 	/* Ramping on BPP is optional */
 	if (charger->pdata->icl_ramp_delay_ms != -1) {
