@@ -14,3 +14,4 @@
 #include "lito-bramble.dtsi"
 #include "lito-bramble-touch-proto.dtsi"
 #include "lito-bramble-camera-sensor-v2.dtsi"
+#include "lito-bramble-pinctrl-proto1_6.dtsi"
