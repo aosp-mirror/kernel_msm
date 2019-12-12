@@ -969,8 +969,22 @@ static struct platform_driver pdphy_driver = {
 	 .shutdown	= pdphy_shutdown,
 };
 
-module_platform_driver(pdphy_driver);
+int __init pdphy_driver_init(void)
+{
+	return platform_driver_register(&pdphy_driver);
+}
+
+void __exit pdphy_driver_exit(void)
+{
+	platform_driver_unregister(&pdphy_driver);
+}
+
+#if !defined(CONFIG_QPNP_USB_PDPHY_MODULE)
+module_init(pdphy_driver_init);
+module_exit(pdphy_driver_exit);
+#endif
 
 MODULE_DESCRIPTION("QPNP PD PHY Driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:qpnp-pdphy");
+MODULE_SOFTDEP("pre: arm_smmu");

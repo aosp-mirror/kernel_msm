@@ -87,6 +87,10 @@ int pd_phy_write(u16 hdr, const u8 *data, size_t data_len,
 int pd_phy_update_roles(enum data_role dr, enum power_role pr);
 int pd_phy_update_frame_filter(u8 frame_filter_val);
 void pd_phy_close(void);
+#if defined(CONFIG_QPNP_USB_PDPHY_MODULE)
+int __init pdphy_driver_init(void);
+void __exit pdphy_driver_exit(void);
+#endif
 #else
 static inline int pd_phy_open(struct pd_phy_params *params)
 {
