@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/io.h>
+#include <linux/module.h>
 #include <linux/device.h>
 #include "arm-smmu-regs.h"
 #include "arm-smmu-debug.h"
@@ -280,3 +281,6 @@ void arm_smmu_debug_clear_intr_and_validbits(void __iomem *tbu_base)
 	val |= RESET_VALID;
 	writel_relaxed(val, tbu_base + ARM_SMMU_TNX_TCR_CNTL);
 }
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("ARM SMMU Debug");
