@@ -242,6 +242,7 @@ int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
 
 	return gbms_storage_register_internal(desc, name, ptr);
 }
+EXPORT_SYMBOL_GPL(gbms_storage_register);
 
 /* ------------------------------------------------------------------------- */
 
@@ -305,6 +306,7 @@ int gbms_storage_read(gbms_tag_t tag, void *data, size_t count)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_read);
 
 int gbms_storage_read_data(gbms_tag_t tag, void *data, size_t count, int idx)
 {
@@ -337,6 +339,7 @@ int gbms_storage_read_data(gbms_tag_t tag, void *data, size_t count, int idx)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_read_data);
 
 static int gbms_cache_write(gbms_tag_t tag, const void *data, size_t count)
 {
@@ -397,6 +400,7 @@ int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_write);
 
 int gbms_storage_write_data(gbms_tag_t tag, const void *data, size_t count,
 			    int idx)
@@ -431,6 +435,7 @@ int gbms_storage_write_data(gbms_tag_t tag, const void *data, size_t count,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_write_data);
 
 static int gbms_storage_flush_all_internal(bool force)
 {
@@ -471,6 +476,7 @@ int gbms_storage_flush(gbms_tag_t tag)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_flush);
 
 int gbms_storage_flush_all(void)
 {
@@ -486,6 +492,7 @@ int gbms_storage_flush_all(void)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_flush_all);
 
 /* ------------------------------------------------------------------------ */
 #ifdef CONFIG_DEBUG_FS
@@ -747,6 +754,7 @@ void gbms_storage_cleanup_device(struct gbms_storage_device *gdev)
 		unregister_chrdev_region(gdev->hcmajor, 1);
 	kfree(gdev);
 }
+EXPORT_SYMBOL_GPL(gbms_storage_cleanup_device);
 
 static int gbms_storage_device_init(struct gbms_storage_device *gdev,
 				    const char *name)
@@ -833,6 +841,7 @@ struct gbms_storage_device *gbms_storage_create_device(const char *name,
 
 	return gdev;
 }
+EXPORT_SYMBOL_GPL(gbms_storage_create_device);
 
 /* ------------------------------------------------------------------------ */
 

@@ -409,23 +409,69 @@ struct gbms_storage_desc {
 			  int idx, void *ptr);
 };
 
-int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
-			  void *ptr);
-int gbms_storage_read(gbms_tag_t tag, void *data, size_t count);
-int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count);
-
-int gbms_storage_read_data(gbms_tag_t tag, void *data, size_t count, int idx);
-int gbms_storage_write_data(gbms_tag_t tag, const void *data, size_t count,
-			    int idx);
-int gbms_storage_flush(gbms_tag_t tag);
-int gbms_storage_flush_all(void);
-
 struct gbms_storage_device;
 
-/* standard device implementation that read data from an enumeration */
-struct gbms_storage_device *gbms_storage_create_device(const char *name,
-						       gbms_tag_t tag);
-void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
+#if IS_ENABLED(CONFIG_GOOGLE_BMS)
 
+extern int gbms_storage_register(struct gbms_storage_desc *desc,
+				 const char *name, void *ptr);
+extern int gbms_storage_read(gbms_tag_t tag, void *data, size_t count);
+extern int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count);
+
+extern int gbms_storage_read_data(gbms_tag_t tag, void *data, size_t count,
+				  int idx);
+extern int gbms_storage_write_data(gbms_tag_t tag, const void *data,
+				   size_t count, int idx);
+extern int gbms_storage_flush(gbms_tag_t tag);
+extern int gbms_storage_flush_all(void);
+
+/* standard device implementation that read data from an enumeration */
+extern struct gbms_storage_device *gbms_storage_create_device(const char *name,
+							      gbms_tag_t tag);
+extern void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
+
+#else
+
+int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
+			  void *ptr)
+{
+	return -EINVAL;
+}
+int gbms_storage_read(gbms_tag_t tag, void *data, size_t count)
+{
+	return -EINVAL;
+}
+int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count)
+{
+	return -EINVAL;
+}
+int gbms_storage_read_data(gbms_tag_t tag, void *data, size_t count, int idx)
+{
+	return -EINVAL;
+}
+int gbms_storage_write_data(gbms_tag_t tag, const void *data, size_t count,
+			    int idx)
+{
+	return -EINVAL;
+}
+int gbms_storage_flush(gbms_tag_t tag)
+{
+	return -EINVAL;
+}
+int gbms_storage_flush_all(void)
+{
+	return -EINVAL;
+}
+struct gbms_storage_device *gbms_storage_create_device(const char *name,
+						       gbms_tag_t tag)
+{
+	return NULL;
+}
+void gbms_storage_cleanup_device(struct gbms_storage_device *gdev)
+{
+	return;
+}
+
+#endif /* CONFIG_GOOGLE_BMS */
 
 #endif  /* __GOOGLE_BMS_H_ */
