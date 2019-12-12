@@ -1272,6 +1272,7 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 
 #ifdef CONFIG_DEBUG_FS
 	g_chip = &pctrl->chip;
+	msm_gpio_dump_builtin_cb = msm_gpio_dump;
 #endif
 
 	return 0;

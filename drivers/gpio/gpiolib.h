@@ -295,4 +295,8 @@ static inline void gpiochip_sysfs_unregister(struct gpio_device *gdev)
 
 #endif /* CONFIG_GPIO_SYSFS */
 
+#ifdef CONFIG_DEBUG_FS
+extern int (*msm_gpio_dump_builtin_cb)(struct seq_file *s);
+#endif
+
 #endif /* GPIOLIB_H */

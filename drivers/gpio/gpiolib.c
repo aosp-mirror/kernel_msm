@@ -4313,6 +4313,8 @@ static int __init gpiolib_dev_init(void)
 core_initcall(gpiolib_dev_init);
 
 #ifdef CONFIG_DEBUG_FS
+int (*msm_gpio_dump_builtin_cb)(struct seq_file *s) = NULL;
+EXPORT_SYMBOL_GPL(msm_gpio_dump_builtin_cb);
 
 static void gpiolib_dbg_show(struct seq_file *s, struct gpio_device *gdev)
 {
@@ -4448,7 +4450,8 @@ static int list_gpios_show(struct seq_file *s, void *v)
 	struct gpio_chip *chip = gdev->chip;
 
 	if (chip->gpio_dump) {
-		msm_gpio_dump(s);
+		if (msm_gpio_dump_builtin_cb)
+			msm_gpio_dump_builtin_cb(s);
 		pmic_gpio_dump(s);
 	}
 	return 0;
