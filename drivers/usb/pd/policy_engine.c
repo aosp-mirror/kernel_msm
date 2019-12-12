@@ -4807,13 +4807,26 @@ EXPORT_SYMBOL(usbpd_destroy);
 
 static int __init usbpd_init(void)
 {
+	int ret;
+
 	usbpd_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "usb_pd", 0);
-	return class_register(&usbpd_class);
+	ret = class_register(&usbpd_class);
+#if defined(CONFIG_QPNP_USB_PDPHY_MODULE)
+	if (ret)
+		return ret;
+	ret = pdphy_driver_init();
+	if (ret)
+		class_unregister(&usbpd_class);
+#endif
+	return ret;
 }
 module_init(usbpd_init);
 
 static void __exit usbpd_exit(void)
 {
+#if defined(CONFIG_QPNP_USB_PDPHY_MODULE)
+	pdphy_driver_exit();
+#endif
 	class_unregister(&usbpd_class);
 }
 module_exit(usbpd_exit);

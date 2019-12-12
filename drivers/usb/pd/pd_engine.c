@@ -2239,12 +2239,20 @@ static int __init pd_engine_init(void)
 	if (!strncmp(boot_mode_string, CHARING_TEST_BOOT_MODE,
 		     strlen(CHARING_TEST_BOOT_MODE)))
 		always_enable_data = 1;
-
+#if defined(CONFIG_QPNP_USB_PDPHY_MODULE)
+	return pdphy_driver_init();
+#else
 	return 0;
+#endif
 }
 module_init(pd_engine_init);
 
-static void __exit pd_engine_exit(void) {}
+static void __exit pd_engine_exit(void)
+{
+#if defined(CONFIG_QPNP_USB_PDPHY_MODULE)
+	pdphy_driver_exit();
+#endif
+}
 module_exit(pd_engine_exit);
 
 MODULE_DESCRIPTION("USB PD Engine based on Type-C Port Manager");
