@@ -1018,7 +1018,33 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 		  "%08x", tx_id);
 	return charger->tx_id_str;
 }
+static const char *p9382_get_ptmc_id_str(struct p9221_charger_data *charger)
+{
+	int ret;
+	uint16_t ptmc_id;
 
+	if (!charger->ben_state || (charger->chip_id != P9382A_CHIP_ID))
+		return NULL;
+
+	pm_runtime_get_sync(charger->dev);
+	if (!charger->resume_complete) {
+		pm_runtime_put_sync(charger->dev);
+		return NULL;
+	}
+	pm_runtime_put_sync(charger->dev);
+
+	ret = p9221_reg_read_16(charger, P9382_PROP_PRMC_ID_REG, &ptmc_id);
+	if (ret) {
+		dev_err(&charger->client->dev,
+			"Failed to read device prmc %d\n", ret);
+		return NULL;
+	}
+
+	scnprintf(charger->ptmc_id_str,
+		  sizeof(charger->ptmc_id_str), "%04x", ptmc_id);
+
+	return charger->ptmc_id_str;
+}
 static int p9221_get_property(struct power_supply *psy,
 			      enum power_supply_property prop,
 			      union power_supply_propval *val)
@@ -1035,6 +1061,11 @@ static int p9221_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 		val->strval = p9221_get_tx_id_str(charger);
+		if (val->strval == NULL)
+			return -ENODATA;
+		break;
+	case POWER_SUPPLY_PROP_PTMC_ID:
+		val->strval = p9382_get_ptmc_id_str(charger);
 		if (val->strval == NULL)
 			return -ENODATA;
 		break;
@@ -3167,6 +3198,7 @@ static enum power_supply_property p9221_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
+	POWER_SUPPLY_PROP_PTMC_ID,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_OPERATING_FREQ,
 };
@@ -3338,6 +3370,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		charger->addr_data_send_buf_start = P9221R5_DATA_SEND_BUF_START;
 		charger->addr_data_recv_buf_start = P9221R5_DATA_RECV_BUF_START;
 	}
+	charger->chip_id = chip_id;
 
 	if (online) {
 		/* set charger->online=true, will ignore first VRECTON IRQ */

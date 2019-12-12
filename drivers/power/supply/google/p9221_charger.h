@@ -231,6 +231,8 @@
 
 
 
+#define P9382_PROP_PRMC_ID_REG			0xBA
+#define P9382_PROP_PRMC_ID_SIZE			2
 
 struct p9221_charger_platform_data {
 	int				irq_gpio;
@@ -277,6 +279,7 @@ struct p9221_charger_data {
 	struct timer_list		align_timer;
 	struct bin_attribute		bin;
 	struct logbuffer		*log;
+	u16				chip_id;
 	int				online;
 	bool				enabled;
 	u16				addr;
@@ -318,6 +321,7 @@ struct p9221_charger_data {
 	u32				current_filtered;
 	u32				current_sample_cnt;
 	struct delayed_work		dcin_pon_work;
+	u8				ptmc_id_str[(sizeof(u16) * 2) + 1];
 };
 
 struct p9221_prop_reg_map_entry {
