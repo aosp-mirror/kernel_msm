@@ -61,6 +61,7 @@
 #define MAX_VOTER			"MAX_VOTER"
 #define THERMAL_DAEMON_VOTER		"THERMAL_DAEMON_VOTER"
 #define USER_VOTER			"USER_VOTER"	/* same as QCOM */
+#define DBG_SUSPEND_VOTER		"dbg_suspend"
 #define MSC_CHG_VOTER			"msc_chg"
 #define MSC_CHG_FULL_VOTER		"msc_chg_full"
 #define CHG_PPS_VOTER			"pps_chg"
@@ -1690,7 +1691,7 @@ static int chg_set_input_suspend(void *data, u64 val)
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	rc = chg_vote_input_suspend(chg_drv, USER_VOTER, val != 0);
+	rc = chg_vote_input_suspend(chg_drv, DBG_SUSPEND_VOTER, val != 0);
 
 	if (chg_drv->chg_psy)
 		power_supply_changed(chg_drv->chg_psy);
