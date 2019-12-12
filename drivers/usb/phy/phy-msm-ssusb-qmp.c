@@ -123,6 +123,27 @@ struct qmp_reg_val {
 	u32 delay;
 };
 
+#define dump_usb3_dp_com_register(nm)				\
+{								\
+	.name   = __stringify(nm),				\
+	.offset = USB3_DP_QSERDES_ ##nm,			\
+}
+
+static const struct debugfs_reg32 usb3_dp_com_regs[] = {
+	dump_usb3_dp_com_register(TXA_TX_DRV_LVL),
+	dump_usb3_dp_com_register(TXA_PRE_EMPH),
+	dump_usb3_dp_com_register(TXA_TX_EMP_POST1_LVL),
+	dump_usb3_dp_com_register(TXB_TX_DRV_LVL),
+	dump_usb3_dp_com_register(TXB_PRE_EMPH),
+	dump_usb3_dp_com_register(TXB_TX_EMP_POST1_LVL),
+	dump_usb3_dp_com_register(RXA_RX_EQU_ADAPTOR_CNTRL2),
+	dump_usb3_dp_com_register(RXA_RX_EQU_ADAPTOR_CNTRL3),
+	dump_usb3_dp_com_register(RXA_RX_EQU_ADAPTOR_CNTRL4),
+	dump_usb3_dp_com_register(RXB_RX_EQU_ADAPTOR_CNTRL2),
+	dump_usb3_dp_com_register(RXB_RX_EQU_ADAPTOR_CNTRL3),
+	dump_usb3_dp_com_register(RXB_RX_EQU_ADAPTOR_CNTRL4),
+};
+
 struct msm_ssphy_qmp {
 	struct usb_phy		phy;
 	void __iomem		*base;
@@ -173,6 +194,7 @@ struct msm_ssphy_qmp {
 	u8			rxb_equ_adaptor_cntrl2;
 	u8			rxb_equ_adaptor_cntrl3;
 	u8			rxb_equ_adaptor_cntrl4;
+	struct debugfs_regset32 *regset;
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -1219,6 +1241,41 @@ static void msm_ssphy_qmp_enable_clks(struct msm_ssphy_qmp *phy, bool on)
 	}
 }
 
+static int msm_ssphy_qmp_param_show(struct seq_file *s, void *unused)
+{
+	struct msm_ssphy_qmp *phy = s->private;
+
+	if (!phy->regset)
+		return 0;
+
+	if (!phy->power_enabled) {
+		seq_puts(s, "SSPHY is powered off\n");
+		return 0;
+	}
+
+	if (phy->phy.flags & PHY_LANE_A)
+		seq_puts(s, "LANE A is active\n");
+	else if (phy->phy.flags & PHY_LANE_B)
+		seq_puts(s, "LANE B is active\n");
+
+	debugfs_print_regs32(s, phy->regset->regs, phy->regset->nregs,
+			     phy->regset->base, "");
+
+	return 0;
+}
+
+static int msm_ssphy_qmp_param_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, msm_ssphy_qmp_param_show, inode->i_private);
+}
+
+static const struct file_operations ssphy_param_fops = {
+	.open                   = msm_ssphy_qmp_param_open,
+	.read                   = seq_read,
+	.llseek                 = seq_lseek,
+	.release                = single_release,
+};
+
 static void msm_ssphy_qmp_create_debugfs(struct msm_ssphy_qmp *phy)
 {
 	phy->root = debugfs_create_dir(dev_name(phy->phy.dev), NULL);
@@ -1246,6 +1303,17 @@ static void msm_ssphy_qmp_create_debugfs(struct msm_ssphy_qmp *phy)
 			  &phy->rxb_equ_adaptor_cntrl3);
 	debugfs_create_x8("rxb_equ_adaptor_cntrl4", 0644, phy->root,
 			  &phy->rxb_equ_adaptor_cntrl4);
+
+	phy->regset = kzalloc(sizeof(*phy->regset), GFP_KERNEL);
+	if (!phy->regset)
+		return;
+
+	if (phy->phy.type == USB_PHY_TYPE_USB3_AND_DP) {
+		phy->regset->regs = usb3_dp_com_regs;
+		phy->regset->nregs = ARRAY_SIZE(usb3_dp_com_regs);
+		phy->regset->base = phy->base;
+	}
+	debugfs_create_file("param", 0444, phy->root, phy, &ssphy_param_fops);
 }
 
 static int msm_ssphy_qmp_probe(struct platform_device *pdev)
@@ -1485,6 +1553,7 @@ static int msm_ssphy_qmp_remove(struct platform_device *pdev)
 		return 0;
 
 	debugfs_remove_recursive(phy->root);
+	kfree(phy->regset);
 
 	usb_remove_phy(&phy->phy);
 	msm_ssphy_qmp_enable_clks(phy, false);
