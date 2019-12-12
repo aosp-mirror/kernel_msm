@@ -14,6 +14,9 @@
 #define __PINCTRL_MSM_H__
 
 #include <linux/pinctrl/qcom-pinctrl.h>
+#ifdef CONFIG_DEBUG_FS
+#include "../../gpio/gpiolib.h"
+#endif
 
 struct pinctrl_pin_desc;
 
