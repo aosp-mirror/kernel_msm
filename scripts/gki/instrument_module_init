@@ -68,6 +68,14 @@ add_debug_printk()
          s/^\(static \)\{0,1\}\(.* ${symbol}(\)\(void\)\{0,1\}) {[ ${TAB}]*}\(\n\)/\1\2\3)\4{\4${TAB}${message}\4}\4/
          t exit
          N
+         /\/[*][^*]*\$/ {
+           : comment_loop
+           N
+           /\/[*].*[*]\// b comment_done
+           b comment_loop
+           : comment_done
+           /\/[*].*[*]\/\$/ N
+         }
          /printk(KERN_WARNING \"${file##*/}:/ b exit
          s/\(\n${TAB}\)\(kfree(\|DBG(\|return[ ${TAB}]\|if (\|platform_driver_\|class_destroy(\|pr_info(\|[a-z_0-9]*_register\(_drivers\|_simple\)\{0,1\}(\|[a-z_0-9]*_\(un\|de\)register\(_drivers\|_simple\)\{0,1\}(\|[a-z+_0-9]*_driver(\)/\1${message}&/
          t exit
@@ -164,7 +172,7 @@ add_debug_printk()
       false
     )
     ret=${?}
-    rm ${TMP}/${file##*/}
+    rm -f ${TMP}/${file##*/}
     if [ 0 -eq ${ret} ]; then
       SYMBOLS="${SYMBOLS}${symbol}:${call} "
     fi
