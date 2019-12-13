@@ -585,25 +585,6 @@ int gvotable_dump_votes(struct election *el,
 	mutex_unlock(&el->lock);
 	return 0;
 }
-
-static int __init gvotable_init(void)
-{
-	return 0;
-}
-
-static void __exit gvotable_exit(void)
-{
-	struct election_slot *slot, *tmp;
-
-	list_for_each_entry_safe(slot, tmp, &gvotables, list) {
-		pr_debug("Destroying %p\n", slot->el);
-		gvotable_destroy_election(slot->el);
-	}
-	pr_info("Deinit completed\n\n");
-}
-
-module_init(gvotable_init);
-module_exit(gvotable_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Luigi Zevola <zevola@google.com>");
 MODULE_DESCRIPTION("Election library for shared resources");
