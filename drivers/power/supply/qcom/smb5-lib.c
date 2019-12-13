@@ -3142,7 +3142,7 @@ int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
 int smblib_set_prop_dc_current_max(struct smb_charger *chg,
 				    const union power_supply_propval *val)
 {
-	return smblib_set_charge_param(chg, &chg->param.dc_icl, val->intval);
+	return vote(chg->dc_icl_votable, DC_USER_VOTER, true, val->intval);
 }
 
 #define DCIN_AICL_RERUN_DELAY_MS	5000
