@@ -1677,7 +1677,8 @@ static int rpmh_regulator_init_vreg_supply(struct rpmh_vreg *vreg)
 		return -ENOMEM;
 	scnprintf(buf, len, "%s-parent-supply", vreg->rdesc.name);
 
-	if (of_find_property(vreg->aggr_vreg->dev->of_node, buf, NULL)) {
+	if (of_find_property(vreg->of_node, buf, NULL) ||
+	    of_find_property(vreg->aggr_vreg->dev->of_node, buf, NULL)) {
 		kfree(buf);
 
 		len = strlen(vreg->rdesc.name) + 10;
