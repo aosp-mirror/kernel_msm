@@ -66,10 +66,11 @@
 
 &max1720x_fg {
 	maxim,capacity-reset-cnt;
+
+	maxim,capacity-stable = <5>;
+	maxim,capacity-fade = <4000>;
 	maxim,capacity-design = <3430>;
 	maxim,capacity-tempco = <0x2826>;
-	maxim,capacity-stable = <50>;
-	maxim,capacity-drop = <100>;
 
 	maxim,config = <&c1_maxim_config>;
 	maxim,n_regval =  /bits/ 16 <
