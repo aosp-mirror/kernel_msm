@@ -5,6 +5,11 @@ menuconfig GOOGLE_BMS
 
 if GOOGLE_BMS
 
+config GOOGLE_BMS_SM7250
+	tristate "Google BMS SM7250"
+	help
+	  Say Y here to choose the Google BMS funtions for SM7250 platform.
+
 config GOOGLE_BATTERY_CHARGING
 	tristate "Google Battery and Charging Control"
 	select GOOGLE_CHARGER
