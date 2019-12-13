@@ -29,10 +29,6 @@
 	};
 };
 
-&pm7250b_charger {
-	qcom,wls-current-max-ua = <1100000>;
-};
-
 &tlmm {
 	p9382_det_int: p9382_det_int {
 		mux {
