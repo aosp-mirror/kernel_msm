@@ -50,10 +50,10 @@
 	google,cap-tsettle = <24>;
 	google,cap-filt-length = <12>;
 
+	maxim,capacity-stable = <5>;
+	maxim,capacity-fade = <4000>;
 	maxim,capacity-design = <3712>;
 	maxim,capacity-tempco = <0x255e>;
-	maxim,capacity-stable = <50>;
-	maxim,capacity-drop = <100>;
 
 	maxim,n_regval_1730x_ver_por = /bits/ 8 <0xcc 0x01>;
 	maxim,n_regval_1730x_ver = /bits/ 8 <0xcc 0x00>;
