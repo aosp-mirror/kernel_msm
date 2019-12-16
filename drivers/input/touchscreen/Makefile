@@ -114,3 +114,4 @@ obj-$(CONFIG_TOUCHSCREEN_ST)		+= st/
 obj-$(CONFIG_TOUCHSCREEN_TBN)		+= qmi_tbn_v01.o touch_bus_negotiator.o
 obj-$(CONFIG_TOUCHSCREEN_HEATMAP)       += heatmap.o
 #obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX) += synaptics_dsx/
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_TCM)	+= synaptics_tcm/

@@ -2068,8 +2068,10 @@ static int rt5514_probe(struct snd_soc_component *component)
 
 	rt5514->component = component;
 
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 	// setup watchdog handler for SPI driver
 	rt5514_watchdog_handler_cb = rt5514_watchdog_handler;
+#endif
 
 	return 0;
 }

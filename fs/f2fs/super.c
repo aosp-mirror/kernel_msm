@@ -2561,6 +2561,7 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	if (F2FS_BLKSIZE != PAGE_SIZE) {
 		f2fs_info(sbi, "Invalid page_cache_size (%lu), supports only 4KB",
 			  PAGE_SIZE);
+
 		return -EFSCORRUPTED;
 	}
 

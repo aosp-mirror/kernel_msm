@@ -718,8 +718,10 @@ int ipa3_send_cmd_timeout(u16 num_desc, struct ipa3_desc *descr, u32 timeout)
 
 	completed = wait_for_completion_timeout(
 		&comp->comp, msecs_to_jiffies(timeout));
-	if (!completed)
+	if (!completed) {
 		IPADBG("timeout waiting for imm-cmd ACK\n");
+		result = -EBUSY;
+	}
 
 	if (atomic_dec_return(&comp->cnt) == 0)
 		kfree(comp);
@@ -2017,7 +2019,6 @@ static void ipa3_replenish_rx_page_recycle(struct ipa3_sys_context *sys)
 			rx_pkt = sys->repl->cache[curr_wq];
 			curr_wq = (++curr_wq == sys->repl->capacity) ?
 								 0 : curr_wq;
-			atomic_set(&sys->repl->head_idx, curr_wq);
 		}
 
 		dma_sync_single_for_device(ipa3_ctx->pdev,
@@ -2055,6 +2056,7 @@ static void ipa3_replenish_rx_page_recycle(struct ipa3_sys_context *sys)
 	if (likely(ret == GSI_STATUS_SUCCESS)) {
 		/* ensure write is done before setting head index */
 		mb();
+		atomic_set(&sys->repl->head_idx, curr_wq);
 		atomic_set(&sys->page_recycle_repl->head_idx, curr);
 		sys->len = rx_len_cached;
 	} else {
@@ -3208,13 +3210,13 @@ static void ipa3_free_skb_rx(struct sk_buff *skb)
 void ipa3_lan_rx_cb(void *priv, enum ipa_dp_evt_type evt, unsigned long data)
 {
 	struct sk_buff *rx_skb = (struct sk_buff *)data;
-	struct ipahal_pkt_status status;
+	struct ipahal_pkt_status_thin status;
 	struct ipa3_ep_context *ep;
 	unsigned int src_pipe;
 	u32 metadata;
 	u8 ucp;
 
-	ipahal_pkt_status_parse(rx_skb->data, &status);
+	ipahal_pkt_status_parse_thin(rx_skb->data, &status);
 	src_pipe = status.endp_src_idx;
 	metadata = status.metadata;
 	ucp = status.ucp;
@@ -3260,7 +3262,13 @@ static void ipa3_recycle_rx_wrapper(struct ipa3_rx_pkt_wrapper *rx_pkt)
 
 static void ipa3_recycle_rx_page_wrapper(struct ipa3_rx_pkt_wrapper *rx_pkt)
 {
-	/* no-op */
+	struct ipa_rx_page_data rx_page;
+
+	rx_page = rx_pkt->page_data;
+
+	/* Free rx_wrapper only for tmp alloc pages*/
+	if (rx_page.is_tmp_alloc)
+		kmem_cache_free(ipa3_ctx->rx_pkt_wrapper_cache, rx_pkt);
 }
 
 /**
@@ -4972,15 +4980,22 @@ start_poll:
 	}
 	cnt += weight - remain_aggr_weight * IPA_WAN_AGGR_PKT_CNT;
 	/* call repl_hdlr before napi_reschedule / napi_complete */
-	if (cnt)
-		ep->sys->repl_hdlr(ep->sys);
-	if (cnt < weight) {
+	ep->sys->repl_hdlr(ep->sys);
+
+	/* When not able to replenish enough descriptors pipe wait
+	 * until minimum number descripotrs to replish.
+	 */
+	if (cnt < weight && ep->sys->len > IPA_DEFAULT_SYS_YELLOW_WM) {
 		napi_complete(ep->sys->napi_obj);
 		ret = ipa3_rx_switch_to_intr_mode(ep->sys);
 		if (ret == -GSI_STATUS_PENDING_IRQ &&
 				napi_reschedule(ep->sys->napi_obj))
 			goto start_poll;
 		ipa_pm_deferred_deactivate(ep->sys->pm_hdl);
+	} else {
+		cnt = weight;
+		IPADBG_LOW("Client = %d not replenished free descripotrs\n",
+				ep->client);
 	}
 	return cnt;
 }
