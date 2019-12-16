@@ -265,7 +265,7 @@ static int batched_hyp_assign(struct sg_table *table, struct scm_desc *desc)
 		batch_start += batches_processed;
 	}
 	total_delta = ktime_us_delta(ktime_get(), first_assign_ts);
-	trace_hyp_assign_end(total_delta, total_delta / i);
+	trace_hyp_assign_end(total_delta, div64_u64(total_delta, i));
 	kfree(sg_table_copy);
 	return ret;
 }
@@ -425,6 +425,8 @@ const char *msm_secure_vmid_to_string(int secure_vmid)
 		return "VMID_CP_SPSS_HLOS_SHARED";
 	case VMID_INVAL:
 		return "VMID_INVAL";
+	case VMID_NAV:
+		return "VMID_NAV";
 	default:
 		return "Unknown VMID";
 	}

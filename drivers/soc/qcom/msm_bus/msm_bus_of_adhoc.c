@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2016, 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016, 2018-2019, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "AXI: %s(): " fmt, __func__
@@ -182,6 +182,12 @@ static void get_qos_params(
 
 	of_property_read_u32(dev_node, "qcom,prio-wr",
 						&node_info->qos_params.prio_wr);
+
+	of_property_read_u32(dev_node, "qcom,prio",
+					&node_info->qos_params.prio_dflt);
+
+	node_info->qos_params.urg_fwd_en = of_property_read_bool(dev_node,
+						"qcom,forwarding");
 
 	of_property_read_u32(dev_node, "qcom,gp",
 						&node_info->qos_params.gp);
@@ -650,6 +656,15 @@ static int get_bus_node_device_data(
 			}
 			of_node_put(qos_clk_node);
 		}
+
+		node_device->clk[ACTIVE_CTX].clk = of_clk_get_by_name(dev_node,
+							"node_a_clk");
+
+		if (IS_ERR_OR_NULL(node_device->clk[ACTIVE_CTX].clk))
+			dev_dbg(&pdev->dev,
+				 "%s:Failed to get bus clk for bus%d ctx%d",
+				__func__, node_device->node_info->id,
+								ACTIVE_CTX);
 
 		node_device->clk[DUAL_CTX].clk = of_clk_get_by_name(dev_node,
 							"node_clk");

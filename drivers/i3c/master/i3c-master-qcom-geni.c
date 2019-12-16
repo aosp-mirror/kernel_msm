@@ -199,10 +199,16 @@ enum geni_i3c_err_code {
 #define TLMM_I3C_MODE	0x24
 #define IBI_SW_RESET_MIN_SLEEP 1000
 #define IBI_SW_RESET_MAX_SLEEP 2000
+#define I3C_OD_CLK_RATE 370000
 
 enum i3c_trans_dir {
 	WRITE_TRANSACTION = 0,
 	READ_TRANSACTION = 1
+};
+
+enum i3c_bus_phase {
+	OPEN_DRAIN_MODE  = 0,
+	PUSH_PULL_MODE   = 1
 };
 
 struct geni_se {
@@ -262,6 +268,7 @@ struct geni_i3c_dev {
 	int cur_idx;
 	unsigned long newaddrslots[(I3C_ADDR_MASK + 1) / BITS_PER_LONG];
 	const struct geni_i3c_clk_fld *clk_fld;
+	const struct geni_i3c_clk_fld *clk_od_fld;
 	struct geni_ibi ibi;
 };
 
@@ -302,9 +309,9 @@ struct geni_i3c_clk_fld {
 	u8  clk_div;
 	u8  i2c_t_high_cnt;
 	u8  i2c_t_low_cnt;
-	u8  i2c_t_cycle_cnt;
 	u8  i3c_t_high_cnt;
 	u8  i3c_t_cycle_cnt;
+	u32 i2c_t_cycle_cnt;
 };
 
 static struct geni_i3c_dev*
@@ -332,11 +339,12 @@ to_geni_i3c_master(struct i3c_master_controller *master)
  * clk_freq_out = t / t_cycle
  */
 static const struct geni_i3c_clk_fld geni_i3c_clk_map[] = {
-	{ KHZ(100),    19200, 7, 10, 11, 26, 0, 0 },
-	{ KHZ(400),    19200, 2,  5, 12, 24, 0, 0 },
-	{ KHZ(1000),   19200, 1,  3,  9, 18, 7, 0 },
-	{ KHZ(1920),   19200, 1,  4,  9, 19, 7, 8 },
-	{ KHZ(12500), 100000, 1, 60, 140, 250, 8, 16 },
+	{ KHZ(100),    19200,  7, 10, 11,  0,  0,  26},
+	{ KHZ(400),    19200,  2,  5, 12,  0,  0,  24},
+	{ KHZ(1000),   19200,  1,  3,  9,  7,  0,  18},
+	{ KHZ(1920),   19200,  1,  4,  9,  7,  8,  19},
+	{ KHZ(370),   100000, 20,  4,  7,  8, 14,  14},
+	{ KHZ(12500), 100000,  1, 72, 168, 6,  7, 300},
 };
 
 static int geni_i3c_clk_map_idx(struct geni_i3c_dev *gi3c)
@@ -351,11 +359,19 @@ static int geni_i3c_clk_map_idx(struct geni_i3c_dev *gi3c)
 			 itr->clk_freq_out == bus->scl_rate.i3c) &&
 			 KHZ(itr->clk_src_freq) == gi3c->clk_src_freq) {
 			gi3c->clk_fld = itr;
-			return 0;
 		}
+
+		if (itr->clk_freq_out == I3C_OD_CLK_RATE)
+			gi3c->clk_od_fld = itr;
 	}
 
-	return -EINVAL;
+	if ((!gi3c->clk_fld) || (!gi3c->clk_od_fld)) {
+		GENI_SE_ERR(gi3c->ipcl, true, gi3c->se.dev,
+			"%s : clk mapping failed", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static void set_new_addr_slot(unsigned long *addrslot, u8 addr)
@@ -391,12 +407,16 @@ static bool is_new_addr_slot_set(unsigned long *addrslot, u8 addr)
 	return ((*ptr & (1 << (addr % BITS_PER_LONG))) != 0);
 }
 
-static void qcom_geni_i3c_conf(struct geni_i3c_dev *gi3c)
+static void qcom_geni_i3c_conf(struct geni_i3c_dev *gi3c,
+	enum i3c_bus_phase bus_phase)
 {
 	const struct geni_i3c_clk_fld *itr = gi3c->clk_fld;
 	u32 val;
 	unsigned long freq;
 	int ret = 0;
+
+	if (bus_phase == OPEN_DRAIN_MODE)
+		itr = gi3c->clk_od_fld;
 
 	if (gi3c->dfs_idx > DFS_INDEX_MAX)
 		ret = geni_se_clk_freq_match(&gi3c->se.i3c_rsc,
@@ -673,8 +693,6 @@ static int i3c_geni_runtime_get_mutex_lock(struct geni_i3c_dev *gi3c)
 		return ret;
 	}
 
-	qcom_geni_i3c_conf(gi3c);
-
 	return 0; /* return 0 to indicate SUCCESS */
 }
 
@@ -818,18 +836,14 @@ static int i3c_geni_execute_write_command
 static void geni_i3c_perform_daa(struct geni_i3c_dev *gi3c)
 {
 	struct i3c_master_controller *m = &gi3c->ctrlr;
-	struct i3c_bus *bus = i3c_master_get_bus(m);
-	u8 last_dyn_addr = 0;
 	int ret;
 
 	while (1) {
 		u8 rx_buf[8], tx_buf[8];
 		struct i3c_xfer_params xfer = { FIFO_MODE };
-		struct i3c_device_info info = { 0 };
-		struct i3c_dev_desc *i3cdev;
-		bool new_device = true;
+		struct i3c_dev_boardinfo *i3cboardinfo;
 		u64 pid;
-		u8 bcr, dcr, addr;
+		u8 bcr, dcr, init_dyn_addr = 0, addr = 0;
 
 		GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
 			"i3c entdaa read\n");
@@ -851,31 +865,38 @@ static void geni_i3c_perform_daa(struct geni_i3c_dev *gi3c)
 			((u64)rx_buf[4] <<  8) |
 			((u64)rx_buf[5]);
 
-		i3c_bus_for_each_i3cdev(bus, i3cdev) {
-
-			if (!i3cdev->dev)
-				continue;
-
-			i3c_device_get_info(i3cdev->dev, &info);
-			if (pid == info.pid &&
-				dcr == info.dcr &&
-				bcr == info.bcr) {
-				new_device = false;
-				addr = (info.dyn_addr) ? info.dyn_addr :
-					info.static_addr;
+		list_for_each_entry(i3cboardinfo, &m->boardinfo.i3c, node) {
+			if (pid == i3cboardinfo->pid) {
+				GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
+				"PID 0x:%x matched with boardinfo\n", pid);
 				break;
 			}
 		}
 
-		if (new_device) {
-			ret = i3c_master_get_free_addr(m,
-						last_dyn_addr + 1);
-			if (ret < 0)
-				goto daa_err;
-			addr = last_dyn_addr = (u8)ret;
-			set_new_addr_slot(gi3c->newaddrslots, addr);
+		if (i3cboardinfo)
+			addr = init_dyn_addr = i3cboardinfo->init_dyn_addr;
+
+		addr = ret = i3c_master_get_free_addr(m, addr);
+
+		if (ret < 0) {
+			GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			"error during get_free_addr ret:%d for pid:0x:%x\n"
+				, ret, pid);
+			goto daa_err;
+		} else if (ret == init_dyn_addr) {
+			GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			"assigning requested addr:0x%x for pid:0x:%x\n"
+				, ret, pid);
+		} else if (init_dyn_addr) {
+			GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			"Can't assign req addr:0x%x for pid:0x%x assigning avl addr:0x%x\n"
+				, init_dyn_addr, pid, addr);
+		} else {
+			GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			"assigning addr:0x%x for pid:x:%x\n", ret, pid);
 		}
 
+		set_new_addr_slot(gi3c->newaddrslots, addr);
 		tx_buf[0] = (addr & I3C_ADDR_MASK) << 1;
 		tx_buf[0] |= ~(hweight8(addr & I3C_ADDR_MASK) & 1);
 
@@ -922,6 +943,8 @@ static int geni_i3c_master_send_ccc_cmd
 	ret = i3c_geni_runtime_get_mutex_lock(gi3c);
 	if (ret)
 		return ret;
+
+	qcom_geni_i3c_conf(gi3c, OPEN_DRAIN_MODE);
 
 	for (i = 0; i < cmd->ndests; i++) {
 		int stall = (i < (cmd->ndests - 1)) ||
@@ -1000,6 +1023,8 @@ static int geni_i3c_master_priv_xfers
 	if (ret)
 		return ret;
 
+	qcom_geni_i3c_conf(gi3c, PUSH_PULL_MODE);
+
 	for (i = 0; i < nxfers; i++) {
 		bool stall = (i < (nxfers - 1));
 		struct i3c_xfer_params xfer = { FIFO_MODE };
@@ -1050,6 +1075,8 @@ static int geni_i3c_master_i2c_xfers
 	ret = i3c_geni_runtime_get_mutex_lock(gi3c);
 	if (ret)
 		return ret;
+
+	qcom_geni_i3c_conf(gi3c, PUSH_PULL_MODE);
 
 	GENI_SE_DBG(gi3c->ipcl, false, gi3c->se.dev,
 		"i2c xfer:num:%d, msgs:len:%d,flg:%d\n",
@@ -1114,6 +1141,7 @@ static int geni_i3c_master_attach_i3c_dev(struct i3c_dev_desc *dev)
 	struct i3c_master_controller *m = i3c_dev_get_master(dev);
 	struct geni_i3c_dev *gi3c = to_geni_i3c_master(m);
 	struct geni_i3c_i2c_dev_data *data;
+	struct i3c_dev_boardinfo *i3cboardinfo;
 
 	data = devm_kzalloc(gi3c->se.dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -1121,6 +1149,12 @@ static int geni_i3c_master_attach_i3c_dev(struct i3c_dev_desc *dev)
 
 	data->ibi = -1;
 	i3c_dev_set_master_data(dev, data);
+	if (!dev->boardinfo) {
+		list_for_each_entry(i3cboardinfo, &m->boardinfo.i3c, node) {
+			if (dev->info.pid == i3cboardinfo->pid)
+				dev->boardinfo = i3cboardinfo;
+		}
+	}
 
 	return 0;
 }
@@ -1131,6 +1165,16 @@ static int geni_i3c_master_reattach_i3c_dev
 	u8 old_dyn_addr
 )
 {
+	struct i3c_master_controller *m = i3c_dev_get_master(dev);
+	struct i3c_dev_boardinfo *i3cboardinfo;
+
+	if (!dev->boardinfo) {
+		list_for_each_entry(i3cboardinfo, &m->boardinfo.i3c, node) {
+			if (dev->info.pid == i3cboardinfo->pid)
+				dev->boardinfo = i3cboardinfo;
+		}
+	}
+
 	return 0;
 }
 
@@ -1193,7 +1237,7 @@ static int geni_i3c_master_bus_init(struct i3c_master_controller *m)
 		goto err_cleanup;
 	}
 
-	qcom_geni_i3c_conf(gi3c);
+	qcom_geni_i3c_conf(gi3c, OPEN_DRAIN_MODE);
 
 	/* Get an address for the master. */
 	ret = i3c_master_get_free_addr(m, 0);

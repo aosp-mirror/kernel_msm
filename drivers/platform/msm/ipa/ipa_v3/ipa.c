@@ -3554,7 +3554,7 @@ static int ipa3_q6_set_ex_path_to_apps(void)
 	/* Set the exception path to AP */
 	for (client_idx = 0; client_idx < IPA_CLIENT_MAX; client_idx++) {
 		ep_idx = ipa3_get_ep_mapping(client_idx);
-		if (ep_idx == -1)
+		if (ep_idx == -1 || (ep_idx >= IPA3_MAX_NUM_PIPES))
 			continue;
 
 		/* disable statuses for all modem controlled prod pipes */
@@ -5023,6 +5023,18 @@ static void __ipa3_dec_client_disable_clks(void)
 	if (ret)
 		goto bail;
 
+	/* Send force close coalsecing frame command in LPM mode before taking
+	 * mutex lock and otherwise observing race condition.
+	 */
+	if (atomic_read(&ipa3_ctx->ipa3_active_clients.cnt) == 1 &&
+		!ipa3_ctx->tag_process_before_gating) {
+		ipa3_force_close_coal();
+		/* While sending force close command setting
+		 * tag process as true to make configure to
+		 * original state
+		 */
+		ipa3_ctx->tag_process_before_gating = false;
+	}
 	/* seems like this is the only client holding the clocks */
 	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
 	if (atomic_read(&ipa3_ctx->ipa3_active_clients.cnt) == 1 &&
@@ -5773,6 +5785,12 @@ static int ipa3_post_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_dma_task;
 	}
 
+	result = ipa3_allocate_coal_close_frame();
+	if (result) {
+		IPAERR("failed to allocate coal frame cmd\n");
+		goto fail_coal_frame;
+	}
+
 	if (ipa3_nat_ipv6ct_init_devices()) {
 		IPAERR("unable to init NAT and IPv6CT devices\n");
 		result = -ENODEV;
@@ -5977,6 +5995,8 @@ fail_init_interrupts:
 fail_allok_pkt_init:
 	ipa3_nat_ipv6ct_destroy_devices();
 fail_nat_ipv6ct_init_dev:
+	ipa3_free_coal_close_frame();
+fail_coal_frame:
 	ipa3_free_dma_task_for_gsi();
 fail_dma_task:
 fail_init_hw:

@@ -693,6 +693,7 @@ struct ipa3_hdr_proc_ctx_offset_entry {
  * @link: entry's link in global header table entries list
  * @type: header processing context type
  * @l2tp_params: L2TP parameters
+ * @generic_params: generic proc_ctx params
  * @offset_entry: entry's offset
  * @hdr: the header
  * @cookie: cookie used for validity check
@@ -706,6 +707,7 @@ struct ipa3_hdr_proc_ctx_entry {
 	u32 cookie;
 	enum ipa_hdr_proc_type type;
 	struct ipa_l2tp_hdr_proc_ctx_params l2tp_params;
+	struct ipa_eth_II_to_eth_II_ex_procparams generic_params;
 	struct ipa3_hdr_proc_ctx_offset_entry *offset_entry;
 	struct ipa3_hdr_entry *hdr;
 	u32 ref_cnt;
@@ -1756,6 +1758,7 @@ struct ipa3_pc_mbox_data {
  * @lan_rx_napi_enable: flag if NAPI is enabled on the LAN dp
  * @lan_ndev: dummy netdev for LAN rx NAPI
  * @napi_lan_rx: NAPI object for LAN rx
+ * @coal_cmd_pyld: holds the coslescing close frame command payload
  */
 struct ipa3_context {
 	struct ipa3_char_device_context cdev;
@@ -1927,6 +1930,7 @@ struct ipa3_context {
 	bool lan_rx_napi_enable;
 	struct net_device lan_ndev;
 	struct napi_struct napi_lan_rx;
+	struct ipahal_imm_cmd_pyld *coal_cmd_pyld;
 };
 
 struct ipa3_plat_drv_res {
@@ -2968,6 +2972,7 @@ int ipa3_set_flt_tuple_mask(int pipe_idx, struct ipahal_reg_hash_tuple *tuple);
 int ipa3_set_rt_tuple_mask(int tbl_idx, struct ipahal_reg_hash_tuple *tuple);
 void ipa3_set_resorce_groups_min_max_limits(void);
 int ipa3_suspend_apps_pipes(bool suspend);
+void ipa3_force_close_coal(void);
 int ipa3_flt_read_tbl_from_hw(u32 pipe_idx,
 	enum ipa_ip_type ip_type,
 	bool hashable,
@@ -3010,6 +3015,8 @@ void ipa3_disable_prefetch(enum ipa_client_type client);
 int ipa3_alloc_common_event_ring(void);
 int ipa3_allocate_dma_task_for_gsi(void);
 void ipa3_free_dma_task_for_gsi(void);
+int ipa3_allocate_coal_close_frame(void);
+void ipa3_free_coal_close_frame(void);
 int ipa3_set_clock_plan_from_pm(int idx);
 void __ipa_gsi_irq_rx_scedule_poll(struct ipa3_sys_context *sys);
 int ipa3_tz_unlock_reg(struct ipa_tz_unlock_reg_info *reg_info, u16 num_regs);
