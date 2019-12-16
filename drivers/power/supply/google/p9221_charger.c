@@ -3229,6 +3229,7 @@ static bool p9221_get_chip_id(struct p9221_charger_data *charger, u16 *chip_id)
 	/* off, try to power on the WLC chip */
 	ret = p9382_rtx_enable(charger, true);
 	if (ret == 0) {
+		/* FIXME: b/146316852 */
 		ret = p9221_reg_read_16(charger, P9221_CHIP_ID_REG, chip_id);
 		p9382_rtx_enable(charger, false);
 
@@ -3238,6 +3239,7 @@ static bool p9221_get_chip_id(struct p9221_charger_data *charger, u16 *chip_id)
 			return false;
 		}
 	}
+	p9382_rtx_enable(charger, false);
 
 	/* hack/fallback use the chip address. useful for prototypes that might
 	 * not have the ability to power the chip.
