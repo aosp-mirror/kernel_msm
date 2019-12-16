@@ -1048,7 +1048,7 @@ static int parse_rsc_event(struct mhi_controller *mhi_cntrl,
 	xfer_len = MHI_TRE_GET_EV_LEN(event);
 
 	/* received out of bound cookie */
-	MHI_ASSERT(cookie >= buf_ring->len, "Invalid Cookie\n");
+	MHI_ASSERT(cookie >= buf_ring->len, "Invalid Cookie 0x%08x\n", cookie);
 
 	buf_info = buf_ring->base + cookie;
 
@@ -1100,6 +1100,7 @@ static void mhi_process_cmd_completion(struct mhi_controller *mhi_cntrl,
 	struct mhi_tre *cmd_pkt;
 	struct mhi_chan *mhi_chan;
 	struct mhi_timesync *mhi_tsync;
+	struct mhi_sfr_info *sfr_info;
 	enum mhi_cmd_type type;
 	u32 chan;
 
@@ -1110,17 +1111,25 @@ static void mhi_process_cmd_completion(struct mhi_controller *mhi_cntrl,
 
 	type = MHI_TRE_GET_CMD_TYPE(cmd_pkt);
 
-	if (type == MHI_CMD_TYPE_TSYNC) {
+	switch (type) {
+	case MHI_CMD_TYPE_TSYNC:
 		mhi_tsync = mhi_cntrl->mhi_tsync;
 		mhi_tsync->ccs = MHI_TRE_GET_EV_CODE(tre);
 		complete(&mhi_tsync->completion);
-	} else {
+		break;
+	case MHI_CMD_TYPE_SFR_CFG:
+		sfr_info = mhi_cntrl->mhi_sfr;
+		sfr_info->ccs = MHI_TRE_GET_EV_CODE(tre);
+		complete(&sfr_info->completion);
+		break;
+	default:
 		chan = MHI_TRE_GET_CMD_CHID(cmd_pkt);
 		mhi_chan = &mhi_cntrl->mhi_chan[chan];
 		write_lock_bh(&mhi_chan->lock);
 		mhi_chan->ccs = MHI_TRE_GET_EV_CODE(tre);
 		complete(&mhi_chan->completion);
 		write_unlock_bh(&mhi_chan->lock);
+		break;
 	}
 
 	mhi_del_ring_element(mhi_cntrl, mhi_ring);
@@ -1407,29 +1416,28 @@ int mhi_process_bw_scale_ev_ring(struct mhi_controller *mhi_cntrl,
 	struct mhi_link_info link_info, *cur_info = &mhi_cntrl->mhi_link_info;
 	int result, ret = 0;
 
-	mutex_lock(&mhi_cntrl->pm_mutex);
-
 	if (unlikely(MHI_EVENT_ACCESS_INVALID(mhi_cntrl->pm_state))) {
 		MHI_LOG("No EV access, PM_STATE:%s\n",
 			to_mhi_pm_state_str(mhi_cntrl->pm_state));
 		ret = -EIO;
-		goto exit_bw_process;
+		goto exit_no_lock;
 	}
 
-	/*
-	 * BW change is not process during suspend since we're suspending link,
-	 * host will process it during resume
-	 */
-	if (MHI_PM_IN_SUSPEND_STATE(mhi_cntrl->pm_state)) {
-		ret = -EACCES;
-		goto exit_bw_process;
-	}
+	ret = __mhi_device_get_sync(mhi_cntrl);
+	if (ret)
+		goto exit_no_lock;
+
+	mutex_lock(&mhi_cntrl->pm_mutex);
 
 	spin_lock_bh(&mhi_event->lock);
 	dev_rp = mhi_to_virtual(ev_ring, er_ctxt->rp);
 
 	if (ev_ring->rp == dev_rp) {
 		spin_unlock_bh(&mhi_event->lock);
+		read_lock_bh(&mhi_cntrl->pm_lock);
+		mhi_cntrl->wake_put(mhi_cntrl, false);
+		read_unlock_bh(&mhi_cntrl->pm_lock);
+		MHI_VERB("no pending event found\n");
 		goto exit_bw_process;
 	}
 
@@ -1474,12 +1482,15 @@ int mhi_process_bw_scale_ev_ring(struct mhi_controller *mhi_cntrl,
 		mhi_write_reg(mhi_cntrl, mhi_cntrl->bw_scale_db, 0,
 			      MHI_BW_SCALE_RESULT(result,
 						  link_info.sequence_num));
+
+	mhi_cntrl->wake_put(mhi_cntrl, false);
 	read_unlock_bh(&mhi_cntrl->pm_lock);
 
 exit_bw_process:
-	MHI_VERB("exit er_index:%u\n", mhi_event->er_index);
-
 	mutex_unlock(&mhi_cntrl->pm_mutex);
+
+exit_no_lock:
+	MHI_VERB("exit er_index:%u\n", mhi_event->er_index);
 
 	return ret;
 }
@@ -1643,7 +1654,8 @@ irqreturn_t mhi_intvec_handlr(int irq_number, void *dev)
 	wake_up_all(&mhi_cntrl->state_event);
 	MHI_VERB("Exit\n");
 
-	schedule_work(&mhi_cntrl->low_priority_worker);
+	if (MHI_IN_MISSION_MODE(mhi_cntrl->ee))
+		schedule_work(&mhi_cntrl->low_priority_worker);
 
 	return IRQ_WAKE_THREAD;
 }
@@ -1655,6 +1667,7 @@ int mhi_send_cmd(struct mhi_controller *mhi_cntrl,
 	struct mhi_tre *cmd_tre = NULL;
 	struct mhi_cmd *mhi_cmd = &mhi_cntrl->mhi_cmd[PRIMARY_CMD_RING];
 	struct mhi_ring *ring = &mhi_cmd->ring;
+	struct mhi_sfr_info *sfr_info;
 	int chan = 0;
 
 	MHI_VERB("Entered, MHI pm_state:%s dev_state:%s ee:%s\n",
@@ -1694,6 +1707,14 @@ int mhi_send_cmd(struct mhi_controller *mhi_cntrl,
 		cmd_tre->dword[0] = MHI_TRE_CMD_TSYNC_CFG_DWORD0;
 		cmd_tre->dword[1] = MHI_TRE_CMD_TSYNC_CFG_DWORD1
 			(mhi_cntrl->mhi_tsync->er_index);
+		break;
+	case MHI_CMD_SFR_CFG:
+		sfr_info = mhi_cntrl->mhi_sfr;
+		cmd_tre->ptr = MHI_TRE_CMD_SFR_CFG_PTR
+						(sfr_info->dma_addr);
+		cmd_tre->dword[0] = MHI_TRE_CMD_SFR_CFG_DWORD0
+						(sfr_info->len - 1);
+		cmd_tre->dword[1] = MHI_TRE_CMD_SFR_CFG_DWORD1;
 		break;
 	}
 

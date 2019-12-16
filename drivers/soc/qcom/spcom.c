@@ -234,6 +234,7 @@ struct spcom_device {
 
 	int32_t nvm_ion_fd;
 	struct mutex ioctl_lock;
+	struct mutex create_channel_lock;
 };
 
 /* Device Driver State */
@@ -258,6 +259,9 @@ static int spcom_create_channel_chardev(const char *name, bool is_sharable);
 static struct spcom_channel *spcom_find_channel_by_name(const char *name);
 static int spcom_register_rpmsg_drv(struct spcom_channel *ch);
 static int spcom_unregister_rpmsg_drv(struct spcom_channel *ch);
+
+/* PIL's original SSR function*/
+int (*desc_powerup)(const struct subsys_desc *) = NULL;
 
 /**
  * spcom_is_channel_open() - channel is open on this side.
@@ -605,6 +609,24 @@ static int spcom_local_powerup(const struct subsys_desc *subsys)
 }
 
 /**
+ * spcom_local_powerup_after_fota() - SSR is not allowed after FOTA -
+ * might cause cryptographic erase. Reset the device
+ *
+ * @subsys: subsystem descriptor.
+ *
+ * Return: 0 on successful operation, negative value otherwise.
+ */
+static int spcom_local_powerup_after_fota(const struct subsys_desc *subsys)
+{
+	(void)subsys;
+
+	pr_err("SSR after firmware update before calling IAR update - panic\n");
+	panic("SSR after SPU firmware update\n");
+
+	return 0;
+}
+
+/**
  * spcom_handle_restart_sp_command() - Handle Restart SP command from
  * user space.
  *
@@ -618,7 +640,6 @@ static int spcom_handle_restart_sp_command(void *cmd_buf, int cmd_size)
 	void *subsystem_get_retval = NULL;
 	struct spcom_user_restart_sp_command *cmd = cmd_buf;
 	struct subsys_desc *desc_p = NULL;
-	int (*desc_powerup)(const struct subsys_desc *) = NULL;
 
 	if (!cmd) {
 		pr_err("NULL cmd_buf\n");
@@ -672,8 +693,14 @@ static int spcom_handle_restart_sp_command(void *cmd_buf, int cmd_size)
 	}
 
 	if (cmd->arg) {
-		/* Reset the PIL subsystem power up function */
-		desc_p->powerup = desc_powerup;
+
+		/* SPU got firmware update. Don't allow SSR*/
+		if (cmd->is_updated) {
+			desc_p->powerup = spcom_local_powerup_after_fota;
+		} else {
+			/* Reset the PIL subsystem power up function */
+			desc_p->powerup = desc_powerup;
+		}
 	}
 	pr_debug("restart - PIL FW loading process is complete\n");
 	return 0;
@@ -1147,6 +1174,41 @@ static int spcom_handle_unlock_ion_buf_command(struct spcom_channel *ch,
 }
 
 /**
+ * spcom_handle_enable_ssr_command() - Handle user space request to enable ssr
+ *
+ * After FOTA SSR is disabled until IAR update occurs.
+ * Then - enable SSR again
+ *
+ * Return: size in bytes on success, negative value on failure.
+ */
+static int spcom_handle_enable_ssr_command(void)
+{
+	struct subsys_desc *desc_p = NULL;
+	void *subsystem_get_retval = find_subsys_device("spss");
+
+	if (!subsystem_get_retval) {
+		pr_err("restart - no device\n");
+		return -ENODEV;
+	}
+
+	desc_p = *(struct subsys_desc **)subsystem_get_retval;
+	if (!desc_p) {
+		pr_err("restart - no device\n");
+		return -ENODEV;
+	}
+
+	if (!desc_powerup) {
+		pr_err("no original SSR function\n");
+		return -ENODEV;
+	}
+
+	desc_p->powerup = desc_powerup;
+	pr_info("SSR is enabled after FOTA\n");
+
+	return 0;
+}
+
+/**
  * spcom_handle_write() - Handle user space write commands.
  *
  * @buf:	command buffer.
@@ -1174,7 +1236,8 @@ static int spcom_handle_write(struct spcom_channel *ch,
 	pr_debug("cmd_id [0x%x]\n", cmd_id);
 
 	if (!ch && cmd_id != SPCOM_CMD_CREATE_CHANNEL
-			&& cmd_id != SPCOM_CMD_RESTART_SP) {
+			&& cmd_id != SPCOM_CMD_RESTART_SP
+			&& cmd_id != SPCOM_CMD_ENABLE_SSR) {
 		pr_err("channel context is null\n");
 		return -EINVAL;
 	}
@@ -1209,6 +1272,9 @@ static int spcom_handle_write(struct spcom_channel *ch,
 		break;
 	case SPCOM_CMD_RESTART_SP:
 		ret = spcom_handle_restart_sp_command(buf, buf_size);
+		break;
+	case SPCOM_CMD_ENABLE_SSR:
+		ret = spcom_handle_enable_ssr_command();
 		break;
 	default:
 		pr_err("Invalid Command Id [0x%x]\n", (int) cmd->cmd_id);
@@ -1898,22 +1964,26 @@ static int spcom_create_channel_chardev(const char *name, bool is_sharable)
 	struct cdev *cdev;
 
 	pr_debug("Add channel [%s]\n", name);
+	mutex_lock(&spcom_dev->create_channel_lock);
 
 	ch = spcom_find_channel_by_name(name);
 	if (ch) {
 		pr_err("channel [%s] already exist\n", name);
+		mutex_unlock(&spcom_dev->create_channel_lock);
 		return -EBUSY;
 	}
 
 	ch = spcom_find_channel_by_name(""); /* find reserved channel */
 	if (!ch) {
 		pr_err("no free channel\n");
+		mutex_unlock(&spcom_dev->create_channel_lock);
 		return -ENODEV;
 	}
 
 	ret = spcom_init_channel(ch, is_sharable, name);
 	if (ret < 0) {
 		pr_err("can't init channel %d\n", ret);
+		mutex_unlock(&spcom_dev->create_channel_lock);
 		return ret;
 	}
 
@@ -1952,6 +2022,7 @@ static int spcom_create_channel_chardev(const char *name, bool is_sharable)
 	ch->cdev = cdev;
 	ch->dev = dev;
 	mutex_unlock(&ch->lock);
+	mutex_unlock(&spcom_dev->create_channel_lock);
 
 	return 0;
 
@@ -1964,10 +2035,11 @@ exit_unregister_drv:
 	if (ret != 0)
 		pr_err("can't unregister rpmsg drv %d\n", ret);
 exit_destroy_channel:
-	// empty channel leaves free slot for next time
+	/* empty channel leaves free slot for next time*/
 	mutex_lock(&ch->lock);
 	memset(ch->name, 0, SPCOM_CHANNEL_NAME_SIZE);
 	mutex_unlock(&ch->lock);
+	mutex_unlock(&spcom_dev->create_channel_lock);
 	return -EFAULT;
 }
 
@@ -2293,7 +2365,7 @@ static void spcom_rpdev_remove(struct rpmsg_device *rpdev)
 	}
 
 	mutex_lock(&ch->lock);
-	// unlock all ion buffers of sp_kernel channel
+	/* unlock all ion buffers of sp_kernel channel*/
 	if (strcmp(ch->name, "sp_kernel") == 0) {
 		for (i = 0; i < ARRAY_SIZE(ch->dmabuf_handle_table); i++) {
 			if (ch->dmabuf_handle_table[i] != NULL) {
@@ -2422,6 +2494,7 @@ static int spcom_probe(struct platform_device *pdev)
 	spin_lock_init(&spcom_dev->rx_lock);
 	spcom_dev->nvm_ion_fd = -1;
 	mutex_init(&spcom_dev->ioctl_lock);
+	mutex_init(&spcom_dev->create_channel_lock);
 
 	ret = spcom_register_chardev();
 	if (ret) {

@@ -7,6 +7,7 @@
 #include <linux/mm_types.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-debug.h>
+#include <linux/dma-mapping-fast.h>
 #include <linux/kref.h>
 
 #define ARM_MAPPING_ERROR		(~(dma_addr_t)0x0)
@@ -14,6 +15,7 @@
 struct dma_iommu_mapping {
 	/* iommu specific data */
 	struct iommu_domain	*domain;
+	const struct dma_map_ops *ops;
 
 	unsigned long		**bitmaps;	/* array of bitmaps */
 	unsigned int		nr_bitmaps;	/* nr of elements in array */
