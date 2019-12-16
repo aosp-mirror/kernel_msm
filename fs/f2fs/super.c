@@ -1040,6 +1040,7 @@ static void f2fs_umount_end(struct super_block *sb, int flags)
 	if ((flags & MNT_FORCE) || atomic_read(&sb->s_active) > 1) {
 		/* to write the latest kbytes_written */
 		if (!(sb->s_flags & MS_RDONLY)) {
+			struct f2fs_sb_info *sbi = F2FS_SB(sb);
 			struct cp_control cpc = {
 				.reason = CP_UMOUNT,
 			};
@@ -1052,7 +1053,9 @@ static void f2fs_umount_end(struct super_block *sb, int flags)
 				up_read(&sb->s_umount);
 			if (err)
 				return;
+			mutex_lock(&sbi->gc_mutex);
 			f2fs_write_checkpoint(F2FS_SB(sb), &cpc);
+			mutex_unlock(&sbi->gc_mutex);
 		}
 	}
 }
