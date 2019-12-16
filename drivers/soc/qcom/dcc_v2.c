@@ -1845,7 +1845,11 @@ static int __init dcc_init(void)
 {
 	return platform_driver_register(&dcc_driver);
 }
+#ifdef MODULE
+module_init(dcc_init);
+#else
 pure_initcall(dcc_init);
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MSM data capture and compare engine");
