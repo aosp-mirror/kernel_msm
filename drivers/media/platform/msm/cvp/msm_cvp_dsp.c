@@ -548,6 +548,9 @@ int __init cvp_dsp_device_init(void)
 register_bail:
 	me->cvp_shutdown = STATUS_DEINIT;
 	me->cdsp_state = STATUS_DEINIT;
+	mutex_destroy(&me->smd_mutex);
+	mutex_destroy(&me->reg_buffer_mutex);
+	mutex_destroy(&me->dereg_buffer_mutex);
 	return err;
 }
 
