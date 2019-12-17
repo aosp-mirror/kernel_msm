@@ -53,6 +53,7 @@ struct slg51000 {
 	struct regulator_dev *rdev[SLG51000_MAX_REGULATORS];
 	int chip_irq;
 	int chip_cs_pin;
+	int chip_cam_buck;
 };
 
 struct slg51000_evt_sta {
@@ -617,6 +618,25 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 	if (!chip)
 		return -ENOMEM;
 
+	cs_gpio = of_get_named_gpio(dev->of_node, "dlg,cs-gpios", 1);
+	if (cs_gpio > 0) {
+		if (!gpio_is_valid(cs_gpio)) {
+			dev_err(dev, "Invalid chip select pin\n");
+			return -EPERM;
+		}
+
+		ret = devm_gpio_request_one(dev, cs_gpio, GPIOF_OUT_INIT_HIGH,
+					    "slg51000_cam_buck");
+		if (ret) {
+			dev_err(dev, "GPIO(%d) request failed(%d)\n",
+				cs_gpio, ret);
+			return ret;
+		}
+
+		chip->chip_cam_buck = cs_gpio;
+		usleep_range(1000, 1000);
+	}
+
 	cs_gpio = of_get_named_gpio(dev->of_node, "dlg,cs-gpios", 0);
 	if (cs_gpio > 0) {
 		if (!gpio_is_valid(cs_gpio)) {
@@ -728,6 +748,11 @@ static int slg51000_i2c_remove(struct i2c_client *client)
 
 	if (chip->chip_cs_pin > 0) {
 		desc = gpio_to_desc(chip->chip_cs_pin);
+		ret = gpiod_direction_output_raw(desc, GPIOF_INIT_LOW);
+	}
+
+	if (chip->chip_cam_buck > 0) {
+		desc = gpio_to_desc(chip->chip_cam_buck);
 		ret = gpiod_direction_output_raw(desc, GPIOF_INIT_LOW);
 	}
 

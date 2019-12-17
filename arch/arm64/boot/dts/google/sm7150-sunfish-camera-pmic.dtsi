@@ -17,8 +17,8 @@
 	slg51000: slg51000@75 {
 		compatible = "dlg,slg51000";
 		reg = <0x75>;
-
-		dlg,cs-gpios = <&pm6150l_gpios 4 0>;
+		dlg,cs-gpios = <&pm6150l_gpios 4 0>,
+				   <&pm6150l_gpios 6 0>;
 		dlg,enable-gpios = <&pm6150l_gpios 1 0>,
 				   <&pm6150l_gpios 5 0>;
 
