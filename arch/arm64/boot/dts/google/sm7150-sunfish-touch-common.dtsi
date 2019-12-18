@@ -3,7 +3,7 @@
 		pins = "gpio4";
 		function = "normal";
 		qcom,drive-strength = <2>;
-		power-source = <0>;
+		power-source = <1>;
 		output-high;
 		bias-disable;
 	};
