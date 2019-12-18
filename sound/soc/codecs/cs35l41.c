@@ -1783,8 +1783,8 @@ static bool cs35l41_need_auto_vol_ramp(struct cs35l41_private *cs35l41)
 			 * 0 < auto_ramp_timeout < CS35L41_MAX_AUTO_RAMP_TIMEOUT
 			 */
 			curr_timestamp = ktime_get();
-			elapsed_time = (s64)curr_timestamp -
-				(s64)cs35l41->vol_ctl.dev_timestamp;
+			elapsed_time = ktime_to_ns(curr_timestamp) -
+				ktime_to_ns(cs35l41->vol_ctl.dev_timestamp);
 			if (elapsed_time < dev_timeout)
 				ramp = true;
 			dev_dbg(cs35l41->dev,
