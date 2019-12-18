@@ -90,6 +90,11 @@ enum core_ldo_levels {
 #define USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3	0x18F0
 #define USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4	0x18F4
 
+/* Tx Parameters enabling bit; Set 1 to select value from bit [4:0] */
+#define TX_PARAM_ENABLE BIT(5)
+/* Tx Lane Mode enabling bit; Set 1 to select value from bit [6:4] */
+#define TX_LANE_MODE_ENABLE BIT(7)
+
 enum qmp_phy_rev_reg {
 	USB3_PHY_PCS_STATUS,
 	USB3_PHY_AUTONOMOUS_MODE_CTRL,
@@ -541,83 +546,46 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		return ret;
 	}
 
-	dev_info(uphy->dev, "current setting for txa_tx_drv_lvl:0x%02x\n",
-			readl_relaxed(phy->base +
-				      USB3_DP_QSERDES_TXA_TX_DRV_LVL));
-	dev_info(uphy->dev, "current setting for txa_pre_emph:0x%02x\n",
-			readl_relaxed(phy->base +
-				      USB3_DP_QSERDES_TXA_PRE_EMPH));
-	dev_info(uphy->dev, "current setting for txa_post1_lvl:0x%02x\n",
-			readl_relaxed(phy->base +
-				      USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL));
-	dev_info(uphy->dev, "current setting for txb_tx_drv_lvl:0x%02x\n",
-			readl_relaxed(phy->base +
-				      USB3_DP_QSERDES_TXB_TX_DRV_LVL));
-	dev_info(uphy->dev, "current setting for txb_pre_emph:0x%02x\n",
-			readl_relaxed(phy->base +
-				      USB3_DP_QSERDES_TXB_PRE_EMPH));
-	dev_info(uphy->dev, "current setting for txb_post1_lvl:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL));
-	dev_info(uphy->dev, "current setting for rxa_equ_adaptor_cntrl2:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL2));
-	dev_info(uphy->dev, "current setting for rxa_equ_adaptor_cntrl3:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL3));
-	dev_info(uphy->dev, "current setting for rxa_equ_adaptor_cntrl4:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_RXA_RX_EQU_ADAPTOR_CNTRL4));
-	dev_info(uphy->dev, "current setting for rxb_equ_adaptor_cntrl2:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL2));
-	dev_info(uphy->dev, "current setting for rxb_equ_adaptor_cntrl3:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL3));
-	dev_info(uphy->dev, "current setting for rxb_equ_adaptor_cntrl4:0x%02x\n",
-			readl_relaxed(phy->base +
-				USB3_DP_QSERDES_RXB_RX_EQU_ADAPTOR_CNTRL4));
-
 	if (phy->txa_tx_drv_lvl) {
-		writel_relaxed(phy->txa_tx_drv_lvl,
+		writel_relaxed(phy->txa_tx_drv_lvl | TX_PARAM_ENABLE,
 			       phy->base + USB3_DP_QSERDES_TXA_TX_DRV_LVL);
 		dev_info(uphy->dev, "override TXA_TX_DRV_LVL: 0x%02x\n",
 			phy->txa_tx_drv_lvl);
 	}
 
 	if (phy->txa_pre_emph) {
-		writel_relaxed(phy->txa_pre_emph,
+		writel_relaxed(phy->txa_pre_emph | TX_PARAM_ENABLE,
 			       phy->base + USB3_DP_QSERDES_TXA_PRE_EMPH);
 		dev_info(uphy->dev, "override TXA_PRE_EMPH: 0x%02x\n",
 			phy->txa_pre_emph);
 	}
 
 	if (phy->txa_post1_lvl) {
-		writel_relaxed(phy->txa_post1_lvl,
+		writel_relaxed(phy->txa_post1_lvl | TX_PARAM_ENABLE,
 			       phy->base +
-			       USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL);
+				       USB3_DP_QSERDES_TXA_TX_EMP_POST1_LVL);
 		dev_info(uphy->dev, "override TXA_TX_EMP_POST1_LVL: 0x%02x\n",
 			phy->txa_post1_lvl);
 	}
 
 	if (phy->txb_tx_drv_lvl) {
-		writel_relaxed(phy->txb_tx_drv_lvl,
+		writel_relaxed(phy->txb_tx_drv_lvl | TX_PARAM_ENABLE,
 			       phy->base + USB3_DP_QSERDES_TXB_TX_DRV_LVL);
 		dev_info(uphy->dev, "override TXB_TX_DRV_LVL: 0x%02x\n",
 			phy->txb_tx_drv_lvl);
 	}
 
 	if (phy->txb_pre_emph) {
-		writel_relaxed(phy->txb_pre_emph,
+		writel_relaxed(phy->txb_pre_emph | TX_PARAM_ENABLE,
 			       phy->base + USB3_DP_QSERDES_TXB_PRE_EMPH);
 		dev_info(uphy->dev, "override TXB_PRE_EMPH: 0x%02x\n",
 			phy->txb_pre_emph);
 	}
 
 	if (phy->txb_post1_lvl) {
-		writel_relaxed(phy->txb_post1_lvl,
+		writel_relaxed(phy->txb_post1_lvl | TX_PARAM_ENABLE,
 			       phy->base +
-			       USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL);
+				       USB3_DP_QSERDES_TXB_TX_EMP_POST1_LVL);
 		dev_info(uphy->dev, "override TXB_TX_EMP_POST1_LVL: 0x%02x\n",
 			phy->txb_post1_lvl);
 	}
