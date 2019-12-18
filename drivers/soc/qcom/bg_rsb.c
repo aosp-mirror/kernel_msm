@@ -550,8 +550,8 @@ static int bgrsb_enable(struct bgrsb_priv *dev, bool enable)
 #if defined(CONFIG_RSB_PARAMETER_ONE)
 	if(enable ==true){
 		req.cmd_id = 0x03;
-		req.data = 0X50;//set report rate 80
-		pr_err("rsb will set report rate 80");
+		req.data = 0X32;//set report rate 50
+		pr_err("rsb will set report rate 50");
 		rc = bgrsb_tx_msg(dev, &req, 5);
 		if (rc != 0) {
 			pr_err("rsb Failed to send resolution value to BG\n");
