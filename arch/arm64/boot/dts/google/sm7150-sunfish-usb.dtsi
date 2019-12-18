@@ -126,5 +126,5 @@
 
 &pm6150_charger {
 	qcom,typec-legacy-rp-icl;
-	qcom,otg-cl-ua = <2000000>;
+	qcom,otg-cl-ua = <1500000>;
 };
