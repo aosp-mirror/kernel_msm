@@ -527,6 +527,13 @@
 	qcom,msm-cpudai-tdm-invert-sync = <0>;
 };
 
+&tdm_sec_tx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <0>;
+
+};
+
 &qupv3_se9_i2c {
 	status= "ok";
 	qcom,clk-freq-out = <400000>;
@@ -544,6 +551,8 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&reset_pin_top_default &irq_pin_top_default>;
+
+		cirrus,asp-sdout-hiz = <3>;
 
 		cirrus,boost-peak-milliamp = <3700>;
 		cirrus,boost-ind-nanohenry = <1000>;
@@ -571,6 +580,8 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&reset_pin_bottom_default &irq_pin_bottom_default>;
+
+		cirrus,asp-sdout-hiz = <3>;
 
 		cirrus,boost-peak-milliamp = <3700>;
 		cirrus,boost-ind-nanohenry = <1000>;
