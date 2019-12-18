@@ -17,6 +17,7 @@
 			pins = "gpio1";
 			function = "normal";
 			output-low;
+			power-source = <1>;
 		};
 	};
 };
