@@ -25,6 +25,7 @@
 #include <linux/keycombo.h>
 #include <linux/keydebug.h>
 #include <linux/keydebug-func.h>
+#include <linux/oom.h>
 
 /*
  * On the kernel command line specify
@@ -50,6 +51,22 @@ module_param(show_dstate_enable, int, 0644);
 static int showallcpus_enable = 1;
 module_param(showallcpus_enable, int, 0644);
 
+/*
+ * On the kernel command line specify
+ * keydebug.showmem_enable=1 to enable the showmem
+ * By default showmem is turned on
+ */
+static int showmem_enable = 1;
+module_param(showmem_enable, int, 0644);
+
+/*
+ * On the kernel command line specify
+ * keydebug.dumptasks_enable=1 to enable the dumptasks
+ * By default dumptasks is turned on
+ */
+static int dumptasks_enable = 1;
+module_param(dumptasks_enable, int, 0644);
+
 #define DEFAULT_DBG_DELAY 3000 /* millisecond */
 static int probe_cnt;
 static struct workqueue_struct *kdbg_wq;
@@ -63,6 +80,12 @@ void do_keydebug(struct work_struct *this)
 
 	if (kernel_top_enable)
 		kernel_top_monitor();
+
+	if (showmem_enable)
+		show_mem(0, NULL);
+
+	if (dumptasks_enable)
+		dump_tasks(NULL, NULL);
 
 	if (show_dstate_enable) {
 		pr_info("=======     Show D state tasks++   =======\n");
