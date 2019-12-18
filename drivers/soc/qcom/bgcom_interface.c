@@ -87,6 +87,7 @@ static char *ssr_domains[] = {
 
 static struct bgdaemon_priv *dev;
 static unsigned int bgreset_gpio;
+static unsigned int hr_gpio;
 static  DEFINE_MUTEX(bg_char_mutex);
 static  struct cdev              bg_cdev;
 static  struct class             *bg_class;
@@ -416,6 +417,7 @@ static int bg_daemon_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	reset_gpio = of_get_named_gpio(node, "qcom,bg-reset-gpio", 0);
+	hr_gpio = of_get_named_gpio(node, "qcom,hr_pwr_gpio", 0);
 	if (!gpio_is_valid(reset_gpio)) {
 		pr_err("gpio %d found is not valid\n", reset_gpio);
 		goto err_ret;
@@ -430,7 +432,24 @@ static int bg_daemon_probe(struct platform_device *pdev)
 		pr_err("gpio %d direction not set\n", reset_gpio);
 		goto err_ret;
 	}
+#if 1
+	if (!gpio_is_valid(hr_gpio)) {
+		pr_err("gpio %d found is not valid\n", reset_gpio);
+		goto err_ret;
+	}
 
+	if (gpio_request(hr_gpio, "hr_pwr_gpio")) {
+		pr_err("gpio %d request failed\n", reset_gpio);
+		goto err_ret;
+	}
+
+	if (gpio_direction_output(hr_gpio, 1)) {
+		pr_err("gpio %d direction not set\n", reset_gpio);
+		goto err_ret;
+	}
+
+	gpio_set_value(hr_gpio, 0);
+#endif
 	pr_info("bg-soft-reset gpio successfully requested\n");
 	bgreset_gpio = reset_gpio;
 
