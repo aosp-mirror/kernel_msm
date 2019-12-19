@@ -380,6 +380,7 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 	int ret;
 	u32 vout_uv;
 	uint8_t reg;
+	u16 tx_mfg_code_reg;
 
 	if (charger->fake_force_epp > 0)
 		return true;
@@ -390,8 +391,11 @@ static bool p9221_is_epp(struct p9221_charger_data *charger)
 	*  NOTE: mfg may be zero due to race condition during bringup. will
 	*  check once more if mfg == 0.
 	*/
+	tx_mfg_code_reg = (charger->chip_id == P9382A_CHIP_ID) ?
+		P9382_EPP_TX_MFG_CODE_REG : P9221R5_EPP_TX_MFG_CODE_REG;
+
 	if (charger->mfg == 0) {
-		ret = p9221_reg_read_16(charger, P9221R5_EPP_TX_MFG_CODE_REG,
+		ret = p9221_reg_read_16(charger, tx_mfg_code_reg,
 					&charger->mfg);
 		if (ret < 0)
 			dev_err(&charger->client->dev,
@@ -891,7 +895,7 @@ static void p9221_init_align(struct p9221_charger_data *charger)
 static void p9221_align_work(struct work_struct *work)
 {
 	int res, align_buckets, i;
-	u16 current_now, current_filter_sample;
+	u16 current_now, current_filter_sample, tx_mfg_code_reg;
 	u32 wlc_freq, current_scaling;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, align_work.work);
@@ -913,11 +917,14 @@ static void p9221_align_work(struct work_struct *work)
 		schedule_delayed_work(&charger->align_work,
 				      msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 
+	tx_mfg_code_reg = (charger->chip_id == P9382A_CHIP_ID) ?
+		P9382_EPP_TX_MFG_CODE_REG : P9221R5_EPP_TX_MFG_CODE_REG;
+
 	if (charger->mfg == 0) {
 		charger->mfg_check_count += 1;
 
 		res = p9221_reg_read_16(charger,
-					P9221R5_EPP_TX_MFG_CODE_REG,
+					tx_mfg_code_reg,
 					&charger->mfg);
 		if (res < 0) {
 			dev_err(&charger->client->dev,
@@ -1007,6 +1014,7 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 {
 	int ret;
 	uint32_t tx_id = 0;
+	u16 tx_id_reg;
 
 	if (!p9221_is_online(charger))
 		return NULL;
@@ -1018,8 +1026,11 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 	}
 	pm_runtime_put_sync(charger->dev);
 
+	tx_id_reg = (charger->chip_id == P9382A_CHIP_ID) ?
+		      P9382_PROP_TX_ID_REG : P9221R5_PROP_TX_ID_REG;
+
 	if (p9221_is_epp(charger)) {
-		ret = p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG,
+		ret = p9221_reg_read_n(charger, tx_id_reg,
 				       &tx_id, sizeof(tx_id));
 		if (ret)
 			dev_err(&charger->client->dev,
@@ -1055,7 +1066,7 @@ static const char *p9382_get_ptmc_id_str(struct p9221_charger_data *charger)
 	}
 	pm_runtime_put_sync(charger->dev);
 
-	ret = p9221_reg_read_16(charger, P9382_PROP_PRMC_ID_REG, &ptmc_id);
+	ret = p9221_reg_read_16(charger, P9382_EPP_TX_MFG_CODE_REG, &ptmc_id);
 	if (ret) {
 		dev_err(&charger->client->dev,
 			"Failed to read device prmc %d\n", ret);
@@ -1511,7 +1522,7 @@ static int p9221_notifier_check_neg_power(struct p9221_charger_data *charger)
 {
 	u8 np8;
 	int ret;
-	u16 status_reg;
+	u16 status_reg, tx_mfg_code_reg;
 
 	ret = p9221_reg_read_8(charger, P9221R5_EPP_CUR_NEGOTIATED_POWER_REG,
 			       &np8);
@@ -1521,10 +1532,13 @@ static int p9221_notifier_check_neg_power(struct p9221_charger_data *charger)
 		return -EIO;
 	}
 
+	tx_mfg_code_reg = (charger->chip_id == P9382A_CHIP_ID) ?
+		P9382_EPP_TX_MFG_CODE_REG : P9221R5_EPP_TX_MFG_CODE_REG;
+
 	if (np8 >= P9221_NEG_POWER_10W) {
 		u8 mfg8;
 
-		ret = p9221_reg_read_8(charger, P9221R5_EPP_TX_MFG_CODE_REG,
+		ret = p9221_reg_read_8(charger, tx_mfg_code_reg,
 				       &mfg8);
 		if (ret < 0) {
 			dev_err(&charger->client->dev,
@@ -1854,9 +1868,13 @@ static ssize_t p9221_show_status(struct device *dev,
 	int ret;
 	u8 tmp[P9221R5_NUM_FOD];
 	uint32_t tx_id = 0;
+	u16 tx_id_reg;
 
 	if (!p9221_is_online(charger))
 		return -ENODEV;
+
+	tx_id_reg = (charger->chip_id == P9382A_CHIP_ID) ?
+		      P9382_PROP_TX_ID_REG : P9221R5_PROP_TX_ID_REG;
 
 	count += p9221_add_reg_buffer(charger, buf, count,
 				      P9221_STATUS_REG, 16, 0,
@@ -1904,7 +1922,7 @@ static ssize_t p9221_show_status(struct device *dev,
 			   "tx_len      : %d\n", charger->tx_len);
 	count += scnprintf(buf + count, PAGE_SIZE - count,
 			   "rx_len      : %d\n", charger->rx_len);
-	p9221_reg_read_n(charger, P9221R5_PROP_TX_ID_REG, &tx_id,
+	p9221_reg_read_n(charger, tx_id_reg, &tx_id,
 			 sizeof(tx_id));
 	count += scnprintf(buf + count, PAGE_SIZE - count,
 			   "tx_id       : %08x (%s)\n", tx_id,
