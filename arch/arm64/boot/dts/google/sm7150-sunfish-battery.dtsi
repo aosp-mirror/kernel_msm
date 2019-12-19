@@ -190,7 +190,8 @@
 		#cooling-cells = <2>;
 		google,chg-power-supply = "sm7150_bms";
 		google,bat-power-supply = "battery";
-		google,thermal-mitigation = <3700000 1850000 925000 500000>;
+		google,thermal-mitigation =
+			<3080000 2500000 2000000 1500000 1000000 500000>;
 		google,fv-max-uv = <4450000>;
 
 		/* TODO: remove when using proper "charger" */
