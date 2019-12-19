@@ -309,6 +309,7 @@ struct p9221_charger_data {
 	u32				icl_ramp_ua;
 	bool				fake_force_epp;
 	bool				force_bpp;
+	u32				dc_icl_epp_neg;
 	u32				dc_icl_bpp;
 	int				align;
 	int				align_count;

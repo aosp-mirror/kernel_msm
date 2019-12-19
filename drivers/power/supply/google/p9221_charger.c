@@ -52,6 +52,11 @@
 #define P9221_NEG_POWER_10W		(10 / 0.5)
 #define P9221_PTMC_EPP_TX_1912		0x32
 
+#define P9382A_DC_ICL_EPP_1200		1200000
+#define P9382A_DC_ICL_EPP_1000		1000000
+#define P9382A_NEG_POWER_10W		(10 / 0.5)
+#define P9382A_NEG_POWER_11W		(11 / 0.5)
+
 #define WLC_ALIGNMENT_MAX		100
 #define WLC_MFG_GOOGLE			0x72
 #define WLC_CURRENT_FILTER_LENGTH	10
@@ -727,8 +732,12 @@ static void p9221_vote_defaults(struct p9221_charger_data *charger)
 		dev_err(&charger->client->dev,
 			"Could not vote DC_ICL %d\n", ret);
 
-	ocp_icl = (charger->dc_icl_epp > 0) ?
-			charger->dc_icl_epp : P9221_DC_ICL_EPP_UA;
+	if (charger->chip_id == P9382A_CHIP_ID)
+		ocp_icl = (charger->dc_icl_epp > P9382A_DC_ICL_EPP_1200) ?
+			   charger->dc_icl_epp : P9382A_DC_ICL_EPP_1200;
+	else
+		ocp_icl = (charger->dc_icl_epp > 0) ?
+			   charger->dc_icl_epp : P9221_DC_ICL_EPP_UA;
 
 	ret = vote(charger->dc_icl_votable, P9221_OCP_VOTER, true,
 			ocp_icl);
@@ -1306,6 +1315,48 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 	return ret;
 }
 
+static void p9382_check_neg_power(struct p9221_charger_data *charger)
+{
+	int ret;
+	u8 np8;
+
+	charger->dc_icl_epp_neg = P9221_DC_ICL_EPP_UA;
+
+	if ((charger->chip_id != P9382A_CHIP_ID) || !p9221_is_epp(charger))
+		return;
+
+	if (charger->is_mfg_google) {
+		dev_info(&charger->client->dev,
+			 "mfg code=%02x, ignore!\n", WLC_MFG_GOOGLE);
+		return;
+	}
+
+	ret = p9221_reg_read_8(charger, P9221R5_EPP_CUR_NEGOTIATED_POWER_REG,
+			       &np8);
+	if (ret)
+		dev_err(&charger->client->dev,
+			"Could not read Tx neg power: %d\n", ret);
+	else if (np8 < P9382A_NEG_POWER_10W) {
+		/*
+		 * base on firmware 17
+		 * Vout is 5V when Tx<10W, use BPP ICL
+		 */
+		charger->dc_icl_epp_neg = P9221_DC_ICL_BPP_UA;
+		dev_info(&charger->client->dev,
+			 "EPP less than 10W,use dc_icl=%dmA,np=%02x\n",
+			 P9221_DC_ICL_BPP_UA/1000, np8);
+	} else {
+		if (np8 > P9382A_NEG_POWER_11W)
+			charger->dc_icl_epp_neg = P9382A_DC_ICL_EPP_1200;
+		else if (np8 < P9382A_NEG_POWER_11W)
+			charger->dc_icl_epp_neg = P9382A_DC_ICL_EPP_1000;
+
+		dev_info(&charger->client->dev,
+			 "Use dc_icl=%dmA,np=%02x\n",
+			 charger->dc_icl_epp_neg/1000, np8);
+	}
+}
+
 static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 {
 	int icl;
@@ -1330,7 +1381,7 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 		icl = charger->dc_icl_bpp;
 
 	if (p9221_is_epp(charger))
-		icl = P9221_DC_ICL_EPP_UA;
+		icl = charger->dc_icl_epp_neg;
 
 	if (p9221_is_epp(charger) && charger->dc_icl_epp)
 		icl = charger->dc_icl_epp;
@@ -1590,7 +1641,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 
 	charger->check_dc = false;
 
-	if (charger->check_np) {
+	if ((charger->chip_id != P9382A_CHIP_ID) && charger->check_np) {
 
 		ret = p9221_notifier_check_neg_power(charger);
 		if (ret > 0) {
@@ -1635,6 +1686,7 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 	 * Always write FOD, check dc_icl, send CSP
 	 */
 	if (dc_in) {
+		p9382_check_neg_power(charger);
 		p9221_set_dc_icl(charger);
 		p9221_write_fod(charger);
 		if (charger->last_capacity > 0)
@@ -3451,6 +3503,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 
 	charger->dc_icl_bpp = 0;
 	charger->dc_icl_epp = 0;
+	charger->dc_icl_epp_neg = P9221_DC_ICL_EPP_UA;
 
 	/* valid chip_id [P9382A_CHIP_ID, P9221_CHIP_ID] or 0 */
 	online = p9221_get_chip_id(charger, &chip_id);
