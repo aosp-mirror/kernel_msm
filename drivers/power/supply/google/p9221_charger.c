@@ -1321,7 +1321,7 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 	if (p9221_is_epp(charger))
 		icl = P9221_DC_ICL_EPP_UA;
 
-	if (charger->dc_icl_epp)
+	if (p9221_is_epp(charger) && charger->dc_icl_epp)
 		icl = charger->dc_icl_epp;
 
 	dev_info(&charger->client->dev, "Setting ICL %duA ramp=%d\n", icl,
