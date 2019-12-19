@@ -310,9 +310,9 @@ static int rt5514_dsp_frame_flag_get(struct snd_kcontrol *kcontrol,
 	u8 buf[8];
 	unsigned int value_spi, value_i2c;
 
-	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 1);
 	rt5514_spi_burst_read(RT5514_BUFFER_MUSIC_WP, (u8 *)&buf, sizeof(buf));
-	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
 	value_spi = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 	if ((value_spi & 0xffe00000) != 0x4fe00000) {
 		ucontrol->value.integer.value[0] = 0;
@@ -1036,10 +1036,10 @@ static int rt5514_ambient_payload_put(struct snd_kcontrol *kcontrol,
 	regmap_read(rt5514->i2c_regmap, 0x18002fdc, &rt5514->payload.status);
 
 	if ((payload_addr & 0xffe00000) == 0x4fe00000) {
-		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 1);
 		rt5514_spi_burst_read(payload_addr, (u8 *)&rt5514->payload.data,
 			AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE);
-		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
 	}
 
 	return ret;
@@ -1079,10 +1079,10 @@ static int rt5514_ambient_process_payload_get(struct snd_kcontrol *kcontrol,
 	regmap_read(rt5514->i2c_regmap, 0x18002fe4, &rt5514->payload.size);
 
 	if ((payload_addr & 0xffe00000) == 0x4fe00000) {
-		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 1);
 		rt5514_spi_burst_read(payload_addr, (u8 *)&rt5514->payload.data,
 			AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE);
-		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
 	}
 
 	if (copy_to_user(bytes, &rt5514->payload, sizeof(struct _payload_st))) {
@@ -1124,7 +1124,7 @@ static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
 	}
 
 	dev_info(component->dev, "Test 1 IMEM 0\n");
-	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 1);
 	memset(buf1, 0, 0x18000);
 	rt5514_spi_burst_write(0x4ff00000, buf1, 0x18000);
 	rt5514_spi_burst_read(0x4ff00000, buf2, 0x18000);
@@ -1160,7 +1160,7 @@ failed:
 	regmap_multi_reg_write(rt5514->i2c_regmap,
 		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
 	rt5514_dsp_enable(rt5514, false, true);
-	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
 	ucontrol->value.integer.value[0] = !!ret;
 
 	kfree(buf1);

@@ -296,10 +296,10 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	if (!(val[0] & 0x2))
 		return false;
 
-	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_WATCHDOG, 1);
 	rt5514_spi_burst_read(RT5514_DBG_BUF_ADDR, (u8 *)&dbgbuf,
 		RT5514_DBG_BUF_SIZE);
-	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_WATCHDOG, 0);
 
 	dev_err(rt5514_dsp->dev, "[DSP Dump]");
 	for (i = 0; i < RT5514_DBG_BUF_CNT; i++)
@@ -348,7 +348,7 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	return true;
 }
 
-void rt5514_spi_request_switch(int mask, bool is_require)
+void rt5514_spi_request_switch(u32 mask, bool is_require)
 {
 	int timeout = 10; /* 100 ms = 10 x 10ms */
 	u32 previous_mask = spi_switch_mask;
@@ -1258,8 +1258,6 @@ static int rt5514_spi_probe(struct spi_device *spi)
 {
 	int ret;
 	struct device_node *np = spi->dev.of_node;
-	int retry_count;
-	bool skip_handshake = false;
 	u32 SPI_hosts_Ctl_enable = 0;
 
 	rt5514_spi = spi;
@@ -1288,60 +1286,54 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	if (!gpio_is_valid(handshake_gpio)) {
 		dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
 			"handshake-gpio", np->full_name, handshake_gpio);
-		skip_handshake = true;
+		handshake_gpio = 0;
+		handshake_ack_gpio = 0;
+		goto no_handshake;
 	} else {
 		dev_info(&rt5514_spi->dev, "handshake gpio %d property %s\n",
 			handshake_gpio, np->full_name);
 	}
 
-	if (!skip_handshake) {
-		ret = gpio_request(handshake_gpio, "handshake-gpio");
-		retry_count = 10;
-		while (ret && retry_count > 0) {
-			ret = gpio_request(handshake_gpio, "handshake-gpio");
-			if (ret)
-				dev_err(&rt5514_spi->dev,
-					"%s Failed to reguest handshake GPIO: %d\n",
-					__func__, ret);
-			retry_count--;
-		}
-		/* default pull handshake to 1 */
-		if (!ret)
-			gpio_direction_output(handshake_gpio, 1);
+	ret = gpio_request(handshake_gpio, "handshake-gpio");
+
+	if (ret) {
+		dev_err(&rt5514_spi->dev,
+			"%s Failed to reguest handshake GPIO: %d\n", __func__,
+			ret);
+		handshake_gpio = 0;
+		handshake_ack_gpio = 0;
+		goto no_handshake;
+	} else
+		gpio_direction_output(handshake_gpio, 1);
+
+	handshake_ack_gpio = of_get_named_gpio(np, "handshake-ack-gpio", 0);
+
+	if (!gpio_is_valid(handshake_ack_gpio)) {
+		dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
+			"handshake-ack-gpio", np->full_name,
+			handshake_ack_gpio);
+		handshake_gpio = 0;
+		handshake_ack_gpio = 0;
+		goto no_handshake;
+	} else {
+		dev_info(&rt5514_spi->dev,
+			"handshake ack gpio %d property %s\n",
+			handshake_ack_gpio, np->full_name);
 	}
 
-	if (!skip_handshake) {
-		handshake_ack_gpio = of_get_named_gpio(np,
-						"handshake-ack-gpio", 0);
+	ret = gpio_request(handshake_ack_gpio, "handshake-ack-gpio");
 
-		if (!gpio_is_valid(handshake_ack_gpio)) {
-			dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
-				"handshake-ack-gpio", np->full_name,
-				handshake_ack_gpio);
-			skip_handshake = true;
-		} else {
-			dev_info(&rt5514_spi->dev,
-				"handshake ack gpio %d property %s\n",
-				handshake_ack_gpio, np->full_name);
-		}
+	if (ret) {
+		dev_err(&rt5514_spi->dev,
+			"%s Failed to reguest handshake ack GPIO: %d\n",
+			__func__, ret);
+		handshake_gpio = 0;
+		handshake_ack_gpio = 0;
+		goto no_handshake;
+	} else
+		gpio_direction_input(handshake_ack_gpio);
 
-		if (!skip_handshake) {
-			ret = gpio_request(handshake_ack_gpio,
-					"handshake-ack-gpio");
-			retry_count = 10;
-			while (ret && retry_count > 0) {
-				ret = gpio_request(handshake_ack_gpio,
-					"handshake-ack-gpio");
-				if (ret)
-					dev_err(&rt5514_spi->dev,
-						"%s Failed to reguest handshake ack GPIO: %d\n",
-						__func__, ret);
-				retry_count--;
-			}
-			if (!ret)
-				gpio_direction_input(handshake_ack_gpio);
-		}
-	}
+no_handshake:
 
 	device_property_read_u32(&spi->dev, "realtek,en-2hosts",
 				&SPI_hosts_Ctl_enable);
