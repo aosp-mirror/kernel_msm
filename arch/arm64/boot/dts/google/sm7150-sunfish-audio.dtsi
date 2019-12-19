@@ -639,8 +639,10 @@
 		spi-max-frequency = <10000000>;
 		spi-cpol;
 		spi-cpha;
-		realtek,hotword-ignore-ms = <1000>;
-		realtek,musdet-ignore-ms = <2000>;
+		realtek,hotword-ignore-ms = <500>;
+		realtek,hotword-ignore-ms-5514p = <6000>;
+		realtek,musdet-ignore-ms = <0>;
+		realtek,musdet-ignore-ms-5514p = <5000>;
 		realtek,en-2hosts = <1>;
 	};
 };
