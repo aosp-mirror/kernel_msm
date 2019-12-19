@@ -37,6 +37,7 @@ function update_debug_config() {
          -e CONFIG_DEBUG_RT_MUTEXES \
          -e CONFIG_DEBUG_PREEMPT \
          -e CONFIG_LOCKUP_DETECTOR \
+         -e CONFIG_LOCK_STAT \
          -e CONFIG_HARDLOCKUP_DETECTOR \
          -e CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU \
          -e CONFIG_BOOTPARAM_HARDLOCKUP_PANIC \
