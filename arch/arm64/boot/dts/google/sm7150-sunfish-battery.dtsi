@@ -207,6 +207,10 @@
 		google,begin-mitigation-temp = <600>;
 		google,end-mitigation-temp = <500>;
 	};
+
+	google_bms {
+		google,gbms-providers = "batt_eeprom";
+	};
 };
 
 &tlmm {
