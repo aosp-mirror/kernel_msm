@@ -439,6 +439,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 			of_property_read_bool(node, "qcom,usb-pd-disable");
 
 	chg->lpd_disabled = of_property_read_bool(node, "qcom,lpd-disable");
+	chg->moisture_detection_enabled = !chg->lpd_disabled;
 
 	rc = of_property_read_u32(node, "qcom,wd-bark-time-secs",
 					&chip->dt.wd_bark_time);
@@ -1097,17 +1098,24 @@ static int smb5_usb_set_prop(struct power_supply *psy,
 static int smb5_usb_prop_is_writeable(struct power_supply *psy,
 		enum power_supply_property psp)
 {
+	struct smb5 *chip = power_supply_get_drvdata(psy);
+	struct smb_charger *chg = &chip->chg;
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CTM_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_CONNECTOR_HEALTH:
 	case POWER_SUPPLY_PROP_SDP_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
-	case POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE:
 	case POWER_SUPPLY_PROP_THERM_ICL_LIMIT:
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX_LIMIT:
 	case POWER_SUPPLY_PROP_ADAPTER_CC_MODE:
 	case POWER_SUPPLY_PROP_DEAD_BATTERY:
 		return 1;
+	case POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE:
+		if (!chg->lpd_disabled)
+			return 1;
+		else
+			return 0;
 	default:
 		break;
 	}
@@ -3110,7 +3118,8 @@ static int smb5_determine_initial_status(struct smb5 *chip)
 	icl_change_irq_handler(0, &irq_data);
 	batt_temp_changed_irq_handler(0, &irq_data);
 	wdog_bark_irq_handler(0, &irq_data);
-	typec_or_rid_detection_change_irq_handler(0, &irq_data);
+	if (!chg->lpd_disabled)
+		typec_or_rid_detection_change_irq_handler(0, &irq_data);
 	wdog_snarl_irq_handler(0, &irq_data);
 
 	return 0;
@@ -3625,7 +3634,7 @@ static int smb5_probe(struct platform_device *pdev)
 	chg->connector_health = -EINVAL;
 	chg->otg_present = false;
 	chg->main_fcc_max = -EINVAL;
-	chg->moisture_detection_enabled = true;
+	chg->moisture_detection_enabled = false;
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {
