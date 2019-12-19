@@ -951,6 +951,9 @@ static int rt5514_spi_hw_params(struct snd_pcm_substream *substream,
 			snd_soc_platform_get_drvdata(rtd->platform);
 	int ret;
 
+	if (cpu_dai->id > 2)
+		return 0;
+
 	mutex_lock(&rt5514_dsp->dma_lock);
 	ret = snd_pcm_lib_alloc_vmalloc_buffer(substream,
 			params_buffer_bytes(hw_params));
@@ -972,6 +975,9 @@ static int rt5514_spi_hw_free(struct snd_pcm_substream *substream)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct rt5514_dsp *rt5514_dsp =
 			snd_soc_platform_get_drvdata(rtd->platform);
+
+	if (cpu_dai->id > 2)
+		return 0;
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 	rt5514_dsp->substream[cpu_dai->id] = NULL;
@@ -1020,10 +1026,21 @@ static const struct snd_pcm_ops rt5514_spi_pcm_ops = {
 static int rt5514_pcm_parse_dp(struct rt5514_dsp *rt5514_dsp,
 	struct device *dev)
 {
-	device_property_read_u32(dev, "realtek,musdet-ignore-ms",
-		&rt5514_dsp->musdet_ignore_ms);
-	device_property_read_u32(dev, "realtek,hotword-ignore-ms",
-		&rt5514_dsp->hotword_ignore_ms);
+	unsigned int val = ~0;
+
+	regmap_read(rt5514_g_i2c_regmap, 0x18002ff0, &val);
+
+	if (val == 0x80) {
+		device_property_read_u32(dev, "realtek,musdet-ignore-ms-5514p",
+			&rt5514_dsp->musdet_ignore_ms);
+		device_property_read_u32(dev, "realtek,hotword-ignore-ms-5514p",
+			&rt5514_dsp->hotword_ignore_ms);
+	} else {
+		device_property_read_u32(dev, "realtek,musdet-ignore-ms",
+			&rt5514_dsp->musdet_ignore_ms);
+		device_property_read_u32(dev, "realtek,hotword-ignore-ms",
+			&rt5514_dsp->hotword_ignore_ms);
+	}
 
 	return 0;
 }
@@ -1032,6 +1049,9 @@ static int rt5514_spi_pcm_probe(struct snd_soc_platform *platform)
 {
 	struct rt5514_dsp *rt5514_dsp;
 	int ret;
+
+	if (!rt5514_g_i2c_regmap)
+		return -EPROBE_DEFER;
 
 	rt5514_dsp = devm_kzalloc(platform->dev, sizeof(*rt5514_dsp),
 			GFP_KERNEL);
