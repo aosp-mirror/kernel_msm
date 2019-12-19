@@ -1130,6 +1130,12 @@ static int p9221_get_property(struct power_supply *psy,
 		/* success */
 		ret = 0;
 		break;
+	case POWER_SUPPLY_PROP_AICL_DELAY:
+		val->intval = charger->aicl_delay_ms;
+		break;
+	case POWER_SUPPLY_PROP_AICL_ICL:
+		val->intval = charger->aicl_icl_ua;
+		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
 		break;
@@ -2447,6 +2453,66 @@ static ssize_t p9221_show_alignment(struct device *dev,
 
 static DEVICE_ATTR(alignment, 0444, p9221_show_alignment, NULL);
 
+static ssize_t aicl_delay_ms_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->aicl_delay_ms);
+}
+
+static ssize_t aicl_delay_ms_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret = 0;
+	u32 t;
+
+	ret = kstrtou32(buf, 10, &t);
+	if (ret < 0)
+		return ret;
+
+	charger->aicl_delay_ms = t;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(aicl_delay_ms);
+
+static ssize_t aicl_icl_ua_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->aicl_icl_ua);
+}
+
+static ssize_t aicl_icl_ua_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret = 0;
+	u32 ua;
+
+	ret = kstrtou32(buf, 10, &ua);
+	if (ret < 0)
+		return ret;
+
+	charger->aicl_icl_ua = ua;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(aicl_icl_ua);
+
 /* ------------------------------------------------------------------------ */
 
 static ssize_t p9382_show_rtx_sw(struct device *dev,
@@ -2696,6 +2762,8 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_rtx_boost.attr,
 	&dev_attr_rtx.attr,
 	&dev_attr_alignment.attr,
+	&dev_attr_aicl_delay_ms.attr,
+	&dev_attr_aicl_icl_ua.attr,
 	NULL
 };
 
@@ -3335,6 +3403,8 @@ static enum power_supply_property p9221_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_AICL_DELAY,
+	POWER_SUPPLY_PROP_AICL_ICL,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_PTMC_ID,
 	POWER_SUPPLY_PROP_CAPACITY,
@@ -3504,6 +3574,8 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dc_icl_bpp = 0;
 	charger->dc_icl_epp = 0;
 	charger->dc_icl_epp_neg = P9221_DC_ICL_EPP_UA;
+	charger->aicl_icl_ua = 0;
+	charger->aicl_delay_ms = 0;
 
 	/* valid chip_id [P9382A_CHIP_ID, P9221_CHIP_ID] or 0 */
 	online = p9221_get_chip_id(charger, &chip_id);

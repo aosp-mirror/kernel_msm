@@ -326,6 +326,8 @@ struct p9221_charger_data {
 	struct delayed_work		dcin_pon_work;
 	bool				is_mfg_google;
 	u8				ptmc_id_str[(sizeof(u16) * 2) + 1];
+	u32				aicl_delay_ms;
+	u32				aicl_icl_ua;
 };
 
 struct p9221_prop_reg_map_entry {
