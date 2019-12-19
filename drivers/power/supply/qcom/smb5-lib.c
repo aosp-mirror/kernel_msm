@@ -3089,6 +3089,53 @@ int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
 	return rc;
 }
 
+int smblib_get_prop_dc_aicl_delay(struct smb_charger *chg,
+				  union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->wls_psy) {
+		chg->wls_psy = power_supply_get_by_name("wireless");
+		if (!chg->wls_psy)
+			return -ENODEV;
+	}
+
+	rc = power_supply_get_property(chg->wls_psy,
+				       POWER_SUPPLY_PROP_AICL_DELAY,
+				       val);
+	if (rc < 0) {
+		dev_err(chg->dev,
+			"Couldn't get POWER_SUPPLY_PROP_AICL_DELAY, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+int smblib_get_prop_dc_aicl_icl(struct smb_charger *chg,
+				union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->wls_psy) {
+		chg->wls_psy = power_supply_get_by_name("wireless");
+		if (!chg->wls_psy)
+			return -ENODEV;
+	}
+
+	rc = power_supply_get_property(chg->wls_psy,
+				       POWER_SUPPLY_PROP_AICL_ICL,
+				       val);
+	if (rc < 0) {
+		dev_err(chg->dev,
+			"Couldn't get POWER_SUPPLY_PROP_AICL_ICL, rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	return rc;
+}
 /*******************
  * DC PSY SETTERS *
  *******************/
@@ -6154,6 +6201,7 @@ static void dcin_aicl(struct smb_charger *chg)
 	int rc, icl, icl_save;
 	int input_present;
 	bool aicl_done = true;
+	union power_supply_propval val;
 
 	/*
 	 * Hold awake votable to prevent pm_relax being called prior to
@@ -6180,6 +6228,13 @@ increment:
 	}
 
 	icl = min(chg->wls_icl_ua, icl + DCIN_ICL_STEP_UA);
+
+	rc = smblib_get_prop_dc_aicl_icl(chg, &val);
+	if (rc == 0)
+		if ((val.intval > DCIN_ICL_MIN_UA) &&
+		    (val.intval < chg->wls_icl_ua))
+			icl = (icl < val.intval) ? val.intval : icl;
+
 	icl_save = icl;
 
 	rc = vote(chg->dc_icl_votable, DCIN_AICL_VOTER, true, icl);
@@ -6232,6 +6287,14 @@ unlock:
 unvote:
 	vote(chg->awake_votable, DCIN_AICL_VOTER, false, 0);
 	chg->dcin_aicl_done = aicl_done;
+}
+
+static void dcin_aicl_delay_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+					       dcin_aicl_delay_work.work);
+
+	dcin_aicl(chg);
 }
 
 static void dcin_aicl_work(struct work_struct *work)
@@ -6329,15 +6392,17 @@ static bool is_cp_topo_vbatt(struct smb_charger *chg)
 	return is_vbatt;
 }
 
+#define DCIN_AICL_DELAY_DEFAULT	      1000
 irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
-	union power_supply_propval pval;
+	union power_supply_propval pval, val;
 	int input_present;
 	bool dcin_present, vbus_present;
 	int rc, wireless_vout = 0;
 	int sec_charger;
+	int delay_ms = DCIN_AICL_DELAY_DEFAULT;
 
 	rc = smblib_get_prop_vph_voltage_now(chg, &pval);
 	if (rc < 0)
@@ -6357,7 +6422,7 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 		chg->cp_ilim_votable = find_votable("CP_ILIM");
 
 	if (dcin_present && !vbus_present) {
-		cancel_work_sync(&chg->dcin_aicl_work);
+		cancel_delayed_work_sync(&chg->dcin_aicl_delay_work);
 
 		/* Reset DCIN ICL to 100 mA */
 		mutex_lock(&chg->dcin_aicl_lock);
@@ -6410,7 +6475,13 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 					rc);
 		}
 
-		schedule_work(&chg->dcin_aicl_work);
+		/* add delay for SW DCIN AICL to wait Vout stable */
+		rc = smblib_get_prop_dc_aicl_delay(chg, &val);
+		if (rc == 0)
+			delay_ms = (val.intval > 0) ?
+				    val.intval : DCIN_AICL_DELAY_DEFAULT;
+		schedule_delayed_work(&chg->dcin_aicl_delay_work,
+				      msecs_to_jiffies(delay_ms));
 	} else {
 		if (chg->cp_reason == POWER_SUPPLY_CP_WIRELESS) {
 			sec_charger = chg->sec_pl_present ?
@@ -7555,6 +7626,7 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
 	INIT_WORK(&chg->dcin_aicl_work, dcin_aicl_work);
 	INIT_WORK(&chg->cp_status_change_work, smblib_cp_status_change_work);
+	INIT_DELAYED_WORK(&chg->dcin_aicl_delay_work, dcin_aicl_delay_work);
 	INIT_DELAYED_WORK(&chg->clear_hdc_work, clear_hdc_work);
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblib_icl_change_work);
 	INIT_DELAYED_WORK(&chg->pl_enable_work, smblib_pl_enable_work);
@@ -7715,6 +7787,7 @@ int smblib_deinit(struct smb_charger *chg)
 		cancel_work_sync(&chg->pl_update_work);
 		cancel_work_sync(&chg->dcin_aicl_work);
 		cancel_work_sync(&chg->cp_status_change_work);
+		cancel_delayed_work_sync(&chg->dcin_aicl_delay_work);
 		cancel_delayed_work_sync(&chg->clear_hdc_work);
 		cancel_delayed_work_sync(&chg->icl_change_work);
 		cancel_delayed_work_sync(&chg->pl_enable_work);

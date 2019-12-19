@@ -448,6 +448,7 @@ struct smb_charger {
 	struct work_struct	chg_termination_work;
 	struct work_struct	dcin_aicl_work;
 	struct work_struct	cp_status_change_work;
+	struct delayed_work	dcin_aicl_delay_work;
 	struct delayed_work	ps_change_timeout_work;
 	struct delayed_work	clear_hdc_work;
 	struct delayed_work	icl_change_work;
