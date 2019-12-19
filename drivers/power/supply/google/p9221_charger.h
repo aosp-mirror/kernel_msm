@@ -231,8 +231,8 @@
 
 
 
-#define P9382_PROP_PRMC_ID_REG			0xBA
-#define P9382_PROP_PRMC_ID_SIZE			2
+#define P9382_PROP_TX_ID_REG			0xC4
+#define P9382_EPP_TX_MFG_CODE_REG		0xBA
 
 struct p9221_charger_platform_data {
 	int				irq_gpio;
