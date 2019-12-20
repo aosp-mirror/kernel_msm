@@ -11,3 +11,18 @@
  * GNU General Public License for more details.
  */
 
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+&L1C {
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+	qcom,init-voltage = <1800000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+};
+
+&L16A {
+	regulator-min-microvolt = <3000000>;
+	regulator-max-microvolt = <3000000>;
+	qcom,init-voltage = <3000000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+};
