@@ -77,7 +77,7 @@
 		};
 	};
 
-	bcl-virt-extreme {
+	bcl-virt2 {
 		cooling-maps {
 			led_flash0 {
 				trip = <&active_config0>;

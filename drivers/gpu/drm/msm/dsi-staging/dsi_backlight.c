@@ -622,10 +622,62 @@ static ssize_t hbm_mode_show(struct device *dev,
 
 static DEVICE_ATTR_RW(hbm_mode);
 
+static ssize_t hbm_sv_enabled_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct backlight_device *bd;
+	struct dsi_backlight_config *bl;
+	struct dsi_panel *panel;
+	int rc = 0;
+	bool hbm_sv_enabled = false;
+
+	/* dev is non-NULL, enforced by sysfs_create_file_ns */
+	bd = to_backlight_device(dev);
+	bl = bl_get_data(bd);
+
+	if (!bl->hbm)
+		return -ENOTSUPP;
+
+	rc = kstrtobool(buf, &hbm_sv_enabled);
+	if (rc)
+		return rc;
+
+	panel = container_of(bl, struct dsi_panel, bl_config);
+	if (!hbm_sv_enabled && panel->hbm_mode == HBM_MODE_SV)
+		return -EBUSY;
+
+	panel->hbm_sv_enabled = hbm_sv_enabled;
+
+	return count;
+}
+
+static ssize_t hbm_sv_enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct backlight_device *bd;
+	struct dsi_backlight_config *bl;
+	struct dsi_panel *panel;
+
+	/* dev is non-NULL, enforced by sysfs_create_file_ns */
+	bd = to_backlight_device(dev);
+	bl = bl_get_data(bd);
+
+	if (!bl->hbm)
+		return snprintf(buf, PAGE_SIZE, "unsupported\n");
+
+	panel = container_of(bl, struct dsi_panel, bl_config);
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+			panel->hbm_sv_enabled ? "true" : "false");
+}
+
+static DEVICE_ATTR_RW(hbm_sv_enabled);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_alpm_mode.attr,
 	&dev_attr_vr_mode.attr,
 	&dev_attr_hbm_mode.attr,
+	&dev_attr_hbm_sv_enabled.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bl_device);
