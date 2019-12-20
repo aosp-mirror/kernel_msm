@@ -933,6 +933,8 @@ config BIG_CLUSTER_MIN_FREQ_ADJUST
 	  to the user specified value when the cluster is not power collapsed. When
 	  the cluster is power collpsed it resets the value to physical limits.
 
-config RSB_PARAMETER_ONE
-	default n
-	bool "Custom for hardware RSB"
+config RSB_FREQUENCY_VALUE
+	int "RSB FREQUENCY VALUE"
+	default 80
+        help
+		Custom for hardware RSB frequency
