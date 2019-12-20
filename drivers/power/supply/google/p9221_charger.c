@@ -765,7 +765,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->align = POWER_SUPPLY_ALIGN_ERROR;
 	charger->align_count = 0;
 	charger->alignment = -1;
-	charger->alignment_capable = false;
+	charger->alignment_capable = ALIGN_MFG_FAILED;
 	charger->mfg = 0;
 	schedule_work(&charger->uevent_work);
 
@@ -920,16 +920,18 @@ static void p9221_align_work(struct work_struct *work)
 	/*
 	 *  NOTE: mfg may be zero due to race condition during bringup. If the
 	 *  mfg check continues to fail then mfg is not correct and we do not
-	 *  reschedule align_work. Always reschedule if alignment_capable.
+	 *  reschedule align_work. Always reschedule if alignment_capable is 1.
+	 *  Check 10 times if alignment_capble is still 0.
 	 */
-	if ((charger->mfg_check_count < 10) || charger->alignment_capable)
+	if ((charger->mfg_check_count < 10) ||
+	    (charger->alignment_capable == ALIGN_MFG_PASSED))
 		schedule_delayed_work(&charger->align_work,
 				      msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 
 	tx_mfg_code_reg = (charger->chip_id == P9382A_CHIP_ID) ?
 		P9382_EPP_TX_MFG_CODE_REG : P9221R5_EPP_TX_MFG_CODE_REG;
 
-	if (charger->mfg == 0) {
+	if (charger->alignment_capable == ALIGN_MFG_CHECKING) {
 		charger->mfg_check_count += 1;
 
 		res = p9221_reg_read_16(charger,
@@ -951,9 +953,10 @@ static void p9221_align_work(struct work_struct *work)
 				      "align: not align capable mfg: 0x%x",
 				      charger->mfg);
 			cancel_delayed_work(&charger->align_work);
+			charger->alignment_capable = ALIGN_MFG_FAILED;
 			return;
 		}
-		charger->alignment_capable = true;
+		charger->alignment_capable = ALIGN_MFG_PASSED;
 	}
 
 	if (charger->pdata->alignment_scalar == 0)
@@ -1526,7 +1529,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 
 	cancel_delayed_work(&charger->dcin_pon_work);
 
-	charger->alignment_capable = false;
+	charger->alignment_capable = ALIGN_MFG_CHECKING;
 	charger->align = POWER_SUPPLY_ALIGN_CENTERED;
 	charger->alignment = -1;
 	logbuffer_log(charger->log, "align: state: %s",
