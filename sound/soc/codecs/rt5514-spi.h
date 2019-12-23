@@ -42,6 +42,8 @@
 #define SPI_SWITCH_MASK_LOAD     (1 << 4)
 #define SPI_SWITCH_MASK_CMD      (1 << 5)
 #define SPI_SWITCH_MASK_WATCHDOG (1 << 6)
+#define SPI_SWITCH_MASK_NO_IRQ   (1 << 7)
+#define SPI_SWITCH_MASK_NO_CHRE  (1 << 8)
 
 /* SPI Command */
 enum {
@@ -58,6 +60,12 @@ enum {
 	RT5514_DSP_STREAM_HOTWORD,
 	RT5514_DSP_STREAM_MUSDET,
 	RT5514_DSP_STREAM_ADC,
+};
+
+enum {
+	RT5514_DSP_HOTWORD = 0,
+	RT5514_DSP_MUSDET,
+	RT5514_DSP_CHRE,
 };
 
 #define RT5514_DBG_BUF_ADDR 0x4ff60000

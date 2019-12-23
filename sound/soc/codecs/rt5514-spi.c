@@ -33,6 +33,7 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <linux/of_gpio.h>
+#include <linux/of_irq.h>
 
 #include "rt5514-spi.h"
 #include "rt5514.h"
@@ -42,8 +43,8 @@ static struct mutex spi_lock;
 static struct mutex switch_lock;
 static struct wakeup_source rt5514_spi_ws;
 static u32 spi_switch_mask;
-static int handshake_gpio, handshake_ack_gpio;
-static bool handshake_enable;
+static int handshake_gpio, handshake_ack_irq;
+struct completion switch_ack;
 
 struct rt5514_dsp {
 	struct device *dev;
@@ -350,22 +351,11 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 
 void rt5514_spi_request_switch(u32 mask, bool is_require)
 {
-	int timeout = 10; /* 100 ms = 10 x 10ms */
 	u32 previous_mask = spi_switch_mask;
-	bool skip_handshake = false;
-
-	if (handshake_gpio <= 0 || handshake_ack_gpio <= 0) {
-		pr_warn("%s: failed to get handshake gpio, \
-			skip handshaking before switch", __func__);
-		skip_handshake = true;
-	}
-
-	if (!handshake_enable) {
-		pr_info("%s: switch disabled", __func__);
-		return;
-	}
+	int ret;
 
 	mutex_lock(&switch_lock);
+
 	if (is_require) {
 		spi_switch_mask |= mask;
 	} else {
@@ -379,19 +369,20 @@ void rt5514_spi_request_switch(u32 mask, bool is_require)
 
 	if (spi_switch_mask > 0) {
 		pr_info("%s: on (mask=%2x)", __func__, spi_switch_mask);
-		if (!skip_handshake) {
-			/* Set handshake GPIO */
-			gpio_set_value(handshake_gpio, 1);
-			/* Wait for handshake ack */
-			while (gpio_get_value(handshake_ack_gpio) == 1 &&
-				timeout > 0) {
-				usleep_range(10000, 10010); /* 10ms */
-				timeout--;
-			}
-			if (timeout == 0) {
-				pr_warn("%s: Timeout! Force switch", __func__);
-			}
+		/* Set handshake GPIO */
+		gpio_set_value(handshake_gpio, 1);
+
+		/* Enable ack IRQ and wait for completion */
+		reinit_completion(&switch_ack);
+		enable_irq(handshake_ack_irq);
+		ret = wait_for_completion_timeout(&switch_ack,
+						  msecs_to_jiffies(100));
+
+		if (ret == 0) {
+			disable_irq(handshake_ack_irq);
+			pr_warn("%s: Timeout! Force switch", __func__);
 		}
+
 		/* Set switch pin back */
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 0);
 	} else {
@@ -399,8 +390,7 @@ void rt5514_spi_request_switch(u32 mask, bool is_require)
 		/* Set switch pin to CHRE */
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 1);
 		/* Set handshake GPIO */
-		if (!skip_handshake)
-			gpio_set_value(handshake_gpio, 0);
+		gpio_set_value(handshake_gpio, 0);
 	}
 	mutex_unlock(&switch_lock);
 }
@@ -934,6 +924,14 @@ static irqreturn_t rt5514_spi_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t rt5514_ack_irq(int irq, void *data)
+{
+	complete(&switch_ack);
+	disable_irq_nosync(handshake_ack_irq);
+
+	return IRQ_HANDLED;
+}
+
 /* PCM for streaming audio from the DSP buffer */
 static int rt5514_spi_pcm_open(struct snd_pcm_substream *substream)
 {
@@ -1281,13 +1279,14 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	}
 
 	spi_switch_mask = 0;
+
+	device_init_wakeup(&spi->dev, true);
+
 	handshake_gpio = of_get_named_gpio(np, "handshake-gpio", 0);
 
 	if (!gpio_is_valid(handshake_gpio)) {
 		dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
 			"handshake-gpio", np->full_name, handshake_gpio);
-		handshake_gpio = 0;
-		handshake_ack_gpio = 0;
 		goto no_handshake;
 	} else {
 		dev_info(&rt5514_spi->dev, "handshake gpio %d property %s\n",
@@ -1300,53 +1299,43 @@ static int rt5514_spi_probe(struct spi_device *spi)
 		dev_err(&rt5514_spi->dev,
 			"%s Failed to reguest handshake GPIO: %d\n", __func__,
 			ret);
-		handshake_gpio = 0;
-		handshake_ack_gpio = 0;
 		goto no_handshake;
 	} else
 		gpio_direction_output(handshake_gpio, 1);
 
-	handshake_ack_gpio = of_get_named_gpio(np, "handshake-ack-gpio", 0);
+	handshake_ack_irq =
+		of_irq_get_byname(rt5514_spi->dev.of_node, "handshake-ack");
 
-	if (!gpio_is_valid(handshake_ack_gpio)) {
-		dev_err(&rt5514_spi->dev, "Look %s property %s fail on %d\n",
-			"handshake-ack-gpio", np->full_name,
-			handshake_ack_gpio);
-		handshake_gpio = 0;
-		handshake_ack_gpio = 0;
+	if (handshake_ack_irq < 0) {
+		dev_err(&rt5514_spi->dev, "failed to get spi switch ack irq\n");
 		goto no_handshake;
 	} else {
-		dev_info(&rt5514_spi->dev,
-			"handshake ack gpio %d property %s\n",
-			handshake_ack_gpio, np->full_name);
+		init_completion(&switch_ack);
+		ret = devm_request_threaded_irq(&rt5514_spi->dev,
+						handshake_ack_irq, NULL,
+						rt5514_ack_irq,
+						IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+						"rt5514-switch-ack", NULL);
+		if (ret) {
+			dev_err(&rt5514_spi->dev,
+				"%s Failed to reguest ack IRQ: %d\n", __func__,
+				ret);
+			goto no_handshake;
+		}
 	}
-
-	ret = gpio_request(handshake_ack_gpio, "handshake-ack-gpio");
-
-	if (ret) {
-		dev_err(&rt5514_spi->dev,
-			"%s Failed to reguest handshake ack GPIO: %d\n",
-			__func__, ret);
-		handshake_gpio = 0;
-		handshake_ack_gpio = 0;
-		goto no_handshake;
-	} else
-		gpio_direction_input(handshake_ack_gpio);
-
-no_handshake:
 
 	device_property_read_u32(&spi->dev, "realtek,en-2hosts",
 				&SPI_hosts_Ctl_enable);
 
-	if (SPI_hosts_Ctl_enable)
-		handshake_enable = true;
-	else
-		handshake_enable = false;
-
-	device_init_wakeup(&spi->dev, true);
+	if (!SPI_hosts_Ctl_enable)
+		goto no_handshake;
 
 	dev_info(&spi->dev, " rt5514-spi register component success.\n");
+	return 0;
 
+no_handshake:
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_IRQ, 1);
+	dev_info(&spi->dev, " rt5514-spi init success without handshake\n");
 	return 0;
 }
 

@@ -918,6 +918,34 @@ static int rt5514_dsp_func_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rt5514_dsp_mod_enable_put(struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case RT5514_DSP_CHRE:
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_CHRE, 0);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int rt5514_dsp_mod_disable_put(struct snd_kcontrol *kcontrol,
+					  struct snd_ctl_elem_value *ucontrol)
+{
+	switch (ucontrol->value.integer.value[0]) {
+	case RT5514_DSP_CHRE:
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_CHRE, 1);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 static int rt5514_dsp_func_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
@@ -1196,6 +1224,10 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 	SOC_SINGLE_EXT("DSP Voice Wake Up", SND_SOC_NOPM, 0, 5, 0,
 		rt5514_dsp_voice_wake_up_get, rt5514_dsp_voice_wake_up_put),
 
+	SOC_SINGLE_EXT("DSP Model Enable", SND_SOC_NOPM, 0, 5, 0,
+		rt5514_dsp_func_get, rt5514_dsp_mod_enable_put),
+	SOC_SINGLE_EXT("DSP Model Disable", SND_SOC_NOPM, 0, 5, 0,
+		rt5514_dsp_func_get, rt5514_dsp_mod_disable_put),
 	SOC_SINGLE_EXT("DSP ADC", SND_SOC_NOPM, 0, 1, 0,
 		rt5514_dsp_adc_get, rt5514_dsp_adc_put),
 	SOC_SINGLE_EXT("DSP FUNC", SND_SOC_NOPM, 0, 5, 0,
