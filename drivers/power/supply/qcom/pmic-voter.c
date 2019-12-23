@@ -4,6 +4,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/errno.h>
 #include <linux/bitops.h>
@@ -199,6 +200,7 @@ bool is_override_vote_enabled_locked(struct votable *votable)
 
 	return votable->override_result != -EINVAL;
 }
+EXPORT_SYMBOL_GPL(is_override_vote_enabled_locked);
 
 bool is_override_vote_enabled(struct votable *votable)
 {
@@ -213,6 +215,7 @@ bool is_override_vote_enabled(struct votable *votable)
 
 	return enable;
 }
+EXPORT_SYMBOL_GPL(is_override_vote_enabled);
 
 /**
  * is_client_vote_enabled() -
@@ -240,6 +243,7 @@ bool is_client_vote_enabled_locked(struct votable *votable,
 
 	return votable->votes[client_id].enabled;
 }
+EXPORT_SYMBOL_GPL(is_client_vote_enabled_locked);
 
 bool is_client_vote_enabled(struct votable *votable, const char *client_str)
 {
@@ -253,6 +257,7 @@ bool is_client_vote_enabled(struct votable *votable, const char *client_str)
 	unlock_votable(votable);
 	return enabled;
 }
+EXPORT_SYMBOL_GPL(is_client_vote_enabled);
 
 /**
  * get_client_vote() -
@@ -283,6 +288,7 @@ int get_client_vote_locked(struct votable *votable, const char *client_str)
 
 	return votable->votes[client_id].value;
 }
+EXPORT_SYMBOL_GPL(get_client_vote_locked);
 
 int get_client_vote(struct votable *votable, const char *client_str)
 {
@@ -556,6 +562,7 @@ out:
 	unlock_votable(votable);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(vote_override);
 
 int rerun_election(struct votable *votable)
 {
@@ -575,6 +582,7 @@ int rerun_election(struct votable *votable)
 	unlock_votable(votable);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(rerun_election);
 
 struct votable *find_votable(const char *name)
 {
@@ -837,3 +845,6 @@ void destroy_votable(struct votable *votable)
 	kfree(votable);
 }
 EXPORT_SYMBOL_GPL(destroy_votable);
+
+MODULE_DESCRIPTION("QPNP PMIC Voter driver");
+MODULE_LICENSE("GPL v2");
