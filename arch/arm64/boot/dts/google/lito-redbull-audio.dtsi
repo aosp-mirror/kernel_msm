@@ -472,7 +472,12 @@
 		compatible = "realtek,rt5514";
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <65 0>;
+		interrupts =
+			<65 0>,
+			<11 0>;
+		interrupt-names =
+			"irq",
+			"handshake-ack";
 		irq-gpio = <&tlmm 65 0>;
 		handshake-gpio = <&tlmm 66 0>;
 		handshake-ack-gpio = <&tlmm 11 0>;
