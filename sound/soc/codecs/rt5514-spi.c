@@ -38,6 +38,7 @@
 #include "rt5514-spi.h"
 
 #define DRV_NAME "rt5514-spi"
+#define COPY_WORK_DELAY_TIME_MS 100
 
 void (*rt5514_watchdog_handler_cb)(void) = NULL;
 EXPORT_SYMBOL_GPL(rt5514_watchdog_handler_cb);
@@ -425,7 +426,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	if (!period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_0,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -433,7 +434,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_0,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -450,7 +451,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 
@@ -465,7 +466,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 		if (remain_data < period_bytes) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 	}
@@ -532,7 +533,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	if (!period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_1,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -540,7 +541,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_1,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -557,7 +558,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 
@@ -572,7 +573,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 		if (remain_data < period_bytes) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 	}
@@ -639,7 +640,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if (!period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -647,7 +648,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -662,7 +663,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -676,7 +677,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if (remain_data < period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
