@@ -4376,6 +4376,18 @@ void msm_vidc_batch_handler(struct work_struct *work)
 	struct msm_vidc_inst *inst;
 
 	inst = container_of(work, struct msm_vidc_inst, batch_work);
+
+	inst = get_inst(get_vidc_core(MSM_VIDC_CORE_VENUS), inst);
+	if (!inst) {
+		dprintk(VIDC_ERR, "%s: invalid params\n", __func__);
+		return;
+	}
+
+	if (inst->state == MSM_VIDC_CORE_INVALID) {
+		dprintk(VIDC_ERR, "%s: invalid state\n", __func__);
+		goto exit;
+	}
+
 	rc = msm_comm_scale_clocks_and_bus(inst);
 	if (rc)
 		dprintk(VIDC_ERR, "%s: scale clocks failed\n", __func__);
@@ -4388,6 +4400,9 @@ void msm_vidc_batch_handler(struct work_struct *work)
 		dprintk(VIDC_ERR, "%s: Failed batch-qbuf to hfi: %d\n",
 			__func__, rc);
 	}
+
+exit:
+	put_inst(inst);
 }
 
 static int msm_comm_qbuf_in_rbr(struct msm_vidc_inst *inst,
@@ -5445,6 +5460,9 @@ enum hal_extradata_id msm_comm_get_hal_extradata_index(
 	case V4L2_MPEG_VIDC_EXTRADATA_ENC_DTS:
 		ret = HAL_EXTRADATA_ENC_DTS_METADATA;
 		break;
+	case V4L2_MPEG_VIDC_EXTRADATA_INPUT_CROP:
+		ret = HAL_EXTRADATA_INPUT_CROP;
+		break;
 	default:
 		dprintk(VIDC_WARN, "Extradata not found: %d\n", index);
 		break;
@@ -5631,6 +5649,65 @@ int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst)
 	return 0;
 }
 
+static bool is_image_session(struct msm_vidc_inst *inst)
+{
+	if (inst->session_type == MSM_VIDC_ENCODER &&
+		get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
+			HAL_VIDEO_CODEC_HEVC)
+		return (inst->profile == HAL_HEVC_PROFILE_MAIN_STILL_PIC ||
+				inst->grid_enable);
+	else
+		return false;
+}
+
+static int msm_vidc_check_image_session_capabilities(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+	struct msm_vidc_image_capability *capability = NULL;
+
+	u32 output_height = ALIGN(inst->prop.height[CAPTURE_PORT], 512);
+	u32 output_width = ALIGN(inst->prop.width[CAPTURE_PORT], 512);
+
+	if (inst->grid_enable)
+		capability = inst->core->platform_data->heic_image_capability;
+	else
+		capability = inst->core->platform_data->hevc_image_capability;
+
+	if (!capability)
+		return -EINVAL;
+
+	if (output_width < capability->width.min ||
+		output_height < capability->height.min) {
+		dprintk(VIDC_ERR,
+			"HEIC Unsupported WxH = (%u)x(%u), min supported is - (%u)x(%u)\n",
+			output_width,
+			output_height,
+			capability->width.min,
+			capability->height.min);
+		rc = -ENOTSUPP;
+	}
+	if (!rc && (output_width > capability->width.max ||
+		output_height > capability->height.max)) {
+		dprintk(VIDC_ERR,
+			"HEIC Unsupported WxH = (%u)x(%u), max supported is - (%u)x(%u)\n",
+			output_width,
+			output_height,
+			capability->width.max,
+			capability->height.max);
+		rc = -ENOTSUPP;
+	}
+	if (!rc && output_height * output_width >
+		capability->width.max * capability->height.max) {
+		dprintk(VIDC_ERR,
+		"HEIC Unsupported WxH = (%u)x(%u), max supported is - (%u)x(%u)\n",
+		output_width, output_height,
+		capability->width.max, capability->height.max);
+		rc = -ENOTSUPP;
+	}
+
+	return rc;
+}
+
 int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_capability *capability;
@@ -5674,6 +5751,11 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 			input_width, input_height,
 			output_width, output_height);
 		rc = -ENOTSUPP;
+	}
+
+	if (is_image_session(inst)) {
+		rc = msm_vidc_check_image_session_capabilities(inst);
+		return rc;
 	}
 
 	output_height = ALIGN(inst->prop.height[CAPTURE_PORT], 16);

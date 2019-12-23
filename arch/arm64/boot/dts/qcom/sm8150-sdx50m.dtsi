@@ -15,6 +15,10 @@
 	qcom,mdm-link-info = "0305_01.01.00";
 };
 
+&pil_modem {
+	qcom,poff-depends-on = "esoc0";
+};
+
 &wil6210 {
 	status = "disabled";
 };
@@ -25,6 +29,7 @@
 	qcom,smmu-cfg = <0>;
 	memory-region = <&mhi_mem>;
 	mhi,use-bb;
+	mhi,allow-m1; /* use legacy mode for suspends */
 	mhi,buffer-len = <0x8000>;
 	qcom,addr-win = <0x0 0xa0000000 0x0 0xa4bfffff>;
 
@@ -68,10 +73,18 @@
 		mhi_chan@108 {
 			status = "disabled";
 		};
+
+		mhi_chan@109 {
+			status = "disabled";
+		};
+
+		mhi_chan@110 {
+			status = "disabled";
+		};
 	};
 
 	mhi_events {
-		mhi_event@4 {
+		mhi_event@5 {
 			mhi,num-elements = <0>;
 			mhi,intmod = <0>;
 			mhi,msi = <5>;
@@ -83,7 +96,7 @@
 			mhi,offload;
 		};
 
-		mhi_event@5 {
+		mhi_event@6 {
 			mhi,num-elements = <0>;
 			mhi,intmod = <0>;
 			mhi,msi = <6>;
@@ -93,10 +106,6 @@
 			mhi,hw-ev;
 			mhi,client-manage;
 			mhi,offload;
-		};
-
-		mhi_events@6 {
-			status = "disabled";
 		};
 
 		mhi_events@7 {
@@ -116,6 +125,18 @@
 		};
 
 		mhi_events@11 {
+			status = "disabled";
+		};
+
+		mhi_events@12 {
+			status = "disabled";
+		};
+
+		mhi_events@13 {
+			status = "disabled";
+		};
+
+		mhi_events@14 {
 			status = "disabled";
 		};
 	};
@@ -158,10 +179,18 @@
 		mhi_chan@108 {
 			status = "disabled";
 		};
+
+		mhi_chan@109 {
+			status = "disabled";
+		};
+
+		mhi_chan@110 {
+			status = "disabled";
+		};
 	};
 
 	mhi_events {
-		mhi_event@4 {
+		mhi_event@5 {
 			mhi,num-elements = <0>;
 			mhi,intmod = <0>;
 			mhi,msi = <5>;
@@ -173,7 +202,7 @@
 			mhi,offload;
 		};
 
-		mhi_event@5 {
+		mhi_event@6 {
 			mhi,num-elements = <0>;
 			mhi,intmod = <0>;
 			mhi,msi = <6>;
@@ -183,10 +212,6 @@
 			mhi,hw-ev;
 			mhi,client-manage;
 			mhi,offload;
-		};
-
-		mhi_events@6 {
-			status = "disabled";
 		};
 
 		mhi_events@7 {
@@ -206,6 +231,18 @@
 		};
 
 		mhi_events@11 {
+			status = "disabled";
+		};
+
+		mhi_events@12 {
+			status = "disabled";
+		};
+
+		mhi_events@13 {
+			status = "disabled";
+		};
+
+		mhi_events@14 {
 			status = "disabled";
 		};
 	};
@@ -245,6 +282,10 @@
 };
 
 &soc {
+	ipa_hw: qcom,ipa@1e00000 {
+		qcom,ipa-mhi-proxy;
+	};
+
 	imp: qcom,ipa-mhi-proxy {
 		compatible = "qcom,ipa-mhi-proxy";
 		qcom,mhi-chdb-base = <0x40300300>;

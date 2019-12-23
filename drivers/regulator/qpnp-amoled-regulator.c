@@ -15,7 +15,6 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -95,7 +94,6 @@ struct qpnp_amoled {
 	struct oledb_regulator	oledb;
 	struct ab_regulator	ab;
 	struct ibb_regulator	ibb;
-	struct mutex		reg_lock;
 	struct delayed_work	vout_work;
 	struct workqueue_struct *wq;
 
@@ -302,7 +300,6 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 
 	if (mode == chip->ab.vreg.mode || mode == chip->ibb.vreg.mode)
 		return 0;
-
 	pr_debug("mode: %d\n", mode);
 
 	if (mode == REGULATOR_MODE_NORMAL || mode == REGULATOR_MODE_STANDBY) {
@@ -324,7 +321,6 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 			queue_delayed_work(chip->wq, &chip->vout_work, delay);
 		}
 	}
-
 	return 0;
 }
 
@@ -621,7 +617,6 @@ static int qpnp_amoled_regulator_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	mutex_init(&chip->reg_lock);
 	INIT_DELAYED_WORK(&chip->vout_work, qpnp_amoled_vout_override_work);
 	chip->dev = &pdev->dev;
 

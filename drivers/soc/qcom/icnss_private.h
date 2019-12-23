@@ -16,6 +16,7 @@
 #include <linux/adc-tm-clients.h>
 #include <linux/iio/consumer.h>
 #include <linux/kobject.h>
+#include <linux/esoc_client.h>
 
 #define icnss_ipc_log_string(_x...) do {				\
 	if (icnss_ipc_log_context)					\
@@ -119,6 +120,8 @@ enum icnss_driver_event_type {
 	ICNSS_DRIVER_EVENT_UNREGISTER_DRIVER,
 	ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 	ICNSS_DRIVER_EVENT_FW_EARLY_CRASH_IND,
+	ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+	ICNSS_DRIVER_EVENT_IDLE_RESTART,
 	ICNSS_DRIVER_EVENT_MAX,
 };
 
@@ -163,6 +166,8 @@ enum icnss_driver_state {
 	ICNSS_BLOCK_SHUTDOWN,
 	ICNSS_PDR,
 	ICNSS_CLK_UP,
+	ICNSS_ESOC_OFF,
+	ICNSS_MODEM_CRASHED,
 };
 
 struct ce_irq_list {
@@ -378,6 +383,9 @@ struct icnss_priv {
 	void *ext_modem_notify_handler;
 	struct notifier_block ext_modem_ssr_nb;
 	struct completion clk_complete;
+	struct esoc_desc *esoc_client;
+	struct esoc_client_hook esoc_ops;
+	struct completion notif_complete;
 };
 
 int icnss_call_driver_uevent(struct icnss_priv *priv,

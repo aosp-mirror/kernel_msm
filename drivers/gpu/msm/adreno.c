@@ -835,6 +835,9 @@ adreno_identify_gpu(struct adreno_device *adreno_dev)
 
 	adreno_dev->gmem_size = adreno_dev->gpucore->gmem_size;
 
+	/* UCHE to GMEM base address requires 1MB alignment */
+	adreno_dev->uche_gmem_base = ALIGN(adreno_dev->gmem_size, SZ_1M);
+
 	/*
 	 * Initialize uninitialzed gpu registers, only needs to be done once
 	 * Make all offsets that are not initialized to ADRENO_REG_UNUSED
@@ -1379,6 +1382,13 @@ static int adreno_probe(struct platform_device *pdev)
 	/* Default to 4K alignment (in other words, no additional padding) */
 	device->mmu.va_padding = PAGE_SIZE;
 
+	/*
+	 * SVM start va can be calculated based on UCHE GMEM size.
+	 * UCHE_GMEM_MAX < (SP LOCAL & PRIVATE) < MMU SVA
+	 */
+	device->mmu.svm_base32 = KGSL_IOMMU_SVM_BASE32 +
+		((ALIGN(adreno_dev->gmem_size, SZ_1M) - SZ_1M) << 1);
+
 	if (adreno_dev->gpucore->va_padding) {
 		device->mmu.features |= KGSL_MMU_PAD_VA;
 		device->mmu.va_padding = adreno_dev->gpucore->va_padding;
@@ -1751,19 +1761,6 @@ static int adreno_init(struct kgsl_device *device)
 
 	}
 
-	if (nopreempt == false &&
-		ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION)) {
-		int r = 0;
-
-		if (gpudev->preemption_init)
-			r = gpudev->preemption_init(adreno_dev);
-
-		if (r == 0)
-			set_bit(ADRENO_DEVICE_PREEMPTION, &adreno_dev->priv);
-		else
-			WARN(1, "adreno: GPU preemption is disabled\n");
-	}
-
 	return 0;
 }
 
@@ -1851,7 +1848,7 @@ int adreno_set_unsecured_mode(struct adreno_device *adreno_dev,
 	}
 
 	/* GPU comes up in secured mode, make it unsecured by default */
-	if (adreno_dev->zap_loaded)
+	if (adreno_dev->zap_handle_ptr)
 		ret = adreno_switch_to_unsecure_mode(adreno_dev, rb);
 	else
 		adreno_writereg(adreno_dev,
@@ -1876,6 +1873,26 @@ static void adreno_set_active_ctxs_null(struct adreno_device *adreno_dev)
 	}
 }
 
+static int adreno_program_smmu_aperture(struct kgsl_device *device)
+{
+	unsigned long start = jiffies;
+	int ret;
+
+	if (!scm_is_call_available(SCM_SVC_MP, CP_SMMU_APERTURE_ID))
+		return 0;
+
+	ret = kgsl_program_smmu_aperture();
+	if (ret)
+		dev_err(device->dev,
+		    "SMMU aperture programming call failed error %d\n",
+		    ret);
+	else if (jiffies_to_msecs(jiffies - start) > 2000)
+		dev_err(device->dev,
+		    "scm call took a long time to finish: %u ms\n",
+		    jiffies_to_msecs(jiffies - start));
+
+	return ret;
+}
 /**
  * _adreno_start - Power up the GPU and prepare to accept commands
  * @adreno_dev: Pointer to an adreno_device structure
@@ -1924,22 +1941,22 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	if (regulator_left_on)
 		_soft_reset(adreno_dev);
 
+	/*
+	 * During adreno_stop, GBIF halt is asserted to ensure
+	 * no further transaction can go through GPU before GPU
+	 * headswitch is turned off.
+	 *
+	 * This halt is deasserted once headswitch goes off but
+	 * incase headswitch doesn't goes off clear GBIF halt
+	 * here to ensure GPU wake-up doesn't fail because of
+	 * halted GPU transactions.
+	 */
+	adreno_deassert_gbif_halt(adreno_dev);
 
 	if (adreno_is_a640v1(adreno_dev)) {
-		unsigned long start = jiffies;
-
-		if (scm_is_call_available(SCM_SVC_MP, CP_SMMU_APERTURE_ID)) {
-			ret = kgsl_program_smmu_aperture();
-			/* Log it if it takes more than 2 seconds */
-			if (((jiffies - start) / HZ) > 2)
-				dev_err(device->dev, "scm call took too long to finish on a640v1: %lu seconds\n",
-					((jiffies - start) / HZ));
-			if (ret) {
-				dev_err(device->dev, "SMMU aperture programming call failed with error %d\n",
-					ret);
-				goto error_pwr_off;
-			}
-		}
+		ret = adreno_program_smmu_aperture(device);
+		if (ret)
+			goto error_pwr_off;
 	}
 
 	adreno_ringbuffer_set_global(adreno_dev, 0);
@@ -2142,6 +2159,14 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	if (status)
 		goto error_oob_clear;
 
+	/*
+	 * At this point it is safe to assume that we recovered. Setting
+	 * this field allows us to take a new snapshot for the next failure
+	 * if we are prioritizing the first unrecoverable snapshot.
+	 */
+	if (device->snapshot)
+		device->snapshot->recovered = true;
+
 	/* Start the dispatcher */
 	adreno_dispatcher_start(device);
 
@@ -2285,8 +2310,15 @@ static int adreno_stop(struct kgsl_device *device)
 
 	adreno_clear_pending_transactions(device);
 
-	/* The halt is not cleared in the above function if we have GBIF */
-	adreno_deassert_gbif_halt(adreno_dev);
+	/*
+	 * The halt is not cleared in the above function if we have GBIF.
+	 * Clear it here if GMU is enabled as GMU stop needs access to
+	 * system memory to stop. For non-GMU targets, we don't need to
+	 * clear it as it will get cleared automatically once headswitch
+	 * goes OFF immediately after adreno_stop.
+	 */
+	if (gmu_core_gpmu_isenabled(device))
+		adreno_deassert_gbif_halt(adreno_dev);
 
 	kgsl_mmu_stop(&device->mmu);
 
@@ -2538,7 +2570,7 @@ static int adreno_getproperty(struct kgsl_device *device,
 
 			if (adreno_is_a5xx(adreno_dev) ||
 					adreno_is_a6xx(adreno_dev))
-				gmem_vaddr = ADRENO_UCHE_GMEM_BASE;
+				gmem_vaddr = adreno_dev->uche_gmem_base;
 			if (sizebytes != sizeof(uint64_t)) {
 				status = -EINVAL;
 				break;
@@ -3944,6 +3976,9 @@ static void adreno_iommu_sync(struct kgsl_device *device, bool sync)
 	struct scm_desc desc = {0};
 	int ret;
 
+	if (!ADRENO_QUIRK(ADRENO_DEVICE(device), ADRENO_QUIRK_IOMMU_SYNC))
+		return;
+
 	if (sync == true) {
 		mutex_lock(&kgsl_mmu_sync);
 		desc.args[0] = true;
@@ -3960,25 +3995,29 @@ static void adreno_iommu_sync(struct kgsl_device *device, bool sync)
 	}
 }
 
-static void _regulator_disable(struct kgsl_regulator *regulator, bool poll)
+static void
+_regulator_disable(struct kgsl_regulator *regulator, unsigned int timeout)
 {
-	unsigned long wait_time = jiffies + msecs_to_jiffies(200);
+	unsigned long wait_time;
 
 	if (IS_ERR_OR_NULL(regulator->reg))
 		return;
 
 	regulator_disable(regulator->reg);
 
-	if (poll == false)
-		return;
+	wait_time = jiffies + msecs_to_jiffies(timeout);
 
+	/* Poll for regulator status to ensure it's OFF */
 	while (!time_after(jiffies, wait_time)) {
 		if (!regulator_is_enabled(regulator->reg))
 			return;
-		cpu_relax();
+		usleep_range(10, 100);
 	}
 
-	KGSL_CORE_ERR("regulator '%s' still on after 200ms\n", regulator->name);
+	if (!regulator_is_enabled(regulator->reg))
+		return;
+
+	KGSL_CORE_ERR("regulator '%s' disable timed out\n", regulator->name);
 }
 
 static void adreno_regulator_disable_poll(struct kgsl_device *device)
@@ -3986,18 +4025,13 @@ static void adreno_regulator_disable_poll(struct kgsl_device *device)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int i;
-
-	/* Fast path - hopefully we don't need this quirk */
-	if (!ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_IOMMU_SYNC)) {
-		for (i = KGSL_MAX_REGULATORS - 1; i >= 0; i--)
-			_regulator_disable(&pwr->regulators[i], false);
-		return;
-	}
+	unsigned int timeout =
+		ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_IOMMU_SYNC) ? 200 : 5000;
 
 	adreno_iommu_sync(device, true);
 
-	for (i = 0; i < KGSL_MAX_REGULATORS; i++)
-		_regulator_disable(&pwr->regulators[i], true);
+	for (i = KGSL_MAX_REGULATORS - 1; i >= 0; i--)
+		_regulator_disable(&pwr->regulators[i], timeout);
 
 	adreno_iommu_sync(device, false);
 }
@@ -4012,6 +4046,73 @@ static void adreno_gpu_model(struct kgsl_device *device, char *str,
 			 ADRENO_CHIPID_MAJOR(adreno_dev->chipid),
 			 ADRENO_CHIPID_MINOR(adreno_dev->chipid),
 			 ADRENO_CHIPID_PATCH(adreno_dev->chipid) + 1);
+}
+
+static int adreno_suspend_device(struct kgsl_device *device,
+				pm_message_t pm_state)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	int pm_event = pm_state.event;
+	int ret = 0;
+
+	if (device->state == KGSL_STATE_SUSPEND)
+		adreno_dispatcher_halt(device);
+
+	if (pm_event != PM_EVENT_SUSPEND) {
+		if (gpudev->zap_shader_unload != NULL)
+			gpudev->zap_shader_unload(adreno_dev);
+
+		if (gpudev->secure_pt_hibernate != NULL)
+			ret = gpudev->secure_pt_hibernate(adreno_dev);
+	}
+
+	return ret;
+}
+
+static int adreno_resume_device(struct kgsl_device *device,
+				pm_message_t pm_state)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	int pm_event = pm_state.event;
+	int ret;
+
+	if (pm_event != PM_EVENT_RESUME) {
+		if (gpudev->secure_pt_restore != NULL) {
+			ret = gpudev->secure_pt_restore(adreno_dev);
+			if (ret)
+				return ret;
+		}
+
+		if (!adreno_is_a640v1(adreno_dev) &&
+			kgsl_mmu_is_perprocess(&device->mmu)) {
+			ret = adreno_program_smmu_aperture(device);
+			if (ret)
+				return ret;
+		}
+
+		if (gmu_core_isenabled(device)) {
+			if (!gmu_core_is_initialized(device)) {
+				clear_bit(GMU_BOOT_INIT_DONE,
+						&device->gmu_core.flags);
+				clear_bit(GMU_RSCC_SLEEP_SEQ_DONE,
+						&device->gmu_core.flags);
+			}
+		}
+
+		if (device->pwrscale.devfreqptr) {
+			ret = msm_adreno_devfreq_init_tz(
+					device->pwrscale.devfreqptr);
+			if (ret)
+				return ret;
+		}
+	}
+
+	if (device->state == KGSL_STATE_SUSPEND)
+		adreno_dispatcher_unhalt(device);
+
+	return 0;
 }
 
 static const struct kgsl_functable adreno_functable = {
@@ -4055,8 +4156,8 @@ static const struct kgsl_functable adreno_functable = {
 	.clk_set_options = adreno_clk_set_options,
 	.gpu_model = adreno_gpu_model,
 	.stop_fault_timer = adreno_dispatcher_stop_fault_timer,
-	.dispatcher_halt = adreno_dispatcher_halt,
-	.dispatcher_unhalt = adreno_dispatcher_unhalt,
+	.suspend_device = adreno_suspend_device,
+	.resume_device = adreno_resume_device,
 };
 
 static struct platform_driver adreno_platform_driver = {

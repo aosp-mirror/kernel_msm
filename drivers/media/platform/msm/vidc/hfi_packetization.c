@@ -544,6 +544,7 @@ static int get_hfi_extradata_index(enum hal_extradata_id index)
 		break;
 	case HAL_EXTRADATA_ASPECT_RATIO:
 	case HAL_EXTRADATA_OUTPUT_CROP:
+	case HAL_EXTRADATA_INPUT_CROP:
 		ret = HFI_PROPERTY_PARAM_INDEX_EXTRADATA;
 		break;
 	case HAL_EXTRADATA_MPEG2_SEQDISP:
@@ -603,6 +604,9 @@ static int get_hfi_extradata_id(enum hal_extradata_id index)
 		break;
 	case HAL_EXTRADATA_OUTPUT_CROP:
 		ret = MSM_VIDC_EXTRADATA_OUTPUT_CROP;
+		break;
+	case HAL_EXTRADATA_INPUT_CROP:
+		ret = MSM_VIDC_EXTRADATA_INPUT_CROP;
 		break;
 	default:
 		ret = get_hfi_extradata_index(index);
@@ -1550,6 +1554,35 @@ int create_pkt_cmd_session_set_property(
 			break;
 		}
 		pkt->size += sizeof(struct hfi_vpe_rotation_type);
+		break;
+	}
+	case HAL_CONFIG_VPE_FLIP:
+	{
+		u32 hfi_flip = HFI_FLIP_NONE;
+		enum hal_flip flip = *(enum hal_flip *)pdata;
+
+		pkt->rg_property_data[0] = HFI_PROPERTY_CONFIG_VPE_FLIP;
+
+		switch (flip) {
+		case HAL_FLIP_NONE:
+			hfi_flip = HFI_FLIP_NONE;
+			break;
+		case HAL_FLIP_HORIZONTAL:
+			hfi_flip = HFI_FLIP_HORIZONTAL;
+			break;
+		case HAL_FLIP_VERTICAL:
+			hfi_flip = HFI_FLIP_VERTICAL;
+			break;
+		case HAL_FLIP_BOTH:
+			hfi_flip = HFI_FLIP_HORIZONTAL | HFI_FLIP_VERTICAL;
+			break;
+		default:
+			dprintk(VIDC_ERR, "Invalid flip: %#x\n", flip);
+			rc = -EINVAL;
+			break;
+		}
+		pkt->rg_property_data[1] = hfi_flip;
+		pkt->size += sizeof(u32);
 		break;
 	}
 	case HAL_PARAM_VENC_INTRA_REFRESH:

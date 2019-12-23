@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -115,6 +115,28 @@ int ipa3_teth_bridge_init(struct teth_bridge_init_params *params)
 }
 
 /**
+ * ipa3_teth_bridge_get_pm_hdl() - Get the Tethering bridge Driver pm hdl
+ *
+ *
+ * Return codes: handle
+ *		-EINVAL - Bad parameter
+ */
+int ipa3_teth_bridge_get_pm_hdl(void)
+{
+	TETH_DBG_FUNC_ENTRY();
+
+	if (ipa3_teth_ctx->modem_pm_hdl == ~0) {
+		TETH_ERR("Bad parameter\n");
+		TETH_DBG_FUNC_EXIT();
+		return -EINVAL;
+	}
+
+	TETH_DBG("Return rm-handle %d\n", ipa3_teth_ctx->modem_pm_hdl);
+	TETH_DBG_FUNC_EXIT();
+	return ipa3_teth_ctx->modem_pm_hdl;
+}
+
+/**
  * ipa3_teth_bridge_disconnect() - Disconnect tethering bridge module
  */
 int ipa3_teth_bridge_disconnect(enum ipa_client_type client)
@@ -169,7 +191,6 @@ int ipa3_teth_bridge_connect(struct teth_bridge_connect_params *connect_params)
 			TETH_ERR("fail to register with PM %d\n", res);
 			return res;
 		}
-
 		res = ipa_pm_activate_sync(ipa3_teth_ctx->modem_pm_hdl);
 		goto bail;
 	}

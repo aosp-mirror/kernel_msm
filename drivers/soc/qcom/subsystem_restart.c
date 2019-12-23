@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1044,7 +1044,7 @@ void *__subsystem_get(const char *name, const char *fw_name)
 		goto err_module;
 	}
 
-	subsys_d = subsystem_get(subsys->desc->depends_on);
+	subsys_d = subsystem_get(subsys->desc->pon_depends_on);
 	if (IS_ERR(subsys_d)) {
 		retval = subsys_d;
 		goto err_depends;
@@ -1123,6 +1123,10 @@ void subsystem_put(void *subsystem)
 	if (IS_ERR_OR_NULL(subsys))
 		return;
 
+	subsys_d = find_subsys_device(subsys->desc->poff_depends_on);
+	if (subsys_d)
+		subsystem_put(subsys_d);
+
 	track = subsys_get_track(subsys);
 	mutex_lock(&track->lock);
 	if (WARN(!subsys->count, "%s: %s: Reference count mismatch\n",
@@ -1136,11 +1140,6 @@ void subsystem_put(void *subsystem)
 	}
 	mutex_unlock(&track->lock);
 
-	subsys_d = find_subsys_device(subsys->desc->depends_on);
-	if (subsys_d) {
-		subsystem_put(subsys_d);
-		put_device(&subsys_d->dev);
-	}
 	module_put(subsys->owner);
 	put_device(&subsys->dev);
 	return;
@@ -1672,7 +1671,7 @@ static int __get_smem_state(struct subsys_desc *desc, const char *prop,
 		desc->state = qcom_smem_state_get(desc->dev, prop, smem_bit);
 		if (IS_ERR_OR_NULL(desc->state)) {
 			pr_err("Could not get smem-states %s\n", prop);
-			return -ENXIO;
+			return PTR_ERR(desc->state);
 		}
 		return 0;
 	}
@@ -1731,6 +1730,14 @@ static int subsys_parse_devicetree(struct subsys_desc *desc)
 							PTR_ERR(order));
 		return PTR_ERR(order);
 	}
+
+	if (of_property_read_string(pdev->dev.of_node, "qcom,pon-depends-on",
+				&desc->pon_depends_on))
+		pr_debug("pon-depends-on not set for %s\n", desc->name);
+
+	if (of_property_read_string(pdev->dev.of_node, "qcom,poff-depends-on",
+				&desc->poff_depends_on))
+		pr_debug("poff-depends-on not set for %s\n", desc->name);
 
 	return 0;
 }
@@ -1970,6 +1977,7 @@ err_sysmon_notifier:
 	if (ofnode)
 		subsys_remove_restart_order(ofnode);
 err_register:
+	subsys_char_device_remove(subsys);
 	device_unregister(&subsys->dev);
 	return ERR_PTR(ret);
 }

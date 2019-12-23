@@ -41,6 +41,7 @@
 #include "ipa_defs.h"
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/qmp.h>
+#include <linux/rmnet_ipa_fd_ioctl.h>
 
 #define IPA_DEV_NAME_MAX_LEN 15
 #define DRV_NAME "ipa"
@@ -223,11 +224,6 @@ enum {
 	SMEM_SPSS,
 	SMEM_HYP,
 	NUM_SMEM_SUBSYSTEMS,
-};
-
-enum ipa_mpm_start_stop_type {
-	MPM_MHIP_STOP,
-	MPM_MHIP_START,
 };
 
 #define IPA_WDI_RX_RING_RES			0
@@ -474,6 +470,7 @@ struct ipa_smmu_cb_ctx {
 	u32 va_start;
 	u32 va_size;
 	u32 va_end;
+	bool is_cache_coherent;
 };
 
 /**
@@ -705,6 +702,7 @@ struct ipa3_hdr_proc_ctx_offset_entry {
  * @link: entry's link in global header table entries list
  * @type: header processing context type
  * @l2tp_params: L2TP parameters
+ * @generic_params: generic proc_ctx params
  * @offset_entry: entry's offset
  * @hdr: the header
  * @cookie: cookie used for validity check
@@ -718,6 +716,7 @@ struct ipa3_hdr_proc_ctx_entry {
 	u32 cookie;
 	enum ipa_hdr_proc_type type;
 	struct ipa_l2tp_hdr_proc_ctx_params l2tp_params;
+	struct ipa_eth_II_to_eth_II_ex_procparams generic_params;
 	struct ipa3_hdr_proc_ctx_offset_entry *offset_entry;
 	struct ipa3_hdr_entry *hdr;
 	u32 ref_cnt;
@@ -919,7 +918,7 @@ struct ipa3_ep_context {
 	struct ipa3_wlan_stats wstats;
 	u32 uc_offload_state;
 	u32 gsi_offload_state;
-	bool disconnect_in_progress;
+	atomic_t disconnect_in_progress;
 	u32 qmi_request_sent;
 	u32 eot_in_poll_err;
 	bool ep_delay_set;
@@ -995,6 +994,7 @@ struct ipa3_repl_ctx {
 struct ipa3_sys_context {
 	u32 len;
 	atomic_t curr_polling_state;
+	atomic_t workqueue_flushed;
 	struct delayed_work switch_to_intr_work;
 	enum ipa3_sys_pipe_policy policy;
 	bool use_comm_evt_ring;
@@ -1020,6 +1020,8 @@ struct ipa3_sys_context {
 	struct list_head pending_pkts[GSI_VEID_MAX];
 	atomic_t xmit_eot_cnt;
 	struct tasklet_struct tasklet;
+	bool skip_eot;
+	u32 eob_drop_cnt;
 
 	/* ordering is important - mutable fields go above */
 	struct ipa3_ep_context *ep;
@@ -1142,7 +1144,10 @@ struct ipa3_desc {
  */
 struct ipa3_rx_pkt_wrapper {
 	struct list_head link;
-	struct ipa_rx_data data;
+	union {
+		struct ipa_rx_data data;
+		struct ipa_rx_page_data page_data;
+	};
 	u32 len;
 	struct work_struct work;
 	struct ipa3_sys_context *sys;
@@ -1296,6 +1301,27 @@ struct ipa3_stats {
 	u32 tx_non_linear;
 };
 
+/* offset for each stats */
+#define IPA3_UC_DEBUG_STATS_RINGFULL_OFF (0)
+#define IPA3_UC_DEBUG_STATS_RINGEMPTY_OFF (4)
+#define IPA3_UC_DEBUG_STATS_RINGUSAGEHIGH_OFF (8)
+#define IPA3_UC_DEBUG_STATS_RINGUSAGELOW_OFF (12)
+#define IPA3_UC_DEBUG_STATS_RINGUTILCOUNT_OFF (16)
+#define IPA3_UC_DEBUG_STATS_OFF (20)
+
+/**
+ * struct ipa3_uc_dbg_stats - uC dbg stats for offloading
+ * protocols
+ * @uc_dbg_stats_ofst: offset to SRAM base
+ * @uc_dbg_stats_size: stats size for all channels
+ * @uc_dbg_stats_mmio: mmio offset
+ */
+struct ipa3_uc_dbg_stats {
+	u32 uc_dbg_stats_ofst;
+	u16 uc_dbg_stats_size;
+	void __iomem *uc_dbg_stats_mmio;
+};
+
 struct ipa3_active_clients {
 	struct mutex mutex;
 	atomic_t cnt;
@@ -1443,7 +1469,38 @@ struct ipa3_wdi2_ctx {
 	u32 rdy_comp_ring_size;
 	u32 *rdy_ring_rp_va;
 	u32 *rdy_comp_ring_wp_va;
+	struct ipa3_uc_dbg_stats dbg_stats;
 };
+
+/**
+ * struct ipa3_wdi3_ctx - IPA wdi3 context
+ */
+struct ipa3_wdi3_ctx {
+	struct ipa3_uc_dbg_stats dbg_stats;
+};
+
+/**
+ * struct ipa3_usb_ctx - IPA usb context
+ */
+struct ipa3_usb_ctx {
+	struct ipa3_uc_dbg_stats dbg_stats;
+};
+
+/**
+ * struct ipa3_mhip_ctx - IPA mhip context
+ */
+struct ipa3_mhip_ctx {
+	struct ipa3_uc_dbg_stats dbg_stats;
+};
+
+/**
+ * struct ipa3_aqc_ctx - IPA aqc context
+ */
+struct ipa3_aqc_ctx {
+	struct ipa3_uc_dbg_stats dbg_stats;
+};
+
+
 /**
  * struct ipa3_transport_pm - transport power management related members
  * @transport_pm_mutex: Mutex to protect the transport_pm functionality.
@@ -1684,6 +1741,8 @@ struct ipa3_pc_mbox_data {
  * @mhi_evid_limits: MHI event rings start and end ids
  *  finished initializing. Example of use - IOCTLs to /dev/ipa
  * @flt_rt_counters: the counters usage info for flt rt stats
+ * @wdi3_ctx: IPA wdi3 context
+ * @gsi_info: channel/protocol info for GSI offloading uC stats
  * IPA context - holds all relevant info about IPA driver and its state
  */
 struct ipa3_context {
@@ -1839,6 +1898,10 @@ struct ipa3_context {
 	void __iomem *reg_collection_base;
 	struct ipa3_wdi2_ctx wdi2_ctx;
 	struct ipa3_pc_mbox_data pc_mbox;
+	struct ipa3_wdi3_ctx wdi3_ctx;
+	struct ipa3_usb_ctx usb_ctx;
+	struct ipa3_mhip_ctx mhip_ctx;
+	struct ipa3_aqc_ctx aqc_ctx;
 	atomic_t ipa_clk_vote;
 	int gsi_chk_intset_value;
 	int uc_mailbox17_chk;
@@ -1847,6 +1910,10 @@ struct ipa3_context {
 	atomic_t is_ssr;
 	bool (*get_teth_port_state[IPA_MAX_CLNT])(void);
 	bool fw_loaded;
+	struct IpaHwOffloadStatsAllocCmdData_t
+		gsi_info[IPA_HW_PROTOCOL_MAX];
+	bool ipa_mhi_proxy;
+	bool ipa_wan_skb_page;
 };
 
 struct ipa3_plat_drv_res {
@@ -1892,6 +1959,8 @@ struct ipa3_plat_drv_res {
 	bool do_non_tn_collection_on_crash;
 	bool ipa_endp_delay_wa;
 	u32 secure_debug_check_action;
+	bool ipa_mhi_proxy;
+	bool ipa_wan_skb_page;
 };
 
 /**
@@ -2428,7 +2497,14 @@ int ipa3_disconnect_gsi_wdi_pipe(u32 clnt_hdl);
 int ipa3_resume_wdi_pipe(u32 clnt_hdl);
 int ipa3_resume_gsi_wdi_pipe(u32 clnt_hdl);
 int ipa3_suspend_wdi_pipe(u32 clnt_hdl);
+void ipa3_get_gsi_stats(int prot_id,
+	struct ipa_uc_dbg_ring_stats *stats);
+int ipa3_get_wdi_gsi_stats(struct ipa_uc_dbg_ring_stats *stats);
+int ipa3_get_wdi3_gsi_stats(struct ipa_uc_dbg_ring_stats *stats);
+int ipa3_get_usb_gsi_stats(struct ipa_uc_dbg_ring_stats *stats);
+int ipa3_get_aqc_gsi_stats(struct ipa_uc_dbg_ring_stats *stats);
 int ipa3_get_wdi_stats(struct IpaHwStatsWDIInfoData_t *stats);
+int ipa3_get_prot_id(enum ipa_client_type client);
 u16 ipa3_get_smem_restr_bytes(void);
 int ipa3_broadcast_wdi_quota_reach_ind(uint32_t fid, uint64_t num_bytes);
 int ipa3_setup_uc_ntn_pipes(struct ipa_ntn_conn_in_params *in,
@@ -2500,6 +2576,8 @@ int ipa3_teth_bridge_init(struct teth_bridge_init_params *params);
 int ipa3_teth_bridge_disconnect(enum ipa_client_type client);
 
 int ipa3_teth_bridge_connect(struct teth_bridge_connect_params *connect_params);
+
+int ipa3_teth_bridge_get_pm_hdl(void);
 
 /*
  * Tethering client info
@@ -2599,6 +2677,8 @@ u8 ipa3_get_qmb_master_sel(enum ipa_client_type client);
 
 int ipa3_get_smmu_params(struct ipa_smmu_in_params *in,
 	struct ipa_smmu_out_params *out);
+
+bool ipa3_get_lan_rx_napi(void);
 
 /* internal functions */
 
@@ -2781,9 +2861,14 @@ int ipa3_uc_mhi_stop_event_update_channel(int channelHandle);
 int ipa3_uc_mhi_print_stats(char *dbg_buff, int size);
 int ipa3_uc_memcpy(phys_addr_t dest, phys_addr_t src, int len);
 int ipa3_uc_send_remote_ipa_info(u32 remote_addr, uint32_t mbox_n);
+int ipa3_uc_debug_stats_alloc(
+	struct IpaHwOffloadStatsAllocCmdData_t cmdinfo);
+int ipa3_uc_debug_stats_dealloc(uint32_t prot_id);
 void ipa3_tag_destroy_imm(void *user1, int user2);
 const struct ipa_gsi_ep_config *ipa3_get_gsi_ep_info
 	(enum ipa_client_type client);
+
+bool ipa3_check_idr_if_freed(void *ptr);
 
 int ipa3_wigig_init_i(void);
 int ipa3_wigig_uc_init(
@@ -2935,14 +3020,13 @@ int ipa3_get_gsi_chan_info(struct gsi_chan_info *gsi_chan_info,
 #ifdef CONFIG_IPA3_MHI_PRIME_MANAGER
 int ipa_mpm_mhip_xdci_pipe_enable(enum ipa_usb_teth_prot prot);
 int ipa_mpm_mhip_xdci_pipe_disable(enum ipa_usb_teth_prot xdci_teth_prot);
-int ipa_mpm_notify_wan_state(void);
-int ipa_mpm_mhip_ul_start_stop_data(
-		enum ipa_mpm_start_stop_type start_stop,
-		enum ipa_usb_teth_prot xdci_teth_prot);
+int ipa_mpm_notify_wan_state(struct wan_ioctl_notify_wan_state *state);
 int ipa3_is_mhip_offload_enabled(void);
 int ipa_mpm_reset_dma_mode(enum ipa_client_type src_pipe,
 	enum ipa_client_type dst_pipe);
 int ipa_mpm_panic_handler(char *buf, int size);
+int ipa3_mpm_enable_adpl_over_odl(bool enable);
+int ipa3_get_mhip_gsi_stats(struct ipa_uc_dbg_ring_stats *stats);
 #else
 static inline int ipa_mpm_mhip_xdci_pipe_enable(
 	enum ipa_usb_teth_prot prot)
@@ -2954,13 +3038,8 @@ static inline int ipa_mpm_mhip_xdci_pipe_disable(
 {
 	return 0;
 }
-static inline int ipa_mpm_notify_wan_state(void)
-{
-	return 0;
-}
-static inline int ipa_mpm_mhip_ul_start_stop_data(
-		enum ipa_mpm_start_stop_type start_stop,
-		enum ipa_usb_teth_prot xdci_teth_prot)
+static inline int ipa_mpm_notify_wan_state(
+	struct wan_ioctl_notify_wan_state *state)
 {
 	return 0;
 }
@@ -2978,6 +3057,25 @@ static inline int ipa_mpm_panic_handler(char *buf, int size)
 	return 0;
 }
 
+static inline int ipa3_get_mhip_gsi_stats(struct ipa_uc_dbg_ring_stats *stats)
+{
+	return 0;
+}
+
+static inline int ipa3_mpm_enable_adpl_over_odl(bool enable)
+{
+	return 0;
+}
+
+static inline void *alloc_and_init(u32 size, u32 init_val)
+{
+	return 0;
+}
+
 #endif /* CONFIG_IPA3_MHI_PRIME_MANAGER */
 
+/* query ipa APQ mode*/
+bool ipa3_is_apq(void);
+/* check if odl is connected */
+bool ipa3_is_odl_connected(void);
 #endif /* _IPA3_I_H_ */

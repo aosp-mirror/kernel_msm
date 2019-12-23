@@ -29,6 +29,7 @@ Optional properties:
 - qcom,rt:	Specifies if the framework worker thread for this
 		controller device should have "real-time" priority.
 - qcom,disable-autosuspend: Specifies to disable runtime PM auto suspend.
+- ssr-enable:	Required only for SSC QupV3 client for SSR notification.
 
 SPI slave nodes must be children of the SPI master node and can contain
 the following properties.
@@ -50,6 +51,9 @@ Optional properties:
 - qcom,disable-dma : Set this flag to ensure only fifo mode is used for
 			transfers. FIFO mode does not work when FW of SE
 			is configured in GSI mode.
+
+- slv-cross-connected : Set this flag only when SPI-Slave MISO pin is connected
+			to SPI-Master MOSI and vice-versa .
 
 Other optional properties described in
 Documentation/devicetree/bindings/spi/spi-bus.txt

@@ -28,7 +28,15 @@ struct rmnet_endpoint {
 	struct hlist_node hlnode;
 };
 
+struct rmnet_agg_stats {
+	u64 ul_agg_reuse;
+	u64 ul_agg_alloc;
+};
+
 struct rmnet_port_priv_stats {
+	u64 dl_hdr_last_qmap_vers;
+	u64 dl_hdr_last_ep_id;
+	u64 dl_hdr_last_trans_id;
 	u64 dl_hdr_last_seq;
 	u64 dl_hdr_last_bytes;
 	u64 dl_hdr_last_pkts;
@@ -38,12 +46,19 @@ struct rmnet_port_priv_stats {
 	u64 dl_hdr_total_pkts;
 	u64 dl_trl_last_seq;
 	u64 dl_trl_count;
+	struct rmnet_agg_stats agg;
 };
 
 struct rmnet_egress_agg_params {
 	u16 agg_size;
-	u16 agg_count;
+	u8 agg_count;
+	u8 agg_features;
 	u32 agg_time;
+};
+
+struct rmnet_agg_page {
+	struct list_head list;
+	struct page *page;
 };
 
 /* One instance of this structure is instantiated for each real_dev associated
@@ -70,6 +85,9 @@ struct rmnet_port {
 	struct timespec agg_last;
 	struct hrtimer hrtimer;
 	struct work_struct agg_wq;
+	u8 agg_size_order;
+	struct list_head agg_list;
+	struct rmnet_agg_page *agg_head;
 
 	void *qmi_info;
 
@@ -77,6 +95,10 @@ struct rmnet_port {
 	struct list_head dl_list;
 	struct rmnet_port_priv_stats stats;
 	int dl_marker_flush;
+
+	/* Descriptor pool */
+	spinlock_t desc_pool_lock;
+	struct rmnet_frag_descriptor_pool *frag_desc_pool;
 };
 
 extern struct rtnl_link_ops rmnet_link_ops;

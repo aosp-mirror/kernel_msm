@@ -20,6 +20,9 @@
 #include <linux/list.h>
 #include <linux/msm-bus.h>
 #include <linux/msm-bus-board.h>
+/* SSC Qup SSR related */
+#include <soc/qcom/subsystem_notif.h>
+#include <soc/qcom/scm.h>
 
 /* Transfer mode supported by GENI Serial Engines */
 enum se_xfer_mode {
@@ -39,8 +42,43 @@ enum se_protocol_types {
 	SPI_SLAVE
 };
 
+/* Notifier block Structure */
+struct ssc_qup_nb {
+	struct notifier_block nb;
+	void *next; /*Notifier block pointer to next notifier block structure*/
+};
+
 /**
- * struct geni_se_rsc - GENI Serial Engine Resource
+ * struct ssc_qup_ssr	GENI Serial Engine SSC qup SSR Structure.
+ * @probe_completed	To ignore up notification during probe.
+ * @is_ssr_down	To check SE status.
+ * @subsys_name	Subsystem name for ssr registration.
+ * @active_list_head	List Head of all client in SSC QUPv3.
+ */
+struct ssc_qup_ssr {
+	struct ssc_qup_nb ssc_qup_nb;
+	bool probe_completed;
+	bool is_ssr_down;
+	const char *subsys_name;
+	struct list_head active_list_head;
+};
+
+/**
+ * struct se_rsc_ssr	GENI Resource SSR Structure.
+ * @active_list	List of SSC qup SE clients.
+ * @force_suspend	Function pointer for Subsystem shutdown case.
+ * @force_resume	Function pointer for Subsystem restart case.
+ * @ssr_enable		To check SSC Qup SSR enable status.
+ */
+struct se_rsc_ssr {
+	struct list_head active_list;
+	int (*force_suspend)(struct device *ctrl_dev);
+	int (*force_resume)(struct device *ctrl_dev);
+	bool ssr_enable;
+};
+
+/**
+ * struct se_geni_rsc - GENI Serial Engine Resource
  * @ctrl_dev		Pointer to controller device.
  * @wrapper_dev:	Pointer to the parent QUPv3 core.
  * @se_clk:		Handle to the core serial engine clock.
@@ -78,7 +116,8 @@ struct se_geni_rsc {
 	struct pinctrl *geni_pinctrl;
 	struct pinctrl_state *geni_gpio_active;
 	struct pinctrl_state *geni_gpio_sleep;
-	int	clk_freq_out;
+	int clk_freq_out;
+	struct se_rsc_ssr rsc_ssr;
 };
 
 #define PINCTRL_DEFAULT	"default"
@@ -103,6 +142,7 @@ struct se_geni_rsc {
 #define SE_GENI_CLK_SEL			(0x7C)
 #define SE_GENI_CFG_SEQ_START			(0x84)
 #define SE_GENI_CFG_REG		(0x200)
+#define GENI_CFG_REG80			(0x240)
 #define SE_GENI_BYTE_GRAN		(0x254)
 #define SE_GENI_DMA_MODE_EN		(0x258)
 #define SE_GENI_TX_PACKING_CFG0		(0x260)
@@ -137,9 +177,17 @@ struct se_geni_rsc {
 #define SE_DMA_DEBUG_REG0		(0xE40)
 #define SLAVE_MODE_EN			(BIT(3))
 #define START_TRIGGER			(BIT(0))
+#define QUPV3_HW_VER			(0x4)
 
 /* GENI_OUTPUT_CTRL fields */
 #define DEFAULT_IO_OUTPUT_CTRL_MSK	(GENMASK(6, 0))
+#define GENI_IO_MUX_0_EN			BIT(1)
+#define GENI_IO_MUX_1_EN			BIT(2)
+
+/* GENI_CFG_REG80 fields */
+#define IO1_SEL_TX			BIT(2)
+#define IO2_DATA_IN_SEL_PAD2	(GENMASK(11, 10))
+#define IO3_DATA_IN_SEL_PAD2	BIT(15)
 
 /* GENI_FORCE_DEFAULT_REG fields */
 #define FORCE_DEFAULT	(BIT(0))

@@ -53,8 +53,9 @@
 #define GSI_OUT_AGGR_SIZE 24576
 
 #define GSI_IN_RNDIS_AGGR_SIZE 16384
-#define GSI_IN_MBIM_AGGR_SIZE 16384
+#define GSI_IN_MBIM_AGGR_SIZE 31744
 #define GSI_IN_RMNET_AGGR_SIZE 16384
+#define GSI_OUT_MBIM_AGGR_SIZE 16384
 #define GSI_ECM_AGGR_SIZE 2048
 
 #define GSI_OUT_MBIM_BUF_LEN 16384
@@ -472,7 +473,7 @@ static struct usb_ss_ep_comp_descriptor rmnet_gsi_ss_in_comp_desc = {
 	.bDescriptorType =	USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =		2,
+	.bMaxBurst =		6,
 	/* .bmAttributes =	0, */
 };
 
@@ -727,7 +728,7 @@ static struct usb_ss_ep_comp_descriptor rndis_gsi_ss_bulk_comp_desc = {
 	.bDescriptorType =	USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =		2,
+	.bMaxBurst =		6,
 	/* .bmAttributes =	0, */
 };
 
@@ -771,7 +772,8 @@ static struct usb_gadget_strings *rndis_gsi_strings[] = {
 };
 
 /* mbim device descriptors */
-#define MBIM_NTB_DEFAULT_IN_SIZE	(0x4000)
+#define MBIM_NTB_DEFAULT_IN_SIZE	GSI_IN_MBIM_AGGR_SIZE
+#define MBIM_NTB_DEFAULT_OUT_SIZE	GSI_OUT_MBIM_AGGR_SIZE
 
 static struct usb_cdc_ncm_ntb_parameters mbim_gsi_ntb_parameters = {
 	.wLength = sizeof(mbim_gsi_ntb_parameters),
@@ -781,7 +783,7 @@ static struct usb_cdc_ncm_ntb_parameters mbim_gsi_ntb_parameters = {
 	.wNdpInPayloadRemainder = cpu_to_le16(0),
 	.wNdpInAlignment = cpu_to_le16(4),
 
-	.dwNtbOutMaxSize = cpu_to_le32(0x4000),
+	.dwNtbOutMaxSize = cpu_to_le32(MBIM_NTB_DEFAULT_OUT_SIZE),
 	.wNdpOutDivisor = cpu_to_le16(4),
 	.wNdpOutPayloadRemainder = cpu_to_le16(0),
 	.wNdpOutAlignment = cpu_to_le16(4),
@@ -1012,7 +1014,7 @@ static struct usb_ss_ep_comp_descriptor mbim_gsi_ss_in_comp_desc = {
 	.bDescriptorType =      USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =         2,
+	.bMaxBurst =         6,
 	/* .bmAttributes =      0, */
 };
 
@@ -1268,7 +1270,7 @@ static struct usb_ss_ep_comp_descriptor ecm_gsi_ss_in_comp_desc = {
 	.bDescriptorType =	USB_DT_SS_ENDPOINT_COMP,
 
 	/* the following 2 values can be tweaked if necessary */
-	.bMaxBurst =         2,
+	.bMaxBurst =         6,
 	/* .bmAttributes =      0, */
 };
 

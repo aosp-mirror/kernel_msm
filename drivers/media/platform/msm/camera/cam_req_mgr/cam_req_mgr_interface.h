@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,6 +26,7 @@ struct cam_req_mgr_core_dev_link_setup;
 struct cam_req_mgr_apply_request;
 struct cam_req_mgr_flush_request;
 struct cam_req_mgr_link_evt_data;
+struct cam_req_mgr_dump_info;
 
 #define SKIP_NEXT_FRAME 0x100
 
@@ -54,6 +55,7 @@ typedef int (*cam_req_mgr_add_req)(struct cam_req_mgr_add_request *);
  * cam_req_mgr_process_evt  : generic events
  * cam_req_mgr_set_strobe   : to reset IR camera storbe
  * cam_reg_mgr_tag_laser_type : get laser tag for corresponding sof frame
+ * cam_req_mgr_dump_req     : dump request
  */
 typedef int (*cam_req_mgr_get_dev_info) (struct cam_req_mgr_device_info *);
 typedef int (*cam_req_mgr_link_setup)(
@@ -64,6 +66,7 @@ typedef int (*cam_req_mgr_process_evt)(struct cam_req_mgr_link_evt_data *);
 typedef int (*cam_req_mgr_set_strobe)(struct cam_req_mgr_apply_request *, bool);
 typedef int (*cam_reg_mgr_tag_laser_type)
 	(struct cam_req_mgr_message *, int32_t);
+typedef int (*cam_req_mgr_dump_req)(struct cam_req_mgr_dump_info *);
 
 /**
  * @brief          : cam_req_mgr_crm_cb - func table
@@ -88,6 +91,7 @@ struct cam_req_mgr_crm_cb {
  * @process_evt  : payload to generic event
  * @set_strobe   : payload to reset IR storbe
  * @get_laser_tag : payload to get laser tag
+ * @dump_req     : payload to dump request
  */
 struct cam_req_mgr_kmd_ops {
 	cam_req_mgr_get_dev_info     get_dev_info;
@@ -98,6 +102,7 @@ struct cam_req_mgr_kmd_ops {
 	cam_req_mgr_set_strobe       set_strobe;
 	cam_reg_mgr_tag_laser_type   tag_laser;
 
+	cam_req_mgr_dump_req         dump_req;
 };
 
 /**
@@ -211,6 +216,8 @@ enum cam_req_mgr_link_evt_type {
  * @frame_id : frame id for internal tracking
  * @trigger  : trigger point of this notification, CRM will send apply
  * only to the devices which subscribe to this point.
+ * @sof_timestamp_val: Captured time stamp value at sof hw event
+ * @req_id   : req id which returned buf_done
  */
 struct cam_req_mgr_trigger_notify {
 	int32_t  link_hdl;
@@ -218,6 +225,7 @@ struct cam_req_mgr_trigger_notify {
 	int64_t  frame_id;
 	uint32_t trigger;
 	uint64_t sof_timestamp_val;
+	uint64_t req_id;
 };
 
 /**
@@ -348,4 +356,25 @@ struct cam_req_mgr_send_request {
 	int32_t    link_hdl;
 	struct cam_req_mgr_req_queue *in_q;
 };
+
+/**
+ * struct cam_req_mgr_dump_info
+ * @req_id      : request id to cancel
+ * @link_hdl    : link identifier
+ * @dev_hdl     : device handle for cross check
+ * @buf_handle  : buf handle
+ * @offset      : offset of buffere
+ * @error_type  : error type
+ *
+ */
+struct cam_req_mgr_dump_info {
+	uint64_t    req_id;
+	int32_t     link_hdl;
+	int32_t     dev_hdl;
+	uint32_t    buf_handle;
+	int32_t     offset;
+	int32_t     error_type;
+};
+
+
 #endif

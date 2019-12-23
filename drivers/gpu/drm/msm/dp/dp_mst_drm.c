@@ -595,6 +595,9 @@ static void _dp_mst_bridge_pre_enable_part1(struct dp_mst_bridge *dp_bridge)
 
 	/* skip mst specific disable operations during suspend */
 	if (mst->state == PM_SUSPEND) {
+		dp_display->wakeup_phy_layer(dp_display, true);
+		drm_dp_send_power_updown_phy(&mst->mst_mgr, port, true);
+		dp_display->wakeup_phy_layer(dp_display, false);
 		_dp_mst_update_single_timeslot(mst, dp_bridge);
 		return;
 	}
@@ -678,8 +681,12 @@ static void _dp_mst_bridge_pre_disable_part2(struct dp_mst_bridge *dp_bridge)
 	DP_MST_DEBUG("enter\n");
 
 	/* skip mst specific disable operations during suspend */
-	if (mst->state == PM_SUSPEND)
+	if (mst->state == PM_SUSPEND) {
+		dp_display->wakeup_phy_layer(dp_display, true);
+		drm_dp_send_power_updown_phy(&mst->mst_mgr, port, false);
+		dp_display->wakeup_phy_layer(dp_display, false);
 		return;
+	}
 
 	mst->mst_fw_cbs->check_act_status(&mst->mst_mgr);
 
@@ -1699,12 +1706,37 @@ static void dp_mst_destroy_fixed_connector(struct drm_dp_mst_topology_mgr *mgr,
 	dp_mst_destroy_connector(mgr, connector);
 }
 
+static int dp_mst_fixed_connnector_set_info_blob(
+		struct drm_connector *connector,
+		void *info, void *display, struct msm_mode_info *mode_info)
+{
+	struct sde_connector *c_conn = to_sde_connector(connector);
+	struct dp_display *dp_display = display;
+	struct dp_mst_private *mst = dp_display->dp_mst_prv_info;
+	const char *display_type = NULL;
+	int i;
+
+	for (i = 0; i < MAX_DP_MST_DRM_BRIDGES; i++) {
+		if (mst->mst_bridge[i].base.encoder != c_conn->encoder)
+			continue;
+
+		dp_display->mst_get_fixed_topology_display_type(dp_display,
+			mst->mst_bridge[i].id, &display_type);
+		sde_kms_info_add_keystr(info,
+			"display type", display_type);
+
+		break;
+	}
+
+	return 0;
+}
+
 static struct drm_connector *
 dp_mst_drm_fixed_connector_init(struct dp_display *dp_display,
 			struct drm_encoder *encoder)
 {
 	static const struct sde_connector_ops dp_mst_connector_ops = {
-		.post_init  = NULL,
+		.set_info_blob = dp_mst_fixed_connnector_set_info_blob,
 		.detect     = dp_mst_fixed_connector_detect,
 		.get_modes  = dp_mst_connector_get_modes,
 		.mode_valid = dp_mst_connector_mode_valid,

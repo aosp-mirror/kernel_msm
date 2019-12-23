@@ -158,6 +158,12 @@ static int dp_parser_misc(struct dp_parser *parser)
 	if (data && (len == DP_MAX_PHY_LN)) {
 		for (i = 0; i < len; i++)
 			parser->l_map[i] = data[i];
+	} else {
+		pr_debug("Incorrect mapping, configure default\n");
+		parser->l_map[0] = DP_PHY_LN0;
+		parser->l_map[1] = DP_PHY_LN1;
+		parser->l_map[2] = DP_PHY_LN2;
+		parser->l_map[3] = DP_PHY_LN3;
 	}
 
 	data = of_get_property(of_node, "qcom,pn-swap-lane-map", &len);
@@ -175,6 +181,17 @@ static int dp_parser_misc(struct dp_parser *parser)
 		"qcom,max-lclk-frequency-khz", &parser->max_lclk_khz);
 	if (rc)
 		parser->max_lclk_khz = DP_MAX_LINK_CLK_KHZ;
+
+	rc = of_property_read_u32(of_node,
+		"qcom,max-hdisplay", &parser->max_hdisplay);
+
+	rc = of_property_read_u32(of_node,
+		"qcom,max-vdisplay", &parser->max_vdisplay);
+
+	parser->display_type = of_get_property(of_node,
+					"qcom,display-type", NULL);
+	if (!parser->display_type)
+		parser->display_type = "unknown";
 
 	return 0;
 }
@@ -224,7 +241,8 @@ static int dp_parser_pinctrl(struct dp_parser *parser)
 				pinctrl->pin, "mdss_dp_hpd_ctrl");
 		}
 
-		if (!pinctrl->state_hpd_tlmm || !pinctrl->state_hpd_ctrl) {
+		if (IS_ERR_OR_NULL(pinctrl->state_hpd_tlmm) ||
+				IS_ERR_OR_NULL(pinctrl->state_hpd_ctrl)) {
 			pinctrl->state_hpd_tlmm = NULL;
 			pinctrl->state_hpd_ctrl = NULL;
 			pr_debug("tlmm or ctrl pinctrl state does not exist\n");
@@ -713,6 +731,8 @@ static int dp_parser_mst(struct dp_parser *parser)
 
 	parser->has_mst = of_property_read_bool(dev->of_node,
 			"qcom,mst-enable");
+	parser->no_mst_encoder = of_property_read_bool(dev->of_node,
+			"qcom,no-mst-encoder");
 	parser->has_mst_sideband = parser->has_mst;
 
 	pr_debug("mst parsing successful. mst:%d\n", parser->has_mst);
@@ -721,6 +741,12 @@ static int dp_parser_mst(struct dp_parser *parser)
 		of_property_read_u32_index(dev->of_node,
 				"qcom,mst-fixed-topology-ports", i,
 				&parser->mst_fixed_port[i]);
+		of_property_read_string_index(
+				dev->of_node,
+				"qcom,mst-fixed-topology-display-types", i,
+				&parser->mst_fixed_display_type[i]);
+		if (!parser->mst_fixed_display_type[i])
+			parser->mst_fixed_display_type[i] = "unknown";
 	}
 
 	return 0;

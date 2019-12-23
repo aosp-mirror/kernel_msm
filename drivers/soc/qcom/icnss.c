@@ -73,7 +73,8 @@
 #define SUBSYS_INTERNAL_MODEM_NAME	"modem"
 #define SUBSYS_EXTERNAL_MODEM_NAME	"esoc0"
 
-#define PROBE_TIMEOUT			5000
+#define PROBE_TIMEOUT			15000
+#define FW_READY_TIMEOUT		50000
 
 static struct icnss_priv *penv;
 
@@ -130,6 +131,7 @@ static struct icnss_vreg_info icnss_vreg_info[] = {
 	{NULL, "vdd-cx-mx", 752000, 752000, 0, 0, false},
 	{NULL, "vdd-1.8-xo", 1800000, 1800000, 0, 0, false},
 	{NULL, "vdd-1.3-rfa", 1304000, 1304000, 0, 0, false},
+	{NULL, "vdd-3.3-ch1", 3312000, 3312000, 0, 0, false},
 	{NULL, "vdd-3.3-ch0", 3312000, 3312000, 0, 0, false},
 };
 
@@ -301,6 +303,10 @@ static char *icnss_driver_event_to_str(enum icnss_driver_event_type type)
 		return "PD_SERVICE_DOWN";
 	case ICNSS_DRIVER_EVENT_FW_EARLY_CRASH_IND:
 		return "FW_EARLY_CRASH_IND";
+	case ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN:
+		return "IDLE_SHUTDOWN";
+	case ICNSS_DRIVER_EVENT_IDLE_RESTART:
+		return "IDLE_RESTART";
 	case ICNSS_DRIVER_EVENT_MAX:
 		return "EVENT_MAX";
 	}
@@ -980,6 +986,10 @@ static int icnss_driver_event_server_arrive(void *data)
 
 	ret = wlfw_ind_register_send_sync_msg(penv);
 	if (ret < 0) {
+		if (ret == -EALREADY) {
+			ret = 0;
+			goto qmi_registered;
+		}
 		ignore_assert = true;
 		goto err_power_on;
 	}
@@ -1039,6 +1049,7 @@ clear_server:
 	icnss_clear_server(penv);
 fail:
 	ICNSS_ASSERT(ignore_assert);
+qmi_registered:
 	return ret;
 }
 
@@ -1126,6 +1137,7 @@ static int icnss_pd_restart_complete(struct icnss_priv *priv)
 	icnss_call_driver_shutdown(priv);
 
 	clear_bit(ICNSS_PDR, &priv->state);
+	clear_bit(ICNSS_MODEM_CRASHED, &priv->state);
 	clear_bit(ICNSS_REJUVENATE, &priv->state);
 	clear_bit(ICNSS_PD_RESTART, &priv->state);
 	priv->early_crash_ind = false;
@@ -1183,6 +1195,12 @@ static int icnss_driver_event_fw_ready_ind(void *data)
 
 	set_bit(ICNSS_FW_READY, &penv->state);
 	clear_bit(ICNSS_MODE_ON, &penv->state);
+	if (penv->clk_monitor_enable)
+		/*
+		 * Safe to release ESOC as WLAN FW
+		 * stage-2 recover is finished.
+		 */
+		complete(&penv->notif_complete);
 
 	icnss_pr_info("WLAN FW is ready: 0x%lx\n", penv->state);
 
@@ -1192,6 +1210,19 @@ static int icnss_driver_event_fw_ready_ind(void *data)
 		icnss_pr_err("Device is not ready\n");
 		ret = -ENODEV;
 		goto out;
+	}
+
+	if (penv->clk_monitor_enable) {
+		/* Wait for clock up notification if ESOC is off */
+		if (test_bit(ICNSS_ESOC_OFF, &penv->state) ||
+		    !test_bit(ICNSS_CLK_UP, &penv->state)) {
+			reinit_completion(&penv->clk_complete);
+			icnss_pr_dbg("Waiting for ESOC recovery 0x%lx\n",
+				     penv->state);
+			wait_for_completion(&penv->clk_complete);
+			clear_bit(ICNSS_ESOC_OFF, &penv->state);
+			set_bit(ICNSS_CLK_UP, &penv->state);
+		}
 	}
 
 	if (test_bit(ICNSS_PD_RESTART, &penv->state))
@@ -1385,6 +1416,51 @@ out:
 	return ret;
 }
 
+static int icnss_driver_event_idle_shutdown(void *data)
+{
+	int ret = 0;
+
+	if (!penv->ops || !penv->ops->idle_shutdown)
+		return 0;
+
+	if (test_bit(ICNSS_MODEM_CRASHED, &penv->state) ||
+			test_bit(ICNSS_PDR, &penv->state) ||
+			test_bit(ICNSS_REJUVENATE, &penv->state)) {
+		icnss_pr_err("SSR/PDR is already in-progress during idle shutdown callback\n");
+		ret = -EBUSY;
+	} else {
+		icnss_pr_dbg("Calling driver idle shutdown, state: 0x%lx\n",
+								penv->state);
+		icnss_block_shutdown(true);
+		ret = penv->ops->idle_shutdown(&penv->pdev->dev);
+		icnss_block_shutdown(false);
+	}
+
+	return ret;
+}
+
+static int icnss_driver_event_idle_restart(void *data)
+{
+	int ret = 0;
+
+	if (!penv->ops || !penv->ops->idle_restart)
+		return 0;
+
+	if (test_bit(ICNSS_MODEM_CRASHED, &penv->state) ||
+			test_bit(ICNSS_PDR, &penv->state) ||
+			test_bit(ICNSS_REJUVENATE, &penv->state)) {
+		icnss_pr_err("SSR/PDR is already in-progress during idle restart callback\n");
+		ret = -EBUSY;
+	} else {
+		icnss_pr_dbg("Calling driver idle restart, state: 0x%lx\n",
+								penv->state);
+		icnss_block_shutdown(true);
+		ret = penv->ops->idle_restart(&penv->pdev->dev);
+		icnss_block_shutdown(false);
+	}
+
+	return ret;
+}
 
 static void icnss_driver_event_work(struct work_struct *work)
 {
@@ -1430,6 +1506,12 @@ static void icnss_driver_event_work(struct work_struct *work)
 		case ICNSS_DRIVER_EVENT_FW_EARLY_CRASH_IND:
 			ret = icnss_driver_event_early_crash_ind(penv,
 								 event->data);
+			break;
+		case ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN:
+			ret = icnss_driver_event_idle_shutdown(event->data);
+			break;
+		case ICNSS_DRIVER_EVENT_IDLE_RESTART:
+			ret = icnss_driver_event_idle_restart(event->data);
 			break;
 		default:
 			icnss_pr_err("Invalid Event type: %d", event->type);
@@ -1505,17 +1587,23 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 
 	priv->is_ssr = true;
 
+	if (notif->crashed)
+		set_bit(ICNSS_MODEM_CRASHED, &priv->state);
+
 	if (code == SUBSYS_BEFORE_SHUTDOWN && !notif->crashed &&
 	    atomic_read(&priv->is_shutdown)) {
 		atomic_set(&priv->is_shutdown, false);
-		icnss_call_driver_remove(priv);
+		if (!test_bit(ICNSS_PD_RESTART, &priv->state) &&
+		    !test_bit(ICNSS_SHUTDOWN_DONE, &priv->state)) {
+			icnss_call_driver_remove(priv);
+		}
 	}
 
 	if (code == SUBSYS_BEFORE_SHUTDOWN && !notif->crashed &&
 	    test_bit(ICNSS_BLOCK_SHUTDOWN, &priv->state)) {
 		if (!wait_for_completion_timeout(&priv->unblock_shutdown,
-						 PROBE_TIMEOUT))
-			icnss_pr_err("wlan driver probe timeout\n");
+				msecs_to_jiffies(PROBE_TIMEOUT)))
+			icnss_pr_err("modem block shutdown timeout\n");
 	}
 
 	if (code == SUBSYS_BEFORE_SHUTDOWN && !notif->crashed) {
@@ -1576,10 +1664,11 @@ static int icnss_ext_modem_notifier_nb(struct notifier_block *nb,
 {
 	struct icnss_priv *priv = container_of(nb, struct icnss_priv,
 					       ext_modem_ssr_nb);
-	icnss_pr_vdbg("EXT-Modem-Notify: event %lu\n", code);
+	icnss_pr_dbg("EXT-Modem-Notify: event %lu\n", code);
 
 
 	if (code == SUBSYS_AFTER_POWERUP) {
+		clear_bit(ICNSS_ESOC_OFF, &priv->state);
 		set_bit(ICNSS_CLK_UP, &priv->state);
 		complete(&priv->clk_complete);
 	}
@@ -1628,6 +1717,97 @@ static int icnss_ext_modem_ssr_unregister_notifier(struct icnss_priv *priv)
 			     ret);
 
 	priv->ext_modem_notify_handler = NULL;
+
+	return 0;
+}
+
+static void icnss_esoc_ops_power_off(void *data, unsigned int flags)
+{
+	int ret = 0;
+	struct icnss_priv *priv = data;
+
+	icnss_pr_dbg("ESOC_POWER_OFF notify: %u\n", flags);
+
+	if (!(flags & ESOC_HOOK_MDM_DOWN))
+		return;
+
+	set_bit(ICNSS_ESOC_OFF, &priv->state);
+	if (test_bit(ICNSS_CLK_UP, &priv->state)) {
+		if (test_bit(ICNSS_PD_RESTART, &priv->state))
+			goto out;
+
+		ret = icnss_trigger_recovery(&priv->pdev->dev);
+		if (ret < 0) {
+			icnss_fatal_err("Fail to trigger PDR: ret: %d, state: 0x%lx\n",
+					ret, priv->state);
+			goto out;
+		}
+
+		reinit_completion(&priv->notif_complete);
+		ret = wait_for_completion_timeout
+			(&priv->notif_complete,
+			 msecs_to_jiffies(FW_READY_TIMEOUT));
+		if (!ret) {
+			icnss_fatal_err("Timeout waiting for FW ready notification\n");
+			goto out;
+		}
+	}
+
+out:
+	clear_bit(ICNSS_CLK_UP, &priv->state);
+}
+
+static int icnss_register_esoc_client(struct icnss_priv *priv)
+{
+	int ret = 0;
+	struct esoc_client_hook *esoc_ops = NULL;
+
+	priv->esoc_client =
+		devm_register_esoc_client(&priv->pdev->dev, "mdm");
+
+	if (IS_ERR_OR_NULL(priv->esoc_client)) {
+		ret = PTR_ERR(priv->esoc_client);
+		icnss_pr_err("Failed to register esoc client: %d\n", ret);
+		if (ret == 0)
+			ret = -EPROBE_DEFER;
+		return ret;
+	}
+
+	esoc_ops = &priv->esoc_ops;
+	esoc_ops->priv = priv;
+	esoc_ops->prio = ESOC_CNSS_HOOK;
+	esoc_ops->esoc_link_power_off =
+		icnss_esoc_ops_power_off;
+
+	ret = esoc_register_client_hook(priv->esoc_client,
+					esoc_ops);
+	if (ret) {
+		icnss_pr_err("Failed to register esoc ops: %d\n", ret);
+		goto unregister_esoc_client;
+	}
+
+	init_completion(&priv->notif_complete);
+
+	return ret;
+
+unregister_esoc_client:
+	devm_unregister_esoc_client(&priv->pdev->dev,
+				    priv->esoc_client);
+	return ret;
+}
+
+static int icnss_unregister_esoc_client(struct icnss_priv *priv)
+{
+	if (!priv->esoc_client)
+		return 0;
+
+	complete_all(&priv->notif_complete);
+
+	esoc_unregister_client_hook(priv->esoc_client,
+				    &priv->esoc_ops);
+	devm_unregister_esoc_client(&priv->pdev->dev,
+				    priv->esoc_client);
+	priv->esoc_client = NULL;
 
 	return 0;
 }
@@ -2402,6 +2582,48 @@ out:
 }
 EXPORT_SYMBOL(icnss_trigger_recovery);
 
+int icnss_idle_shutdown(struct device *dev)
+{
+	struct icnss_priv *priv = dev_get_drvdata(dev);
+
+	if (!priv) {
+		icnss_pr_err("Invalid drvdata: dev %pK", dev);
+		return -EINVAL;
+	}
+
+	if (test_bit(ICNSS_MODEM_CRASHED, &priv->state) ||
+			test_bit(ICNSS_PDR, &priv->state) ||
+			test_bit(ICNSS_REJUVENATE, &penv->state)) {
+		icnss_pr_err("SSR/PDR is already in-progress during idle shutdown\n");
+		return -EBUSY;
+	}
+
+	return icnss_driver_event_post(ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+}
+EXPORT_SYMBOL(icnss_idle_shutdown);
+
+int icnss_idle_restart(struct device *dev)
+{
+	struct icnss_priv *priv = dev_get_drvdata(dev);
+
+	if (!priv) {
+		icnss_pr_err("Invalid drvdata: dev %pK", dev);
+		return -EINVAL;
+	}
+
+	if (test_bit(ICNSS_MODEM_CRASHED, &priv->state) ||
+			test_bit(ICNSS_PDR, &priv->state) ||
+			test_bit(ICNSS_REJUVENATE, &penv->state)) {
+		icnss_pr_err("SSR/PDR is already in-progress during idle restart\n");
+		return -EBUSY;
+	}
+
+	return icnss_driver_event_post(ICNSS_DRIVER_EVENT_IDLE_RESTART,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+}
+EXPORT_SYMBOL(icnss_idle_restart);
+
 
 static int icnss_smmu_init(struct icnss_priv *priv)
 {
@@ -2726,6 +2948,15 @@ static void icnss_allow_recursive_recovery(struct device *dev)
 	icnss_pr_info("Recursive recovery allowed for WLAN\n");
 }
 
+static void icnss_disallow_recursive_recovery(struct device *dev)
+{
+	struct icnss_priv *priv = dev_get_drvdata(dev);
+
+	priv->allow_recursive_recovery = false;
+
+	icnss_pr_info("Recursive recovery disallowed for WLAN\n");
+}
+
 static ssize_t icnss_fw_debug_write(struct file *fp,
 				    const char __user *user_buf,
 				    size_t count, loff_t *off)
@@ -2776,6 +3007,9 @@ static ssize_t icnss_fw_debug_write(struct file *fp,
 			break;
 		case 4:
 			icnss_allow_recursive_recovery(&priv->pdev->dev);
+			break;
+		case 5:
+			icnss_disallow_recursive_recovery(&priv->pdev->dev);
 			break;
 		default:
 			return -EINVAL;
@@ -2903,6 +3137,11 @@ static int icnss_stats_show_state(struct seq_file *s, struct icnss_priv *priv)
 		case ICNSS_CLK_UP:
 			seq_puts(s, "CLK UP");
 			continue;
+		case ICNSS_ESOC_OFF:
+			seq_puts(s, "ESOC_OFF");
+			continue;
+		case ICNSS_MODEM_CRASHED:
+			seq_puts(s, "MODEM CRASHED");
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);
@@ -3428,6 +3667,8 @@ static int icnss_probe(struct platform_device *pdev)
 
 	priv->vreg_info = icnss_vreg_info;
 
+	icnss_allow_recursive_recovery(dev);
+
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,icnss-adc_tm")) {
 		ret = icnss_get_vbatt_info(priv);
 		if (ret == -EPROBE_DEFER)
@@ -3580,6 +3821,9 @@ static int icnss_probe(struct platform_device *pdev)
 		if (ret)
 			goto out_smmu_deinit;
 
+		ret = icnss_register_esoc_client(priv);
+		if (ret)
+			goto out_unregister_ext_modem;
 	}
 
 	device_enable_async_suspend(dev);
@@ -3592,7 +3836,7 @@ static int icnss_probe(struct platform_device *pdev)
 	if (!priv->event_wq) {
 		icnss_pr_err("Workqueue creation failed\n");
 		ret = -EFAULT;
-		goto out_unregister_ext_modem;
+		goto out_unregister_esoc_client;
 	}
 
 	INIT_WORK(&priv->event_work, icnss_driver_event_work);
@@ -3625,6 +3869,8 @@ static int icnss_probe(struct platform_device *pdev)
 
 out_destroy_wq:
 	destroy_workqueue(priv->event_wq);
+out_unregister_esoc_client:
+	icnss_unregister_esoc_client(priv);
 out_unregister_ext_modem:
 	icnss_ext_modem_ssr_unregister_notifier(priv);
 out_smmu_deinit:
@@ -3656,6 +3902,8 @@ static int icnss_remove(struct platform_device *pdev)
 	icnss_unregister_fw_service(penv);
 	if (penv->event_wq)
 		destroy_workqueue(penv->event_wq);
+
+	icnss_unregister_esoc_client(penv);
 
 	icnss_ext_modem_ssr_unregister_notifier(penv);
 

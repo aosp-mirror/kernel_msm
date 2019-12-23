@@ -46,6 +46,7 @@
 		i2c1 = &qupv3_se1_i2c;
 		i2c2 = &qupv3_se3_i2c;
 		hsuart0 = &qupv3_se7_4uart;
+		hsuart1 = &qupv3_se4_2uart;
 		swr0 = &swr0;
 		swr1 = &swr1;
 		swr2 = &swr2;
@@ -542,49 +543,49 @@
 		pil_modem_mem: modem_region@8b000000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x8b000000 0 0x7e00000>;
+			reg = <0 0x8b000000 0 0x8400000>;
 		};
 
-		pil_video_mem: pil_video_region@92e00000 {
+		pil_video_mem: pil_video_region@93400000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x92e00000 0 0x500000>;
+			reg = <0 0x93400000 0 0x500000>;
 		};
 
-		wlan_msa_mem: wlan_msa_region@93300000 {
+		wlan_msa_mem: wlan_msa_region@93900000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x93300000 0 0x200000>;
+			reg = <0 0x93900000 0 0x200000>;
 		};
 
-		pil_cdsp_mem: cdsp_regions@93500000 {
+		pil_cdsp_mem: cdsp_regions@93b00000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x93500000 0 0x1e00000>;
+			reg = <0 0x93b00000 0 0x1e00000>;
 		};
 
-		pil_adsp_mem: pil_adsp_region@95300000 {
+		pil_adsp_mem: pil_adsp_region@95900000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x95300000 0 0x1e00000>;
+			reg = <0 0x95900000 0 0x1e00000>;
 		};
 
-		pil_ipa_fw_mem: ips_fw_region@0x97100000 {
+		pil_ipa_fw_mem: ips_fw_region@0x97700000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x97100000 0 0x10000>;
+			reg = <0 0x97700000 0 0x10000>;
 		};
 
-		pil_ipa_gsi_mem: ipa_gsi_region@0x97110000 {
+		pil_ipa_gsi_mem: ipa_gsi_region@0x97710000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x97110000 0 0x5000>;
+			reg = <0 0x97710000 0 0x5000>;
 		};
 
-		pil_gpu_mem: gpu_region@0x97115000 {
+		pil_gpu_mem: gpu_region@0x97715000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0 0x97115000 0 0x2000>;
+			reg = <0 0x97715000 0 0x2000>;
 		};
 
 		qseecom_mem: qseecom_region@0x9e400000 {
@@ -645,7 +646,7 @@
 		};
 
 		dfps_data_memory: dfps_data_region@9e300000 {
-			reg = <0x0 0x9e300000 0x0 0x0100000>;
+			reg = <0x0 0x9cf00000 0x0 0x0100000>;
 			label = "dfps_data_region";
 		};
 
@@ -822,6 +823,13 @@
 		reg-names = "cc_base";
 		vdd_cx-supply = <&VDD_CX_LEVEL>;
 		vdd_cx_ao-supply = <&VDD_CX_LEVEL_AO>;
+		protected-clocks = <GCC_SDR_CORE_CLK>,
+				<GCC_SDR_WR0_MEM_CLK>,
+				<GCC_SDR_WR1_MEM_CLK>,
+				<GCC_SDR_WR2_MEM_CLK>,
+				<GCC_SDR_CSR_HCLK>,
+				<GCC_SDR_PRI_MI2S_CLK>,
+				<GCC_SDR_SEC_MI2S_CLK>;
 		#clock-cells = <1>;
 		#reset-cells = <1>;
 	};

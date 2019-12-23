@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,6 +41,7 @@ enum msm_pcie_event {
 	MSM_PCIE_EVENT_LINKDOWN = 0x1,
 	MSM_PCIE_EVENT_LINKUP = 0x2,
 	MSM_PCIE_EVENT_WAKEUP = 0x4,
+	MSM_PCIE_EVENT_L1SS_TIMEOUT = BIT(3),
 };
 
 enum msm_pcie_trigger {
@@ -66,9 +67,14 @@ struct msm_pcie_register_event {
 };
 
 #ifdef CONFIG_PCI_MSM_MSI
+void msm_msi_config_access(struct irq_domain *domain, bool allow);
 void msm_msi_config(struct irq_domain *domain);
 int msm_msi_init(struct device *dev);
 #else
+static inline void msm_msi_config_access(struct irq_domain *domain, bool allow)
+{
+}
+
 static inline void msm_msi_config(struct irq_domain *domain)
 {
 }
@@ -80,6 +86,40 @@ static inline int msm_msi_init(struct device *dev)
 #endif
 
 #ifdef CONFIG_PCI_MSM
+
+/**
+ * msm_pcie_set_link_bandwidth - updates the number of lanes and speed of PCIe
+ * link.
+ * @pci_dev:		client's pci device structure
+ * @target_link_speed:	gen speed
+ * @target_link_width:	number of lanes
+ *
+ * This function gives PCIe clients the control to update the number of lanes
+ * and gen speed of the link.
+ *
+ * Return: 0 on success, negative value on error
+ */
+int msm_pcie_set_link_bandwidth(struct pci_dev *pci_dev, u16 target_link_speed,
+				u16 target_link_width);
+
+/**
+ * msm_pcie_l1ss_timeout_disable - disable L1ss timeout feature
+ * @pci_dev:	client's pci device structure
+ *
+ * This function gives PCIe clients the control to disable L1ss timeout
+ * feature.
+ */
+void msm_pcie_l1ss_timeout_disable(struct pci_dev *pci_dev);
+
+/**
+ * msm_pcie_l1ss_timeout_enable - enable L1ss timeout feature
+ * @pci_dev:	client's pci device structure
+ *
+ * This function gives PCIe clients the control to enable L1ss timeout
+ * feature.
+ */
+void msm_pcie_l1ss_timeout_enable(struct pci_dev *pci_dev);
+
 /**
  * msm_pcie_set_l1ss_state - configure active l1ss
  * @dev: pci device structure
@@ -209,6 +249,16 @@ void msm_pcie_set_l1ss_state(struct pci_dev *dev,
 
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
+{
+	return -ENODEV;
+}
+
+static inline int msm_pcie_l1ss_timeout_disable(struct pci_dev *pci_dev)
+{
+	return -ENODEV;
+}
+
+static inline int msm_pcie_l1ss_timeout_enable(struct pci_dev *pci_dev)
 {
 	return -ENODEV;
 }

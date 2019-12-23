@@ -2,6 +2,7 @@
 #define _UAPI_MSM_IPA_H_
 
 #ifndef __KERNEL__
+#include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/stat.h>
@@ -30,7 +31,7 @@
  */
 #define IPA_IPV6CT_DEV_NAME "ipaIpv6CTTable"
 
- /**
+/**
  * name of the default routing tables for v4 and v6
  */
 #define IPA_DFLT_RT_TBL_NAME "ipa_dflt_rt"
@@ -121,6 +122,7 @@
 #define IPA_IOCTL_FNR_COUNTER_ALLOC             74
 #define IPA_IOCTL_FNR_COUNTER_DEALLOC           75
 #define IPA_IOCTL_FNR_COUNTER_QUERY             76
+#define IPA_IOCTL_GET_NAT_IN_SRAM_INFO          77
 
 /**
  * max size of the header to be inserted
@@ -204,6 +206,9 @@
 #define IPA_FLT_L2TP_INNER_IP_TYPE	(1ul << 25)
 #define IPA_FLT_L2TP_INNER_IPV4_DST_ADDR (1ul << 26)
 #define IPA_FLT_IS_PURE_ACK		(1ul << 27)
+#define IPA_FLT_VLAN_ID			(1ul << 28)
+#define IPA_FLT_MAC_SRC_ADDR_802_1Q	(1ul << 29)
+#define IPA_FLT_MAC_DST_ADDR_802_1Q	(1ul << 30)
 
 /**
  * maximal number of NAT PDNs in the PDN config table
@@ -410,6 +415,10 @@ enum ipa_client_type {
 	(client) == IPA_CLIENT_USB_DPL_CONS || \
 	(client) == IPA_CLIENT_USB4_CONS)
 
+#define IPA_CLIENT_IS_WAN_CONS(client) \
+	((client) == IPA_CLIENT_APPS_WAN_CONS || \
+	(client) == IPA_CLIENT_APPS_WAN_COAL_CONS)
+
 #define IPA_CLIENT_IS_WLAN_CONS(client) \
 	((client) == IPA_CLIENT_WLAN1_CONS || \
 	(client) == IPA_CLIENT_WLAN2_CONS || \
@@ -501,13 +510,36 @@ enum ipa_client_type {
 	(IPA_CLIENT_IS_TEST_PROD(client) || IPA_CLIENT_IS_TEST_CONS(client))
 
 /**
+ * The following is used to describe the types of memory NAT can
+ * reside in.
+ *
+ * PLEASE KEEP THE FOLLOWING IN SYNC WITH ipa3_nat_mem_in_as_str()
+ * BELOW.
+ */
+enum ipa3_nat_mem_in {
+	IPA_NAT_MEM_IN_DDR  = 0,
+	IPA_NAT_MEM_IN_SRAM = 1,
+
+	IPA_NAT_MEM_IN_MAX
+};
+
+#define IPA_VALID_NAT_MEM_IN(t) \
+	((t) >= IPA_NAT_MEM_IN_DDR && (t) < IPA_NAT_MEM_IN_MAX)
+
+/**
  * enum ipa_ip_type - Address family: IPv4 or IPv6
+ *
+ * PLEASE KEEP THE FOLLOWING IN SYNC WITH ipa_ip_type_as_str()
+ * BELOW.
  */
 enum ipa_ip_type {
 	IPA_IP_v4,
 	IPA_IP_v6,
 	IPA_IP_MAX
 };
+
+#define VALID_IPA_IP_TYPE(t) \
+	((t) >= IPA_IP_v4 && (t) < IPA_IP_MAX)
 
 /**
  * enum ipa_rule_type - Type of routing or filtering rule
@@ -771,6 +803,7 @@ enum ipa_hw_type {
  * @u.v6.src_addr_mask: src address mask
  * @u.v6.dst_addr: dst address val
  * @u.v6.dst_addr_mask: dst address mask
+ * @vlan_id: vlan id value
  */
 struct ipa_rule_attrib {
 	uint32_t attrib_mask;
@@ -811,6 +844,7 @@ struct ipa_rule_attrib {
 			uint32_t dst_addr_mask[4];
 		} v6;
 	} u;
+	uint16_t vlan_id;
 };
 
 /*! @brief The maximum number of Mask Equal 32 Eqns */
@@ -1051,6 +1085,8 @@ enum ipa_hdr_l2_type {
  * IPA_HDR_PROC_ETHII_TO_802_3: Process Ethernet II to 802_3
  * IPA_HDR_PROC_802_3_TO_ETHII: Process 802_3 to Ethernet II
  * IPA_HDR_PROC_802_3_TO_802_3: Process 802_3 to 802_3
+ * IPA_HDR_PROC_ETHII_TO_ETHII_EX: Process Ethernet II to Ethernet II with
+ *	generic lengths of src and dst headers
  */
 enum ipa_hdr_proc_type {
 	IPA_HDR_PROC_NONE,
@@ -1059,9 +1095,10 @@ enum ipa_hdr_proc_type {
 	IPA_HDR_PROC_802_3_TO_ETHII,
 	IPA_HDR_PROC_802_3_TO_802_3,
 	IPA_HDR_PROC_L2TP_HEADER_ADD,
-	IPA_HDR_PROC_L2TP_HEADER_REMOVE
+	IPA_HDR_PROC_L2TP_HEADER_REMOVE,
+	IPA_HDR_PROC_ETHII_TO_ETHII_EX
 };
-#define IPA_HDR_PROC_MAX (IPA_HDR_PROC_L2TP_HEADER_REMOVE + 1)
+#define IPA_HDR_PROC_MAX (IPA_HDR_PROC_ETHII_TO_ETHII_EX + 1)
 
 /**
  * struct ipa_rt_rule - attributes of a routing rule
@@ -1216,6 +1253,20 @@ struct ipa_l2tp_hdr_proc_ctx_params {
 	enum ipa_client_type dst_pipe;
 };
 
+/**
+ * struct ipa_eth_II_to_eth_II_ex_procparams -
+ * @input_ethhdr_negative_offset: Specifies where the ethernet hdr offset is
+ *	(in bytes) from the start of the input IP hdr
+ * @output_ethhdr_negative_offset: Specifies where the ethernet hdr offset is
+ *	(in bytes) from the end of the template hdr
+ * @reserved: for future use
+ */
+struct ipa_eth_II_to_eth_II_ex_procparams {
+	uint32_t input_ethhdr_negative_offset : 8;
+	uint32_t output_ethhdr_negative_offset : 8;
+	uint32_t reserved : 16;
+};
+
 #define L2TP_USER_SPACE_SPECIFY_DST_PIPE
 
 /**
@@ -1224,6 +1275,7 @@ struct ipa_l2tp_hdr_proc_ctx_params {
  * @type: processing context type
  * @hdr_hdl: in parameter, handle to header
  * @l2tp_params: l2tp parameters
+ * @generic_params: generic proc_ctx params
  * @proc_ctx_hdl: out parameter, handle to proc_ctx, valid when status is 0
  * @status:	out parameter, status of header add operation,
  *		0 for success,
@@ -1235,6 +1287,7 @@ struct ipa_hdr_proc_ctx_add {
 	uint32_t proc_ctx_hdl;
 	int status;
 	struct ipa_l2tp_hdr_proc_ctx_params l2tp_params;
+	struct ipa_eth_II_to_eth_II_ex_procparams generic_params;
 };
 
 #define IPA_L2TP_HDR_PROC_SUPPORT
@@ -1962,6 +2015,8 @@ struct ipa_ioc_ext_intf_prop {
 	uint8_t is_xlat_rule;
 	uint32_t rule_id;
 	uint8_t is_rule_hashable;
+#define IPA_V6_UL_WL_FIREWALL_HANDLE
+	uint8_t replicate_needed;
 };
 
 /**
@@ -2037,9 +2092,11 @@ struct ipa_ioc_nat_ipv6ct_table_alloc {
  * @expn_table_entries: input parameter, ipv4 expansion rules table number of
  *                      entries
  * @ip_addr: input parameter, public ip address
+ * @mem_type: input parameter, type of memory the table resides in
+ * @focus_change: input parameter, are we moving to/from sram or ddr
  */
 struct ipa_ioc_v4_nat_init {
-	uint8_t tbl_index;
+	uint8_t  tbl_index;
 	uint32_t ipv4_rules_offset;
 	uint32_t expn_rules_offset;
 
@@ -2049,6 +2106,9 @@ struct ipa_ioc_v4_nat_init {
 	uint16_t table_entries;
 	uint16_t expn_table_entries;
 	uint32_t ip_addr;
+
+	uint8_t  mem_type;
+	uint8_t  focus_change;
 };
 
 /**
@@ -2081,9 +2141,11 @@ struct ipa_ioc_v4_nat_del {
 /**
  * struct ipa_ioc_nat_ipv6ct_table_del - NAT/IPv6CT table delete parameter
  * @table_index: input parameter, index of the table
+ * @mem_type: input parameter, type of memory the table resides in
  */
 struct ipa_ioc_nat_ipv6ct_table_del {
 	uint8_t table_index;
+	uint8_t mem_type;
 };
 
 /**
@@ -2107,11 +2169,12 @@ struct ipa_ioc_nat_dma_one {
  * struct ipa_ioc_nat_dma_cmd - To hold multiple nat/ipv6ct dma commands
  * @entries: number of dma commands in use
  * @dma: data pointer to the dma commands
+ * @mem_type: input parameter, type of memory the table resides in
  */
 struct ipa_ioc_nat_dma_cmd {
 	uint8_t entries;
+	uint8_t mem_type;
 	struct ipa_ioc_nat_dma_one dma[0];
-
 };
 
 /**
@@ -2747,6 +2810,10 @@ struct ipa_odl_modem_config {
 				IPA_IOCTL_FNR_COUNTER_QUERY, \
 				struct ipa_ioc_flt_rt_query)
 
+#define IPA_IOC_GET_NAT_IN_SRAM_INFO _IOWR(IPA_IOC_MAGIC, \
+				IPA_IOCTL_GET_NAT_IN_SRAM_INFO, \
+				struct ipa_nat_in_sram_info)
+
 /*
  * unique magic number of the Tethering bridge ioctls
  */
@@ -2836,6 +2903,21 @@ struct teth_ioc_aggr_params {
 	uint16_t lcid;
 };
 
+/**
+ * struct ipa_nat_in_sram_info - query for nat in sram particulars
+ * @sram_mem_available_for_nat: Amount SRAM available to fit nat table
+ * @nat_table_offset_into_mmap: Offset into mmap'd vm where table will be
+ * @best_nat_in_sram_size_rqst: The size to request for mmap
+ *
+ * The last two elements above are required to deal with situations
+ * where the SRAM's physical address and size don't play nice with
+ * mmap'ings page size and boundary attributes.
+ */
+struct ipa_nat_in_sram_info {
+	uint32_t sram_mem_available_for_nat;
+	uint32_t nat_table_offset_into_mmap;
+	uint32_t best_nat_in_sram_size_rqst;
+};
 
 #define TETH_BRIDGE_IOC_SET_BRIDGE_MODE _IOW(TETH_BRIDGE_IOC_MAGIC, \
 				TETH_BRIDGE_IOCTL_SET_BRIDGE_MODE, \

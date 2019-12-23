@@ -97,8 +97,8 @@ enum mhi_client_channel {
 	MHI_CLIENT_IP_CTRL_0_IN = 17,
 	MHI_CLIENT_IP_CTRL_1_OUT = 18,
 	MHI_CLIENT_IP_CTRL_1_IN = 19,
-	MHI_CLIENT_DCI_OUT = 20,
-	MHI_CLIENT_DCI_IN = 21,
+	MHI_CLIENT_IPCR_OUT = 20,
+	MHI_CLIENT_IPCR_IN = 21,
 	MHI_CLIENT_IP_CTRL_3_OUT = 22,
 	MHI_CLIENT_IP_CTRL_3_IN = 23,
 	MHI_CLIENT_IP_CTRL_4_OUT = 24,
@@ -168,7 +168,7 @@ int mhi_dev_open_channel(uint32_t chan_id,
 /**
  * mhi_dev_close_channel() - Channel close for a given client.
  */
-int mhi_dev_close_channel(struct mhi_dev_client *handle_client);
+void mhi_dev_close_channel(struct mhi_dev_client *handle_client);
 
 /**
  * mhi_dev_read_channel() - Channel read for a given client

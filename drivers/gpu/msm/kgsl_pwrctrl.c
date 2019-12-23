@@ -66,7 +66,7 @@ static const char * const clocks[] = {
 	"smmu_vote",
 };
 
-static unsigned int ib_votes[KGSL_MAX_BUSLEVELS];
+static unsigned long ib_votes[KGSL_MAX_BUSLEVELS];
 static int last_vote_buslevel;
 static int max_vote_buslevel;
 
@@ -144,8 +144,8 @@ static unsigned long kgsl_get_bw(void)
 static void _ab_buslevel_update(struct kgsl_pwrctrl *pwr,
 				unsigned long *ab)
 {
-	unsigned int ib = ib_votes[last_vote_buslevel];
-	unsigned int max_bw = ib_votes[max_vote_buslevel];
+	unsigned long ib = ib_votes[last_vote_buslevel];
+	unsigned long max_bw = ib_votes[max_vote_buslevel];
 
 	if (!ab)
 		return;
@@ -178,6 +178,12 @@ static unsigned int _adjust_pwrlevel(struct kgsl_pwrctrl *pwr, int level,
 	unsigned int min_pwrlevel = min_t(unsigned int,
 					pwr->thermal_pwrlevel_floor,
 					pwr->min_pwrlevel);
+
+	/* Ensure that max/min pwrlevels are within thermal max/min limits */
+	max_pwrlevel = min_t(unsigned int, max_pwrlevel,
+					pwr->thermal_pwrlevel_floor);
+	min_pwrlevel = max_t(unsigned int, min_pwrlevel,
+					pwr->thermal_pwrlevel);
 
 	switch (pwrc->type) {
 	case KGSL_CONSTRAINT_PWRLEVEL: {
@@ -2837,6 +2843,7 @@ _aware(struct kgsl_device *device)
 	case KGSL_STATE_RESET:
 		if (!gmu_core_gpmu_isenabled(device))
 			break;
+		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		status = gmu_core_start(device);
 		break;
 	case KGSL_STATE_INIT:
@@ -2901,6 +2908,7 @@ _aware(struct kgsl_device *device)
 				 * to make sure next attempt to wake up
 				 * GMU/GPU is indeed a fresh start.
 				 */
+				kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 				gmu_core_suspend(device);
 				kgsl_pwrctrl_set_state(device, state);
 			} else {
@@ -2987,7 +2995,6 @@ _slumber(struct kgsl_device *device)
 		kgsl_pwrctrl_clk_set_options(device, false);
 		kgsl_pwrctrl_disable(device);
 		kgsl_pwrscale_sleep(device);
-		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_SLUMBER);
 		pm_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
 						PM_QOS_DEFAULT_VALUE);

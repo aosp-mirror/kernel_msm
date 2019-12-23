@@ -60,25 +60,25 @@
 		wlan_fw_mem: wlan_fw_mem@86400000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x86400000 0x0 0xf00000>;
+			reg = <0x0 0x86400000 0x0 0x1000000>;
 		};
 
 		adsp_fw_mem: adsp_fw_mem@87500000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x87300000 0x0 0x1400000>;
+			reg = <0x0 0x87400000 0x0 0x1400000>;
 		};
 
 		cdsp_fw_mem: cdsp_fw_mem@88f00000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x88700000 0x0 0x600000>;
+			reg = <0x0 0x88800000 0x0 0x600000>;
 		};
 
 		wlan_msa_mem: wlan_msa_region@89500000 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x88D00000 0x0 0x100000>;
+			reg = <0x0 0x88E00000 0x0 0x100000>;
 		};
 
 		secure_mem: secure_region {
@@ -138,6 +138,7 @@
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 SD Card slot */
 		qpic_nand1 = &qnand_1;
+		pci-domain0 = &pcie0; /* PCIe0 domain */
 	};
 
 	soc: soc { };
@@ -469,7 +470,7 @@
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
-		qcom,pet-time = <10000>;
+		qcom,pet-time = <9744>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
 		status = "okay";
@@ -1296,7 +1297,7 @@
 			100000000 200000000 4294967295>;
 
 		qcom,clk-rates = <400000 20000000 25000000
-					50000000 100000000 200000000>;
+					50000000 100000000>;
 		qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50",
 				      "SDR104";
 
@@ -1306,16 +1307,23 @@
 			<&clock_gcc GCC_SDCC2_APPS_CLK>;
 		clock-names = "iface_clk", "core_clk";
 
-		qcom,nonhotplug;
-
 		/* VDD is an external regulator eLDO5 */
-		vdd-io-supply = <&pms405_l11>;
-		qcom,vdd-io-voltage-level = <1800000 2950000>;
+		vdd-io-supply = <&pms405_l6>;
+		qcom,vdd-io-voltage-level = <1800000 1800000>;
 		qcom,vdd-io-current-level = <0 24200>;
+		post-power-on-delay-ms = <100>;
+
+		qcom,core_3_0v_support;
+		qcom,nonremovable;
 
 		pinctrl-names = "active", "sleep";
-		pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on>;
-		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off>;
+		pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on
+			&sdc2_wlan_on>;
+		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off
+			&sdc2_wlan_off>;
+
+		/delete-property/ qcom,devfreq,freq-table;
+		/delete-property/ cd-gpios;
 
 		status = "ok";
 	};
@@ -1353,7 +1361,8 @@
 
 		qcom,cpufreq-table =
 			 < 1094400 >,
-			 < 1248000 >;
+			 < 1248000 >,
+			 < 1401600 >;
 	};
 
 	ddr_bw_opp_table: ddr-bw-opp-table {
@@ -1394,7 +1403,8 @@
 		qcom,target-dev = <&cpu0_cpu_ddr_latfloor>;
 		qcom,core-dev-table =
 			< 1094400 MHZ_TO_MBPS( 297, 8) >,
-			< 1248000 MHZ_TO_MBPS( 597, 8) >;
+			< 1248000 MHZ_TO_MBPS( 597, 8) >,
+			< 1401600 MHZ_TO_MBPS( 710, 8) >;
 	};
 
 	emac_hw: qcom,emac@07A80000 {
@@ -1508,6 +1518,26 @@
 		qcom,smmu-s1-bypass;
 		qcom,hyp_disabled;
 	};
+
+	cnss_sdio: qcom,cnss_sdio {
+		compatible = "qcom,cnss_sdio";
+		subsys-name = "AR6320";
+		/**
+		 * There is no vdd-wlan on board and this is not for DSRC.
+		 * IO and XTAL share the same vreg.
+		 **/
+		vdd-wlan-io-supply = <&pms405_l5>;
+		qcom,cap-tsf-gpio = <&tlmm 53 1>;
+		qcom,wlan-ramdump-dynamic = <0x200000>;
+		qcom,msm-bus,name = "msm-cnss";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<79 512 0 0>,             /* No vote */
+				<79 512 6250 200000>,     /* 50 Mbps */
+				<79 512 25000 200000>,    /* 200 Mbps */
+				<79 512 2048000 4096000>; /* MAX */
+	};
 };
 
 #include "qcs405-gdsc.dtsi"
@@ -1532,6 +1562,7 @@
 
 #include "qcs405-coresight.dtsi"
 #include "qcs405-usb.dtsi"
+#include "qcs405-pcie.dtsi"
 
 &i2c_5 {
 	smb1351_otg_supply: smb1351-charger@55 {

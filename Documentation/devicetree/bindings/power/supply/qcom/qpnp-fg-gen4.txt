@@ -29,6 +29,12 @@ First Level Node - FG Gen4 device
 	Definition: Should specify the phandle of PMIC revid module. This is
 		    used to identify the PMIC subtype.
 
+- qcom,pmic-pbs
+	Usage:      optional
+	Value type: <phandle>
+	Definition: Should specify the phandle of PMIC PBS module. This is
+		    used to trigger PBS for certain configurations.
+
 - #thermal-sensor-cells: Should be 0. See thermal.txt for the description.
 
 - nvmem-names:
@@ -477,6 +483,12 @@ First Level Node - FG Gen4 device
 		    filtered voltage when qcom,soc-scale-mode-en is
 		    specified. If this is not specified, then the
 		    default value is 10000. Unit is in ms.
+
+- qcom,sw-esr-control
+	Usage:      optional
+	Value type: <empty>
+	Definition: A boolean property that when specified enables SW ESR
+		    control depending on input presence and user request.
 
 ==========================================================
 Second Level Nodes - Peripherals managed by FG Gen4 driver

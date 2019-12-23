@@ -86,7 +86,17 @@ void diag_md_open_all(void)
 			ch->ops->open(ch->ctx, DIAG_MEMORY_DEVICE_MODE);
 	}
 }
+void diag_md_open_device(int id)
+{
+	struct diag_md_info *ch = NULL;
 
+	ch = &diag_md[id];
+	if (!ch->md_info_inited)
+		return;
+	if (ch->ops && ch->ops->open)
+		ch->ops->open(ch->ctx, DIAG_MEMORY_DEVICE_MODE);
+
+}
 void diag_md_close_all(void)
 {
 	int i, j;
@@ -125,12 +135,47 @@ void diag_md_close_all(void)
 
 	diag_ws_reset(DIAG_WS_MUX);
 }
+void diag_md_close_device(int id)
+{
+	int  j;
+	unsigned long flags;
+	struct diag_md_info *ch = NULL;
+	struct diag_buf_tbl_t *entry = NULL;
 
+	ch = &diag_md[id];
+	if (!ch->md_info_inited)
+		return;
+
+	if (ch->ops && ch->ops->close)
+		ch->ops->close(ch->ctx, DIAG_MEMORY_DEVICE_MODE);
+
+	/*
+	 * When we close the Memory device mode, make sure we flush the
+	 * internal buffers in the table so that there are no stale
+	 * entries.
+	 */
+	spin_lock_irqsave(&ch->lock, flags);
+	for (j = 0; j < ch->num_tbl_entries; j++) {
+		entry = &ch->tbl[j];
+		if (entry->len <= 0)
+			continue;
+		if (ch->ops && ch->ops->write_done)
+			ch->ops->write_done(entry->buf, entry->len,
+					    entry->ctx,
+					    DIAG_MEMORY_DEVICE_MODE);
+		entry->buf = NULL;
+		entry->len = 0;
+		entry->ctx = 0;
+	}
+	spin_unlock_irqrestore(&ch->lock, flags);
+
+	diag_ws_reset(DIAG_WS_MUX);
+}
 int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 {
 	int i, peripheral, pid = 0;
 	uint8_t found = 0;
-	unsigned long flags;
+	unsigned long flags, flags_sec;
 	struct diag_md_info *ch = NULL;
 	struct diag_md_session_t *session_info = NULL;
 
@@ -139,17 +184,20 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 
 	if (!buf || len < 0)
 		return -EINVAL;
-
-	peripheral = diag_md_get_peripheral(ctx);
-	if (peripheral < 0)
-		return -EINVAL;
-
+	if (id == DIAG_LOCAL_PROC) {
+		peripheral = diag_md_get_peripheral(ctx);
+		if (peripheral < 0)
+			return -EINVAL;
+	} else {
+		peripheral = 0;
+	}
 	mutex_lock(&driver->md_session_lock);
-	session_info = diag_md_session_get_peripheral(peripheral);
+	session_info = diag_md_session_get_peripheral(id, peripheral);
 	if (!session_info) {
 		mutex_unlock(&driver->md_session_lock);
 		return -EIO;
 	}
+
 	pid = session_info->pid;
 
 	ch = &diag_md[id];
@@ -159,6 +207,16 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 	}
 
 	spin_lock_irqsave(&ch->lock, flags);
+	if (peripheral == APPS_DATA) {
+		spin_lock_irqsave(&driver->diagmem_lock, flags_sec);
+		if (!hdlc_data.allocated && !non_hdlc_data.allocated) {
+			spin_unlock_irqrestore(&driver->diagmem_lock,
+				flags_sec);
+			spin_unlock_irqrestore(&ch->lock, flags);
+			mutex_unlock(&driver->md_session_lock);
+			return -EINVAL;
+		}
+	}
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
 		if (ch->tbl[i].buf != buf)
 			continue;
@@ -170,14 +228,16 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		ch->tbl[i].len = 0;
 		ch->tbl[i].ctx = 0;
 	}
-	spin_unlock_irqrestore(&ch->lock, flags);
 
 	if (found) {
+		if (peripheral == APPS_DATA)
+			spin_unlock_irqrestore(&driver->diagmem_lock,
+				flags_sec);
+		spin_unlock_irqrestore(&ch->lock, flags);
 		mutex_unlock(&driver->md_session_lock);
 		return -ENOMEM;
 	}
 
-	spin_lock_irqsave(&ch->lock, flags);
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
 		if (ch->tbl[i].len == 0) {
 			ch->tbl[i].buf = buf;
@@ -187,6 +247,8 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 			diag_ws_on_read(DIAG_WS_MUX, len);
 		}
 	}
+	if (peripheral == APPS_DATA)
+		spin_unlock_irqrestore(&driver->diagmem_lock, flags_sec);
 	spin_unlock_irqrestore(&ch->lock, flags);
 	mutex_unlock(&driver->md_session_lock);
 
@@ -240,28 +302,22 @@ int diag_md_copy_to_user(char __user *buf, int *pret, size_t buf_size,
 		if (!ch->md_info_inited)
 			continue;
 		for (j = 0; j < ch->num_tbl_entries && !err; j++) {
-			spin_lock_irqsave(&ch->lock, flags);
 			entry = &ch->tbl[j];
-			if (entry->len <= 0 || entry->buf == NULL) {
-				spin_unlock_irqrestore(&ch->lock, flags);
+			if (entry->len <= 0 || entry->buf == NULL)
 				continue;
-			}
 
 			peripheral = diag_md_get_peripheral(entry->ctx);
-			if (peripheral < 0) {
-				spin_unlock_irqrestore(&ch->lock, flags);
+			if (peripheral < 0)
 				goto drop_data;
-			}
-			spin_unlock_irqrestore(&ch->lock, flags);
 			session_info =
-			diag_md_session_get_peripheral(peripheral);
+			diag_md_session_get_peripheral(i, peripheral);
 			if (!session_info)
 				goto drop_data;
 
 			if (session_info && info &&
 				(session_info->pid != info->pid))
 				continue;
-			if ((info && (info->peripheral_mask &
+			if ((info && (info->peripheral_mask[i] &
 			    MD_PERIPHERAL_MASK(peripheral)) == 0))
 				goto drop_data;
 			pid_struct = find_get_pid(session_info->pid);
@@ -389,32 +445,6 @@ int diag_md_close_peripheral(int id, uint8_t peripheral)
 			entry->len = 0;
 			entry->ctx = 0;
 		}
-	}
-	spin_unlock_irqrestore(&ch->lock, flags);
-	return 0;
-}
-
-int diag_md_close_device(int id)
-{
-	int i;
-	uint8_t found = 0;
-	unsigned long flags;
-	struct diag_md_info *ch = NULL;
-	struct diag_buf_tbl_t *entry = NULL;
-
-	if (id < 0 || id >= NUM_DIAG_MD_DEV || id >= DIAG_NUM_PROC)
-		return -EINVAL;
-
-	ch = &diag_md[id];
-	if (!ch || !ch->md_info_inited)
-		return -EINVAL;
-
-	spin_lock_irqsave(&ch->lock, flags);
-	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
-		entry = &ch->tbl[i];
-		entry->buf = NULL;
-		entry->len = 0;
-		entry->ctx = 0;
 	}
 	spin_unlock_irqrestore(&ch->lock, flags);
 	return 0;

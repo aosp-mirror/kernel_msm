@@ -183,6 +183,8 @@
 #include "dsi-panel-ext-bridge-1080p.dtsi"
 
 &dsi_ext_bridge_1080p {
+	qcom,mdss-dsi-ext-bridge = <0>;
+
 	qcom,mdss-dsi-display-timings {
 		timing@0{
 			qcom,mdss-dsi-panel-phy-timings = [00 1E 08 07 24 22
@@ -226,9 +228,10 @@
 		clocks = <&mdss_dsi0_pll BYTECLK_MUX_0_CLK>,
 			 <&mdss_dsi0_pll PCLK_MUX_0_CLK>,
 			 <&mdss_dsi1_pll BYTECLK_MUX_1_CLK>,
-			 <&mdss_dsi1_pll PCLK_MUX_1_CLK>;
+			 <&mdss_dsi1_pll PCLK_MUX_1_CLK>,
+			 <&clock_rpmh RPMH_CXO_CLK>;
 		clock-names = "mux_byte_clk0", "mux_pixel_clk0",
-			      "mux_byte_clk1", "mux_pixel_clk1";
+			      "mux_byte_clk1", "mux_pixel_clk1", "xo_clk";
 
 		qcom,dsi-display-list =
 			<&dsi_anx_7625_1>;
@@ -256,9 +259,10 @@
 		clocks = <&mdss_dsi0_pll BYTECLK_MUX_0_CLK>,
 			 <&mdss_dsi0_pll PCLK_MUX_0_CLK>,
 			 <&mdss_dsi1_pll BYTECLK_MUX_1_CLK>,
-			 <&mdss_dsi1_pll PCLK_MUX_1_CLK>;
+			 <&mdss_dsi1_pll PCLK_MUX_1_CLK>,
+			 <&clock_rpmh RPMH_CXO_CLK>;
 		clock-names = "mux_byte_clk0", "mux_pixel_clk0",
-			      "mux_byte_clk1", "mux_pixel_clk1";
+			      "mux_byte_clk1", "mux_pixel_clk1", "xo_clk";
 
 		qcom,dsi-display-list =
 			<&dsi_anx_7625_2>;
@@ -300,5 +304,9 @@
 };
 
 &mdss_mdp {
+	qcom,sde-ctl-display-pref = "primary", "none", "none",
+				"none", "none";
+	qcom,sde-mixer-display-pref = "primary", "none", "none",
+				"none", "none", "none";
 	connectors = <&dsi_dp1 &dsi_dp2 &sde_dp &sde_wb>;
 };

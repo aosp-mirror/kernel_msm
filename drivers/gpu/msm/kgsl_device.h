@@ -15,6 +15,7 @@
 
 #include <linux/slab.h>
 #include <linux/idr.h>
+#include <linux/pm.h>
 #include <linux/pm_qos.h>
 #include <linux/sched.h>
 
@@ -189,8 +190,10 @@ struct kgsl_functable {
 	void (*gpu_model)(struct kgsl_device *device, char *str,
 		size_t bufsz);
 	void (*stop_fault_timer)(struct kgsl_device *device);
-	void (*dispatcher_halt)(struct kgsl_device *device);
-	void (*dispatcher_unhalt)(struct kgsl_device *device);
+	int (*suspend_device)(struct kgsl_device *device,
+		pm_message_t pm_state);
+	int (*resume_device)(struct kgsl_device *device,
+		pm_message_t pm_state);
 };
 
 struct kgsl_ioctl {
@@ -399,6 +402,8 @@ struct kgsl_process_private;
  * @fault_time: time of the first gpu hang in last _context_throttle_time ms
  * @user_ctxt_record: memory descriptor used by CP to save/restore VPC data
  * across preemption
+ * @total_fault_count: number of times gpu faulted in this context
+ * @last_faulted_cmd_ts: last faulted command batch timestamp
  */
 struct kgsl_context {
 	struct kref refcount;
@@ -418,6 +423,8 @@ struct kgsl_context {
 	unsigned int fault_count;
 	unsigned long fault_time;
 	struct kgsl_mem_entry *user_ctxt_record;
+	unsigned int total_fault_count;
+	unsigned int last_faulted_cmd_ts;
 };
 
 #define _context_comm(_c) \
@@ -668,6 +675,26 @@ static inline int kgsl_state_is_awake(struct kgsl_device *device)
 		return true;
 	else
 		return false;
+}
+
+static inline int kgsl_change_flag(struct kgsl_device *device,
+		unsigned long flag, unsigned long *val)
+{
+	int ret;
+
+	mutex_lock(&device->mutex);
+	/*
+	 * Bring down the GPU, so that we can bring it back up with the correct
+	 * power and clock settings
+	 */
+	ret = kgsl_pwrctrl_change_state(device, KGSL_STATE_SUSPEND);
+	if (!ret) {
+		change_bit(flag, val);
+		kgsl_pwrctrl_change_state(device, KGSL_STATE_SLUMBER);
+	}
+
+	mutex_unlock(&device->mutex);
+	return ret;
 }
 
 int kgsl_readtimestamp(struct kgsl_device *device, void *priv,

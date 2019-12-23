@@ -883,14 +883,18 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 	char *envp51[2] = { "ACCESSORY=GETPROTOCOL", NULL };
 	char *envp52[2] = { "ACCESSORY=SENDSTRING", NULL };
 
-	if (!_acc_dev)
+	/*
+	 * If instance is not created which is the case in power off charging
+	 * mode, dev will be NULL. Hence return error if it is the case.
+	 */
+	if (!dev)
 		return -ENODEV;
-
-	dev = _acc_dev;
-
-	pr_debug("%s: %02x.%02x v%04x i%04x l%u\n",
-		  __func__, b_requestType, b_request,
-		  w_value, w_index, w_length);
+/*
+	printk(KERN_INFO "acc_ctrlrequest "
+			"%02x.%02x v%04x i%04x l%u\n",
+			b_requestType, b_request,
+			w_value, w_index, w_length);
+*/
 
 	if (b_requestType == (USB_DIR_OUT | USB_TYPE_VENDOR)) {
 		if (b_request == ACCESSORY_START) {

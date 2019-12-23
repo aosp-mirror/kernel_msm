@@ -16,8 +16,12 @@
 #include <linux/vmalloc.h>
 #include <linux/interrupt.h>
 #include <linux/cpu.h>
+#include <uapi/linux/ip.h>
+#include <uapi/linux/tcp.h>
+#include <uapi/linux/udp.h>
 
 #include "atl_trace.h"
+#include "atl_fwdnl.h"
 
 #define atl_update_ring_stat(ring, stat, delta)			\
 do {								\
@@ -92,16 +96,11 @@ static inline struct netdev_queue *atl_txq(struct atl_desc_ring *ring)
 		ring->qvec->idx);
 }
 
-static unsigned int atl_tx_free_low = MAX_SKB_FRAGS + 4;
+unsigned int atl_tx_free_low = MAX_SKB_FRAGS + 4;
 module_param_named(tx_free_low, atl_tx_free_low, uint, 0644);
 
-static unsigned int atl_tx_free_high = MAX_SKB_FRAGS * 3;
+unsigned int atl_tx_free_high = MAX_SKB_FRAGS * 3;
 module_param_named(tx_free_high, atl_tx_free_high, uint, 0644);
-
-static inline int skb_xmit_more(struct sk_buff *skb)
-{
-	return skb->xmit_more;
-}
 
 static netdev_tx_t atl_map_xmit_skb(struct sk_buff *skb,
 	struct atl_desc_ring *ring, struct atl_txbuf *first_buf)
@@ -109,7 +108,7 @@ static netdev_tx_t atl_map_xmit_skb(struct sk_buff *skb,
 	int idx = ring->tail;
 	struct device *dev = ring->qvec->dev;
 	struct atl_tx_desc *desc = &ring->desc.tx;
-	struct skb_frag_struct *frag;
+	skb_frag_t *frag;
 	/* Header's DMA mapping must be stored in the txbuf that has
 	 * ->skb set, even if it corresponds to the context
 	 * descriptor and not the first data descriptor
@@ -257,6 +256,17 @@ netdev_tx_t atl_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	struct atl_txbuf *txbuf;
 	uint32_t cmd_from_ctx;
 
+	if (nic->priv_flags & ATL_PF_BIT(LPB_NET_DMA))
+		return NETDEV_TX_BUSY;
+
+#ifdef CONFIG_ATLFWD_FWD_NETLINK
+	/* atl_max_queues is the number of standard queues.
+	 * Extra queue is allocated for FWD processing.
+	 */
+	if (unlikely(skb->queue_mapping >= nic->nvecs))
+		return atlfwd_nl_xmit(skb, ndev);
+#endif
+
 	if (tx_full(ring, skb_shinfo(skb)->nr_frags + 4)) {
 		atl_update_ring_stat(ring, tx.tx_busy, 1);
 		return NETDEV_TX_BUSY;
@@ -305,7 +315,7 @@ netdev_tx_t atl_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	return atl_map_xmit_skb(skb, ring, txbuf);
 }
 
-static unsigned int atl_tx_clean_budget = 256;
+unsigned int atl_tx_clean_budget = 256;
 module_param_named(tx_clean_budget, atl_tx_clean_budget, uint, 0644);
 
 // Returns true if all work done
@@ -384,7 +394,7 @@ static bool atl_clean_tx(struct atl_desc_ring *ring)
 
 		smp_mb();
 		if (__netif_subqueue_stopped(ndev, ring->qvec->idx) &&
-			test_bit(ATL_ST_UP, &nic->state)) {
+			test_bit(ATL_ST_RINGS_RUNNING, &nic->hw.state)) {
 			atl_nic_dbg("restarting tx queue\n");
 			netif_wake_subqueue(ndev, ring->qvec->idx);
 			atl_update_ring_stat(ring, tx.tx_restart, 1);
@@ -394,12 +404,72 @@ static bool atl_clean_tx(struct atl_desc_ring *ring)
 	return !!budget;
 }
 
+/* work around HW bugs in checksum calculation:
+ * - packets less than 60 octets
+ * - ip, tcp or udp checksum is 0xFFFF
+ */
+static bool atl_checksum_workaround(struct sk_buff *skb,
+				    struct atl_rx_desc_wb *desc)
+{
+	int ip_header_offset = 14;
+	int l4_header_offset = 0;
+	struct iphdr *ip;
+	struct tcphdr *tcp;
+	struct udphdr *udp;
+
+	if (desc->pkt_len <= 60)
+		return true;
+
+	if ((desc->pkt_type & atl_rx_pkt_type_vlan_msk) ==
+	    atl_rx_pkt_type_vlan)
+		ip_header_offset += 4;
+
+	if ((desc->pkt_type & atl_rx_pkt_type_vlan_msk) ==
+	    atl_rx_pkt_type_dbl_vlan)
+		ip_header_offset += 8;
+
+	switch (desc->pkt_type & atl_rx_pkt_type_l3_msk) {
+	case atl_rx_pkt_type_ipv4:
+		ip = (struct iphdr *) &skb->data[ip_header_offset];
+
+		if (ip->check == 0xFFFF)
+			return true;
+		l4_header_offset = ip->ihl << 2;
+		break;
+	case atl_rx_pkt_type_ipv6:
+		l4_header_offset = ip_header_offset + sizeof(struct ipv6hdr);
+		break;
+	default:
+		return false;
+	}
+
+	switch (desc->pkt_type & atl_rx_pkt_type_l4_msk) {
+	case atl_rx_pkt_type_tcp:
+		tcp = (struct tcphdr *) &skb->data[ip_header_offset +
+						  l4_header_offset];
+
+		if (tcp->check == 0xFFFF)
+			return true;
+		break;
+	case atl_rx_pkt_type_udp:
+		udp = (struct udphdr *) &skb->data[ip_header_offset +
+						  l4_header_offset];
+		if (udp->check == 0xFFFF)
+			return true;
+		break;
+	default:
+		return false;
+	}
+
+	return false;
+}
+
 static bool atl_rx_checksum(struct sk_buff *skb, struct atl_rx_desc_wb *desc,
 	struct atl_desc_ring *ring)
 {
 	struct atl_nic *nic = ring->qvec->nic;
 	struct net_device *ndev = nic->ndev;
-	int csum_ok = 1, recheck = 0;
+	int csum_ok = 1;
 
 	skb_checksum_none_assert(skb);
 
@@ -426,7 +496,6 @@ static bool atl_rx_checksum(struct sk_buff *skb, struct atl_rx_desc_wb *desc,
 	switch (desc->pkt_type & atl_rx_pkt_type_l4_msk) {
 	case atl_rx_pkt_type_tcp:
 	case atl_rx_pkt_type_udp:
-		recheck = desc->pkt_len <= 60;
 		csum_ok &= !(desc->rx_stat & atl_rx_stat_l4_err);
 		break;
 	default:
@@ -436,8 +505,10 @@ static bool atl_rx_checksum(struct sk_buff *skb, struct atl_rx_desc_wb *desc,
 	if (csum_ok) {
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 		return true;
-	} else if (recheck)
-		return true;
+	} else {
+		if (atl_checksum_workaround(skb, desc))
+			return true;
+	}
 
 	atl_update_ring_stat(ring, rx.csum_err, 1);
 
@@ -1085,7 +1156,8 @@ static int atl_config_interrupts(struct atl_nic *nic)
 	if (atl_enable_msi) {
 		int nvecs;
 
-		nvecs = min_t(int, nic->requested_nvecs, num_present_cpus());
+		nvecs = min_t(unsigned int, nic->requested_nvecs,
+			      num_present_cpus());
 		flags = PCI_IRQ_MSIX | PCI_IRQ_MSI;
 		ret = pci_alloc_irq_vectors(hw->pdev,
 			ATL_NUM_NON_RING_IRQS + 1,
@@ -1135,7 +1207,7 @@ void atl_clear_datapath(struct atl_nic *nic)
 	 * pci_ops->remove(), without an intervening
 	 * atl_setup_datapath().
 	 */
-	if (!test_and_clear_bit(ATL_ST_CONFIGURED, &nic->state))
+	if (!test_and_clear_bit(ATL_ST_CONFIGURED, &nic->hw.state))
 		return;
 
 	atl_free_link_intr(nic);
@@ -1229,7 +1301,7 @@ int atl_setup_datapath(struct atl_nic *nic)
 
 	nic->max_mtu = atl_rx_linear ? ATL_MAX_RX_LINEAR_MTU : ATL_MAX_MTU;
 
-	set_bit(ATL_ST_CONFIGURED, &nic->state);
+	set_bit(ATL_ST_CONFIGURED, &nic->hw.state);
 	return 0;
 
 err_link_intr:
@@ -1620,6 +1692,9 @@ int atl_start_rings(struct atl_nic *nic)
 	struct atl_queue_vec *qvec;
 	int ret;
 
+	if (test_bit(ATL_ST_RINGS_RUNNING, &hw->state))
+		return 0;
+
 	if (nic->flags & ATL_FL_MULTIPLE_VECTORS) {
 		mask = BIT(nic->nvecs + ATL_NUM_NON_RING_IRQS) -
 			BIT(ATL_NUM_NON_RING_IRQS);
@@ -1638,6 +1713,9 @@ int atl_start_rings(struct atl_nic *nic)
 			goto stop;
 	}
 
+	set_bit(ATL_ST_RINGS_RUNNING, &hw->state);
+	netif_tx_start_all_queues(nic->ndev);
+
 	return 0;
 
 stop:
@@ -1647,17 +1725,38 @@ stop:
 	return ret;
 }
 
-void atl_stop_rings(struct atl_nic *nic)
+void atl_clear_tdm_cache(struct atl_nic *nic)
 {
-	struct atl_queue_vec *qvec;
 	struct atl_hw *hw = &nic->hw;
 
-	atl_for_each_qvec(nic, qvec)
-		atl_stop_qvec(qvec);
+	atl_write_bit(hw, 0x7b00, 0, 1);
+	udelay(10);
+	atl_write_bit(hw, 0x7b00, 0, 0);
+}
+
+void atl_clear_rdm_cache(struct atl_nic *nic)
+{
+	struct atl_hw *hw = &nic->hw;
 
 	atl_write_bit(hw, 0x5a00, 0, 1);
 	udelay(10);
 	atl_write_bit(hw, 0x5a00, 0, 0);
+}
+
+void atl_stop_rings(struct atl_nic *nic)
+{
+	struct atl_queue_vec *qvec;
+
+	if (!test_and_clear_bit(ATL_ST_RINGS_RUNNING, &nic->hw.state))
+		return;
+
+	netif_tx_stop_all_queues(nic->ndev);
+
+	atl_for_each_qvec(nic, qvec)
+		atl_stop_qvec(qvec);
+
+	atl_clear_rdm_cache(nic);
+	atl_clear_tdm_cache(nic);
 }
 
 int atl_set_features(struct net_device *ndev, netdev_features_t features)
@@ -1698,8 +1797,11 @@ void atl_update_global_stats(struct atl_nic *nic)
 	int i;
 	struct atl_ring_stats stats;
 
+	if (!test_bit(ATL_ST_ENABLED, &nic->hw.state) ||
+	    test_bit(ATL_ST_RESETTING, &nic->hw.state))
+		return;
+
 	memset(&stats, 0, sizeof(stats));
-	atl_update_eth_stats(nic);
 
 	spin_lock(&nic->stats_lock);
 

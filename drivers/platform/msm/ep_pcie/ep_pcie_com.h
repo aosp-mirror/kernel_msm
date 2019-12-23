@@ -146,7 +146,7 @@
 #define LINK_UP_CHECK_MAX_COUNT		      30000
 #define BME_TIMEOUT_US_MIN	              1000
 #define BME_TIMEOUT_US_MAX	              1000
-#define BME_CHECK_MAX_COUNT		      30000
+#define BME_CHECK_MAX_COUNT		      100000
 #define PHY_STABILIZATION_DELAY_US_MIN	      1000
 #define PHY_STABILIZATION_DELAY_US_MAX	      1000
 #define REFCLK_STABILIZATION_DELAY_US_MIN     1000
@@ -344,6 +344,7 @@ struct ep_pcie_dev_t {
 	bool                         aggregated_irq;
 	bool                         mhi_a7_irq;
 	bool                         pcie_edma;
+	bool                         tcsr_not_supported;
 	u32                          dbi_base_reg;
 	u32                          slv_space_reg;
 	u32                          phy_status_reg;
@@ -397,6 +398,15 @@ struct ep_pcie_dev_t {
 extern struct ep_pcie_dev_t ep_pcie_dev;
 extern struct ep_pcie_hw hw_drv;
 
+#if IS_ENABLED(CONFIG_QCOM_PCI_EDMA)
+int qcom_edma_init(struct device *dev);
+#else
+static inline int qcom_edma_init(struct device *dev)
+{
+	return 0;
+}
+#endif
+
 static inline void ep_pcie_write_mask(void __iomem *addr,
 				u32 clear_mask, u32 set_mask)
 {
@@ -435,6 +445,5 @@ extern bool ep_pcie_phy_is_ready(struct ep_pcie_dev_t *dev);
 extern void ep_pcie_reg_dump(struct ep_pcie_dev_t *dev, u32 sel, bool linkdown);
 extern void ep_pcie_debugfs_init(struct ep_pcie_dev_t *ep_dev);
 extern void ep_pcie_debugfs_exit(void);
-extern int qcom_edma_init(struct device *dev);
 
 #endif

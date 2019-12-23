@@ -25,6 +25,7 @@
 #include "rmnet_vnd.h"
 #include "rmnet_map.h"
 #include "rmnet_handlers.h"
+#include "rmnet_descriptor.h"
 
 #include <soc/qcom/rmnet_qmi.h>
 #include <soc/qcom/qmi_rmnet.h>
@@ -113,11 +114,14 @@ rmnet_deliver_skb(struct sk_buff *skb, struct rmnet_port *port)
 	skb->pkt_type = PACKET_HOST;
 	skb_set_mac_header(skb, 0);
 
+	rcu_read_lock();
 	rmnet_shs_stamp = rcu_dereference(rmnet_shs_skb_entry);
 	if (rmnet_shs_stamp) {
 		rmnet_shs_stamp(skb, port);
+		rcu_read_unlock();
 		return;
 	}
+	rcu_read_unlock();
 
 	if (port->data_format & RMNET_INGRESS_FORMAT_DL_MARKER) {
 		if (!rmnet_check_skb_can_gro(skb) &&
@@ -158,12 +162,15 @@ rmnet_deliver_skb_wq(struct sk_buff *skb, struct rmnet_port *port,
 	/* packets coming from work queue context due to packet flush timer
 	 * must go through the special workqueue path in SHS driver
 	 */
+	rcu_read_lock();
 	rmnet_shs_stamp = (!ctx) ? rcu_dereference(rmnet_shs_skb_entry) :
 				   rcu_dereference(rmnet_shs_skb_entry_wq);
 	if (rmnet_shs_stamp) {
 		rmnet_shs_stamp(skb, port);
+		rcu_read_unlock();
 		return;
 	}
+	rcu_read_unlock();
 
 	if (ctx == RMNET_NET_RX_CTX) {
 		if (port->data_format & RMNET_INGRESS_FORMAT_DL_MARKER) {
@@ -299,6 +306,14 @@ rmnet_map_ingress_handler(struct sk_buff *skb,
 		skb_push(skb, ETH_HLEN);
 	}
 
+	if (port->data_format & (RMNET_FLAGS_INGRESS_COALESCE |
+				 RMNET_FLAGS_INGRESS_MAP_CKSUMV5)) {
+		if (skb_is_nonlinear(skb)) {
+			rmnet_frag_ingress_handler(skb, port);
+			return;
+		}
+	}
+
 	/* No aggregation. Pass the frame on as is */
 	if (!(port->data_format & RMNET_FLAGS_INGRESS_DEAGGREGATION)) {
 		__rmnet_map_ingress_handler(skb, port);
@@ -306,11 +321,14 @@ rmnet_map_ingress_handler(struct sk_buff *skb,
 	}
 
 	/* Pass off handling to rmnet_perf module, if present */
+	rcu_read_lock();
 	rmnet_perf_core_deaggregate = rcu_dereference(rmnet_perf_deag_entry);
 	if (rmnet_perf_core_deaggregate) {
 		rmnet_perf_core_deaggregate(skb, port);
+		rcu_read_unlock();
 		return;
 	}
+	rcu_read_unlock();
 
 	/* Deaggregation and freeing of HW originating
 	 * buffers is done within here
@@ -369,18 +387,8 @@ static int rmnet_map_egress_handler(struct sk_buff *skb,
 	map_header->mux_id = mux_id;
 
 	if (port->data_format & RMNET_EGRESS_FORMAT_AGGREGATION) {
-		int non_linear_skb;
-
 		if (rmnet_map_tx_agg_skip(skb, required_headroom))
 			goto done;
-
-		non_linear_skb = (orig_dev->features & NETIF_F_GSO) &&
-				 skb_is_nonlinear(skb);
-
-		if (non_linear_skb) {
-			if (unlikely(__skb_linearize(skb)))
-				goto done;
-		}
 
 		rmnet_map_tx_aggregate(skb, port);
 		return -EINPROGRESS;

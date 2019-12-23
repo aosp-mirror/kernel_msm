@@ -29,6 +29,8 @@
 #include "diagfwd_rpmsg.h"
 #include "diag_ipc_logging.h"
 
+#define PERI_RPMSG rpmsg_info->peripheral
+
 struct diag_rpmsg_read_work {
 	struct diag_rpmsg_info *rpmsg_info;
 	const void *ptr_read_done;
@@ -91,6 +93,15 @@ struct diag_rpmsg_info rpmsg_data[NUM_PERIPHERALS] = {
 		.buf1 = NULL,
 		.buf2 = NULL,
 		.hdl = NULL
+	},
+	{
+		.peripheral = PERIPHERAL_NPU,
+		.type = TYPE_DATA,
+		.edge = "npu",
+		.name = "DIAG_DATA",
+		.buf1 = NULL,
+		.buf2 = NULL,
+		.hdl = NULL
 	}
 };
 
@@ -144,6 +155,15 @@ struct diag_rpmsg_info rpmsg_cntl[NUM_PERIPHERALS] = {
 		.peripheral = PERIPHERAL_CDSP,
 		.type = TYPE_CNTL,
 		.edge = "cdsp",
+		.name = "DIAG_CTRL",
+		.buf1 = NULL,
+		.buf2 = NULL,
+		.hdl = NULL
+	},
+	{
+		.peripheral = PERIPHERAL_NPU,
+		.type = TYPE_CNTL,
+		.edge = "npu",
 		.name = "DIAG_CTRL",
 		.buf1 = NULL,
 		.buf2 = NULL,
@@ -205,6 +225,15 @@ struct diag_rpmsg_info rpmsg_dci[NUM_PERIPHERALS] = {
 		.buf1 = NULL,
 		.buf2 = NULL,
 		.hdl = NULL
+	},
+	{
+		.peripheral = PERIPHERAL_NPU,
+		.type = TYPE_DCI,
+		.edge = "npu",
+		.name = "DIAG_DCI_DATA",
+		.buf1 = NULL,
+		.buf2 = NULL,
+		.hdl = NULL
 	}
 };
 
@@ -258,6 +287,15 @@ struct diag_rpmsg_info rpmsg_cmd[NUM_PERIPHERALS] = {
 		.peripheral = PERIPHERAL_CDSP,
 		.type = TYPE_CMD,
 		.edge = "cdsp",
+		.name = "DIAG_CMD",
+		.buf1 = NULL,
+		.buf2 = NULL,
+		.hdl = NULL
+	},
+	{
+		.peripheral = PERIPHERAL_NPU,
+		.type = TYPE_CMD,
+		.edge = "npu",
 		.name = "DIAG_CMD",
 		.buf1 = NULL,
 		.buf2 = NULL,
@@ -319,6 +357,15 @@ struct diag_rpmsg_info rpmsg_dci_cmd[NUM_PERIPHERALS] = {
 		.buf1 = NULL,
 		.buf2 = NULL,
 		.hdl = NULL
+	},
+	{
+		.peripheral = PERIPHERAL_NPU,
+		.type = TYPE_DCI_CMD,
+		.edge = "npu",
+		.name = "DIAG_DCI_CMD",
+		.buf1 = NULL,
+		.buf2 = NULL,
+		.hdl = NULL
 	}
 };
 
@@ -357,11 +404,7 @@ static void diag_rpmsg_queue_read(void *ctxt)
 		return;
 
 	rpmsg_info = (struct diag_rpmsg_info *)ctxt;
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
-	if (rpmsg_info->hdl && rpmsg_info->wq &&
-		atomic_read(&rpmsg_info->opened))
-		queue_work(rpmsg_info->wq, &(rpmsg_info->read_work));
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	queue_work(rpmsg_info->wq, &(rpmsg_info->read_work));
 }
 
 static void diag_state_close_rpmsg(void *ctxt)
@@ -405,15 +448,15 @@ static int diag_rpmsg_read(void *ctxt, unsigned char *buf, int buf_len)
 		return -EIO;
 	}
 
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	if (!atomic_read(&rpmsg_info->opened) ||
 		!rpmsg_info->hdl || !rpmsg_info->inited) {
 		DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
 			"diag:RPMSG channel not opened");
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		return -EIO;
 	}
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 
 	fwd_info = rpmsg_info->fwd_ctxt;
 
@@ -441,18 +484,18 @@ static void diag_rpmsg_read_work_fn(struct work_struct *work)
 	if (!rpmsg_info)
 		return;
 
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 
 	if (!atomic_read(&rpmsg_info->opened)) {
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		return;
 	}
 	if (!rpmsg_info->inited) {
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		diag_ws_release();
 		return;
 	}
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 
 	diagfwd_channel_read(rpmsg_info->fwd_ctxt);
 }
@@ -473,15 +516,14 @@ static int  diag_rpmsg_write(void *ctxt, unsigned char *buf, int len)
 		return -EINVAL;
 	}
 
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	if (!rpmsg_info->inited || !rpmsg_info->hdl ||
 		!atomic_read(&rpmsg_info->opened)) {
 		pr_err_ratelimited("diag: In %s, rpmsg not inited, rpmsg_info: %pK, buf: %pK, len: %d\n",
 				 __func__, rpmsg_info, buf, len);
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		return -ENODEV;
 	}
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
 
 	rpdev = (struct rpmsg_device *)rpmsg_info->hdl;
 	err = rpmsg_send(rpdev->ept, buf, len);
@@ -491,6 +533,7 @@ static int  diag_rpmsg_write(void *ctxt, unsigned char *buf, int len)
 	} else
 		err = -ENOMEM;
 
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	return err;
 
 }
@@ -500,15 +543,16 @@ static void diag_rpmsg_late_init_work_fn(struct work_struct *work)
 	struct diag_rpmsg_info *rpmsg_info = container_of(work,
 							struct diag_rpmsg_info,
 							late_init_work);
+
 	if (!rpmsg_info)
 		return;
 
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	if (!rpmsg_info->hdl) {
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		return;
 	}
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 
 	diagfwd_channel_open(rpmsg_info->fwd_ctxt);
 	DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "rpmsg late init p: %d t: %d\n",
@@ -521,15 +565,16 @@ static void diag_rpmsg_open_work_fn(struct work_struct *work)
 	struct diag_rpmsg_info *rpmsg_info = container_of(work,
 							struct diag_rpmsg_info,
 							open_work);
+
 	if (!rpmsg_info)
 		return;
 
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	if (!rpmsg_info->inited) {
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		return;
 	}
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 
 	if (rpmsg_info->type != TYPE_CNTL) {
 		diagfwd_channel_open(rpmsg_info->fwd_ctxt);
@@ -544,16 +589,17 @@ static void diag_rpmsg_close_work_fn(struct work_struct *work)
 	struct diag_rpmsg_info *rpmsg_info = container_of(work,
 							struct diag_rpmsg_info,
 							close_work);
+
 	if (!rpmsg_info)
 		return;
 
-	mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	if (!rpmsg_info->inited || !rpmsg_info->hdl) {
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		return;
 	}
 	rpmsg_info->hdl = NULL;
-	mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	diagfwd_channel_close(rpmsg_info->fwd_ctxt);
 }
 
@@ -704,6 +750,7 @@ static void __diag_rpmsg_init(struct diag_rpmsg_info *rpmsg_info)
 	INIT_WORK(&(rpmsg_info->close_work), diag_rpmsg_close_work_fn);
 	INIT_WORK(&(rpmsg_info->read_work), diag_rpmsg_read_work_fn);
 	INIT_WORK(&(rpmsg_info->late_init_work), diag_rpmsg_late_init_work_fn);
+	mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 	rpmsg_info->hdl = NULL;
 	rpmsg_info->fwd_ctxt = NULL;
 	atomic_set(&rpmsg_info->opened, 0);
@@ -712,6 +759,7 @@ static void __diag_rpmsg_init(struct diag_rpmsg_info *rpmsg_info)
 		"%s initialized fwd_ctxt: %pK hdl: %pK\n",
 		rpmsg_info->name, rpmsg_info->fwd_ctxt,
 		rpmsg_info->hdl);
+	mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 }
 
 void diag_rpmsg_invalidate(void *ctxt, struct diagfwd_info *fwd_ctxt)
@@ -734,9 +782,7 @@ int diag_rpmsg_init(void)
 		if (peripheral != PERIPHERAL_WDSP)
 			continue;
 		rpmsg_info = &rpmsg_cntl[peripheral];
-		mutex_lock(&driver->rpmsginfo_mutex[peripheral]);
 		__diag_rpmsg_init(rpmsg_info);
-		mutex_unlock(&driver->rpmsginfo_mutex[peripheral]);
 		diagfwd_cntl_register(TRANSPORT_RPMSG, rpmsg_info->peripheral,
 					(void *)rpmsg_info, &rpmsg_ops,
 					&(rpmsg_info->fwd_ctxt));
@@ -745,12 +791,10 @@ int diag_rpmsg_init(void)
 		mutex_unlock(&driver->rpmsginfo_mutex[peripheral]);
 		diagfwd_channel_open(rpmsg_info->fwd_ctxt);
 		diagfwd_late_open(rpmsg_info->fwd_ctxt);
-		mutex_lock(&driver->rpmsginfo_mutex[peripheral]);
 		__diag_rpmsg_init(&rpmsg_data[peripheral]);
 		__diag_rpmsg_init(&rpmsg_cmd[peripheral]);
 		__diag_rpmsg_init(&rpmsg_dci[peripheral]);
 		__diag_rpmsg_init(&rpmsg_dci_cmd[peripheral]);
-		mutex_unlock(&driver->rpmsginfo_mutex[peripheral]);
 	}
 	return 0;
 }
@@ -832,10 +876,10 @@ static int diag_rpmsg_probe(struct rpmsg_device *rpdev)
 	rpmsg_info = diag_get_rpmsg_ptr(rpdev->id.name);
 	if (rpmsg_info) {
 
-		mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		rpmsg_info->hdl = rpdev;
 		atomic_set(&rpmsg_info->opened, 1);
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 
 		dev_set_drvdata(&rpdev->dev, rpmsg_info);
 		diagfwd_channel_read(rpmsg_info->fwd_ctxt);
@@ -854,9 +898,9 @@ static void diag_rpmsg_remove(struct rpmsg_device *rpdev)
 
 	rpmsg_info = diag_get_rpmsg_ptr(rpdev->id.name);
 	if (rpmsg_info) {
-		mutex_lock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_lock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		atomic_set(&rpmsg_info->opened, 0);
-		mutex_unlock(&driver->rpmsginfo_mutex[rpmsg_info->peripheral]);
+		mutex_unlock(&driver->rpmsginfo_mutex[PERI_RPMSG]);
 		queue_work(rpmsg_info->wq, &rpmsg_info->close_work);
 	}
 }

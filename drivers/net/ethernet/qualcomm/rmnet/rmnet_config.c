@@ -22,6 +22,7 @@
 #include "rmnet_vnd.h"
 #include "rmnet_private.h"
 #include "rmnet_map.h"
+#include "rmnet_descriptor.h"
 #include <soc/qcom/rmnet_qmi.h>
 #include <soc/qcom/qmi_rmnet.h>
 
@@ -86,10 +87,12 @@ static int rmnet_unregister_real_device(struct net_device *real_dev,
 	if (port->nr_rmnet_devs)
 		return -EINVAL;
 
+	netdev_rx_handler_unregister(real_dev);
+
 	rmnet_map_cmd_exit(port);
 	rmnet_map_tx_aggregate_exit(port);
 
-	netdev_rx_handler_unregister(real_dev);
+	rmnet_descriptor_deinit(port);
 
 	kfree(port);
 
@@ -126,6 +129,12 @@ static int rmnet_register_real_device(struct net_device *real_dev)
 	for (entry = 0; entry < RMNET_MAX_LOGICAL_EP; entry++)
 		INIT_HLIST_HEAD(&port->muxed_ep[entry]);
 
+	rc = rmnet_descriptor_init(port);
+	if (rc) {
+		rmnet_descriptor_deinit(port);
+		return rc;
+	}
+
 	rmnet_map_tx_aggregate_init(port);
 	rmnet_map_cmd_init(port);
 
@@ -161,11 +170,11 @@ static int rmnet_newlink(struct net *src_net, struct net_device *dev,
 			 struct nlattr *tb[], struct nlattr *data[],
 			 struct netlink_ext_ack *extack)
 {
-	u32 data_format = RMNET_FLAGS_INGRESS_DEAGGREGATION;
 	struct net_device *real_dev;
 	int mode = RMNET_EPMODE_VND;
 	struct rmnet_endpoint *ep;
 	struct rmnet_port *port;
+	u32 data_format;
 	int err = 0;
 	u16 mux_id;
 
@@ -200,10 +209,9 @@ static int rmnet_newlink(struct net *src_net, struct net_device *dev,
 
 		flags = nla_data(data[IFLA_RMNET_FLAGS]);
 		data_format = flags->flags & flags->mask;
+		netdev_dbg(dev, "data format [0x%08X]\n", data_format);
+		port->data_format = data_format;
 	}
-
-	netdev_dbg(dev, "data format [0x%08X]\n", data_format);
-	port->data_format = data_format;
 
 	if (data[IFLA_RMNET_UL_AGG_PARAMS]) {
 		void *agg_params;
@@ -254,9 +262,9 @@ static void rmnet_dellink(struct net_device *dev, struct list_head *head)
 	if (!port->nr_rmnet_devs)
 		qmi_rmnet_qmi_exit(port->qmi_info, port);
 
-	rmnet_unregister_real_device(real_dev, port);
+	unregister_netdevice(dev);
 
-	unregister_netdevice_queue(dev, head);
+	rmnet_unregister_real_device(real_dev, port);
 }
 
 static void rmnet_force_unassociate_device(struct net_device *dev)
@@ -286,7 +294,9 @@ static void rmnet_force_unassociate_device(struct net_device *dev)
 		synchronize_rcu();
 		kfree(ep);
 	}
-
+	/* Unregistering devices in context before freeing port.
+	 * If this API becomes non-context their order should switch.
+	 */
 	unregister_netdevice_many(&list);
 
 	rmnet_unregister_real_device(real_dev, port);
@@ -388,14 +398,13 @@ static int rmnet_changelink(struct net_device *dev, struct nlattr *tb[],
 	}
 
 	if (data[IFLA_RMNET_UL_AGG_PARAMS]) {
-		void *agg_params;
-		unsigned long irq_flags;
+		struct rmnet_egress_agg_params *agg_params;
 
 		agg_params = nla_data(data[IFLA_RMNET_UL_AGG_PARAMS]);
-		spin_lock_irqsave(&port->agg_lock, irq_flags);
-		memcpy(&port->egress_agg_params, agg_params,
-		       sizeof(port->egress_agg_params));
-		spin_unlock_irqrestore(&port->agg_lock, irq_flags);
+		rmnet_map_update_ul_agg_config(port, agg_params->agg_size,
+					       agg_params->agg_count,
+					       agg_params->agg_features,
+					       agg_params->agg_time);
 	}
 
 	return 0;
@@ -695,6 +704,16 @@ int rmnet_get_powersave_notif(void *port)
 	return ((struct rmnet_port *)port)->data_format & RMNET_FORMAT_PS_NOTIF;
 }
 EXPORT_SYMBOL(rmnet_get_powersave_notif);
+
+struct net_device *rmnet_get_real_dev(void *port)
+{
+	if (port)
+		return ((struct rmnet_port *)port)->dev;
+
+	return NULL;
+}
+EXPORT_SYMBOL(rmnet_get_real_dev);
+
 #endif
 
 /* Startup/Shutdown */

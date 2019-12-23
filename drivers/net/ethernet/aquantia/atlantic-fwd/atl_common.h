@@ -18,72 +18,18 @@
 #include <linux/netdevice.h>
 #include <linux/moduleparam.h>
 
-#define ATL_VERSION "1.0.18"
+#define ATL_VERSION "1.0.27"
 
 struct atl_nic;
+enum atl_fwd_notify;
 
 #include "atl_compat.h"
 #include "atl_hw.h"
+#include "atl_stats.h"
 
 #define ATL_MAX_QUEUES 8
 
 #include "atl_fwd.h"
-
-struct atl_rx_ring_stats {
-	uint64_t packets;
-	uint64_t bytes;
-	uint64_t linear_dropped;
-	uint64_t alloc_skb_failed;
-	uint64_t reused_head_page;
-	uint64_t reused_data_page;
-	uint64_t alloc_head_page;
-	uint64_t alloc_data_page;
-	uint64_t alloc_head_page_failed;
-	uint64_t alloc_data_page_failed;
-	uint64_t non_eop_descs;
-	uint64_t mac_err;
-	uint64_t csum_err;
-	uint64_t multicast;
-};
-
-struct atl_tx_ring_stats {
-	uint64_t packets;
-	uint64_t bytes;
-	uint64_t tx_busy;
-	uint64_t tx_restart;
-	uint64_t dma_map_failed;
-};
-
-struct atl_ring_stats {
-	union {
-		struct atl_rx_ring_stats rx;
-		struct atl_tx_ring_stats tx;
-	};
-};
-
-struct atl_ether_stats {
-	uint64_t rx_pause;
-	uint64_t tx_pause;
-	uint64_t rx_ether_drops;
-	uint64_t rx_ether_octets;
-	uint64_t rx_ether_pkts;
-	uint64_t rx_ether_broacasts;
-	uint64_t rx_ether_multicasts;
-	uint64_t rx_ether_crc_align_errs;
-	uint64_t rx_filter_host;
-	uint64_t rx_filter_lost;
-};
-
-struct atl_global_stats {
-	struct atl_rx_ring_stats rx;
-	struct atl_tx_ring_stats tx;
-
-	/* MSM counters can't be reset without full HW reset, so
-	 * store them in relative form:
-	 * eth[i] == HW_counter - eth_base[i] */
-	struct atl_ether_stats eth;
-	struct atl_ether_stats eth_base;
-};
 
 enum {
 	ATL_RXF_VLAN_BASE = 0,
@@ -210,8 +156,39 @@ struct atl_fwd {
 	unsigned long ring_map[ATL_FWDIR_NUM];
 	struct atl_fwd_ring *rings[ATL_FWDIR_NUM][ATL_NUM_FWD_RINGS];
 	unsigned long msi_map;
-	void *private;
+	struct blocking_notifier_head nh_clients;
 };
+
+#ifdef CONFIG_ATLFWD_FWD_NETLINK
+/* FWD ring descriptor
+ * Similar to atl_desc_ring, but has less fields.
+ *
+ * Note: it's not a part of atl_fwd_ring on purpose.
+ */
+struct atl_fwd_ring_desc {
+	struct atl_hw_ring hw;
+	uint32_t head;
+	uint32_t tail;
+	union {
+		struct atl_txbuf *txbufs;
+	};
+	struct u64_stats_sync syncp;
+	struct atl_ring_stats stats;
+	u32 tx_hw_head;
+	struct atl_fwd_event tx_evt;
+	struct atl_fwd_event rx_evt;
+};
+
+struct atl_fwdnl {
+	struct atl_fwd_ring_desc ring_desc[ATL_NUM_FWD_RINGS * 2];
+	/* State of forced redirections */
+	int force_icmp_via;
+	int force_tx_via;
+	/* Deferred TX head cleanup */
+	struct delayed_work *tx_cleanup_wq;
+	u32 tx_bunch;
+};
+#endif /* CONFIG_ATLFWD_FWD_NETLINK */
 
 struct atl_nic {
 	struct net_device *ndev;
@@ -220,11 +197,10 @@ struct atl_nic {
 	int nvecs;
 	struct atl_hw hw;
 	unsigned flags;
-	unsigned long state;
 	uint32_t priv_flags;
-	struct timer_list link_timer;
+	struct timer_list work_timer;
 	int max_mtu;
-	int requested_nvecs;
+	unsigned int requested_nvecs;
 	int requested_rx_size;
 	int requested_tx_size;
 	int rx_intr_delay;
@@ -235,6 +211,9 @@ struct atl_nic {
 
 #ifdef CONFIG_ATLFWD_FWD
 	struct atl_fwd fwd;
+#endif
+#ifdef CONFIG_ATLFWD_FWD_NETLINK
+	struct atl_fwdnl fwdnl;
 #endif
 
 	struct atl_rxf_ntuple rxf_ntuple;
@@ -249,13 +228,6 @@ enum atl_nic_flags {
 	ATL_FL_WOL = BIT(1),
 };
 
-enum atl_nic_state {
-	ATL_ST_UP,
-	ATL_ST_CONFIGURED,
-	ATL_ST_ENABLED,
-	ATL_ST_WORK_SCHED,
-};
-
 #define ATL_PF(_name) ATL_PF_ ## _name
 #define ATL_PF_BIT(_name) ATL_PF_ ## _name ## _BIT
 #define ATL_DEF_PF_BIT(_name) ATL_PF_BIT(_name) = BIT(ATL_PF(_name))
@@ -263,22 +235,28 @@ enum atl_nic_state {
 enum atl_priv_flags {
 	ATL_PF_LPB_SYS_PB,
 	ATL_PF_LPB_SYS_DMA,
-	/* ATL_PF_LPB_NET_DMA, */
+	ATL_PF_LPB_NET_DMA,
+	ATL_PF_LPB_INT_PHY,
+	ATL_PF_LPB_EXT_PHY,
 	ATL_PF_LPI_RX_MAC,
 	ATL_PF_LPI_TX_MAC,
 	ATL_PF_LPI_RX_PHY,
 	ATL_PF_LPI_TX_PHY,
 	ATL_PF_STATS_RESET,
 	ATL_PF_STRIP_PAD,
+	ATL_PF_MEDIA_DETECT,
 };
 
 enum atl_priv_flag_bits {
 	ATL_DEF_PF_BIT(LPB_SYS_PB),
 	ATL_DEF_PF_BIT(LPB_SYS_DMA),
-	/* ATL_DEF_PF_BIT(LPB_NET_DMA), */
+	ATL_DEF_PF_BIT(LPB_NET_DMA),
+	ATL_DEF_PF_BIT(LPB_INT_PHY),
+	ATL_DEF_PF_BIT(LPB_EXT_PHY),
 
-	ATL_PF_LPB_MASK = ATL_PF_BIT(LPB_SYS_DMA) | ATL_PF_BIT(LPB_SYS_PB)
-		/* | ATL_PF_BIT(LPB_NET_DMA) */,
+	ATL_PF_LPB_MASK = ATL_PF_BIT(LPB_SYS_DMA) | ATL_PF_BIT(LPB_SYS_PB) |
+			  ATL_PF_BIT(LPB_NET_DMA) | ATL_PF_BIT(LPB_INT_PHY) |
+			  ATL_PF_BIT(LPB_EXT_PHY),
 
 	ATL_DEF_PF_BIT(LPI_RX_MAC),
 	ATL_DEF_PF_BIT(LPI_TX_MAC),
@@ -290,9 +268,10 @@ enum atl_priv_flag_bits {
 	ATL_DEF_PF_BIT(STATS_RESET),
 
 	ATL_DEF_PF_BIT(STRIP_PAD),
+	ATL_DEF_PF_BIT(MEDIA_DETECT),
 
 	ATL_PF_RW_MASK = ATL_PF_LPB_MASK | ATL_PF_BIT(STATS_RESET) |
-		ATL_PF_BIT(STRIP_PAD),
+		ATL_PF_BIT(STRIP_PAD) | ATL_PF_BIT(MEDIA_DETECT),
 	ATL_PF_RO_MASK = ATL_PF_LPI_MASK,
 };
 
@@ -305,10 +284,13 @@ extern const char atl_driver_name[];
 
 extern const struct ethtool_ops atl_ethtool_ops;
 
-extern int atl_max_queues;
+extern unsigned int atl_max_queues;
 extern unsigned atl_rx_linear;
 extern unsigned atl_min_intr_delay;
 extern int atl_enable_msi;
+extern unsigned int atl_tx_clean_budget;
+extern unsigned int atl_tx_free_low;
+extern unsigned int atl_tx_free_high;
 
 /* Logging conviniency macros.
  *
@@ -335,18 +317,37 @@ extern int atl_enable_msi;
 #define atl_nic_err(fmt, args...)		\
 	dev_err(&nic->hw.pdev->dev, fmt, ## args)
 
+#define atl_dev_init_warn(fmt, args...)					\
+do {									\
+	if (hw)								\
+		atl_dev_warn(fmt, ## args);				\
+	else								\
+		printk(KERN_WARNING "%s: " fmt, atl_driver_name, ##args); \
+} while(0)
+
+#define atl_dev_init_err(fmt, args...)					\
+do {									\
+	if (hw)								\
+		atl_dev_warn(fmt, ## args);				\
+	else								\
+		printk(KERN_ERR "%s: " fmt, atl_driver_name, ##args);	\
+} while(0)
+
 #define atl_module_param(_name, _type, _mode)			\
 	module_param_named(_name, atl_ ## _name, _type, _mode)
 
 static inline void atl_intr_enable_non_ring(struct atl_nic *nic)
 {
 	struct atl_hw *hw = &nic->hw;
-	uint32_t mask = hw->intr_mask;
 
-#ifdef CONFIG_ATLFWD_FWD
-	mask |= (uint32_t)(nic->fwd.msi_map);
-#endif
-	atl_intr_enable(hw, mask);
+	atl_intr_enable(hw, hw->non_ring_intr_mask);
+}
+
+static inline void atl_intr_disable_non_ring(struct atl_nic *nic)
+{
+	struct atl_hw *hw = &nic->hw;
+
+	atl_intr_disable(hw, hw->non_ring_intr_mask);
 }
 
 netdev_tx_t atl_start_xmit(struct sk_buff *skb, struct net_device *ndev);
@@ -360,6 +361,8 @@ int atl_setup_datapath(struct atl_nic *nic);
 void atl_clear_datapath(struct atl_nic *nic);
 int atl_start_rings(struct atl_nic *nic);
 void atl_stop_rings(struct atl_nic *nic);
+void atl_clear_rdm_cache(struct atl_nic *nic);
+void atl_clear_tdm_cache(struct atl_nic *nic);
 int atl_alloc_rings(struct atl_nic *nic);
 void atl_free_rings(struct atl_nic *nic);
 irqreturn_t atl_ring_irq(int irq, void *priv);
@@ -384,6 +387,13 @@ int atl_update_eth_stats(struct atl_nic *nic);
 void atl_adjust_eth_stats(struct atl_ether_stats *stats,
 	struct atl_ether_stats *base, bool add);
 void atl_fwd_release_rings(struct atl_nic *nic);
+#ifdef CONFIG_ATLFWD_FWD
+int atl_fwd_suspend_rings(struct atl_nic *nic);
+int atl_fwd_resume_rings(struct atl_nic *nic);
+#else
+static inline int atl_fwd_suspend_rings(struct atl_nic *nic) { return 0; }
+static inline int atl_fwd_resume_rings(struct atl_nic *nic) { return 0; }
+#endif
 int atl_get_lpi_timer(struct atl_nic *nic, uint32_t *lpi_delay);
 int atl_mdio_hwsem_get(struct atl_hw *hw);
 void atl_mdio_hwsem_put(struct atl_hw *hw);
@@ -398,5 +408,10 @@ int atl_mdio_write(struct atl_hw *hw, uint8_t prtad, uint8_t mmd,
 void atl_refresh_rxfs(struct atl_nic *nic);
 void atl_schedule_work(struct atl_nic *nic);
 int atl_hwmon_init(struct atl_nic *nic);
+int atl_update_thermal(struct atl_hw *hw);
+int atl_update_thermal_flag(struct atl_hw *hw, int bit, bool val);
+int atl_verify_thermal_limits(struct atl_hw *hw, struct atl_thermal *thermal);
+int atl_do_reset(struct atl_nic *nic);
+int atl_set_media_detect(struct atl_nic *nic, bool on);
 
 #endif

@@ -30,6 +30,10 @@
 	status = "ok";
 };
 
+&qupv3_se7_4uart {
+	status = "ok";
+};
+
 &usb0 {
 	status = "ok";
 };
@@ -37,3 +41,16 @@
 &qusb_phy0 {
 	status = "ok";
 };
+
+&pcie0_msi {
+	status = "ok";
+};
+
+&pcie0 {
+	status = "ok";
+};
+
+&sdhc_2 {
+	status = "ok";
+};
+

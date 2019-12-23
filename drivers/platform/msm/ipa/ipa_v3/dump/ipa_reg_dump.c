@@ -667,7 +667,7 @@ static struct reg_access_funcs_s *get_access_funcs(u32 addr)
 
 	for (i = 0; i < ARRAY_SIZE(mem_access_map); i++) {
 		if (addr >= mem_access_map[i].addr_range_begin &&
-		    addr <= mem_access_map[i].addr_range_end) {
+		    addr <  mem_access_map[i].addr_range_end) {
 			return mem_access_map[i].access[asub];
 		}
 	}
@@ -818,9 +818,13 @@ void ipa_save_registers(void)
 	for (i = 0;
 	     i < ARRAY_SIZE(ipa_reg_save_gsi_ch_test_bus_selector_array);
 	     i++) {
+		ipa_reg_save.gsi.debug.gsi_test_bus.test_bus_selector[i] =
+			ipa_reg_save_gsi_ch_test_bus_selector_array[i];
+
 		/* Write test bus selector */
 		HWIO_GSI_TEST_BUS_SEL_OUT
 			(ipa_reg_save_gsi_ch_test_bus_selector_array[i]);
+
 		ipa_reg_save.gsi.debug.gsi_test_bus.test_bus_reg[
 		    i].gsi_testbus_reg =
 		    (u32)HWIO_GSI_TEST_BUS_REG_IN;
@@ -1217,6 +1221,7 @@ static void ipa_hal_save_regs_save_ipa_testbus(void)
 			for (sel_internal = 0;
 			     sel_internal <= IPA_TESTBUS_SEL_INTERNAL_PIPE_MAX;
 			     sel_internal++) {
+				debug_data_sel.value = 0;
 				debug_data_sel.def.pipe_select = sel_ep;
 				debug_data_sel.def.external_block_select =
 					sel_external;
@@ -1269,7 +1274,7 @@ int ipa_reg_save_init(u32 value)
 	       ipa3_ctx->ipa_wrapper_base);
 
 	ipa3_ctx->reg_collection_base =
-		ioremap(ipa3_ctx->ipa_wrapper_base,
+		ioremap_nocache(ipa3_ctx->ipa_wrapper_base,
 			ipa3_ctx->entire_ipa_block_size);
 
 	if (!ipa3_ctx->reg_collection_base) {

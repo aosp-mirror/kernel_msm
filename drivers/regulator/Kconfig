@@ -1094,5 +1094,11 @@ config REGULATOR_TPS
 	help
 	  This driver adds support for enabling TPS regulator.
 
+config VIRTIO_REGULATOR
+	tristate "Virtio regulator driver"
+	depends on VIRTIO
+	---help---
+	  This is the virtual regulator driver for virtio.
+
 endif
 
