@@ -445,6 +445,25 @@ static int32_t cam_sensor_i2c_modes_util(
 				return rc;
 			}
 		}
+	} else if (i2c_list->op_code == CAM_SENSOR_I2C_READ) {
+		size = i2c_list->i2c_settings.size;
+		for (i = 0; i < size; i++) {
+			rc = camera_io_dev_read(
+			io_master_info,
+			i2c_list->i2c_settings.reg_setting[i].reg_addr,
+			&(i2c_list->i2c_settings.reg_setting[i].reg_data),
+			i2c_list->i2c_settings.addr_type,
+			i2c_list->i2c_settings.data_type);
+			if (rc < 0) {
+				CAM_ERR(CAM_SENSOR,
+					"i2c read Fail: %d", rc);
+				return rc;
+			}
+			CAM_INFO(CAM_SENSOR,
+				"i2c read addr: 0x%x, data: 0x%x",
+				i2c_list->i2c_settings.reg_setting[i].reg_addr,
+				i2c_list->i2c_settings.reg_setting[i].reg_data);
+		}
 	}
 
 	return rc;

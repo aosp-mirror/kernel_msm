@@ -241,6 +241,41 @@ static int32_t cam_sensor_handle_continuous_write(
 	return rc;
 }
 
+int32_t cam_sensor_handle_read(
+	struct cam_cmd_i2c_continuous_rd *cam_cmd,
+	struct i2c_settings_array *i2c_reg_settings,
+	uint32_t *byte_cnt, int32_t *offset,
+	struct list_head **list)
+{
+	struct i2c_settings_list  *i2c_list;
+	int32_t rc = 0;
+
+	i2c_list = cam_sensor_get_i2c_ptr(i2c_reg_settings,
+		cam_cmd->header.count);
+	if (i2c_list == NULL ||
+		i2c_list->i2c_settings.reg_setting == NULL) {
+		CAM_ERR(CAM_SENSOR, "Failed in allocating i2c_list");
+		return -ENOMEM;
+	}
+
+	*byte_cnt = sizeof(struct cam_cmd_i2c_continuous_rd);
+	i2c_list->op_code = CAM_SENSOR_I2C_READ;
+	i2c_list->i2c_settings.addr_type =
+		cam_cmd->header.addr_type;
+	i2c_list->i2c_settings.data_type =
+		cam_cmd->header.data_type;
+	i2c_list->i2c_settings.size =
+		cam_cmd->header.count;
+
+	i2c_list->i2c_settings.reg_setting[0].reg_addr =
+		cam_cmd->reg_addr;
+
+	(*offset) += 1;
+	*list = &(i2c_list->list);
+
+	return rc;
+}
+
 static int cam_sensor_handle_slave_info(
 	struct camera_io_master *io_master,
 	uint32_t *cmd_buf)
@@ -478,6 +513,19 @@ int cam_sensor_i2c_command_parser(
 				}
 				break;
 			}
+			case CAMERA_SENSOR_CMD_TYPE_I2C_CONT_RD:
+				rc = cam_sensor_handle_read(
+					(struct cam_cmd_i2c_continuous_rd *)
+					cmd_buf,
+					i2c_reg_settings,
+					&byte_cnt, &j, &list);
+				if (rc < 0) {
+					CAM_ERR(CAM_SENSOR,
+						"read hdl failed: %d",
+						rc);
+					goto rel_buf;
+				}
+			break;
 			case CAMERA_SENSOR_CMD_TYPE_I2C_INFO: {
 				if (remain_len - byte_cnt <
 				    sizeof(struct cam_cmd_i2c_info)) {
