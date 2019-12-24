@@ -30,13 +30,15 @@ dtbo-$(CONFIG_BOARD_REDFIN) += \
 	lito-redfin-proto-sop-overlay.dtbo \
 	lito-redfin-proto-overlay.dtbo \
 	lito-redfin-proto1_1-overlay.dtbo \
-	lito-v2-redfin-proto1_1-overlay.dtbo
+	lito-v2-redfin-proto1_1-overlay.dtbo \
+	lito-v2-redfin-evt-overlay.dtbo
 
 lito-redfin-dev1.0-overlay.dtbo-base := qcom-base/lito.dtb
 lito-redfin-proto-sop-overlay.dtbo-base := qcom-base/lito.dtb
 lito-redfin-proto-overlay.dtbo-base := qcom-base/lito.dtb
 lito-redfin-proto1_1-overlay.dtbo-base := qcom-base/lito.dtb
 lito-v2-redfin-proto1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-redfin-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
 endif
 
