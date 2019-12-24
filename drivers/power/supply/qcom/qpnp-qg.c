@@ -2162,6 +2162,7 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RESISTANCE_CAPACITIVE:
 		pval->intval = chip->dt.rbat_conn_mohm;
 		break;
+	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
 	case POWER_SUPPLY_PROP_BATTERY_TYPE:
 		pval->strval = qg_get_battery_type(chip);
 		break;
@@ -2245,9 +2246,6 @@ static int qg_psy_get_property(struct power_supply *psy,
 			rc = power_supply_get_property(chip->batt_psy,
 						       POWER_SUPPLY_PROP_STATUS,
 						       pval);
-		break;
-	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
-		rc = -ENODATA;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_FIFO:
 		pval->intval = chip->last_fifo_v_uv;
