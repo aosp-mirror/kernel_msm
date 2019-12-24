@@ -29,6 +29,9 @@
 #include <linux/regulator/consumer.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/subsystem_notif.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
 #include "bgrsb.h"
 
 #define BGRSB_GLINK_INTENT_SIZE 0x04
@@ -133,6 +136,7 @@ struct bgrsb_priv {
 	uint32_t calbrtion_cpi;
 
 	uint8_t bttn_configs;
+	int hr_gpio;
 
 	bool calibration_needed;
 	bool is_calibrd;
@@ -563,6 +567,13 @@ static int bgrsb_enable(struct bgrsb_priv *dev, bool enable)
 			pr_err("rsb Failed to send interval value to BG\n");
 		}
 	}
+
+	if (gpio_is_valid(dev->hr_gpio)) {
+		pr_err("gpio %d is valid \n", dev->hr_gpio);
+		if (gpio_get_value(dev->hr_gpio))
+			gpio_set_value(dev->hr_gpio, 0);
+	}
+
 	return rc;
 }
 
@@ -1026,11 +1037,14 @@ static int bg_rsb_probe(struct platform_device *pdev)
 {
 	struct bgrsb_priv *dev;
 	struct input_dev *input;
+	struct device_node *node;
 	int rc;
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
+
+	node = pdev->dev.of_node;
 
 	/* Add wake lock for PM suspend */
 	wakeup_source_init(&dev->bgrsb_ws, "BGRSB_wake_lock");
@@ -1078,6 +1092,25 @@ static int bg_rsb_probe(struct platform_device *pdev)
 		pr_err("Failed to set regulators\n");
 		goto err_ret_inp;
 	}
+
+	dev->hr_gpio = of_get_named_gpio(node, "qcom,hr_pwr_gpio", 0);
+
+	if (!gpio_is_valid(dev->hr_gpio)) {
+		pr_err("gpio %d found is not valid\n", dev->hr_gpio);
+		goto gpio_ret;
+	}
+	if (gpio_request(dev->hr_gpio, "hr_pwr_gpio")) {
+		pr_err("gpio %d require failed\n", dev->hr_gpio);
+		goto gpio_ret;
+	}
+	if (gpio_direction_output(dev->hr_gpio, 0)) {
+		pr_err("gpio %d dirct output failed\n", dev->hr_gpio);
+		goto gpio_ret;
+	}
+
+	gpio_set_value(dev->hr_gpio, 0);
+gpio_ret:
+
 	return 0;
 
 err_ret_inp:
