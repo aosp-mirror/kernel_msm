@@ -346,3 +346,7 @@
 	};
 };
 
+/* Temperature parameters index for LTC */
+&actuator_rear {
+	param-index = <5>;
+};
