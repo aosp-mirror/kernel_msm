@@ -316,6 +316,7 @@ struct smb_charger {
 	struct work_struct	legacy_detection_work;
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
+	struct delayed_work	usbicl_rerun_work;
 
 	/* cached status */
 	int			voltage_min_uv;
@@ -360,6 +361,7 @@ struct smb_charger {
 	bool			fcc_stepper_enable;
 	bool			vzn_retailmode_charging;
 	int			is_retailmode;
+	bool			aicl_rerun_enable;
 
 	/* workaround flag */
 	u32			wa_flags;

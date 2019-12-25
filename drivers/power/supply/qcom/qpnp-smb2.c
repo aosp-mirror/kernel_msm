@@ -231,6 +231,9 @@ static int smb2_parse_dt(struct smb2 *chip)
 	chg->sw_jeita_enabled = of_property_read_bool(node,
 				"qcom,sw-jeita-enable");
 
+	chg->aicl_rerun_enable = of_property_read_bool(node,
+						"qcom,aicl_rerun_enable");
+
 	rc = of_property_read_u32(node, "qcom,wd-bark-time-secs",
 					&chip->dt.wd_bark_time);
 	if (rc < 0 || chip->dt.wd_bark_time < MIN_WD_BARK_TIME)
@@ -2419,6 +2422,7 @@ static int smb2_probe(struct platform_device *pdev)
 	chg->name = "PMI";
 	chg->audio_headset_drp_wait_ms = &__audio_headset_drp_wait_ms;
 	chg->is_retailmode = 0;
+	chg->aicl_rerun_enable = 0;
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {
