@@ -36,6 +36,9 @@
 #include <linux/of_irq.h>
 
 #include "rt5514-spi.h"
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+#include <linux/codec-misc.h>
+#endif
 
 #define DRV_NAME "rt5514-spi"
 #define COPY_WORK_DELAY_TIME_MS 100
@@ -277,6 +280,33 @@ static const unsigned int rt5514_regdump_table2[] = {
 	0x18002fd0, 0x18002fd4, 0x18002fd8, 0x18002fdc, 0x18002fe0,
 	0x18002fe4, 0x18002fe8, 0x18002fec, 0x18002ff0, 0x18002ff4,
 };
+
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+int rt5514_codec_state(void)
+{
+	int ret;
+	unsigned int val;
+
+	ret = regmap_read(rt5514_g_i2c_regmap, 0x18002ff4, &val);
+	if (ret || val != 0x10ec5514) {
+		pr_err("Device with ID register %x is not rt5514\n", val);
+		return CODEC_STATE_UNKNOWN;
+	}
+
+	return CODEC_STATE_ONLINE;
+}
+
+char *rt5514_codec_hwinfo(void)
+{
+	unsigned int val;
+
+	regmap_read(rt5514_g_i2c_regmap, 0x18002ff0, &val);
+	if (val == 0x80)
+		return "rt5514p";
+	else
+		return "rt5514";
+}
+#endif
 
 static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 {
@@ -1107,6 +1137,11 @@ static int rt5514_spi_pcm_probe(struct snd_soc_component *component)
 	snd_soc_dapm_ignore_suspend(dapm, "DSP_IN1");
 	snd_soc_dapm_ignore_suspend(dapm, "DSP_IN2");
 	snd_soc_dapm_ignore_suspend(dapm, "DSP_IN3");
+
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+	codec_detect_state_callback(rt5514_codec_state);
+	codec_detect_number_callback(rt5514_codec_hwinfo);
+#endif
 
 	return 0;
 }
