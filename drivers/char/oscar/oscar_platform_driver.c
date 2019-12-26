@@ -54,7 +54,7 @@
 #define OSCAR_BAR_INDEX 0
 
 /* The number of user-mappable memory ranges in Oscar BAR. */
-#define NUM_BAR_RANGES 3
+#define NUM_BAR_RANGES 4
 
 #define OSCAR_BAR_OFFSET 0
 #define OSCAR_CM_OFFSET 0x1000000
@@ -162,6 +162,7 @@ static struct gasket_page_table_config oscar_page_table_configs[NUM_NODES] = {
 static const struct gasket_mappable_region
 oscar_mappable_regions[NUM_BAR_RANGES] = {
 	{ 0x0000, 0x1000 },
+	{ 0x2000, 0x1000 },
 	{ 0x4000, 0x1000 },
 	{ 0x8000, 0x1000 },
 };
