@@ -82,6 +82,14 @@ struct bias_config {
 #define USE_DCIN_BIT				BIT(3)
 #define VALID_INPUT_POWER_SOURCE_STS_BIT	BIT(0)
 
+#define CHG_P_DCIN_CMD_IL_REG			0x1440
+#define CHG_P_DCIN_EN_OVERRIDE_BIT		BIT(1)
+
+#define CHG_P_DCIN_INT_RT_STS			0x1410
+#define CHG_P_DCIN_PLUGIN_BIT			BIT(4)
+#define CHG_P_DCIN_EN_BIT			BIT(7)
+
+
 #define CHGR_BATTERY_CHARGER_STATUS_MASK	GENMASK(2, 0)
 
 #define CHGR_FLOAT_VOLTAGE_BASE		3600000
@@ -711,6 +719,7 @@ static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 	int vchrg, rc;
 	bool usb_valid, dc_valid;
 	u8 icl = 0;
+	u8 reg = 0, val;
 
 	chg_state->v = 0;
 	chg_state->f.chg_status = sm8150_get_chg_status(bms, &dc_valid,
@@ -744,6 +753,15 @@ static int sm8150_get_chg_chgr_state(const struct bms_dev *bms,
 		chg_state->f.vchrg,
 		chg_state->f.icl,
 		usb_valid ? 'u' : dc_valid ? 'w' : ' ');
+
+	rc = sm8150_rd8(bms->pmic_regmap, CHG_P_DCIN_INT_RT_STS, &reg);
+
+	if ((!rc) && (reg & CHG_P_DCIN_PLUGIN_BIT) &&
+	    (!(reg & CHG_P_DCIN_EN_BIT))) {
+		val = CHG_P_DCIN_EN_OVERRIDE_BIT;
+		pr_info("MSC_PCS: reset DCIN enable pin\n");
+		sm8150_write(bms->pmic_regmap, CHG_P_DCIN_CMD_IL_REG, &val, 1);
+	}
 
 	return 0;
 }
