@@ -1310,6 +1310,7 @@ void dwc3_ep0_interrupt(struct dwc3 *dwc,
 {
 	struct dwc3_ep	*dep;
 	u8 epnum = event->endpoint_number;
+	u8		cmd;
 
 	dep = dwc->eps[epnum];
 	switch (event->endpoint_event) {
@@ -1334,6 +1335,10 @@ void dwc3_ep0_interrupt(struct dwc3 *dwc,
 		break;
 	case DWC3_DEPEVT_EPCMDCMPLT:
 		dep->dbg_ep_events.epcmdcomplete++;
+		cmd = DEPEVT_PARAMETER_CMD(event->parameters);
+
+		if (cmd == DWC3_DEPCMD_ENDTRANSFER)
+			dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
 		break;
 	}
 }

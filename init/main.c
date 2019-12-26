@@ -88,7 +88,6 @@
 #include <linux/io.h>
 #include <linux/cache.h>
 #include <linux/rodata_test.h>
-#include <linux/scs.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -100,7 +99,6 @@
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
-extern void fork_init(void);
 extern void radix_tree_init(void);
 
 /*
@@ -542,7 +540,6 @@ asmlinkage __visible void __init start_kernel(void)
 	char *after_dashes;
 
 	set_task_stack_end_magic(&init_task);
-	scs_set_init_magic(&init_task);
 
 	smp_setup_processor_id();
 	debug_objects_early_init();

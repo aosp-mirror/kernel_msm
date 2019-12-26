@@ -275,6 +275,14 @@ extern int coresight_timeout(void __iomem *addr, u32 offset,
 extern void coresight_abort(void);
 extern void coresight_disable_reg_clk(struct coresight_device *csdev);
 extern void coresight_enable_reg_clk(struct coresight_device *csdev);
+
+extern int coresight_claim_device(void __iomem *base);
+extern int coresight_claim_device_unlocked(void __iomem *base);
+
+extern void coresight_disclaim_device(void __iomem *base);
+extern void coresight_disclaim_device_unlocked(void __iomem *base);
+
+extern bool coresight_loses_context_with_cpu(struct device *dev);
 #else
 static inline struct coresight_device *
 coresight_register(struct coresight_desc *desc) { return NULL; }
@@ -287,6 +295,23 @@ static inline int coresight_timeout(void __iomem *addr, u32 offset,
 static inline void coresight_abort(void) {}
 static inline void coresight_disable_reg_clk(struct coresight_device *csdev) {}
 static inline void coresight_enable_reg_clk(struct coresight_device *csdev) {}
+static inline int coresight_claim_device_unlocked(void __iomem *base)
+{
+	return -EINVAL;
+}
+
+static inline int coresight_claim_device(void __iomem *base)
+{
+	return -EINVAL;
+}
+
+static inline void coresight_disclaim_device(void __iomem *base) {}
+static inline void coresight_disclaim_device_unlocked(void __iomem *base) {}
+
+static inline bool coresight_loses_context_with_cpu(struct device *dev)
+{
+	return false;
+}
 #endif
 
 #if defined(CONFIG_OF) && defined(CONFIG_CORESIGHT)
