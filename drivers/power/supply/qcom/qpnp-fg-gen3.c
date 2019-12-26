@@ -3261,6 +3261,31 @@ resched:
 			msecs_to_jiffies(fg_sram_dump_period_ms));
 }
 
+static void temp_notify_work(struct work_struct *work)
+{
+	struct fg_chip *chip = container_of(work, struct fg_chip,
+					    temp_notify_work.work);
+	int rc, batt_temp;
+
+	rc = fg_get_battery_temp(chip, &batt_temp);
+	if (rc < 0) {
+		chip->monitor_batt_temp = false;
+		return;
+	}
+
+	if (batt_temp > chip->dt.batt_update_high_temp_threshold) {
+		if (batt_temp != chip->batt_temp) {
+			chip->batt_temp = batt_temp;
+			if (chip->batt_psy)
+				power_supply_changed(chip->batt_psy);
+		}
+		schedule_delayed_work(&chip->temp_notify_work,
+				msecs_to_jiffies(HIGH_TEMP_UPDATE_CHECK));
+	} else {
+		chip->monitor_batt_temp = false;
+		chip->batt_temp = 0;
+	}
+}
 static int fg_sram_dump_sysfs(const char *val, const struct kernel_param *kp)
 {
 	int rc;
@@ -3901,6 +3926,12 @@ static int fg_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		rc = fg_get_battery_temp(chip, &pval->intval);
+		if (!rc && !chip->monitor_batt_temp &&
+		    (pval->intval > chip->dt.batt_update_high_temp_threshold)) {
+			chip->monitor_batt_temp = true;
+			schedule_delayed_work(&chip->temp_notify_work,
+				msecs_to_jiffies(HIGH_TEMP_UPDATE_CHECK));
+		}
 		break;
 	case POWER_SUPPLY_PROP_COLD_TEMP:
 		rc = fg_get_jeita_threshold(chip, JEITA_COLD, &pval->intval);
@@ -5475,6 +5506,15 @@ static int fg_parse_dt(struct fg_chip *chip)
 	chip->dt.batt_psy_is_bms =
 		of_property_read_bool(node, "google,batt_psy_is_bms");
 
+	rc = of_property_read_u32(node, "google,update-high-temp-threshold",
+					&temp);
+	if (rc < 0) {
+		chip->dt.batt_update_high_temp_threshold =
+				DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD;
+	} else {
+		chip->dt.batt_update_high_temp_threshold = temp;
+	}
+
 	return 0;
 }
 
@@ -5638,6 +5678,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->status_change_work, status_change_work);
 	INIT_DELAYED_WORK(&chip->ttf_work, ttf_work);
 	INIT_DELAYED_WORK(&chip->sram_dump_work, sram_dump_work);
+	INIT_DELAYED_WORK(&chip->temp_notify_work, temp_notify_work);
 	INIT_WORK(&chip->esr_filter_work, esr_filter_work);
 	alarm_init(&chip->esr_filter_alarm, ALARM_BOOTTIME,
 			fg_esr_filter_alarm_cb);
