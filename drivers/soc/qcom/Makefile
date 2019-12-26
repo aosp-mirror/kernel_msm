@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0
 KASAN_SANITIZE_scm.o := n
+# TODO(b/142390482) disabling KASAN for qmi_encdec due to
+# use-after-free bug on camera launch.
+# Remove the next line once the bug is fixed.
+KASAN_SANITIZE_qmi_encdec.o := n
 obj-$(CONFIG_QCOM_CPUSS_DUMP) += cpuss_dump.o
 obj-$(CONFIG_QCOM_GLINK_SSR) +=	glink_ssr.o
 obj-$(CONFIG_QCOM_GSBI)	+=	qcom_gsbi.o
