@@ -286,8 +286,10 @@ int msm_mdss_enable_vreg(struct mdss_vreg *in_vreg, int num_vreg, int enable)
 					in_vreg[i].vreg_name);
 				goto vreg_set_opt_mode_fail;
 			}
-			if ((strnstr(saved_command_line,"boe_rm6d010",10)!=NULL
-			|| strnstr(saved_command_line,"auo_h139clx01",10)!=NULL)
+			if ((strnstr(saved_command_line,"boe_rm6d010",
+				strlen(saved_command_line))!=NULL
+			|| strnstr(saved_command_line,"auo_h139clx01",
+				strlen(saved_command_line))!=NULL)
 			&&(!strcmp(in_vreg[i].vreg_name, "vdd")
 			|| !strcmp(in_vreg[i].vreg_name, "vddio"))){
 				if (!lcd_reset_high)
@@ -313,8 +315,10 @@ int msm_mdss_enable_vreg(struct mdss_vreg *in_vreg, int num_vreg, int enable)
 				in_vreg[i].load[DSS_REG_MODE_DISABLE]);
 
 			if (regulator_is_enabled(in_vreg[i].vreg)){
-			if ((strnstr(saved_command_line,"boe_rm6d010",10)!=NULL
-			||strnstr(saved_command_line,"auo_h139clx01",10)!=NULL)
+			if ((strnstr(saved_command_line,"boe_rm6d010",
+				strlen(saved_command_line))!=NULL
+			||strnstr(saved_command_line,"auo_h139clx01",
+				strlen(saved_command_line))!=NULL)
 			&&(!strcmp(in_vreg[i].vreg_name, "vdd")||
 			!strcmp(in_vreg[i].vreg_name, "vddio"))){
 				if (!lcd_reset_high)
