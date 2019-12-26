@@ -2898,8 +2898,6 @@ int do_swap_page(struct vm_fault *vmf)
 	struct mem_cgroup *memcg;
 	struct vma_swap_readahead swap_ra;
 	swp_entry_t entry;
-	struct swap_info_struct *si;
-	bool skip_swapcache = false;
 	pte_t pte;
 	int locked;
 	int exclusive = 0;
