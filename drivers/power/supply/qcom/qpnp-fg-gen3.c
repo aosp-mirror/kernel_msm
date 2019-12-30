@@ -4137,6 +4137,61 @@ end_work:
 
 /* PSY CALLBACKS STAY HERE */
 
+int fg_get_rradc_usbin_current(struct fg_chip *chip, int *val)
+{
+	int rc = 0, usb_input_current = 0, input_suspend = 0;
+	union power_supply_propval prop = {0, };
+
+	/* if input_suspend = 1, rradc_usbin value is abnormal */
+	if (chip->batt_psy) {
+		rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_INPUT_SUSPEND, &prop);
+		if (rc < 0)
+			pr_err("Error in getting input_suspend, rc=%d\n", rc);
+		else
+			input_suspend = prop.intval;
+	}
+
+	*val = 0;
+	if (chip->usbin_i_input_chan) {
+		rc = iio_read_channel_processed(chip->usbin_i_input_chan,
+			&usb_input_current);
+		if (rc < 0) {
+			pr_err("Error in reading usbin_current, rc:%d\n", rc);
+			return rc;
+		}
+		if (input_suspend) {
+			//the value is abnormal, force return 0mA
+			pr_debug("input_suspend = 1, force return 0mA\n");
+			*val = 0;
+		} else
+			*val = usb_input_current / 1000;
+	} else {
+		pr_debug("usbin_i_input_chan is empty\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int fg_get_rradc_usbin_voltage(struct fg_chip *chip, int *val)
+{
+	int rc = 0, usb_input_voltage = 0;
+	*val = 0;
+	if (chip->usbin_v_input_chan) {
+		rc = iio_read_channel_processed(chip->usbin_v_input_chan,
+			&usb_input_voltage);
+		if (rc < 0) {
+			pr_err("Error in reading usbin_voltage, rc:%d\n", rc);
+			return rc;
+		}
+		*val = usb_input_voltage / 1000;
+	} else {
+		pr_debug("usbin_v_input_chan is empty\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static int fg_psy_get_property(struct power_supply *psy,
 				       enum power_supply_property psp,
 				       union power_supply_propval *pval)
@@ -4256,6 +4311,12 @@ static int fg_psy_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CC_STEP_SEL:
 		pval->intval = chip->ttf.cc_step.sel;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		rc = fg_get_rradc_usbin_current(chip, &pval->intval);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		rc = fg_get_rradc_usbin_voltage(chip, &pval->intval);
 		break;
 	default:
 		pr_err("unsupported property %d\n", psp);
@@ -4463,6 +4524,8 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
 	POWER_SUPPLY_PROP_CC_STEP,
 	POWER_SUPPLY_PROP_CC_STEP_SEL,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 };
 
 static const struct power_supply_desc fg_psy_desc = {
@@ -5914,6 +5977,40 @@ static int fg_gen3_probe(struct platform_device *pdev)
 			return rc;
 		}
 	}
+
+	//usbin current
+	rc = of_property_match_string(chip->dev->of_node,
+				"io-channel-names", "rradc_usbin_i");
+	if (rc >= 0) {
+		chip->usbin_i_input_chan = iio_channel_get(chip->dev,
+						"rradc_usbin_i");
+		if (IS_ERR(chip->usbin_i_input_chan)) {
+			if (PTR_ERR(chip->usbin_i_input_chan) != -EPROBE_DEFER)
+				pr_err("rradc_usbin_i unavailable %ld\n",
+					PTR_ERR(chip->usbin_i_input_chan));
+			rc = PTR_ERR(chip->usbin_i_input_chan);
+			chip->usbin_i_input_chan = NULL;
+			return rc;
+		}
+	} else
+		pr_err("Can't find channel: rradc_usbin_i\n");
+
+	//usbin voltage
+	rc = of_property_match_string(chip->dev->of_node,
+				"io-channel-names", "rradc_usbin_v");
+	if (rc >= 0) {
+		chip->usbin_v_input_chan = iio_channel_get(chip->dev,
+						"rradc_usbin_v");
+		if (IS_ERR(chip->usbin_v_input_chan)) {
+			if (PTR_ERR(chip->usbin_v_input_chan) != -EPROBE_DEFER)
+				pr_err("rradc_usbin_v unavailable %ld\n",
+					PTR_ERR(chip->usbin_v_input_chan));
+			rc = PTR_ERR(chip->usbin_v_input_chan);
+			chip->usbin_v_input_chan = NULL;
+			return rc;
+		}
+	} else
+		pr_err("Can't find channel: rradc_usbin_v\n");
 
 	chip->pl_disable_votable = find_votable("PL_DISABLE");
 	if (chip->pl_disable_votable == NULL) {

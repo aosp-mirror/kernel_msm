@@ -455,6 +455,8 @@ struct fg_chip {
 	struct power_supply	*pc_port_psy;
 	struct iio_channel	*batt_id_chan;
 	struct iio_channel	*die_temp_chan;
+	struct iio_channel	*usbin_i_input_chan;
+	struct iio_channel	*usbin_v_input_chan;
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
 	struct votable		*delta_bsoc_irq_en_votable;
