@@ -202,6 +202,15 @@ int smblib_get_usb_suspend(struct smb_charger *chg, int *suspend)
 	return rc;
 }
 
+static u8 usbicl_rerun_time;
+#define AICL_RERUN_TIME_3S 0
+#define AICL_RERUN_TIME_12S 1
+#define AICL_RERUN_TIME_45S 2
+#define AICL_RERUN_TIME_3min 3
+static char *usbicl_rerun_time_text[] = {
+		"3s", "12s", "45s", "3min"
+};
+
 struct apsd_result {
 	const char * const name;
 	const u8 bit;
@@ -3597,6 +3606,12 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 						chg->chg_freq.freq_removal);
 
 	if (vbus_rising) {
+		if (chg->aicl_rerun_enable) {
+			usbicl_rerun_time = AICL_RERUN_TIME_3S;
+			schedule_delayed_work(&chg->usbicl_rerun_work,
+							msecs_to_jiffies(3000));
+		}
+
 		if (smblib_get_prop_dfp_mode(chg) != POWER_SUPPLY_TYPEC_NONE) {
 			chg->fake_usb_insertion = true;
 			return;
@@ -3619,6 +3634,9 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 				!chg->pd_active)
 			pr_err("APSD disabled on vbus rising without PD\n");
 	} else {
+		if (chg->aicl_rerun_enable)
+			cancel_delayed_work(&chg->usbicl_rerun_work);
+
 		if (chg->fake_usb_insertion) {
 			chg->fake_usb_insertion = false;
 			return;
@@ -4684,6 +4702,12 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 			 */
 			schedule_delayed_work(&chg->bb_removal_work,
 				msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
+			if (chg->aicl_rerun_enable) {
+				cancel_delayed_work(&chg->usbicl_rerun_work);
+				usbicl_rerun_time = AICL_RERUN_TIME_3S;
+				schedule_delayed_work(&chg->usbicl_rerun_work,
+						msecs_to_jiffies(3000));
+			}
 		}
 	}
 
@@ -5140,6 +5164,30 @@ unlock:
 	mutex_unlock(&chg->lock);
 }
 
+static void smblib_usbicl_rerun_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+							usbicl_rerun_work.work);
+	int rc = -EINVAL;
+
+	pr_info("Set AICL rerun timer to %s\n",
+	usbicl_rerun_time_text[usbicl_rerun_time]);
+
+	rc = smblib_masked_write(chg, AICL_RERUN_TIME_CFG_REG,
+		AICL_RERUN_TIME_MASK, usbicl_rerun_time);
+	if (rc < 0) {
+		pr_err("Couldn't config AICL rerun time\n");
+		return;
+	}
+
+	if (usbicl_rerun_time == AICL_RERUN_TIME_3S) {
+		//delay 90s then set to rerun time to 3min
+		schedule_delayed_work(&chg->usbicl_rerun_work,
+				msecs_to_jiffies(90000));
+		usbicl_rerun_time = AICL_RERUN_TIME_3min;
+	}
+}
+
 static int smblib_create_votables(struct smb_charger *chg)
 {
 	int rc = 0;
@@ -5360,6 +5408,8 @@ int smblib_init(struct smb_charger *chg)
 	INIT_WORK(&chg->legacy_detection_work, smblib_legacy_detection_work);
 	INIT_DELAYED_WORK(&chg->uusb_otg_work, smblib_uusb_otg_work);
 	INIT_DELAYED_WORK(&chg->bb_removal_work, smblib_bb_removal_work);
+	INIT_DELAYED_WORK(&chg->usbicl_rerun_work,
+				smblib_usbicl_rerun_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_input_current_limited = -EINVAL;
 	chg->fake_batt_status = -EINVAL;
