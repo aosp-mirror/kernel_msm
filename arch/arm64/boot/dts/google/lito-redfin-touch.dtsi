@@ -122,5 +122,6 @@
 		avdd-supply = <&pm8150_l17>;
 		//sec,regulator_dvdd = "vdd";
 		sec,regulator_avdd = "avdd";
+		sec,panel_map = <&dsi_s6e3hc2_dsc_1080p_cmd 0>;
 	};
 };
