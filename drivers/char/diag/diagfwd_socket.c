@@ -604,12 +604,14 @@ static void socket_read_work_fn(struct work_struct *work)
 						     struct diag_socket_info,
 						     read_work);
 
-	if (!info)
+	if (!info) {
+		diag_ws_release();
 		return;
-
+	}
 	mutex_lock(&info->socket_info_mutex);
 	if (!info->hdl || !info->hdl->sk) {
 		mutex_unlock(&info->socket_info_mutex);
+		diag_ws_release();
 		return;
 	}
 	err = sock_error(info->hdl->sk);
