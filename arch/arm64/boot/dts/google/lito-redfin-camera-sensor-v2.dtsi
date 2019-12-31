@@ -12,7 +12,7 @@
 * GNU General Public License for more details.
 */
 #include <dt-bindings/clock/qcom,camcc-lito.h>
-#include "lito-redfin-camera-pmic.dtsi"
+#include "lito-redfin-camera-pmic-v2.dtsi"
 
 &pm8150l_gpios {
 	camera_rear_vcm_en {
