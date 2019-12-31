@@ -193,6 +193,65 @@
 		};
 	};
 
+	backup-charge {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		thermal-sensors = <&pm6150l_adc_tm ADC_GPIO4_PU2>;
+		wake-capable-sensor;
+		disable-thermal-zone;
+		trips {
+			batt_charging_lv1: batt-charging_lv1 {
+				temperature = <39000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv2: batt-charging_lv2 {
+				temperature = <40500>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv3: batt-charging_lv3 {
+				temperature = <43000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv4: batt-charging_lv4 {
+				temperature = <44000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			batt_charging_lv5: batt-charging_lv5 {
+				temperature = <46000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			charge_cdev_lv1 {
+				trip = <&batt_charging_lv1>;
+				cooling-device = <&google_charger 1 1>;
+			};
+			charge_cdev_lv2 {
+				trip = <&batt_charging_lv2>;
+				cooling-device = <&google_charger 2 2>;
+			};
+			charge_cdev_lv3 {
+				trip = <&batt_charging_lv3>;
+				cooling-device = <&google_charger 3 3>;
+			};
+			charge_cdev_lv4 {
+				trip = <&batt_charging_lv4>;
+				cooling-device = <&google_charger 4 4>;
+			};
+			charge_cdev_lv5 {
+				trip = <&batt_charging_lv5>;
+				cooling-device = <&google_charger 5 5>;
+			};
+		};
+	};
+
 	rf-pa0-therm-adc {
 		status = "disabled";
 	};
