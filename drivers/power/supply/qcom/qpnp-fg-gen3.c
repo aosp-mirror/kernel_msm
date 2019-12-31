@@ -4318,6 +4318,12 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		rc = fg_get_rradc_usbin_voltage(chip, &pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		rc = -EINVAL;
+		break;
+	case POWER_SUPPLY_PROP_ONLINE:
+		rc = -EINVAL;
+		break;
 	default:
 		pr_err("unsupported property %d\n", psp);
 		rc = -EINVAL;
