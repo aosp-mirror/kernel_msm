@@ -161,8 +161,8 @@
 		google,fv-uv-resolution = <25000>;
 		google,fv-uv-margin-dpct = <1020>;
 		/* tier switch */
-		google,cv-range-accuracy = <10000>;
-		google,cv-otv-margin = <12000>;
+		google,cv-range-accuracy = <80000>;
+		google,cv-otv-margin = <90000>;
 		google,cv-debounce-cnt = <3>;
 		google,cv-tier-ov-cnt = <1>;
 		google,cv-tier-switch-cnt = <3>;
