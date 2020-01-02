@@ -77,10 +77,11 @@ DEFINE_MUTEX(oom_lock);
 
 #ifdef CONFIG_HAVE_USERSPACE_LOW_MEMORY_KILLER
 static atomic64_t ulmk_kill_jiffies = ATOMIC64_INIT(INITIAL_JIFFIES);
+static atomic64_t ulmk_watchdog_pet_jiffies = ATOMIC64_INIT(INITIAL_JIFFIES);
 static unsigned long psi_emergency_jiffies = INITIAL_JIFFIES;
 static DEFINE_MUTEX(ulmk_retry_lock);
 
-static bool ulmk_kill_possible(void)
+static bool __maybe_unused ulmk_kill_possible(void)
 {
 	struct task_struct *tsk;
 	bool ret = false;
