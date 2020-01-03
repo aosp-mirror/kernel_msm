@@ -362,3 +362,8 @@
 &cam_cci1 {
 	status = "disabled";
 };
+
+// Force warm reboot on 'shutdown,thermal'
+&msm_poweroff {
+	qcom,force-warm-reboot-on-thermal-shutdown;
+};
