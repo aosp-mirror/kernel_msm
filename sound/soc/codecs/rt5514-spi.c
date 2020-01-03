@@ -48,6 +48,7 @@ struct completion switch_ack;
 
 struct rt5514_dsp {
 	struct device *dev;
+	struct snd_soc_component *component;
 	struct delayed_work copy_work_0, copy_work_1, copy_work_2, start_work,
 		adc_work;
 	struct mutex dma_lock;
@@ -363,6 +364,12 @@ void rt5514_spi_request_switch(u32 mask, bool is_require)
 	}
 
 	if (!previous_mask == !spi_switch_mask) {
+		mutex_unlock(&switch_lock);
+		return;
+	}
+
+	if (spi_switch_mask & SPI_SWITCH_MASK_NO_IRQ) {
+		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 0);
 		mutex_unlock(&switch_lock);
 		return;
 	}
@@ -872,44 +879,40 @@ end:
 static void rt5514_spi_start_work(struct work_struct *work) {
 	struct rt5514_dsp *rt5514_dsp =
 		container_of(work, struct rt5514_dsp, start_work.work);
-	struct snd_card *card;
+	struct snd_soc_component *component = rt5514_dsp->component;
 
-	if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
-		rt5514_watchdog_handler();
-		return;
+	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
+			rt5514_watchdog_handler();
+			return;
+		}
 	}
 
 	mutex_lock(&rt5514_dsp->dma_lock);
-	if (rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm)
-		card = rt5514_dsp->substream[0]->pcm->card;
-	else if (rt5514_dsp->substream[1] && rt5514_dsp->substream[1]->pcm)
-		card = rt5514_dsp->substream[1]->pcm->card;
-	else {
+	if (!(rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm) &&
+		!(rt5514_dsp->substream[1] && rt5514_dsp->substream[1]->pcm)) {
 		mutex_unlock(&rt5514_dsp->dma_lock);
 		return;
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
-		rt5514_schedule_copy(rt5514_dsp, false);
+	rt5514_schedule_copy(rt5514_dsp, false);
 }
 
 static void rt5514_spi_adc_start(struct work_struct *work)
 {
 	struct rt5514_dsp *rt5514_dsp =
 		container_of(work, struct rt5514_dsp, adc_work.work);
-	struct snd_card *card;
+	struct snd_soc_component *component = rt5514_dsp->component;
 
 	mutex_lock(&rt5514_dsp->dma_lock);
-	if (rt5514_dsp->substream[2] && rt5514_dsp->substream[2]->pcm)
-		card = rt5514_dsp->substream[2]->pcm->card;
-	else {
+	if (!(rt5514_dsp->substream[2] && rt5514_dsp->substream[2]->pcm)) {
 		mutex_unlock(&rt5514_dsp->dma_lock);
 		return;
 	}
 	mutex_unlock(&rt5514_dsp->dma_lock);
 
-	if (!snd_power_wait(card, SNDRV_CTL_POWER_D0))
+	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0))
 		rt5514_schedule_copy(rt5514_dsp, true);
 }
 
@@ -1057,6 +1060,7 @@ static int rt5514_spi_pcm_probe(struct snd_soc_platform *platform)
 	rt5514_pcm_parse_dp(rt5514_dsp, &rt5514_spi->dev);
 
 	rt5514_dsp->dev = &rt5514_spi->dev;
+	rt5514_dsp->component = &platform->component;
 	mutex_init(&rt5514_dsp->dma_lock);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_0, rt5514_spi_copy_work_0);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_1, rt5514_spi_copy_work_1);
