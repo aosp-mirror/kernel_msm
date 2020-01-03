@@ -100,7 +100,7 @@
 	idt,gpio_ben = <&pm8150_gpios 8 GPIO_ACTIVE_HIGH>;
 	idt,gpio_switch = <&tlmm 90 GPIO_ACTIVE_HIGH>;
 
-	google,epp_rp_value = <0x16>;
+	google,epp_rp_value = <0x18>;
 	//google,needs_dcin_reset = <P9221_WC_DC_RESET_MODECHANGED>;
 	google,alignment_frequencies = /bits/ 32 <87000 120000 130000
 						  140000 205000>;
