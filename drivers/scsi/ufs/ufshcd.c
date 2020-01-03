@@ -11321,6 +11321,7 @@ static void ufshcd_mgc_hibern8_work(struct work_struct *work)
 	struct ufs_hba *hba = container_of(work, struct ufs_hba,
 						manual_gc.hibern8_work);
 	pm_runtime_mark_last_busy(hba->dev);
+	pm_runtime_put_noidle(hba->dev);
 	/* bkops will be disabled when power down */
 }
 
