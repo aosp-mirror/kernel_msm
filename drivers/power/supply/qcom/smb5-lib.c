@@ -6713,8 +6713,8 @@ irqreturn_t wdog_snarl_irq_handler(int irq, void *data)
 		vote(chg->awake_votable, SW_THERM_REGULATION_VOTER, true, 0);
 		schedule_delayed_work(&chg->thermal_regulation_work, 0);
 	}
-
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 	return IRQ_HANDLED;
 }
