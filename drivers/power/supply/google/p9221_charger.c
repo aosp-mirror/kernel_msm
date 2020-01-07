@@ -2514,6 +2514,40 @@ static ssize_t aicl_icl_ua_store(struct device *dev,
 static DEVICE_ATTR_RW(aicl_icl_ua);
 
 /* ------------------------------------------------------------------------ */
+static ssize_t rtx_status_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	static const char * const rtx_state_text[] = {
+		"not support", "available", "active", "disabled" };
+
+	u8 reg;
+	int ret;
+
+	if (charger->chip_id != P9382A_CHIP_ID)
+		charger->rtx_state = RTX_NOTSUPPORTED;
+
+	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
+	if (ret == 0) {
+		if (reg & P9382A_MODE_TXMODE)
+			charger->rtx_state = RTX_ACTIVE;
+		else
+			charger->rtx_state = RTX_DISABLED;
+	} else {
+		/* FIXME: b/147213330
+		 * if otg enabled, rtx disabled.
+		 * if otg disabled, rtx available.
+		 */
+		charger->rtx_state = RTX_AVAILABLE;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n",
+			 rtx_state_text[charger->rtx_state]);
+}
+
+static DEVICE_ATTR_RO(rtx_status);
 
 static ssize_t p9382_show_rtx_sw(struct device *dev,
 				 struct device_attribute *attr,
@@ -2764,6 +2798,7 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_alignment.attr,
 	&dev_attr_aicl_delay_ms.attr,
 	&dev_attr_aicl_icl_ua.attr,
+	&dev_attr_rtx_status.attr,
 	NULL
 };
 
@@ -3582,9 +3617,11 @@ static int p9221_charger_probe(struct i2c_client *client,
 	if (chip_id == P9382A_CHIP_ID) {
 		charger->addr_data_send_buf_start = P9382A_DATA_SEND_BUF_START;
 		charger->addr_data_recv_buf_start = P9382A_DATA_RECV_BUF_START;
+		charger->rtx_state = RTX_AVAILABLE;
 	} else {
 		charger->addr_data_send_buf_start = P9221R5_DATA_SEND_BUF_START;
 		charger->addr_data_recv_buf_start = P9221R5_DATA_RECV_BUF_START;
+		charger->rtx_state = RTX_NOTSUPPORTED;
 	}
 	charger->chip_id = chip_id;
 
