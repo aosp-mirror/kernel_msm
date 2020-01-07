@@ -19,11 +19,6 @@
 #define LIMITS_SMEM_CONFIG        619
 #define PARTITION_SIZE_BYTES      4096
 
-struct limits_isense_cdsp_sysfs {
-	struct kobj_attribute  attr;
-	struct module_kobject *m_kobj;
-};
-
 struct limits_isense_cdsp_smem_data {
 	uint8_t  subsys_cal_done;
 	uint8_t  store_data_in_partition;
@@ -31,7 +26,8 @@ struct limits_isense_cdsp_smem_data {
 } __packed;
 
 static struct limits_isense_cdsp_smem_data  *limits_isense_cdsp_data;
-static struct limits_isense_cdsp_sysfs      *limits_isense_cdsp_sysfs;
+static struct kobj_attribute		    *limits_isense_cdsp_attr;
+static struct kobject			    *kobj;
 
 static ssize_t limits_isense_cdsp_data_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
@@ -63,17 +59,21 @@ static int limits_create_msm_limits_cdsp_sysfs(struct platform_device *pdev)
 	int err = 0;
 	struct module_kobject *m_kobj;
 
-	limits_isense_cdsp_sysfs = devm_kcalloc(&pdev->dev, 1,
-			sizeof(*limits_isense_cdsp_sysfs), GFP_KERNEL);
-	if (!limits_isense_cdsp_sysfs)
-		return PTR_ERR(limits_isense_cdsp_sysfs);
+	limits_isense_cdsp_attr = devm_kcalloc(&pdev->dev, 1,
+			sizeof(*limits_isense_cdsp_attr), GFP_KERNEL);
+	if (!limits_isense_cdsp_attr)
+		return PTR_ERR(limits_isense_cdsp_attr);
 
+	/* If this is loaded as a module, the sysfs folder already exists */
+	kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
+	if (kobj)
+		goto kobj_ready;
+
+	/* Otherwise, we need to create the kobject */
 	m_kobj = devm_kcalloc(&pdev->dev, 1,
 			sizeof(*m_kobj), GFP_KERNEL);
 	if (!m_kobj)
 		return PTR_ERR(m_kobj);
-
-	limits_isense_cdsp_sysfs->m_kobj = m_kobj;
 
 	m_kobj->mod = THIS_MODULE;
 	m_kobj->kobj.kset = module_kset;
@@ -93,14 +93,16 @@ static int limits_create_msm_limits_cdsp_sysfs(struct platform_device *pdev)
 		err = PTR_ERR(&m_kobj->kobj);
 		goto exit_handler;
 	}
+	kobj = &m_kobj->kobj;
 
-	sysfs_attr_init(&limits_isense_cdsp_sysfs->attr.attr);
-	limits_isense_cdsp_sysfs->attr.attr.name = "data";
-	limits_isense_cdsp_sysfs->attr.attr.mode = 0444;
-	limits_isense_cdsp_sysfs->attr.show = limits_isense_cdsp_data_show;
-	limits_isense_cdsp_sysfs->attr.store = NULL;
+kobj_ready:
+	sysfs_attr_init(&limits_isense_cdsp_attr->attr);
+	limits_isense_cdsp_attr->attr.name = "data";
+	limits_isense_cdsp_attr->attr.mode = 0444;
+	limits_isense_cdsp_attr->show = limits_isense_cdsp_data_show;
+	limits_isense_cdsp_attr->store = NULL;
 
-	sysfs_create_file(&m_kobj->kobj, &limits_isense_cdsp_sysfs->attr.attr);
+	err = sysfs_create_file(kobj, &limits_isense_cdsp_attr->attr);
 	if (err) {
 		dev_err(&pdev->dev, "cannot create sysfs file\n");
 		goto exit_handler;
@@ -109,7 +111,8 @@ static int limits_create_msm_limits_cdsp_sysfs(struct platform_device *pdev)
 	return err;
 
 exit_handler:
-	kobject_del(&m_kobj->kobj);
+	kobject_put(kobj);
+	kobj = NULL;
 
 	return err;
 }
@@ -141,11 +144,9 @@ static int limits_isense_cdsp_probe(struct platform_device *pdev)
 static int limits_isense_cdsp_remove(struct platform_device *pdev)
 {
 	limits_isense_cdsp_data = NULL;
-
-	if (limits_isense_cdsp_sysfs && limits_isense_cdsp_sysfs->m_kobj) {
-		sysfs_remove_file(&limits_isense_cdsp_sysfs->m_kobj->kobj,
-				  &limits_isense_cdsp_sysfs->attr.attr);
-		kobject_del(&limits_isense_cdsp_sysfs->m_kobj->kobj);
+	if (kobj) {
+		sysfs_remove_file(kobj, &limits_isense_cdsp_attr->attr);
+		kobject_put(kobj);
 	}
 
 	return 0;
@@ -177,3 +178,12 @@ int __init limits_isense_cdsp_late_init(void)
 	return err;
 }
 late_initcall(limits_isense_cdsp_late_init);
+
+void __exit limits_isense_cdsp_late_exit(void)
+{
+	platform_driver_unregister(&limits_isense_cdsp_driver);
+}
+module_exit(limits_isense_cdsp_late_exit);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("QTI Limits Isense Driver");
