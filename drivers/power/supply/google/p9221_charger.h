@@ -328,6 +328,7 @@ struct p9221_charger_data {
 	u8				ptmc_id_str[(sizeof(u16) * 2) + 1];
 	u32				aicl_delay_ms;
 	u32				aicl_icl_ua;
+	int				rtx_state;
 };
 
 struct p9221_prop_reg_map_entry {
@@ -335,6 +336,13 @@ struct p9221_prop_reg_map_entry {
 	u16				reg;
 	bool				get;
 	bool				set;
+};
+
+enum p9382_rtx_state {
+	RTX_NOTSUPPORTED = 0,
+	RTX_AVAILABLE,
+	RTX_ACTIVE,
+	RTX_DISABLED,
 };
 
 #define P9221_SHOW(name, reg, width, mask, format)			\
