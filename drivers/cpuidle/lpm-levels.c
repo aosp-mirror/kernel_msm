@@ -1897,6 +1897,9 @@ static int __init lpm_levels_module_init(void)
 		pr_info("Error registering %s rc=%d\n", lpm_driver.driver.name,
 									rc);
 
+	if (!rc)
+		set_update_ipi_history_callback(update_ipi_history);
+
 	return rc;
 }
 
