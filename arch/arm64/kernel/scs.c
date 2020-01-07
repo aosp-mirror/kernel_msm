@@ -1,11 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Shadow Call Stack support.
  *
- * Copyright (C) 2018 Google LLC
+ * Copyright (C) 2019 Google LLC
  */
 
 #include <linux/percpu.h>
 #include <linux/vmalloc.h>
+#include <asm/pgtable.h>
 #include <asm/scs.h>
 
 DEFINE_PER_CPU(unsigned long *, irq_shadow_call_stack_ptr);
@@ -23,9 +25,9 @@ void scs_init_irq(void)
 #ifdef CONFIG_SHADOW_CALL_STACK_VMAP
 		unsigned long *p;
 
-		p = __vmalloc_node_range(SCS_SIZE, SCS_SIZE,
+		p = __vmalloc_node_range(PAGE_SIZE, SCS_SIZE,
 					 VMALLOC_START, VMALLOC_END,
-					 SCS_GFP, PAGE_KERNEL,
+					 GFP_SCS, PAGE_KERNEL,
 					 0, cpu_to_node(cpu),
 					 __builtin_return_address(0));
 

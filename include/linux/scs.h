@@ -1,41 +1,41 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Shadow Call Stack support.
  *
- * Copyright (C) 2018 Google LLC
+ * Copyright (C) 2019 Google LLC
  */
 
 #ifndef _LINUX_SCS_H
 #define _LINUX_SCS_H
 
-#ifdef CONFIG_SHADOW_CALL_STACK
-
 #include <linux/gfp.h>
 #include <linux/sched.h>
 #include <asm/page.h>
 
-#ifdef CONFIG_SHADOW_CALL_STACK_VMAP
-# define SCS_SIZE		PAGE_SIZE
-#else
-# define SCS_SIZE		1024
-#endif
+#ifdef CONFIG_SHADOW_CALL_STACK
 
-#define SCS_GFP			(GFP_KERNEL | __GFP_ZERO)
+/*
+ * In testing, 1 KiB shadow stack size (i.e. 128 stack frames on a 64-bit
+ * architecture) provided ~40% safety margin on stack usage while keeping
+ * memory allocation overhead reasonable.
+ */
+#define SCS_SIZE	1024UL
+#define GFP_SCS		(GFP_KERNEL | __GFP_ZERO)
 
-extern unsigned long init_shadow_call_stack[];
+/*
+ * A random number outside the kernel's virtual address space to mark the
+ * end of the shadow stack.
+ */
+#define SCS_END_MAGIC	0xaf0194819b1635f6UL
 
-static inline void *task_scs(struct task_struct *tsk)
-{
-	return task_thread_info(tsk)->shadow_call_stack;
-}
+#define task_scs(tsk)	(task_thread_info(tsk)->shadow_call_stack)
 
 static inline void task_set_scs(struct task_struct *tsk, void *s)
 {
-	task_thread_info(tsk)->shadow_call_stack = s;
+	task_scs(tsk) = s;
 }
 
 extern void scs_init(void);
-extern void scs_set_init_magic(struct task_struct *tsk);
-extern void scs_task_init(struct task_struct *tsk);
 extern void scs_task_reset(struct task_struct *tsk);
 extern int scs_prepare(struct task_struct *tsk, int node);
 extern bool scs_corrupted(struct task_struct *tsk);
@@ -43,44 +43,14 @@ extern void scs_release(struct task_struct *tsk);
 
 #else /* CONFIG_SHADOW_CALL_STACK */
 
-static inline void *task_scs(struct task_struct *tsk)
-{
-	return 0;
-}
+#define task_scs(tsk)	NULL
 
-static inline void task_set_scs(struct task_struct *tsk, void *s)
-{
-}
-
-static inline void scs_init(void)
-{
-}
-
-static inline void scs_set_init_magic(struct task_struct *tsk)
-{
-}
-
-static inline void scs_task_init(struct task_struct *tsk)
-{
-}
-
-static inline void scs_task_reset(struct task_struct *tsk)
-{
-}
-
-static inline int scs_prepare(struct task_struct *tsk, int node)
-{
-	return 0;
-}
-
-static inline bool scs_corrupted(struct task_struct *tsk)
-{
-	return false;
-}
-
-static inline void scs_release(struct task_struct *tsk)
-{
-}
+static inline void task_set_scs(struct task_struct *tsk, void *s) {}
+static inline void scs_init(void) {}
+static inline void scs_task_reset(struct task_struct *tsk) {}
+static inline int scs_prepare(struct task_struct *tsk, int node) { return 0; }
+static inline bool scs_corrupted(struct task_struct *tsk) { return false; }
+static inline void scs_release(struct task_struct *tsk) {}
 
 #endif /* CONFIG_SHADOW_CALL_STACK */
 

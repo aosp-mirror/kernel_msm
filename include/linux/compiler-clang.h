@@ -46,7 +46,6 @@
 #define __nocfi		__attribute__((no_sanitize("cfi")))
 #endif
 
-#define __noscs		__attribute__((no_sanitize("shadow-call-stack")))
 /*
  * Not all versions of clang implement the the type-generic versions
  * of the builtin overflow checkers. Fortunately, clang implements
@@ -59,4 +58,10 @@
     __has_builtin(__builtin_add_overflow) && \
     __has_builtin(__builtin_sub_overflow)
 #define COMPILER_HAS_GENERIC_BUILTIN_OVERFLOW 1
+#endif
+
+#if __has_feature(shadow_call_stack)
+# define __noscs	__attribute__((__no_sanitize__("shadow-call-stack")))
+#else
+# define __noscs
 #endif
