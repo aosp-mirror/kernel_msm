@@ -12,8 +12,9 @@ if <output> is empty ('' or last option), will not collect dmesg or probe
 list.  If no -o option is specified, then <output> will be default of -
 (stdout) and all pieces will go to the standard output separated by a snip
 header.  If specified, <output> will contain the filtered /dev/ and /sys/
-dumps, <output>.probed the subset filter of just the probed drivers, and
-<output>.dmesg the kernel logs.
+dumps, <output>.probed the subset filter of just the probed drivers,
+<output>.dmesg the kernel logs and <output>.config the uncompressed
+/proc/config.gz.
 
 NB: for default standard output, the probed list will be post-filter so
     some details may be altered to make it easier to discover differences.
@@ -367,6 +368,7 @@ else
       sed -n 's@/sys/devices/platform/\(.*\)/driver$@\1@p' |
       sort -u >${output}.probed
     adb shell su root dmesg </dev/null >${output}.dmesg
+    adb shell su root cat /proc/config.gz </dev/null | gunzip >${output}.config
   else
     cat - >&99
   fi 99>&1
@@ -418,4 +420,6 @@ fi |
 if [ -z "${filter}" -a X"${output}" = X"-" ]; then
   echo "------------------------> cut dmesg <------------------------"
   adb shell su root dmesg </dev/null
+  echo "-----------------------> cut .config <-----------------------"
+  adb shell su root cat /proc/config.gz </dev/null | gunzip
 fi
