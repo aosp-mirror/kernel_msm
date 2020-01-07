@@ -146,7 +146,6 @@ enum {
 	UFS_ERR_CLEAR_PEND_XFER_TM,
 	UFS_ERR_INT_FATAL_ERRORS,
 	UFS_ERR_INT_UIC_ERROR,
-	UFS_ERR_CRYPTO_ENGINE,
 
 	/* other errors */
 	UFS_ERR_HIBERN8_ENTER,
@@ -371,31 +370,6 @@ struct ufs_hba_variant_ops {
 };
 
 /**
- * struct ufs_hba_crypto_variant_ops - variant specific crypto callbacks
- * @crypto_req_setup:	retreieve the necessary cryptographic arguments to setup
-			a requests's transfer descriptor.
- * @crypto_engine_cfg_start: start configuring cryptographic engine
- *							 according to tag
- *							 parameter
- * @crypto_engine_cfg_end: end configuring cryptographic engine
- *						   according to tag parameter
- * @crypto_engine_reset: perform reset to the cryptographic engine
- * @crypto_engine_get_status: get errors status of the cryptographic engine
- */
-struct ufs_hba_crypto_variant_ops {
-	int	(*crypto_req_setup)(struct ufs_hba *hba,
-				    struct ufshcd_lrb *lrbp, u8 *cc_index,
-				    bool *enable, u64 *dun);
-	int	(*crypto_engine_cfg_start)(struct ufs_hba *hba,
-					   unsigned int task_tag);
-	int	(*crypto_engine_cfg_end)(struct ufs_hba *hba,
-					 struct ufshcd_lrb *lrbp,
-					 struct request *req);
-	int	(*crypto_engine_reset)(struct ufs_hba *hba);
-	int	(*crypto_engine_get_status)(struct ufs_hba *hba, u32 *status);
-};
-
-/**
  * struct ufs_hba_pm_qos_variant_ops - variant specific PM QoS callbacks
  */
 struct ufs_hba_pm_qos_variant_ops {
@@ -412,7 +386,6 @@ struct ufs_hba_variant {
 	struct device				*dev;
 	const char				*name;
 	struct ufs_hba_variant_ops		*vops;
-	struct ufs_hba_crypto_variant_ops	*crypto_vops;
 	struct ufs_hba_pm_qos_variant_ops	*pm_qos_vops;
 };
 
@@ -1049,7 +1022,6 @@ struct ufs_hba {
 	/* HBA Errors */
 	u32 errors;
 	u32 uic_error;
-	u32 ce_error;	/* crypto engine errors */
 	u32 saved_err;
 	u32 saved_uic_err;
 	u32 saved_ce_err;
@@ -1231,11 +1203,6 @@ static inline bool ufshcd_is_auto_hibern8_supported(struct ufs_hba *hba)
 static inline bool ufshcd_is_auto_hibern8_enabled(struct ufs_hba *hba)
 {
 	return ufshcd_is_auto_hibern8_supported(hba) && !!hba->ahit;
-}
-
-static inline bool ufshcd_is_crypto_supported(struct ufs_hba *hba)
-{
-	return !!(hba->capabilities & MASK_CRYPTO_SUPPORT);
 }
 
 #define ufshcd_writel(hba, val, reg)	\
@@ -1636,55 +1603,6 @@ static inline void ufshcd_vops_remove_debugfs(struct ufs_hba *hba)
 {
 }
 #endif
-
-static inline int ufshcd_vops_crypto_req_setup(struct ufs_hba *hba,
-	struct ufshcd_lrb *lrbp, u8 *cc_index, bool *enable, u64 *dun)
-{
-	if (hba->var && hba->var->crypto_vops &&
-		hba->var->crypto_vops->crypto_req_setup)
-		return hba->var->crypto_vops->crypto_req_setup(hba, lrbp,
-			cc_index, enable, dun);
-	return 0;
-}
-
-static inline int ufshcd_vops_crypto_engine_cfg_start(struct ufs_hba *hba,
-						unsigned int task_tag)
-{
-	if (hba->var && hba->var->crypto_vops &&
-	    hba->var->crypto_vops->crypto_engine_cfg_start)
-		return hba->var->crypto_vops->crypto_engine_cfg_start
-				(hba, task_tag);
-	return 0;
-}
-
-static inline int ufshcd_vops_crypto_engine_cfg_end(struct ufs_hba *hba,
-						struct ufshcd_lrb *lrbp,
-						struct request *req)
-{
-	if (hba->var && hba->var->crypto_vops &&
-	    hba->var->crypto_vops->crypto_engine_cfg_end)
-		return hba->var->crypto_vops->crypto_engine_cfg_end
-				(hba, lrbp, req);
-	return 0;
-}
-
-static inline int ufshcd_vops_crypto_engine_reset(struct ufs_hba *hba)
-{
-	if (hba->var && hba->var->crypto_vops &&
-	    hba->var->crypto_vops->crypto_engine_reset)
-		return hba->var->crypto_vops->crypto_engine_reset(hba);
-	return 0;
-}
-
-static inline int ufshcd_vops_crypto_engine_get_status(struct ufs_hba *hba,
-		u32 *status)
-{
-	if (hba->var && hba->var->crypto_vops &&
-	    hba->var->crypto_vops->crypto_engine_get_status)
-		return hba->var->crypto_vops->crypto_engine_get_status(hba,
-			status);
-	return 0;
-}
 
 static inline void ufshcd_vops_pm_qos_req_start(struct ufs_hba *hba,
 		struct request *req)
