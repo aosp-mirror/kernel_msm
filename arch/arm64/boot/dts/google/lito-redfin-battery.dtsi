@@ -12,3 +12,9 @@
  */
 
 #include "lito-redfin-battery-common.dtsi"
+
+&soc {
+	google_wlc_charger: google,wlc_charger {
+		#cooling-cells = <2>;
+	};
+};
