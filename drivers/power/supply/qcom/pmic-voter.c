@@ -177,11 +177,13 @@ void lock_votable(struct votable *votable)
 {
 	mutex_lock(&votable->vote_lock);
 }
+EXPORT_SYMBOL_GPL(lock_votable);
 
 void unlock_votable(struct votable *votable)
 {
 	mutex_unlock(&votable->vote_lock);
 }
+EXPORT_SYMBOL_GPL(unlock_votable);
 
 /**
  * is_override_vote_enabled() -
