@@ -33,6 +33,7 @@
 	/* google,batt_psy_disable ; */
 	google,batt_psy_name = "smb5";
 	google,batt_psy_is_bms;
+	google,wdog_snarl_disable;
 	google,usb-port-tz-name = "usbc-therm-adc";
 	qcom,hvdcp-disable;
 	qcom,chg-term-src = <1>;
