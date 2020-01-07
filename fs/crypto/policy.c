@@ -76,12 +76,6 @@ bool fscrypt_supported_policy(const union fscrypt_policy *policy_u,
 			return false;
 		}
 
-		if (policy->contents_encryption_mode == FSCRYPT_MODE_PRIVATE) {
-			fscrypt_warn(inode,
-				     "FSCRYPT_MODE_PRIVATE is only supported for v1 policies");
-			return false;
-		}
-
 		if (policy->flags & ~FSCRYPT_POLICY_FLAGS_VALID) {
 			fscrypt_warn(inode,
 				     "Unsupported encryption flags (0x%02x)",

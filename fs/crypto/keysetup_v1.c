@@ -27,7 +27,6 @@
 #include <linux/scatterlist.h>
 
 #include "fscrypt_private.h"
-#include "fscrypt_ice.h"
 
 /* Table of keys referenced by DIRECT_KEY policies */
 static DEFINE_HASHTABLE(fscrypt_direct_keys, 6); /* 6 bits = 64 buckets */
@@ -309,27 +308,9 @@ out:
 	return err;
 }
 
-static int setup_v1_file_key_private(struct fscrypt_info *ci,
-				     const u8 *raw_master_key)
-{
-	if (!fscrypt_is_ice_capable(ci->ci_inode->i_sb)) {
-		fscrypt_warn(ci->ci_inode, "ICE support not available");
-		return -EINVAL;
-	}
-
-	/*
-	 * Inline encryption: no key derivation required because IVs are
-	 * assigned based on iv_sector.
-	 */
-	memcpy(ci->ci_raw_key, raw_master_key, FS_AES_256_XTS_KEY_SIZE);
-	return 0;
-}
-
 int fscrypt_setup_v1_file_key(struct fscrypt_info *ci, const u8 *raw_master_key)
 {
-	if (is_private_mode(ci->ci_mode))
-		return setup_v1_file_key_private(ci, raw_master_key);
-	else if (ci->ci_policy.v1.flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY)
+	if (ci->ci_policy.v1.flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY)
 		return setup_v1_file_key_direct(ci, raw_master_key);
 	else
 		return setup_v1_file_key_derived(ci, raw_master_key);

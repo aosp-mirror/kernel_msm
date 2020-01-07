@@ -9,7 +9,6 @@
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/blkdev.h>
-#include <crypto/ice.h>
 
 #include "sdhci-msm.h"
 

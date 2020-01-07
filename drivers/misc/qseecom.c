@@ -37,14 +37,12 @@
 #include <soc/qcom/qseecomi.h>
 #include <asm/cacheflush.h>
 #include "qseecom_kernel.h"
-#include <crypto/ice.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
 #include <linux/dma-buf.h>
 #include <linux/ion_kernel.h>
 #include <linux/compat.h>
 #include "compat_qseecom.h"
-#include <linux/pfk.h>
 #include <linux/kthread.h>
 #include <linux/dma-contiguous.h>
 #include <linux/cma.h>
@@ -432,8 +430,6 @@ static void __qseecom_disable_clk(enum qseecom_ce_hw_instance ce);
 static int __qseecom_init_clk(enum qseecom_ce_hw_instance ce);
 static int qseecom_load_commonlib_image(struct qseecom_dev_handle *data,
 					char *cmnlib_name);
-static int qseecom_enable_ice_setup(int usage);
-static int qseecom_disable_ice_setup(int usage);
 static void __qseecom_reentrancy_check_if_no_app_blocked(uint32_t smc_id);
 static int qseecom_get_ce_info(struct qseecom_dev_handle *data,
 						void __user *argp);
@@ -6326,30 +6322,6 @@ static int __qseecom_update_current_key_user_info(
 }
 
 
-static int qseecom_enable_ice_setup(int usage)
-{
-	int ret = 0;
-
-	if (usage == QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("ufs", true);
-	else if (usage == QSEOS_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("sdcc", true);
-
-	return ret;
-}
-
-static int qseecom_disable_ice_setup(int usage)
-{
-	int ret = 0;
-
-	if (usage == QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("ufs", false);
-	else if (usage == QSEOS_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("sdcc", false);
-
-	return ret;
-}
-
 static int qseecom_get_ce_hw_instance(uint32_t unit, uint32_t usage)
 {
 	struct qseecom_ce_info_use *pce_info_use, *p;
@@ -6491,13 +6463,6 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 		memcpy((void *)set_key_ireq.hash32,
 				(void *)create_key_req.hash32,
 				QSEECOM_HASH_SIZE);
-		/*
-		 * It will return false if it is GPCE based crypto instance or
-		 * ICE is setup properly
-		 */
-		ret = qseecom_enable_ice_setup(create_key_req.usage);
-		if (ret)
-			goto free_buf;
 
 		do {
 			ret = __qseecom_set_clear_ce_key(data,
@@ -6511,8 +6476,6 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 				msleep(50);
 
 		} while (ret == QSEOS_RESULT_FAIL_PENDING_OPERATION);
-
-		qseecom_disable_ice_setup(create_key_req.usage);
 
 		if (ret) {
 			pr_err("Failed to create key: pipe %d, ce %d: %d\n",
@@ -6621,19 +6584,8 @@ static int qseecom_wipe_key(struct qseecom_dev_handle *data,
 			clear_key_ireq.key_id[i] = QSEECOM_INVALID_KEY_ID;
 		memset((void *)clear_key_ireq.hash32, 0, QSEECOM_HASH_SIZE);
 
-		/*
-		 * It will return false if it is GPCE based crypto instance or
-		 * ICE is setup properly
-		 */
-		ret = qseecom_enable_ice_setup(wipe_key_req.usage);
-		if (ret)
-			goto free_buf;
-
 		ret = __qseecom_set_clear_ce_key(data, wipe_key_req.usage,
 					&clear_key_ireq);
-
-		qseecom_disable_ice_setup(wipe_key_req.usage);
-
 		if (ret) {
 			pr_err("Failed to wipe key: pipe %d, ce %d: %d\n",
 				pipe, ce_hw[j], ret);
@@ -8202,28 +8154,12 @@ static long qseecom_ioctl(struct file *file,
 		break;
 	}
 	case QSEECOM_IOCTL_SET_ICE_INFO: {
-		struct qseecom_ice_data_t ice_data;
-
-		ret = copy_from_user(&ice_data, argp, sizeof(ice_data));
-		if (ret) {
-			pr_err("copy_from_user failed\n");
-			return -EFAULT;
-		}
-		qcom_ice_set_fde_flag(ice_data.flag);
-		break;
+		pr_err("Obsolete ioctl QSEECOM_IOCTL_SET_ICE_INFO was used.\n");
+		return 0;
 	}
 	case QSEECOM_IOCTL_FBE_CLEAR_KEY: {
-		struct qseecom_ice_key_data_t key_data;
-
-		ret = copy_from_user(&key_data, argp, sizeof(key_data));
-		if (ret) {
-			pr_err("copy from user failed\n");
-			return -EFAULT;
-		}
-		pfk_fbe_clear_key((const unsigned char *) key_data.key,
-				key_data.key_len, (const unsigned char *)
-				key_data.salt, key_data.salt_len);
-		break;
+		pr_err("Obsolete ioctl QSEECOM_IOCTL_FBE_CLEAR_KEY was used.\n");
+		return 0;
 	}
 	default:
 		pr_err("Invalid IOCTL: 0x%x\n", cmd);

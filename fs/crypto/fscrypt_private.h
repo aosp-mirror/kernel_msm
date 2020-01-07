@@ -13,11 +13,9 @@
 
 #include <linux/fscrypt.h>
 #include <crypto/hash.h>
-#include <linux/pfk.h>
 
 #define CONST_STRLEN(str)	(sizeof(str) - 1)
 
-#define FS_AES_256_XTS_KEY_SIZE		64
 #define FS_KEY_DERIVATION_NONCE_SIZE	16
 
 #define FSCRYPT_MIN_KEY_SIZE		16
@@ -204,9 +202,6 @@ struct fscrypt_info {
 
 	/* This inode's nonce, copied from the fscrypt_context */
 	u8 ci_nonce[FS_KEY_DERIVATION_NONCE_SIZE];
-
-	/* Raw key, only for inline encryption w/ FSCRYPT_MODE_PRIVATE */
-	u8 ci_raw_key[FS_AES_256_XTS_KEY_SIZE];
 };
 
 typedef enum {
@@ -229,10 +224,6 @@ static inline bool fscrypt_valid_enc_modes(u32 contents_mode,
 
 	if (contents_mode == FSCRYPT_MODE_ADIANTUM &&
 	    filenames_mode == FSCRYPT_MODE_ADIANTUM)
-		return true;
-
-	if (contents_mode == FSCRYPT_MODE_PRIVATE &&
-	    filenames_mode == FSCRYPT_MODE_AES_256_CTS)
 		return true;
 
 	return false;
@@ -455,12 +446,6 @@ struct fscrypt_mode {
 	bool logged_impl_name;
 	bool needs_essiv;
 };
-
-static inline bool is_private_mode(const struct fscrypt_mode *mode)
-{
-	/* Using inline encryption with ICE, rather than the crypto API? */
-	return mode->cipher_str == NULL;
-}
 
 static inline bool
 fscrypt_mode_supports_direct_key(const struct fscrypt_mode *mode)
