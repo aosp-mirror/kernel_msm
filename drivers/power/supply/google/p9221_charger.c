@@ -1246,6 +1246,9 @@ static int p9221_notifier_cb(struct notifier_block *nb, unsigned long event,
 	struct p9221_charger_data *charger =
 		container_of(nb, struct p9221_charger_data, nb);
 
+	if (charger->ben_state)
+		goto out;
+
 	if (event != PSY_EVENT_PROP_CHANGED)
 		goto out;
 
