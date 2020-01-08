@@ -19,6 +19,7 @@
 
 #include "../core.h"
 #include "../pinctrl-utils.h"
+#include "../../gpio/gpiolib.h"
 
 #define PMIC_GPIO_ADDRESS_RANGE			0x100
 
@@ -1330,7 +1331,19 @@ static struct platform_driver pmic_gpio_driver = {
 	.remove = pmic_gpio_remove,
 };
 
-module_platform_driver(pmic_gpio_driver);
+static int __init pinctrl_spmi_gpio_init(void)
+{
+	pmic_gpio_dump_builtin_cb = pmic_gpio_dump;
+	return platform_driver_register(&pmic_gpio_driver);
+}
+module_init(pinctrl_spmi_gpio_init);
+
+static void __exit pinctrl_spmi_gpio_exit(void)
+{
+	pmic_gpio_dump_builtin_cb = NULL;
+	platform_driver_unregister(&pmic_gpio_driver);
+}
+module_exit(pinctrl_spmi_gpio_exit);
 
 MODULE_AUTHOR("Ivan T. Ivanov <iivanov@mm-sol.com>");
 MODULE_DESCRIPTION("Qualcomm SPMI PMIC GPIO pin control driver");
