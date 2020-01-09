@@ -2047,10 +2047,20 @@ static int rt5514_set_bias_level(struct snd_soc_codec *codec,
 static int rt5514_probe(struct snd_soc_codec *codec)
 {
 	struct rt5514_priv *rt5514 = snd_soc_codec_get_drvdata(codec);
+	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
 
 	rt5514->mclk = devm_clk_get(codec->dev, "mclk");
 	if (PTR_ERR(rt5514->mclk) == -EPROBE_DEFER)
 		return -EPROBE_DEFER;
+
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC1L");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC1R");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC2L");
+	snd_soc_dapm_ignore_suspend(dapm, "DMIC2R");
+	snd_soc_dapm_ignore_suspend(dapm, "AMICL");
+	snd_soc_dapm_ignore_suspend(dapm, "AMICR");
+	snd_soc_dapm_ignore_suspend(dapm, "AIF1 Capture");
+	snd_soc_dapm_sync(dapm);
 
 	rt5514->codec = codec;
 

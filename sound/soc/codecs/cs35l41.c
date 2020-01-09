@@ -2514,6 +2514,7 @@ static int cs35l41_set_pdata(struct cs35l41_private *cs35l41)
 static int cs35l41_codec_probe(struct snd_soc_codec *codec)
 {
 	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
+	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
 	struct snd_kcontrol_new *kcontrol;
 	int ret = 0;
 
@@ -2544,6 +2545,27 @@ static int cs35l41_codec_probe(struct snd_soc_codec *codec)
 			       "snd_soc_add_codec_controls failed (%d)\n", ret);
 		kfree(kcontrol);
 	}
+
+	if (codec->component.name_prefix &&
+		!strcmp(codec->component.name_prefix, "R")) {
+		snd_soc_dapm_ignore_suspend(dapm, "R SPK");
+		snd_soc_dapm_ignore_suspend(dapm, "R VP");
+		snd_soc_dapm_ignore_suspend(dapm, "R VBST");
+		snd_soc_dapm_ignore_suspend(dapm, "R ISENSE");
+		snd_soc_dapm_ignore_suspend(dapm, "R VSENSE");
+		snd_soc_dapm_ignore_suspend(dapm, "R TEMP");
+		snd_soc_dapm_ignore_suspend(dapm, "R AMP Playback");
+	} else {
+		snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
+		snd_soc_dapm_ignore_suspend(dapm, "VBST");
+		snd_soc_dapm_ignore_suspend(dapm, "SPK");
+		snd_soc_dapm_ignore_suspend(dapm, "VP");
+		snd_soc_dapm_ignore_suspend(dapm, "ISENSE");
+		snd_soc_dapm_ignore_suspend(dapm, "VSENSE");
+		snd_soc_dapm_ignore_suspend(dapm, "TEMP");
+	}
+
+	snd_soc_dapm_sync(dapm);
 
 exit:
 	return ret;
