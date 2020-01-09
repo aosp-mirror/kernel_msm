@@ -485,3 +485,6 @@ static void codec_detect_exit(void)
 
 subsys_initcall(codec_detect_init);
 module_exit(codec_detect_exit);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Google Codec Detect driver");
