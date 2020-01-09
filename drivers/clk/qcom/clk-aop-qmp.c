@@ -9,6 +9,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/mailbox_client.h>
@@ -344,3 +345,6 @@ static int __init aop_qmp_clk_init(void)
 	return platform_driver_register(&aop_qmp_clk_driver);
 }
 subsys_initcall(aop_qmp_clk_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("AOP QMP Clock Driver");
