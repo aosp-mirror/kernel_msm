@@ -35,6 +35,9 @@
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 #include "rt5514-spi.h"
 #endif
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+#include <linux/codec-misc.h>
+#endif
 
 struct regmap *rt5514_g_i2c_regmap;
 EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
@@ -751,6 +754,9 @@ watchdog:
 						RT5514_DSP_FUNC_SUSPEND);
 			}
 		}
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+		codec_detect_status_notifier(WDSP_STAT_UP);
+#endif
 
 		regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
 	} else {
@@ -758,6 +764,9 @@ watchdog:
 			rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
 		regcache_mark_dirty(rt5514->regmap);
 		regcache_sync(rt5514->regmap);
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+		codec_detect_status_notifier(WDSP_STAT_DOWN);
+#endif
 	}
 
 	return 0;
@@ -765,6 +774,9 @@ watchdog:
 
 void rt5514_watchdog_handler(void)
 {
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+	codec_detect_status_notifier(WDSP_STAT_CRASH);
+#endif
 	if (g_rt5514->gpiod_reset) {
 		gpiod_set_value(g_rt5514->gpiod_reset, 0);
 		usleep_range(1000, 2000);
@@ -993,6 +1005,9 @@ static int rt5514_hw_reset_set(struct snd_kcontrol *kcontrol,
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 
 	if (rt5514->gpiod_reset) {
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+		codec_detect_status_notifier(WDSP_STAT_CRASH);
+#endif
 		gpiod_set_value(rt5514->gpiod_reset, 0);
 		usleep_range(1000, 2000);
 		gpiod_set_value(rt5514->gpiod_reset, 1);
