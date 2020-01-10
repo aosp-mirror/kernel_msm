@@ -233,6 +233,13 @@ struct ufs_hw_version {
 	u8 major;
 };
 
+/* Inline Crypto Engine hardware version: major.minor.step */
+struct ufs_qcom_ice_hw_version {
+	u16 step;
+	u8 minor;
+	u8 major;
+};
+
 struct ufs_qcom_testbus {
 	u8 select_major;
 	u8 select_minor;
@@ -350,6 +357,10 @@ struct ufs_qcom_host {
 	void __iomem *dev_ref_clk_ctrl_mmio;
 	bool is_dev_ref_clk_enabled;
 	struct ufs_hw_version hw_ver;
+#ifdef CONFIG_SCSI_UFS_CRYPTO
+	void __iomem *ice_mmio;
+	struct ufs_qcom_ice_hw_version ice_ver;
+#endif
 #ifdef CONFIG_DEBUG_FS
 	struct qcom_debugfs_files debugfs_files;
 #endif
@@ -403,5 +414,29 @@ static inline bool ufs_qcom_cap_svs2(struct ufs_qcom_host *host)
 {
 	return !!(host->caps & UFS_QCOM_CAP_SVS2);
 }
+
+/* ufs-qcom-ice.c */
+
+#ifdef CONFIG_SCSI_UFS_CRYPTO
+int ufs_qcom_ice_init(struct ufs_qcom_host *host);
+int ufs_qcom_ice_enable(struct ufs_qcom_host *host);
+int ufs_qcom_ice_resume(struct ufs_qcom_host *host);
+int ufs_qcom_ice_program_key(struct ufs_hba *hba,
+			     const union ufs_crypto_cfg_entry *cfg, int slot);
+#else
+static inline int ufs_qcom_ice_init(struct ufs_qcom_host *host)
+{
+	return 0;
+}
+static inline int ufs_qcom_ice_enable(struct ufs_qcom_host *host)
+{
+	return 0;
+}
+static inline int ufs_qcom_ice_resume(struct ufs_qcom_host *host)
+{
+	return 0;
+}
+#define ufs_qcom_ice_program_key NULL
+#endif /* !CONFIG_SCSI_UFS_CRYPTO */
 
 #endif /* UFS_QCOM_H_ */

@@ -411,6 +411,7 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 	case POST_CHANGE:
 		/* check if UFS PHY moved from DISABLED to HIBERN8 */
 		err = ufs_qcom_check_hibern8(hba);
+		ufs_qcom_ice_enable(host);
 		break;
 	default:
 		dev_err(hba->dev, "%s: invalid status %d\n", __func__, status);
@@ -879,6 +880,10 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	err = ufs_qcom_enable_lane_clks(host);
 	if (err)
 		goto out;
+
+	err = ufs_qcom_ice_resume(host);
+	if (err)
+		return err;
 
 	hba->is_sys_suspended = false;
 
@@ -2201,6 +2206,13 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
 
+	err = ufs_qcom_ice_init(host);
+	if (err) {
+		if (err != -ENODEV)
+			goto out_variant_clear;
+		hba->quirks |= UFSHCD_QUIRK_BROKEN_CRYPTO;
+	}
+
 	ufs_qcom_set_bus_vote(hba, true);
 	ufs_qcom_setup_clocks(hba, true, POST_CHANGE);
 
@@ -2715,6 +2727,7 @@ static struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 	.add_debugfs		= ufs_qcom_dbg_add_debugfs,
 #endif
 	.get_user_cap_mode	= ufs_qcom_get_user_cap_mode,
+	.program_key		= ufs_qcom_ice_program_key,
 };
 
 static struct ufs_hba_pm_qos_variant_ops ufs_hba_pm_qos_variant_ops = {
