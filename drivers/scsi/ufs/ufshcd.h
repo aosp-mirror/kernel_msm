@@ -309,6 +309,8 @@ struct ufs_pwr_mode_info {
 	struct ufs_pa_layer_attr info;
 };
 
+union ufs_crypto_cfg_entry;
+
 /**
  * struct ufs_hba_variant_ops - variant specific callbacks
  * @init: called when the driver is initialized
@@ -339,6 +341,7 @@ struct ufs_pwr_mode_info {
  *			 scale down
  * @set_bus_vote: called to vote for the required bus bandwidth
  * @phy_initialization: used to initialize phys
+ * @program_key: program an inline encryption key into a keyslot
  */
 struct ufs_hba_variant_ops {
 	int	(*init)(struct ufs_hba *);
@@ -375,6 +378,8 @@ struct ufs_hba_variant_ops {
 	void	(*add_debugfs)(struct ufs_hba *hba, struct dentry *root);
 	void	(*remove_debugfs)(struct ufs_hba *hba);
 #endif
+	int	(*program_key)(struct ufs_hba *hba,
+			       const union ufs_crypto_cfg_entry *cfg, int slot);
 };
 
 /**
