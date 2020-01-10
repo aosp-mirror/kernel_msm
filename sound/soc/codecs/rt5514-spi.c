@@ -37,6 +37,7 @@
 
 #include "rt5514-spi.h"
 #include "rt5514.h"
+#define COPY_WORK_DELAY_TIME_MS 100
 
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
@@ -427,7 +428,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	if (!period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_0,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -435,7 +436,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_0,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -451,7 +452,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 
@@ -466,7 +467,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 		if (remain_data < period_bytes) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 	}
@@ -533,7 +534,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	if (!period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_1,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -541,7 +542,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_1,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -557,7 +558,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 
@@ -572,7 +573,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 		if (remain_data < period_bytes) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
-				msecs_to_jiffies(50));
+				msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 			goto done;
 		}
 	}
@@ -639,7 +640,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if (!period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -647,7 +648,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if (snd_pcm_capture_hw_avail(runtime) <= runtime->period_size) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -661,7 +662,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
@@ -675,7 +676,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	if (remain_data < period_bytes) {
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		schedule_delayed_work(&rt5514_dsp->copy_work_2,
-			msecs_to_jiffies(50));
+			msecs_to_jiffies(COPY_WORK_DELAY_TIME_MS));
 		goto done;
 	}
 
