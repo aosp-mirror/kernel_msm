@@ -46,6 +46,18 @@
 #include "cs35l41.h"
 #include <sound/cs35l41.h>
 
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+#include <linux/codec-misc.h>
+
+struct cs35l41_misc_priv_type {
+	struct cs35l41_private *cs35l41_priv;
+	int r_channel;
+	long impedance;
+	long thermal;
+	struct mutex lock;
+};
+#endif
+
 static const char * const cs35l41_supplies[] = {
 	"VA",
 	"VP",
@@ -1250,6 +1262,65 @@ static const char * const cs35l41_output_dev_text[] = {
 	"Receiver",
 };
 
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+static int cs35l41_imp_put(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	struct cs35l41_misc_priv_type *misc_priv = NULL;
+
+	if (IS_ERR_OR_NULL(cs35l41))
+		return -EINVAL;
+
+	misc_priv = (struct cs35l41_misc_priv_type *)cs35l41->misc_priv;
+
+	if (IS_ERR_OR_NULL(misc_priv))
+		return -EINVAL;
+
+	mutex_lock(&misc_priv->lock);
+	dev_info(cs35l41->dev, "%s: %c: %ld -> %ld\n",
+		__func__,
+		((misc_priv->r_channel)?'R':'L'),
+		misc_priv->impedance, ucontrol->value.integer.value[0]);
+
+	misc_priv->impedance = ucontrol->value.integer.value[0];
+	mutex_unlock(&misc_priv->lock);
+
+	codec_misc_amp_put(misc_priv->r_channel, misc_priv->impedance);
+
+	return 0;
+}
+
+static int cs35l41_imp_get(struct snd_kcontrol *kcontrol,
+			struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	struct cs35l41_misc_priv_type *misc_priv = NULL;
+
+	if (!cs35l41)
+		return -EINVAL;
+
+	misc_priv = (struct cs35l41_misc_priv_type *)cs35l41->misc_priv;
+
+	if (!misc_priv)
+		return -EINVAL;
+
+	mutex_lock(&misc_priv->lock);
+	ucontrol->value.integer.value[0] = misc_priv->impedance;
+	dev_dbg(cs35l41->dev, "%s: %ld\n", __func__,
+		ucontrol->value.integer.value[0]);
+	mutex_unlock(&misc_priv->lock);
+
+	return 0;
+}
+#endif /* IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT) */
+
 /* Ensure SPK and RCV defined values match array index */
 static const unsigned int cs35l41_output_dev_val[] = {
 	CS35L41_OUTPUT_DEV_SPK,
@@ -1324,6 +1395,11 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 		       cs35l41_put_auto_ramp_timeout),
 	SOC_VALUE_ENUM_EXT("Audio Output Device", cs35l41_output_dev,
 			   cs35l41_get_output_dev, cs35l41_put_output_dev),
+
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+	SOC_SINGLE_EXT("IMP", SND_SOC_NOPM, 0, 0xFFFFFFFF, 0,
+			cs35l41_imp_get, cs35l41_imp_put),
+#endif
 };
 
 static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
@@ -3296,6 +3372,40 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+int cs35l41_misc_init(struct cs35l41_private *cs35l41)
+{
+	struct cs35l41_misc_priv_type *misc_priv = NULL;
+	int ret = 0;
+
+	if (!cs35l41 || !cs35l41->dev)
+		return -EINVAL;
+
+	misc_priv = devm_kzalloc(cs35l41->dev, sizeof(*misc_priv), GFP_KERNEL);
+	if (!misc_priv)
+		return -ENOMEM;
+
+	cs35l41->misc_priv = (void *)misc_priv;
+	misc_priv->cs35l41_priv = cs35l41;
+	misc_priv->r_channel = (cs35l41->pdata.right_channel) ? 1 : 0;
+	mutex_init(&misc_priv->lock);
+
+	return ret;
+}
+
+int cs35l41_misc_exit(struct cs35l41_private *cs35l41)
+{
+	struct cs35l41_misc_priv_type *misc_priv;
+
+	if (!cs35l41)
+		return -EINVAL;
+	misc_priv = (struct cs35l41_misc_priv_type *) cs35l41->misc_priv;
+	mutex_destroy(&misc_priv->lock);
+	devm_kfree(cs35l41->dev, misc_priv);
+	return 0;
+}
+#endif
+
 int cs35l41_probe(struct cs35l41_private *cs35l41,
 				struct cs35l41_platform_data *pdata)
 {
@@ -3526,6 +3636,10 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	INIT_DELAYED_WORK(&cs35l41->hb_work, cs35l41_hibernate_work);
 	mutex_init(&cs35l41->hb_lock);
+
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+	cs35l41_misc_init(cs35l41);
+#endif
 err:
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
 	return ret;
@@ -3533,6 +3647,9 @@ err:
 
 int cs35l41_remove(struct cs35l41_private *cs35l41)
 {
+#if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
+	cs35l41_misc_exit(cs35l41);
+#endif
 	destroy_workqueue(cs35l41->wq);
 	mutex_destroy(&cs35l41->hb_lock);
 	destroy_workqueue(cs35l41->vol_ctl.ramp_wq);
