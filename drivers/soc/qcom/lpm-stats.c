@@ -817,3 +817,6 @@ void lpm_stats_suspend_exit(void)
 	update_level_stats(&suspend_time_stats, exit_time, true);
 }
 EXPORT_SYMBOL(lpm_stats_suspend_exit);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM CPU Idle statistics collector");

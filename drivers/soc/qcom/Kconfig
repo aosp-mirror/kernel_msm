@@ -714,7 +714,7 @@ config MSM_PM
 
 if MSM_PM
 menuconfig MSM_IDLE_STATS
-	bool "Collect idle statistics"
+	tristate "Collect idle statistics"
 	help
 	  Collect cores various low power mode idle statistics
 	  and export them in proc/msm_pm_stats. User can read

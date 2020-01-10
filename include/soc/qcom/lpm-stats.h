@@ -32,7 +32,7 @@ struct lpm_stats {
 
 
 
-#ifdef CONFIG_MSM_IDLE_STATS
+#if IS_ENABLED(CONFIG_MSM_IDLE_STATS)
 struct lpm_stats *lpm_stats_config_level(const char *name,
 	const char **levels, int num_levels, struct lpm_stats *parent,
 	struct cpumask *mask);
