@@ -1145,33 +1145,35 @@ static int npu_cc_lito_probe(struct platform_device *pdev)
 
 	ret = npu_cc_lito_fixup(pdev);
 	if (ret)
-		return ret;
+		goto error;
 
 	ret = npu_clocks_lito_probe(pdev, &npu_cc_lito_desc);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "npu_cc clock registration failed, ret=%d\n",
 									ret);
-		return ret;
+		goto error;
 	}
 
 	ret = npu_clocks_lito_probe(pdev, &npu_qdsp6ss_lito_desc);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "npu_qdsp6ss clock registration failed, ret=%d\n",
 									ret);
-		return ret;
+		goto error;
 	}
 
 	ret = npu_clocks_lito_probe(pdev, &npu_qdsp6ss_pll_lito_desc);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "npu_qdsp6ss_pll clock registration failed, ret=%d\n",
 			ret);
-		return ret;
+		goto error;
 	}
+error:
+	if (ret)
+		clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+	else
+		dev_info(&pdev->dev, "Registered NPU_CC clocks\n");
 
-	dev_info(&pdev->dev, "Registered NPU_CC clocks\n");
-
-	return 0;
-
+	return ret;
 }
 
 static void npu_cc_lito_sync_state(struct device *dev)
