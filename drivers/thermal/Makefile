@@ -64,4 +64,5 @@ obj-$(CONFIG_ZX2967_THERMAL)	+= zx2967_thermal.o
 obj-$(CONFIG_UNIPHIER_THERMAL)	+= uniphier_thermal.o
 obj-$(CONFIG_THERMAL_TSENS)	+= thermal-tsens.o
 thermal-tsens-objs += msm-tsens.o tsens2xxx.o tsens-dbg.o tsens-mtc.o tsens1xxx.o tsens-calib.o
+thermal-tsens-$(CONFIG_QTI_VIRTUAL_SENSOR) += qcom/qti_virtual_sensor.o
 
