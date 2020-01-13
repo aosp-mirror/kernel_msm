@@ -192,6 +192,7 @@
 		#cooling-cells = <2>;
 		google,chg-power-supply = "sm7150_bms";
 		google,bat-power-supply = "battery";
+		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
 		google,thermal-mitigation =
 			<3080000 2500000 2000000 1500000 1000000 500000>;
 		google,fv-max-uv = <4450000>;
