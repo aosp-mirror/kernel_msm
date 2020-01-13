@@ -346,8 +346,6 @@ static int gpu_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
-	vdd_cx.skip_handoff = true;
-	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
 	if (IS_ERR(vdd_mx.regulator[0])) {
@@ -356,6 +354,10 @@ static int gpu_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_mx regulator\n");
 		return PTR_ERR(vdd_mx.regulator[0]);
 	}
+
+	vdd_cx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+
 	vdd_mx.skip_handoff = true;
 	clk_vote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
 
@@ -371,6 +373,8 @@ static int gpu_cc_lito_probe(struct platform_device *pdev)
 	ret = qcom_cc_really_probe(pdev, &gpu_cc_lito_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GPU CC clocks\n");
+		clk_unvote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
+		clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 		return ret;
 	}
 
