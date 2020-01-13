@@ -562,6 +562,23 @@ int cam_req_mgr_notify_message(struct cam_req_mgr_message *msg,
 	if (!msg)
 		return -EINVAL;
 
+	if (id == V4L_EVENT_CAM_REQ_MGR_SOF) {
+		CAM_DBG(CAM_CRM,
+			"request id:%lld frame number:%lld SOF time stamp:0x%llx",
+			msg->u.frame_msg.request_id, msg->u.frame_msg.frame_id,
+			msg->u.frame_msg.timestamp);
+	} else if (id == V4L_EVENT_CAM_REQ_MGR_SOF_BOOT_TS) {
+		CAM_DBG(CAM_CRM,
+			"request id:%lld frame number:%lld boot time stamp:0x%llx",
+			msg->u.frame_msg.request_id, msg->u.frame_msg.frame_id,
+			msg->u.frame_msg.timestamp);
+	} else if (id == V4L_EVENT_CAM_REQ_MGR_VSYNC_TS) {
+		CAM_DBG(CAM_CRM,
+			"request id %lld frame number %lld vsync time stamp %lld",
+			msg->u.frame_msg.request_id, msg->u.frame_msg.frame_id,
+			msg->u.frame_msg.timestamp);
+	}
+
 	event.id = id;
 	event.type = type;
 	ev_header = CAM_REQ_MGR_GET_PAYLOAD_PTR(event,

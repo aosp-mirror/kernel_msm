@@ -358,7 +358,6 @@ static int cam_vsync_get_cam_id(int32_t link_hdl, uint32_t *cam_id)
 	struct cam_req_mgr_core_link *link;
 	struct cam_req_mgr_connected_device *dev = NULL;
 	struct cam_sensor_ctrl_t *s_ctrl = NULL;
-	uint32_t sensor_id = 0;
 	int i, rc = 0;
 
 	link = (struct cam_req_mgr_core_link *)
@@ -382,22 +381,8 @@ static int cam_vsync_get_cam_id(int32_t link_hdl, uint32_t *cam_id)
 			CAM_ERR(CAM_SENSOR, "Device data is NULL");
 			return -EINVAL;
 		}
-		/* Kernel    REAR_WIDE REAR_TELE FRONT_CAM */
-		/* Userspace REAR_WIDE FRONT_CAM REAR_TELE */
-		sensor_id = s_ctrl->soc_info.index;
-		switch (sensor_id) {
-		case 0:
-			*cam_id = 0;
-			break;
-		case 1:
-			*cam_id = 2;
-			break;
-		case 2:
-			*cam_id = 1;
-			break;
-		default:
-			break;
-		}
+
+		*cam_id = s_ctrl->soc_info.index;
 	}
 
 	return rc;

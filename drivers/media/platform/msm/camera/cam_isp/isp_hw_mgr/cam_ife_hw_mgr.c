@@ -2090,6 +2090,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 		 acquire_hw_info->input_info_offset);
 
 	/* acquire HW resources */
+	CAM_DBG(CAM_ISP, "num_inputs=%x", acquire_hw_info->num_inputs);
 	for (i = 0; i < acquire_hw_info->num_inputs; i++) {
 
 		if ((in_port->num_out_res > CAM_IFE_HW_OUT_RES_MAX) ||
