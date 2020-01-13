@@ -7,7 +7,10 @@
  */
 
 #include <linux/platform_device.h>
-#include <linux/qcom_scm.h>
+
+#include <soc/qcom/scm.h>
+#include <soc/qcom/qseecomi.h>
+#include <soc/qcom/qtee_shmbridge.h>
 
 #include "ufshcd-crypto.h"
 #include "ufs-qcom.h"
@@ -62,6 +65,86 @@
 	writel((val), (host)->ice_mmio + (reg))
 #define qcom_ice_readl(host, reg)	\
 	readl((host)->ice_mmio + (reg))
+
+/* QCOM SCM call definitions */
+
+#define TZ_ES_INVALIDATE_ICE_KEY 0x3
+#define TZ_ES_CONFIG_SET_ICE_KEY 0x4
+
+#define TZ_ES_CONFIG_SET_ICE_KEY_ID \
+	TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_SIP, TZ_SVC_ES, \
+	TZ_ES_CONFIG_SET_ICE_KEY)
+
+#define TZ_ES_INVALIDATE_ICE_KEY_ID \
+		TZ_SYSCALL_CREATE_SMC_ID(TZ_OWNER_SIP, \
+			TZ_SVC_ES, TZ_ES_INVALIDATE_ICE_KEY)
+
+#define TZ_ES_INVALIDATE_ICE_KEY_PARAM_ID \
+	TZ_SYSCALL_CREATE_PARAM_ID_1( \
+	TZ_SYSCALL_PARAM_TYPE_VAL)
+
+#define TZ_ES_CONFIG_SET_ICE_KEY_PARAM_ID \
+	TZ_SYSCALL_CREATE_PARAM_ID_5( \
+	TZ_SYSCALL_PARAM_TYPE_VAL, \
+	TZ_SYSCALL_PARAM_TYPE_BUF_RW, TZ_SYSCALL_PARAM_TYPE_VAL, \
+	TZ_SYSCALL_PARAM_TYPE_VAL, TZ_SYSCALL_PARAM_TYPE_VAL)
+
+enum qcom_scm_ice_cipher_mode {
+	QCOM_SCM_ICE_CIPHER_MODE_XTS_128 = 0,
+	QCOM_SCM_ICE_CIPHER_MODE_CBC_128 = 1,
+	QCOM_SCM_ICE_CIPHER_MODE_XTS_256 = 3,
+	QCOM_SCM_ICE_CIPHER_MODE_CBC_256 = 4,
+};
+
+static bool qcom_scm_ice_available(void)
+{
+	return true;
+}
+
+static int qcom_scm_ice_set_key(u32 index, const u8 *key, int key_size,
+				enum qcom_scm_ice_cipher_mode mode,
+				int data_unit_size)
+{
+	struct qtee_shm shm;
+	struct scm_desc desc = {0};
+	int err;
+
+	if (qtee_shmbridge_allocate_shm(key_size, &shm) != 0)
+		return -ENOMEM;
+
+	memcpy(shm.vaddr, key, key_size);
+
+	dmac_flush_range(shm.vaddr, shm.vaddr + key_size);
+
+	desc.arginfo = TZ_ES_CONFIG_SET_ICE_KEY_PARAM_ID;
+	desc.args[0] = index;
+	desc.args[1] = shm.paddr;
+	desc.args[2] = key_size;
+	desc.args[3] = mode;
+	desc.args[4] = data_unit_size;
+
+	err = scm_call2_noretry(TZ_ES_CONFIG_SET_ICE_KEY_ID, &desc);
+	if (err)
+		pr_err("SCM call to set ICE key failed with error %d\n", err);
+
+	qtee_shmbridge_free_shm(&shm);
+	return err;
+}
+
+static int qcom_scm_ice_invalidate_key(u32 index)
+{
+	struct scm_desc desc = {0};
+	int err;
+
+	desc.arginfo = TZ_ES_INVALIDATE_ICE_KEY_PARAM_ID;
+	desc.args[0] = index;
+
+	err = scm_call2_noretry(TZ_ES_INVALIDATE_ICE_KEY_ID, &desc);
+	if (err)
+		pr_err("SCM call to invalidate ICE key failed with error %d\n",
+		       err);
+	return err;
+}
 
 static int qcom_ice_check_version(struct ufs_qcom_host *host)
 {
