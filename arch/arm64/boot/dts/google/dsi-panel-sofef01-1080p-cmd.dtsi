@@ -53,6 +53,8 @@
 		qcom,mdss-dsi-bl-min-level = <4>;
 		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
 
+		qcom,mdss-dsi-bl-notifier-ranges = <30 50 70 200 255>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
