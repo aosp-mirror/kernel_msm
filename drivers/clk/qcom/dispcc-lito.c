@@ -1139,6 +1139,7 @@ static int disp_cc_lito_probe(struct platform_device *pdev)
 
 	ret = qcom_cc_really_probe(pdev, &disp_cc_lito_desc, regmap);
 	if (ret) {
+		clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 		dev_err(&pdev->dev, "Failed to register Display CC clocks\n");
 		return ret;
 	}
