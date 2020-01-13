@@ -196,6 +196,7 @@
 		google,thermal-mitigation =
 			<3080000 2500000 2000000 1500000 1000000 500000>;
 		google,fv-max-uv = <4450000>;
+		google,chg-termination-5v;
 
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
