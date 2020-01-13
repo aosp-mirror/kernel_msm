@@ -1313,29 +1313,25 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 
 /* ADC Mixer*/
 static const struct snd_kcontrol_new rt5514_sto1_adc_l_mix[] = {
-	SOC_DAPM_SINGLE("DMIC Switch", RT5514_DOWNFILTER0_CTRL1,
-		RT5514_AD_DMIC_MIX_BIT, 1, 1),
+	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER0_CTRL1,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
 
 static const struct snd_kcontrol_new rt5514_sto1_adc_r_mix[] = {
-	SOC_DAPM_SINGLE("DMIC Switch", RT5514_DOWNFILTER0_CTRL2,
-		RT5514_AD_DMIC_MIX_BIT, 1, 1),
+	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER0_CTRL2,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
 
 static const struct snd_kcontrol_new rt5514_sto2_adc_l_mix[] = {
-	SOC_DAPM_SINGLE("DMIC Switch", RT5514_DOWNFILTER1_CTRL1,
-		RT5514_AD_DMIC_MIX_BIT, 1, 1),
+	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER1_CTRL1,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
 
 static const struct snd_kcontrol_new rt5514_sto2_adc_r_mix[] = {
-	SOC_DAPM_SINGLE("DMIC Switch", RT5514_DOWNFILTER1_CTRL2,
-		RT5514_AD_DMIC_MIX_BIT, 1, 1),
+	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER1_CTRL2,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
