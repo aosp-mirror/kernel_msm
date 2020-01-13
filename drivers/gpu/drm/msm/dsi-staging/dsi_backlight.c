@@ -673,11 +673,49 @@ static ssize_t hbm_sv_enabled_show(struct device *dev,
 
 static DEVICE_ATTR_RW(hbm_sv_enabled);
 
+static ssize_t state_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct dsi_backlight_config *bl = bl_get_data(bd);
+	bool show_mode = false;
+	const char *statestr;
+	int rc;
+
+	mutex_lock(&bd->ops_lock);
+	if (is_standby_mode(bd->props.state)) {
+		statestr = "Off";
+	} else if (is_lp_mode(bd->props.state)) {
+		statestr = "LP";
+	} else {
+		show_mode = true;
+		statestr = "On";
+	}
+	mutex_unlock(&bd->ops_lock);
+
+	if (show_mode) {
+		const struct dsi_panel *panel = container_of(bl,
+					struct dsi_panel, bl_config);
+		const struct dsi_display_mode *mode = panel->cur_mode;
+
+		rc = snprintf(buf, PAGE_SIZE, "%s: %dx%d@%d\n", statestr,
+			 mode->timing.h_active, mode->timing.v_active,
+			 mode->timing.refresh_rate);
+	} else {
+		rc = snprintf(buf, PAGE_SIZE, "%s\n", statestr);
+	}
+
+	return rc;
+}
+
+static DEVICE_ATTR_RO(state);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_alpm_mode.attr,
 	&dev_attr_vr_mode.attr,
 	&dev_attr_hbm_mode.attr,
 	&dev_attr_hbm_sv_enabled.attr,
+	&dev_attr_state.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bl_device);
@@ -816,6 +854,7 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 
 	mutex_unlock(&bd->ops_lock);
 	backlight_update_status(bd);
+	sysfs_notify(&bd->dev.kobj, NULL, "state");
 
 	return 0;
 }
