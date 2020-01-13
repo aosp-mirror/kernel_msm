@@ -2345,8 +2345,6 @@ static int cam_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_mx regulator\n");
 		return PTR_ERR(vdd_mx.regulator[0]);
 	}
-	vdd_mx.skip_handoff = true;
-	clk_vote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
 
 	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
 	if (IS_ERR(vdd_cx.regulator[0])) {
@@ -2355,13 +2353,18 @@ static int cam_cc_lito_probe(struct platform_device *pdev)
 				"Unable to get vdd_cx regulator\n");
 		return PTR_ERR(vdd_cx.regulator[0]);
 	}
+
+	vdd_mx.skip_handoff = true;
+	clk_vote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
+
 	vdd_cx.skip_handoff = true;
 	clk_vote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
 
 	regmap = qcom_cc_map(pdev, &cam_cc_lito_desc);
 	if (IS_ERR(regmap)) {
 		dev_err(&pdev->dev, "Failed to map the cam CC registers\n");
-		return PTR_ERR(regmap);
+		ret = PTR_ERR(regmap);
+		goto error;
 	}
 
 	clk_lucid_pll_configure(&cam_cc_pll0, regmap, &cam_cc_pll0_config);
@@ -2379,13 +2382,16 @@ static int cam_cc_lito_probe(struct platform_device *pdev)
 	clk_lucid_pll_configure(&cam_cc_pll4, regmap, &cam_cc_pll4_config);
 
 	ret = qcom_cc_really_probe(pdev, &cam_cc_lito_desc, regmap);
+error:
 	if (ret) {
+		clk_unvote_vdd_level(&vdd_cx, vdd_cx.num_levels - 1);
+		clk_unvote_vdd_level(&vdd_mx, vdd_mx.num_levels - 1);
 		dev_err(&pdev->dev, "Failed to register CAM CC clocks\n");
-		return ret;
+	} else {
+		dev_info(&pdev->dev, "Registered CAM CC clocks\n");
 	}
 
-	dev_info(&pdev->dev, "Registered CAM CC clocks\n");
-	return 0;
+	return ret;
 }
 
 static void cam_cc_lito_sync_state(struct device *dev)
