@@ -148,6 +148,7 @@
 &soc {
 	qcom,msm-dai-tdm-tert-rx {
 		qcom,msm-cpudai-tdm-clk-rate = <6144000>;
+		qcom,msm-cpudai-tdm-clk-attribute = /bits/ 16 <1>;
 		qcom,msm-cpudai-tdm-sync-mode = <0>;
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
 		qcom,msm-cpudai-tdm-group-num-ports = <2>;
@@ -169,6 +170,7 @@
 
 	qcom,msm-dai-tdm-tert-tx {
 		qcom,msm-cpudai-tdm-clk-rate = <6144000>;
+		qcom,msm-cpudai-tdm-clk-attribute = /bits/ 16 <1>;
 		qcom,msm-cpudai-tdm-sync-mode = <0>;
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
 	};
@@ -206,12 +208,14 @@
 		qcom,msm-cpudai-tdm-group-num-ports = <1>;
 		qcom,msm-cpudai-tdm-group-port-id = <36912>;
 		qcom,msm-cpudai-tdm-clk-rate = <6144000>;
+		qcom,msm-cpudai-tdm-clk-attribute = /bits/ 16 <1>;
 		qcom,msm-cpudai-tdm-sync-mode = <0>;
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
 	};
 
 	qcom,msm-dai-tdm-quat-tx {
 		qcom,msm-cpudai-tdm-clk-rate = <6144000>;
+		qcom,msm-cpudai-tdm-clk-attribute = /bits/ 16 <1>;
 		qcom,msm-cpudai-tdm-sync-mode = <0>;
 		qcom,msm-cpudai-tdm-invert-sync = <0>;
 	};
