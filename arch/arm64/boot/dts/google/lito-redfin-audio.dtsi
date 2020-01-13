@@ -22,9 +22,7 @@
 		"Stereo1 DMIC Mux", "Audio LDO Mic1",
 		"Stereo2 DMIC Mux", "Audio LDO Mic2",
 		"DSP_IN1", "Audio LDO Mic1",
-		"DSP_IN1", "Audio LDO Mic2",
-		"DSP_IN2", "Audio LDO Mic1",
-		"DSP_IN2", "Audio LDO Mic2";
+		"DSP_IN2", "Audio LDO Mic1";
 	qcom,bolero_audio_intf = <0>;
 
 	qcom,wsa-max-devs = <0>;
