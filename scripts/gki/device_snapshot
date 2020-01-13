@@ -4,6 +4,7 @@
 # (c) 2019, Google
 
 progname=${0##*/}
+NUM=XX
 USAGE="USAGE: ${progname} [-s <serialno>] [-f [<input>]] [-o <output>]
 
 Collect filtered /dev and /sys details, along with dmesg and probe list.
@@ -19,8 +20,8 @@ dumps, <output>.probed the subset filter of just the probed drivers,
 NB: for default standard output, the probed list will be post-filter so
     some details may be altered to make it easier to discover differences.
     So if bus enumerations change, some of the enumerators will be replaced
-    with an 'x' so that they continue to match.  For a specified output, the
-    <output>.probed file will retain the details.
+    with an '${NUM}' so that they continue to match when moved.  For a specified
+    output, the <output>.probed file will retain the details.
 
 -f <input> allows one to utilize the filter to an existing find /dev /sys
 output from a device.  No dmesg will be collected.
@@ -381,24 +382,26 @@ fi |
   grep -v '^/sys/dev/char/[0-9]*:[0-9]*$' |
   grep -v '^/sys/devices/virtual/thermal/tz-by-name/wsatz[.][0-9]*$' |
   grep -v '^/sys/kernel/debug/tracing/instances/wifi' |
-  sed 's@\(/regulator[.]\)[0-9][0-9]*/@\1x/@
-       s@\(/msi_irqs/\)[0-9][0-9]*$@\1x@
-       s@\(/sys/class\|/sys/devices/platform/soc/[0-9a-f]*[.]qcom,gpi-dma\)\(/dma/dma\)[0-9]*\(chan[0-9]*\(\|/.*\)\)$@\1\2x\3@
-       s@\(/i2c-\)\([0-9]\)\(/[^/]*/i2c-\)\2\(\|/.*\)$@\1x\3x\4@
-       s@\(/i2c-\)[0-9]\(\|/[^/]*\)$@\1x\2@
-       s@-\([0-9]\)/\1\(-[0-9][0-9][0-9][0-9]/\)@-x/x\2@
-       s@/[0-9]\(-[0-9][0-9][0-9][0-9]\(\|-vdd\|-vdd/.*\|-avdd\|-avdd/.*\|-vio\|-vio/.*\|/.*\)\)$@x\1@
-       s@\(/sys/devices/platform/soc/[0-9a-z]*[.]qcom,[^/]*/subsys\)[0-9][0-9]*@\1x@
-       s@\(rpmsg_chrdev[.]0[.]0/rpmsg/rpmsg_ctrl\)[0-9][0-9]*@\1x@
-       s@\(/sys/devices/virtual/kgsl/kgsl/pagetables/\)[0-9][0-9]*@\1x@
-       s@\(/sys/devices/virtual/kgsl/kgsl/proc/\)[0-9][0-9]*@\1x@
-       s@\(/sys/kernel/debug/adsprpc/\(adsp\|cdsp\|ssc\)rpcd_\)[0-9][0-9]*$@\1x@
-       s@\(/sys/kernel/debug/binder/proc/\)[0-9][0-9]*$@\1x@
-       s@\(/sys/kernel/debug/kgsl/proc/\)[0-9][0-9]*@\1x@
-       s@\(/sys/kernel/debug/msm_cvp/core0/inst_\)[0-9a-f][0-9a-f]*@\1x@
-       s@\(/sys/kernel/iommu_groups/\)[0-9][0-9]*@\1x@
-       s@\(/devices/soc:qcom,msm_fastrpc:qcom,msm_fastrpc_compute_cb\)[0-9][0-9]*@\1x@
-       s@\(/sys/kernel/irq/\)[0-9][0-9]*@\1x@' |
+  sed "s@\(/regulator[.]\)[0-9][0-9]*\$@\1${NUM}@
+       s@\(/regulator[.]\)[0-9][0-9]*/@\1${NUM}/@g
+       s@\(/vppservice_\)[0-9][0-9]*\$@\1${NUM}@
+       s@\(/msi_irqs/\)[0-9][0-9]*\$@\1${NUM}@
+       s@\(/sys/class\|/sys/devices/platform/soc/[0-9a-f]*[.]qcom,gpi-dma\)\(/dma/dma\)[0-9]*\(chan[0-9]*\(\|/.*\)\)\$@\1\2${NUM}\3@
+       s@\(/i2c-\)\([0-9]\)\(/[^/]*/i2c-\)\2\(\|/.*\)\$@\1${NUM}\3${NUM}\4@
+       s@\(/i2c-\)[0-9]\(\|/[^/]*\)\$@\1${NUM}\2@
+       s@-\([0-9]\)/\1\(-[0-9][0-9][0-9][0-9]/\)@-${NUM}/${NUM}\2@g
+       s@/[0-9]\(-[0-9][0-9][0-9][0-9]\(\|-vdd\|-vdd/.*\|-avdd\|-avdd/.*\|-vio\|-vio/.*\|/.*\)\)\$@${NUM}\1@
+       s@\(/sys/devices/platform/soc/[0-9a-z]*[.]qcom,[^/]*/subsys\)[0-9][0-9]*@\1${NUM}@
+       s@\(rpmsg_chrdev[.]0[.]0/rpmsg/rpmsg_ctrl\)[0-9][0-9]*@\1${NUM}@
+       s@\(/sys/devices/virtual/kgsl/kgsl/pagetables/\)[0-9][0-9]*@\1${NUM}@
+       s@\(/sys/devices/virtual/kgsl/kgsl/proc/\)[0-9][0-9]*@\1${NUM}@
+       s@\(/sys/kernel/debug/adsprpc/\(adsp\|cdsp\|ssc\)rpcd_\)[0-9][0-9]*\$@\1${NUM}@
+       s@\(/sys/kernel/debug/binder/proc/\)[0-9][0-9]*\$@\1${NUM}@
+       s@\(/sys/kernel/debug/kgsl/proc/\)[0-9][0-9]*@\1${NUM}@
+       s@\(/sys/kernel/debug/msm_cvp/core0/inst_\)[0-9a-f][0-9a-f]*@\1${NUM}@
+       s@\(/sys/kernel/iommu_groups/\)[0-9][0-9]*@\1${NUM}@
+       s@\(/devices/soc:qcom,msm_fastrpc:qcom,msm_fastrpc_compute_cb\)[0-9][0-9]*@\1${NUM}@
+       s@\(/sys/kernel/irq/\)[0-9][0-9]*@\1${NUM}@" |
   if [ -n "${output}" -a X"${output}" != X"-" ]; then
     sort -u >${output}
   else
