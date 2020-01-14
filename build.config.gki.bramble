@@ -18,3 +18,6 @@ MODULES_OPTIONS="
 options service_locator enable=1
 options msm_drm dsi_display0=qcom,mdss_dsi_sofef01_sdc_1080p_cmd:
 "
+
+ABI_DEFINITION=abi_gki_aarch64_redbull.xml
+KMI_WHITELIST=abi_gki_aarch64_redbull_whitelist
