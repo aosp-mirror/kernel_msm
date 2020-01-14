@@ -1,5 +1,5 @@
 config QCOM_GDSC
-	bool
+	tristate
 	select PM_GENERIC_DOMAINS if PM
 
 config QCOM_RPMCC
@@ -11,6 +11,7 @@ config COMMON_CLK_QCOM
 	depends on ARCH_QCOM || COMPILE_TEST
 	select REGMAP_MMIO
 	select RESET_CONTROLLER
+	default y if ARCH_QCOM
 
 config QCOM_A53PLL
 	tristate "MSM8916 A53 PLL"
