@@ -202,6 +202,7 @@
 		google,chg-cc-tolerance = <25>;
 
 		google,pps-awake;
+		google,usbc-connector = <&usb_con>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
