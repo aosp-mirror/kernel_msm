@@ -5199,11 +5199,13 @@ static void ext4_umount_end(struct super_block *sb, int flags)
 	 * next boot.
 	 */
 	if ((flags & MNT_FORCE) || atomic_read(&sb->s_active) > 1) {
-		ext4_msg(sb, KERN_ERR,
-			"errors=remount-ro for active namespaces on umount %x",
+		if (test_opt(sb, ERRORS_PANIC)) {
+			ext4_msg(sb, KERN_ERR,
+				"errors=remount-ro for active namespaces on umount %x",
 						flags);
-		clear_opt(sb, ERRORS_PANIC);
-		set_opt(sb, ERRORS_RO);
+			clear_opt(sb, ERRORS_PANIC);
+			set_opt(sb, ERRORS_RO);
+		}
 		/* to write the latest s_kbytes_written */
 		if (!(sb->s_flags & MS_RDONLY))
 			ext4_commit_super(sb, 1);
