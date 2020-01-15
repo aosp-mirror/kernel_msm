@@ -200,6 +200,8 @@
 
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
+
+		google,pps-awake;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
