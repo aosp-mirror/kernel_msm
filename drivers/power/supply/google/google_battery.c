@@ -81,6 +81,7 @@ enum batt_rl_status {
 };
 
 #define RL_DELTA_SOC_MAX	8
+#define DEFAULT_RL_ST_COUNT	3
 
 struct batt_ssoc_rl_state {
 	/* rate limiter state */
@@ -91,6 +92,8 @@ struct batt_ssoc_rl_state {
 	bool rl_no_zero;
 	int rl_fast_track;
 	int rl_slow_track;
+	int rl_st_count;
+	int rl_st_max_count;
 	int rl_track_target;
 	/* rate limiter config */
 	int rl_delta_max_time;
@@ -467,8 +470,11 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 	bool apply_slow_rate = false;
 
 	/* apply slow drop rate when enter slow track condition */
-	if (!ssoc->buck_enabled &&
-	    rls->rl_slow_track && ssoc->ssoc_uic == rls->rl_ssoc_target)
+	if (!ssoc->buck_enabled && ssoc->ssoc_uic == rls->rl_ssoc_target)
+		rls->rl_st_count++;
+	else
+		rls->rl_st_count = 0;
+	if (rls->rl_slow_track && rls->rl_st_count >= rls->rl_st_max_count)
 		apply_slow_rate = true;
 
 	/* track ssoc_uic when buck is enabled or the minimum value of uic */
@@ -752,6 +758,11 @@ static int ssoc_rl_read_dt(struct batt_ssoc_rl_state *rls,
 	if (ret == 0)
 		rls->rl_st_delta_limit = qnum_fromint(tmp);
 
+	rls->rl_st_max_count = DEFAULT_RL_ST_COUNT;
+	ret = of_property_read_u32(node, "google,rl_st-max-count", &tmp);
+	if (ret == 0)
+		rls->rl_st_max_count = tmp;
+
 	rls->rl_delta_soc_cnt = of_property_count_elems_of_size(node,
 					      "google,rl_soc-limits",
 					      sizeof(u32));
@@ -802,6 +813,7 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
 	if (ret < 0)
 		ssoc_state->ssoc_rl_state.rl_track_target = 1;
 	ssoc_state->ssoc_rl_state.rl_ssoc_target = -1;
+	ssoc_state->ssoc_rl_state.rl_st_count = 0;
 
 	/* ssoc_work() needs a curve: start with the charge curve to prevent
 	 * SSOC% from increasing after a reboot. Curve type must be NONE until
