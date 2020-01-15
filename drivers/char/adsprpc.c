@@ -170,8 +170,6 @@
 				##__VA_ARGS__); \
 	} while (0)
 
-static DEFINE_SPINLOCK(fastrpc_memlock);
-
 static int fastrpc_pdr_notifier_cb(struct notifier_block *nb,
 					unsigned long code,
 					void *data);
@@ -599,7 +597,6 @@ static inline int poll_on_early_response(struct smq_invoke_ctx *ctx)
 	uint64_t *fdlist;
 	uint32_t *crclist, *poll;
 	unsigned int inbufs, outbufs, handles;
-	unsigned long flags;
 
 	/* calculate poll memory location */
 	inbufs = REMOTE_SCALARS_INBUFS(sc);
@@ -615,7 +612,7 @@ static inline int poll_on_early_response(struct smq_invoke_ctx *ctx)
 	 * poll on memory for actual completion after receiving
 	 * early response from DSP. Return failure on timeout.
 	 */
-	spin_lock_irqsave(&fastrpc_memlock, flags);
+	preempt_disable();
 	for (ii = 0, jj = 0; ii < FASTRPC_POLL_TIME; ii++, jj++) {
 		if (*poll == FASTRPC_EARLY_WAKEUP_POLL) {
 			err = 0;
@@ -623,14 +620,14 @@ static inline int poll_on_early_response(struct smq_invoke_ctx *ctx)
 		}
 		if (jj == FASTRPC_POLL_TIME_WITHOUT_PREEMPT) {
 			/* limit preempt disable time with no rescheduling */
-			spin_unlock_irqrestore(&fastrpc_memlock, flags);
+			preempt_enable();
 			mem_barrier();
-			spin_lock_irqsave(&fastrpc_memlock, flags);
+			preempt_disable();
 			jj = 0;
 		}
 		udelay(1);
 	}
-	spin_unlock_irqrestore(&fastrpc_memlock, flags);
+	preempt_enable_no_resched();
 	return err;
 }
 
@@ -2127,7 +2124,6 @@ static void fastrpc_wait_for_completion(struct smq_invoke_ctx *ctx,
 	bool wait_resp;
 	uint32_t wTimeout = FASTRPC_USER_EARLY_HINT_TIMEOUT;
 	uint32_t wakeTime = 0;
-	unsigned long flags;
 
 	if (!ctx) {
 		/* This failure is not expected */
@@ -2144,7 +2140,7 @@ static void fastrpc_wait_for_completion(struct smq_invoke_ctx *ctx,
 		case USER_EARLY_SIGNAL:
 			/* try wait if completion time is less than timeout */
 			/* disable preempt to avoid context switch latency */
-			spin_lock_irqsave(&fastrpc_memlock, flags);
+			preempt_disable();
 			jj = 0;
 			wait_resp = false;
 			for (; wakeTime < wTimeout && jj < wTimeout; jj++) {
@@ -2153,7 +2149,7 @@ static void fastrpc_wait_for_completion(struct smq_invoke_ctx *ctx,
 					break;
 				udelay(1);
 			}
-			spin_unlock_irqrestore(&fastrpc_memlock, flags);
+			preempt_enable_no_resched();
 			if (!wait_resp) {
 				interrupted = fastrpc_wait_for_response(ctx,
 									kernel);
