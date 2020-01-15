@@ -52,6 +52,18 @@
 		pmsg-size = <0x80000>;
 	};
 
+	access_ramoops@0 {
+		compatible = "access_ramoops";
+		label = "metadata";
+		memory-region = <&ramoops_meta_mem>;
+	};
+
+	access_ramoops@1 {
+		compatible = "access_ramoops";
+		label = "ramoops";
+		memory-region = <&alt_ramoops_mem>;
+	};
+
 	qcom,msm-imem@146aa000 {
 		kernel_rtb@cb0 {
 			compatible = "msm-imem-rtb_info";
