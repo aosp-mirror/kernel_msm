@@ -627,7 +627,7 @@ static inline int poll_on_early_response(struct smq_invoke_ctx *ctx)
 		}
 		udelay(1);
 	}
-	preempt_enable_no_resched();
+	preempt_enable();
 	return err;
 }
 
@@ -2149,7 +2149,7 @@ static void fastrpc_wait_for_completion(struct smq_invoke_ctx *ctx,
 					break;
 				udelay(1);
 			}
-			preempt_enable_no_resched();
+			preempt_enable();
 			if (!wait_resp) {
 				interrupted = fastrpc_wait_for_response(ctx,
 									kernel);
