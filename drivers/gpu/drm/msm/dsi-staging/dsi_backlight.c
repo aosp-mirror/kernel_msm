@@ -44,6 +44,12 @@ struct dsi_backlight_pwm_config {
 static void dsi_panel_bl_hbm_free(struct device *dev,
 	struct dsi_backlight_config *bl);
 
+static void dsi_panel_bl_notifier_free(struct device *dev,
+	struct dsi_backlight_config *bl);
+
+static int dsi_panel_bl_find_range(struct dsi_backlight_config *bl,
+		int brightness, u32 *range);
+
 static inline bool is_standby_mode(unsigned long state)
 {
 	return (state & BL_STATE_STANDBY) != 0;
@@ -52,6 +58,11 @@ static inline bool is_standby_mode(unsigned long state)
 static inline bool is_lp_mode(unsigned long state)
 {
 	return (state & (BL_STATE_LP | BL_STATE_LP2)) != 0;
+}
+
+static inline bool is_on_mode(unsigned long state)
+{
+	return (!is_lp_mode(state) && !is_standby_mode(state));
 }
 
 static inline unsigned int regulator_mode_from_state(unsigned long state)
@@ -447,6 +458,20 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 			goto done;
 		}
 		bl->bl_update_pending = false;
+		if (bl->bl_notifier && is_on_mode(bd->props.state)
+				&& !(dsi_panel_get_hbm(panel))) {
+			u32 target_range = 0;
+
+			rc = dsi_panel_bl_find_range(bl, brightness, &target_range);
+			if (rc) {
+				pr_err("unable to find range from the backlight table (%d)\n", rc);
+			} else if (bl->bl_notifier->cur_range != target_range) {
+				bl->bl_notifier->cur_range = target_range;
+				sysfs_notify(&bd->dev.kobj, NULL, "brightness");
+				pr_debug("cur_range = %d, brightness = %d\n",
+						bl->bl_notifier->cur_range, brightness);
+			}
+		}
 	}
 	bl->bl_actual = bl_lvl;
 	bl->last_state = bd->props.state;
@@ -678,6 +703,8 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 {
 	struct backlight_device *bd = to_backlight_device(dev);
 	struct dsi_backlight_config *bl = bl_get_data(bd);
+	struct dsi_panel *panel = container_of(bl,
+					struct dsi_panel, bl_config);
 	bool show_mode = false;
 	const char *statestr;
 	int rc;
@@ -689,13 +716,14 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 		statestr = "LP";
 	} else {
 		show_mode = true;
-		statestr = "On";
+		if (dsi_panel_get_hbm(panel))
+			statestr = "HBM";
+		else
+			statestr = "On";
 	}
 	mutex_unlock(&bd->ops_lock);
 
 	if (show_mode) {
-		const struct dsi_panel *panel = container_of(bl,
-					struct dsi_panel, bl_config);
 		const struct dsi_display_mode *mode = panel->cur_mode;
 
 		rc = snprintf(buf, PAGE_SIZE, "%s: %dx%d@%d\n", statestr,
@@ -1156,6 +1184,7 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 		sysfs_remove_groups(&bl->bl_device->dev.kobj, bl_device_groups);
 
 	dsi_panel_bl_hbm_free(panel->parent, bl);
+	dsi_panel_bl_notifier_free(panel->parent, bl);
 
 	return 0;
 }
@@ -1424,6 +1453,63 @@ exit_free:
 	return rc;
 }
 
+static int dsi_panel_bl_find_range(struct dsi_backlight_config *bl,
+		int brightness, u32 *range)
+{
+	u32 i;
+
+	if (!bl || !bl->bl_notifier || !range)
+		return -EINVAL;
+
+	for (i = 0; i < bl->bl_notifier->num_ranges; i++) {
+		if (brightness <= bl->bl_notifier->ranges[i]) {
+			*range = i;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static void dsi_panel_bl_notifier_free(struct device *dev,
+	struct dsi_backlight_config *bl)
+{
+	struct bl_notifier_data *bl_notifier = bl->bl_notifier;
+
+	if (!bl_notifier)
+		return;
+
+	devm_kfree(dev, bl_notifier);
+	bl->bl_notifier = NULL;
+}
+
+static int dsi_panel_bl_parse_ranges(struct device *parent,
+		struct dsi_backlight_config *bl, struct device_node *of_node)
+{
+	int num_ranges = 0;
+
+	bl->bl_notifier = devm_kzalloc(parent, sizeof(struct bl_notifier_data), GFP_KERNEL);
+	if (bl->bl_notifier == NULL) {
+		pr_err("Failed to allocate memory for  bl_notifier_data\n");
+		return -ENOMEM;
+	}
+
+	num_ranges = of_property_read_variable_u32_array(of_node,
+						"qcom,mdss-dsi-bl-notifier-ranges",
+						(u32 *)&bl->bl_notifier->ranges,
+						0,
+						BL_RANGE_MAX);
+	if (num_ranges >= 0) {
+		bl->bl_notifier->num_ranges = num_ranges;
+	} else {
+		dsi_panel_bl_notifier_free(parent, bl);
+		pr_debug("Unable to parse optional backlight ranges (%d)\n", num_ranges);
+		return num_ranges;
+	}
+
+	return 0;
+}
+
 int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config *bl)
 {
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
@@ -1510,6 +1596,11 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 	rc = dsi_panel_bl_parse_hbm(parent, bl, utils->data);
 	if (rc)
 		pr_err("[%s] error while parsing high brightness mode (hbm) details, rc=%d\n",
+			panel->name, rc);
+
+	rc = dsi_panel_bl_parse_ranges(parent, bl, utils->data);
+	if (rc)
+		pr_debug("[%s] error while parsing backlight ranges, rc=%d\n",
 			panel->name, rc);
 
 	rc = utils->read_u32(utils->data,

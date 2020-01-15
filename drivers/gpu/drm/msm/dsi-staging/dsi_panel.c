@@ -4536,6 +4536,10 @@ static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
 				panel->name, rc);
 	}
 
+	if (bl->bl_device)
+		sysfs_notify(&bl->bl_device->dev.kobj, NULL,
+					"state");
+
 	return 0;
 }
 

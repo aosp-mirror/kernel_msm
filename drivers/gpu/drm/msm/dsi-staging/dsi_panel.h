@@ -34,6 +34,7 @@
 #define MAX_BL_SCALE_LEVEL 1024
 #define MAX_AD_BL_SCALE_LEVEL 65535
 #define DSI_CMD_PPS_SIZE 135
+#define BL_RANGE_MAX 10
 
 #define DSI_MODE_MAX 5
 #define HBM_RANGE_MAX 4
@@ -159,6 +160,12 @@ struct hbm_data {
 	struct dsi_panel *panel;
 };
 
+struct bl_notifier_data {
+	u32 ranges[BL_RANGE_MAX];
+	u32 num_ranges;
+	u32 cur_range;
+};
+
 struct dsi_backlight_config {
 	enum dsi_backlight_type type;
 	enum bl_update_flag bl_update;
@@ -175,7 +182,7 @@ struct dsi_backlight_config {
 	bool bl_update_pending;
 	bool allow_bl_update;
 
-
+	struct bl_notifier_data *bl_notifier;
 	struct hbm_data *hbm;
 
 	int en_gpio;
