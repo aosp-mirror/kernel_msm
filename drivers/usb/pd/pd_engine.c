@@ -1423,8 +1423,9 @@ static int tcpm_pd_transmit(struct tcpc_dev *dev, enum tcpm_transmit_type type,
 	return 0;
 }
 
-static int tcpm_start_drp_toggling(struct tcpc_dev *dev,
-				   enum typec_cc_status cc)
+static int tcpm_start_toggling(struct tcpc_dev *dev,
+			       enum typec_port_type port_type,
+			       enum typec_cc_status cc)
 {
 	/*
 	 * Ignore the typec_cc_status for now. As current no
@@ -1906,7 +1907,7 @@ static int init_tcpc_dev(struct usbpd *pd,
 	pd_tcpc_dev->set_roles = tcpm_set_roles;
 	pd_tcpc_dev->try_role = NULL;
 	pd_tcpc_dev->pd_transmit = tcpm_pd_transmit;
-	pd_tcpc_dev->start_drp_toggling = tcpm_start_drp_toggling;
+	pd_tcpc_dev->start_toggling = tcpm_start_toggling;
 	pd_tcpc_dev->set_in_pr_swap = tcpm_set_in_pr_swap;
 	pd_tcpc_dev->set_pd_capable = set_pd_capable;
 	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
