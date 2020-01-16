@@ -4579,6 +4579,15 @@ static const struct dev_pm_ops qpnp_qg_pm_ops = {
 	.resume		= qpnp_qg_resume,
 };
 
+extern char boot_mode_string[64];
+bool is_charger_bootmode(void)
+{
+	if (!strncmp(boot_mode_string, "charger", sizeof(boot_mode_string)))
+		return true;
+
+	return false;
+}
+
 static int qpnp_qg_probe(struct platform_device *pdev)
 {
 	int rc = 0, soc = 0, nom_cap_uah;
@@ -4646,6 +4655,7 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	chip->fifo_count = 0;
 	chip->last_fifo_v_uv = 0;
 	chip->vbat_fifo_acc = false;
+	wakeup_source_init(&chip->qg_wakelock, "google-qg");
 
 	rc = qg_alg_init(chip);
 	if (rc < 0) {
@@ -4778,8 +4788,13 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	}
 
 	qg_get_battery_capacity(chip, &soc);
-	pr_info("QG initialized! battery_profile=%s SOC=%d QG_subtype=%d\n",
-			qg_get_battery_type(chip), soc, chip->qg_subtype);
+
+	/*FIXME: need to fix bootmode value problem with b/148833549*/
+	chip->is_charger_mode = is_charger_bootmode();
+
+	pr_info("QG initialized! battery_profile=%s SOC=%d QG_subtype=%d charger_mode=%d\n",
+		qg_get_battery_type(chip), soc, chip->qg_subtype,
+		chip->is_charger_mode);
 
 	return rc;
 
@@ -4808,6 +4823,7 @@ static int qpnp_qg_remove(struct platform_device *pdev)
 	mutex_destroy(&chip->bus_lock);
 	mutex_destroy(&chip->data_lock);
 	mutex_destroy(&chip->soc_lock);
+	wakeup_source_trash(&chip->qg_wakelock);
 	if (chip->awake_votable)
 		destroy_votable(chip->awake_votable);
 

@@ -352,6 +352,7 @@ int qg_write_monotonic_soc(struct qpnp_qg *chip, int msoc)
 	return rc;
 }
 
+#define WAKELOCK_TIMEOUT_MSEC	(2000)
 int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 {
 	int rc = 0;
@@ -360,6 +361,9 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 		*temp = 250;
 		return 0;
 	}
+
+	if (chip->is_charger_mode)
+		__pm_wakeup_event(&chip->qg_wakelock, WAKELOCK_TIMEOUT_MSEC);
 
 	rc = iio_read_channel_processed(chip->batt_therm_chan, temp);
 	if (rc < 0) {

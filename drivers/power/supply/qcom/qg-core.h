@@ -147,6 +147,7 @@ struct qpnp_qg {
 	bool			fvss_active;
 	bool			vbat_fifo_acc;
 	bool			tcss_active;
+	bool			is_charger_mode;
 	int			charge_status;
 	int			charge_type;
 	int			chg_iterm_ma;
@@ -181,6 +182,7 @@ struct qpnp_qg {
 	unsigned long		suspend_time;
 	struct iio_channel	*batt_therm_chan;
 	struct iio_channel	*batt_id_chan;
+	struct wakeup_source	qg_wakelock;
 
 	/* GPN in eeprom*/
 	const char		*batt_gpn;
