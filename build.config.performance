@@ -72,5 +72,5 @@ function update_perf_config() {
     -d EDAC_QCOM_LLCC_PANIC_ON_UE \
 
   (cd ${OUT_DIR} && \
-    make O=${OUT_DIR} $archsubarch CROSS_COMPILE=${CROSS_COMPILE} olddefconfig)
+    make O=${OUT_DIR} CLANG_TRIPLE=${CLANG_TRIPLE} CROSS_COMPILE=${CROSS_COMPILE} "${TOOL_ARGS[@]}" ${MAKE_ARGS} olddefconfig)
 }
