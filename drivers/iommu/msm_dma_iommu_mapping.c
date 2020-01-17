@@ -472,3 +472,4 @@ void msm_dma_buf_freed(void *buffer)
 
 	msm_iommu_meta_put(meta);
 }
+EXPORT_SYMBOL_GPL(msm_dma_buf_freed);
