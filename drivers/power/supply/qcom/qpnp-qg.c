@@ -2272,7 +2272,7 @@ static int qg_psy_get_property(struct power_supply *psy,
 		pval->intval = chip->batt_age_level;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
-		if (chip->batt_psy)
+		if (is_batt_available(chip))
 			rc = power_supply_get_property(chip->batt_psy,
 						      POWER_SUPPLY_PROP_PRESENT,
 						      pval);
@@ -2280,8 +2280,7 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_STATUS:
 		if (chip->battery_missing)
 			pval->intval = POWER_SUPPLY_STATUS_DISCHARGING;
-
-		if (chip->batt_psy)
+		else if (is_batt_available(chip))
 			rc = power_supply_get_property(chip->batt_psy,
 						       POWER_SUPPLY_PROP_STATUS,
 						       pval);
