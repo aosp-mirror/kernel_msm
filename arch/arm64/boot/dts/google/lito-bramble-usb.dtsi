@@ -46,7 +46,7 @@
 	ext_5v_boost: ext_5v_boost {
 		compatible = "regulator-tps";
 		regulator-name = "ext_5v_boost";
-		nr-control-gpios = <1>;
+		control-gpio-count = <1>;
 		control-gpios = <&pm8150_gpios 7 GPIO_ACTIVE_HIGH>;
 		nr-gpio-enable-sequence = <1>;
 		gpio-enable-sequence = <1>;
