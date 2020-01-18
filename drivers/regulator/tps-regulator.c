@@ -61,10 +61,10 @@ int of_get_regulator_tps_config(struct device *dev,
 	of_property_read_u32(np, "startup-delay-us",
 			     &drvdata->desc.enable_time);
 
-	ret = of_property_read_u32(np, "nr-control-gpios",
+	ret = of_property_read_u32(np, "control-gpio-count",
 			     &drvdata->nr_control_gpios);
 	if (ret || drvdata->nr_control_gpios <= 0) {
-		dev_err(dev, "Incorrect value for nr-control-gpios\n");
+		dev_err(dev, "Incorrect value for control-gpio-count\n");
 		return -EINVAL;
 	}
 
