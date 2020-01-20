@@ -82,5 +82,6 @@
 };
 
 &pm7250b_pdphy {
+	google,ext_vbus-supported;
 	ext-vbus-supply = <&ext_5v_boost>;
 };
