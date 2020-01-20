@@ -1070,11 +1070,17 @@ static int rt5514_pcm_parse_dp(struct rt5514_dsp *rt5514_dsp,
 			&rt5514_dsp->musdet_ignore_ms);
 		device_property_read_u32(dev, "realtek,hotword-ignore-ms-5514p",
 			&rt5514_dsp->hotword_ignore_ms);
+		device_property_read_u32(dev, "realtek,spi-max-frequency-5514p",
+			&rt5514_spi->max_speed_hz);
+		spi_setup(rt5514_spi);
 	} else {
 		device_property_read_u32(dev, "realtek,musdet-ignore-ms",
 			&rt5514_dsp->musdet_ignore_ms);
 		device_property_read_u32(dev, "realtek,hotword-ignore-ms",
 			&rt5514_dsp->hotword_ignore_ms);
+		device_property_read_u32(dev, "realtek,spi-max-frequency-5514",
+			&rt5514_spi->max_speed_hz);
+		spi_setup(rt5514_spi);
 	}
 
 	return 0;
