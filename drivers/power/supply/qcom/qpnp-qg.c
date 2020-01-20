@@ -2276,6 +2276,8 @@ static int qg_psy_get_property(struct power_supply *psy,
 			rc = power_supply_get_property(chip->batt_psy,
 						      POWER_SUPPLY_PROP_PRESENT,
 						      pval);
+		else
+			pval->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_STATUS:
 		if (chip->battery_missing)
