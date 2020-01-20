@@ -80,3 +80,7 @@
 	qcom,param-override-seq =
 		<0x4e 0x70>;
 };
+
+&pm7250b_pdphy {
+	ext-vbus-supply = <&ext_5v_boost>;
+};
