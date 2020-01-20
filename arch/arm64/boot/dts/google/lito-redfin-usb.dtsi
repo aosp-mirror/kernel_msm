@@ -85,3 +85,7 @@
 	google,ext_vbus-supported;
 	ext-vbus-supply = <&ext_5v_boost>;
 };
+
+&usb0 {
+	google,switch-vbus = <500>;
+};
