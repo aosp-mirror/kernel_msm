@@ -21,7 +21,6 @@ config QPNP_SMB5
 	depends on MFD_SPMI_PMIC
 	depends on QPNP_PMIC_VOTER
 	depends on QPNP_REVID
-	depends on GOOGLE_LOGBUFFER
 	help
 	  Say Y to enables support for the SMB5 charging peripheral.
 	  The QPNP SMB5 charger driver supports the charger peripheral
