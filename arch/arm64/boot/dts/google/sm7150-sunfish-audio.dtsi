@@ -657,6 +657,8 @@
 		realtek,hotword-ignore-ms-5514p = <6000>;
 		realtek,musdet-ignore-ms = <0>;
 		realtek,musdet-ignore-ms-5514p = <5000>;
+		realtek,spi-max-frequency-5514 = <10000000>;
+		realtek,spi-max-frequency-5514p = <20000000>;
 		realtek,en-2hosts = <1>;
 	};
 };
