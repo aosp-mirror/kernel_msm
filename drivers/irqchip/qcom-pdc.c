@@ -12,9 +12,11 @@
 #include <linux/irqdomain.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_device.h>
+#include <linux/of_irq.h>
 #include <linux/soc/qcom/irq.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -425,14 +427,14 @@ static int pdc_setup_pin_mapping(struct device_node *np)
 	return 0;
 }
 
-static int __init qcom_pdc_early_init(void)
+static int qcom_pdc_early_init(void)
 {
-	pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
+	if (!pdc_ipc_log)
+		pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
 
 	return 0;
 
 }
-core_initcall(qcom_pdc_early_init);
 
 static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 {
@@ -495,7 +497,40 @@ fail:
 	return ret;
 }
 
+#ifdef MODULE
+static int pdc_lito_probe(struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct device_node *pnp = of_irq_find_parent(np);
+
+	if (pnp == np)
+		pnp = NULL;
+
+	qcom_pdc_early_init();
+	return qcom_pdc_init(np, pnp);
+}
+
+static const struct of_device_id pdc_lito_match_table[] = {
+	{ .compatible = "qcom,lito-pdc" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, pdc_lito_match_table);
+
+static struct platform_driver pdc_lito_driver = {
+	.probe	= pdc_lito_probe,
+	.driver	= {
+		.name = "lito-pdc",
+		.of_match_table = pdc_lito_match_table,
+	},
+};
+
+builtin_platform_driver(pdc_lito_driver);
+MODULE_DESCRIPTION("QTI PDC LITO Driver");
+MODULE_LICENSE("GPL v2");
+#else
+core_initcall(qcom_pdc_early_init);
 IRQCHIP_DECLARE(pdc_sdm845, "qcom,sdm845-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_kona,   "qcom,kona-pdc",   qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_lito,   "qcom,lito-pdc",   qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_lagoon,   "qcom,lagoon-pdc",   qcom_pdc_init);
+#endif
