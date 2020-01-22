@@ -42,6 +42,22 @@ struct bus_vectors {
 	int dst;
 };
 
+// msm-bus callback functions
+int (*__msm_bus_scale_update_bw_cb)(struct msm_bus_client_handle *cl, u64 ab,
+				    u64 ib);
+EXPORT_SYMBOL_GPL(__msm_bus_scale_update_bw_cb);
+int (*__msm_bus_scale_client_update_request_cb)(uint32_t cl,
+						unsigned int index);
+EXPORT_SYMBOL_GPL(__msm_bus_scale_client_update_request_cb);
+uint32_t (*__msm_bus_scale_register_client_cb)(
+	struct msm_bus_scale_pdata *pdata);
+EXPORT_SYMBOL_GPL(__msm_bus_scale_register_client_cb);
+struct msm_bus_client_handle *(*__msm_bus_scale_register_cb)(uint32_t mas,
+							     uint32_t slv,
+							     char *name,
+							     bool active_only);
+EXPORT_SYMBOL_GPL(__msm_bus_scale_register_cb);
+
 /**
  * @struct geni_se_device - Data structure to represent the QUPv3 Core
  * @dev:		Device pointer of the QUPv3 core.
@@ -745,9 +761,9 @@ static int geni_se_rmv_ab_ib(struct geni_se_device *geni_se_dev,
 	}
 
 	if (bus_bw_update && geni_se_dev->num_paths != 2)
-		ret = msm_bus_scale_update_bw(geni_se_dev->bus_bw,
-						geni_se_dev->cur_ab,
-						geni_se_dev->cur_ib);
+		ret = __msm_bus_scale_update_bw_cb(geni_se_dev->bus_bw,
+						   geni_se_dev->cur_ab,
+						   geni_se_dev->cur_ib);
 	GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
 		"%s: %s: cur_ab_ib(%lu:%lu) req_ab_ib(%lu:%lu) %d\n",
 		__func__, dev_name(rsc->ctrl_dev), geni_se_dev->cur_ab,
@@ -779,8 +795,8 @@ static int geni_se_rmv_ab_ib(struct geni_se_device *geni_se_dev,
 
 		if (bus_bw_update_noc || bus_bw_update) {
 			geni_se_dev->update = new_update;
-			ret = msm_bus_scale_client_update_request
-					(geni_se_dev->bus_bw_noc, new_update);
+			ret = __msm_bus_scale_client_update_request_cb(
+				geni_se_dev->bus_bw_noc, new_update);
 		}
 		GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
 			"%s: %s: cur_ab_ib_noc(%lu:%lu) req_ab_ib_noc(%lu:%lu) %d\n",
@@ -895,9 +911,9 @@ static int geni_se_add_ab_ib(struct geni_se_device *geni_se_dev,
 	}
 
 	if (bus_bw_update && geni_se_dev->num_paths != 2)
-		ret = msm_bus_scale_update_bw(geni_se_dev->bus_bw,
-						geni_se_dev->cur_ab,
-						geni_se_dev->cur_ib);
+		ret = __msm_bus_scale_update_bw_cb(geni_se_dev->bus_bw,
+						   geni_se_dev->cur_ab,
+						   geni_se_dev->cur_ib);
 	GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
 		"%s: %s: cur_ab_ib(%lu:%lu) req_ab_ib(%lu:%lu) %d\n",
 		__func__, dev_name(rsc->ctrl_dev),
@@ -930,8 +946,8 @@ static int geni_se_add_ab_ib(struct geni_se_device *geni_se_dev,
 				geni_se_dev->cur_ib_noc;
 		if (bus_bw_update_noc || bus_bw_update) {
 			geni_se_dev->update = new_update;
-			ret = msm_bus_scale_client_update_request
-					(geni_se_dev->bus_bw_noc, new_update);
+			ret = __msm_bus_scale_client_update_request_cb(
+				geni_se_dev->bus_bw_noc, new_update);
 		}
 		GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
 			"%s: %s: cur_ab_ib_noc(%lu:%lu) req_ab_ib_noc(%lu:%lu) %d\n",
@@ -1054,7 +1070,8 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 	if (geni_se_dev->num_paths == 2) {
 		if (unlikely(!(geni_se_dev->bus_bw_noc))) {
 			geni_se_dev->bus_bw_noc =
-			msm_bus_scale_register_client(geni_se_dev->pdata);
+				__msm_bus_scale_register_client_cb(
+					geni_se_dev->pdata);
 			if (!(geni_se_dev->bus_bw_noc)) {
 				GENI_SE_ERR(geni_se_dev->log_ctx,
 					false, NULL,
@@ -1072,11 +1089,10 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 		INIT_LIST_HEAD(&rsc->ib_list_noc);
 	} else {
 		if (unlikely(IS_ERR_OR_NULL(geni_se_dev->bus_bw))) {
-			geni_se_dev->bus_bw = msm_bus_scale_register(
-						geni_se_dev->bus_mas_id,
-						geni_se_dev->bus_slv_id,
-					(char *)dev_name(geni_se_dev->dev),
-						false);
+			geni_se_dev->bus_bw = __msm_bus_scale_register_cb(
+				geni_se_dev->bus_mas_id,
+				geni_se_dev->bus_slv_id,
+				(char *)dev_name(geni_se_dev->dev), false);
 			if (IS_ERR_OR_NULL(geni_se_dev->bus_bw)) {
 				GENI_SE_ERR(geni_se_dev->log_ctx,
 					false, NULL,
@@ -1685,12 +1701,38 @@ static int geni_se_iommu_probe(struct device *dev)
 	return 0;
 }
 
+static int geni_se_check_msm_bus_callbacks(void)
+{
+	if (!__msm_bus_scale_update_bw_cb) {
+		goto error_defer;
+	}
+	if (!__msm_bus_scale_client_update_request_cb) {
+		goto error_defer;
+	}
+	if (!__msm_bus_scale_register_client_cb) {
+		goto error_defer;
+	}
+	if (!__msm_bus_scale_register_cb) {
+		goto error_defer;
+	}
+
+	return 0;
+error_defer:
+	pr_err("%s: msm_bus_scale_* callbacks are not register yet! DEFER PROBE\n",
+	       __func__);
+	return -EPROBE_DEFER;
+}
+
 static int geni_se_probe(struct platform_device *pdev)
 {
 	int ret;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
 	struct geni_se_device *geni_se_dev;
+
+	ret = geni_se_check_msm_bus_callbacks();
+	if (ret)
+		return ret;
 
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (ret) {
