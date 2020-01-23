@@ -464,6 +464,7 @@ struct max1720x_chip {
 	struct regmap *regmap;
 	struct power_supply *psy;
 	struct delayed_work init_work;
+	struct delayed_work filtercfg_work;
 	struct i2c_client *primary;
 	struct i2c_client *secondary;
 	struct regmap *regmap_nvram;
@@ -524,6 +525,7 @@ struct max1720x_chip {
 	int cycle_stable;
 	int ini_rcomp0;
 	int ini_tempco;
+	int ini_filtercfg;
 	/* Capacity Estimation */
 	struct gbatt_capacity_estimation cap_estimate;
 	struct logbuffer *ce_log;
@@ -2491,6 +2493,67 @@ static void max1720x_fixup_capacity(int plugged, struct max1720x_chip *chip)
 
 }
 
+/*
+ * FILTERCFG changed to 45 sec * 2^(MAXIM_FILTERCFG_PLUGGED - 7) on charger plug
+ * event. If temperature and VFSOC are below the limits, then reset to INI
+ * value. Otherwise, reschedule the work to reset to INI in 100 seconds.
+ */
+#define MAXIM_FILTERCFG_PLUGGED		9
+#define MAXIM_FILTERCFG_MASK		0xFFF0
+#define MAXIM_FILTERCFG_VFSOC_LIM	25
+#define MAXIM_FILTERCFG_TEMP_LIM	(5 * 10)
+#define FILTCFG_DLY_MS			(100 * 1000)
+
+static void max1720x_dyn_filtercfg(int plugged, struct max1720x_chip *chip)
+{
+	u16 data, new_filtercfg;
+	int temp, err, vfsoc;
+
+	if (chip->ini_filtercfg == -1)
+		return;
+
+	if (plugged) {
+		cancel_delayed_work(&chip->filtercfg_work);
+		new_filtercfg = (chip->ini_filtercfg & MAXIM_FILTERCFG_MASK) |
+				MAXIM_FILTERCFG_PLUGGED;
+	} else {
+		err = max17x0x_reg_read(chip->regmap, MAX17X0X_TAG_temp, &data);
+		if (err < 0)
+			return;
+		temp = reg_to_deci_deg_cel(data);
+		vfsoc = max1720x_get_battery_vfsoc(chip);
+
+		if ((vfsoc < MAXIM_FILTERCFG_VFSOC_LIM) &&
+		    (temp < MAXIM_FILTERCFG_TEMP_LIM))
+			new_filtercfg = chip->ini_filtercfg;
+		else {
+			dev_info(chip->dev, "vfsoc=%d, temp=%d\n", vfsoc, temp);
+			schedule_delayed_work(&chip->filtercfg_work,
+					      msecs_to_jiffies(FILTCFG_DLY_MS));
+			return;
+		}
+	}
+
+	dev_info(chip->dev, "new filtercfg=0x%x on plug=%d\n", new_filtercfg,
+		 plugged);
+
+	err = REGMAP_WRITE(chip->regmap, MAX1720X_FILTERCFG, new_filtercfg);
+	if (err < 0)
+		dev_err(chip->dev, "filtercfg failed update (%d)\n", err);
+}
+
+static void max1720x_filtercfg_work(struct work_struct *work)
+{
+	struct max1720x_chip *chip =
+		container_of(work, struct max1720x_chip, filtercfg_work.work);
+	int err;
+
+	err = REGMAP_WRITE(chip->regmap, MAX1720X_FILTERCFG,
+			   chip->ini_filtercfg);
+	if (err < 0)
+		dev_err(chip->dev, "filtercfg failed update (%d)\n", err);
+
+}
 
 static int max1720x_set_property(struct power_supply *psy,
 				 enum power_supply_property psp,
@@ -2512,6 +2575,7 @@ static int max1720x_set_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_BATT_CE_CTRL:
 		max1720x_fixup_capacity(val->intval, chip);
+		max1720x_dyn_filtercfg(val->intval, chip);
 
 		mutex_lock(&ce->batt_ce_lock);
 		if (val->intval) {
@@ -3653,11 +3717,18 @@ static int max17201_init_fix_capacity(struct max1720x_chip *chip)
 			chip->cycle_band = BATTERY_MAX_CYCLE_BAND;
 	}
 
-
 	dev_info(chip->dev, "cnts=%d,%d dc=%d cap_sta=%d cap_fad=%d rcomp0=0x%x tempco=0x%x\n",
 		chip->comp_update_count, chip->dxacc_update_count,
 		chip->design_capacity, chip->cycle_stable, chip->cycle_fade,
 		chip->ini_rcomp0, chip->ini_tempco);
+
+	ret = read_chip_property_u32(chip, "maxim,capacity-filtercfg", &data32);
+	if (ret < 0)
+		chip->ini_filtercfg = -1;
+	else
+		chip->ini_filtercfg = data32;
+
+	dev_info(chip->dev, "ini_filtercfg=0x%x\n", chip->ini_filtercfg);
 
 	return 0;
 }
@@ -4437,6 +4508,7 @@ static int max1720x_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&chip->cap_estimate.settle_timer,
 			  batt_ce_capacityfiltered_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
+	INIT_DELAYED_WORK(&chip->filtercfg_work, max1720x_filtercfg_work);
 
 	schedule_delayed_work(&chip->init_work, 0);
 
