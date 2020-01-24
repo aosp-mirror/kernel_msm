@@ -212,6 +212,9 @@ int fsa4480_reg_notifier(struct notifier_block *nb,
 	dev_dbg(fsa_priv->dev, "%s: verify if USB adapter is already inserted\n",
 		__func__);
 	rc = fsa4480_usbc_analog_setup_switches(fsa_priv);
+	if (rc)
+		blocking_notifier_chain_unregister(&fsa_priv->fsa4480_notifier,
+						   nb);
 
 	return rc;
 }
