@@ -207,7 +207,7 @@ config MTK_CMDQ_MBOX
 	  during the vblank.
 
 config MSM_QMP
-	bool "QTI Mailbox Protocol(QMP)"
+	tristate "QTI Mailbox Protocol(QMP)"
 	help
 	  Say yes to add support for the QTI Mailbox Protocol mailbox driver.
 	  QMP is a lightweight communication protocol for sending messages to
