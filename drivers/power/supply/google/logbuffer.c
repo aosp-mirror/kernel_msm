@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright 2019 Google, Inc
+ * Copyright 2020 Google, Inc
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,7 +15,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/debugfs.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/rtc.h>
@@ -23,6 +23,7 @@
 #include <linux/suspend.h>
 #include <linux/slab.h>
 #include <linux/syscore_ops.h>
+#include <linux/miscdevice.h>
 
 #define LOG_BUFFER_ENTRIES      1024
 #define LOG_BUFFER_ENTRY_SIZE   256
@@ -34,30 +35,13 @@ struct logbuffer {
 	// protects buffer
 	spinlock_t logbuffer_lock;
 	u8 *buffer;
-	struct dentry *file;
 	char id[ID_LENGTH];
-	struct list_head entry;
+
+	struct miscdevice misc;
 };
 
-/*
- * Rootdir for the log files.
- */
-struct dentry *rootdir;
-
-/*
- * Device suspended since last logged.
- */
-bool suspend_since_last_logged;
-
-/*
- * List to maintain logbuffer intance.
- */
-static LIST_HEAD(instances);
-
-/*
- * Protects instances list.
- */
-static spinlock_t instances_lock;
+/* Device suspended since last logged. */
+static bool suspend_since_last_logged;
 
 static void __logbuffer_log(struct logbuffer *instance,
 			    const char *tmpbuffer, bool record_utc)
@@ -166,27 +150,28 @@ static int logbuffer_seq_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-static int logbuffer_debug_open(struct inode *inode, struct file *file)
+static int logbuffer_dev_open(struct inode *inode, struct file *file)
 {
+	struct logbuffer *instance = container_of(file->private_data,
+						  struct logbuffer,
+						  misc);
+
+	inode->i_private = instance;
 	return single_open(file, logbuffer_seq_show, inode->i_private);
 }
 
-static const struct file_operations logbuffer_debug_operations = {
-	.open           = logbuffer_debug_open,
-	.llseek         = seq_lseek,
-	.read           = seq_read,
-	.release        = single_release,
+static const struct file_operations logbuffer_dev_operations = {
+	.owner = THIS_MODULE,
+	.open = logbuffer_dev_open,
+	.read = seq_read,
+	.release = single_release,
 };
 
-struct logbuffer *debugfs_logbuffer_register(char *name)
+struct logbuffer *logbuffer_register(char *name)
 {
 	struct logbuffer *instance;
-	unsigned long flags;
-
-	if (IS_ERR_OR_NULL(rootdir)) {
-		pr_err("rootdir not found\n");
-		return ERR_PTR(-ENODEV);
-	}
+	char buf[50] = "logbuffer_";
+	int ret;
 
 	instance = kzalloc(sizeof(struct logbuffer), GFP_KERNEL);
 	if (!instance) {
@@ -201,23 +186,21 @@ struct logbuffer *debugfs_logbuffer_register(char *name)
 		goto free_instance;
 	}
 
-	instance->file = debugfs_create_file(name,
-				0444, rootdir, instance,
-				&logbuffer_debug_operations);
+	strlcat(buf, name, sizeof(buf));
+	instance->misc.minor = MISC_DYNAMIC_MINOR;
+	instance->misc.name = buf;
+	instance->misc.fops = &logbuffer_dev_operations;
 
-	if (IS_ERR_OR_NULL(instance->file)) {
-		pr_err("Failed to create debugfs file:%s err:%ld\n", name,
-		       PTR_ERR(instance->file));
+	ret = misc_register(&instance->misc);
+	if (ret) {
+		pr_err("Logbuffer error while doing misc_register ret=%d\n",
+			ret);
 		goto free_buffer;
 	}
 
 	strlcpy(instance->id, name, sizeof(instance->id));
 
 	spin_lock_init(&instance->logbuffer_lock);
-
-	spin_lock_irqsave(&instances_lock, flags);
-	list_add(&instance->entry, &instances);
-	spin_unlock_irqrestore(&instances_lock, flags);
 
 	pr_info(" id:%s registered\n", name);
 	return instance;
@@ -229,24 +212,16 @@ free_instance:
 
 	return ERR_PTR(-ENOMEM);
 }
-EXPORT_SYMBOL_GPL(debugfs_logbuffer_register);
+EXPORT_SYMBOL_GPL(logbuffer_register);
 
-void debugfs_logbuffer_unregister(struct logbuffer *instance)
+void logbuffer_unregister(struct logbuffer *instance)
 {
-	unsigned long flags;
-
-	if (IS_ERR_OR_NULL(instance))
-		return;
-
-	debugfs_remove(instance->file);
+	misc_deregister(&instance->misc);
 	vfree(instance->buffer);
-	spin_lock_irqsave(&instances_lock, flags);
-	list_del(&instance->entry);
-	spin_unlock_irqrestore(&instances_lock, flags);
 	pr_info(" id:%s unregistered\n", instance->id);
 	kfree(instance);
 }
-EXPORT_SYMBOL_GPL(debugfs_logbuffer_unregister);
+EXPORT_SYMBOL_GPL(logbuffer_unregister);
 
 int logbuffer_suspend(void)
 {
@@ -258,43 +233,19 @@ static struct syscore_ops logbuffer_ops = {
 	.suspend        = logbuffer_suspend,
 };
 
-static int __init logbuffer_debugfs_init(void)
+static int __init logbuffer_dev_init(void)
 {
-	spin_lock_init(&instances_lock);
-
-	rootdir = debugfs_create_dir("logbuffer", NULL);
-	if (IS_ERR_OR_NULL(rootdir)) {
-		pr_err("Unable to create rootdir %ld\n", PTR_ERR(rootdir));
-		rootdir = NULL;
-		return 0;
-	}
-
 	register_syscore_ops(&logbuffer_ops);
 
 	return 0;
 }
 
-static void logbuffer_debugfs_exit(void)
+static void logbuffer_dev_exit(void)
 {
-	struct logbuffer *instance, *next;
-	unsigned long flags;
-
-	if (!rootdir)
-		return;
-
-	spin_lock_irqsave(&instances_lock, flags);
-	list_for_each_entry_safe(instance, next, &instances, entry) {
-		debugfs_remove(instance->file);
-		vfree(instance->buffer);
-		list_del(&instance->entry);
-		pr_info(" id:%s unregistered\n", instance->id);
-		kfree(instance);
-	}
-	spin_unlock_irqrestore(&instances_lock, flags);
-	debugfs_remove(rootdir);
+	unregister_syscore_ops(&logbuffer_ops);
 }
-early_initcall(logbuffer_debugfs_init);
-module_exit(logbuffer_debugfs_exit);
+early_initcall(logbuffer_dev_init);
+module_exit(logbuffer_dev_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Google BMS debugfs logbuffer");
+MODULE_DESCRIPTION("Google BMS logbuffer");

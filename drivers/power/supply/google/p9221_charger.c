@@ -4362,7 +4362,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	charger->log = debugfs_logbuffer_register("wireless");
+	charger->log = logbuffer_register("wireless");
 	if (IS_ERR(charger->log)) {
 		ret = PTR_ERR(charger->log);
 		dev_err(charger->dev,
@@ -4370,7 +4370,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		charger->log = NULL;
 	}
 
-	charger->rtx_log = debugfs_logbuffer_register("rtx");
+	charger->rtx_log = logbuffer_register("rtx");
 	if (IS_ERR(charger->rtx_log)) {
 		ret = PTR_ERR(charger->rtx_log);
 		dev_err(charger->dev,
@@ -4410,9 +4410,9 @@ static int p9221_charger_remove(struct i2c_client *client)
 	power_supply_unreg_notifier(&charger->nb);
 	mutex_destroy(&charger->io_lock);
 	if (charger->log)
-		debugfs_logbuffer_unregister(charger->log);
+		logbuffer_unregister(charger->log);
 	if (charger->rtx_log)
-		debugfs_logbuffer_unregister(charger->rtx_log);
+		logbuffer_unregister(charger->rtx_log);
 	return 0;
 }
 

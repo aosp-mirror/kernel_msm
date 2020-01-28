@@ -19,9 +19,7 @@
 #include "storm-watch.h"
 #include "battery.h"
 
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 #include "../google/logbuffer.h"
-#endif
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -649,10 +647,9 @@ struct smb_charger {
 
 	struct regulator *ext_vbus;
 
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 	/* logging */
 	struct logbuffer *log;
-#endif
+
 	bool moisture_detection_enabled;
 
 	/* lpd timer work */

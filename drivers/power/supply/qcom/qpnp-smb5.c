@@ -3687,22 +3687,16 @@ static int smb5_probe(struct platform_device *pdev)
 	else
 		return -EPROBE_DEFER;
 
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
-	chg->log = debugfs_logbuffer_register("smblib");
+	chg->log = logbuffer_register("smblib");
 	if (IS_ERR_OR_NULL(chg->log)) {
-		pr_err("failed to obtain logbuffer instance rc:%ld",
-		       PTR_ERR(chg->log));
+		pr_err("failed to obtain logbuffer instance\n");
+		chg->log = NULL;
 	}
-#endif
 
 	rc = smblib_init(chg);
 	if (rc < 0) {
 		pr_err("Smblib_init failed rc=%d\n", rc);
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 		goto unregister_buffer;
-#else
-		return rc;
-#endif
 	}
 
 	/* set driver data before resources request it */
@@ -3857,10 +3851,9 @@ free_irq:
 cleanup:
 	smblib_deinit(chg);
 	platform_set_drvdata(pdev, NULL);
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 unregister_buffer:
-	debugfs_logbuffer_unregister(chg->log);
-#endif
+	if (chg->log)
+		logbuffer_unregister(chg->log);
 
 	return rc;
 }
@@ -3878,9 +3871,9 @@ static int smb5_remove(struct platform_device *pdev)
 	smblib_deinit(chg);
 	sysfs_remove_groups(&chg->dev->kobj, smb5_groups);
 	platform_set_drvdata(pdev, NULL);
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
-	debugfs_logbuffer_unregister(chg->log);
-#endif
+	if (chg->log)
+		logbuffer_unregister(chg->log);
+
 	return 0;
 }
 
