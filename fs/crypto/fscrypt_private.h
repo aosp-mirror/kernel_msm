@@ -244,6 +244,10 @@ static inline bool fscrypt_valid_enc_modes(u32 contents_mode,
 	    filenames_mode == FSCRYPT_MODE_ADIANTUM)
 		return true;
 
+	if (contents_mode == FSCRYPT_MODE_LEGACY_ICE &&
+	    filenames_mode == FSCRYPT_MODE_AES_256_CTS)
+		return true;
+
 	return false;
 }
 
@@ -541,6 +545,11 @@ struct fscrypt_mode {
 };
 
 extern struct fscrypt_mode fscrypt_modes[];
+
+static inline bool fscrypt_is_legacy_ice(const struct fscrypt_mode *mode)
+{
+	return mode - fscrypt_modes == FSCRYPT_MODE_LEGACY_ICE;
+}
 
 static inline bool
 fscrypt_mode_supports_direct_key(const struct fscrypt_mode *mode)

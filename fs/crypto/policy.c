@@ -111,6 +111,13 @@ bool fscrypt_supported_policy(const union fscrypt_policy *policy_u,
 			return false;
 		}
 
+		if (policy->contents_encryption_mode ==
+		    FSCRYPT_MODE_LEGACY_ICE) {
+			fscrypt_warn(inode,
+				     "Legacy ICE mode not supported with v2 policy");
+			return false;
+		}
+
 		if (policy->flags & ~FSCRYPT_POLICY_FLAGS_VALID) {
 			fscrypt_warn(inode,
 				     "Unsupported encryption flags (0x%02x)",

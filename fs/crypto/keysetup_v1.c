@@ -304,6 +304,8 @@ out:
 
 int fscrypt_setup_v1_file_key(struct fscrypt_info *ci, const u8 *raw_master_key)
 {
+	if (fscrypt_is_legacy_ice(ci->ci_mode))
+		return fscrypt_set_derived_key(ci, raw_master_key);
 	if (ci->ci_policy.v1.flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY)
 		return setup_v1_file_key_direct(ci, raw_master_key);
 	else
