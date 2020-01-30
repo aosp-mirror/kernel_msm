@@ -92,7 +92,7 @@ struct scm_desc {
 	u64 x5;
 };
 
-#ifdef CONFIG_QCOM_SCM
+#if IS_ENABLED(CONFIG_QCOM_SCM)
 
 #define SCM_VERSION(major, minor) (((major) << 16) | ((minor) & 0xFF))
 extern int scm_call2(u32 cmd_id, struct scm_desc *desc);
