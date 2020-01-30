@@ -11,7 +11,7 @@
 #include <linux/scatterlist.h>
 #include <linux/dma-mapping.h>
 
-#ifdef CONFIG_QCOM_LAZY_MAPPING
+#if IS_ENABLED(CONFIG_QCOM_LAZY_MAPPING)
 /*
  * This function is not taking a reference to the dma_buf here. It is expected
  * that clients hold reference to the dma_buf until they are done with mapping
