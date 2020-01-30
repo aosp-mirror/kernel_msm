@@ -8,6 +8,7 @@
 #include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/io-pgtable.h>
+#include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -350,3 +351,6 @@ struct io_pgtable_init_fns io_pgtable_arm_msm_secure_init_fns = {
 	.alloc	= msm_secure_alloc_pgtable,
 	.free	= msm_secure_free_pgtable,
 };
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM IO secure pgtable");
