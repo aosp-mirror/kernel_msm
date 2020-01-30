@@ -47,6 +47,13 @@ struct fscrypt_mode fscrypt_modes[] = {
 		.ivsize = 32,
 		.blk_crypto_mode = BLK_ENCRYPTION_MODE_ADIANTUM,
 	},
+	[FSCRYPT_MODE_LEGACY_ICE] = {
+		.friendly_name = "Legacy ICE (AES-256-XTS)",
+		.cipher_str = "xts(aes)",
+		.keysize = 64,
+		.ivsize = 16,
+		.blk_crypto_mode = BLK_ENCRYPTION_MODE_AES_256_XTS,
+	},
 };
 
 static struct fscrypt_mode *
