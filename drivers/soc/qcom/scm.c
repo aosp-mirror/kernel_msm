@@ -306,6 +306,7 @@ bool is_scm_armv8(void)
 	return (scm_version == SCM_ARMV8_32) ||
 			(scm_version == SCM_ARMV8_64);
 }
+EXPORT_SYMBOL_GPL(is_scm_armv8);
 
 /*
  * If there are more than N_REGISTER_ARGS, allocate a buffer and place
