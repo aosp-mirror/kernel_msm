@@ -320,8 +320,10 @@ int ufs_qcom_ice_program_key(struct ufs_hba *hba,
 	 * ICE (or maybe the SCM call?) byte-swaps the 32-bit words of the key.
 	 * So we have to do the same, in order for the final key be correct.
 	 */
-	for (i = 0; i < key_size / sizeof(u32); i++)
-		__cpu_to_be32s(&key.words[i]);
+	if (!IS_ENABLED(CONFIG_SCSI_UFS_QCOM_LEGACY_ICE)) {
+		for (i = 0; i < key_size / sizeof(u32); i++)
+			__cpu_to_be32s(&key.words[i]);
+	}
 
 	err = qcom_scm_ice_set_key(slot, key.bytes, key_size, mode,
 				   cfg->data_unit_size);
