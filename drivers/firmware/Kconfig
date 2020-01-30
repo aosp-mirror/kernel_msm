@@ -246,7 +246,7 @@ config FW_CFG_SYSFS_CMDLINE
 	  may crash your system.
 
 config QCOM_SCM
-	bool
+	tristate
 	depends on ARM || ARM64
 	select RESET_CONTROLLER
 
