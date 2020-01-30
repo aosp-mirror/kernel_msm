@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/device.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <soc/qcom/scm.h>
 #include <soc/qcom/msm_tz_smmu.h>
@@ -121,3 +122,6 @@ int msm_tz_set_cb_format(enum tz_smmu_device_id sec_id, int cbndx)
 
 	return 0;
 }
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM TZ SMMU");
