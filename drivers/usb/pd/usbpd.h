@@ -97,6 +97,11 @@ static inline int pd_phy_open(struct pd_phy_params *params)
 	return -ENODEV;
 }
 
+static inline int pd_phy_assign_pm_callbacks(struct pd_phy_params *params)
+{
+	return -ENODEV;
+}
+
 static inline int pd_phy_signal(enum pd_sig_type type)
 {
 	return -ENODEV;
