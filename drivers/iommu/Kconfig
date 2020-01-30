@@ -426,7 +426,7 @@ config ARM_SMMU_TESTBUS_DUMP
 	  If unsure, say N here.
 
 config QCOM_LAZY_MAPPING
-	bool "Reference counted iommu-mapping support"
+	tristate "Reference counted iommu-mapping support"
 	depends on ION
 	depends on IOMMU_API
 	help
