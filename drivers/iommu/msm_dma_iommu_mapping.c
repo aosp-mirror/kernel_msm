@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/kref.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/rbtree.h>
 #include <linux/mutex.h>
@@ -473,3 +474,6 @@ void msm_dma_buf_freed(void *buffer)
 	msm_iommu_meta_put(meta);
 }
 EXPORT_SYMBOL_GPL(msm_dma_buf_freed);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("MSM DMA Iommu Mapping");
