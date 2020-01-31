@@ -410,3 +410,6 @@ exit:
 }
 
 early_initcall(qtee_shmbridge_init);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Qtee Shmbridge");
