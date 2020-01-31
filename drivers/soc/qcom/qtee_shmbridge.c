@@ -398,6 +398,9 @@ static int __init qtee_shmbridge_init(void)
 
 	pr_debug("qtee shmbridge registered default bridge with size %d bytes\n",
 			DEFAULT_BRIDGE_SIZE);
+#ifdef MODULE
+	scm_enable_mem_protection();
+#endif
 
 	return 0;
 
