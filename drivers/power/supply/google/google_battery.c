@@ -215,6 +215,8 @@ struct batt_drv {
 	/* update high temperature in time */
 	int batt_temp;
 	u32 batt_update_high_temp_threshold;
+	/* fake battery temp for thermal testing */
+	int fake_temp;
 	/* triger for recharge logic next update from charger */
 	bool batt_full;
 	struct batt_ssoc_state ssoc_state;
@@ -2622,6 +2624,47 @@ DEFINE_SIMPLE_ATTRIBUTE(debug_chg_health_stage_fops, NULL,
 			debug_chg_health_set_stage, "%u\n");
 #endif
 
+static ssize_t debug_get_fake_temp(struct file *filp,
+					   char __user *buf,
+					   size_t count, loff_t *ppos)
+{
+	struct batt_drv *batt_drv = (struct batt_drv *)filp->private_data;
+	char tmp[8];
+
+	mutex_lock(&batt_drv->chg_lock);
+	scnprintf(tmp, sizeof(tmp), "%d\n", batt_drv->fake_temp);
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return simple_read_from_buffer(buf, count, ppos, tmp, strlen(tmp));
+}
+
+static ssize_t debug_set_fake_temp(struct file *filp,
+					 const char __user *user_buf,
+					 size_t count, loff_t *ppos)
+{
+	struct batt_drv *batt_drv = filp->private_data;
+	int ret = 0, val;
+	char buf[8];
+
+	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
+	if (ret <= 0)
+		return -EFAULT;
+
+	buf[ret] = '\0';
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	mutex_lock(&batt_drv->chg_lock);
+	batt_drv->fake_temp = val;
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return count;
+}
+
+BATTERY_DEBUG_ATTRIBUTE(debug_fake_temp_fops,
+				debug_get_fake_temp, debug_set_fake_temp);
+
 /* ------------------------------------------------------------------------- */
 
 static ssize_t batt_ctl_chg_stats_actual(struct device *dev,
@@ -2996,6 +3039,8 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &debug_ssoc_uicurve_cstr_fops);
 		debugfs_create_file("force_psy_update", 0400, de,
 				    batt_drv, &debug_force_psy_update_fops);
+		debugfs_create_file("fake_temp", 0600, de,
+				    batt_drv, &debug_fake_temp_fops);
 
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
@@ -3058,6 +3103,27 @@ static int gbatt_get_capacity_level(struct batt_ssoc_state *ssoc_state,
 	}
 
 	return capacity_level;
+}
+
+static int gbatt_get_temp(struct batt_drv *batt_drv, int *temp)
+{
+	int err = 0;
+	union power_supply_propval val;
+
+	if (batt_drv->fake_temp) {
+		*temp = batt_drv->fake_temp;
+	} else if (!batt_drv->fg_psy) {
+		err = -EINVAL;
+	} else {
+		err = power_supply_get_property(batt_drv->fg_psy,
+						POWER_SUPPLY_PROP_TEMP, &val);
+		if (err < 0)
+			pr_err("failed to get temp(%d)\n", err);
+		else
+			*temp = val.intval;
+	}
+
+	return err;
 }
 
 void bat_log_ttf_estimate(const char *label, int ssoc,
@@ -3161,7 +3227,7 @@ static void google_battery_work(struct work_struct *work)
 
 	/* TODO: poll other data here if needed */
 
-	batt_temp = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_TEMP, &ret);
+	ret = gbatt_get_temp(batt_drv, &batt_temp);
 	if (ret < 0) {
 		pr_err("unable to get batt_temp, ret=%d", ret);
 	} else if (batt_temp != batt_drv->batt_temp) {
@@ -3488,6 +3554,9 @@ static int gbatt_get_property(struct power_supply *psy,
 							psp, val);
 	} break;
 
+	case POWER_SUPPLY_PROP_TEMP:
+		err = gbatt_get_temp(batt_drv, &val->intval);
+		break;
 	/* TODO: "charger" will expose this but I'd rather use an API from
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
 	 * fg_psy doesn't look it up in google_battery
@@ -3650,6 +3719,7 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_drv->capacity_level = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
 	batt_drv->ssoc_state.buck_enabled = -1;
 	batt_drv->hold_taper_ws = false;
+	batt_drv->fake_temp = 0;
 	batt_reset_chg_drv_state(batt_drv);
 
 	mutex_init(&batt_drv->chg_lock);
