@@ -701,3 +701,6 @@ inline int scm_enable_mem_protection(void)
 }
 #endif
 EXPORT_SYMBOL(scm_enable_mem_protection);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Scm");
