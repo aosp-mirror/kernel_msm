@@ -460,3 +460,6 @@ u32 msm_secure_get_vmid_perms(u32 vmid)
 		return PERM_READ | PERM_WRITE;
 }
 EXPORT_SYMBOL(msm_secure_get_vmid_perms);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Secure Buffer");
