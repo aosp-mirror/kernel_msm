@@ -54,7 +54,7 @@ struct mem_prot_info {
 	u64 size;
 };
 
-#ifdef CONFIG_QCOM_SECURE_BUFFER
+#if IS_ENABLED(CONFIG_QCOM_SECURE_BUFFER)
 int msm_secure_table(struct sg_table *table);
 int msm_unsecure_table(struct sg_table *table);
 int hyp_assign_table(struct sg_table *table,
