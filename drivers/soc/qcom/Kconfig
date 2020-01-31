@@ -356,7 +356,7 @@ config PANIC_ON_SSR_NOTIF_TIMEOUT
 	  This is a debugging feature.
 
 config QCOM_SECURE_BUFFER
-	bool "Helper functions for securing buffers through TZ"
+	tristate "Helper functions for securing buffers through TZ"
 	help
 	 Say 'Y' here for targets that need to call into TZ to secure
 	 memory buffers. This ensures that only the correct clients can
