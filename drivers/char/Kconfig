@@ -542,7 +542,7 @@ source "drivers/char/xillybus/Kconfig"
 source "drivers/char/diag/Kconfig"
 
 config MSM_FASTCVPD
-	bool "QTI FASTCVP driver"
+	tristate "QTI FASTCVP driver"
 	depends on QCOM_GLINK
 	help
 	  This driver exposes APIs (Application Program Interface) to video driver
