@@ -11,7 +11,7 @@
 #define FASTCVPD_SMD_GUID "fastcvpd-smd-apps-dsp"
 #define FASTCVPD_DEVICE_NAME "fastcvpd-smd"
 
-#ifdef CONFIG_MSM_FASTCVPD
+#if IS_ENABLED(CONFIG_MSM_FASTCVPD)
 /*
  * API for Video driver to send physical address to FastCVP driver
  * @param phys_addr
