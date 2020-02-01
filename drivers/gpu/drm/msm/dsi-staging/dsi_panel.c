@@ -4508,17 +4508,17 @@ static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
 	hbm->cur_range = HBM_RANGE_MAX;
 
 	if (hbm_mode == HBM_MODE_SV) {
-		int rc = panel->funcs->update_irc(panel, false);
+		int rc = dsi_panel_bl_update_irc(bl, false);
 
 		if (rc != 0 && rc != -EOPNOTSUPP)
 			pr_err("[%s] failed to disable IRC, rc=%d\n",
-			       panel->name, rc);
+				panel->name, rc);
 	} else if (hbm_mode == HBM_MODE_ON && panel->hbm_mode == HBM_MODE_SV) {
-		int rc = panel->funcs->update_irc(panel, true);
+		int rc = dsi_panel_bl_update_irc(bl, true);
 
 		if (rc != 0 && rc != -EOPNOTSUPP)
 			pr_err("[%s] failed to enable IRC, rc=%d\n",
-			       panel->name, rc);
+				panel->name, rc);
 	}
 
 	panel->hbm_mode = hbm_mode;

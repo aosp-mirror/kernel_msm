@@ -97,6 +97,12 @@ as optional:
 - dsi-hbm-exit-dimming-stop-command: Optional command to send at the end of the
 	brightness dimming duration, to disable dimming. Mandatory if
 	dsi-hbm-exit-num-dimming-frames is specified.
+- dsi-irc-addr: Optional register address to control IRC.
+- dsi-irc-bit-offset: Optional IRC bit offset.
+- dsi-irc-unlock-command: Optional command for unlock panel IRC.
+- dsi-irc-unlock-commands-state: Optional command state for unlock panel IRC.
+- dsi-irc-lock-command: Optional command for lock panel IRC.
+- dsi-irc-lock-commands-state: Optional command state for lock panel IRC
 
 Each hbm-range@n contains the following properties. Each property is required,
 unless specified as optional:
@@ -121,6 +127,17 @@ Example:
 			15 01 00 00 00 00 02 53 20
 		];
 		google,dsi-hbm-commands-state = "dsi_lp_mode";
+
+		google,dsi-irc-addr = <0xBE>;
+		google,dsi-irc-bit-offset = <21>;
+		google,dsi-irc-unlock-command = [
+			39 01 00 00 00 00 03 F0 5A 5A
+		];
+		google,dsi-irc-unlock-commands-state = "dsi_lp_mode";
+		google,dsi-irc-lock-command = [
+			39 01 00 00 00 00 03 F0 A5 A5
+		];
+		google,dsi-irc-lock-commands-state = "dsi_lp_mode";
 
 		hbm-range@0 {
 			google,dsi-hbm-range-brightness-threshold = <1>;

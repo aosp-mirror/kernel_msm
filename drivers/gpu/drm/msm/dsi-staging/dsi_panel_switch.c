@@ -50,7 +50,6 @@ struct panel_switch_funcs {
 			       const struct dsi_display_mode *mode);
 	int (*post_enable)(struct panel_switch_data *pdata);
 	int (*support_update_hbm)(struct dsi_panel *panel);
-	int (*support_update_irc)(struct dsi_panel *panel, bool enable);
 	int (*send_nolp_cmds)(struct dsi_panel *panel);
 };
 
@@ -438,19 +437,6 @@ static int panel_update_hbm(struct dsi_panel *panel)
 	return pdata->funcs->support_update_hbm(panel);
 }
 
-static int panel_update_irc(struct dsi_panel *panel, bool enable)
-{
-	struct panel_switch_data *pdata = panel->private_data;
-
-	if (unlikely(!pdata || !pdata->funcs))
-		return -EINVAL;
-
-	if (!pdata->funcs->support_update_irc)
-		return -EOPNOTSUPP;
-
-	return pdata->funcs->support_update_irc(panel, enable);
-}
-
 static int panel_send_nolp(struct dsi_panel *panel)
 {
 	struct panel_switch_data *pdata = panel->private_data;
@@ -603,7 +589,6 @@ static const struct dsi_panel_funcs panel_funcs = {
 	.wakeup      = panel_wakeup,
 	.pre_lp1     = panel_flush_switch_queue,
 	.update_hbm  = panel_update_hbm,
-	.update_irc  = panel_update_irc,
 	.send_nolp   = panel_send_nolp,
 };
 
@@ -1571,47 +1556,6 @@ static int s6e3hc2_update_hbm(struct dsi_panel *panel)
 	return s6e3hc2_switch_mode_update(panel, pdata->display_mode, true);
 }
 
-#define S6E3HC2_READ_IRC       0x95
-#define S6E3HC2_IRC_BIT        0x20
-
-static int s6e3hc2_update_irc(struct dsi_panel *panel, bool enable)
-{
-	static struct {
-		bool init;
-		u8 cmd[3];
-	} irc_data;
-
-	struct mipi_dsi_device *dsi = &panel->mipi_device;
-	int rc;
-
-	pr_debug("irc update: %d\n", enable);
-
-	if (DSI_WRITE_CMD_BUF(dsi, unlock_cmd))
-		return -EFAULT;
-
-	if (!irc_data.init) {
-		irc_data.cmd[0] = S6E3HC2_READ_IRC;
-		rc = mipi_dsi_dcs_read(dsi, S6E3HC2_READ_IRC,
-				       &irc_data.cmd[1], 2);
-		if (rc != 2) {
-			pr_warn("Unable to read irc register\n");
-			DSI_WRITE_CMD_BUF(dsi, lock_cmd);
-			return -EFAULT;
-		}
-		irc_data.init = true;
-	}
-
-	if (enable)
-		irc_data.cmd[2] |= S6E3HC2_IRC_BIT;
-	else
-		irc_data.cmd[2] &= ~(S6E3HC2_IRC_BIT);
-
-	DSI_WRITE_CMD_BUF(dsi, irc_data.cmd);
-	DSI_WRITE_CMD_BUF(dsi, lock_cmd);
-
-	return 0;
-}
-
 static void s6e3hc2_perform_switch(struct panel_switch_data *pdata,
 				   const struct dsi_display_mode *mode)
 {
@@ -1687,7 +1631,6 @@ const struct panel_switch_funcs s6e3hc2_switch_funcs = {
 	.perform_switch     = s6e3hc2_perform_switch,
 	.post_enable        = s6e3hc2_post_enable,
 	.support_update_hbm = s6e3hc2_update_hbm,
-	.support_update_irc = s6e3hc2_update_irc,
 	.send_nolp_cmds     = s6e3hc2_send_nolp_cmds,
 };
 
