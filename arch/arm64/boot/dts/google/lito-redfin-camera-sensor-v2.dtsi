@@ -19,7 +19,7 @@
 		camera_rear_vcm_en_default: camera_rear_vcm_en_default {
 			pins = "gpio8";
 			function = "normal";
-			power-source = <0>;
+			power-source = <1>;
 			output-low;
 		};
 	};
