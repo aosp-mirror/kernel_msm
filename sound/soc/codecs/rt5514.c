@@ -1343,24 +1343,28 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 /* ADC Mixer*/
 static const struct snd_kcontrol_new rt5514_sto1_adc_l_mix[] = {
 	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
+	SOC_DAPM_SINGLE("BargeIn DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER0_CTRL1,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
 
 static const struct snd_kcontrol_new rt5514_sto1_adc_r_mix[] = {
 	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
+	SOC_DAPM_SINGLE("BargeIn DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER0_CTRL2,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
 
 static const struct snd_kcontrol_new rt5514_sto2_adc_l_mix[] = {
 	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
+	SOC_DAPM_SINGLE("BargeIn DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER1_CTRL1,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
 
 static const struct snd_kcontrol_new rt5514_sto2_adc_r_mix[] = {
 	SOC_DAPM_SINGLE("DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
+	SOC_DAPM_SINGLE("BargeIn DMIC Switch", SND_SOC_NOPM, 0, 1, 0),
 	SOC_DAPM_SINGLE("ADC Switch", RT5514_DOWNFILTER1_CTRL2,
 		RT5514_AD_AD_MIX_BIT, 1, 1),
 };
@@ -1619,8 +1623,10 @@ static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
 	{ "Stereo1 DMIC Mux", "DMIC2", "DMIC2" },
 
 	{ "Sto1 ADC MIXL", "DMIC Switch", "Stereo1 DMIC Mux" },
+	{ "Sto1 ADC MIXL", "BargeIn DMIC Switch", "Stereo1 DMIC Mux" },
 	{ "Sto1 ADC MIXL", "ADC Switch", "AMICL" },
 	{ "Sto1 ADC MIXR", "DMIC Switch", "Stereo1 DMIC Mux" },
+	{ "Sto1 ADC MIXR", "BargeIn DMIC Switch", "Stereo1 DMIC Mux" },
 	{ "Sto1 ADC MIXR", "ADC Switch", "AMICR" },
 
 	{ "ADC Power", NULL, "LDO18 IN" },
@@ -1673,8 +1679,10 @@ static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
 	{ "Stereo2 DMIC Mux", "DMIC2", "DMIC2" },
 
 	{ "Sto2 ADC MIXL", "DMIC Switch", "Stereo2 DMIC Mux" },
+	{ "Sto2 ADC MIXL", "BargeIn DMIC Switch", "Stereo2 DMIC Mux" },
 	{ "Sto2 ADC MIXL", "ADC Switch", "AMICL" },
 	{ "Sto2 ADC MIXR", "DMIC Switch", "Stereo2 DMIC Mux" },
+	{ "Sto2 ADC MIXR", "BargeIn DMIC Switch", "Stereo2 DMIC Mux" },
 	{ "Sto2 ADC MIXR", "ADC Switch", "AMICR" },
 
 	{ "Stereo2 ADC MIXL", NULL, "Sto2 ADC MIXL" },
