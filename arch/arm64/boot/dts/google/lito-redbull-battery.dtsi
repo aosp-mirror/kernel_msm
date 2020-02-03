@@ -183,6 +183,7 @@
 		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
 		google,thermal-mitigation = <3700000 1850000 925000 500000>;
 		google,fv-max-uv = <4450000>;
+		google,chg-termination-5v;
 
 		/* TODO: remove when using proper "charger" */
 		google,chg-cc-tolerance = <25>;
