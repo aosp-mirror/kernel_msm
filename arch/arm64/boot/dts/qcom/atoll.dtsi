@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation.All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation.All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -640,7 +640,7 @@
 		};
 
 		disp_rdump_memory: disp_rdump_region@9c000000 {
-			reg = <0x0 0x9c000000 0x0 0x01800000>;
+			reg = <0x0 0x9c000000 0x0 0x01700000>;
 			label = "disp_rdump_region";
 		};
 
@@ -1512,6 +1512,13 @@
 		qcom,minidump-id = <3>;
 		qcom,aux-minidump-ids = <4>;
 		qcom,complete-ramdump;
+
+		qcom,msm-bus,name = "pil-modem";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<129 512 0 0>,
+				<129 512 0 1041408>;
 
 		/* Inputs from mss */
 		interrupts-extended = <&pdc GIC_SPI 266 IRQ_TYPE_EDGE_RISING>,
@@ -2972,6 +2979,7 @@
 			    "tsens_tm_physical";
 		interrupts = <0 506 0>, <0 508 0>;
 		interrupt-names = "tsens-upper-lower", "tsens-critical";
+		tsens-reinit-wa;
 		#thermal-sensor-cells = <1>;
 	};
 
@@ -2983,6 +2991,7 @@
 			    "tsens_tm_physical";
 		interrupts = <0 507 0>, <0 509 0>;
 		interrupt-names = "tsens-upper-lower", "tsens-critical";
+		tsens-reinit-wa;
 		#thermal-sensor-cells = <1>;
 	};
 
