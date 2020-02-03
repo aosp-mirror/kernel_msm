@@ -15,8 +15,9 @@
 &soc {
 	redfin_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
-		#include "batterydata-qcom-b5-Desay-ATL-3750.dtsi"
-		#include "batterydata-qcom-b5-unknown.dtsi"
+		#include "batterydata-qcom-r3-LSN-4000.dtsi"
+		#include "batterydata-qcom-r3-COS-4000.dtsi"
+		#include "batterydata-qcom-r3-unknown.dtsi"
 	};
 };
 
