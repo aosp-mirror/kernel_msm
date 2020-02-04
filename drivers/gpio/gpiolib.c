@@ -4460,15 +4460,10 @@ static struct dentry *debugfs_base;
 
 static int list_gpios_show(struct seq_file *s, void *v)
 {
-	struct gpio_device *gdev = v;
-	struct gpio_chip *chip = gdev->chip;
-
-	if (chip->gpio_dump) {
-		if (msm_gpio_dump_builtin_cb)
-			msm_gpio_dump_builtin_cb(s);
-		if (pmic_gpio_dump_builtin_cb)
-			pmic_gpio_dump_builtin_cb(s);
-	}
+	if (msm_gpio_dump_builtin_cb)
+		msm_gpio_dump_builtin_cb(s);
+	if (pmic_gpio_dump_builtin_cb)
+		pmic_gpio_dump_builtin_cb(s);
 	return 0;
 }
 
