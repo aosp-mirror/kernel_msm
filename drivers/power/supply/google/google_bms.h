@@ -18,6 +18,7 @@
 #define __GOOGLE_BMS_H_
 
 #include <linux/types.h>
+#include <linux/power_supply.h>
 #include "qmath.h"
 
 struct device_node;
@@ -355,6 +356,9 @@ int gbms_msc_round_fv_uv(const struct gbms_chg_profile *profile,
 
 /* newgen charging: charger flags  */
 uint8_t gbms_gen_chg_flags(int chg_status, int chg_type);
+/* newgen charging: read/gen charger state  */
+int gbms_read_charger_state(union gbms_charger_state *chg_state,
+			    struct power_supply *chg_psy);
 
 /* debug/print */
 const char *gbms_chg_type_s(int chg_type);
@@ -388,6 +392,7 @@ int gbms_cycle_count_cstr_bc(char *buff, size_t size,
 
 #define gbms_cycle_count_cstr(buff, size, cc)	\
 	gbms_cycle_count_cstr_bc(buff, size, cc, GBMS_CCBIN_BUCKET_COUNT)
+
 
 /* Time to full */
 int ttf_soc_cstr(char *buff, int size, const struct ttf_soc_stats *soc_stats,
