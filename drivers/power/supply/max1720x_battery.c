@@ -378,6 +378,13 @@ struct max1720x_chip {
 	u32 batt_update_high_temp_threshold;
 	int batt_temp;
 	bool monitor_batt_temp;
+
+	/*
+	 * Thermal test:
+	 * fake_temp=0 means no fake
+	 * fake_temp>0 means fake the battery temp
+	 */
+	u16 fake_temp;
 };
 
 static inline int max1720x_regmap_read(struct regmap *map,
@@ -715,16 +722,36 @@ static enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 };
 
-static void max1720x_temp_notify_work(struct work_struct *work)
+static int max1720x_get_battery_temperature(struct max1720x_chip *chip,
+					     int *temp)
 {
+	int err;
 	u16 data = 0;
-	int batt_temp;
-	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
-						  temp_notify_work.work);
 	struct regmap *map = chip->regmap;
 
-	REGMAP_READ(map, MAX1720X_TEMP, &data);
-	batt_temp = reg_to_deci_deg_cel(data);
+	if (chip->fake_temp) {
+		*temp = chip->fake_temp;
+	} else {
+		err = REGMAP_READ(map, MAX1720X_TEMP, &data);
+		if (err) {
+			dev_warn(chip->dev, "failed to read temp(%d)\n", err);
+			return err;
+		}
+		*temp = reg_to_deci_deg_cel(data);
+	}
+
+	return 0;
+}
+
+static void max1720x_temp_notify_work(struct work_struct *work)
+{
+	int batt_temp, ret;
+	struct max1720x_chip *chip = container_of(work, struct max1720x_chip,
+						  temp_notify_work.work);
+
+	ret = max1720x_get_battery_temperature(chip, &batt_temp);
+	if (ret < 0)
+		return;
 
 	if (batt_temp > chip->batt_update_high_temp_threshold) {
 		if (batt_temp != chip->batt_temp) {
@@ -1231,8 +1258,7 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = reg_to_resistance_micro_ohms(data, chip->RSense);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		REGMAP_READ(map, MAX1720X_TEMP, &data);
-		val->intval = reg_to_deci_deg_cel(data);
+		err = max1720x_get_battery_temperature(chip, &val->intval);
 		max1720x_handle_update_nconvgcfg(chip, val->intval);
 		if ((!chip->monitor_batt_temp) &&
 			(val->intval > chip->batt_update_high_temp_threshold)) {
@@ -2120,6 +2146,25 @@ static int set_irq_none_cnt(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(irq_none_cnt_fops, get_irq_none_cnt,
 	set_irq_none_cnt, "%llu\n");
+
+static int get_fake_temp(void *data, u64 *val)
+{
+	struct max1720x_chip *chip = data;
+
+	*val = chip->fake_temp;
+	return 0;
+}
+
+static int set_fake_temp(void *data, u64 val)
+{
+	struct max1720x_chip *chip = data;
+
+	chip->fake_temp = val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fake_temp_fops, get_fake_temp,
+	set_fake_temp, "%llu\n");
 #endif
 
 static int init_debugfs(struct max1720x_chip *chip)
@@ -2128,9 +2173,12 @@ static int init_debugfs(struct max1720x_chip *chip)
 	struct dentry *de;
 
 	de = debugfs_create_dir("max1720x", 0);
-	if (de)
+	if (de) {
 		debugfs_create_file("irq_none_cnt", 0644, de,
 				   chip, &irq_none_cnt_fops);
+		debugfs_create_file("fake_temp", 0600, de,
+				   chip, &fake_temp_fops);
+	}
 #endif
 	return 0;
 }
@@ -2582,6 +2630,7 @@ static void max1720x_init_work(struct work_struct *work)
 
 	(void)max1720x_init_history(chip);
 	chip->cycle_count = -1;
+	chip->fake_temp = 0;
 
 	if (chip->psy)
 		power_supply_changed(chip->psy);
