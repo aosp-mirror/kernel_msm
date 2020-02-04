@@ -77,6 +77,9 @@ struct msm_pinctrl {
 
 	const struct msm_pinctrl_soc_data *soc;
 	void __iomem *regs;
+
+	u32 *ignored_gpios;
+	int ignored_gpios_nr;
 };
 
 static struct msm_pinctrl *msm_pinctrl_data;
@@ -568,9 +571,10 @@ static void msm_gpio_dbg_show_one(struct seq_file *s,
 
 static bool msm_gpio_is_ignored(struct gpio_chip *chip, unsigned int gpio)
 {
+	struct msm_pinctrl *pctrl = gpiochip_get_data(chip);
 	int i;
-	for (i = 0; i < chip->ignored_gpios_nr; i++) {
-		if (gpio == chip->ignored_gpios[i])
+	for (i = 0; i < pctrl->ignored_gpios_nr; i++) {
+		if (gpio == pctrl->ignored_gpios[i])
 			return true;
 	}
 	return false;
@@ -656,7 +660,6 @@ static const struct gpio_chip msm_gpio_template = {
 	.request          = gpiochip_generic_request,
 	.free             = gpiochip_generic_free,
 	.dbg_show         = msm_gpio_dbg_show,
-	.gpio_dump        = msm_gpio_dump,
 };
 
 /* For dual-edge interrupts in software, since some hardware has no
@@ -1232,16 +1235,16 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	ignored_gpios_nr = of_property_count_u32_elems(chip->of_node,
 		"goog,ignored-gpios");
 	if (ignored_gpios_nr > 0) {
-		chip->ignored_gpios = kmalloc_array(ignored_gpios_nr,
-			sizeof(*chip->ignored_gpios), GFP_KERNEL);
-		if (!chip->ignored_gpios) {
+		pctrl->ignored_gpios = kmalloc_array(ignored_gpios_nr,
+			sizeof(*pctrl->ignored_gpios), GFP_KERNEL);
+		if (!pctrl->ignored_gpios) {
 			ret = -ENOMEM;
 			goto fail;
 		}
 		of_property_read_u32_array(chip->of_node, "goog,ignored-gpios",
-			chip->ignored_gpios,
+			pctrl->ignored_gpios,
 			ignored_gpios_nr);
-		chip->ignored_gpios_nr = ignored_gpios_nr;
+		pctrl->ignored_gpios_nr = ignored_gpios_nr;
 	}
 
 	ret = msm_gpio_init_valid_mask(chip, pctrl);
@@ -1279,8 +1282,8 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 
 	return 0;
 fail:
-	kfree(pctrl->chip.ignored_gpios);
-	pctrl->chip.ignored_gpios = NULL;
+	kfree(pctrl->ignored_gpios);
+	pctrl->ignored_gpios = NULL;
 	gpiochip_remove(&pctrl->chip);
 	return ret;
 }
@@ -1502,8 +1505,8 @@ int msm_pinctrl_remove(struct platform_device *pdev)
 {
 	struct msm_pinctrl *pctrl = platform_get_drvdata(pdev);
 
-	kfree(pctrl->chip.ignored_gpios);
-	pctrl->chip.ignored_gpios = NULL;
+	kfree(pctrl->ignored_gpios);
+	pctrl->ignored_gpios = NULL;
 	gpiochip_remove(&pctrl->chip);
 
 	unregister_restart_handler(&pctrl->restart_nb);
