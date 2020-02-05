@@ -2139,11 +2139,6 @@ static int ufshpb_init(struct ufs_hba *hba)
 	int activate = CONFIG_SCSI_UFSHCD_HPB_ACTIVATE;
 	bool need_disable = false;
 
-	if (!activate) {
-		hba->ufshpb_state = HPB_NOT_SUPPORTED;
-		return 0;
-	}
-
 	pm_runtime_get_sync(hba->dev);
 
 	ret = ufshpb_read_dev_desc_support(hba, &func_desc);
@@ -2380,9 +2375,6 @@ void ufshpb_release(struct ufs_hba *hba, int state)
 {
 	int lun;
 
-	if (!CONFIG_SCSI_UFSHCD_HPB_ACTIVATE)
-		return;
-
 	hba->ufshpb_state = HPB_FAILED;
 
 	for (lun = 0 ; lun < UFS_UPIU_MAX_GENERAL_LUN ; lun++) {
@@ -2463,10 +2455,7 @@ void ufshcd_init_hpb(struct ufs_hba *hba)
 		hba->sdev_ufs_lu[lun] = NULL;
 	}
 
-	if (CONFIG_SCSI_UFSHCD_HPB_ACTIVATE)
-		INIT_DELAYED_WORK(&hba->ufshpb_init_work, ufshpb_init_handler);
-	else
-		hba->ufshpb_state = HPB_NOT_SUPPORTED;
+	INIT_DELAYED_WORK(&hba->ufshpb_init_work, ufshpb_init_handler);
 }
 
 static void ufshpb_error_handler(struct work_struct *work)
