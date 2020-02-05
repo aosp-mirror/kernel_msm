@@ -78,13 +78,4 @@ enum query_opcode {
 	UPIU_QUERY_OPCODE_TOGGLE_FLAG	= 0x8,
 	UPIU_QUERY_OPCODE_MAX,
 };
-
-/*
- * high 16 bits for HPB. E.g.,
- *  opcode = (UFS_IOCTL_QUERY_OPCODE << 16) | UPIU_QUERY_OPCODE_READ_DESC
- */
-#define UPIU_QUERY_OPCODE_HIGH_HPB	0x5500
-#define UPIU_QUERY_OPCODE_HIGH(opcode)	((opcode) >> 16)
-#define UPIU_QUERY_OPCODE_LOW(opcode)	((opcode) & 0xffff)
-
 #endif /* UAPI_UFS_H_ */

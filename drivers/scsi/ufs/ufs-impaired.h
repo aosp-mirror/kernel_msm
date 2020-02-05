@@ -85,6 +85,8 @@ struct ufs_impaired_storage {
 	struct ufs_impaired_io io[UFS_IMPAIRED_OPTYPE_COUNT];
 };
 
+struct ufshcd_lrb;
+
 extern void ufs_impaired_init(struct ufs_hba *hba);
 extern void ufs_impaired_exit(struct ufs_hba *hba);
 extern void ufs_impaired_init_sysfs(struct ufs_hba *hba);

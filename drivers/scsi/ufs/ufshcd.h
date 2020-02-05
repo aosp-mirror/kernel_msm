@@ -76,10 +76,6 @@
 
 #include "ufs.h"
 #include "ufshci.h"
-#include "ufshpb.h"
-#ifdef CONFIG_SCSI_UFS_IMPAIRED
-#include "ufs-impaired.h"
-#endif
 
 #define UFSHCD "ufshcd"
 #define UFSHCD_DRIVER_VERSION "0.3"
@@ -88,6 +84,10 @@
 #define UFS_MASK(x, y)	(x << ((y) % BITS_PER_LONG))
 
 struct ufs_hba;
+
+#ifdef CONFIG_SCSI_UFS_IMPAIRED
+#include "ufs-impaired.h"
+#endif
 
 enum dev_cmd_type {
 	DEV_CMD_TYPE_NOP		= 0x0,
@@ -1159,16 +1159,6 @@ struct ufs_hba {
 	/* To monitor slow UFS I/O requests. */
 	u64 slowio_min_us;
 	u64 slowio[UFSHCD_SLOWIO_OP_MAX][UFSHCD_SLOWIO_SYS_MAX];
-
-	/* HPB support */
-	u32 ufshpb_feat;
-	int ufshpb_state;
-	int ufshpb_max_regions;
-	struct delayed_work ufshpb_init_work;
-	bool issue_ioctl;
-	struct ufshpb_lu *ufshpb_lup[UFS_UPIU_MAX_GENERAL_LUN];
-	struct scsi_device *sdev_ufs_lu[UFS_UPIU_MAX_GENERAL_LUN];
-	struct work_struct ufshpb_eh_work;
 
 	struct ufs_manual_gc manual_gc;
 

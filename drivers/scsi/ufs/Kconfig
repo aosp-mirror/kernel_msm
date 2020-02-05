@@ -138,13 +138,6 @@ config SCSI_UFSHCD_CMD_LOGGING
 	  Select this if you want above mentioned debug information captured.
 	  If unsure, say N.
 
-config SCSI_UFSHCD_HPB_ACTIVATE
-	int "Activate HPB Host-aware Performance Booster"
-	depends on SCSI_UFSHCD
-	default 1
-	help
-	  Activate or deactive UFSHPB v1.3.5 test driver
-
 config SCSI_UFS_IMPAIRED
 	bool "Impaired storage emulation support"
 	depends on SCSI_UFSHCD
