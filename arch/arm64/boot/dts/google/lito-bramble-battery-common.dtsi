@@ -31,8 +31,30 @@
 
 &pm7250b_qg {
 	qcom,battery-data = <&bramble_batterydata>;
+	qcom,qg-iterm-ma = <456>;
 };
 
 &google_battery {
 	google,chg-battery-capacity = <3800>;
+
+	/* charge table for bramble */
+	google,chg-temp-limits = <0 100 200 420 460 480 550>;
+	google,chg-cv-limits = <4200000 4300000 4390000>;
+	google,chg-cc-limits = <
+		 30  10   0
+		 50  30  30
+		100  70  55
+		 80  50  55
+		 50  50   0
+		 30   0   0
+	>;
+	google,chg-last-tier = <4450000>;
+	google,chg-last-tier-ramp-rate-mv = <30000>;
+	/* ramp rate unit : 1/1000 */
+	google,chg-last-tier-ramp-rate-dpct = <490>;
+
+	/* micro-adjust cc_max to avoid vpack exceeding spec criteria */
+	/* vpack tolerance unit : 1/10000 */
+	google,chg-last-tier-vpack-tolerance = <15>;
+	google,chg-last-tier-cc-adjust = <50000>;
 };

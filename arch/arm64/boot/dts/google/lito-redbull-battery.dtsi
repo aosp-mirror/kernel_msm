@@ -59,7 +59,6 @@
 	qcom,qg-ext-sns;
 	qcom,cl-min-delta-batt-soc = <10>;
 	qcom,cl-wt-enable;
-	qcom,qg-iterm-ma = <570>;
 	qcom,vbatt-cutoff-mv = <3300>;
 	qcom,vbatt-low-mv = <3500>;
 	qcom,vbatt-low-cold-mv = <3800>;
@@ -119,22 +118,10 @@
 		compatible = "google,battery";
 		google,fg-psy-name = "bms";
 
-		/* charge table for floral */
-		google,chg-temp-limits = <0 100 200 420 460 480 550>;
-		google,chg-cv-limits = <4200000 4300000 4450000>;
-		google,chg-cc-limits = <
-			 30  10   0
-			 50  30  30
-			100  70  50
-			 80  50  50
-			 50  50   0
-			 30   0   0
-		>;
-
 		/* battery poll rate */
 		google,update-interval = <30000>;
 		/* IRDrop Compensation */
-		google,fv-uv-resolution = <25000>;
+		google,fv-uv-resolution = <10000>;
 		google,fv-uv-margin-dpct = <1020>;
 		/* tier switch */
 		google,cv-range-accuracy = <100000>;
