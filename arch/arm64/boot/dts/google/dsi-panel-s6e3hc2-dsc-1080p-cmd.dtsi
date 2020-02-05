@@ -55,6 +55,7 @@
 		qcom,bl-update-flag = "delay_until_first_frame";
 		/* param1 = DBV[9:8], param2 = DBV[7:0] */
 		google,dsi-bl-cmd-high-byte-offset = <8>;
+		google,dsi-panel-dimming-enable;
 
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 5>;
 		qcom,mdss-dsi-lp11-init;
@@ -85,12 +86,18 @@
 				qcom,mdss-dsi-on-command = [
 					07 01 00 00 00 00 01 01    /* Compression Enable */
 					05 01 00 00 78 00 01 11    /* sleep out, Wait 120 ms */
-					15 01 00 00 00 00 02 53 20 /* write ctl 60hz */
+
+					/* write ctl 60hz */
+					15 01 00 00 00 00 02 53 28
 					15 01 00 00 00 00 02 35 00 /* TE on */
 
 					39 01 00 00 00 00 03 F0 5A 5A
 					39 01 00 00 00 00 03 F1 5A 5A
 					39 01 00 00 00 00 03 FC 5A 5A
+
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
 
 					/* Dither IP On */
 					39 01 00 00 00 00 03 B0 86 EB
@@ -117,7 +124,8 @@
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-timing-switch-command = [
-					15 01 00 00 00 00 02 53 20 /* write ctl 60hz */];
+					/* write ctl 60hz */
+					15 01 00 00 00 00 02 53 28];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-lp1-command = [
@@ -135,7 +143,9 @@
 					39 01 00 00 00 00 03 F0 5A 5A
 					39 01 00 00 00 00 03 B0 A8 B1
 					15 01 00 00 00 00 02 B1 01
-					15 01 00 00 00 00 02 53 20 /* write ctl 60 hz */
+
+					/* write ctl 60 hz */
+					15 01 00 00 00 00 02 53 28
 
 					/* swire refresh on */
 					39 01 00 00 00 00 03 B0 3F B5
@@ -184,12 +194,18 @@
 				qcom,mdss-dsi-on-command = [
 					07 01 00 00 00 00 01 01    /* Compression Enable */
 					05 01 00 00 78 00 01 11    /* sleep out, Wait 120 ms */
-					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */
+
+					/* write ctl 90hz */
+					15 01 00 00 00 00 02 53 38
 					15 01 00 00 00 00 02 35 00 /* TE on */
 
 					39 01 00 00 00 00 03 F0 5A 5A
 					39 01 00 00 00 00 03 F1 5A 5A
 					39 01 00 00 00 00 03 FC 5A 5A
+
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
 
 					/* Dither IP On */
 					39 01 00 00 00 00 03 B0 86 EB
@@ -216,7 +232,8 @@
 				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-timing-switch-command = [
-					15 01 00 00 00 00 02 53 30 /* write ctl 90hz */];
+					/* write ctl 90hz */
+					15 01 00 00 00 00 02 53 38];
 				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
 
 				qcom,mdss-dsi-lp1-command = [
@@ -234,7 +251,9 @@
 					39 01 00 00 00 00 03 F0 5A 5A
 					39 01 00 00 00 00 03 B0 A8 B1
 					15 01 00 00 00 00 02 B1 01
-					15 01 00 00 00 00 02 53 30 /* write ctl 90 hz */
+
+					/* write ctl 90 hz */
+					15 01 00 00 00 00 02 53 38
 
 					/* swire refresh on */
 					39 01 00 00 00 00 03 B0 3F B5
@@ -315,17 +334,22 @@
 
 		google,hbm-ranges {
 			google,dsi-hbm-exit-command = [
-				/* Disable high brightness and enable
-				 * brightness dimming
-				 */
+				/* Set Dimming frames to 32 */
+				39 01 00 00 00 00 03 F0 5A 5A
+				39 01 00 00 00 00 03 B0 05 B1
+				15 01 00 00 00 00 02 B1 20
+				39 01 00 00 00 00 03 F0 A5 A5
+
+				/* Disable high brightness */
 				15 01 00 00 00 00 02 53 28
 			];
 			google,dsi-hbm-exit-num-dimming-frames = <32>;
 			google,dsi-hbm-exit-dimming-stop-command = [
-				/* Disable high brightness and disable
-				 * brightness dimming
-				 */
-				15 01 00 00 00 00 02 53 20
+				/* Set Dimming frames to 8 */
+				39 01 00 00 00 00 03 F0 5A 5A
+				39 01 00 00 00 00 03 B0 05 B1
+				15 01 00 00 00 00 02 B1 08
+				39 01 00 00 00 00 03 F0 A5 A5
 			];
 			google,dsi-hbm-commands-state = "dsi_lp_mode";
 			google,dsi-irc-addr = <0x95>;
@@ -345,17 +369,22 @@
 				google,dsi-hbm-range-bl-min-level = <0x4>;
 				google,dsi-hbm-range-bl-max-level = <0x3ff>;
 				google,dsi-hbm-range-entry-command = [
-					/* Disable high brightness and enable
-					 * brightness dimming
-					 */
+					/* Set Dimming frames to 32 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 20
+					39 01 00 00 00 00 03 F0 A5 A5
+
+					/* Disable high brightness */
 					15 01 00 00 00 00 02 53 28
 				];
 				google,dsi-hbm-range-num-dimming-frames = <32>;
 				google,dsi-hbm-range-dimming-stop-command = [
-					/* Disable high brightness and disable
-					 * brightness dimming
-					 */
-					15 01 00 00 00 00 02 53 20
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
+					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				google,dsi-hbm-range-commands-state =
 					"dsi_lp_mode";
@@ -378,15 +407,22 @@
 				google,dsi-hbm-range-bl-max-level = <0x3ff>;
 
 				google,dsi-hbm-range-entry-command = [
+					/* Set Dimming frames to 32 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 20
+					39 01 00 00 00 00 03 F0 A5 A5
+
 					/* Enable high brightness */
 					15 01 00 00 00 00 02 53 E8
 				];
 				google,dsi-hbm-range-num-dimming-frames = <32>;
 				google,dsi-hbm-range-dimming-stop-command = [
-					/* Enable high brightness and disable
-					 * brightness dimming
-					 */
-					15 01 00 00 00 00 02 53 E0
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
+					39 01 00 00 00 00 03 F0 A5 A5
 				];
 				google,dsi-hbm-range-commands-state =
 					"dsi_lp_mode";
