@@ -53,7 +53,7 @@
 
 #define SUZYQ_ENABLED "enabled"
 
-static char boot_mode_string[64];
+char boot_mode_string[64];
 static char suzyq_enabled[15];
 
 struct usbpd {
