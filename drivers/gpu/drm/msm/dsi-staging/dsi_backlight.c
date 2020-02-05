@@ -725,6 +725,8 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 
 	if (show_mode) {
 		const struct dsi_display_mode *mode = panel->cur_mode;
+		if (unlikely(!mode))
+			return -ENODEV;
 
 		rc = snprintf(buf, PAGE_SIZE, "%s: %dx%d@%d\n", statestr,
 			 mode->timing.h_active, mode->timing.v_active,
