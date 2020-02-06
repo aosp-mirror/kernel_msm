@@ -694,13 +694,8 @@ int scm_enable_mem_protection(void)
 
 	return resp;
 }
-#else
-inline int scm_enable_mem_protection(void)
-{
-	return 0;
-}
-#endif
 EXPORT_SYMBOL(scm_enable_mem_protection);
+#endif
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Scm");
