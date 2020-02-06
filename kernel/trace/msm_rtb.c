@@ -369,3 +369,5 @@ module_platform_driver(msm_rtb_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Msm Rtb");
+MODULE_SOFTDEP("pre: watchdog_v2");
+MODULE_SOFTDEP("pre: early_random");

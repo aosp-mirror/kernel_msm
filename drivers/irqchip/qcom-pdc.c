@@ -527,6 +527,8 @@ static struct platform_driver pdc_lito_driver = {
 builtin_platform_driver(pdc_lito_driver);
 MODULE_DESCRIPTION("QTI PDC LITO Driver");
 MODULE_LICENSE("GPL v2");
+MODULE_SOFTDEP("pre: watchdog_v2");
+MODULE_SOFTDEP("pre: early_random");
 #else
 core_initcall(qcom_pdc_early_init);
 IRQCHIP_DECLARE(pdc_sdm845, "qcom,sdm845-pdc", qcom_pdc_init);

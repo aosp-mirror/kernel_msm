@@ -275,7 +275,7 @@ config QCOM_SCM
 	  SCM driver provides the support for atomic scm calls also.
 
 config QCOM_EARLY_RANDOM
-	bool "Initialize random pool very early"
+	tristate "Initialize random pool very early"
 	help
 	 The standard random pool may not initialize until late in the boot
 	 process which means that any calls to get random numbers before then
