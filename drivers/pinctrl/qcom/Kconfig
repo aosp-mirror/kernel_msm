@@ -4,6 +4,8 @@ config PINCTRL_MSM
 	tristate "Qualcomm core pin controller driver"
 	select PINMUX
 	select PINCONF
+	select GENERIC_PINCTRL_GROUPS
+	select GENERIC_PINMUX_FUNCTIONS
 	select GENERIC_PINCONF
 	select GPIOLIB_IRQCHIP
 
