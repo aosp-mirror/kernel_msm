@@ -33,6 +33,7 @@
 	qcom,otg-cl-ua = <1500000>;
 	google,otg-out-uv = <5100000>;
 	ext-vbus-supply = <&ext_5v_boost>;
+	qcom,lpd-disable; /* Temporarily disable lpd IRQ. */
 };
 
 &pm7250b_pdphy {
