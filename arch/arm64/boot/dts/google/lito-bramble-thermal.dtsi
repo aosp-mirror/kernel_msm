@@ -168,16 +168,141 @@
 	};
 
 	skin-therm {
-		polling-delay-passive = <0>;
+		polling-delay-passive = <5000>;
 		polling-delay = <0>;
-		thermal-governor = "user_space";
+		thermal-governor = "step_wise";
 		thermal-sensors = <&pm8150_adc_tm ADC_AMUX_THM2_PU2>;
 		wake-capable-sensor;
 		trips {
-			active-config0 {
-				temperature = <125000>;
+			skin_light_lv1: skin-light-lv1 {
+				temperature = <36000>;
 				hysteresis = <1000>;
 				type = "passive";
+			};
+			skin_light_lv2: skin-light-lv2 {
+				temperature = <37000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_moderate_lv1: skin-moderate-lv1 {
+				temperature = <38000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_moderate_lv2: skin-moderate-lv2 {
+				temperature = <39000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_moderate_lv3: skin-moderate-lv3 {
+				temperature = <40000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_severe: skin-severe {
+				temperature = <41000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_critical: skin-critical {
+				temperature = <42000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			/* thermal light throttling level 1 */
+			cpu7-turbo_l2-step {
+				trip = <&skin_light_lv1>;
+				cooling-device = <&CPU7 THERMAL_NO_LIMIT 1>;
+			};
+			/* thermal light throttling level 2 */
+			cpu6-turbo-step {
+				trip = <&skin_light_lv2>;
+				cooling-device = <&CPU6 THERMAL_NO_LIMIT 1>;
+			};
+			cpu7-turbo-lock {
+				trip = <&skin_light_lv2>;
+				cooling-device = <&CPU7 3 3>;
+			};
+			/* thermal moderate throttling level 1 */
+			cpu6-nominal_l1-step {
+				trip = <&skin_moderate_lv1>;
+				cooling-device = <&CPU6 1 2>;
+			};
+			cpu7-nominal_l1-step {
+				trip = <&skin_moderate_lv1>;
+				cooling-device = <&CPU7 3 4>;
+			};
+			/* thermal moderate throttling level 2 */
+			cpu6-nominal-step {
+				trip = <&skin_moderate_lv2>;
+				cooling-device = <&CPU6 2 3>;
+			};
+			cpu7-nominal-step {
+				trip = <&skin_moderate_lv2>;
+				cooling-device = <&CPU7 4 5>;
+			};
+			wired_charge-lv1-step {
+				trip = <&skin_moderate_lv2>;
+				cooling-device = <&google_charger
+					THERMAL_NO_LIMIT 1>;
+			};
+			/* thermal moderate throttling level 3 */
+			cpu6-svs_l1-step {
+				trip = <&skin_moderate_lv3>;
+				cooling-device = <&CPU6 3 4>;
+			};
+			cpu7-svs_l1-step {
+				trip = <&skin_moderate_lv3>;
+				cooling-device = <&CPU7 5 6>;
+			};
+			wired_charge-lv2-step {
+				trip = <&skin_moderate_lv3>;
+				cooling-device = <&google_charger 1 2>;
+			};
+			/* thermal severe throttling */
+			cpu0-svs_l1-lock {
+				trip = <&skin_severe>;
+				cooling-device = <&CPU0 3 3>;
+			};
+			cpu6-svs_l1-lock {
+				trip = <&skin_severe>;
+				cooling-device = <&CPU6 4 4>;
+			};
+			cpu7-svs_l1-lock {
+				trip = <&skin_severe>;
+				cooling-device = <&CPU7 6 6>;
+			};
+			gpu-svs_l1-step {
+				trip = <&skin_severe>;
+				cooling-device = <&msm_gpu THERMAL_NO_LIMIT 1>;
+			};
+			wired_charge-lv3-step {
+				trip = <&skin_severe>;
+				cooling-device = <&google_charger 2 3>;
+			};
+			/* thermal critical throttling */
+			cpu0-svs-lock {
+				trip = <&skin_critical>;
+				cooling-device = <&CPU0 4 4>;
+			};
+			cpu6-svs-lock {
+				trip = <&skin_critical>;
+				cooling-device = <&CPU6 5 5>;
+			};
+			cpu7-svs-lock {
+				trip = <&skin_critical>;
+				cooling-device = <&CPU7 7 7>;
+			};
+			gpu-svs_l1-lock {
+				trip = <&skin_critical>;
+				cooling-device = <&msm_gpu 1 1>;
+			};
+			wired_charge-disable {
+				trip = <&skin_critical>;
+				cooling-device = <&google_charger
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
 		};
 	};
