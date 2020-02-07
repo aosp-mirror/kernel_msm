@@ -17,6 +17,7 @@
 #include "msm_bus_core.h"
 
 struct msm_bus_arb_ops arb_ops;
+EXPORT_SYMBOL_GPL(arb_ops);
 
 /**
  * msm_bus_scale_register_client() - Register the clients with the msm bus
