@@ -431,7 +431,8 @@ static int piltz_resc_init(struct platform_device *pdev, struct pil_tz_data *d)
 	}
 	d->proxy_reg_count = count;
 
-	if (of_find_property(dev->of_node, "qcom,msm-bus,name", &len)) {
+	if (of_find_property(dev->of_node, "qcom,msm-bus,name", &len) &&
+	    of_find_property(dev->of_node, "qcom,msm-bus,num-cases", &len)) {
 		d->enable_bus_scaling = true;
 		rc = of_read_bus_pdata(pdev, d);
 		if (rc) {
