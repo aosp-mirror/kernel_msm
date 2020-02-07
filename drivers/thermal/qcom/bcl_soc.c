@@ -29,6 +29,7 @@ struct bcl_device {
 	bool					irq_enabled;
 	struct thermal_zone_device		*tz_dev;
 	struct thermal_zone_of_device_ops	ops;
+	const char				*bat_psy_name;
 };
 
 static struct bcl_device *bcl_perph;
@@ -61,7 +62,7 @@ static int bcl_read_soc(void *data, int *val)
 
 	*val = 100;
 	if (!batt_psy)
-		batt_psy = power_supply_get_by_name("battery");
+		batt_psy = power_supply_get_by_name(bcl_perph->bat_psy_name);
 	if (batt_psy) {
 		err = power_supply_get_property(batt_psy,
 				POWER_SUPPLY_PROP_CAPACITY, &ret);
@@ -107,7 +108,7 @@ static int battery_supply_callback(struct notifier_block *nb,
 {
 	struct power_supply *psy = data;
 
-	if (strcmp(psy->desc->name, "battery"))
+	if (strcmp(psy->desc->name, bcl_perph->bat_psy_name))
 		return NOTIFY_OK;
 	schedule_work(&bcl_perph->soc_eval_work);
 
@@ -128,16 +129,24 @@ static int bcl_soc_remove(struct platform_device *pdev)
 static int bcl_soc_probe(struct platform_device *pdev)
 {
 	int ret = 0;
+	const char *bat_psy_name = NULL;
 
 	bcl_perph = devm_kzalloc(&pdev->dev, sizeof(*bcl_perph), GFP_KERNEL);
 	if (!bcl_perph)
 		return -ENOMEM;
+
+	ret = of_property_read_string(pdev->dev.of_node,
+		"google,fg-psy-name", &bat_psy_name);
+	if (ret)
+		bat_psy_name = "battery";
 
 	mutex_init(&bcl_perph->state_trans_lock);
 	bcl_perph->ops.get_temp = bcl_read_soc;
 	bcl_perph->ops.set_trips = bcl_set_soc;
 	INIT_WORK(&bcl_perph->soc_eval_work, bcl_evaluate_soc);
 	bcl_perph->psy_nb.notifier_call = battery_supply_callback;
+	bcl_perph->bat_psy_name = devm_kstrdup(&pdev->dev,
+		bat_psy_name, GFP_KERNEL);
 	ret = power_supply_reg_notifier(&bcl_perph->psy_nb);
 	if (ret < 0) {
 		pr_err("soc notifier registration error. defer. err:%d\n",
