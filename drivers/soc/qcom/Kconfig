@@ -576,7 +576,7 @@ config QCOM_WDOG_IPI_ENABLE
 	  To track CPUs health on LPM, or on debug builds enable it.
 
 config QCOM_BUS_SCALING
-	bool "Bus scaling driver"
+	tristate "Bus scaling driver"
 	help
 	This option enables bus scaling on MSM devices.  Bus scaling
 	allows devices to request the clocks be set to rates sufficient
@@ -584,7 +584,7 @@ config QCOM_BUS_SCALING
 	frequency when a slower speed is sufficient.
 
 config  QCOM_BUS_CONFIG_RPMH
-	bool "RPMH Bus scaling driver"
+	tristate "RPMH Bus scaling driver"
 	depends on QCOM_BUS_SCALING
 	help
 	  This option enables bus scaling using QCOM specific hardware

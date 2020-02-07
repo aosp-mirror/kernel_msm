@@ -2025,6 +2025,12 @@ int __init msm_bus_device_init_driver(void)
 {
 	int rc;
 
+#ifdef MODULE
+	rc = msm_bus_rsc_init_driver();
+	if (rc)
+		return rc;
+#endif
+
 	MSM_BUS_ERR("msm_bus_fabric_rpmh_init_driver\n");
 	rc =  platform_driver_register(&msm_bus_device_driver);
 
@@ -2035,5 +2041,10 @@ int __init msm_bus_device_init_driver(void)
 	return platform_driver_register(&msm_bus_rules_driver);
 }
 
+#ifndef MODULE
 core_initcall(msm_bus_rsc_init_driver);
+#endif
 subsys_initcall(msm_bus_device_init_driver);
+
+MODULE_DESCRIPTION("MSM Bus Scaling driver");
+MODULE_LICENSE("GPL v2");
