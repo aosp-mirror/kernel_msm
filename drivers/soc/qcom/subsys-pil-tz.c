@@ -351,7 +351,7 @@ static int of_read_regs(struct device *dev, struct reg_info **regs_ref,
 	return reg_count;
 }
 
-#if defined(CONFIG_QCOM_BUS_SCALING)
+#if IS_ENABLED(CONFIG_QCOM_BUS_SCALING)
 static int of_read_bus_pdata(struct platform_device *pdev,
 			     struct pil_tz_data *d)
 {
