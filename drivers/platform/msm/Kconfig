@@ -23,7 +23,7 @@ config QPNP_REVID
 	  type is mapped to a QTI chip part number and logged as well.
 
 config SPS
-	bool "SPS support"
+	tristate "SPS support"
 	select GENERIC_ALLOCATOR
 	help
 	  The SPS (Smart Peripheral Switch) is a DMA engine.
