@@ -21,6 +21,7 @@
 #include <linux/arm_sdei.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/hotplug.h>
@@ -849,7 +850,8 @@ static void ipi_cpu_stop(unsigned int cpu, struct pt_regs *regs)
 		pr_crit("CPU%u: stopping\n", cpu);
 		__show_regs(regs);
 		dump_stack();
-		dump_stack_minidump(regs->sp);
+		if (vendor_panic_cb)
+			vendor_panic_cb(regs->sp);
 		raw_spin_unlock(&stop_lock);
 	}
 

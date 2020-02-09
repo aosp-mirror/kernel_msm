@@ -160,6 +160,7 @@ static int __init msm_minidump_log_init(void)
 {
 	register_kernel_sections();
 	register_log_buf();
+	vendor_panic_cb = dump_stack_minidump;
 	return 0;
 }
 late_initcall(msm_minidump_log_init);
