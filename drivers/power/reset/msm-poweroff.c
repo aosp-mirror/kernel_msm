@@ -107,7 +107,7 @@ static size_t store_emmc_dload(struct kobject *kobj, struct attribute *attr,
 			       const char *buf, size_t count);
 RESET_ATTR(emmc_dload, 0644, show_emmc_dload, store_emmc_dload);
 
-#ifdef CONFIG_QCOM_MINIDUMP
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 static ssize_t show_dload_mode(struct kobject *kobj, struct attribute *attr,
 			       char *buf);
 static size_t store_dload_mode(struct kobject *kobj, struct attribute *attr,
@@ -117,7 +117,7 @@ RESET_ATTR(dload_mode, 0644, show_dload_mode, store_dload_mode);
 
 static struct attribute *reset_attrs[] = {
 	&reset_attr_emmc_dload.attr,
-#ifdef CONFIG_QCOM_MINIDUMP
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 	&reset_attr_dload_mode.attr,
 #endif
 	NULL
@@ -457,7 +457,7 @@ static size_t store_emmc_dload(struct kobject *kobj, struct attribute *attr,
 	return count;
 }
 
-#ifdef CONFIG_QCOM_MINIDUMP
+#if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 static DEFINE_MUTEX(tcsr_lock);
 
 static ssize_t show_dload_mode(struct kobject *kobj, struct attribute *attr,

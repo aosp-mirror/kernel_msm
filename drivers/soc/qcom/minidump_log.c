@@ -164,3 +164,5 @@ static int __init msm_minidump_log_init(void)
 	return 0;
 }
 late_initcall(msm_minidump_log_init);
+
+MODULE_LICENSE("GPL v2");
