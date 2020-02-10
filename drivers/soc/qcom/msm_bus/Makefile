@@ -14,5 +14,5 @@ msm_bus_rpmh-objs += msm_bus_fabric_rpmh.o msm_bus_arb_rpmh.o msm_bus_rules.o \
 msm_bus_rpmh-$(CONFIG_OF) += msm_bus_of_rpmh.o
 
 ifdef CONFIG_DEBUG_FS
-obj-$(CONFIG_QCOM_BUS_CONFIG_RPMH) += msm_bus_dbg.o
+obj-$(CONFIG_QCOM_BUS_CONFIG_RPMH) += msm_bus_dbg_rpmh.o
 endif
