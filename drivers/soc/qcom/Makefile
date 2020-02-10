@@ -40,7 +40,6 @@ obj-$(CONFIG_QCOM_DCC_V2) += dcc_v2.o
 obj-$(CONFIG_MSM_SERVICE_NOTIFIER) += service-notifier.o
 obj-$(CONFIG_MSM_SERVICE_LOCATOR) += service-locator.o
 obj-$(CONFIG_MSM_SYSMON_GLINK_COMM) += sysmon-glink.o
-obj-$(CONFIG_MSM_SYSMON_QMI_COMM) += sysmon-qmi.o
 obj-$(CONFIG_MSM_PIL_SSR_GENERIC) += subsys-pil-tz.o
 obj-$(CONFIG_MEM_SHARE_QMI_SERVICE)		+= memshare/
 obj-$(CONFIG_MSM_PIL)   +=      peripheral-loader.o
@@ -51,10 +50,12 @@ obj-$(CONFIG_QCOM_SMCINVOKE) += smcinvoke.o
 obj-$(CONFIG_QCOM_RUN_QUEUE_STATS) += rq_stats.o
 
 ifdef CONFIG_MSM_SUBSYSTEM_RESTART
-	obj-y += subsystem_notif.o
-	obj-y += subsystem_restart.o
-	obj-y += ramdump.o
-	obj-y += microdump_collector.o
+	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += subsystem_notif.o
+	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += ssr.o
+	ssr-objs += subsystem_restart.o
+	ssr-objs += sysmon-qmi.o
+	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += ramdump.o
+	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += microdump_collector.o
 endif
 obj-$(CONFIG_QCOM_EUD) += eud.o
 obj-$(CONFIG_QCOM_SOCINFO) += qcom_socinfo.o

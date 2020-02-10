@@ -402,7 +402,7 @@ config MSM_SERVICE_NOTIFIER
 	  locator.
 
 config MSM_SUBSYSTEM_RESTART
-	bool "MSM Subsystem Restart"
+	tristate "MSM Subsystem Restart"
 	help
 	  This option enables the MSM subsystem restart framework.
 	
