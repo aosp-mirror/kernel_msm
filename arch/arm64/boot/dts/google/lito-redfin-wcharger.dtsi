@@ -62,7 +62,7 @@
 		config {
 			pins = "gpio99";
 			power-source = <0>;
-			output-high;
+			output-low;
 			bias-pull-up;
 			drive-strength = <4>;
 		};
