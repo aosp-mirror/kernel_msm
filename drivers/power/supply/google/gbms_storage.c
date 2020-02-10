@@ -222,11 +222,9 @@ int gbms_storage_register_internal(struct gbms_storage_desc *desc,
 	if (index == gbms_providers_count)
 		gbms_providers_count += 1;
 
-#ifdef CONFIG_DEBUG_FS
 	if (!IS_ERR_OR_NULL(rootdir) && name) {
 		/* TODO: create debugfs entries for the providers */
 	}
-#endif
 	spin_unlock_irqrestore(&providers_lock, flags);
 
 	return 0;
@@ -495,7 +493,6 @@ int gbms_storage_flush_all(void)
 EXPORT_SYMBOL_GPL(gbms_storage_flush_all);
 
 /* ------------------------------------------------------------------------ */
-#ifdef CONFIG_DEBUG_FS
 
 static int gbms_storage_show_cache(struct seq_file *m, void *data)
 {
@@ -596,8 +593,6 @@ static const struct file_operations gbms_providers_status_ops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
-
-#endif
 
 /* ------------------------------------------------------------------------ */
 
@@ -910,7 +905,6 @@ static int __init gbms_storage_init(void)
 	gbms_storage_init_done = true;
 	pr_info("init done\n");
 
-#ifdef CONFIG_DEBUG_FS
 	rootdir = debugfs_create_dir("gbms_storage", NULL);
 	if (!IS_ERR_OR_NULL(rootdir)) {
 		debugfs_create_file("cache", S_IFREG | 0444, rootdir,
@@ -918,7 +912,6 @@ static int __init gbms_storage_init(void)
 		debugfs_create_file("providers", S_IFREG | 0444, rootdir,
 				    NULL, &gbms_providers_status_ops);
 	}
-#endif
 
 	return 0;
 }
@@ -927,10 +920,8 @@ static void __exit gbms_storage_exit(void)
 {
 	int ret;
 
-#ifdef CONFIG_DEBUG_FS
 	if (!IS_ERR_OR_NULL(rootdir))
 		debugfs_remove(rootdir);
-#endif
 
 	ret = gbms_storage_flush_all_internal(true);
 	if (ret < 0)

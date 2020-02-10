@@ -27,9 +27,7 @@
 #include "qmath.h"
 #include "logbuffer.h"
 
-#ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
-#endif
 
 #define ELAP_LIMIT_S 60
 #define ERR_RETURN -1

@@ -100,6 +100,9 @@ void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
 	char tmpbuffer[LOG_BUFFER_ENTRY_SIZE];
 	unsigned long flags;
 
+	if (IS_ERR_OR_NULL(instance))
+		return;
+
 	/* Empty log msgs are passed from TCPM to log RTC.
 	 * The RTC is printed if thats the first message
 	 * printed after resume.

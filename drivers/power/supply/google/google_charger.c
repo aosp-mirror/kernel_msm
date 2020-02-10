@@ -36,10 +36,8 @@
 #include "google_psy.h"
 #include "logbuffer.h"
 
-#ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
-#endif
 
 #define CHG_DELAY_INIT_MS 250
 #define CHG_DELAY_INIT_DETECT_MS 1000
@@ -1591,8 +1589,6 @@ static int chg_vote_input_suspend(struct chg_drv *chg_drv,
 	return 0;
 }
 
-#ifdef CONFIG_DEBUG_FS
-
 static int chg_get_input_suspend(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
@@ -1874,11 +1870,6 @@ static int chg_reschedule_work(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(chg_reschedule_work_fops,
 					NULL, chg_reschedule_work, "%d\n");
 
-
-
-
-#endif
-
 static int chg_init_fs(struct chg_drv *chg_drv)
 {
 	int ret;
@@ -1905,9 +1896,8 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 		return ret;
 	}
 
-#ifdef CONFIG_DEBUG_FS
 	de = debugfs_create_dir("google_charger", 0);
-	if (de) {
+	if (!IS_ERR_OR_NULL(de)) {
 		debugfs_create_file("chg_mode", 0644, de,
 				   chg_drv, &chg_mode_fops);
 		debugfs_create_file("input_suspend", 0644, de,
@@ -1936,7 +1926,6 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 					   chg_drv, &chg_interval_fops);
 		}
 	}
-#endif
 
 	return 0;
 }

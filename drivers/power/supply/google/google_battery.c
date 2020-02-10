@@ -34,9 +34,7 @@
 #include "qmath.h"
 #include "logbuffer.h"
 
-#ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
-#endif
 
 #define BATT_DELAY_INIT_MS		250
 #define BATT_WORK_FAST_RETRY_CNT	30
@@ -2396,7 +2394,6 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 
 /* ------------------------------------------------------------------------- */
 
-#ifdef CONFIG_DEBUG_FS
 
 #define BATTERY_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
 static const struct file_operations name = {	\
@@ -2701,7 +2698,6 @@ static int debug_chg_health_set_stage(void *data, u64 val)
 /* Adaptive Charging */
 DEFINE_SIMPLE_ATTRIBUTE(debug_chg_health_stage_fops, NULL,
 			debug_chg_health_set_stage, "%u\n");
-#endif
 
 /* ------------------------------------------------------------------------- */
 
@@ -3101,9 +3097,8 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				"Failed to create ttf_details\n");
 
 
-#ifdef CONFIG_DEBUG_FS
 	de = debugfs_create_dir("google_battery", 0);
-	if (de) {
+	if (!IS_ERR_OR_NULL(de)) {
 		debugfs_create_file("cycle_count_bins", 0400, de,
 				    batt_drv, &cycle_count_bins_fops);
 		debugfs_create_file("cycle_count_sync", 0600, de,
@@ -3132,7 +3127,6 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 		debugfs_create_file("chg_health_stage", 0600, de,
 				    batt_drv, &debug_chg_health_stage_fops);
 	}
-#endif
 
 	return ret;
 }
