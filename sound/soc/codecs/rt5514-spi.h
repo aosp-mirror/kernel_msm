@@ -45,6 +45,7 @@
 #define SPI_SWITCH_MASK_WATCHDOG (1 << 6)
 #define SPI_SWITCH_MASK_NO_IRQ   (1 << 7)
 #define SPI_SWITCH_MASK_NO_CHRE  (1 << 8)
+#define SPI_SWITCH_MASK_RESET    (1 << 9)
 
 /* SPI Command */
 enum {
