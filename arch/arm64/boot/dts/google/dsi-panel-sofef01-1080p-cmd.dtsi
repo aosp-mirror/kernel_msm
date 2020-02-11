@@ -52,6 +52,7 @@
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <4>;
 		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
+		qcom,bl-update-flag = "delay_until_first_frame";
 
 		qcom,mdss-dsi-bl-notifier-ranges = <30 50 70 200 255>;
 
