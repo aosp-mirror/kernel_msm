@@ -65,6 +65,8 @@
 		qcom,mdss-dsi-t-clk-post = <0x15>;
 		qcom,mdss-dsi-t-clk-pre = <0x12>;
 
+		qcom,mdss-dsi-bl-notifier-ranges = <33 40 47 255>;
+
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <60>;
