@@ -88,6 +88,10 @@
 	/delete-node/ bmr_n_therm@4f;
 };
 
+&bcl_soc {
+	google,fg-psy-name = "bms";
+};
+
 &thermal_zones {
 	/* Bring up common thermal zones for Redfin and Bramble */
 	usbc-therm-adc {
