@@ -130,6 +130,21 @@ static const struct reg_default rt5514_reg[] = {
 	{RT5514_VENDOR_ID2,		0x10ec5514},
 };
 
+static void rt5514_filter_power_reset(struct rt5514_priv *rt5514)
+{
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_RESET, 1);
+
+	/* Following register control will cause Filter component power reset,
+	 * this will reset buffer pointer as well
+	 */
+	regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+
+	/* Notify CHRE DSP buffer reset when following register is Zero */
+	regmap_write(rt5514->i2c_regmap, RT5514_DSP_CHRE_INFORM, 0);
+
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_RESET, 0);
+}
+
 static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 {
 	/* Reset */
@@ -539,7 +554,7 @@ static int rt5514_dsp_enable(struct rt5514_priv *rt5514, bool is_adc,
 						RT5514_DSP_FUNC_SUSPEND);
 			}
 
-			regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+			rt5514_filter_power_reset(rt5514);
 
 			return 0;
 		}
@@ -563,8 +578,7 @@ static int rt5514_dsp_enable(struct rt5514_priv *rt5514, bool is_adc,
 						rt5514->i2c_regmap,
 						RT5514_DSP_FUNC,
 						RT5514_DSP_FUNC_WOV);
-				regmap_write(rt5514->i2c_regmap,
-					0x18001014, 1);
+				rt5514_filter_power_reset(rt5514);
 			} else {
 				if (rt5514->dsp_adc_enabled) {
 					dev_warn(component->dev,
@@ -580,8 +594,7 @@ static int rt5514_dsp_enable(struct rt5514_priv *rt5514, bool is_adc,
 				regmap_write(rt5514->i2c_regmap,
 					RT5514_DSP_FUNC,
 					RT5514_DSP_FUNC_SUSPEND);
-				regmap_write(rt5514->i2c_regmap,
-					0x18001014, 1);
+				rt5514_filter_power_reset(rt5514);
 			}
 
 			return 0;
@@ -797,7 +810,7 @@ watchdog:
 		codec_detect_status_notifier(WDSP_STAT_UP);
 #endif
 
-		regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+		rt5514_filter_power_reset(rt5514);
 	} else {
 		regmap_multi_reg_write(rt5514->i2c_regmap,
 			rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
@@ -892,8 +905,7 @@ static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 					regmap_write(rt5514->i2c_regmap,
 						RT5514_DSP_FUNC,
 						RT5514_DSP_FUNC_I2S);
-					regmap_write(rt5514->i2c_regmap,
-						0x18001014, 1);
+					rt5514_filter_power_reset(rt5514);
 				}
 			} else {
 				rt5514_dsp_func_select(rt5514);
@@ -907,8 +919,7 @@ static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 						RT5514_DSP_FUNC,
 						RT5514_DSP_FUNC_WOV_I2S);
 
-				regmap_write(rt5514->i2c_regmap,
-						0x18001014, 1);
+				rt5514_filter_power_reset(rt5514);
 			}
 		} else {
 			dev_warn(component->dev, "Unsupport : %d %d\n",
@@ -955,7 +966,7 @@ static int rt5514_dsp_adc_put(struct snd_kcontrol *kcontrol,
 						RT5514_DSP_FUNC_I2S);
 			}
 
-			regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+			rt5514_filter_power_reset(rt5514);
 		} else {
 			dev_warn(component->dev, "Unsupport : %d %d\n",
 				rt5514->dsp_enabled, rt5514->dsp_adc_enabled);
@@ -985,7 +996,7 @@ static int rt5514_dsp_func_put(struct snd_kcontrol *kcontrol,
 
 	regmap_write(rt5514->i2c_regmap, RT5514_DSP_FUNC,
 		ucontrol->value.integer.value[0]);
-	regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+	rt5514_filter_power_reset(rt5514);
 
 	return 0;
 }
@@ -1741,7 +1752,7 @@ static int rt5514_hw_params(struct snd_pcm_substream *substream,
 					RT5514_DSP_FUNC_I2S);
 		}
 
-		regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+		rt5514_filter_power_reset(rt5514);
 
 		switch (params_format(params)) {
 		case SNDRV_PCM_FORMAT_S16_LE:
@@ -1838,7 +1849,7 @@ static int rt5514_hw_free(struct snd_pcm_substream  *substream,
 					RT5514_DSP_FUNC_SUSPEND);
 		}
 
-		regmap_write(rt5514->i2c_regmap, 0x18001014, 1);
+		rt5514_filter_power_reset(rt5514);
 	}
 	rt5514->is_streaming = false;
 	if (rt5514->need_reload)
