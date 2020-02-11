@@ -497,8 +497,10 @@ void msm_msi_config_access(struct irq_domain *domain, bool allow)
 	struct msm_msi *msi = domain->parent->host_data;
 	unsigned long flags;
 
+#if !IS_ENABLED(CONFIG_MFD_ABC_PCIE)
 	if (msi->type == MSM_MSI_TYPE_QCOM)
 		return;
+#endif
 
 	spin_lock_irqsave(&msi->cfg_lock, flags);
 	msi->cfg_access = allow;
@@ -511,6 +513,13 @@ void msm_msi_config(struct irq_domain *domain)
 {
 	struct msm_msi *msi;
 	int i;
+
+#if IS_ENABLED(CONFIG_MFD_ABC_PCIE)
+	/* force-enable access to Airbrush MSI registers (b/149265407) */
+	msm_msi_config_access(domain, true);
+
+	return;
+#endif
 
 	msi = domain->parent->host_data;
 	if (msi->type == MSM_MSI_TYPE_QCOM)
