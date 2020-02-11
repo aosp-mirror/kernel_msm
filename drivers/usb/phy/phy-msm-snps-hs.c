@@ -83,6 +83,19 @@
 #define USB_HSPHY_1P8_VOL_MAX			1800000 /* uV */
 #define USB_HSPHY_1P8_HPM_LOAD			19000	/* uA */
 
+#define dump_usb2_hsphy_register(nm)				\
+{								\
+	.name   = __stringify(nm),				\
+	.offset = USB2PHY_USB_PHY_PARAMETER_OVERRIDE_ ##nm,	\
+}
+
+static const struct debugfs_reg32 usb2_hsphy_regs[] = {
+	dump_usb2_hsphy_register(X0),
+	dump_usb2_hsphy_register(X1),
+	dump_usb2_hsphy_register(X2),
+	dump_usb2_hsphy_register(X3),
+};
+
 struct msm_hsphy {
 	struct usb_phy		phy;
 	void __iomem		*base;
@@ -121,6 +134,7 @@ struct msm_hsphy {
 	u8			param_ovrd1;
 	u8			param_ovrd2;
 	u8			param_ovrd3;
+	struct debugfs_regset32 *regset;
 
 };
 
@@ -692,6 +706,36 @@ static int msm_hsphy_regulator_init(struct msm_hsphy *phy)
 	return 0;
 }
 
+static int msm_hsphy_param_show(struct seq_file *s, void *unused)
+{
+	struct msm_hsphy *phy = s->private;
+
+	if (!phy->regset)
+		return 0;
+
+	if (!phy->power_enabled) {
+		seq_puts(s, "HSPHY is powered off\n");
+		return 0;
+	}
+
+	debugfs_print_regs32(s, phy->regset->regs, phy->regset->nregs,
+			     phy->regset->base, "");
+
+	return 0;
+}
+
+static int msm_hsphy_param_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, msm_hsphy_param_show, inode->i_private);
+}
+
+static const struct file_operations hsphy_param_fops = {
+	.open                   = msm_hsphy_param_open,
+	.read                   = seq_read,
+	.llseek                 = seq_lseek,
+	.release                = single_release,
+};
+
 static void msm_hsphy_create_debugfs(struct msm_hsphy *phy)
 {
 	phy->root = debugfs_create_dir(dev_name(phy->phy.dev), NULL);
@@ -701,6 +745,15 @@ static void msm_hsphy_create_debugfs(struct msm_hsphy *phy)
 	debugfs_create_x8("param_ovrd1", 0644, phy->root, &phy->param_ovrd1);
 	debugfs_create_x8("param_ovrd2", 0644, phy->root, &phy->param_ovrd2);
 	debugfs_create_x8("param_ovrd3", 0644, phy->root, &phy->param_ovrd3);
+
+	phy->regset = kzalloc(sizeof(*phy->regset), GFP_KERNEL);
+	if (!phy->regset)
+		return;
+
+	phy->regset->regs = usb2_hsphy_regs;
+	phy->regset->nregs = ARRAY_SIZE(usb2_hsphy_regs);
+	phy->regset->base = phy->base;
+	debugfs_create_file("param", 0444, phy->root, phy, &hsphy_param_fops);
 }
 
 static int msm_hsphy_probe(struct platform_device *pdev)
@@ -878,6 +931,7 @@ static int msm_hsphy_remove(struct platform_device *pdev)
 		return 0;
 
 	debugfs_remove_recursive(phy->root);
+	kfree(phy->regset);
 
 	usb_remove_phy(&phy->phy);
 	clk_disable_unprepare(phy->ref_clk_src);
