@@ -163,11 +163,7 @@
 		google,fv-uv-resolution = <10000>;
 		google,fv-uv-margin-dpct = <1020>;
 		/* tier switch */
-		google,cv-range-accuracy = <80000>;
-		google,cv-otv-margin = <90000>;
-		google,cv-debounce-cnt = <3>;
-		google,cv-tier-ov-cnt = <1>;
-		google,cv-tier-switch-cnt = <3>;
+		google,irdrop-disable;
 		/* charging stats */
 		google,chg-stats-qual-time = <900>;
 		google,chg-stats-delta-soc = <15>;
