@@ -28,6 +28,17 @@
 #define TBN_REQUEST_BUS_TIMEOUT_MS 500
 #define TBN_RELEASE_BUS_TIMEOUT_MS 500
 
+
+enum tbn_mode {
+	TBN_MODE_QMI,
+	TBN_MODE_GPIO,
+};
+
+enum tbn_bus_owner {
+	TBN_BUS_OWNER_AP = 0,
+	TBN_BUS_OWNER_LPI = 1,
+};
+
 struct tbn_context {
 	struct device *dev;
 	struct qmi_handle qmi_handle;
@@ -38,6 +49,10 @@ struct tbn_context {
 	struct completion bus_requested;
 	struct completion bus_released;
 	bool connected;
+	u8 mode;
+	int lpi2ap_gpio;
+	int ap2lpi_gpio;
+	int lpi2ap_irq;
 };
 
 struct tbn_context *tbn_init(struct device *dev);
