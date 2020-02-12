@@ -49,6 +49,7 @@
 	google,batt_psy_is_bms;
 	google,usb-port-tz-name = "usbc-therm-adc";
 	google,wdog_snarl_disable;
+	google,sdam_sts_disable;
 	qcom,hvdcp-disable;
 	qcom,chg-term-src = <1>;
 	qcom,chg-term-current-ma = <(-154)>;
