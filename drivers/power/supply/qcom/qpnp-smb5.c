@@ -236,6 +236,7 @@ struct smb_dt_props {
 	int			batt_psy_is_bms;
 	int			batt_psy_disable;
 	int			wdog_snarl_disable;
+	int			sdam_sts_disable;
 	const char		*batt_psy_name;
 
 };
@@ -661,6 +662,8 @@ static int smb5_parse_dt(struct smb5 *chip)
 
 	chip->dt.wdog_snarl_disable = of_property_read_bool(node,
 					"google,wdog_snarl_disable");
+	chip->dt.sdam_sts_disable = of_property_read_bool(node,
+					"google,sdam_sts_disable");
 
 	rc = of_property_read_string(node, "google,usb-port-tz-name",
 				     &chg->usb_port_tz_name);
@@ -3511,6 +3514,8 @@ static int smb5_request_interrupts(struct smb5 *chip)
 		disable_irq_wake(chg->irq_info[WDOG_SNARL_IRQ].irq);
 		disable_irq_nosync(chg->irq_info[WDOG_SNARL_IRQ].irq);
 	}
+	if (chg->irq_info[SDAM_STS_IRQ].irq && chip->dt.sdam_sts_disable)
+		disable_irq_nosync(chg->irq_info[SDAM_STS_IRQ].irq);
 
 	vote(chg->limited_irq_disable_votable, CHARGER_TYPE_VOTER, true, 0);
 	vote(chg->hdc_irq_disable_votable, CHARGER_TYPE_VOTER, true, 0);
