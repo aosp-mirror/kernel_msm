@@ -21,7 +21,7 @@ struct csiphy_reg_parms_t csiphy_v1_2 = {
 	.mipi_csiphy_glbl_irq_cmd_addr = 0x828,
 	.csiphy_common_array_size = 6,
 	.csiphy_reset_array_size = 5,
-	.csiphy_2ph_config_array_size = 22,
+	.csiphy_2ph_config_array_size = 21,
 	.csiphy_3ph_config_array_size = 38,
 	.csiphy_2ph_clock_lane = 0x1,
 	.csiphy_2ph_combo_ck_ln = 0x10,
@@ -78,11 +78,10 @@ csiphy_reg_t csiphy_2ph_v1_2_reg[MAX_LANES][MAX_SETTINGS_PER_LANE] = {
 		{0x0000, 0x91, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0004, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0020, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0008, 0x10, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
+		{0x0008, 0x04, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
 		{0x000c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0010, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0038, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 	},
 	{
 		{0x0730, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -106,7 +105,6 @@ csiphy_reg_t csiphy_2ph_v1_2_reg[MAX_LANES][MAX_SETTINGS_PER_LANE] = {
 		{0x070c, 0xFF, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0710, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0738, 0x1F, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 	},
 	{
 		{0x0230, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -130,7 +128,6 @@ csiphy_reg_t csiphy_2ph_v1_2_reg[MAX_LANES][MAX_SETTINGS_PER_LANE] = {
 		{0x020c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0210, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0238, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 	},
 	{
 		{0x0430, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -154,7 +151,6 @@ csiphy_reg_t csiphy_2ph_v1_2_reg[MAX_LANES][MAX_SETTINGS_PER_LANE] = {
 		{0x040c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0410, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0438, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 	},
 	{
 		{0x0630, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -178,7 +174,6 @@ csiphy_reg_t csiphy_2ph_v1_2_reg[MAX_LANES][MAX_SETTINGS_PER_LANE] = {
 		{0x060c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0610, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0638, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
 	},
 };
 
@@ -202,11 +197,10 @@ struct csiphy_reg_t
 		{0x0000, 0x91, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0004, 0x0C, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0020, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0008, 0x10, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
+		{0x0008, 0x04, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
 		{0x000c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0010, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0038, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 	},
 	{
 		{0x0730, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -230,7 +224,6 @@ struct csiphy_reg_t
 		{0x070c, 0xFF, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0710, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0738, 0x1F, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 	},
 	{
 		{0x0230, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -254,7 +247,6 @@ struct csiphy_reg_t
 		{0x020c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0210, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0238, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 	},
 	{
 		{0x0430, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -278,7 +270,6 @@ struct csiphy_reg_t
 		{0x040c, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 		{0x0410, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0438, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 	},
 	{
 		{0x0630, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
@@ -302,7 +293,6 @@ struct csiphy_reg_t
 		{0x060c, 0xFF, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0610, 0x52, 0x00, CSIPHY_DEFAULT_PARAMS},
 		{0x0638, 0xFE, 0x00, CSIPHY_DEFAULT_PARAMS},
-		{0x0800, 0x00, 0x00, CSIPHY_DNP_PARAMS},
 	},
 };
 
@@ -430,7 +420,7 @@ csiphy_reg_t csiphy_3ph_v1_2_reg[MAX_LANES][MAX_SETTINGS_PER_LANE] = {
 	},
 };
 
-struct data_rate_settings_t data_rate_delta_table_1_2 = {
+struct data_rate_settings_t data_rate_delta_table = {
 	.num_data_rate_settings = 3,
 	.data_rate_settings = {
 		{

@@ -46,10 +46,9 @@ static int cam_icp_context_dump_active_request(void *data, unsigned long iova,
 	}
 
 	if (ctx->state < CAM_CTX_ACQUIRED || ctx->state > CAM_CTX_ACTIVATED) {
-	if (ctx->state < CAM_CTX_READY || ctx->state > CAM_CTX_ACTIVATED) {
 		CAM_ERR(CAM_ICP, "Invalid state icp ctx %d state %d",
 			ctx->ctx_id, ctx->state);
-		return -EINVAL;
+		goto end;
 	}
 
 	CAM_INFO(CAM_ICP, "iommu fault for icp ctx %d state %d",
@@ -112,18 +111,6 @@ static int __cam_icp_start_dev_in_acquired(struct cam_context *ctx,
 		ctx->state = CAM_CTX_READY;
 		trace_cam_context_state("ICP", ctx);
 	}
-
-	return rc;
-}
-
-static int __cam_icp_dump_dev_in_ready(struct cam_context *ctx,
-	struct cam_dump_req_cmd *cmd)
-{
-	int rc;
-
-	rc = cam_context_dump_dev_to_hw(ctx, cmd);
-	if (rc)
-		CAM_ERR(CAM_ICP, "Failed to dump device");
 
 	return rc;
 }
@@ -239,7 +226,6 @@ static struct cam_ctx_ops
 			.start_dev = __cam_icp_start_dev_in_acquired,
 			.config_dev = __cam_icp_config_dev_in_ready,
 			.flush_dev = __cam_icp_flush_dev_in_ready,
-			.dump_dev = __cam_icp_dump_dev_in_ready,
 		},
 		.crm_ops = {},
 		.irq_ops = __cam_icp_handle_buf_done_in_ready,
@@ -252,7 +238,6 @@ static struct cam_ctx_ops
 			.release_dev = __cam_icp_release_dev_in_ready,
 			.config_dev = __cam_icp_config_dev_in_ready,
 			.flush_dev = __cam_icp_flush_dev_in_ready,
-			.dump_dev = __cam_icp_dump_dev_in_ready,
 		},
 		.crm_ops = {},
 		.irq_ops = __cam_icp_handle_buf_done_in_ready,
