@@ -20,7 +20,52 @@
 #include <linux/net.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
+#include <linux/gpio.h>
+#include <linux/interrupt.h>
+#include <linux/irq.h>
+#include <linux/of_gpio.h>
+#include <linux/delay.h>
 #include <linux/input/touch_bus_negotiator.h>
+
+static irqreturn_t tbn_lpi2ap_irq_thread(int irq, void *ptr)
+{
+	struct tbn_context *tbn = (struct tbn_context *)ptr;
+
+	if (completion_done(&tbn->bus_released) &&
+		completion_done(&tbn->bus_requested)) {
+		return IRQ_HANDLED;
+	}
+
+	/* For bus release, there two possibilities:
+	 * 1. lpi2ap gpio value already changed to LPI
+	 * 2. tbn_release_bus() with TBN_RELEASE_BUS_TIMEOUT_MS timeout
+	 *    for complete_all(&tbn->bus_released);
+	 */
+	while (!completion_done(&tbn->bus_released)) {
+		if (gpio_get_value(tbn->lpi2ap_gpio) == TBN_BUS_OWNER_LPI)
+			complete_all(&tbn->bus_released);
+		else {
+			/* wait 10 ms for gpio stablized */
+			msleep(10);
+		}
+	}
+
+	/* For bus request, there two possibilities:
+	 * 1. lpi2ap gpio value already changed to AP
+	 * 2. tbn_request_bus() with TBN_REQUEST_BUS_TIMEOUT_MS timeout
+	 *    for complete_all(&tbn->bus_requested);
+	 */
+	while (!completion_done(&tbn->bus_requested)) {
+		if (gpio_get_value(tbn->lpi2ap_gpio) == TBN_BUS_OWNER_AP)
+			complete_all(&tbn->bus_requested);
+		else {
+			/* wait 10 ms for gpio stablized */
+			msleep(10);
+		}
+	}
+
+	return IRQ_HANDLED;
+}
 
 static int send_request_wait(struct qmi_handle *handle,
 			     int req_id, size_t req_len,
@@ -85,10 +130,30 @@ int tbn_request_bus(struct tbn_context *tbn)
 		dev_err(tbn->dev, "wait for a response on qmi transaction!\n");
 	else {
 		reinit_completion(&tbn->bus_requested);
-		queue_work(tbn->qmi_wq, &tbn->request_work);
-		wait_for_completion_timeout(&tbn->bus_requested,
-			msecs_to_jiffies(TBN_REQUEST_BUS_TIMEOUT_MS));
+		if (tbn->mode == TBN_MODE_QMI) {
+			queue_work(tbn->qmi_wq, &tbn->request_work);
+			if (wait_for_completion_timeout(&tbn->bus_requested,
+			    msecs_to_jiffies(TBN_REQUEST_BUS_TIMEOUT_MS)) == 0)
+				dev_err(tbn->dev,
+					"%s: timeout!\n", __func__);
+		} else {
+			irq_set_irq_type(tbn->lpi2ap_irq, IRQ_TYPE_LEVEL_LOW);
+			enable_irq(tbn->lpi2ap_irq);
+			gpio_direction_output(tbn->ap2lpi_gpio,
+						TBN_BUS_OWNER_AP);
+			if (wait_for_completion_timeout(&tbn->bus_requested,
+				msecs_to_jiffies(TBN_REQUEST_BUS_TIMEOUT_MS))
+				== 0) {
+				dev_err(tbn->dev,
+					"%s: timeout!\n", __func__);
+				complete_all(&tbn->bus_requested);
+			} else
+				dev_dbg(tbn->dev,
+					"kernel requesting bus access from SLPI ... SUCCESS!\n");
+			disable_irq_nosync(tbn->lpi2ap_irq);
+		}
 	}
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tbn_request_bus);
@@ -131,10 +196,30 @@ int tbn_release_bus(struct tbn_context *tbn)
 		dev_err(tbn->dev, "wait for a response on qmi transaction!\n");
 	else {
 		reinit_completion(&tbn->bus_released);
-		queue_work(tbn->qmi_wq, &tbn->release_work);
-		wait_for_completion_timeout(&tbn->bus_released,
-			msecs_to_jiffies(TBN_RELEASE_BUS_TIMEOUT_MS));
+		if (tbn->mode == TBN_MODE_QMI) {
+			queue_work(tbn->qmi_wq, &tbn->release_work);
+			if (wait_for_completion_timeout(&tbn->bus_released,
+			    msecs_to_jiffies(TBN_RELEASE_BUS_TIMEOUT_MS)) == 0)
+				dev_err(tbn->dev,
+					"%s: timeout!\n", __func__);
+		} else {
+			irq_set_irq_type(tbn->lpi2ap_irq, IRQ_TYPE_LEVEL_HIGH);
+			enable_irq(tbn->lpi2ap_irq);
+			gpio_direction_output(tbn->ap2lpi_gpio,
+						TBN_BUS_OWNER_LPI);
+			if (wait_for_completion_timeout(&tbn->bus_released,
+				msecs_to_jiffies(TBN_RELEASE_BUS_TIMEOUT_MS))
+				== 0) {
+				dev_err(tbn->dev,
+					"%s: timeout!\n", __func__);
+				complete_all(&tbn->bus_released);
+			} else
+				dev_dbg(tbn->dev,
+					"kernel releasing bus access from SLPI ... SUCCESS!\n");
+			disable_irq_nosync(tbn->lpi2ap_irq);
+		}
 	}
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tbn_release_bus);
@@ -183,6 +268,7 @@ struct tbn_context *tbn_init(struct device *dev)
 {
 	int err = 0;
 	struct tbn_context *tbn = NULL;
+	struct device_node *np = dev->of_node;
 
 	tbn = kzalloc(sizeof(struct tbn_context), GFP_KERNEL);
 	if (!tbn)
@@ -191,34 +277,89 @@ struct tbn_context *tbn_init(struct device *dev)
 	tbn->dev = dev;
 	mutex_init(&tbn->service_lock);
 
-	err = qmi_handle_init(&tbn->qmi_handle, 0, &qmi_ops, NULL);
-	if (err < 0) {
-		dev_err(tbn->dev, "failed to init qmi handle with %d\n", err);
-		goto fail_register_server_event_notifier;
+	if (of_property_read_bool(np, "tbn,ap2lpi_gpio") &&
+		of_property_read_bool(np, "tbn,lpi2ap_gpio")) {
+		tbn->mode = TBN_MODE_GPIO;
+		tbn->ap2lpi_gpio = of_get_named_gpio(np, "tbn,ap2lpi_gpio", 0);
+		tbn->lpi2ap_gpio = of_get_named_gpio(np, "tbn,lpi2ap_gpio", 0);
+
+		if (gpio_is_valid(tbn->ap2lpi_gpio)) {
+			err = devm_gpio_request_one(tbn->dev, tbn->ap2lpi_gpio,
+				GPIOF_OUT_INIT_LOW, "tbn,ap2lpi_gpio");
+			if (err) {
+				dev_err(tbn->dev, "%s: Unable to request ap2lpi_gpio %d, err %d!\n",
+					__func__, tbn->ap2lpi_gpio, err);
+				goto fail_gpio;
+			}
+		}
+
+		if (gpio_is_valid(tbn->lpi2ap_gpio)) {
+			err = devm_gpio_request_one(tbn->dev, tbn->lpi2ap_gpio,
+				GPIOF_DIR_IN, "tbn,lpi2ap_gpio");
+			if (err) {
+				dev_err(tbn->dev, "%s: Unable to request lpi2ap_gpio %d, err %d!\n",
+					__func__, tbn->lpi2ap_gpio, err);
+				goto fail_gpio;
+			}
+			tbn->lpi2ap_irq = gpio_to_irq(tbn->lpi2ap_gpio);
+			err = devm_request_threaded_irq(tbn->dev,
+				tbn->lpi2ap_irq, NULL,
+				tbn_lpi2ap_irq_thread,
+				IRQF_TRIGGER_HIGH |
+				IRQF_ONESHOT, "tbn", tbn);
+			if (err) {
+				dev_err(tbn->dev,
+					"%s: Unable to request_threaded_irq, err %d!\n",
+					__func__, err);
+				goto fail_gpio;
+			}
+			disable_irq_nosync(tbn->lpi2ap_irq);
+		} else {
+			dev_err(tbn->dev, "%s: invalid lpi2ap_gpio %d!\n",
+				__func__, tbn->lpi2ap_gpio);
+			goto fail_gpio;
+		}
+
+		tbn->connected = true;
+	} else {
+		tbn->mode = TBN_MODE_QMI;
+
+		err = qmi_handle_init(&tbn->qmi_handle, 0, &qmi_ops, NULL);
+		if (err < 0) {
+			dev_err(tbn->dev,
+				"failed to init qmi handle with %d\n", err);
+			goto fail_register_server_event_notifier;
+		}
+
+		err = qmi_add_lookup(&tbn->qmi_handle,
+				     TBN_SERVICE_ID_V01,
+				     TBN_SERVICE_VERS_V01,
+				     0);
+		if (err < 0) {
+			dev_err(tbn->dev,
+				"failed to add server lookup with %d\n", err);
+			goto fail_register_server_event_notifier;
+		}
+
+		tbn->qmi_wq = alloc_workqueue("tbn-qmi-wq",
+				WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
+		if (!tbn->qmi_wq) {
+			dev_err(tbn->dev, "failed to alloc qmi_wq\n");
+			goto fail_allocate_qmi_wq;
+		}
+
+		INIT_WORK(&tbn->request_work, tbn_request_work);
+		INIT_WORK(&tbn->release_work, tbn_release_work);
 	}
 
-	err = qmi_add_lookup(&tbn->qmi_handle,
-			     TBN_SERVICE_ID_V01,
-			     TBN_SERVICE_VERS_V01,
-			     0);
-	if (err < 0) {
-		dev_err(tbn->dev, "failed to add server lookup with %d\n", err);
-		goto fail_register_server_event_notifier;
-	}
-
-	tbn->qmi_wq = alloc_workqueue("tbn-qmi-wq", WQ_UNBOUND |
-					 WQ_HIGHPRI | WQ_CPU_INTENSIVE, 1);
-	if (!tbn->qmi_wq) {
-		dev_err(tbn->dev, "failed to alloc qmi_wq\n");
-		goto fail_allocate_qmi_wq;
-	}
-
-	INIT_WORK(&tbn->request_work, tbn_request_work);
-	INIT_WORK(&tbn->release_work, tbn_release_work);
 	init_completion(&tbn->bus_requested);
 	init_completion(&tbn->bus_released);
 	complete_all(&tbn->bus_requested);
 	complete_all(&tbn->bus_released);
+
+	dev_info(tbn->dev,
+		"%s: gpios(lpi2ap: %d ap2lpi: %d), mode %d\n",
+		__func__, tbn->lpi2ap_gpio, tbn->ap2lpi_gpio, tbn->mode);
 
 	dev_info(tbn->dev, "bus negotiator initialized: %p\n", tbn);
 
@@ -227,6 +368,7 @@ struct tbn_context *tbn_init(struct device *dev)
 fail_allocate_qmi_wq:
 fail_register_server_event_notifier:
 	qmi_handle_release(&tbn->qmi_handle);
+fail_gpio:
 	kfree(tbn);
 fail_allocate_tbn_context:
 	return NULL;
@@ -240,8 +382,10 @@ void tbn_cleanup(struct tbn_context *tbn)
 	if (!tbn)
 		return;
 
-	destroy_workqueue(tbn->qmi_wq);
-	qmi_handle_release(&tbn->qmi_handle);
+	if (tbn->mode == TBN_MODE_QMI) {
+		destroy_workqueue(tbn->qmi_wq);
+		qmi_handle_release(&tbn->qmi_handle);
+	}
 
 	kfree(tbn);
 }
