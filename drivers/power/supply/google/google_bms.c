@@ -189,6 +189,10 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 		return -EINVAL;
 	}
 
+	/* for irdrop enable */
+	profile->irdrop_disable =
+		  of_property_read_bool(node, "google,irdrop-disable");
+
 	/* for irdrop compensation in taper step */
 	ret = of_property_read_u32(node, "google,fv-uv-resolution",
 				   &profile->fv_uv_resolution);

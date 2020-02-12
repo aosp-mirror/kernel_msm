@@ -1863,10 +1863,12 @@ static int msc_logic(struct batt_drv *batt_drv)
 							vbatt_idx + 1);
 
 		/* book elapsed time to previous tier & msc_irdrop_state */
-		msc_state = msc_logic_irdrop(batt_drv,
-					     vbatt, ibatt, temp_idx,
-					     &vbatt_idx, &fv_uv,
-					     &update_interval);
+		if (!profile->irdrop_disable) {
+			msc_state = msc_logic_irdrop(batt_drv,
+						     vbatt, ibatt, temp_idx,
+						     &vbatt_idx, &fv_uv,
+						     &update_interval);
+		}
 
 		if (msc_pm_hold(msc_state) == 1 && !batt_drv->hold_taper_ws) {
 			__pm_stay_awake(&batt_drv->taper_ws);
