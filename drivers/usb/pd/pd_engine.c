@@ -2079,6 +2079,11 @@ static int update_ext_vbus(struct notifier_block *self, unsigned long action,
 	pd->low_power_udev = turn_on_ext_vbus;
 
 	if (pd->switch_based_on_maxpower) {
+		if (pd->pd_capable) {
+			logbuffer_log(pd->log,
+				      "PD is capable, don't operate ext_vbus");
+			goto exit;
+		}
 		pd->external_vbus_update = turn_on_ext_vbus;
 		work_queued = queue_delayed_work(pd->wq, &pd->ext_vbus_work,
 					turn_on_ext_vbus ?
