@@ -1,13 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
 qcom,4255243_Google_B5_Unknown_3800mAH_PM7250 {
-    /* 4255243_Google_B5_ATL_3800mAH_PM7250_averaged_MasterSlave_Nov13th2019 */
-    qcom,max-voltage-uv = <4450000>;
-    qcom,fg-cc-cv-threshold-uv = <4440000>;
-    qcom,fastchg-current-ma = <1900>;
-    qcom,batt-id-kohm = <10>;
-    qcom,battery-beta = <3440>;
-    qcom,battery-therm-kohm = <10>;
-    qcom,battery-type = "unknown";
-    qcom,qg-batt-profile-ver = <100>;
+	/* 4255243_Google_B5_ATL_3800mAH_PM7250_Nov13th2019 */
+	qcom,max-voltage-uv = <4450000>;
+	qcom,fg-cc-cv-threshold-uv = <4440000>;
+	qcom,fastchg-current-ma = <1900>;
+	qcom,batt-id-kohm = <10>;
+	qcom,battery-beta = <3440>;
+	qcom,battery-therm-kohm = <10>;
+	qcom,battery-type = "unknown";
+	qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {
 		qcom,lut-col-legend = <0 10 25 40 50>;
