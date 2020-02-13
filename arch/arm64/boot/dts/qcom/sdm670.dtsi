@@ -1407,6 +1407,11 @@
 			qcom,dump-id = <0xec>;
 		};
 
+		fcm {
+			qcom,dump-size = <0x8400>;
+			qcom,dump-id = <0xee>;
+		};
+
 		rpm_sw {
 			qcom,dump-size = <0x28000>;
 			qcom,dump-id = <0xea>;
