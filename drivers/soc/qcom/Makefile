@@ -51,9 +51,9 @@ obj-$(CONFIG_QCOM_RUN_QUEUE_STATS) += rq_stats.o
 
 ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += subsystem_notif.o
-	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += ssr.o
-	ssr-objs += subsystem_restart.o
-	ssr-objs += sysmon-qmi.o
+	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += subsystem-restart.o
+	subsystem-restart-objs := subsystem_restart.o
+	subsystem-restart-objs += sysmon-qmi.o
 	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += ramdump.o
 	obj-$(CONFIG_MSM_SUBSYSTEM_RESTART) += microdump_collector.o
 endif
