@@ -64,6 +64,13 @@
 		memory-region = <&alt_ramoops_mem>;
 	};
 
+	keydebug {
+		compatible = "keydebug";
+		key_down_delay = <7000>;
+		keys_down = <116>;
+		dbg_fn_delay = <2500>;
+	};
+
 	qcom,msm-imem@146aa000 {
 		kernel_rtb@cb0 {
 			compatible = "msm-imem-rtb_info";
