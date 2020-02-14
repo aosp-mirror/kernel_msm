@@ -470,4 +470,4 @@ module_init(cnss_utils_init);
 module_exit(cnss_utils_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION(DEVICE "CNSS Utilities Driver");
+MODULE_DESCRIPTION("CNSS Utilities Driver");
