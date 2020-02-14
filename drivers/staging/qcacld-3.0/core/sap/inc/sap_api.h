@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -872,13 +872,6 @@ typedef struct sap_SoftapStats_s {
 #endif
 } tSap_SoftapStats, *tpSap_SoftapStats;
 
-#ifdef FEATURE_WLAN_CH_AVOID
-/* Store channel safety information */
-typedef struct {
-	uint16_t channelNumber;
-	bool isSafe;
-} sapSafeChannelType;
-#endif /* FEATURE_WLAN_CH_AVOID */
 void sap_cleanup_channel_list(void *sapContext);
 void sapCleanupAllChannelList(void);
 

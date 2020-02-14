@@ -570,6 +570,29 @@ wma_ol_txrx_vdev_detach(tp_wma_handle wma_handle,
 	iface->is_vdev_valid = false;
 }
 
+/*
+ * wma_handle_monitor_mode_vdev_detach() - Stop and down monitor mode vdev
+ * @wma_handle: wma handle
+ * @vdev_id: used to get wma interface txrx node
+ *
+ * Monitor mode is unconneted mode, so do explicit vdev stop and down
+ *
+ * Return: None
+ */
+static void wma_handle_monitor_mode_vdev_detach(tp_wma_handle wma,
+						uint8_t vdev_id)
+{
+	if (wma_send_vdev_stop_to_fw(wma, vdev_id)) {
+		WMA_LOGE("%s: %d Failed to send vdev stop", __func__, __LINE__);
+		wma_remove_vdev_req(wma, vdev_id,
+				    WMA_TARGET_REQ_TYPE_VDEV_STOP);
+	}
+
+	if (wma_send_vdev_down_to_fw(wma, vdev_id) != QDF_STATUS_SUCCESS)
+		WMA_LOGE("Failed to send vdev down cmd: vdev %d", vdev_id);
+}
+
+
 static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 			struct del_sta_self_params *del_sta_self_req_param,
 			uint8_t generate_rsp)
@@ -578,6 +601,9 @@ static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 	uint8_t vdev_id = del_sta_self_req_param->session_id;
 	struct wma_txrx_node *iface = &wma_handle->interfaces[vdev_id];
 	struct wma_target_req *msg = NULL;
+
+	if (cds_get_conparam() == QDF_GLOBAL_MONITOR_MODE)
+		wma_handle_monitor_mode_vdev_detach(wma_handle, vdev_id);
 
 	status = wmi_unified_vdev_delete_send(wma_handle->wmi_handle, vdev_id);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -685,9 +711,10 @@ QDF_STATUS wma_vdev_detach(tp_wma_handle wma_handle,
 	if (iface->type == WMI_VDEV_TYPE_STA)
 		wma_pno_stop(wma_handle, vdev_id);
 
-	/* P2P Device */
-	if ((iface->type == WMI_VDEV_TYPE_AP) &&
-	    (iface->sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_DEVICE)) {
+	if (((iface->type == WMI_VDEV_TYPE_AP) &&
+	    (iface->sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_DEVICE)) ||
+	    (iface->type == WMI_VDEV_TYPE_OCB) ||
+	    (iface->type == WMI_VDEV_TYPE_MONITOR)) {
 		status = wma_self_peer_remove(wma_handle,
 					pdel_sta_self_req_param, generateRsp);
 		if ((status != QDF_STATUS_SUCCESS) && generateRsp) {
@@ -1908,6 +1935,10 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 			 __func__, resp_event->vdev_id);
 		return -EINVAL;
 	}
+
+	/* Ignore stop_response in Monitor mode */
+	if (cds_get_conparam() == QDF_GLOBAL_MONITOR_MODE)
+		return  QDF_STATUS_SUCCESS;
 
 	iface = &wma->interfaces[resp_event->vdev_id];
 	/*

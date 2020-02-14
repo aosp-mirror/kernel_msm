@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -127,52 +127,6 @@
 
 #define ACS_WEIGHT_SOFTAP_TX_POWER_THROUGHPUT_CFG(weights) \
 	(((weights) & 0xf00000) >> 20)
-
-#ifdef FEATURE_WLAN_CH_AVOID
-sapSafeChannelType safe_channels[NUM_CHANNELS] = {
-	{1, true},
-	{2, true},
-	{3, true},
-	{4, true},
-	{5, true},
-	{6, true},
-	{7, true},
-	{8, true},
-	{9, true},
-	{10, true},
-	{11, true},
-	{12, true},
-	{13, true},
-	{14, true},
-	{36, true},
-	{40, true},
-	{44, true},
-	{48, true},
-	{52, true},
-	{56, true},
-	{60, true},
-	{64, true},
-	{100, true},
-	{104, true},
-	{108, true},
-	{112, true},
-	{116, true},
-	{120, true},
-	{124, true},
-	{128, true},
-	{132, true},
-	{136, true},
-	{140, true},
-	{144, true},
-	{149, true},
-	{153, true},
-	{157, true},
-	{161, true},
-	{165, true},
-	{169, true},
-	{173, true},
-};
-#endif
 
 typedef struct {
 	uint16_t chStartNum;
@@ -401,81 +355,6 @@ static void sap_process_avoid_ie(tHalHandle hal,
 }
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
 
-#ifdef FEATURE_WLAN_CH_AVOID
-/*==========================================================================
-   FUNCTION    sap_update_unsafe_channel_list
-
-   DESCRIPTION
-    Function  Undate unsafe channel list table
-
-   DEPENDENCIES
-    NA.
-
-   IN
-    SapContext pointer
-
-   RETURN VALUE
-    NULL
-   ============================================================================*/
-void sap_update_unsafe_channel_list(ptSapContext pSapCtx)
-{
-	uint16_t i, j;
-	uint16_t unsafe_channel_list[NUM_CHANNELS];
-	uint16_t unsafe_channel_count = 0;
-	qdf_device_t qdf_ctx = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
-
-	if (!qdf_ctx) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_FATAL,
-			  "qdf_ctx is NULL");
-		return;
-	}
-
-	/* Flush, default set all channel safe */
-	for (i = 0; i < NUM_CHANNELS; i++) {
-		safe_channels[i].isSafe = true;
-	}
-
-	/* Try to find unsafe channel */
-#if defined(FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE)
-	for (i = 0; i < NUM_CHANNELS; i++) {
-		if (pSapCtx->dfs_ch_disable == true) {
-			if (CDS_IS_DFS_CH(safe_channels[i].channelNumber)) {
-				safe_channels[i].isSafe = false;
-				QDF_TRACE(QDF_MODULE_ID_SAP,
-					QDF_TRACE_LEVEL_DEBUG,
-					"%s: DFS Ch %d is not safe in"
-					" Concurrent mode",
-					__func__,
-					safe_channels[i].channelNumber);
-			}
-		}
-	}
-#endif
-	pld_get_wlan_unsafe_channel(qdf_ctx->dev,
-				    unsafe_channel_list,
-				     &unsafe_channel_count,
-				     sizeof(unsafe_channel_list));
-
-	for (i = 0; i < unsafe_channel_count; i++) {
-		for (j = 0; j < NUM_CHANNELS; j++) {
-			if (safe_channels[j].channelNumber ==
-			    unsafe_channel_list[i]) {
-				/* Found unsafe channel, update it */
-				safe_channels[j].isSafe = false;
-				QDF_TRACE(QDF_MODULE_ID_SAP,
-					  QDF_TRACE_LEVEL_DEBUG,
-					  FL("CH %d is not safe"),
-					  unsafe_channel_list[i]);
-				break;
-			}
-		}
-	}
-
-	return;
-}
-
-#endif /* FEATURE_WLAN_CH_AVOID */
-
 /*==========================================================================
    FUNCTION    sap_cleanup_channel_list
 
@@ -635,9 +514,6 @@ static bool sap_chan_sel_init(tHalHandle halHandle,
 	uint16_t channelnum = 0;
 	tpAniSirGlobal pMac = PMAC_STRUCT(halHandle);
 	bool chSafe = true;
-#ifdef FEATURE_WLAN_CH_AVOID
-	uint16_t i;
-#endif
 	uint32_t dfs_master_cap_enabled;
 	bool include_dfs_ch = true;
 	bool sta_sap_scc_on_dfs_chan =
@@ -704,19 +580,8 @@ static bool sap_chan_sel_init(tHalHandle halHandle,
 			}
 		}
 
-#ifdef FEATURE_WLAN_CH_AVOID
-		for (i = 0; i < NUM_CHANNELS; i++) {
-			if ((safe_channels[i].channelNumber == *pChans) &&
-			    (false == safe_channels[i].isSafe)) {
-				QDF_TRACE(QDF_MODULE_ID_SAP,
-					  QDF_TRACE_LEVEL_DEBUG,
-					  "In %s, Ch %d is not safe", __func__,
-					  *pChans);
-				chSafe = false;
-				break;
-			}
-		}
-#endif /* FEATURE_WLAN_CH_AVOID */
+		if (!cds_is_safe_channel(*pChans))
+			chSafe = false;
 
 		/* OFDM rates are not supported on channel 14 */
 		if (*pChans == 14 &&
@@ -2556,101 +2421,6 @@ static bool sap_is_ch_non_overlap(ptSapContext sap_ctx, uint16_t ch)
 	return false;
 }
 
-#ifdef FEATURE_WLAN_CH_AVOID
-/**
- * sap_select_channel_no_scan_result() - select SAP channel when no scan results
- * are available.
- * @sap_ctx: Sap context
- *
- * Returns: channel number if success, 0 otherwise
- */
-static uint8_t sap_select_channel_no_scan_result(tHalHandle hal,
-						 ptSapContext sap_ctx)
-{
-	enum channel_state ch_type;
-	uint8_t i, first_safe_ch_in_range = SAP_CHANNEL_NOT_SELECTED;
-	uint32_t dfs_master_cap_enabled;
-	uint32_t start_ch_num = sap_ctx->acs_cfg->start_ch;
-	uint32_t end_ch_num = sap_ctx->acs_cfg->end_ch;
-
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("start - end: %d - %d"), start_ch_num, end_ch_num);
-
-	sme_cfg_get_int(hal, WNI_CFG_DFS_MASTER_ENABLED,
-				&dfs_master_cap_enabled);
-
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		"%s: dfs_master %x", __func__, dfs_master_cap_enabled);
-
-	/* get a channel in PCL and within the range */
-	for (i = 0; i < sap_ctx->acs_cfg->pcl_ch_count; i++) {
-		if ((sap_ctx->acs_cfg->pcl_channels[i] < start_ch_num) ||
-		    (sap_ctx->acs_cfg->pcl_channels[i] > end_ch_num))
-			continue;
-
-		first_safe_ch_in_range = sap_ctx->acs_cfg->pcl_channels[i];
-		break;
-	}
-
-	if (SAP_CHANNEL_NOT_SELECTED != first_safe_ch_in_range)
-		return first_safe_ch_in_range;
-
-	for (i = 0; i < NUM_CHANNELS; i++) {
-		if ((safe_channels[i].channelNumber < start_ch_num) ||
-		    (safe_channels[i].channelNumber > end_ch_num))
-			continue;
-
-		ch_type = cds_get_channel_state(safe_channels[i].channelNumber);
-
-		if ((ch_type == CHANNEL_STATE_DISABLE) ||
-			(ch_type == CHANNEL_STATE_INVALID))
-			continue;
-		if ((!dfs_master_cap_enabled) &&
-			(CHANNEL_STATE_DFS == ch_type)) {
-			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-				"%s: DFS master mode disabled. Skip DFS channel %d",
-				__func__, safe_channels[i].channelNumber);
-			continue;
-		}
-		if ((sap_ctx->dfs_mode == ACS_DFS_MODE_DISABLE) &&
-		    (CHANNEL_STATE_DFS == ch_type))
-			continue;
-
-		if (safe_channels[i].isSafe == true) {
-			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-				FL("channel %d in the configuration is safe"),
-				safe_channels[i].channelNumber);
-			first_safe_ch_in_range = safe_channels[i].channelNumber;
-			break;
-		}
-
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-			FL("channel %d in the configuration is unsafe"),
-			safe_channels[i].channelNumber);
-	}
-
-	/* if no channel selected return SAP_CHANNEL_NOT_SELECTED */
-	return first_safe_ch_in_range;
-}
-#else
-static uint8_t sap_select_channel_no_scan_result(tHalHandle hal,
-						 ptSapContext sap_ctx)
-{
-	uint32_t start_ch_num = sap_ctx->acs_cfg->start_ch;
-
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
-		  FL("start - end: %d - %d"),
-		  start_ch_num,
-		  sap_ctx->acs_cfg->end_ch);
-
-	sap_ctx->acs_cfg->pri_ch = start_ch_num;
-	sap_ctx->acs_cfg->ht_sec_ch = 0;
-
-	/* pick the first channel in configured range */
-	return start_ch_num;
-}
-#endif /* FEATURE_WLAN_CH_AVOID */
-
 /**
  * sap_select_channel() - select SAP channel
  * @hal: Pointer to HAL handle
@@ -2677,10 +2447,6 @@ uint8_t sap_select_channel(tHalHandle hal, ptSapContext sap_ctx,
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO_HIGH,
 		  "In %s, Running SAP Ch Select", __func__);
 
-#ifdef FEATURE_WLAN_CH_AVOID
-	sap_update_unsafe_channel_list(sap_ctx);
-#endif
-
 	/*
 	 * If ACS weight is not enabled on noise_floor/channel_free/tx_power,
 	 * then skip acs process if no bss found.
@@ -2693,7 +2459,7 @@ uint8_t sap_select_channel(tHalHandle hal, ptSapContext sap_ctx,
 #ifndef SOFTAP_CHANNEL_RANGE
 		return SAP_CHANNEL_NOT_SELECTED;
 #else
-		return sap_select_channel_no_scan_result(hal, sap_ctx);
+		return sap_select_default_oper_chan(sap_ctx->acs_cfg);
 #endif
 	}
 

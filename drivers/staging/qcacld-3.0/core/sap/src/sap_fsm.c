@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -67,10 +67,6 @@
 /*----------------------------------------------------------------------------
  *  External declarations for global context
  * -------------------------------------------------------------------------*/
-#ifdef FEATURE_WLAN_CH_AVOID
-extern sapSafeChannelType safe_channels[];
-#endif /* FEATURE_WLAN_CH_AVOID */
-
 /*----------------------------------------------------------------------------
  * Static Variable Definitions
  * -------------------------------------------------------------------------*/
@@ -2355,6 +2351,9 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 					"%s: Override ch %d to %d due to CC Intf",
 					__func__, sap_context->channel, con_ch);
 				sap_context->channel = con_ch;
+				if (CDS_IS_CHANNEL_24GHZ(con_ch))
+					sap_context->ch_params.ch_width =
+								CH_WIDTH_20MHZ;
 				cds_set_channel_params(sap_context->channel, 0,
 						&sap_context->ch_params);
 			}
@@ -2407,6 +2406,9 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 						__func__, sap_context->channel,
 						con_ch);
 				sap_context->channel = con_ch;
+				if (CDS_IS_CHANNEL_24GHZ(con_ch))
+					sap_context->ch_params.ch_width =
+								CH_WIDTH_20MHZ;
 				cds_set_channel_params(sap_context->channel, 0,
 						&sap_context->ch_params);
 			}
@@ -4866,9 +4868,7 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 	uint8_t end_ch_num, band_end_ch;
 	uint32_t en_lte_coex;
 	tHalHandle hal = CDS_GET_HAL_CB(sap_ctx->p_cds_gctx);
-#ifdef FEATURE_WLAN_CH_AVOID
 	uint8_t i;
-#endif
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 	tSapChSelSpectInfo spect_info_obj = { NULL, 0 };
 	uint16_t ch_width;
@@ -4970,13 +4970,6 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 				continue;
 		}
 
-#ifdef FEATURE_WLAN_CH_AVOID
-		for (i = 0; i < NUM_CHANNELS; i++) {
-			if (safe_channels[i].channelNumber ==
-			     CDS_CHANNEL_NUM(loop_count)) {
-				/* Check if channel is safe */
-				if (true == safe_channels[i].isSafe) {
-#endif
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
 		uint8_t ch;
 
@@ -5012,12 +5005,6 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 #else
 		list[ch_count] = CDS_CHANNEL_NUM(loop_count);
 		ch_count++;
-#endif
-#ifdef FEATURE_WLAN_CH_AVOID
-				}
-				break;
-			}
-		}
 #endif
 	}
 

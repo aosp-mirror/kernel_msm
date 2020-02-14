@@ -79,6 +79,7 @@
 #include <wlan_logging_sock_svc.h>
 #include "cds_utils.h"
 #include "wlan_hdd_packet_filter_api.h"
+#include "cds_concurrency.h"
 
 /* Preprocessor definitions and constants */
 #define HDD_SSR_BRING_UP_TIME 30000
@@ -1948,6 +1949,11 @@ static int __wlan_hdd_cfg80211_suspend_wlan(struct wiphy *wiphy,
 		return 0;
 	}
 	mutex_unlock(&pHddCtx->iface_change_lock);
+
+	if (cds_is_connection_in_progress(NULL, NULL)) {
+		hdd_err("Suspend rejected: conn in progress");
+		return -EINVAL;
+	}
 
 	/* If RADAR detection is in progress (HDD), prevent suspend. The flag
 	 * "dfs_cac_block_tx" is set to true when RADAR is found and stay true

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -373,10 +373,6 @@ sap_search_mac_list(struct qdf_mac_addr *macList, uint8_t num_mac,
 QDF_STATUS sap_acquire_global_lock(ptSapContext pSapCtx);
 
 QDF_STATUS sap_release_global_lock(ptSapContext pSapCtx);
-
-#ifdef FEATURE_WLAN_CH_AVOID
-void sap_update_unsafe_channel_list(ptSapContext pSapCtx);
-#endif /* FEATURE_WLAN_CH_AVOID */
 
 uint8_t
 sap_indicate_radar(ptSapContext sapContext,
