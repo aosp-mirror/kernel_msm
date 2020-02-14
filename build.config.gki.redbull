@@ -1,10 +1,10 @@
 KERNEL_DIR=private/msm-google
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.no-cfi
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.performance
 
 # Override the defconfig
 DEFCONFIG=redbull-gki_defconfig
 
-if [ ! -z "$BUILD_BOOT_IMG" ]; then
+if [ -n "${BUILD_BOOT_IMG}" ]; then
 BUILD_INITRAMFS=1
 MKBOOTIMG_PATH=tools/mkbootimg/mkbootimg.py
 GKI_RAMDISK_PREBUILT_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/gki_ramdisk-rvc-dev.img
