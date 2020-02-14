@@ -123,6 +123,8 @@ struct gbms_storage_desc {
 
 int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
 			  void *ptr);
+int gbms_storage_offline(const char *name, bool flush);
+
 int gbms_storage_read(gbms_tag_t tag, void *data, size_t count);
 int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count);
 
@@ -138,11 +140,5 @@ struct gbms_storage_device;
 struct gbms_storage_device *gbms_storage_create_device(const char *name,
 						       gbms_tag_t tag);
 void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
-
-
-struct nvmem_device;
-
-int gbee_register_device(const char *name, struct nvmem_device *nvram);
-void gbee_destroy_device(void);
 
 #endif /* __GBMS_STORAGE_H__ */
