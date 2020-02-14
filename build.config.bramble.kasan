@@ -1,6 +1,7 @@
 KERNEL_DIR=private/msm-google
+DISABLE_LLD=1
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.bramble.common.clang
-POST_DEFCONFIG_CMDS="check_defconfig && update_kasan_config"
+POST_DEFCONFIG_CMDS="update_kasan_config"
 
 function update_kasan_config() {
     ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
