@@ -5250,14 +5250,17 @@ static void google_battery_init_work(struct work_struct *work)
 	mutex_init(&batt_drv->stats_lock);
 	mutex_init(&batt_drv->cc_data.lock);
 
-	fg_psy = power_supply_get_by_name(batt_drv->fg_psy_name);
-	if (!fg_psy) {
-		pr_info("failed to get \"%s\" power supply, retrying...\n",
-			batt_drv->fg_psy_name);
-		goto retry_init_work;
-	}
+	if (!batt_drv->fg_psy) {
 
-	batt_drv->fg_psy = fg_psy;
+		fg_psy = power_supply_get_by_name(batt_drv->fg_psy_name);
+		if (!fg_psy) {
+			pr_info("failed to get \"%s\" power supply, retrying...\n",
+				batt_drv->fg_psy_name);
+			goto retry_init_work;
+		}
+
+		batt_drv->fg_psy = fg_psy;
+	}
 
 	if (!batt_drv->batt_present) {
 		ret = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
@@ -5566,31 +5569,36 @@ static int google_battery_probe(struct platform_device *pdev)
 static int google_battery_remove(struct platform_device *pdev)
 {
 	struct batt_drv *batt_drv = platform_get_drvdata(pdev);
+	struct batt_ttf_stats *ttf_stats;
 
-	if (batt_drv) {
-		struct batt_ttf_stats *ttf_stats = &batt_drv->ttf_stats;
+	if (!batt_drv)
+		return 0;
 
-		if (batt_drv->history)
-			gbms_storage_cleanup_device(batt_drv->history);
-		if (batt_drv->fg_psy)
-			power_supply_put(batt_drv->fg_psy);
+	ttf_stats = &batt_drv->ttf_stats;
 
-		gbms_free_chg_profile(&batt_drv->chg_profile);
+	if (batt_drv->ssoc_log)
+		debugfs_logbuffer_unregister(batt_drv->ssoc_log);
+	if (ttf_stats->ttf_log)
+		debugfs_logbuffer_unregister(ttf_stats->ttf_log);
+	if (batt_drv->tz_dev)
+		thermal_zone_of_sensor_unregister(batt_drv->device,
+				batt_drv->tz_dev);
+	if (batt_drv->history)
+		gbms_storage_cleanup_device(batt_drv->history);
 
-		wakeup_source_trash(&batt_drv->msc_ws);
-		wakeup_source_trash(&batt_drv->batt_ws);
-		wakeup_source_trash(&batt_drv->taper_ws);
-		wakeup_source_trash(&batt_drv->poll_ws);
+	if (batt_drv->fg_psy)
+		power_supply_put(batt_drv->fg_psy);
 
-		if (batt_drv->ssoc_log)
-			debugfs_logbuffer_unregister(batt_drv->ssoc_log);
-		if (ttf_stats->ttf_log)
-			debugfs_logbuffer_unregister(ttf_stats->ttf_log);
-		if (batt_drv->tz_dev)
-			thermal_zone_of_sensor_unregister(batt_drv->device,
-					batt_drv->tz_dev);
-	}
+	gbms_free_chg_profile(&batt_drv->chg_profile);
 
+	wakeup_source_trash(&batt_drv->msc_ws);
+	wakeup_source_trash(&batt_drv->batt_ws);
+	wakeup_source_trash(&batt_drv->taper_ws);
+	wakeup_source_trash(&batt_drv->poll_ws);
+
+	if (batt_drv->tz_dev)
+		thermal_zone_of_sensor_unregister(batt_drv->device,
+				batt_drv->tz_dev);
 	return 0;
 }
 
