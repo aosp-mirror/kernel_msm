@@ -128,6 +128,8 @@ struct gbms_storage_device;
 
 extern int gbms_storage_register(struct gbms_storage_desc *desc,
 				 const char *name, void *ptr);
+extern int gbms_storage_offline(const char *name, bool flush);
+
 extern int gbms_storage_read(gbms_tag_t tag, void *data, size_t count);
 extern int gbms_storage_write(gbms_tag_t tag, const void *data, size_t count);
 
@@ -147,6 +149,10 @@ extern void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
 
 int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
 			  void *ptr)
+{
+	return -EINVAL;
+}
+int gbms_storage_offline(const char *name, bool flush)
 {
 	return -EINVAL;
 }
@@ -186,11 +192,5 @@ void gbms_storage_cleanup_device(struct gbms_storage_device *gdev)
 }
 
 #endif /* CONFIG_GOOGLE_BMS */
-
-
-struct nvmem_device;
-
-int gbee_register_device(const char *name, struct nvmem_device *nvram);
-void gbee_destroy_device(void);
 
 #endif /* __GBMS_STORAGE_H__ */
