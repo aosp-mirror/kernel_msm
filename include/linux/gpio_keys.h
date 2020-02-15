@@ -2,6 +2,11 @@
 #ifndef _GPIO_KEYS_H
 #define _GPIO_KEYS_H
 
+#ifdef pr_fmt
+#undef pr_fmt
+#define pr_fmt(fmt) "[KEY] " fmt
+#endif
+
 struct device;
 
 /**
