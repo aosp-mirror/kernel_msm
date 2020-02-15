@@ -736,6 +736,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 
 	charger->online = false;
 	charger->force_bpp = false;
+	charger->re_nego = false;
 
 	/* Reset PP buf so we can get a new serial number next time around */
 	charger->pp_buf_valid = false;
@@ -1304,10 +1305,13 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 	if (p9221_is_epp(charger))
 		icl = P9221_DC_ICL_EPP_UA;
 
+	if (charger->re_nego)
+		icl = P9221_DC_ICL_EPP_UA;
+
 	dev_info(&charger->client->dev, "Setting ICL %duA ramp=%d\n", icl,
 		 charger->icl_ramp);
-	if (charger->icl_ramp)
-	    vote(charger->dc_icl_votable, P9221_DEFAULT_VOTER, true, icl);
+	if ((charger->icl_ramp) || (charger->re_nego))
+		vote(charger->dc_icl_votable, P9221_DEFAULT_VOTER, true, icl);
 
 	ret = vote(charger->dc_icl_votable, P9221_WLC_VOTER, true, icl);
 	if (ret)
@@ -1341,10 +1345,76 @@ static enum alarmtimer_restart p9221_icl_ramp_alarm_cb(struct alarm *alarm,
 	return ALARMTIMER_NORESTART;
 }
 
+static bool p9221_wait_for_negotiation(struct p9221_charger_data *charger)
+{
+	int ret, loops;
+	u8 val = 0;
+
+	ret = p9221_reg_write_8(charger, P9221R5_EPP_RENEGOTIATION_REG,
+				P9221R5_EPP_NEGOTIATED_RNTXCAPABREQ);
+	if (ret < 0)
+		return false;
+
+	ret = p9221_reg_write_8(charger, P9221R5_EPP_REQ_NEGOTIATED_POWER_REG,
+				P9221R5_EPP_NEGOTIATED_POWER_10W);
+	if (ret < 0)
+		return false;
+
+	/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0000 */
+	ret = p9221_set_cmd_reg(charger, P9221R5_COM_RENEGOTIATE);
+	if (ret != 0)
+		return false;
+
+	/* 30 * 100 = 3 sec */
+	for (loops = 30; loops; loops--) {
+		ret = p9221_reg_read_8(charger, P9221R5_EPP_RENEGOTIATION_REG,
+				       &val);
+		if (ret < 0)
+			break;
+
+		if (val & P9221R5_EPP_NEGOTIATED_RNDONE) {
+			logbuffer_log(charger->log,
+				      "Run re-negotiation process\n");
+			ret = p9221_reg_read_8(
+				charger, P9221R5_EPP_CUR_NEGOTIATED_POWER_REG,
+				&val);
+			if (val == P9221R5_EPP_NEGOTIATED_POWER_10W) {
+				ret = p9221_reg_write_8(charger,
+							P9221R5_VOUT_SET_REG,
+							P9221R5_VOUT_SET_9V);
+				if (ret < 0)
+					break;
+				logbuffer_log(charger->log,
+					      "10W detetction is done.\n");
+				charger->re_nego = true;
+				return true;
+			}
+			logbuffer_log(charger->log,
+				      "less than 10W detection.\n");
+			break;
+		}
+
+		if (val & P9221R5_EPP_NEGOTIATED_RNERROR) {
+			logbuffer_log(charger->log,
+				      "Process is done and do nothing.\n");
+			break;
+		}
+
+		msleep(100);
+	}
+	if (loops == 0)
+		logbuffer_log(charger->log,
+			      "re-negotiation loop check timout\n");
+
+	return false;
+}
+
 static void p9221_icl_ramp_work(struct work_struct *work)
 {
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, icl_ramp_work.work);
+	int ret;
+	u8 reg = 0;
 
 	pm_runtime_get_sync(charger->dev);
 	if (!charger->resume_complete) {
@@ -1360,6 +1430,9 @@ static void p9221_icl_ramp_work(struct work_struct *work)
 		 charger->icl_ramp);
 
 	charger->icl_ramp = true;
+	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
+	if ((ret == 0) && ((reg & P9221R5_SYSTEM_MODE_EXTENDED_MASK) > 0))
+		charger->icl_ramp = !p9221_wait_for_negotiation(charger);
 	p9221_set_dc_icl(charger);
 
 	pm_relax(charger->dev);
@@ -3342,6 +3415,8 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dc_icl_votable = find_votable("DC_ICL");
 	if (!charger->dc_icl_votable)
 		dev_warn(&charger->client->dev, "Could not find DC_ICL votable\n");
+
+	charger->re_nego = false;
 
 	/* Ramping on BPP is optional */
 	if (charger->pdata->icl_ramp_delay_ms != -1) {

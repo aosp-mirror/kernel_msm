@@ -27,6 +27,12 @@
 
 #define P9221_DEFAULT_VOTER			"DEFAULT_VOTER"
 
+#define P9221R5_EPP_NEGOTIATED_POWER_10W	0x14
+#define P9221R5_VOUT_SET_9V			0x5A
+#define P9221R5_EPP_NEGOTIATED_RNTXCAPABREQ	BIT(0)
+#define P9221R5_EPP_NEGOTIATED_RNDONE		BIT(1)
+#define P9221R5_EPP_NEGOTIATED_RNERROR		BIT(2)
+
 /*
  * P9221 common registers
  */
@@ -52,7 +58,6 @@
 #define P9221_INT_MASK				0xF7
 #define P9221_INT_ENABLE_REG			0x38
 #define P9221_COM_REG				0x4E
-
 
 /*
  * P9221R5 unique registers
@@ -130,7 +135,7 @@
 /*
  * System Mode Mask (R5+/0x4C)
  */
-#define P9221R5_SYSTEM_MODE_EXTENDED_MASK	(1 << 3)
+#define P9221R5_SYSTEM_MODE_EXTENDED_MASK	BIT(3)
 
 /*
  * Com Channel Commands
@@ -309,6 +314,7 @@ struct p9221_charger_data {
 	int				last_capacity;
 	bool				resume_complete;
 	bool				icl_ramp;
+	bool				re_nego;
 	u32				icl_ramp_ua;
 	bool				fake_force_epp;
 	bool				force_bpp;
