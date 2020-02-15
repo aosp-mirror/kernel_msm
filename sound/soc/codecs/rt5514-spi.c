@@ -55,7 +55,7 @@ struct rt5514_dsp {
 	struct device *dev;
 	struct snd_soc_component *component;
 	struct delayed_work copy_work_0, copy_work_1, copy_work_2, start_work,
-		adc_work;
+		adc_work, chre_chk_work;
 	struct mutex dma_lock;
 	struct snd_pcm_substream *substream[3];
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
@@ -63,6 +63,8 @@ struct rt5514_dsp {
 	unsigned int hotword_ignore_ms, musdet_ignore_ms;
 	size_t buf_size[3], get_size[2], dma_offset[3];
 };
+
+struct rt5514_dsp *rt5514_g_dsp;
 
 static const struct snd_pcm_hardware rt5514_spi_pcm_hardware = {
 	.info			= SNDRV_PCM_INFO_MMAP |
@@ -384,6 +386,23 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	return true;
 }
 
+bool rt5514_check_chre_read_done(void)
+{
+	unsigned int val;
+
+	regmap_read(rt5514_g_i2c_regmap, RT5514_CHRE_READ, &val);
+	if (val == 1)
+		return true;
+	else
+		return false;
+}
+
+static void rt5514_chre_check_work(struct work_struct *work)
+{
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_CHRE_READ, 0);
+	pr_info("%s: stop chre check work", __func__);
+}
+
 void rt5514_spi_request_switch(u32 mask, bool is_require)
 {
 	u32 previous_mask = spi_switch_mask;
@@ -426,6 +445,16 @@ void rt5514_spi_request_switch(u32 mask, bool is_require)
 
 		/* Set switch pin back */
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 0);
+
+		/* Check LPI read done */
+		if (rt5514_check_chre_read_done()) {
+			pr_info("%s: register CHRE_READ is 1", __func__);
+			regmap_write(rt5514_g_i2c_regmap, RT5514_CHRE_READ, 0);
+			spi_switch_mask |= SPI_SWITCH_MASK_CHRE_READ;
+			cancel_delayed_work_sync(&rt5514_g_dsp->chre_chk_work);
+			schedule_delayed_work(&rt5514_g_dsp->chre_chk_work,
+					      msecs_to_jiffies(850));
+		}
 	} else {
 		pr_info("%s: off (mask=%2x)", __func__, spi_switch_mask);
 		/* Set switch pin to CHRE */
@@ -1100,6 +1129,9 @@ static int rt5514_spi_pcm_probe(struct snd_soc_platform *platform)
 	rt5514_pcm_parse_dp(rt5514_dsp, &rt5514_spi->dev);
 
 	rt5514_dsp->dev = &rt5514_spi->dev;
+
+	rt5514_g_dsp = rt5514_dsp;
+
 	rt5514_dsp->component = &platform->component;
 	mutex_init(&rt5514_dsp->dma_lock);
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_0, rt5514_spi_copy_work_0);
@@ -1107,6 +1139,7 @@ static int rt5514_spi_pcm_probe(struct snd_soc_platform *platform)
 	INIT_DELAYED_WORK(&rt5514_dsp->copy_work_2, rt5514_spi_copy_work_2);
 	INIT_DELAYED_WORK(&rt5514_dsp->start_work, rt5514_spi_start_work);
 	INIT_DELAYED_WORK(&rt5514_dsp->adc_work, rt5514_spi_adc_start);
+	INIT_DELAYED_WORK(&rt5514_dsp->chre_chk_work, rt5514_chre_check_work);
 	snd_soc_platform_set_drvdata(platform, rt5514_dsp);
 
 	if (rt5514_spi->irq) {

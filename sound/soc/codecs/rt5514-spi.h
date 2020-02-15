@@ -35,17 +35,19 @@
 #define RT5514_MUSDET_FLAG		0x18001038
 #define RT5514_DSP_WOV_TYPE		0x18002fac
 #define RT5514_DSP_FUNC			0x18002fb0
+#define RT5514_CHRE_READ 		0x18002fe8
 
-#define SPI_SWITCH_MASK_WORK_0   (1 << 0)
-#define SPI_SWITCH_MASK_WORK_1   (1 << 1)
-#define SPI_SWITCH_MASK_WORK_2   (1 << 2)
-#define SPI_SWITCH_MASK_COPY     (1 << 3)
-#define SPI_SWITCH_MASK_LOAD     (1 << 4)
-#define SPI_SWITCH_MASK_CMD      (1 << 5)
-#define SPI_SWITCH_MASK_WATCHDOG (1 << 6)
-#define SPI_SWITCH_MASK_NO_IRQ   (1 << 7)
-#define SPI_SWITCH_MASK_NO_CHRE  (1 << 8)
-#define SPI_SWITCH_MASK_RESET    (1 << 9)
+#define SPI_SWITCH_MASK_WORK_0    (1 << 0)
+#define SPI_SWITCH_MASK_WORK_1    (1 << 1)
+#define SPI_SWITCH_MASK_WORK_2    (1 << 2)
+#define SPI_SWITCH_MASK_COPY      (1 << 3)
+#define SPI_SWITCH_MASK_LOAD      (1 << 4)
+#define SPI_SWITCH_MASK_CMD       (1 << 5)
+#define SPI_SWITCH_MASK_WATCHDOG  (1 << 6)
+#define SPI_SWITCH_MASK_NO_IRQ    (1 << 7)
+#define SPI_SWITCH_MASK_NO_CHRE   (1 << 8)
+#define SPI_SWITCH_MASK_RESET     (1 << 9)
+#define SPI_SWITCH_MASK_CHRE_READ (1 << 10)
 
 /* SPI Command */
 enum {
