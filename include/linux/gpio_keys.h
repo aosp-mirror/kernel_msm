@@ -3,6 +3,10 @@
 #define _GPIO_KEYS_H
 
 #include <linux/types.h>
+#ifdef pr_fmt
+#undef pr_fmt
+#define pr_fmt(fmt) "[KEY] " fmt
+#endif
 
 struct device;
 
