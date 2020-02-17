@@ -43,19 +43,16 @@
 };
 
 &soc {
-	ext_5v_boost: ext_5v_boost {
+	ext_boost: ext_boost {
 		compatible = "regulator-tps";
-		regulator-name = "ext_5v_boost";
-		control-gpio-count = <1>;
-		control-gpios = <&pm8150_gpios 7 GPIO_ACTIVE_HIGH>;
-		nr-gpio-enable-sequence = <1>;
-		gpio-enable-sequence = <1>;
-		gpio-enable-delay = <0>;
-		nr-gpio-disable-sequence = <1>;
-		gpio-disable-sequence = <1>;
-		gpio-disable-delay = <0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb_ext_5v_boost_default>;
+		regulator-name = "ext_boost";
+		voltage-count = <1>;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		en-gpios = <&pm8150_gpios 7 GPIO_ACTIVE_HIGH>;
+		en-delay = <0>;
+		dis-delay = <0>;
+		en-pin-only;
 		status = "okay";
 	};
 };
