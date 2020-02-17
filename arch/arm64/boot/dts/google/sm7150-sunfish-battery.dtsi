@@ -90,6 +90,8 @@
 	google,fvss-interval-ms = <5000>;
 	qcom,s3-entry-ibat-ua = <14640>;
 	qcom,qg-sleep-config;
+
+	google,qg-cycle-disable;
 };
 
 &spmi_bus {
