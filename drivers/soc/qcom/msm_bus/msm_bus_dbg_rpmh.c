@@ -342,6 +342,7 @@ int msm_bus_dbg_add_client(const struct msm_bus_client_handle *pdata)
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(msm_bus_dbg_add_client);
 
 int msm_bus_dbg_add_bcm(struct msm_bus_node_device_type *cur_bcm)
 {
@@ -354,6 +355,7 @@ int msm_bus_dbg_add_bcm(struct msm_bus_node_device_type *cur_bcm)
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(msm_bus_dbg_add_bcm);
 
 int msm_bus_dbg_rec_transaction(const struct msm_bus_client_handle *pdata,
 						u64 ab, u64 ib)
@@ -416,6 +418,7 @@ int msm_bus_dbg_rec_transaction(const struct msm_bus_client_handle *pdata,
 
 	return i;
 }
+EXPORT_SYMBOL_GPL(msm_bus_dbg_rec_transaction);
 
 void msm_bus_dbg_remove_client(const struct msm_bus_client_handle *pdata)
 {
@@ -432,6 +435,7 @@ void msm_bus_dbg_remove_client(const struct msm_bus_client_handle *pdata)
 	}
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
 }
+EXPORT_SYMBOL_GPL(msm_bus_dbg_remove_client);
 
 void msm_bus_dbg_remove_bcm(struct msm_bus_node_device_type *cur_bcm)
 {
@@ -443,6 +447,7 @@ void msm_bus_dbg_remove_bcm(struct msm_bus_node_device_type *cur_bcm)
 	list_del_init(&cur_bcm->dbg_link);
 	rt_mutex_unlock(&msm_bus_dbg_cllist_lock);
 }
+EXPORT_SYMBOL_GPL(msm_bus_dbg_remove_bcm);
 
 static int msm_bus_dbg_record_client(const struct msm_bus_scale_pdata *pdata,
 	int index, uint32_t clid, struct dentry *file)
@@ -667,7 +672,6 @@ static ssize_t rules_dbg_read(struct file *file, char __user *buf,
 	ssize_t ret;
 
 	memset(rules_buf, 0, MAX_BUFF_SIZE);
-	print_rules_buf(rules_buf, MAX_BUFF_SIZE);
 	ret = simple_read_from_buffer(buf, count, ppos,
 		rules_buf, MAX_BUFF_SIZE);
 	return ret;
@@ -1068,3 +1072,4 @@ static void __exit msm_bus_dbg_teardown(void)
 }
 module_exit(msm_bus_dbg_teardown);
 MODULE_DESCRIPTION("Debugfs for msm bus scaling client");
+MODULE_LICENSE("GPL v2");

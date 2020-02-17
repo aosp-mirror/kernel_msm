@@ -94,19 +94,6 @@ uint64_t msm_bus_div64(uint64_t num, unsigned int base)
 	return *n;
 }
 
-int msm_bus_device_match_adhoc(struct device *dev, void *id)
-{
-	int ret = 0;
-	struct msm_bus_node_device_type *bnode = to_msm_bus_node(dev);
-
-	if (bnode)
-		ret = (bnode->node_info->id == *(unsigned int *)id);
-	else
-		ret = 0;
-
-	return ret;
-}
-
 static void bcm_add_bus_req(struct device *dev)
 {
 	struct msm_bus_node_device_type *cur_dev = NULL;

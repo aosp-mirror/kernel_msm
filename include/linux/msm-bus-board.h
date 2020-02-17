@@ -101,8 +101,6 @@ extern struct msm_bus_fabric_registration msm_bus_9625_bimc_pdata;
 extern struct msm_bus_fabric_registration msm_bus_9625_periph_noc_pdata;
 extern struct msm_bus_fabric_registration msm_bus_9625_config_noc_pdata;
 
-extern int msm_bus_device_match_adhoc(struct device *dev, void *id);
-
 void msm_bus_rpm_set_mt_mask(void);
 int msm_bus_board_rpm_get_il_ids(uint16_t *id);
 int msm_bus_board_get_iid(int id);
