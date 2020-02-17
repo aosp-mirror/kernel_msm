@@ -29,7 +29,7 @@
 #include <linux/pmic-voter.h>
 #include <linux/alarmtimer.h>
 #include "p9221_charger.h"
-#include "../google/logbuffer.h"
+#include "../../../usb/pd/logbuffer.h"
 
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(2 * 1000)
