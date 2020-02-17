@@ -82,6 +82,7 @@ struct qg_dt {
 	bool			tcss_enable;
 	bool			bass_enable;
 	const char		*batt_type_name;
+	bool			qg_cycle_disable;
 };
 
 struct qg_esr_data {
@@ -214,6 +215,7 @@ struct qpnp_qg {
 	struct cap_learning	*cl;
 	/* charge counter */
 	struct cycle_counter	*counter;
+	char			cycle_str[BUCKET_COUNT * 6 + 2];
 	/* ttf */
 	struct ttf		*ttf;
 };

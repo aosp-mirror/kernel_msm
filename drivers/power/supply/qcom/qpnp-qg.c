@@ -2199,12 +2199,41 @@ static int qg_psy_get_property(struct power_supply *psy,
 			pval->intval = (int)temp;
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
-		rc = get_cycle_counts(chip->counter, &pval->strval);
-		if (rc < 0)
-			pval->strval = NULL;
+		if (chip->dt.qg_cycle_disable) {
+			u16 count[BUCKET_COUNT];
+
+			rc = qg_sdam_multibyte_read(QG_SDAM_CYCLE_COUNT_OFFSET,
+							(u8 *)count,
+							sizeof(count));
+			if (rc < 0) {
+				pval->strval = NULL;
+				pr_err("cycle read failed: %d\n", rc);
+				break;
+			}
+			gbms_cycle_count_cstr(chip->cycle_str,
+					      GBMS_CCBIN_CSTR_SIZE, count);
+			pval->strval = chip->cycle_str;
+		} else {
+			rc = get_cycle_counts(chip->counter, &pval->strval);
+			if (rc < 0)
+				pval->strval = NULL;
+		}
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		rc = get_cycle_count(chip->counter, &pval->intval);
+		if (chip->dt.qg_cycle_disable) {
+			u16 count[BUCKET_COUNT];
+			int id;
+
+			rc = qg_sdam_multibyte_read(QG_SDAM_CYCLE_COUNT_OFFSET,
+							(u8 *)count,
+							sizeof(count));
+			if (rc < 0)
+				break;
+			for (id = 0; id < BUCKET_COUNT; id++)
+				temp += count[id];
+			pval->intval = temp / 100;
+		} else
+			rc = get_cycle_count(chip->counter, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
 		rc = ttf_get_time_to_full(chip->ttf, &pval->intval);
@@ -3795,6 +3824,12 @@ static int qg_alg_init(struct qpnp_qg *chip)
 	struct device_node *node = chip->dev->of_node;
 	int rc;
 
+
+	chip->dt.qg_cycle_disable = of_property_read_bool(node,
+						"google,qg-cycle-disable");
+	if (chip->dt.qg_cycle_disable)
+		goto skip_counter;
+
 	counter = devm_kzalloc(chip->dev, sizeof(*counter), GFP_KERNEL);
 	if (!counter)
 		return -ENOMEM;
@@ -3814,6 +3849,7 @@ static int qg_alg_init(struct qpnp_qg *chip)
 
 	chip->counter = counter;
 
+skip_counter:
 	ttf = devm_kzalloc(chip->dev, sizeof(*ttf), GFP_KERNEL);
 	if (!ttf)
 		return -ENOMEM;
@@ -4600,6 +4636,89 @@ static int qg_get_batt_type(struct qpnp_qg *chip)
 
 	return 0;
 }
+
+static int qg_storage_iter(int index, gbms_tag_t *tag, void *ptr)
+{
+	static gbms_tag_t keys[] = { GBMS_TAG_BCNT };
+	const int count = ARRAY_SIZE(keys);
+
+	if (index >= 0 && index < count)
+		*tag = keys[index];
+	else
+		return -ENOENT;
+
+	return 0;
+}
+
+static int qg_storage_read(gbms_tag_t tag, void *buff, size_t size,
+			   void *ptr)
+{
+	struct qpnp_qg *chip = (struct qpnp_qg *)ptr;
+	int ret;
+	int offset = 0;
+
+	switch (tag) {
+	case GBMS_TAG_BCNT:
+		if (size != (BUCKET_COUNT * 2)) {
+			pr_err("BCNT read error size %d/%d",
+					(BUCKET_COUNT * 2), size);
+			return -ERANGE;
+		}
+
+		offset = QG_SDAM_CYCLE_COUNT_OFFSET;
+		break;
+	default:
+		ret = -ENOENT;
+		break;
+	}
+
+	if (offset)
+		ret = qg_sdam_multibyte_read(offset, (u8 *)buff,
+					     BUCKET_COUNT * 2);
+	if (ret < 0) {
+		pr_err("failed to read cycle counts rc=%d\n", ret);
+		return ret;
+	}
+	return ret;
+}
+
+static int qg_storage_write(gbms_tag_t tag, const void *buff, size_t size,
+				  void *ptr)
+{
+	struct qpnp_qg *chip = (struct qpnp_qg *)ptr;
+	int ret;
+	int offset = 0;
+
+	switch (tag) {
+	case GBMS_TAG_BCNT:
+		if (size != (BUCKET_COUNT * 2)) {
+			pr_err("BCNT write error size %d/%d",
+					(BUCKET_COUNT * 2), size);
+			return -ERANGE;
+		}
+
+		offset = QG_SDAM_CYCLE_COUNT_OFFSET;
+		break;
+	default:
+		ret = -ENOENT;
+		break;
+	}
+
+	if (offset)
+		ret = qg_sdam_multibyte_write(offset, (u8 *)buff,
+					      BUCKET_COUNT * 2);
+	if (ret < 0) {
+		pr_err("failed to write cycle counts rc=%d\n", ret);
+		return ret;
+	}
+	return ret;
+}
+
+static struct gbms_storage_desc qg_storage_dsc = {
+	.iter = qg_storage_iter,
+	.read = qg_storage_read,
+	.write = qg_storage_write,
+};
 #endif /* CONFIG_GOOGLE_BMS */
 
 static const struct dev_pm_ops qpnp_qg_pm_ops = {
@@ -4752,10 +4871,14 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 				}
 			}
 		}
-		rc = restore_cycle_count(chip->counter);
-		if (rc < 0) {
-			pr_err("Error in restoring cycle_count, rc=%d\n", rc);
-			return rc;
+
+		if (!chip->dt.qg_cycle_disable) {
+			rc = restore_cycle_count(chip->counter);
+			if (rc < 0) {
+				pr_err("Error restoring cycle_count, rc=%d\n",
+						rc);
+				return rc;
+			}
 		}
 		schedule_delayed_work(&chip->ttf->ttf_work, 10000);
 	}
@@ -4816,6 +4939,14 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 		pr_err("Failed in qg_post_init rc=%d\n", rc);
 		goto fail_votable;
 	}
+
+#if IS_ENABLED(CONFIG_GOOGLE_BMS)
+	rc = gbms_storage_register(&qg_storage_dsc, "qg", chip);
+	if (rc < 0) {
+		pr_err("Failed in qg_storage_register rc=%d\n", rc);
+		goto fail_votable;
+	}
+#endif
 
 	qg_get_battery_capacity(chip, &soc);
 
