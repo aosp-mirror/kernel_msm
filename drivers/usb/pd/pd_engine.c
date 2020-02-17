@@ -74,6 +74,7 @@ struct usbpd {
 	struct regulator	*vbus;
 	struct regulator	*vconn;
 	struct regulator        *ext_vbus;
+	struct notifier_block	hw_reg_nb;
 	bool			vbus_output;
 	bool			external_vbus;
 	bool			external_vbus_update;
@@ -544,6 +545,10 @@ static int pd_regulator_update(struct usbpd *pd, bool external_reg, bool on)
 	int ret = 0;
 
 	if (on) {
+		if (external_reg)
+			ret = regulator_set_voltage(pd->ext_vbus,
+						    5000000, 5000000);
+
 		ret = regulator_enable(external_reg ? pd->ext_vbus
 				       : pd->vbus);
 		if (ret) {
@@ -2037,6 +2042,19 @@ exit:
 	return NOTIFY_OK;
 }
 
+static int ext_boost_changed(struct notifier_block *nb, unsigned long evt,
+			     void *data)
+{
+	struct usbpd *pd = container_of(nb, struct usbpd, hw_reg_nb);
+
+	if (evt == REGULATOR_EVENT_ENABLE)
+		logbuffer_log(pd->log, "ext_boost enabled");
+	else if (evt == REGULATOR_EVENT_DISABLE)
+		logbuffer_log(pd->log, "ext_boost disabled");
+
+	return NOTIFY_OK;
+}
+
 static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
@@ -2131,6 +2149,14 @@ struct usbpd *usbpd_create(struct device *parent)
 		if (IS_ERR_OR_NULL(pd->ext_vbus)) {
 			dev_err(&pd->dev, "Can't find ext-vbus-supply\n");
 			ret = PTR_ERR(pd->ext_vbus);
+			goto exit_debugfs;
+		}
+
+		pd->hw_reg_nb.notifier_call = ext_boost_changed;
+		ret = devm_regulator_register_notifier(pd->ext_vbus,
+						       &pd->hw_reg_nb);
+		if (ret) {
+			dev_err(&pd->dev, "Couldn't register ext_boost notifier\n");
 			goto exit_debugfs;
 		}
 	}
