@@ -303,6 +303,7 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.gmem_size = (SZ_256K + SZ_16K),
 		.num_protected_regs = 0x20,
 		.busy_mask = 0xFFFFFFFE,
+		.cx_ipeak_gpu_freq = 700000000,
 	},
 	{
 		.gpurev = ADRENO_REV_A508,
@@ -395,9 +396,9 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.gmem_size = SZ_512K,
 		.num_protected_regs = 0x20,
 		.busy_mask = 0xFFFFFFFE,
-		.gpmufw_name = "a630_gmu.bin",
+		.gpmufw_name = "a618_gmu.bin",
 		.gpmu_major = 0x1,
-		.gpmu_minor = 0x007,
+		.gpmu_minor = 0x008,
 	},
 	{
 		.gpurev = ADRENO_REV_A640,
@@ -449,7 +450,9 @@ static const struct adreno_gpu_core adreno_gpulist[] = {
 		.major = 8,
 		.minor = 0,
 		.patchid = ANY_ID,
-		.features = ADRENO_64BIT | ADRENO_RPMH | ADRENO_GPMU,
+		.features = ADRENO_64BIT | ADRENO_RPMH | ADRENO_GPMU |
+			ADRENO_CONTENT_PROTECTION | ADRENO_IOCOHERENT |
+			ADRENO_IFPC,
 		.sqefw_name = "a630_sqe.fw",
 		.zap_name = "a640_zap",
 		.gpudev = &adreno_a6xx_gpudev,

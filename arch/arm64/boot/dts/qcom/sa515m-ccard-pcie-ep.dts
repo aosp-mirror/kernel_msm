@@ -12,6 +12,7 @@
 
 /dts-v1/;
 
+#include "sdxprairie.dtsi"
 #include "sa515m-ccard.dtsi"
 
 / {
@@ -31,6 +32,8 @@
 
 &ipa_hw {
 	qcom,use-ipa-in-mhi-mode;
+	qcom,ipa-config-is-auto;
+	qcom,mhi-event-ring-id-limits = <7 11>; /* start and end */
 };
 
 &pcie0 {
@@ -46,6 +49,10 @@
 };
 
 &mhi_net_device {
+	status = "okay";
+};
+
+&mhi_dev_qrtr {
 	status = "okay";
 };
 

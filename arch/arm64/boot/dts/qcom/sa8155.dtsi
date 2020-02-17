@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -70,6 +70,10 @@
 
 &slpi_tlmm {
 	status = "ok";
+};
+
+&clock_gpucc {
+	compatible = "qcom,gpucc-sa8155", "syscon";
 };
 
 &cam_csiphy0 {
@@ -496,6 +500,7 @@
 &mdss_mdp {
 	qcom,sde-mixer-display-pref = "primary", "none", "none",
 				"none", "none", "none";
+	/delete-property/ qcom,sde-has-dest-scaler;
 };
 
 #include <dt-bindings/gpio/gpio.h>
@@ -508,8 +513,8 @@
 		      <0x17080000 0xE000>;
 		reg-names = "lpa_if", "lpass_tcsr";
 		interrupts = <GIC_SPI 267 0>;
-		bit-clock-hz = <20000000>;
-		interrupt-interval-ms = <10>;
+		number-of-rate-detectors = <2>;
+		rate-detector-interfaces = <0 1>;
 
 		sdr0: qcom,hs0_i2s {
 			compatible = "qcom,hsi2s-interface";
@@ -524,6 +529,23 @@
 			iommus = <&apps_smmu 0x1B5C 0x0>;
 			qcom,smmu-s1-bypass;
 			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 
 		sdr1: qcom,hs1_i2s {
@@ -539,6 +561,23 @@
 			iommus = <&apps_smmu 0x1B5D 0x0>;
 			qcom,smmu-s1-bypass;
 			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 
 		sdr2: qcom,hs2_i2s {
@@ -554,6 +593,23 @@
 			iommus = <&apps_smmu 0x1B5E 0x0>;
 			qcom,smmu-s1-bypass;
 			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 	};
 

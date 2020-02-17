@@ -356,7 +356,7 @@ static int32_t cam_eeprom_get_dev_handle(struct cam_eeprom_ctrl_t *e_ctrl,
 	bridge_params.v4l2_sub_dev_flag = 0;
 	bridge_params.media_entity_flag = 0;
 	bridge_params.priv = e_ctrl;
-
+	bridge_params.dev_id = CAM_EEPROM;
 	eeprom_acq_dev.device_handle =
 		cam_create_device_hdl(&bridge_params);
 	e_ctrl->bridge_intf.device_hdl = eeprom_acq_dev.device_handle;
@@ -915,7 +915,7 @@ static int32_t cam_eeprom_pkt_parse(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	}
 
 	if (cam_mem_put_cpu_buf(dev_config.packet_handle))
-		CAM_WARN(CAM_EEPROM, "Put cpu buffer failed : 0x%x",
+		CAM_WARN(CAM_EEPROM, "Put cpu buffer failed : 0x%llx",
 			dev_config.packet_handle);
 
 	return rc;
@@ -935,7 +935,7 @@ error:
 	e_ctrl->cam_eeprom_state = CAM_EEPROM_ACQUIRE;
 release_buf:
 	if (cam_mem_put_cpu_buf(dev_config.packet_handle))
-		CAM_WARN(CAM_EEPROM, "Put cpu buffer failed : 0x%x",
+		CAM_WARN(CAM_EEPROM, "Put cpu buffer failed : 0x%llx",
 			dev_config.packet_handle);
 
 	return rc;

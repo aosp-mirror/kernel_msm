@@ -94,8 +94,6 @@ struct cpu_gpu_lock {
 };
 
 #define A6XX_CP_CTXRECORD_MAGIC_REF     0xAE399D6EUL
-/* Size of each CP preemption record */
-#define A6XX_CP_CTXRECORD_SIZE_IN_BYTES     (2112 * 1024)
 /* Size of the preemption counter block (in bytes) */
 #define A6XX_CP_CTXRECORD_PREEMPTION_COUNTER_SIZE   (16 * 4)
 /* Size of the user context record block (in bytes) */
@@ -143,31 +141,6 @@ static inline int timed_poll_check(struct kgsl_device *device,
 	return -ETIMEDOUT;
 }
 
-/*
- * read_AO_counter() - Returns the 64bit always on counter value
- *
- * @device: Pointer to KGSL device
- */
-static inline uint64_t read_AO_counter(struct kgsl_device *device)
-{
-	unsigned int l, h, h1;
-
-	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_H, &h);
-	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_L, &l);
-	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_H, &h1);
-
-	/*
-	 * If there's no change in COUNTER_H we have no overflow so return,
-	 * otherwise read COUNTER_L again
-	 */
-
-	if (h == h1)
-		return (uint64_t) l | ((uint64_t) h << 32);
-
-	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_L, &l);
-	return (uint64_t) l | ((uint64_t) h1 << 32);
-}
-
 /* Preemption functions */
 void a6xx_preemption_trigger(struct adreno_device *adreno_dev);
 void a6xx_preemption_schedule(struct adreno_device *adreno_dev);
@@ -198,4 +171,5 @@ void a6xx_gmu_sptprac_disable(struct adreno_device *adreno_dev);
 bool a6xx_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
 size_t a6xx_snapshot_preemption(struct kgsl_device *device, u8 *buf,
 		size_t remain, void *priv);
+u64 a6xx_gmu_read_ao_counter(struct kgsl_device *device);
 #endif

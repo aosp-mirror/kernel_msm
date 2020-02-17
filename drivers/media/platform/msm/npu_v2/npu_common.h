@@ -13,8 +13,9 @@
 #ifndef _NPU_COMMON_H
 #define _NPU_COMMON_H
 
-/*
+/* -------------------------------------------------------------------------
  * Includes
+ * -------------------------------------------------------------------------
  */
 #include <asm/dma-iommu.h>
 #include <linux/cdev.h>
@@ -34,8 +35,9 @@
 
 #include "npu_mgr.h"
 
-/*
+/* -------------------------------------------------------------------------
  * Defines
+ * -------------------------------------------------------------------------
  */
 #define NPU_MAX_MBOX_NUM	    4
 #define NPU_MBOX_LOW_PRI	    0
@@ -76,8 +78,9 @@ enum npu_power_level {
 #define NPU_DBG(fmt, args...)                           \
 	pr_debug("NPU_DBG: %s: %d " fmt, __func__,  __LINE__, ##args)
 
-/*
+/* -------------------------------------------------------------------------
  * Data Structures
+ * -------------------------------------------------------------------------
  */
 struct npu_smmu_ctx {
 	int domain;
@@ -113,14 +116,18 @@ struct npu_debugfs_ctx {
 	struct dentry *root;
 	uint32_t reg_off;
 	uint32_t reg_cnt;
-	char *buf;
-	size_t buf_len;
 	uint8_t *log_buf;
 	struct mutex log_lock;
 	uint32_t log_num_bytes_buffered;
 	uint32_t log_read_index;
 	uint32_t log_write_index;
 	uint32_t log_buf_size;
+};
+
+struct npu_debugfs_reg_ctx {
+	char *buf;
+	size_t buf_len;
+	struct npu_device *npu_dev;
 };
 
 struct npu_mbox {
@@ -314,8 +321,9 @@ struct ipcc_mbox_chan {
 	struct npu_device *npu_dev;
 };
 
-/*
+/* -------------------------------------------------------------------------
  * Function Prototypes
+ * -------------------------------------------------------------------------
  */
 int npu_debugfs_init(struct npu_device *npu_dev);
 void npu_debugfs_deinit(struct npu_device *npu_dev);
@@ -339,5 +347,5 @@ void disable_fw(struct npu_device *npu_dev);
 int load_fw(struct npu_device *npu_dev);
 int unload_fw(struct npu_device *npu_dev);
 int npu_set_bw(struct npu_device *npu_dev, int new_ib, int new_ab);
-
+int npu_process_kevent(struct npu_client *client, struct npu_kevent *kevt);
 #endif /* _NPU_COMMON_H */

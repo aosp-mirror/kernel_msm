@@ -89,6 +89,10 @@ int memblock_clear_hotplug(phys_addr_t base, phys_addr_t size);
 int memblock_mark_mirror(phys_addr_t base, phys_addr_t size);
 int memblock_mark_nomap(phys_addr_t base, phys_addr_t size);
 int memblock_clear_nomap(phys_addr_t base, phys_addr_t size);
+#ifdef CONFIG_MEMORY_HOTPLUG
+int memblock_dump_aligned_blocks_addr(char *buf);
+int memblock_dump_aligned_blocks_num(char *buf);
+#endif
 ulong choose_memblock_flags(void);
 
 /* Low level functions */
@@ -395,6 +399,11 @@ static inline unsigned long memblock_region_reserved_end_pfn(const struct memblo
 	for (idx = 0, rgn = &memblock_type->regions[0];			\
 	     idx < memblock_type->cnt;					\
 	     idx++, rgn = &memblock_type->regions[idx])
+#define for_each_memblock_rev(memblock_type, region)	\
+	for (region = memblock.memblock_type.regions + \
+			memblock.memblock_type.cnt - 1;	\
+	     region >= memblock.memblock_type.regions;	\
+	     region--)
 
 #ifdef CONFIG_MEMTEST
 extern void early_memtest(phys_addr_t start, phys_addr_t end);

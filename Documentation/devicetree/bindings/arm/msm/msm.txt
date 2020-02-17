@@ -22,6 +22,8 @@ restart@fc4ab000 {
 * Compatible strings:
 
 SoCs:
+- MDM9607
+  compatible = "qcom,mdm9607"
 
 - APQ8016
   compatible = "qcom,apq8016"
@@ -86,6 +88,9 @@ SoCs:
 - QCS410
   compatible = "qcom,qcs410"
 
+- SDM660
+  compatible = "qcom,sdm660"
+
 Generic board variants:
 
 - CDP device:
@@ -132,6 +137,9 @@ Generic board variants:
 
 - IOT device:
   compatible = "qcom,iot"
+
+- TTP device:
+  compatible = "qcom,ttp"
 
 
 Boards (SoC type + board variant):
@@ -199,6 +207,7 @@ compatible = "qcom,sa6155-adp-air"
 compatible = "qcom,sa6155p-adp-air"
 compatible = "qcom,qcs405-rumi"
 compatible = "qcom,qcs405-iot"
+compatible = "qcom,sa2150p-ccard"
 compatible = "qcom,qcs403-iot"
 compatible = "qcom,qcs401-iot"
 compatible = "qcom,qcs404-iot"
@@ -218,6 +227,7 @@ compatible = "qcom,sdxprairie-rumi"
 compatible = "qcom,sdxprairie-mtp"
 compatible = "qcom,sdxprairie-cdp"
 compatible = "qcom,sa515m-ccard"
+compatible = "qcom,sa515m-ttp"
 compatible = "qcom,sdmmagpie-rumi"
 compatible = "qcom,sdmmagpie-idp"
 compatible = "qcom,sdmmagpie-atp"
@@ -237,5 +247,14 @@ compatible = "qcom,atollp"
 compatible = "qcom,atollp-idp"
 compatible = "qcom,atollp-atp"
 compatible = "qcom,atollp-qrd"
+compatible = "qcom,atoll-ab"
+compatible = "qcom,atoll-ab-idp"
+compatible = "qcom,atoll-ab-atp"
+compatible = "qcom,atoll-ab-qrd"
 compatible = "qcom,qcs610-iot"
 compatible = "qcom,qcs410-iot"
+compatible = "qcom,mdm9607-mtp"
+compatible = "qcom,sdm660-cdp"
+compatible = "qcom,sdm660-mtp"
+compatible = "qcom,sdm660-qrd"
+compatible = "qcom,sdm660-sim"

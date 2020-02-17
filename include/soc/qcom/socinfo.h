@@ -85,6 +85,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,qcs407")
 #define early_machine_is_sdxprairie()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdxprairie")
+#define early_machine_is_mdm9607()      \
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,mdm9607")
 #define early_machine_is_sdmmagpie()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdmmagpie")
 #define early_machine_is_sdmmagpiep()	\
@@ -105,6 +107,10 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,atoll")
 #define early_machine_is_atollp()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,atollp")
+#define early_machine_is_atoll_ab()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,atoll-ab")
+#define early_machine_is_sdm660()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sdm660")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -137,6 +143,7 @@
 #define early_machine_is_qcs404()       0
 #define early_machine_is_qcs407()       0
 #define early_machine_is_sdxprairie()	0
+#define early_machine_is_mdm9607()      0
 #define early_machine_is_sdmmagpie()	0
 #define early_machine_is_sdmmagpiep()	0
 #define early_machine_is_sa6155p()	0
@@ -147,6 +154,7 @@
 #define early_machine_is_qcs410()       0
 #define early_machine_is_atoll()	0
 #define early_machine_is_atollp()	0
+#define early_machine_is_sdm660()	0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
@@ -181,6 +189,7 @@ enum msm_cpu {
 	MSM_CPU_QCS404,
 	MSM_CPU_QCS407,
 	SDX_CPU_SDXPRAIRIE,
+	MSM_CPU_9607,
 	MSM_CPU_SDMMAGPIE,
 	MSM_CPU_SDMMAGPIEP,
 	MSM_CPU_SA6155P,
@@ -191,6 +200,8 @@ enum msm_cpu {
 	MSM_CPU_QCS410,
 	MSM_CPU_ATOLL,
 	MSM_CPU_ATOLLP,
+	MSM_CPU_ATOLL_AB,
+	MSM_CPU_SDM660,
 };
 
 struct msm_soc_info {

@@ -1424,7 +1424,8 @@ static int msm_drm_object_supports_event(struct drm_device *dev,
 	int ret = -EINVAL;
 	struct drm_mode_object *arg_obj;
 
-	arg_obj = drm_mode_object_find(dev, req->object_id, req->object_type);
+	arg_obj = drm_mode_object_find(dev, NULL,
+				req->object_id, req->object_type);
 	if (!arg_obj)
 		return -ENOENT;
 
@@ -1451,7 +1452,8 @@ static int msm_register_event(struct drm_device *dev,
 	struct msm_kms *kms = priv->kms;
 	struct drm_mode_object *arg_obj;
 
-	arg_obj = drm_mode_object_find(dev, req->object_id, req->object_type);
+	arg_obj = drm_mode_object_find(dev, NULL,
+				req->object_id, req->object_type);
 	if (!arg_obj)
 		return -ENOENT;
 
@@ -1714,7 +1716,7 @@ int msm_ioctl_rmfb2(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
 
-	fb = drm_framebuffer_lookup(dev, *id);
+	fb = drm_framebuffer_lookup(dev, file_priv, *id);
 	if (!fb)
 		return -ENOENT;
 
@@ -2192,11 +2194,11 @@ static int msm_pdev_probe(struct platform_device *pdev)
 
 	ret = add_display_components(&pdev->dev, &match);
 	if (ret)
-		return ret;
+		goto fail;
 
 	ret = add_gpu_components(&pdev->dev, &match);
 	if (ret)
-		return ret;
+		goto fail;
 
 	if (!match)
 		return -ENODEV;
@@ -2204,7 +2206,16 @@ static int msm_pdev_probe(struct platform_device *pdev)
 	device_enable_async_suspend(&pdev->dev);
 
 	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
-	return component_master_add_with_match(&pdev->dev, &msm_drm_ops, match);
+
+	ret = component_master_add_with_match(&pdev->dev, &msm_drm_ops, match);
+	if (ret)
+		goto fail;
+
+	return 0;
+
+fail:
+	of_platform_depopulate(&pdev->dev);
+	return ret;
 }
 
 static int msm_pdev_remove(struct platform_device *pdev)

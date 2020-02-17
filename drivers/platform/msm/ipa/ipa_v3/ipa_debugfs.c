@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -100,6 +100,8 @@ const char *ipa3_hdr_proc_type_name[] = {
 	__stringify(IPA_HDR_PROC_L2TP_HEADER_ADD),
 	__stringify(IPA_HDR_PROC_L2TP_HEADER_REMOVE),
 	__stringify(IPA_HDR_PROC_ETHII_TO_ETHII_EX),
+	__stringify(IPA_HDR_PROC_L2TP_UDP_HEADER_ADD),
+	__stringify(IPA_HDR_PROC_L2TP_UDP_HEADER_REMOVE),
 };
 
 static struct dentry *dent;
@@ -109,12 +111,6 @@ static char *active_clients_buf;
 static s8 ep_reg_idx;
 static void *ipa_ipc_low_buff;
 
-#define IPA_MAX_DEBUG_MSG_LEN (IPA_MAX_MSG_LEN * 6)
-#define IPA_DEBUG_MSG_DUMP_HW 0 /*1: enable, 0: disable*/
-static int ipa_msg_buff_count;
-static char *ipa_msg_buff;
-static ssize_t ipa3_read_dump_debug_msg(struct file*,
-		char __user*, size_t, loff_t*);
 
 static ssize_t ipa3_read_gen_reg(struct file *file, char __user *ubuf,
 		size_t count, loff_t *ppos)
@@ -340,7 +336,6 @@ static ssize_t ipa3_write_keep_awake(struct file *file, const char __user *buf,
 {
 	unsigned long missing;
 	s8 option = 0;
-	uint32_t bw_mbps = 0;
 
 	if (sizeof(dbg_buff) < count + 1)
 		return -EFAULT;
@@ -353,34 +348,16 @@ static ssize_t ipa3_write_keep_awake(struct file *file, const char __user *buf,
 	if (kstrtos8(dbg_buff, 0, &option))
 		return -EFAULT;
 
-	switch (option) {
-	case 0:
-		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
-		bw_mbps = 0;
-		break;
-	case 1:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 0;
-		break;
-	case 2:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 700;
-		break;
-	case 3:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 3000;
-		break;
-	case 4:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 7000;
-		break;
-	default:
-		pr_err("Not support this vote (%d)\n", option);
-		return -EFAULT;
-	}
-	if (ipa3_vote_for_bus_bw(&bw_mbps)) {
-		IPAERR("Failed to vote for bus BW (%u)\n", bw_mbps);
-		return -EFAULT;
+	if (option == 0) {
+		if (ipa_pm_remove_dummy_clients()) {
+			pr_err("Failed to remove dummy clients\n");
+			return -EFAULT;
+		}
+	} else {
+		if (ipa_pm_add_dummy_clients(option - 1)) {
+			pr_err("Failed to add dummy clients\n");
+			return -EFAULT;
+		}
 	}
 
 	return count;
@@ -566,11 +543,16 @@ static int ipa3_attrib_dump(struct ipa_rule_attrib *attrib,
 	if ((attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_ETHER_II) ||
 		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_3) ||
 		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_L2TP) ||
-		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_1Q)) {
+		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_1Q) ||
+		(attrib->attrib_mask & IPA_FLT_L2TP_UDP_INNER_MAC_DST_ADDR)) {
 		pr_err("dst_mac_addr:%pM ", attrib->dst_mac_addr);
 	}
 
-	if (attrib->attrib_mask & IPA_FLT_MAC_ETHER_TYPE)
+	if (attrib->ext_attrib_mask & IPA_FLT_EXT_MTU)
+		pr_err("Payload Length:%d ", attrib->payload_length);
+
+	if (attrib->attrib_mask & IPA_FLT_MAC_ETHER_TYPE ||
+		attrib->ext_attrib_mask & IPA_FLT_EXT_L2TP_UDP_INNER_ETHER_TYPE)
 		pr_err("ether_type:%x ", attrib->ether_type);
 
 	if (attrib->attrib_mask & IPA_FLT_VLAN_ID)
@@ -579,7 +561,8 @@ static int ipa3_attrib_dump(struct ipa_rule_attrib *attrib,
 	if (attrib->attrib_mask & IPA_FLT_TCP_SYN)
 		pr_err("tcp syn ");
 
-	if (attrib->attrib_mask & IPA_FLT_TCP_SYN_L2TP)
+	if (attrib->attrib_mask & IPA_FLT_TCP_SYN_L2TP ||
+		attrib->ext_attrib_mask & IPA_FLT_EXT_L2TP_UDP_TCP_SYN)
 		pr_err("tcp syn l2tp ");
 
 	if (attrib->attrib_mask & IPA_FLT_L2TP_INNER_IP_TYPE)
@@ -1221,6 +1204,26 @@ static ssize_t ipa3_read_odlstats(struct file *file, char __user *ubuf,
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, cnt);
 }
 
+static ssize_t ipa3_read_page_recycle_stats(struct file *file,
+		char __user *ubuf, size_t count, loff_t *ppos)
+{
+	int nbytes;
+	int cnt = 0;
+
+	nbytes = scnprintf(dbg_buff, IPA_MAX_MSG_LEN,
+			"COAL : Total number of packets replenished =%llu\n"
+			"COAL : Number of tmp alloc packets  =%llu\n"
+			"DEF  : Total number of packets replenished =%llu\n"
+			"DEF  : Number of tmp alloc packets  =%llu\n",
+			ipa3_ctx->stats.page_recycle_stats[0].total_replenished,
+			ipa3_ctx->stats.page_recycle_stats[0].tmp_alloc,
+			ipa3_ctx->stats.page_recycle_stats[1].total_replenished,
+			ipa3_ctx->stats.page_recycle_stats[1].tmp_alloc);
+
+	cnt += nbytes;
+
+	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, cnt);
+}
 static ssize_t ipa3_read_wstats(struct file *file, char __user *ubuf,
 		size_t count, loff_t *ppos)
 {
@@ -1646,7 +1649,8 @@ static ssize_t ipa3_read_msg(struct file *file, char __user *ubuf,
 }
 
 static void ipa3_read_table(
-	char *table_addr, u32 table_size,
+	char *table_addr,
+	u32 table_size,
 	u32 *total_num_entries,
 	u32 *rule_id,
 	enum ipahal_nat_type nat_type)
@@ -1660,46 +1664,51 @@ static void ipa3_read_table(
 	char *buff;
 	size_t buff_size = 2 * IPA_MAX_ENTRY_STRING_LEN;
 
-	IPADBG("\n");
+	IPADBG("In\n");
+
 	if (table_addr == NULL) {
 		pr_err("NULL NAT table\n");
-		return;
+		goto bail;
 	}
 
 	result = ipahal_nat_entry_size(nat_type, &entry_size);
+
 	if (result) {
 		IPAERR("Failed to retrieve size of %s entry\n",
 			ipahal_nat_type_str(nat_type));
-		return;
+		goto bail;
 	}
 
 	buff = kzalloc(buff_size, GFP_KERNEL);
+
 	if (!buff) {
 		IPAERR("Out of memory\n");
-		return;
+		goto bail;
 	}
 
 	for (i = 0, entry = table_addr;
 		i < table_size;
 		++i, ++id, entry += entry_size) {
+
 		result = ipahal_nat_is_entry_zeroed(nat_type, entry,
 			&entry_zeroed);
+
 		if (result) {
-			IPAERR(
-				"Failed to determine whether the %s entry is definitely zero\n"
-					, ipahal_nat_type_str(nat_type));
-			goto bail;
+			IPAERR("Undefined if %s entry is zero\n",
+				   ipahal_nat_type_str(nat_type));
+			goto free_buf;
 		}
+
 		if (entry_zeroed)
 			continue;
 
 		result = ipahal_nat_is_entry_valid(nat_type, entry,
 			&entry_valid);
+
 		if (result) {
-			IPAERR(
-				"Failed to determine whether the %s entry is valid\n"
-					, ipahal_nat_type_str(nat_type));
-			goto bail;
+			IPAERR("Undefined if %s entry is valid\n",
+				   ipahal_nat_type_str(nat_type));
+			goto free_buf;
 		}
 
 		if (entry_valid) {
@@ -1710,7 +1719,9 @@ static void ipa3_read_table(
 
 		ipahal_nat_stringify_entry(nat_type, entry,
 			buff, buff_size);
+
 		pr_err("%s\n", buff);
+
 		memset(buff, 0, buff_size);
 	}
 
@@ -1718,52 +1729,150 @@ static void ipa3_read_table(
 		pr_err("\n");
 	else
 		pr_err("\tEmpty\n\n");
-	IPADBG("return\n");
-bail:
+
+free_buf:
 	kfree(buff);
 	*rule_id = id;
 	*total_num_entries += num_entries;
+
+bail:
+	IPADBG("Out\n");
 }
 
 static void ipa3_start_read_memory_device(
 	struct ipa3_nat_ipv6ct_common_mem *dev,
 	enum ipahal_nat_type nat_type,
-	u32 *num_entries)
+	u32 *num_ddr_ent_ptr,
+	u32 *num_sram_ent_ptr)
 {
 	u32 rule_id = 0;
 
-	IPADBG("\n");
+	if (dev->is_ipv6ct_mem) {
 
-	pr_err("%s_Table_Size=%d\n",
-		dev->name, dev->table_entries + 1);
+		IPADBG("In: v6\n");
 
-	pr_err("%s_Expansion_Table_Size=%d\n",
-		dev->name, dev->expn_table_entries);
+		pr_err("%s_Table_Size=%d\n",
+			   dev->name, dev->table_entries + 1);
 
-	if (!dev->is_sys_mem)
-		pr_err("Not supported for local(shared) memory\n");
+		pr_err("%s_Expansion_Table_Size=%d\n",
+			   dev->name, dev->expn_table_entries);
 
-	pr_err("\n%s Base Table:\n", dev->name);
-	ipa3_read_table(dev->base_table_addr, dev->table_entries + 1,
-		num_entries, &rule_id, nat_type);
+		pr_err("\n%s Base Table:\n", dev->name);
 
-	pr_err("%s Expansion Table:\n", dev->name);
-	ipa3_read_table(
-		dev->expansion_table_addr, dev->expn_table_entries,
-		num_entries,
-		&rule_id,
-		nat_type);
+		if (dev->base_table_addr)
+			ipa3_read_table(
+				dev->base_table_addr,
+				dev->table_entries + 1,
+				num_ddr_ent_ptr,
+				&rule_id,
+				nat_type);
 
-	IPADBG("return\n");
+		pr_err("%s Expansion Table:\n", dev->name);
+
+		if (dev->expansion_table_addr)
+			ipa3_read_table(
+				dev->expansion_table_addr,
+				dev->expn_table_entries,
+				num_ddr_ent_ptr,
+				&rule_id,
+				nat_type);
+	}
+
+	if (dev->is_nat_mem) {
+		struct ipa3_nat_mem *nm_ptr = (struct ipa3_nat_mem *) dev;
+		struct ipa3_nat_mem_loc_data *mld_ptr = NULL;
+		u32 *num_ent_ptr;
+		const char *type_ptr;
+
+		IPADBG("In: v4\n");
+
+		if (nm_ptr->active_table == IPA_NAT_MEM_IN_DDR &&
+			nm_ptr->ddr_in_use) {
+
+			mld_ptr     = &nm_ptr->mem_loc[IPA_NAT_MEM_IN_DDR];
+			num_ent_ptr = num_ddr_ent_ptr;
+			type_ptr    = "DDR based table";
+		}
+
+		if (nm_ptr->active_table == IPA_NAT_MEM_IN_SRAM &&
+			nm_ptr->sram_in_use) {
+
+			mld_ptr     = &nm_ptr->mem_loc[IPA_NAT_MEM_IN_SRAM];
+			num_ent_ptr = num_sram_ent_ptr;
+			type_ptr    = "SRAM based table";
+		}
+
+		if (mld_ptr) {
+			pr_err("(%s) %s_Table_Size=%d\n",
+				   type_ptr,
+				   dev->name,
+				   mld_ptr->table_entries + 1);
+
+			pr_err("(%s) %s_Expansion_Table_Size=%d\n",
+				   type_ptr,
+				   dev->name,
+				   mld_ptr->expn_table_entries);
+
+			pr_err("\n(%s) %s_Base Table:\n",
+				   type_ptr,
+				   dev->name);
+
+			if (mld_ptr->base_table_addr)
+				ipa3_read_table(
+					mld_ptr->base_table_addr,
+					mld_ptr->table_entries + 1,
+					num_ent_ptr,
+					&rule_id,
+					nat_type);
+
+			pr_err("(%s) %s_Expansion Table:\n",
+				   type_ptr,
+				   dev->name);
+
+			if (mld_ptr->expansion_table_addr)
+				ipa3_read_table(
+					mld_ptr->expansion_table_addr,
+					mld_ptr->expn_table_entries,
+					num_ent_ptr,
+					&rule_id,
+					nat_type);
+		}
+	}
+
+	IPADBG("Out\n");
 }
 
 static void ipa3_finish_read_memory_device(
 	struct ipa3_nat_ipv6ct_common_mem *dev,
-	u32 num_entries)
+	u32 num_ddr_entries,
+	u32 num_sram_entries)
 {
-	IPADBG("\n");
-	pr_err("Overall number %s entries: %d\n\n", dev->name, num_entries);
-	IPADBG("return\n");
+	IPADBG("In\n");
+
+	if (dev->is_ipv6ct_mem) {
+		pr_err("Overall number %s entries: %u\n\n",
+			   dev->name,
+			   num_ddr_entries);
+	} else {
+		struct ipa3_nat_mem *nm_ptr = (struct ipa3_nat_mem *) dev;
+
+		if (num_ddr_entries)
+			pr_err("%s: Overall number of DDR entries: %u\n\n",
+				   dev->name,
+				   num_ddr_entries);
+
+		if (num_sram_entries)
+			pr_err("%s: Overall number of SRAM entries: %u\n\n",
+				   dev->name,
+				   num_sram_entries);
+
+		pr_err("%s: Driver focus changes to DDR(%u) to SRAM(%u)\n",
+			   dev->name,
+			   nm_ptr->switch2ddr_cnt,
+			   nm_ptr->switch2sram_cnt);
+	}
+
+	IPADBG("Out\n");
 }
 
 static void ipa3_read_pdn_table(void)
@@ -1776,72 +1885,106 @@ static void ipa3_read_pdn_table(void)
 	char *buff;
 	size_t buff_size = 128;
 
-	IPADBG("\n");
+	IPADBG("In\n");
 
-	result = ipahal_nat_entry_size(IPAHAL_NAT_IPV4_PDN, &pdn_entry_size);
-	if (result) {
-		IPAERR("Failed to retrieve size of PDN entry");
-		return;
-	}
+	if (ipa3_ctx->nat_mem.pdn_mem.base) {
 
-	buff = kzalloc(buff_size, GFP_KERNEL);
-	if (!buff) {
-		IPAERR("Out of memory\n");
-		return;
-	}
+		result = ipahal_nat_entry_size(
+			IPAHAL_NAT_IPV4_PDN, &pdn_entry_size);
 
-	for (i = 0, pdn_entry = ipa3_ctx->nat_mem.pdn_mem.base;
-		i < IPA_MAX_PDN_NUM;
-		++i, pdn_entry += pdn_entry_size) {
-		result = ipahal_nat_is_entry_zeroed(IPAHAL_NAT_IPV4_PDN,
-			pdn_entry, &entry_zeroed);
 		if (result) {
-			IPAERR(
-				"Failed to determine whether the PDN entry is definitely zero\n");
+			IPAERR("Failed to retrieve size of PDN entry");
 			goto bail;
 		}
-		if (entry_zeroed)
-			continue;
 
-		result = ipahal_nat_is_entry_valid(IPAHAL_NAT_IPV4_PDN,
-			pdn_entry, &entry_valid);
-		if (result) {
-			IPAERR(
-				"Failed to determine whether the PDN entry is valid\n");
+		buff = kzalloc(buff_size, GFP_KERNEL);
+		if (!buff) {
+			IPAERR("Out of memory\n");
 			goto bail;
 		}
-		if (entry_valid)
-			pr_err("PDN %d: ", i);
-		else
-			pr_err("PDN %d - Invalid: ", i);
 
-		ipahal_nat_stringify_entry(IPAHAL_NAT_IPV4_PDN,
+		for (i = 0, pdn_entry = ipa3_ctx->nat_mem.pdn_mem.base;
+			 i < IPA_MAX_PDN_NUM;
+			 ++i, pdn_entry += pdn_entry_size) {
+
+			result = ipahal_nat_is_entry_zeroed(
+				IPAHAL_NAT_IPV4_PDN,
+				pdn_entry, &entry_zeroed);
+
+			if (result) {
+				IPAERR("ipahal_nat_is_entry_zeroed() fail\n");
+				goto free;
+			}
+
+			if (entry_zeroed)
+				continue;
+
+			result = ipahal_nat_is_entry_valid(
+				IPAHAL_NAT_IPV4_PDN,
+				pdn_entry, &entry_valid);
+
+			if (result) {
+				IPAERR(
+					"Failed to determine whether the PDN entry is valid\n");
+				goto free;
+			}
+
+			if (entry_valid)
+				pr_err("PDN %d: ", i);
+			else
+				pr_err("PDN %d - Invalid: ", i);
+
+			ipahal_nat_stringify_entry(
+				IPAHAL_NAT_IPV4_PDN,
 				pdn_entry, buff, buff_size);
-		pr_err("%s\n", buff);
-		memset(buff, 0, buff_size);
+
+			pr_err("%s\n", buff);
+
+			memset(buff, 0, buff_size);
+		}
+		pr_err("\n");
+free:
+		kfree(buff);
 	}
-	pr_err("\n");
 bail:
-	kfree(buff);
-	IPADBG("return\n");
+	IPADBG("Out\n");
 }
 
-static ssize_t ipa3_read_nat4(struct file *file,
-		char __user *ubuf, size_t count,
-		loff_t *ppos)
+static ssize_t ipa3_read_nat4(
+	struct file *file,
+	char __user *ubuf,
+	size_t count,
+	loff_t *ppos)
 {
-	u32 rule_id = 0, num_entries = 0, index_num_entries = 0;
+	struct ipa3_nat_ipv6ct_common_mem *dev = &ipa3_ctx->nat_mem.dev;
+	struct ipa3_nat_mem *nm_ptr = (struct ipa3_nat_mem *) dev;
+	struct ipa3_nat_mem_loc_data *mld_ptr = NULL;
+
+	u32  rule_id = 0;
+
+	u32 *num_ents_ptr;
+	u32  num_ddr_ents = 0;
+	u32  num_sram_ents = 0;
+
+	u32 *num_index_ents_ptr;
+	u32  num_ddr_index_ents = 0;
+	u32  num_sram_index_ents = 0;
+
+	const char *type_ptr;
+
+	bool any_table_active = (nm_ptr->ddr_in_use || nm_ptr->sram_in_use);
 
 	pr_err("IPA3 NAT stats\n");
-	if (!ipa3_ctx->nat_mem.dev.is_dev_init) {
+
+	if (!dev->is_dev_init) {
 		pr_err("NAT hasn't been initialized or not supported\n");
 		goto ret;
 	}
 
-	mutex_lock(&ipa3_ctx->nat_mem.dev.lock);
+	mutex_lock(&dev->lock);
 
-	if (!ipa3_ctx->nat_mem.dev.is_hw_init) {
-		pr_err("NAT H/W hasn't been initialized\n");
+	if (!dev->is_hw_init || !any_table_active) {
+		pr_err("NAT H/W and/or S/W not initialized\n");
 		goto bail;
 	}
 
@@ -1849,71 +1992,117 @@ static ssize_t ipa3_read_nat4(struct file *file,
 		ipa3_read_pdn_table();
 	} else {
 		pr_err("NAT Table IP Address=%pI4h\n\n",
-			&ipa3_ctx->nat_mem.public_ip_addr);
+			   &ipa3_ctx->nat_mem.public_ip_addr);
 	}
 
-	ipa3_start_read_memory_device(&ipa3_ctx->nat_mem.dev,
-		IPAHAL_NAT_IPV4, &num_entries);
+	ipa3_start_read_memory_device(
+		dev,
+		IPAHAL_NAT_IPV4,
+		&num_ddr_ents,
+		&num_sram_ents);
 
-	/* Print Index tables */
-	pr_err("ipaNatTable Index Table:\n");
-	ipa3_read_table(
-		ipa3_ctx->nat_mem.index_table_addr,
-		ipa3_ctx->nat_mem.dev.table_entries + 1,
-		&index_num_entries,
-		&rule_id,
-		IPAHAL_NAT_IPV4_INDEX);
+	if (nm_ptr->active_table == IPA_NAT_MEM_IN_DDR &&
+		nm_ptr->ddr_in_use) {
 
-	pr_err("ipaNatTable Expansion Index Table:\n");
-	ipa3_read_table(
-		ipa3_ctx->nat_mem.index_table_expansion_addr,
-		ipa3_ctx->nat_mem.dev.expn_table_entries,
-		&index_num_entries,
-		&rule_id,
-		IPAHAL_NAT_IPV4_INDEX);
+		mld_ptr            = &nm_ptr->mem_loc[IPA_NAT_MEM_IN_DDR];
+		num_ents_ptr       = &num_ddr_ents;
+		num_index_ents_ptr = &num_ddr_index_ents;
+		type_ptr           = "DDR based table";
+	}
 
-	if (num_entries != index_num_entries)
-		IPAERR(
-			"The NAT table number of entries %d is different from index table number of entries %d\n",
-			num_entries, index_num_entries);
+	if (nm_ptr->active_table == IPA_NAT_MEM_IN_SRAM &&
+		nm_ptr->sram_in_use) {
 
-	ipa3_finish_read_memory_device(&ipa3_ctx->nat_mem.dev, num_entries);
+		mld_ptr            = &nm_ptr->mem_loc[IPA_NAT_MEM_IN_SRAM];
+		num_ents_ptr       = &num_sram_ents;
+		num_index_ents_ptr = &num_sram_index_ents;
+		type_ptr           = "SRAM based table";
+	}
 
-	IPADBG("return\n");
+	if (mld_ptr) {
+		/* Print Index tables */
+		pr_err("(%s) ipaNatTable Index Table:\n", type_ptr);
+
+		ipa3_read_table(
+			mld_ptr->index_table_addr,
+			mld_ptr->table_entries + 1,
+			num_index_ents_ptr,
+			&rule_id,
+			IPAHAL_NAT_IPV4_INDEX);
+
+		pr_err("(%s) ipaNatTable Expansion Index Table:\n", type_ptr);
+
+		ipa3_read_table(
+			mld_ptr->index_table_expansion_addr,
+			mld_ptr->expn_table_entries,
+			num_index_ents_ptr,
+			&rule_id,
+			IPAHAL_NAT_IPV4_INDEX);
+
+		if (*num_ents_ptr != *num_index_ents_ptr)
+			IPAERR(
+				"(%s) Base Table vs Index Table entry count differs (%u vs %u)\n",
+				type_ptr, *num_ents_ptr, *num_index_ents_ptr);
+	}
+
+	ipa3_finish_read_memory_device(
+		dev,
+		num_ddr_ents,
+		num_sram_ents);
+
 bail:
-	mutex_unlock(&ipa3_ctx->nat_mem.dev.lock);
+	mutex_unlock(&dev->lock);
+
 ret:
+	IPADBG("Out\n");
+
 	return 0;
 }
 
-static ssize_t ipa3_read_ipv6ct(struct file *file,
-	char __user *ubuf, size_t count,
+static ssize_t ipa3_read_ipv6ct(
+	struct file *file,
+	char __user *ubuf,
+	size_t count,
 	loff_t *ppos)
 {
-	u32 num_entries = 0;
+	struct ipa3_nat_ipv6ct_common_mem *dev = &ipa3_ctx->ipv6ct_mem.dev;
+
+	u32 num_ddr_ents, num_sram_ents;
+
+	num_ddr_ents = num_sram_ents = 0;
+
+	IPADBG("In\n");
 
 	pr_err("\n");
 
-	if (!ipa3_ctx->ipv6ct_mem.dev.is_dev_init) {
+	if (!dev->is_dev_init) {
 		pr_err("IPv6 Conntrack not initialized or not supported\n");
-		return 0;
+		goto bail;
 	}
 
-	mutex_lock(&ipa3_ctx->ipv6ct_mem.dev.lock);
-
-	if (!ipa3_ctx->ipv6ct_mem.dev.is_hw_init) {
+	if (!dev->is_hw_init) {
 		pr_err("IPv6 connection tracking H/W hasn't been initialized\n");
 		goto bail;
 	}
 
-	ipa3_start_read_memory_device(&ipa3_ctx->ipv6ct_mem.dev,
-		IPAHAL_NAT_IPV6CT, &num_entries);
-	ipa3_finish_read_memory_device(&ipa3_ctx->ipv6ct_mem.dev,
-		num_entries);
+	mutex_lock(&dev->lock);
 
-	IPADBG("return\n");
+	ipa3_start_read_memory_device(
+		dev,
+		IPAHAL_NAT_IPV6CT,
+		&num_ddr_ents,
+		&num_sram_ents);
+
+	ipa3_finish_read_memory_device(
+		dev,
+		num_ddr_ents,
+		num_sram_ents);
+
+	mutex_unlock(&dev->lock);
+
 bail:
-	mutex_unlock(&ipa3_ctx->ipv6ct_mem.dev.lock);
+	IPADBG("Out\n");
+
 	return 0;
 }
 
@@ -2286,6 +2475,22 @@ done:
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, cnt);
 }
 
+static ssize_t ipa3_read_app_clk_vote(
+	struct file *file,
+	char __user *ubuf,
+	size_t count,
+	loff_t *ppos)
+{
+	int cnt =
+		scnprintf(
+			dbg_buff,
+			IPA_MAX_MSG_LEN,
+			"%u\n",
+			ipa3_ctx->app_clock_vote.cnt);
+
+	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, cnt);
+}
+
 static void ipa_dump_status(struct ipahal_pkt_status *status)
 {
 	IPA_DUMP_STATUS_FIELD(status_opcode);
@@ -2512,6 +2717,10 @@ static const struct ipa3_debugfs_file debugfs_files[] = {
 			.read = ipa3_read_odlstats,
 		}
 	}, {
+		"page_recycle_stats", IPA_READ_ONLY_MODE, NULL, {
+			.read = ipa3_read_page_recycle_stats,
+		}
+	}, {
 		"wdi", IPA_READ_ONLY_MODE, NULL, {
 			.read = ipa3_read_wdi,
 		}
@@ -2561,10 +2770,6 @@ static const struct ipa3_debugfs_file debugfs_files[] = {
 			.read = ipa3_read_ipahal_regs,
 		}
 	}, {
-		"ipa_statistics_msg", IPA_READ_ONLY_MODE, NULL, {
-			.read = ipa3_read_dump_debug_msg,
-		}
-	}, {
 		"wdi_gsi_stats", IPA_READ_ONLY_MODE, NULL, {
 			.read = ipa3_read_wdi_gsi_stats,
 		}
@@ -2588,7 +2793,11 @@ static const struct ipa3_debugfs_file debugfs_files[] = {
 		"usb_gsi_stats", IPA_READ_ONLY_MODE, NULL, {
 			.read = ipa3_read_usb_gsi_stats,
 		}
-	}
+	}, {
+		"app_clk_vote_cnt", IPA_READ_ONLY_MODE, NULL, {
+			.read = ipa3_read_app_clk_vote,
+		}
+	},
 };
 
 void ipa3_debugfs_pre_init(void)
@@ -2637,8 +2846,6 @@ void ipa3_debugfs_post_init(void)
 			GFP_KERNEL);
 	if (active_clients_buf == NULL)
 		goto fail;
-
-	ipa_msg_buff = NULL;
 
 	file = debugfs_create_u32("enable_clock_scaling", IPA_READ_WRITE_MODE,
 		dent, &ipa3_ctx->enable_clock_scaling);
@@ -2703,1659 +2910,6 @@ struct dentry *ipa_debugfs_get_root(void)
 	return dent;
 }
 EXPORT_SYMBOL(ipa_debugfs_get_root);
-
-static int ipa3_collect_gen_reg(char *msg_buff, int max_buff_len)
-{
-	int nbytes = 0;
-	struct ipahal_reg_shared_mem_size smem_sz = { 0 };
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-
-	ipahal_read_reg_fields(IPA_SHARED_MEM_SIZE, &smem_sz);
-	nbytes = scnprintf(msg_buff, max_buff_len,
-			"IPA_VERSION=0x%x\n"
-			"IPA_COMP_HW_VERSION=0x%x\n"
-			"IPA_ROUTE=0x%x\n"
-			"IPA_SHARED_MEM_RESTRICTED=0x%x\n"
-			"IPA_SHARED_MEM_SIZE=0x%x\n"
-			"IPA_QTIME_TIMESTAMP_CFG=0x%x\n"
-			"IPA_TIMERS_PULSE_GRAN_CFG=0x%x\n"
-			"IPA_TIMERS_XO_CLK_DIV_CFG=0x%x\n",
-			ipahal_read_reg(IPA_VERSION),
-			ipahal_read_reg(IPA_COMP_HW_VERSION),
-			ipahal_read_reg(IPA_ROUTE),
-			smem_sz.shared_mem_baddr,
-			smem_sz.shared_mem_sz,
-			ipahal_read_reg(IPA_QTIME_TIMESTAMP_CFG),
-			ipahal_read_reg(IPA_TIMERS_PULSE_GRAN_CFG),
-			ipahal_read_reg(IPA_TIMERS_XO_CLK_DIV_CFG));
-
-	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
-
-	return nbytes;
-}
-
-static int ipa3_collect_active_clients(char *msg_buff, int max_buff_len)
-{
-	int nbytes = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	mutex_lock(&ipa3_ctx->ipa3_active_clients.mutex);
-	nbytes = ipa3_active_clients_log_print_buffer(
-			msg_buff, max_buff_len);
-	nbytes += ipa3_active_clients_log_print_table(
-			msg_buff + nbytes, max_buff_len - nbytes);
-	mutex_unlock(&ipa3_ctx->ipa3_active_clients.mutex);
-
-	return nbytes;
-}
-
-static int ipa3_collect_ep_reg(char *msg_buff, int max_buff_len)
-{
-	int start_idx = 0, end_idx = 0;
-	int nbytes = 0, i = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	/* negative ep_reg_idx means all registers */
-	if (ep_reg_idx < 0) {
-		start_idx = 0;
-		end_idx = ipa3_ctx->ipa_num_pipes;
-	} else {
-		start_idx = ep_reg_idx;
-		end_idx = start_idx + 1;
-	}
-
-	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-	for (i = start_idx; i < end_idx; i++) {
-
-		nbytes += scnprintf(
-		msg_buff + nbytes, max_buff_len - nbytes,
-		"IPA_ENDP_INIT_NAT_%u=0x%x\n"
-		"IPA_ENDP_INIT_CONN_TRACK_n%u=0x%x\n"
-		"IPA_ENDP_INIT_HDR_%u=0x%x\n"
-		"IPA_ENDP_INIT_HDR_EXT_%u=0x%x\n"
-		"IPA_ENDP_INIT_MODE_%u=0x%x\n"
-		"IPA_ENDP_INIT_AGGR_%u=0x%x\n"
-		"IPA_ENDP_INIT_CTRL_%u=0x%x\n"
-		"IPA_ENDP_INIT_HOL_EN_%u=0x%x\n"
-		"IPA_ENDP_INIT_HOL_TIMER_%u=0x%x\n"
-		"IPA_ENDP_INIT_DEAGGR_%u=0x%x\n"
-		"IPA_ENDP_INIT_CFG_%u=0x%x\n",
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_NAT_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_CONN_TRACK_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_HDR_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_HDR_EXT_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_MODE_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_AGGR_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_CTRL_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_HOL_BLOCK_EN_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_HOL_BLOCK_TIMER_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_DEAGGR_n, i),
-		i, ipahal_read_reg_n(IPA_ENDP_INIT_CFG_n, i));
-	}
-	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
-
-	return nbytes;
-}
-
-static int ipa3_collect_attrib(
-		char *msg_buff,
-		int max_buff_len,
-		struct ipa_rule_attrib *attrib,
-		enum ipa_ip_type ip)
-{
-	uint32_t addr[4] = { 0 };
-	uint32_t mask[4] = { 0 };
-	int i = 0, nbytes = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	if (attrib->attrib_mask & IPA_FLT_IS_PURE_ACK)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"is_pure_ack\n");
-
-	if (attrib->attrib_mask & IPA_FLT_TOS)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"tos:%d ", attrib->u.v4.tos);
-
-	if (attrib->attrib_mask & IPA_FLT_TOS_MASKED) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"tos_value:%d ", attrib->tos_value);
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"tos_mask:%d ", attrib->tos_mask);
-	}
-
-	if (attrib->attrib_mask & IPA_FLT_PROTOCOL)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"protocol:%d\n", attrib->u.v4.protocol);
-
-	if (attrib->attrib_mask & IPA_FLT_SRC_ADDR) {
-		if (ip == IPA_IP_v4) {
-			addr[0] = htonl(attrib->u.v4.src_addr);
-			mask[0] = htonl(attrib->u.v4.src_addr_mask);
-			nbytes += scnprintf(msg_buff + nbytes,
-						max_buff_len - nbytes,
-						"src_addr:%pI4 src_addr_mask:%pI4\n",
-							addr + 0, mask + 0);
-		} else if (ip == IPA_IP_v6) {
-			for (i = 0; i < 4; i++) {
-				addr[i] = htonl(attrib->u.v6.src_addr[i]);
-				mask[i] = htonl(attrib->u.v6.src_addr_mask[i]);
-			}
-			nbytes += scnprintf(msg_buff + nbytes,
-						max_buff_len - nbytes,
-						"src_addr:%pI6 src_addr_mask:%pI6\n",
-							addr + 0, mask + 0);
-		}
-	}
-	if (attrib->attrib_mask & IPA_FLT_DST_ADDR) {
-		if (ip == IPA_IP_v4) {
-			addr[0] = htonl(attrib->u.v4.dst_addr);
-			mask[0] = htonl(attrib->u.v4.dst_addr_mask);
-			nbytes += scnprintf(msg_buff + nbytes,
-						max_buff_len - nbytes,
-						"dst_addr:%pI4 dst_addr_mask:%pI4\n",
-							addr + 0, mask + 0);
-		} else if (ip == IPA_IP_v6) {
-			for (i = 0; i < 4; i++) {
-				addr[i] = htonl(attrib->u.v6.dst_addr[i]);
-				mask[i] = htonl(attrib->u.v6.dst_addr_mask[i]);
-			}
-			nbytes += scnprintf(msg_buff + nbytes,
-						max_buff_len - nbytes,
-						"dst_addr:%pI6 dst_addr_mask:%pI6\n",
-						addr + 0, mask + 0);
-		}
-	}
-	if (attrib->attrib_mask & IPA_FLT_SRC_PORT_RANGE) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"src_port_range:%u %u\n",
-					attrib->src_port_lo,
-					attrib->src_port_hi);
-	}
-	if (attrib->attrib_mask & IPA_FLT_DST_PORT_RANGE) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"dst_port_range:%u %u\n",
-					attrib->dst_port_lo,
-					attrib->dst_port_hi);
-	}
-	if (attrib->attrib_mask & IPA_FLT_TYPE)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"type:%d\n", attrib->type);
-
-	if (attrib->attrib_mask & IPA_FLT_CODE)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"code:%d\n", attrib->code);
-
-	if (attrib->attrib_mask & IPA_FLT_SPI)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"spi:%x\n", attrib->spi);
-
-	if (attrib->attrib_mask & IPA_FLT_SRC_PORT)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"src_port:%u\n", attrib->src_port);
-
-	if (attrib->attrib_mask & IPA_FLT_DST_PORT)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"dst_port:%u\n", attrib->dst_port);
-
-	if (attrib->attrib_mask & IPA_FLT_TC)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"tc:%d\n", attrib->u.v6.tc);
-
-	if (attrib->attrib_mask & IPA_FLT_FLOW_LABEL)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"flow_label:%x\n",
-					attrib->u.v6.flow_label);
-
-	if (attrib->attrib_mask & IPA_FLT_NEXT_HDR)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"next_hdr:%d\n",
-					attrib->u.v6.next_hdr);
-
-	if (attrib->attrib_mask & IPA_FLT_META_DATA) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"metadata:%x metadata_mask:%x\n",
-					attrib->meta_data,
-					attrib->meta_data_mask);
-	}
-
-	if (attrib->attrib_mask & IPA_FLT_FRAGMENT)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"frg\n");
-
-	if ((attrib->attrib_mask & IPA_FLT_MAC_SRC_ADDR_ETHER_II) ||
-		(attrib->attrib_mask & IPA_FLT_MAC_SRC_ADDR_802_3)) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"src_mac_addr:%pM\n",
-					attrib->src_mac_addr);
-	}
-
-	if ((attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_ETHER_II) ||
-		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_3) ||
-		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_L2TP)) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"dst_mac_addr:%pM\n",
-					attrib->dst_mac_addr);
-	}
-
-	if (attrib->attrib_mask & IPA_FLT_MAC_ETHER_TYPE)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"ether_type:%x\n",
-					attrib->ether_type);
-
-	if (attrib->attrib_mask & IPA_FLT_TCP_SYN)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"tcp syn\n");
-
-	if (attrib->attrib_mask & IPA_FLT_TCP_SYN_L2TP)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"tcp syn l2tp\n");
-
-	if (attrib->attrib_mask & IPA_FLT_L2TP_INNER_IP_TYPE)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"l2tp inner ip type: %d\n",
-					attrib->type);
-
-	if (attrib->attrib_mask & IPA_FLT_L2TP_INNER_IPV4_DST_ADDR) {
-		addr[0] = htonl(attrib->u.v4.dst_addr);
-		mask[0] = htonl(attrib->u.v4.dst_addr_mask);
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"dst_addr:%pI4 dst_addr_mask:%pI4\n",
-					addr, mask);
-	}
-
-	return nbytes;
-}
-
-static int ipa3_collect_rt(
-	char *msg_buff,
-	int max_buff_len,
-	enum ipa_ip_type ip)
-{
-	char *temp_buff = NULL;
-	int nbytes = 0, i = 0;
-	u32 ofst = 0, ofst_words = 0;
-	struct ipa3_rt_tbl *tbl;
-	struct ipa3_rt_entry *entry;
-	struct ipa3_rt_tbl_set *set;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	if (ip !=  IPA_IP_v6 && ip !=  IPA_IP_v4) {
-		IPAERR("ip type error %d\n", ip);
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	set = &ipa3_ctx->rt_tbl_set[ip];
-
-	mutex_lock(&ipa3_ctx->lock);
-
-	temp_buff = kzalloc(IPA_MAX_ENTRY_STRING_LEN, GFP_KERNEL);
-	if (temp_buff == NULL) {
-		IPAERR("temp buffer is not allocated");
-		goto fail;
-	}
-
-	if (ip ==  IPA_IP_v6) {
-		if (ipa3_ctx->ip6_rt_tbl_hash_lcl)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Hashable table resides on local memory\n");
-		else
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Hashable table resides on system (ddr) memory\n");
-		if (ipa3_ctx->ip6_rt_tbl_nhash_lcl)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Non-Hashable table resides on local memory\n");
-		else
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Non-Hashable table resides on system (ddr) memory\n");
-	} else if (ip == IPA_IP_v4) {
-		if (ipa3_ctx->ip4_rt_tbl_hash_lcl)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Hashable table resides on local memory\n");
-		else
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Hashable table resides on system (ddr) memory\n");
-		if (ipa3_ctx->ip4_rt_tbl_nhash_lcl)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Non-Hashable table resides on local memory\n");
-		else
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"Non-Hashable table resides on system (ddr) memory\n");
-	}
-
-	list_for_each_entry(tbl, &set->head_rt_tbl_list, link) {
-		i = 0;
-		list_for_each_entry(entry, &tbl->head_rt_rule_list, link) {
-			if (entry->proc_ctx) {
-				ofst = entry->proc_ctx->offset_entry->offset;
-				ofst_words =
-					(ofst +
-					ipa3_ctx->hdr_proc_ctx_tbl.start_offset)
-					>> 5;
-
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"tbl_idx:%d tbl_name:%s tbl_ref:%u\n",
-					entry->tbl->idx, entry->tbl->name,
-					entry->tbl->ref_cnt);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"rule_idx:%d dst:%d ep:%d S:%u\n",
-					i, entry->rule.dst,
-					ipa3_get_ep_mapping(entry->rule.dst),
-					!ipa3_ctx->hdr_proc_ctx_tbl_lcl);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"proc_ctx[32B]:%u attrib_mask:%08x\n",
-					ofst_words,
-					entry->rule.attrib.attrib_mask);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"rule_id:%u max_prio:%u prio:%u\n",
-					entry->rule_id, entry->rule.max_prio,
-					entry->prio);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"enable_stats:%u counter_id:%u\n",
-					entry->rule.enable_stats,
-					entry->rule.cnt_idx);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"hashable:%u retain_hdr:%u\n",
-					entry->rule.hashable,
-					entry->rule.retain_hdr);
-			} else {
-				if (entry->hdr)
-					ofst = entry->hdr->offset_entry->offset;
-				else
-					ofst = 0;
-
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"tbl_idx:%d tbl_name:%s tbl_ref:%u\n",
-					entry->tbl->idx, entry->tbl->name,
-					entry->tbl->ref_cnt);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"rule_idx:%d dst:%d ep:%d S:%u\n",
-					i, entry->rule.dst,
-					ipa3_get_ep_mapping(entry->rule.dst),
-					!ipa3_ctx->hdr_tbl_lcl);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"hdr_ofst[words]:%u attrib_mask:%08x\n",
-					ofst >> 2,
-					entry->rule.attrib.attrib_mask);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"rule_id:%u max_prio:%u prio:%u\n",
-					entry->rule_id, entry->rule.max_prio,
-					entry->prio);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"enable_stats:%u counter_id:%u\n",
-					entry->rule.enable_stats,
-					entry->rule.cnt_idx);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"hashable:%u retain_hdr:%u\n",
-					entry->rule.hashable,
-					entry->rule.retain_hdr);
-			}
-
-			ipa3_collect_attrib(
-				temp_buff,
-				IPA_MAX_ENTRY_STRING_LEN,
-				&entry->rule.attrib,
-				ip);
-			nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"%s\n",
-					temp_buff);
-			i++;
-		}
-	}
-
-	if (temp_buff != NULL) {
-		kfree(temp_buff);
-		temp_buff = NULL;
-	}
-
-fail:
-	mutex_unlock(&ipa3_ctx->lock);
-
-	return nbytes;
-}
-
-static int ipa3_attrib_collect_eq(
-			char *msg_buff,
-			int max_buff_len,
-			struct ipa_ipfltri_rule_eq *attrib)
-{
-	uint8_t addr[16] = { 0 };
-	uint8_t mask[16] = { 0 };
-	int i = 0, j = 0, nbytes = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	if (attrib->tos_eq_present) {
-		if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5)
-			nbytes += scnprintf(msg_buff + nbytes,
-						max_buff_len - nbytes,
-						"pure_ack\n");
-		else
-			nbytes += scnprintf(msg_buff + nbytes,
-						max_buff_len - nbytes,
-						"tos:%d\n", attrib->tos_eq);
-	}
-
-	if (attrib->protocol_eq_present)
-		nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"protocol:%d\n", attrib->protocol_eq);
-
-	if (attrib->tc_eq_present)
-		nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"tc:%d\n", attrib->tc_eq);
-
-	if (attrib->num_offset_meq_128 > IPA_IPFLTR_NUM_MEQ_128_EQNS) {
-		IPAERR_RL("num_offset_meq_128  Max %d passed value %d\n",
-		IPA_IPFLTR_NUM_MEQ_128_EQNS, attrib->num_offset_meq_128);
-		return nbytes;
-	}
-
-	for (i = 0; i < attrib->num_offset_meq_128; i++) {
-		for (j = 0; j < 16; j++) {
-			addr[j] = attrib->offset_meq_128[i].value[j];
-			mask[j] = attrib->offset_meq_128[i].mask[j];
-		}
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"(ofst_meq128: ofst:%d mask:%pI6 val:%pI6)\n",
-					attrib->offset_meq_128[i].offset,
-					mask, addr);
-	}
-
-	if (attrib->num_offset_meq_32 > IPA_IPFLTR_NUM_MEQ_32_EQNS) {
-		IPAERR_RL("num_offset_meq_32  Max %d passed value %d\n",
-		IPA_IPFLTR_NUM_MEQ_32_EQNS, attrib->num_offset_meq_32);
-		return nbytes;
-	}
-
-	for (i = 0; i < attrib->num_offset_meq_32; i++)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-						"(ofst_meq32: ofst:%u mask:0x%x val:0x%x)\n",
-						attrib->offset_meq_32[i].offset,
-						attrib->offset_meq_32[i].mask,
-						attrib->offset_meq_32[i].value);
-
-	if (attrib->num_ihl_offset_meq_32 > IPA_IPFLTR_NUM_IHL_MEQ_32_EQNS) {
-		IPAERR_RL("num_ihl_offset_meq_32  Max %d passed value %d\n",
-		IPA_IPFLTR_NUM_IHL_MEQ_32_EQNS, attrib->num_ihl_offset_meq_32);
-		return nbytes;
-	}
-
-	for (i = 0; i < attrib->num_ihl_offset_meq_32; i++)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"(ihl_ofst_meq32: ofts:%d mask:0x%x val:0x%x)\n",
-					attrib->ihl_offset_meq_32[i].offset,
-					attrib->ihl_offset_meq_32[i].mask,
-					attrib->ihl_offset_meq_32[i].value);
-
-	if (attrib->metadata_meq32_present)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"(metadata: ofst:%u mask:0x%x val:0x%x)\n",
-					attrib->metadata_meq32.offset,
-					attrib->metadata_meq32.mask,
-					attrib->metadata_meq32.value);
-
-	if (attrib->num_ihl_offset_range_16 >
-			IPA_IPFLTR_NUM_IHL_RANGE_16_EQNS) {
-		IPAERR_RL("num_ihl_offset_range_16  Max %d passed value %d\n",
-			IPA_IPFLTR_NUM_IHL_RANGE_16_EQNS,
-			attrib->num_ihl_offset_range_16);
-		return nbytes;
-	}
-
-	for (i = 0; i < attrib->num_ihl_offset_range_16; i++)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"(ihl_ofst_range16: ofst:%u lo:%u hi:%u)\n",
-				attrib->ihl_offset_range_16[i].offset,
-				attrib->ihl_offset_range_16[i].range_low,
-				attrib->ihl_offset_range_16[i].range_high);
-
-	if (attrib->ihl_offset_eq_32_present)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"(ihl_ofst_eq32:%d val:0x%x)\n",
-				attrib->ihl_offset_eq_32.offset,
-				attrib->ihl_offset_eq_32.value);
-
-	if (attrib->ihl_offset_eq_16_present)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"(ihl_ofst_eq16:%d val:0x%x)\n",
-				attrib->ihl_offset_eq_16.offset,
-				attrib->ihl_offset_eq_16.value);
-
-	if (attrib->fl_eq_present)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"flow_label:%d\n", attrib->fl_eq);
-
-	if (attrib->ipv4_frag_eq_present)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"frag\n");
-
-	return nbytes;
-}
-
-static int ipa3_collect_rt_hw(
-	char *msg_buff,
-	int max_buff_len,
-	enum ipa_ip_type ip)
-{
-	char *temp_buff = NULL;
-	int tbls_num = 0, rules_num = 0;
-	int tbl = 0, rl = 0;
-	int res = 0;
-	int nbytes = 0;
-	struct ipahal_rt_rule_entry *rules = NULL;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	switch (ip) {
-	case IPA_IP_v4:
-		tbls_num = IPA_MEM_PART(v4_rt_num_index);
-		break;
-	case IPA_IP_v6:
-		tbls_num = IPA_MEM_PART(v6_rt_num_index);
-		break;
-	default:
-		IPAERR("ip type error %d\n", ip);
-		return 0;
-	};
-
-	memset(msg_buff, 0, max_buff_len);
-
-	IPADBG("Tring to parse %d H/W routing tables - IP=%d\n", tbls_num, ip);
-
-	rules = kzalloc(sizeof(*rules) * IPA_DBG_MAX_RULE_IN_TBL, GFP_KERNEL);
-	if (!rules) {
-		IPAERR("failed to allocate mem for tbl rules\n");
-		return 0;
-	}
-
-	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-	mutex_lock(&ipa3_ctx->lock);
-	temp_buff = kzalloc(IPA_MAX_ENTRY_STRING_LEN, GFP_KERNEL);
-	if (temp_buff == NULL) {
-		IPAERR("temp buffer is not allocated");
-		goto fail;
-	}
-
-	for (tbl = 0 ; tbl < tbls_num ; tbl++) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"=== Routing Table %d = Hashable Rules ===\n",
-			tbl);
-		rules_num = IPA_DBG_MAX_RULE_IN_TBL;
-		res = ipa3_rt_read_tbl_from_hw(tbl, ip, true, rules,
-			&rules_num);
-		if (res) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"ERROR - Check the logs\n");
-			IPAERR("failed reading tbl from hw\n");
-			goto fail;
-		}
-		if (!rules_num)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"-->No rules. Empty tbl or modem system table\n");
-
-		for (rl = 0 ; rl < rules_num ; rl++) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"rule_idx:%d dst ep:%d L:%u\n",
-				rl, rules[rl].dst_pipe_idx,
-				rules[rl].hdr_lcl);
-
-			if (rules[rl].hdr_type == IPAHAL_RT_RULE_HDR_PROC_CTX)
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"proc_ctx:%u attrib_mask:%08x\n",
-					rules[rl].hdr_ofst,
-					rules[rl].eq_attrib.rule_eq_bitmap
-					);
-			else
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"hdr_ofst:%u attrib_mask:%08x\n",
-					rules[rl].hdr_ofst,
-					rules[rl].eq_attrib.rule_eq_bitmap);
-
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"rule_id:%u cnt_id:%hhu prio:%u retain_hdr:%u\n",
-				rules[rl].id, rules[rl].cnt_idx,
-				rules[rl].priority, rules[rl].retain_hdr);
-
-			ipa3_attrib_collect_eq(
-				temp_buff,
-				IPA_MAX_ENTRY_STRING_LEN,
-				&rules[rl].eq_attrib);
-
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"%s\n",
-				temp_buff);
-		}
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			"=== Routing Table %d = Non-Hashable Rules ===\n",
-			tbl);
-		rules_num = IPA_DBG_MAX_RULE_IN_TBL;
-		res = ipa3_rt_read_tbl_from_hw(tbl, ip, false, rules,
-			&rules_num);
-		if (res) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"ERROR - Check the logs\n");
-			IPAERR("failed reading tbl from hw\n");
-			goto fail;
-		}
-		if (!rules_num)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"-->No rules. Empty tbl or modem system table\n");
-
-		for (rl = 0 ; rl < rules_num ; rl++) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"rule_idx:%d dst ep:%d L:%u\n",
-				rl, rules[rl].dst_pipe_idx,
-				rules[rl].hdr_lcl);
-
-			if (rules[rl].hdr_type == IPAHAL_RT_RULE_HDR_PROC_CTX)
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"proc_ctx:%u attrib_mask:%08x\n",
-					rules[rl].hdr_ofst,
-					rules[rl].eq_attrib.rule_eq_bitmap);
-			else
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"hdr_ofst:%u attrib_mask:%08x\n",
-					rules[rl].hdr_ofst,
-					rules[rl].eq_attrib.rule_eq_bitmap);
-
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"rule_id:%u cnt_id:%hhu prio:%u retain_hdr:%u\n",
-				rules[rl].id, rules[rl].cnt_idx,
-				rules[rl].priority, rules[rl].retain_hdr);
-			ipa3_attrib_collect_eq(
-				temp_buff,
-				IPA_MAX_ENTRY_STRING_LEN,
-				&rules[rl].eq_attrib);
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"%s\n",
-				temp_buff);
-		}
-	}
-
-fail:
-	if (temp_buff != NULL) {
-		kfree(temp_buff);
-		temp_buff = NULL;
-	}
-	mutex_unlock(&ipa3_ctx->lock);
-	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
-	kfree(rules);
-	return nbytes;
-}
-
-
-static int ipa3_collect_flt(
-	char *msg_buff,
-	int max_buff_len,
-	enum ipa_ip_type ip)
-{
-	char *temp_buff = NULL;
-	int i = 0, j = 0, nbytes = 0;
-	u32 rt_tbl_idx = 0, bitmap = 0;
-	bool eq = false;
-	struct ipa3_flt_tbl *tbl;
-	struct ipa3_flt_entry *entry;
-	struct ipa3_rt_tbl *rt_tbl;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	if (ip !=  IPA_IP_v6 && ip !=  IPA_IP_v4) {
-		IPAERR("ip type error %d\n", ip);
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	mutex_lock(&ipa3_ctx->lock);
-
-	temp_buff = kzalloc(IPA_MAX_ENTRY_STRING_LEN, GFP_KERNEL);
-	if (temp_buff == NULL) {
-		IPAERR("temp buffer is not allocated");
-		goto fail;
-	}
-
-	for (j = 0; j < ipa3_ctx->ipa_num_pipes; j++) {
-		if (!ipa_is_ep_support_flt(j))
-			continue;
-		tbl = &ipa3_ctx->flt_tbl[j][ip];
-		i = 0;
-		list_for_each_entry(entry, &tbl->head_flt_rule_list, link) {
-			if (entry->cookie != IPA_FLT_COOKIE)
-				continue;
-			if (entry->rule.eq_attrib_type) {
-				rt_tbl_idx = entry->rule.rt_tbl_idx;
-				bitmap = entry->rule.eq_attrib.rule_eq_bitmap;
-				eq = true;
-			} else {
-				rt_tbl = ipa3_id_find(entry->rule.rt_tbl_hdl);
-				if (rt_tbl == NULL ||
-					rt_tbl->cookie != IPA_RT_TBL_COOKIE)
-					rt_tbl_idx =  ~0;
-				else
-					rt_tbl_idx = rt_tbl->idx;
-				bitmap = entry->rule.attrib.attrib_mask;
-				eq = false;
-			}
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"ep_idx:%d rule_idx:%d act:%d rt_tbl_idx:%d ",
-				j, i, entry->rule.action, rt_tbl_idx);
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"attrib_mask:%08x retain_hdr:%d eq:%d ",
-				bitmap, entry->rule.retain_hdr, eq);
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"hashable:%u rule_id:%u max_prio:%u prio:%u ",
-				entry->rule.hashable, entry->rule_id,
-				entry->rule.max_prio, entry->prio);
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"enable_stats:%u counter_id:%u ",
-				entry->rule.enable_stats,
-				entry->rule.cnt_idx);
-			if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0)
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"pdn index %d, set metadata %d ",
-					entry->rule.pdn_idx,
-					entry->rule.set_metadata);
-			if (eq) {
-				ipa3_attrib_collect_eq(
-					temp_buff,
-					IPA_MAX_ENTRY_STRING_LEN,
-					&entry->rule.eq_attrib);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"%s\n",
-					temp_buff);
-			} else {
-				ipa3_collect_attrib(
-					temp_buff,
-					IPA_MAX_ENTRY_STRING_LEN,
-					&entry->rule.attrib, ip);
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"%s\n",
-					temp_buff);
-			}
-			i++;
-		}
-	}
-
-	if (temp_buff != NULL) {
-		kfree(temp_buff);
-		temp_buff = NULL;
-	}
-fail:
-	mutex_unlock(&ipa3_ctx->lock);
-
-	return nbytes;
-}
-
-static int ipa3_collect_pdn_table(
-	char *msg_buff,
-	int max_buff_len)
-{
-	char *pdn_entry = NULL;
-	char *buff = NULL;
-	int i = 0, result = 0, nbytes = 0;
-	bool entry_zeroed = false, entry_valid = false;
-	size_t pdn_entry_size = 0, buff_size = 128;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	buff = kzalloc(buff_size, GFP_KERNEL);
-	if (!buff) {
-		IPAERR("Out of memory\n");
-		return 0;
-	}
-	memset(buff, 0, buff_size);
-
-	result = ipahal_nat_entry_size(IPAHAL_NAT_IPV4_PDN, &pdn_entry_size);
-	if (result) {
-		IPAERR("Failed to retrieve size of PDN entry");
-		goto fail;
-	}
-
-	for (i = 0, pdn_entry = ipa3_ctx->nat_mem.pdn_mem.base;
-		i < IPA_MAX_PDN_NUM;
-		++i, pdn_entry += pdn_entry_size) {
-		result = ipahal_nat_is_entry_zeroed(IPAHAL_NAT_IPV4_PDN,
-			pdn_entry, &entry_zeroed);
-		if (result) {
-			IPAERR("Failed to determine whether "
-				"the PDN entry is definitely zero\n");
-			goto fail;
-		}
-		if (entry_zeroed)
-			continue;
-
-		result = ipahal_nat_is_entry_valid(IPAHAL_NAT_IPV4_PDN,
-			pdn_entry, &entry_valid);
-		if (result) {
-			IPAERR("Failed to determine whether "
-				"the PDN entry is valid\n");
-			goto fail;
-		}
-		if (entry_valid)
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"PDN %d: ", i);
-		else
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"PDN %d - Invalid: ", i);
-
-		ipahal_nat_stringify_entry(IPAHAL_NAT_IPV4_PDN,
-				pdn_entry, buff, buff_size);
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes, "%s\n", buff);
-		memset(buff, 0, buff_size);
-	}
-
-fail:
-	if (buff != NULL) {
-		kfree(buff);
-		buff = NULL;
-	}
-	return nbytes;
-}
-
-static int ipa3_collect_table(
-	char *msg_buff, int max_buff_len,
-	char *table_addr, u32 table_size,
-	u32 *total_num_entries,
-	u32 *rule_id,
-	enum ipahal_nat_type nat_type)
-{
-	char *entry = NULL;
-	char *buff = NULL;
-	int nbytes = 0, result = 0;
-	bool entry_zeroed = false, entry_valid = false;
-	u32 i = 0, num_entries = 0, id = *rule_id;
-	size_t entry_size = 0, buff_size = 2 * IPA_MAX_ENTRY_STRING_LEN;
-
-	if (table_addr == NULL) {
-		pr_err("NULL NAT table\n");
-		return 0;
-	}
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	result = ipahal_nat_entry_size(nat_type, &entry_size);
-	if (result) {
-		IPAERR("Failed to retrieve size of %s entry\n",
-			ipahal_nat_type_str(nat_type));
-		return 0;
-	}
-
-	buff = kzalloc(buff_size, GFP_KERNEL);
-	if (!buff) {
-		IPAERR("Out of memory\n");
-		return 0;
-	}
-
-	for (i = 0, entry = table_addr;
-		i < table_size;
-		++i, ++id, entry += entry_size) {
-		result = ipahal_nat_is_entry_zeroed(nat_type, entry,
-			&entry_zeroed);
-		if (result) {
-			IPAERR(
-				"Failed to determine whether the %s entry is definitely zero\n",
-				ipahal_nat_type_str(nat_type));
-			goto fail;
-		}
-		if (entry_zeroed)
-			continue;
-
-		result = ipahal_nat_is_entry_valid(nat_type, entry,
-			&entry_valid);
-		if (result) {
-			IPAERR(
-				"Failed to determine whether the %s entry is valid\n",
-				ipahal_nat_type_str(nat_type));
-			goto fail;
-		}
-
-		if (entry_valid) {
-			++num_entries;
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"\tEntry_Index=%d\n", id);
-		} else
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				"\tEntry_Index=%d - Invalid Entry\n", id);
-
-		ipahal_nat_stringify_entry(nat_type, entry,
-			buff, buff_size);
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes, "%s\n", buff);
-		memset(buff, 0, buff_size);
-	}
-
-	if (num_entries)
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes, "\n");
-	else
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes, "\tEmpty\n\n");
-fail:
-	if ( buff != NULL ) {
-		kfree(buff);
-		buff = NULL;
-	}
-	*rule_id = id;
-	*total_num_entries += num_entries;
-	return nbytes;
-}
-
-static int ipa3_start_collect_memory_device(
-	char *msg_buff, int max_buff_len,
-	struct ipa3_nat_ipv6ct_common_mem *dev,
-	enum ipahal_nat_type nat_type,
-	u32 *num_entries)
-{
-	char *temp_buff = NULL;
-	size_t temp_buff_size = 2 * IPA_MAX_ENTRY_STRING_LEN;
-	u32 rule_id = 0;
-	int nbytes = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	temp_buff = kzalloc(temp_buff_size, GFP_KERNEL);
-	if (!temp_buff) {
-		IPAERR("Out of memory\n");
-		return 0;
-	}
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"%s_Table_Size=%d\n",
-					dev->name, dev->table_entries + 1);
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"%s_Expansion_Table_Size=%d\n",
-					dev->name, dev->expn_table_entries);
-
-	if (!dev->is_sys_mem)
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-						"Not supported for local(shared) memory\n");
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"\n%s Base Table:\n", dev->name);
-	ipa3_collect_table(
-		temp_buff,
-		temp_buff_size,
-		dev->base_table_addr,
-		dev->table_entries + 1,
-		num_entries,
-		&rule_id,
-		nat_type);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"%s\n", temp_buff);
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"%s Expansion Table:\n", dev->name);
-	ipa3_collect_table(
-		temp_buff, temp_buff_size,
-		dev->expansion_table_addr, dev->expn_table_entries,
-		num_entries,
-		&rule_id,
-		nat_type);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-					"%s\n", temp_buff);
-
-	if (temp_buff != NULL) {
-		kfree(temp_buff);
-		temp_buff = NULL;
-	}
-
-	return nbytes;
-}
-
-static int ipa3_collect_nat4(char *msg_buff, int max_buff_len)
-{
-	char *temp_buff = NULL;
-	size_t temp_buff_size = 3 * IPA_MAX_ENTRY_STRING_LEN;
-	u32 rule_id = 0, num_entries = 0, index_num_entries = 0;
-	int nbytes = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	temp_buff = kzalloc(temp_buff_size, GFP_KERNEL);
-	if (temp_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"IPA3 NAT stats\n");
-	if (!ipa3_ctx->nat_mem.dev.is_dev_init) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"NAT hasn't been initialized or not supported\n");
-		goto ret;
-	}
-
-	mutex_lock(&ipa3_ctx->nat_mem.dev.lock);
-
-	if (!ipa3_ctx->nat_mem.dev.is_hw_init) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"NAT H/W hasn't been initialized\n");
-		goto fail;
-	}
-
-	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0) {
-		ipa3_collect_pdn_table(temp_buff, temp_buff_size);
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"%s\n",
-			temp_buff);
-	} else {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"NAT Table IP Address=%pI4h\n\n",
-			&ipa3_ctx->nat_mem.public_ip_addr);
-	}
-
-	ipa3_start_collect_memory_device(temp_buff, temp_buff_size,
-		&ipa3_ctx->nat_mem.dev,
-		IPAHAL_NAT_IPV4, &num_entries);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"%s\n",
-		temp_buff);
-
-	/* Print Index tables */
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"ipaNatTable Index Table:\n");
-	ipa3_collect_table(
-		temp_buff, temp_buff_size,
-		ipa3_ctx->nat_mem.index_table_addr,
-		ipa3_ctx->nat_mem.dev.table_entries + 1,
-		&index_num_entries,
-		&rule_id,
-		IPAHAL_NAT_IPV4_INDEX);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"%s\n",
-		temp_buff);
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"ipaNatTable Expansion Index Table:\n");
-	ipa3_collect_table(
-		temp_buff, temp_buff_size,
-		ipa3_ctx->nat_mem.index_table_expansion_addr,
-		ipa3_ctx->nat_mem.dev.expn_table_entries,
-		&index_num_entries,
-		&rule_id,
-		IPAHAL_NAT_IPV4_INDEX);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"ipaNatTable Expansion Index Table:\n");
-
-	if (num_entries != index_num_entries)
-		IPAERR(
-			"The NAT table number of entries %d is different from index table number of entries %d\n",
-			num_entries, index_num_entries);
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-		"Overall number %s entries: %d\n\n",
-		ipa3_ctx->nat_mem.dev.name, num_entries);
-
-fail:
-	mutex_unlock(&ipa3_ctx->nat_mem.dev.lock);
-ret:
-	if (temp_buff != NULL) {
-		kfree(temp_buff);
-		temp_buff = NULL;
-	}
-	return nbytes;
-}
-
-static int ipa3_collect_stats(char *msg_buff, int max_buff_len)
-{
-	int i = 0, nbytes = 0;
-	uint connect = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	for (i = 0; i < ipa3_ctx->ipa_num_pipes; i++)
-		connect |= (ipa3_ctx->ep[i].valid << i);
-
-	nbytes = scnprintf(msg_buff, max_buff_len,
-		"sw_tx=%u\n"
-		"hw_tx=%u\n"
-		"tx_non_linear=%u\n"
-		"tx_compl=%u\n"
-		"wan_rx=%u\n"
-		"stat_compl=%u\n"
-		"lan_aggr_close=%u\n"
-		"wan_aggr_close=%u\n"
-		"act_clnt=%u\n"
-		"con_clnt_bmap=0x%x\n"
-		"wan_rx_empty=%u\n"
-		"wan_repl_rx_empty=%u\n"
-		"lan_rx_empty=%u\n"
-		"lan_repl_rx_empty=%u\n"
-		"flow_enable=%u\n"
-		"flow_disable=%u\n",
-		ipa3_ctx->stats.tx_sw_pkts,
-		ipa3_ctx->stats.tx_hw_pkts,
-		ipa3_ctx->stats.tx_non_linear,
-		ipa3_ctx->stats.tx_pkts_compl,
-		ipa3_ctx->stats.rx_pkts,
-		ipa3_ctx->stats.stat_compl,
-		ipa3_ctx->stats.aggr_close,
-		ipa3_ctx->stats.wan_aggr_close,
-		atomic_read(&ipa3_ctx->ipa3_active_clients.cnt),
-		connect,
-		ipa3_ctx->stats.wan_rx_empty,
-		ipa3_ctx->stats.wan_repl_rx_empty,
-		ipa3_ctx->stats.lan_rx_empty,
-		ipa3_ctx->stats.lan_repl_rx_empty,
-		ipa3_ctx->stats.flow_enable,
-		ipa3_ctx->stats.flow_disable);
-
-	for (i = 0; i < IPAHAL_PKT_STATUS_EXCEPTION_MAX; i++) {
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"lan_rx_excp[%u:%20s]=%u\n", i,
-			ipahal_pkt_status_exception_str(i),
-			ipa3_ctx->stats.rx_excp_pkts[i]);
-	}
-
-	return nbytes;
-}
-
-
-static int ipa3_collect_wstats(char *msg_buff, int max_buff_len)
-{
-
-#define HEAD_FRMT_STR "%25s\n"
-#define FRMT_STR "%25s %10u\n"
-#define FRMT_STR1 "%25s %10u\n\n"
-
-	int nbytes = 0;
-	int ipa_ep_idx = 0;
-	enum ipa_client_type client = IPA_CLIENT_WLAN1_PROD;
-	struct ipa3_ep_context *ep;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	do {
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			HEAD_FRMT_STR, "Client IPA_CLIENT_WLAN1_PROD Stats:");
-
-		ipa_ep_idx = ipa3_get_ep_mapping(client);
-		if (ipa_ep_idx == -1) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				HEAD_FRMT_STR, "Not up");
-			break;
-		}
-
-		ep = &ipa3_ctx->ep[ipa_ep_idx];
-		if (ep->valid != 1) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				HEAD_FRMT_STR, "Not up");
-			break;
-		}
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Avail Fifo Desc:",
-			atomic_read(&ep->avail_fifo_desc));
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Rx Pkts Rcvd:", ep->wstats.rx_pkts_rcvd);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Rx Pkts Status Rcvd:",
-			ep->wstats.rx_pkts_status_rcvd);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Rx DH Rcvd:", ep->wstats.rx_hd_rcvd);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Rx DH Processed:",
-			ep->wstats.rx_hd_processed);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Rx DH Sent Back:", ep->wstats.rx_hd_reply);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR, "Rx Pkt Leak:", ep->wstats.rx_pkt_leak);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR1, "Rx DP Fail:", ep->wstats.rx_dp_fail);
-	} while (0);
-
-	client = IPA_CLIENT_WLAN1_CONS;
-	nbytes += scnprintf(msg_buff + nbytes,
-		max_buff_len - nbytes,
-		HEAD_FRMT_STR,
-		"Client IPA_CLIENT_WLAN1_CONS Stats:");
-
-	while (1) {
-		ipa_ep_idx = ipa3_get_ep_mapping(client);
-		if (ipa_ep_idx == -1) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				HEAD_FRMT_STR, "Not up");
-			goto nxt_clnt_cons;
-		}
-
-		ep = &ipa3_ctx->ep[ipa_ep_idx];
-		if (ep->valid != 1) {
-			nbytes += scnprintf(msg_buff + nbytes,
-				max_buff_len - nbytes,
-				HEAD_FRMT_STR, "Not up");
-			goto nxt_clnt_cons;
-		}
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR,
-			"Tx Pkts Received:",
-			ep->wstats.tx_pkts_rcvd);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR,
-			"Tx Pkts Sent:",
-			ep->wstats.tx_pkts_sent);
-
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			FRMT_STR1,
-			"Tx Pkts Dropped:",
-			ep->wstats.tx_pkts_dropped);
-
-nxt_clnt_cons:
-			switch (client) {
-			case IPA_CLIENT_WLAN1_CONS:
-				client = IPA_CLIENT_WLAN2_CONS;
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					HEAD_FRMT_STR,
-					"Client IPA_CLIENT_WLAN2_CONS Stats:");
-				continue;
-			case IPA_CLIENT_WLAN2_CONS:
-				client = IPA_CLIENT_WLAN3_CONS;
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					HEAD_FRMT_STR,
-					"Client IPA_CLIENT_WLAN3_CONS Stats:");
-				continue;
-			case IPA_CLIENT_WLAN3_CONS:
-				client = IPA_CLIENT_WLAN4_CONS;
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					HEAD_FRMT_STR,
-					"Client IPA_CLIENT_WLAN4_CONS Stats:");
-				continue;
-			case IPA_CLIENT_WLAN4_CONS:
-			default:
-				break;
-			}
-		break;
-	}
-
-	nbytes += scnprintf(msg_buff + nbytes,
-		max_buff_len - nbytes,
-		"\n"HEAD_FRMT_STR,
-		"All Wlan Consumer pipes stats:");
-
-	nbytes += scnprintf(msg_buff + nbytes,
-		max_buff_len - nbytes,
-		FRMT_STR,
-		"Tx Comm Buff Allocated:",
-		ipa3_ctx->wc_memb.wlan_comm_total_cnt);
-
-	nbytes += scnprintf(msg_buff + nbytes,
-		max_buff_len - nbytes,
-		FRMT_STR,
-		"Tx Comm Buff Avail:",
-		ipa3_ctx->wc_memb.wlan_comm_free_cnt);
-
-	nbytes += scnprintf(msg_buff + nbytes,
-		max_buff_len - nbytes,
-		FRMT_STR1,
-		"Total Tx Pkts Freed:",
-		ipa3_ctx->wc_memb.total_tx_pkts_freed);
-
-	return nbytes;
-}
-
-static int ipa3_collect_msg(char *msg_buff, int max_buff_len)
-{
-	int nbytes = 0, i = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	for (i = 0; i < ARRAY_SIZE(ipa3_event_name); i++) {
-		nbytes += scnprintf(msg_buff + nbytes,
-			max_buff_len - nbytes,
-			"msg[%u:%27s] W:%u R:%u\n", i,
-			ipa3_event_name[i],
-			ipa3_ctx->stats.msg_w[i],
-			ipa3_ctx->stats.msg_r[i]);
-	}
-
-	return nbytes;
-}
-
-static int ipa3_collect_debug_msg(char *msg_buff, int max_buff_len)
-{
-	char *temp_buff = NULL;
-	int max_temp_len = IPA_MAX_MSG_LEN;
-	int nbytes = 0;
-
-	if (msg_buff == NULL) {
-		IPAERR("msg_buff is NULL\n");
-		return 0;
-	}
-
-	memset(msg_buff, 0, max_buff_len);
-
-	temp_buff = kzalloc(max_temp_len, GFP_KERNEL);
-	if (!temp_buff) {
-		IPAERR("temp_buff is NULL\n");
-		return 0;
-	}
-
-	//Start
-	nbytes += scnprintf(msg_buff, max_buff_len,
-			"===== IPA debug message start =====\n\n");
-
-	//gen_reg
-	ipa3_collect_gen_reg(temp_buff, max_temp_len);
-
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA register ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//active_clients
-	ipa3_collect_active_clients(temp_buff, max_temp_len);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA active clients ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//ep_reg
-	ipa3_collect_ep_reg(temp_buff, max_temp_len);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA ep reg ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//ip4_rt
-	ipa3_collect_rt(temp_buff, max_temp_len, IPA_IP_v4);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA ip4 rt ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	if(IPA_DEBUG_MSG_DUMP_HW) {
-		//ip4_rt_hw
-		ipa3_collect_rt_hw(temp_buff, max_temp_len, IPA_IP_v4);
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"==== IPA ip4 rt hw ====\n"
-				"%s\n\n",
-				temp_buff);
-	}
-
-	//ip4_flt
-	ipa3_collect_flt(temp_buff, max_temp_len, IPA_IP_v4);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA ip4 flt ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//ip4_nat
-	ipa3_collect_nat4(temp_buff, max_temp_len);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA ip4 nat ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//ip6_rt
-	ipa3_collect_rt(temp_buff, max_temp_len, IPA_IP_v6);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA ip6 rt ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	if(IPA_DEBUG_MSG_DUMP_HW) {
-		//ip6_rt_hw
-		ipa3_collect_rt_hw(temp_buff, max_temp_len, IPA_IP_v6);
-		nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-				"==== IPA ip6 rt hw ====\n"
-				"%s\n\n",
-				temp_buff);
-	}
-
-	//ip6_flt
-	ipa3_collect_flt(temp_buff, max_temp_len, IPA_IP_v6);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA ip6 flt ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//stats
-	ipa3_collect_stats(temp_buff, max_temp_len);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA stats ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//wstats
-	ipa3_collect_wstats(temp_buff, max_temp_len);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA wstats ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//msg
-	ipa3_collect_msg(temp_buff, max_temp_len);
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"==== IPA msg ====\n"
-			"%s\n\n",
-			temp_buff);
-
-	//End
-	nbytes += scnprintf(msg_buff + nbytes, max_buff_len - nbytes,
-			"===== IPA debug message end =====\n\r");
-
-	if (temp_buff != NULL) {
-		kfree(temp_buff);
-		temp_buff = NULL;
-	}
-
-	return nbytes;
-}
-
-static ssize_t ipa3_read_dump_debug_msg(
-		struct file *file, char __user *ubuf,
-		size_t count, loff_t *ppos)
-{
-	ssize_t ret = 0;
-	if (*ppos == 0) {
-		//alloc buffer
-		ipa_msg_buff_count = 0;
-		if (ipa_msg_buff == NULL) {
-			ipa_msg_buff =
-				kzalloc(IPA_MAX_DEBUG_MSG_LEN, GFP_KERNEL);
-		}
-
-		if ( ipa_msg_buff )
-			memset(ipa_msg_buff, 0, IPA_MAX_DEBUG_MSG_LEN);
-		else {
-			IPAERR("buffer is not allocated");
-			return 0;
-		}
-
-		//collect data
-		ipa_msg_buff_count =
-			ipa3_collect_debug_msg(
-				ipa_msg_buff,
-				IPA_MAX_DEBUG_MSG_LEN);
-		pr_info("ipa_msg_buff_count=[%d]", ipa_msg_buff_count);
-	} else if (*ppos == ipa_msg_buff_count) {
-		ipa_msg_buff_count = 0;
-		if (ipa_msg_buff != NULL) {
-			kfree(ipa_msg_buff);
-			ipa_msg_buff = NULL;
-		}
-		return 0;
-	}
-
-	//check buffer before print
-	if (ipa_msg_buff == NULL) {
-		IPAERR("buffer is not allocated");
-		return 0;
-	}
-
-	//Check buffer size and ipa_msg_buff_count
-	if ( strlen(ipa_msg_buff) != ipa_msg_buff_count ) {
-		ipa_msg_buff_count = 0;
-		if (ipa_msg_buff != NULL) {
-			kfree(ipa_msg_buff);
-			ipa_msg_buff = NULL;
-		}
-		IPAERR("ipa_msg_buff size is incorrect\n");
-		return 0;
-	}
-
-	ret = simple_read_from_buffer(
-			ubuf, count, ppos,
-			ipa_msg_buff,
-			ipa_msg_buff_count);
-
-	return ret;
-}
 
 #else /* !CONFIG_DEBUG_FS */
 void ipa3_debugfs_pre_init(void) {}

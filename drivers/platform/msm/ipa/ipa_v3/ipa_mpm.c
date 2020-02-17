@@ -2211,7 +2211,7 @@ static int ipa_mpm_mhi_probe_cb(struct mhi_device *mhi_dev,
 		}
 		if (is_acted)
 			ipa_mpm_vote_unvote_pcie_clk(CLK_OFF, probe_id,
-				true, &is_acted);
+						true, &is_acted);
 		break;
 	case IPA_MPM_TETH_INPROGRESS:
 	case IPA_MPM_TETH_CONNECTED:

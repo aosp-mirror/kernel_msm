@@ -35,3 +35,5 @@ keydebug-y := keydebug-core.o keydebug-func.o
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/
 
 obj-$(CONFIG_TOUCHSCREEN_SEC_TS)	+= sec_cmd.o
+
+obj-$(CONFIG_SMI130)   += sensors/smi130/

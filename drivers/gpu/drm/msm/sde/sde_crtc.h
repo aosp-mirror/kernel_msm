@@ -216,7 +216,6 @@ struct sde_crtc_fps_info {
  * @event_lock    : Spinlock around event handling code
  * @misr_enable   : boolean entry indicates misr enable/disable status.
  * @misr_frame_count  : misr frame count provided by client
- * @prev_misr_data    : store misr data of previous frame
  * @misr_data     : store misr data before turning off the clocks.
  * @sbuf_op_mode_old : inline rotator op mode for previous commit cycle
  * @sbuf_rot_id   : inline rotator block id for attached planes
@@ -286,8 +285,6 @@ struct sde_crtc {
 	spinlock_t event_lock;
 	bool misr_enable;
 	u32 misr_frame_count;
-
-	u32 prev_misr_data[CRTC_DUAL_MIXERS];
 	u32 misr_data[CRTC_DUAL_MIXERS];
 
 	u32 sbuf_op_mode_old;
@@ -518,17 +515,6 @@ static inline int sde_crtc_get_mixer_height(struct sde_crtc *sde_crtc,
 }
 
 /**
- * sde_crtc_get_num_datapath - get the number of datapath active
- * @crtc: Pointer to drm crtc object
- */
-static inline int sde_crtc_get_num_datapath(struct drm_crtc *crtc)
-{
-	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
-
-	return sde_crtc ? sde_crtc->num_mixers : 0;
-}
-
-/**
  * sde_crtc_get_rotator_op_mode - get the rotator op mode from the crtc state
  * @crtc: Pointer to drm crtc object
  */
@@ -578,27 +564,6 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
  */
 void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 		struct drm_crtc_state *old_state);
-
-/**
- * sde_crtc_collect_misr - Collects MISR. Returns
- * SDE_CRTC_MSRI_COLLECT_SUCCESS on success or
- * if MSRI is disabled it returns SDE_CRTC_MSRI_DISABLED.
- * @sde_crtc: Pointer to SDE CRTC
- * @out_mist_data: Pointer to array to store collected MISR.
- * when a collection for a mixer fails, it won't modify that mixer MISR content
- * @misr_count: Amount of MISR mixers to collect.
- */
-int sde_crtc_collect_misr(struct sde_crtc *sde_crtc,
-		u32 *out_misr_data, u32 misr_count);
-
-/**
- * is_sde_misr_same - Compares whether two MISR arrays
- * match on a per element basis.
- * @misr1: Pointer to array to compare
- * @misr2: Pointer to array to compare
- * @misr_count: Amount of MISR mixers to compare.
- */
-bool is_sde_misr_same(u32 *misr1, u32 *misr2, u32 misr_count);
 
 /**
  * sde_crtc_complete_commit - callback signalling completion of current commit
@@ -884,5 +849,14 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count);
 int sde_crtc_calc_vpadding_param(struct drm_crtc_state *state,
 		uint32_t crtc_y, uint32_t crtc_h, uint32_t *padding_y,
 		uint32_t *padding_start, uint32_t *padding_height);
+
+/**
+ * sde_crtc_get_num_datapath - get the number of datapath active
+ *				of primary connector
+ * @crtc: Pointer to DRM crtc object
+ * @connector: Pointer to DRM connector object of WB in CWB case
+ */
+int sde_crtc_get_num_datapath(struct drm_crtc *crtc,
+		struct drm_connector *connector);
 
 #endif /* _SDE_CRTC_H_ */

@@ -2453,7 +2453,7 @@ int ipa3_resume_gsi_wdi_pipe(u32 clnt_hdl)
 	struct ipa3_ep_context *ep;
 	struct ipa_ep_cfg_ctrl ep_cfg_ctrl;
 	struct gsi_chan_info chan_info;
-	union gsi_channel_scratch gsi_scratch;
+	union __packed gsi_channel_scratch gsi_scratch;
 	struct IpaHwOffloadStatsAllocCmdData_t *pcmd_t = NULL;
 
 	IPADBG("ep=%d\n", clnt_hdl);
@@ -2590,7 +2590,7 @@ int ipa3_suspend_gsi_wdi_pipe(u32 clnt_hdl)
 	struct ipahal_ep_cfg_ctrl_scnd ep_ctrl_scnd = { 0 };
 	int retry_cnt = 0;
 	struct gsi_chan_info chan_info;
-	union gsi_channel_scratch gsi_scratch;
+	union __packed gsi_channel_scratch gsi_scratch;
 	struct IpaHwOffloadStatsAllocCmdData_t *pcmd_t = NULL;
 
 	ipa_ep_idx = ipa3_get_ep_mapping(ipa3_get_client_mapping(clnt_hdl));

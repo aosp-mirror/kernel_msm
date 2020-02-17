@@ -79,6 +79,7 @@
 #define CSID_DEBUG_ENABLE_CPHY_PKT_CAPTURE        BIT(6)
 #define CSID_DEBUG_ENABLE_HBI_VBI_INFO            BIT(7)
 #define CSID_DEBUG_DISABLE_EARLY_EOF              BIT(8)
+#define CSID_DEBUG_RECOVERY_ENABLED               BIT(24)
 
 /* enum cam_csid_path_halt_mode select the path halt mode control */
 enum cam_csid_path_halt_mode {
@@ -395,6 +396,18 @@ struct cam_ife_csid_cid_data {
 	uint32_t                     tpg_set;
 };
 
+/**
+ * struct cam_csid_hw_work_data- work data for csid
+ * Later other fields can be added to this data
+ * @evt_type   : Event type from CSID
+ * @irq_status : IRQ Status register
+ * @ctx        : pointer to ctx
+ */
+struct cam_csid_hw_work_data {
+	uint32_t           evt_type;
+	uint32_t           irq_status[CSID_IRQ_STATUS_MAX];
+	void              *ctx;
+};
 
 /**
  * struct cam_ife_csid_path_cfg- csid path configuration details. It is stored

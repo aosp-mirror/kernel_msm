@@ -682,7 +682,7 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 	}
 
 	if (cam_mem_put_cpu_buf(config.packet_handle))
-		CAM_WARN(CAM_ACTUATOR, "Fail to put cmd buffer: 0x%x",
+		CAM_WARN(CAM_ACTUATOR, "Fail to put cmd buffer: 0x%llx",
 			config.packet_handle);
 
 	return rc;
@@ -693,7 +693,7 @@ rel_cmd_buf:
 			cmd_desc[i].mem_handle);
 rel_pkt_buf:
 	if (cam_mem_put_cpu_buf(config.packet_handle))
-		CAM_WARN(CAM_ACTUATOR, "Fail to put cmd buffer: 0x%x",
+		CAM_WARN(CAM_ACTUATOR, "Fail to put cmd buffer: 0x%llx",
 			config.packet_handle);
 
 	return rc;
@@ -786,7 +786,7 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 		bridge_params.v4l2_sub_dev_flag = 0;
 		bridge_params.media_entity_flag = 0;
 		bridge_params.priv = a_ctrl;
-
+		bridge_params.dev_id = CAM_ACTUATOR;
 		actuator_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
 		a_ctrl->bridge_intf.device_hdl = actuator_acq_dev.device_handle;

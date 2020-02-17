@@ -559,6 +559,17 @@ void diag_pcie_connect_all(void)
 	}
 }
 
+void diag_pcie_connect_device(int id)
+{
+	struct diag_pcie_info *pcie_info = NULL;
+
+	pcie_info = &diag_pcie[id];
+	if (!atomic_read(&pcie_info->enabled))
+		return;
+	atomic_set(&pcie_info->diag_state, 1);
+	diag_pcie_connect(pcie_info);
+}
+
 static void diag_pcie_disconnect(struct diag_pcie_info *ch)
 {
 	if (!ch)
@@ -591,9 +602,19 @@ void diag_pcie_disconnect_all(void)
 	}
 }
 
+void diag_pcie_disconnect_device(int id)
+{
+	struct diag_pcie_info *pcie_info = NULL;
+
+	pcie_info = &diag_pcie[id];
+	if (!atomic_read(&pcie_info->enabled))
+		return;
+	atomic_set(&pcie_info->diag_state, 0);
+	diag_pcie_disconnect(pcie_info);
+}
+
 void diag_pcie_close_work_fn(struct work_struct *work)
 {
-	int rc = 0;
 	struct diag_pcie_info *pcie_info = container_of(work,
 						      struct diag_pcie_info,
 						      open_work);
@@ -602,10 +623,10 @@ void diag_pcie_close_work_fn(struct work_struct *work)
 		return;
 	mutex_lock(&pcie_info->out_chan_lock);
 	mutex_lock(&pcie_info->in_chan_lock);
-	rc = mhi_dev_close_channel(pcie_info->in_handle);
+	mhi_dev_close_channel(pcie_info->in_handle);
 	DIAG_LOG(DIAG_DEBUG_MUX, " closed in bound channel %d",
 		pcie_info->in_chan);
-	rc = mhi_dev_close_channel(pcie_info->out_handle);
+	mhi_dev_close_channel(pcie_info->out_handle);
 	DIAG_LOG(DIAG_DEBUG_MUX, " closed out bound channel %d",
 		pcie_info->out_chan);
 	mutex_unlock(&pcie_info->in_chan_lock);

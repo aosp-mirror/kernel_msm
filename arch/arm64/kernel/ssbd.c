@@ -25,6 +25,10 @@ static void ssbd_ssbs_disable(struct task_struct *task)
 {
 	u64 val = is_compat_thread(task_thread_info(task)) ?
 		  PSR_AA32_SSBS_BIT : PSR_SSBS_BIT;
+
+	task_pt_regs(task)->pstate &= ~val;
+}
+
 /*
  * prctl interface for SSBD
  */

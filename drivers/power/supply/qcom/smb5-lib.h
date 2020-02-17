@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,7 @@
 #include <linux/alarmtimer.h>
 #include <linux/ktime.h>
 #include <linux/types.h>
+#include <linux/timer.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
 #include <linux/thermal.h>
@@ -87,6 +88,7 @@ enum print_reason {
 #define MAIN_FCC_VOTER			"MAIN_FCC_VOTER"
 #define DCIN_AICL_VOTER			"DCIN_AICL_VOTER"
 #define DC_USER_VOTER			"DC_USER_VOTER"
+#define OVERHEAT_LIMIT_VOTER		"OVERHEAT_LIMIT_VOTER"
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
@@ -144,6 +146,8 @@ enum {
 	WEAK_ADAPTER_WA			= BIT(2),
 	USBIN_OV_WA			= BIT(3),
 	CHG_TERMINATION_WA		= BIT(4),
+	USBIN_ADC_WA			= BIT(5),
+	SKIP_MISC_PBS_IRQ_WA		= BIT(6),
 };
 
 enum jeita_cfg_stat {
@@ -409,8 +413,10 @@ struct smb_charger {
 	struct mutex		dr_lock;
 	struct mutex		dc_reset_lock;
 	struct mutex		irq_status_lock;
+	struct mutex		adc_lock;
 	spinlock_t		typec_pr_lock;
 	struct mutex		dcin_aicl_lock;
+	struct mutex		dpdm_lock;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -434,6 +440,7 @@ struct smb_charger {
 
 	/* CC Mode */
 	int	adapter_cc_mode;
+	int	thermal_overheat;
 
 	/* regulators */
 	struct smb_regulator	*vbus_vreg;
@@ -485,6 +492,8 @@ struct smb_charger {
 	struct alarm		moisture_protection_alarm;
 	struct alarm		chg_termination_alarm;
 	struct alarm		dcin_aicl_alarm;
+
+	struct timer_list	apsd_timer;
 
 	struct charger_param	chg_param;
 	/* secondary charger config */
@@ -585,6 +594,9 @@ struct smb_charger {
 	u32			comp_clamp_level;
 	bool			hvdcp3_standalone_config;
 	int			wls_icl_ua;
+	bool			dpdm_enabled;
+	bool			apsd_ext_timeout;
+	bool			qc3p5_detected;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -784,6 +796,8 @@ int smblib_get_prop_charger_temp(struct smb_charger *chg,
 int smblib_get_prop_die_health(struct smb_charger *chg);
 int smblib_get_prop_smb_health(struct smb_charger *chg);
 int smblib_get_prop_connector_health(struct smb_charger *chg);
+int smblib_set_prop_thermal_overheat(struct smb_charger *chg,
+			       int therm_overheat);
 int smblib_get_skin_temp_status(struct smb_charger *chg);
 int smblib_get_prop_vph_voltage_now(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -809,6 +823,7 @@ int smblib_set_prop_rechg_soc_thresh(struct smb_charger *chg,
 				const union power_supply_propval *val);
 void smblib_suspend_on_debug_battery(struct smb_charger *chg);
 int smblib_rerun_apsd_if_required(struct smb_charger *chg);
+void smblib_rerun_apsd(struct smb_charger *chg);
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_thermal_threshold(struct smb_charger *chg, u16 addr, int *val);

@@ -2,7 +2,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm Technologies, Inc. MSM SDHCI Platform
  * driver source file
  *
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -5193,6 +5193,13 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		goto vreg_deinit;
 	}
 
+	/*
+	 * To avoid polling and to avoid this R1b command conversion
+	 * to R1 command if the requested busy timeout > host's max
+	 * busy timeout in case of sanitize, erase or any R1b command
+	 */
+	host->mmc->max_busy_timeout = 0;
+
 	msm_host->pltfm_init_done = true;
 
 	pm_runtime_set_active(&pdev->dev);
@@ -5552,11 +5559,24 @@ static int sdhci_msm_suspend_noirq(struct device *dev)
 	return ret;
 }
 
+static int sdhci_msm_restore(struct device *dev)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	struct mmc_host *mmc = host->mmc;
+
+	if (mmc->inlinecrypt_support)
+		mmc->inlinecrypt_reset_needed = true;
+
+	return 0;
+}
+
 static const struct dev_pm_ops sdhci_msm_pmops = {
-	SET_LATE_SYSTEM_SLEEP_PM_OPS(sdhci_msm_suspend, sdhci_msm_resume)
-	SET_RUNTIME_PM_OPS(sdhci_msm_runtime_suspend, sdhci_msm_runtime_resume,
-			   NULL)
-	.suspend_noirq = sdhci_msm_suspend_noirq,
+	.suspend_late		= sdhci_msm_suspend,
+	.resume_early		= sdhci_msm_resume,
+	.runtime_suspend	= sdhci_msm_runtime_suspend,
+	.runtime_resume		= sdhci_msm_runtime_resume,
+	.suspend_noirq		= sdhci_msm_suspend_noirq,
+	.restore		= sdhci_msm_restore,
 };
 
 #define SDHCI_MSM_PMOPS (&sdhci_msm_pmops)

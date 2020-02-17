@@ -307,7 +307,9 @@ static const struct v4l2_file_operations msm_v4l2_vidc_fops = {
 	.open = msm_v4l2_open,
 	.release = msm_v4l2_close,
 	.unlocked_ioctl = video_ioctl2,
+#ifdef CONFIG_COMPAT
 	.compat_ioctl32 = msm_v4l2_private,
+#endif
 	.poll = msm_v4l2_poll,
 };
 
@@ -531,6 +533,8 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 	struct msm_vidc_core *core;
 	struct device *dev;
 	int nr = BASE_DEVICE_NUMBER;
+
+	place_marker("M - DRIVER Video Start");
 
 	if (!vidc_driver) {
 		dprintk(VIDC_ERR, "Invalid vidc driver\n");

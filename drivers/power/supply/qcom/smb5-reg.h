@@ -192,6 +192,7 @@ enum {
 #define SHIP_MODE_EN_BIT			BIT(0)
 
 #define BATIF_ADC_CHANNEL_EN_REG		(BATIF_BASE + 0x82)
+#define IBATT_CHANNEL_EN_BIT			BIT(6)
 #define CONN_THM_CHANNEL_EN_BIT			BIT(4)
 #define DIE_TEMP_CHANNEL_EN_BIT			BIT(2)
 #define MISC_THM_CHANNEL_EN_BIT			BIT(1)
@@ -347,6 +348,7 @@ enum {
 #define SNK_RP_STD_DAM_BIT			BIT(6)
 #define SNK_RP_1P5_DAM_BIT			BIT(5)
 #define SNK_RP_3P0_DAM_BIT			BIT(4)
+
 #define SNK_RP_STD_BIT				BIT(3)
 #define SNK_RP_1P5_BIT				BIT(2)
 #define SNK_RP_3P0_BIT				BIT(1)

@@ -63,19 +63,19 @@
 			reg = <0x0 0x86400000 0x0 0x1000000>;
 		};
 
-		adsp_fw_mem: adsp_fw_mem@87500000 {
+		adsp_fw_mem: adsp_fw_mem@87400000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x87400000 0x0 0x1400000>;
 		};
 
-		cdsp_fw_mem: cdsp_fw_mem@88f00000 {
+		cdsp_fw_mem: cdsp_fw_mem@88800000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x88800000 0x0 0x600000>;
 		};
 
-		wlan_msa_mem: wlan_msa_region@89500000 {
+		wlan_msa_mem: wlan_msa_region@88E00000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x88E00000 0x0 0x100000>;
@@ -310,6 +310,7 @@
 		reg = <0x1800000 0x80000>;
 		reg-names = "cc_base";
 		vdd_cx-supply = <&pms405_s1_level>;
+		vdd_sr_pll-supply = <&pms405_l3>;
 		clocks = <&clock_rpmcc RPM_SMD_XO_CLK_SRC>;
 		qcom,gcc_oxili_gfx3d_clk-opp-handle = <&msm_gpu>;
 		clock-names = "cxo";
@@ -1308,22 +1309,16 @@
 		clock-names = "iface_clk", "core_clk";
 
 		/* VDD is an external regulator eLDO5 */
-		vdd-io-supply = <&pms405_l6>;
-		qcom,vdd-io-voltage-level = <1800000 1800000>;
+		vdd-io-supply = <&pms405_l11>;
+		qcom,vdd-io-voltage-level = <1800000 2950000>;
 		qcom,vdd-io-current-level = <0 24200>;
 		post-power-on-delay-ms = <100>;
-
-		qcom,core_3_0v_support;
-		qcom,nonremovable;
 
 		pinctrl-names = "active", "sleep";
 		pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on
 			&sdc2_wlan_on>;
 		pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off
 			&sdc2_wlan_off>;
-
-		/delete-property/ qcom,devfreq,freq-table;
-		/delete-property/ cd-gpios;
 
 		status = "ok";
 	};

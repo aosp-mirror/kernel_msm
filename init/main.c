@@ -1120,6 +1120,7 @@ static noinline void __init kernel_init_freeable(void)
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}
+	launch_early_services();
 
 	/*
 	 * Ok, we have completed the initial bootup, and

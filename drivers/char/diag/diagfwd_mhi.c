@@ -320,6 +320,8 @@ fail:
 
 static int mhi_open(int id)
 {
+	int err = 0;
+
 	if (id < 0 || id >= NUM_MHI_DEV) {
 		pr_err("diag: In %s, invalid index %d\n", __func__, id);
 		return -EINVAL;
@@ -330,7 +332,9 @@ static int mhi_open(int id)
 	 * explicitly by Diag. Open both the read and write channels (denoted by
 	 * OPEN_CHANNELS flag)
 	 */
-	__mhi_open(&diag_mhi[id], OPEN_CHANNELS);
+	err = __mhi_open(&diag_mhi[id], OPEN_CHANNELS);
+	if (err)
+		return err;
 	diag_remote_dev_open(diag_mhi[id].dev_id);
 	queue_work(diag_mhi[id].mhi_wq, &(diag_mhi[id].read_work));
 
@@ -517,8 +521,10 @@ static int mhi_write(int id, unsigned char *buf, int len, int ctxt)
 	spin_lock_irqsave(&ch->lock, flags);
 	err = mhi_buf_tbl_add(&diag_mhi[id], TYPE_MHI_WRITE_CH, buf,
 			      len);
-	if (err)
+	if (err) {
+		spin_unlock_irqrestore(&ch->lock, flags);
 		goto fail;
+	}
 
 	err = mhi_queue_transfer(diag_mhi[id].mhi_dev, DMA_TO_DEVICE, buf,
 				len, mhi_flags);

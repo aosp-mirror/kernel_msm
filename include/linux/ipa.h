@@ -747,6 +747,7 @@ struct ipa_rm_perf_profile {
 enum teth_tethering_mode {
 	TETH_TETHERING_MODE_RMNET,
 	TETH_TETHERING_MODE_MBIM,
+	TETH_TETHERING_MODE_RMNET_2,
 	TETH_TETHERING_MODE_MAX,
 };
 
@@ -2483,7 +2484,8 @@ static inline int ipa_release_wdi_mapping(u32 num_buffers,
 	return -EINVAL;
 }
 
-static inline int ipa_disable_apps_wan_cons_deaggr(void)
+static inline int ipa_disable_apps_wan_cons_deaggr(uint32_t agg_size,
+		uint32_t agg_count)
 {
 	return -EINVAL;
 }

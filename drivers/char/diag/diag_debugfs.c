@@ -21,7 +21,7 @@
 #ifdef CONFIG_DIAGFWD_BRIDGE_CODE
 #include "diagfwd_bridge.h"
 #endif
-#ifdef CONFIG_USB_QCOM_DIAG_BRIDGE
+#ifdef CONFIG_USB_QTI_DIAG_BRIDGE
 #include "diagfwd_hsic.h"
 #endif
 #ifdef CONFIG_MHI_BUS
@@ -89,12 +89,12 @@ static ssize_t diag_dbgfs_read_status(struct file *file, char __user *ubuf,
 		driver->supports_apps_hdlc_encoding,
 		driver->supports_apps_header_untagging,
 		driver->supports_sockets,
-		driver->logging_mode,
+		driver->logging_mode[DIAG_LOCAL_PROC],
 		driver->rsp_buf_busy,
 		driver->hdlc_disabled,
 		driver->time_sync_enabled,
-		driver->md_session_mode,
-		driver->md_session_mask,
+		driver->md_session_mode[DIAG_LOCAL_PROC],
+		driver->md_session_mask[DIAG_LOCAL_PROC],
 		driver->uses_time_api,
 		driver->supports_pd_buffering);
 
@@ -246,7 +246,7 @@ static ssize_t diag_dbgfs_read_power(struct file *file, char __user *ubuf,
 		driver->num_dci_client,
 		driver->md_ws.ref_count,
 		driver->md_ws.copy_count,
-		driver->logging_mode,
+		driver->logging_mode[DIAG_LOCAL_PROC],
 		driver->diag_dev->power.wakeup->active_count,
 		driver->diag_dev->power.wakeup->relax_count);
 
@@ -553,7 +553,7 @@ static ssize_t diag_dbgfs_read_socketinfo(struct file *file, char __user *ubuf,
 	struct diag_socket_info *info = NULL;
 	struct diagfwd_info *fwd_ctxt = NULL;
 
-	if (diag_dbgfs_socketinfo_index >= NUM_PERIPHERALS) {
+	if (diag_dbgfs_socketinfo_index >= NUM_TYPES) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_socketinfo_index = 0;
 		return 0;
@@ -659,7 +659,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 	struct diag_rpmsg_info *info = NULL;
 	struct diagfwd_info *fwd_ctxt = NULL;
 
-	if (diag_dbgfs_rpmsginfo_index >= NUM_PERIPHERALS) {
+	if (diag_dbgfs_rpmsginfo_index >= NUM_TYPES) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_rpmsginfo_index = 0;
 		return 0;
@@ -697,7 +697,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 
 			bytes_written = scnprintf(buf+bytes_in_buffer,
 				bytes_remaining,
-				"name\t\t:\t%s\n"
+				"name\t\t:\t%s:\t%s\n"
 				"hdl\t\t:\t%pK\n"
 				"inited\t\t:\t%d\n"
 				"opened\t\t:\t%d\n"
@@ -712,6 +712,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 				"fwd inited\t:\t%d\n"
 				"fwd opened\t:\t%d\n"
 				"fwd ch_open\t:\t%d\n\n",
+				info->edge,
 				info->name,
 				info->hdl,
 				info->inited,
@@ -780,7 +781,7 @@ static ssize_t diag_dbgfs_write_debug(struct file *fp, const char __user *buf,
 #endif
 
 #ifdef CONFIG_DIAGFWD_BRIDGE_CODE
-#ifdef CONFIG_USB_QCOM_DIAG_BRIDGE
+#ifdef CONFIG_USB_QTI_DIAG_BRIDGE
 static ssize_t diag_dbgfs_read_hsicinfo(struct file *file, char __user *ubuf,
 					size_t count, loff_t *ppos)
 {
@@ -793,7 +794,7 @@ static ssize_t diag_dbgfs_read_hsicinfo(struct file *file, char __user *ubuf,
 	unsigned int bytes_in_buffer = 0;
 	struct diag_hsic_info *hsic_info = NULL;
 
-	if (diag_dbgfs_hsicinfo_index >= NUM_DIAG_USB_DEV) {
+	if (diag_dbgfs_hsicinfo_index >= NUM_HSIC_DEV) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_hsicinfo_index = 0;
 		return 0;
@@ -938,7 +939,7 @@ static ssize_t diag_dbgfs_read_bridge(struct file *file, char __user *ubuf,
 	unsigned int bytes_in_buffer = 0;
 	struct diagfwd_bridge_info *info = NULL;
 
-	if (diag_dbgfs_bridgeinfo_index >= NUM_DIAG_USB_DEV) {
+	if (diag_dbgfs_bridgeinfo_index >= NUM_REMOTE_DEV) {
 		/* Done. Reset to prepare for future requests */
 		diag_dbgfs_bridgeinfo_index = 0;
 		return 0;
@@ -1103,7 +1104,7 @@ int diag_debugfs_init(void)
 				    &diag_dbgfs_bridge_ops);
 	if (!entry)
 		goto err;
-#ifdef CONFIG_USB_QCOM_DIAG_BRIDGE
+#ifdef CONFIG_USB_QTI_DIAG_BRIDGE
 	entry = debugfs_create_file("hsicinfo", 0444, diag_dbgfs_dent, 0,
 				    &diag_dbgfs_hsicinfo_ops);
 	if (!entry)

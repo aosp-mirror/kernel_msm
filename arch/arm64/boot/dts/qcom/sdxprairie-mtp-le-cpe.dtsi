@@ -88,10 +88,22 @@
 	status = "ok";
 };
 
+&usb {
+	qcom,smmu-s1-bypass;
+};
+
 &sdx_ext_ipc {
 	status = "ok";
 };
 
-&usb {
-	qcom,smmu-s1-bypass;
+&i2c_3 {
+	tavil_codec {
+		status = "disabled";
+	};
+};
+
+&soc {
+	sound-tavil {
+		status = "disabled";
+	};
 };

@@ -1059,6 +1059,7 @@
 		qcom,smmu-s1-enable;
 
 		mhi,max-channels = <30>;
+		mhi,buffer-len = <0x8000>;
 		mhi,timeout = <10000>;
 
 		mhi_channels {
@@ -1405,6 +1406,65 @@
 		status = "disabled";
 	};
 
+	mtl_rx_setup: rx-queues-config {
+		snps,rx-queues-to-use = <4>;
+		snps,rx-sched-sp;
+
+		queue0 {
+			snps,dcb-algorithm;
+			snps,map-to-dma-channel = <0x0>;
+			snps,route-up;
+			snps,route-ptp;
+			snps,route-dcbcp;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+			snps,map-to-dma-channel = <0x1>;
+			snps,route-avcp;
+			snps,route-multi-broad;
+		};
+
+		queue2 {
+			snps,avb-algorithm;
+			snps,map-to-dma-channel = <0x2>;
+		};
+
+		queue3 {
+			snps,avb-algorithm;
+			snps,map-to-dma-channel = <0x3>;
+			snps,priority = <0x0C>;
+		};
+	};
+
+	mtl_tx_setup: tx-queues-config {
+		snps,tx-queues-to-use = <5>;
+		snps,tx-sched-sp;
+		queue0 {
+			snps,dcb-algorithm;
+		};
+
+		queue1 {
+			snps,dcb-algorithm;
+		};
+
+		queue2 {
+			snps,avb-algorithm;
+			snps,send_slope = <0x1000>;
+			snps,idle_slope = <0x1000>;
+			snps,high_credit = <0x3E800>;
+			snps,low_credit = <0xFFC18000>;
+		};
+
+		queue3 {
+			snps,avb-algorithm;
+			snps,send_slope = <0x1000>;
+			snps,idle_slope = <0x1000>;
+			snps,high_credit = <0x3E800>;
+			snps,low_credit = <0xFFC18000>;
+		};
+	};
+
 	ethqos_hw: qcom,ethernet@00020000 {
 		compatible = "qcom,sdxprairie-ethqos";
 		qcom,arm-smmu;
@@ -1421,10 +1481,20 @@
 			<&tlmm 90 2>, <&pdc 0 290 1>, <&pdc 0 291 1>;
 		interrupt-names = "macirq", "eth_lpi",
 			"phy-intr",	"ptp_pps_irq_0", "ptp_pps_irq_1";
-
+		qcom,msm-bus,name = "emac";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <2>;
+		qcom,msm-bus,vectors-KBps =
+			<98 512 0 0>, <1 781 0 0>,  /* No vote */
+			<98 512 2500 0>, <1 781 0 40000>,  /* 10Mbps vote */
+			<98 512 25000 0>, <1 781 0 40000>,  /* 100Mbps vote */
+			<98 512 250000 0>, <1 781 0 40000>; /* 1000Mbps vote */
+		qcom,bus-vector-names = "0", "10", "100", "1000";
 		snps,tso;
-		rx-fifo-depth = <4096>;
-		tx-fifo-depth = <4096>;
+		rx-fifo-depth = <16384>;
+		tx-fifo-depth = <16384>;
+		snps,mtl-rx-config = <&mtl_rx_setup>;
+		snps,mtl-tx-config = <&mtl_tx_setup>;
 
 		vreg_rgmii-supply = <&pmxprairie_vref_rgmii>;
 		vreg_emac_phy-supply =  <&vreg_emac_phy>;

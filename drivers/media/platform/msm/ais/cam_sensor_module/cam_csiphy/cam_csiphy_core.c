@@ -255,7 +255,7 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 
 rel_pkt_buf:
 	if (cam_mem_put_cpu_buf((int32_t) cfg_dev->packet_handle))
-		CAM_WARN(CAM_CSIPHY, "Failed to put packet Mem address: 0x%x",
+		CAM_WARN(CAM_CSIPHY, "Failed to put packet Mem address: 0x%llx",
 			 cfg_dev->packet_handle);
 
 	return rc;
@@ -550,7 +550,7 @@ int32_t cam_csiphy_config_dev(struct csiphy_device *csiphy_dev)
 void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 {
 	struct cam_hw_soc_info *soc_info;
-	int32_t i = 0;
+	int32_t i = 0, rc = 0;
 
 	if (csiphy_dev->csiphy_state == CAM_CSIPHY_INIT)
 		return;
@@ -573,7 +573,10 @@ void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 		cam_csiphy_reset(csiphy_dev);
 		cam_soc_util_disable_platform_resource(soc_info, true, true);
 
-		cam_cpas_stop(csiphy_dev->cpas_handle);
+		rc = cam_cpas_stop(csiphy_dev->cpas_handle);
+		if (rc)
+			CAM_ERR(CAM_CSIPHY, "cpas stop failed %d", rc);
+
 		csiphy_dev->csiphy_state = CAM_CSIPHY_ACQUIRE;
 	}
 
@@ -597,6 +600,11 @@ void cam_csiphy_shutdown(struct csiphy_device *csiphy_dev)
 	csiphy_dev->acquire_count = 0;
 	csiphy_dev->start_dev_count = 0;
 	csiphy_dev->csiphy_state = CAM_CSIPHY_INIT;
+
+	/* reset csiphy info */
+	csiphy_dev->csiphy_info.lane_mask = 0;
+	csiphy_dev->csiphy_info.lane_cnt = 0;
+	csiphy_dev->csiphy_info.combo_mode = 0;
 }
 
 static int32_t cam_csiphy_external_cmd(struct csiphy_device *csiphy_dev,
@@ -724,7 +732,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		bridge_params.v4l2_sub_dev_flag = 0;
 		bridge_params.media_entity_flag = 0;
 		bridge_params.priv = csiphy_dev;
-
+		bridge_params.dev_id = CAM_CSIPHY;
 		if (csiphy_acq_params.combo_mode >= 2) {
 			CAM_ERR(CAM_CSIPHY, "Invalid combo_mode %d",
 				csiphy_acq_params.combo_mode);
@@ -933,7 +941,10 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 			if (rc < 0) {
 				csiphy_dev->csiphy_info.secure_mode[offset] =
 					CAM_SECURE_MODE_NON_SECURE;
-				cam_cpas_stop(csiphy_dev->cpas_handle);
+				rc = cam_cpas_stop(csiphy_dev->cpas_handle);
+				if (rc < 0)
+					CAM_ERR(CAM_CSIPHY,
+						"de-voting CPAS: %d", rc);
 				goto release_mutex;
 			}
 		}
@@ -941,7 +952,9 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		rc = cam_csiphy_enable_hw(csiphy_dev);
 		if (rc != 0) {
 			CAM_ERR(CAM_CSIPHY, "cam_csiphy_enable_hw failed");
-			cam_cpas_stop(csiphy_dev->cpas_handle);
+			rc = cam_cpas_stop(csiphy_dev->cpas_handle);
+			if (rc < 0)
+				CAM_ERR(CAM_CSIPHY, "de-voting CPAS: %d", rc);
 			goto release_mutex;
 		}
 		rc = cam_csiphy_config_dev(csiphy_dev);
@@ -951,7 +964,9 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		if (rc < 0) {
 			CAM_ERR(CAM_CSIPHY, "cam_csiphy_config_dev failed");
 			cam_csiphy_disable_hw(csiphy_dev);
-			cam_cpas_stop(csiphy_dev->cpas_handle);
+			rc = cam_cpas_stop(csiphy_dev->cpas_handle);
+			if (rc < 0)
+				CAM_ERR(CAM_CSIPHY, "de-voting CPAS: %d", rc);
 			goto release_mutex;
 		}
 		csiphy_dev->start_dev_count++;

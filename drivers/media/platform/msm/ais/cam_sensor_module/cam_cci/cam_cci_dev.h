@@ -140,6 +140,7 @@ struct cam_cci_master_info {
 	uint8_t reset_pending;
 	struct mutex mutex;
 	struct completion reset_complete;
+	struct completion rd_done;
 	struct completion th_complete;
 	struct mutex mutex_q[NUM_QUEUES];
 	struct completion report_q[NUM_QUEUES];
@@ -168,72 +169,6 @@ struct cam_cci_clk_params_t {
 enum cam_cci_state_t {
 	CCI_STATE_ENABLED,
 	CCI_STATE_DISABLED,
-};
-
-/**
- * struct cci_device
- * @pdev: Platform device
- * @subdev: V4L2 sub device
- * @base: Base address of CCI device
- * @hw_version: Hardware version
- * @ref_count: Reference Count
- * @cci_state: CCI state machine
- * @num_clk: Number of CCI clock
- * @cci_clk: CCI clock structure
- * @cci_clk_info: CCI clock information
- * @cam_cci_i2c_queue_info: CCI queue information
- * @i2c_freq_mode: I2C frequency of operations
- * @cci_clk_params: CCI hw clk params
- * @cci_gpio_tbl: CCI GPIO table
- * @cci_gpio_tbl_size: GPIO table size
- * @cci_pinctrl: Pinctrl structure
- * @cci_pinctrl_status: CCI pinctrl status
- * @cci_clk_src: CCI clk src rate
- * @cci_vreg: CCI regulator structure
- * @cci_reg_ptr: CCI individual regulator structure
- * @regulator_count: Regulator count
- * @support_seq_write:
- *     Set this flag when sequential write is enabled
- * @write_wq: Work queue structure
- * @valid_sync: Is it a valid sync with CSID
- * @v4l2_dev_str: V4L2 device structure
- * @cci_wait_sync_cfg: CCI sync config
- * @cycles_per_us: Cycles per micro sec
- * @payload_size: CCI packet payload size
- * @irq_status1: Store irq_status1 to be cleared after
- *               draining FIFO buffer for burst read
- * @lock_status: to protect changes to irq_status1
- * @is_burst_read: Flag to determine if we are performing
- *                 a burst read operation or not
- * @irqs_disabled: Mask for IRQs that are disabled
- */
-struct cci_device {
-	struct v4l2_subdev subdev;
-	struct cam_hw_soc_info soc_info;
-	uint32_t hw_version;
-	uint8_t ref_count;
-	enum cam_cci_state_t cci_state;
-	struct cam_cci_i2c_queue_info
-		cci_i2c_queue_info[NUM_MASTERS][NUM_QUEUES];
-	struct cam_cci_master_info cci_master_info[NUM_MASTERS];
-	enum i2c_freq_mode i2c_freq_mode[NUM_MASTERS];
-	struct cam_cci_clk_params_t cci_clk_params[I2C_MAX_MODES];
-	struct msm_pinctrl_info cci_pinctrl;
-	uint8_t cci_pinctrl_status;
-	uint8_t support_seq_write;
-	struct workqueue_struct *write_wq[MASTER_MAX];
-	struct cam_cci_wait_sync_cfg cci_wait_sync_cfg;
-	uint8_t valid_sync;
-	struct cam_subdev v4l2_dev_str;
-	uint32_t cycles_per_us;
-	int32_t clk_level_index;
-	uint8_t payload_size;
-	char device_name[20];
-	uint32_t cpas_handle;
-	uint32_t irq_status1;
-	spinlock_t lock_status;
-	bool is_burst_read;
-	uint32_t irqs_disabled;
 };
 
 enum cam_cci_i2c_cmd_type {
@@ -280,6 +215,75 @@ struct cam_sensor_cci_client {
 	uint16_t retries;
 	uint16_t id_map;
 	uint16_t cci_device;
+};
+
+/**
+ * struct cci_device
+ * @pdev:                       Platform device
+ * @subdev:                     V4L2 sub device
+ * @base:                       Base address of CCI device
+ * @hw_version:                 Hardware version
+ * @ref_count:                  Reference Count
+ * @cci_state:                  CCI state machine
+ * @num_clk:                    Number of CCI clock
+ * @cci_clk:                    CCI clock structure
+ * @cci_clk_info:               CCI clock information
+ * @cam_cci_i2c_queue_info:     CCI queue information
+ * @i2c_freq_mode:              I2C frequency of operations
+ * @cci_clk_params:             CCI hw clk params
+ * @cci_gpio_tbl:               CCI GPIO table
+ * @cci_gpio_tbl_size:          GPIO table size
+ * @cci_pinctrl:                Pinctrl structure
+ * @cci_pinctrl_status:         CCI pinctrl status
+ * @cci_clk_src:                CCI clk src rate
+ * @cci_vreg:                   CCI regulator structure
+ * @cci_reg_ptr:                CCI individual regulator structure
+ * @regulator_count:            Regulator count
+ * @support_seq_write:          Set this flag when sequential write is enabled
+ * @write_wq:                   Work queue structure
+ * @valid_sync:                 Is it a valid sync with CSID
+ * @v4l2_dev_str:               V4L2 device structure
+ * @cci_wait_sync_cfg:          CCI sync config
+ * @cycles_per_us:              Cycles per micro sec
+ * @payload_size:               CCI packet payload size
+ * @irq_status1:                Store irq_status1 to be cleared after
+ *                              draining FIFO buffer for burst read
+ * @lock_status:                to protect changes to irq_status1
+ * @is_burst_read:              Flag to determine if we are performing
+ *                              a burst read operation or not
+ * @irqs_disabled:              Mask for IRQs that are disabled
+ * @init_mutex:                 Mutex for maintaining refcount for attached
+ *                              devices to cci during init/deinit.
+ */
+struct cci_device {
+	struct v4l2_subdev subdev;
+	struct cam_hw_soc_info soc_info;
+	uint32_t hw_version;
+	uint8_t ref_count;
+	enum cam_cci_state_t cci_state;
+	struct cam_cci_i2c_queue_info
+		cci_i2c_queue_info[NUM_MASTERS][NUM_QUEUES];
+	struct cam_cci_master_info cci_master_info[NUM_MASTERS];
+	enum i2c_freq_mode i2c_freq_mode[NUM_MASTERS];
+	struct cam_cci_clk_params_t cci_clk_params[I2C_MAX_MODES];
+	struct msm_pinctrl_info cci_pinctrl;
+	uint8_t cci_pinctrl_status;
+	uint8_t support_seq_write;
+	struct workqueue_struct *write_wq[MASTER_MAX];
+	struct cam_cci_wait_sync_cfg cci_wait_sync_cfg;
+	uint8_t valid_sync;
+	struct cam_subdev v4l2_dev_str;
+	uint32_t cycles_per_us;
+	int32_t clk_level_index;
+	uint8_t payload_size;
+	char device_name[20];
+	uint32_t cpas_handle;
+	uint32_t irq_status1;
+	spinlock_t lock_status;
+	bool is_burst_read;
+	uint32_t irqs_disabled;
+	struct mutex init_mutex;
+	struct cam_sensor_cci_client cci_debug;
 };
 
 struct cam_cci_ctrl {

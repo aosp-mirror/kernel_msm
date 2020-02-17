@@ -130,6 +130,7 @@ static struct clk_rcg2 gpu_cc_gmu_clk_src = {
 	.hid_width = 5,
 	.parent_map = gpu_cc_parent_map_0,
 	.freq_tbl = ftbl_gpu_cc_gmu_clk_src,
+	.enable_safe_config = true,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gpu_cc_gmu_clk_src",
 		.parent_names = gpu_cc_parent_names_0,
@@ -430,12 +431,31 @@ static const struct qcom_cc_desc gpu_cc_sm8150_desc = {
 	.num_resets = ARRAY_SIZE(gpu_cc_sm8150_resets),
 };
 
+static struct clk_regmap *gpucc_sm8150_critical_clocks[] = {
+	&gpu_cc_ahb_clk.clkr,
+};
+
+static const struct qcom_cc_critical_desc gpucc_sm8150_critical_desc = {
+	.clks = gpucc_sm8150_critical_clocks,
+	.num_clks = ARRAY_SIZE(gpucc_sm8150_critical_clocks),
+};
+
 static const struct of_device_id gpu_cc_sm8150_match_table[] = {
 	{ .compatible = "qcom,gpucc-sm8150" },
 	{ .compatible = "qcom,gpucc-sdmshrike" },
+	{ .compatible = "qcom,gpucc-sa8155" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_sm8150_match_table);
+
+static int gpucc_sa8150_resume(struct device *dev)
+{
+	return qcom_cc_enable_critical_clks(&gpucc_sm8150_critical_desc);
+}
+
+static const struct dev_pm_ops gpucc_sa8150_pm_ops = {
+	.restore_early = gpucc_sa8150_resume,
+};
 
 static void gpu_cc_sm8150_fixup_sdmshrike(void)
 {
@@ -455,6 +475,9 @@ static int gpu_cc_sm8150_fixup(struct platform_device *pdev)
 
 	if (!strcmp(compat, "qcom,gpucc-sdmshrike"))
 		gpu_cc_sm8150_fixup_sdmshrike();
+
+	if (!strcmp(compat, "qcom,gcc-sa8155"))
+		pdev->dev.driver->pm = &gpucc_sa8150_pm_ops;
 
 	return 0;
 }
