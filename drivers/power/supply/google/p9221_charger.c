@@ -1304,14 +1304,20 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 
 	dev_dbg(&charger->client->dev, "Enable interrupts\n");
 
-	mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
-	       P9221_STAT_VRECT;
+	if (charger->ben_state) {
+		/* enable necessary INT for RTx mode */
+		mask = P9382_STAT_RXCONNECTED;
+	} else {
+		mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
+		       P9221_STAT_VRECT;
 
-	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_VOUTCHANGED)
-		mask |= P9221R5_STAT_VOUTCHANGED;
-	if (charger->pdata->needs_dcin_reset == P9221_WC_DC_RESET_MODECHANGED)
-		mask |= P9221R5_STAT_MODECHANGED;
-
+		if (charger->pdata->needs_dcin_reset ==
+						P9221_WC_DC_RESET_VOUTCHANGED)
+			mask |= P9221R5_STAT_VOUTCHANGED;
+		if (charger->pdata->needs_dcin_reset ==
+						P9221_WC_DC_RESET_MODECHANGED)
+			mask |= P9221R5_STAT_MODECHANGED;
+	}
 	ret = p9221_clear_interrupts(charger, mask);
 	if (ret)
 		dev_err(&charger->client->dev,
@@ -1321,6 +1327,7 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 	if (ret)
 		dev_err(&charger->client->dev,
 			"Could not enable interrupts: %d\n", ret);
+
 	return ret;
 }
 
@@ -2529,7 +2536,7 @@ static ssize_t rtx_status_show(struct device *dev,
 	u8 reg;
 	int ret;
 
-	if (charger->chip_id != P9382A_CHIP_ID)
+	if (charger->pdata->switch_gpio < 0)
 		charger->rtx_state = RTX_NOTSUPPORTED;
 
 	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
@@ -2551,6 +2558,29 @@ static ssize_t rtx_status_show(struct device *dev,
 }
 
 static DEVICE_ATTR_RO(rtx_status);
+
+static ssize_t is_rtx_connected_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	u16 status_reg = 0;
+	bool attached = 0;
+
+	if (charger->pdata->switch_gpio < 0)
+		return -ENODEV;
+
+	if (charger->ben_state)
+		p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+
+	attached = status_reg & P9382_STAT_RXCONNECTED;
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n",
+			 attached ? "connected" : "disconnect");
+}
+
+static DEVICE_ATTR_RO(is_rtx_connected);
 
 static ssize_t p9382_show_rtx_sw(struct device *dev,
 				 struct device_attribute *attr,
@@ -2718,6 +2748,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 	int ret;
 
 	if (buf[0] == '0') {
+		dev_info(&charger->client->dev, "disable rtx\n");
 		/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0000 */
 		ret = p9221_set_cmd_reg(charger, P9221R5_COM_RENEGOTIATE);
 		if (ret == 0) {
@@ -2735,6 +2766,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 			dev_err(&charger->client->dev,
 				"fail to enable dcin, ret=%d\n", ret);
 	} else if (buf[0] == '1') {
+		dev_info(&charger->client->dev, "enable rtx\n");
 		if (!charger->dc_suspend_votable) {
 			charger->dc_suspend_votable = find_votable("DC_SUSPEND");
 			if (!charger->dc_suspend_votable) {
@@ -2761,6 +2793,11 @@ static ssize_t p9382_set_rtx(struct device *dev,
 		ret = p9221_reg_write_16(charger, P9382A_STATUS_REG, 0);
 		if (ret == 0)
 			ret = p9382_wait_for_mode(charger, P9382A_MODE_TXMODE);
+
+		ret = p9221_enable_interrupts(charger);
+		if (ret)
+			dev_err(&charger->client->dev,
+				"Could not enable interrupts: %d\n", ret);
 
 		if (ret < 0) {
 			pr_err("cannot enter rTX mode (%d)\n", ret);
@@ -2802,6 +2839,7 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_aicl_delay_ms.attr,
 	&dev_attr_aicl_icl_ua.attr,
 	&dev_attr_rtx_status.attr,
+	&dev_attr_is_rtx_connected.attr,
 	NULL
 };
 
@@ -3039,6 +3077,29 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 
 	return false;
 }
+/* Handler for rtx mode */
+static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
+{
+	int ret;
+	u16 status_reg;
+	bool attached = 0;
+
+	ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+	if (ret) {
+		dev_err(&charger->client->dev,
+			"failed to read P9221_STATUS_REG reg: %d\n", ret);
+		return;
+	}
+
+	if (irq_src & P9382_STAT_RXCONNECTED) {
+		attached = status_reg & P9382_STAT_RXCONNECTED;
+		dev_info(&charger->client->dev,
+			 "INT: %04x, Rx is %s\n",
+			 irq_src, attached ? "connected" : "disconnect");
+		schedule_work(&charger->uevent_work);
+		return;
+	}
+}
 
 /* Handler for R5 and R7 chips */
 static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
@@ -3166,8 +3227,10 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 	}
 
 	/* todo interrupt handling for rx */
-	if (charger->ben_state)
+	if (charger->ben_state) {
+		rtx_irq_handler(charger, irq_src);
 		goto out;
+	}
 
 	if (irq_src & P9221_STAT_VRECT) {
 		dev_info(&charger->client->dev,

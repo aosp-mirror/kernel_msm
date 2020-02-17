@@ -234,6 +234,11 @@
 #define P9382_PROP_TX_ID_REG			0xC4
 #define P9382_EPP_TX_MFG_CODE_REG		0xBA
 
+/*
+ * Interrupt/Status flags for P9382
+ */
+#define P9382_STAT_RXCONNECTED			BIT(10)
+
 struct p9221_charger_platform_data {
 	int				irq_gpio;
 	int				irq_int;
