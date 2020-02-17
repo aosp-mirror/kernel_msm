@@ -1856,6 +1856,41 @@ static int msc_pm_hold(int msc_state)
 	return pm_state;
 }
 
+/* To meet IEEE 1725 requirement that the maximum charging voltage
+ * can't exceed the pack spec definition, add logic to control current down and
+ * float voltage up in discrete steps until float voltage reaches real last tier
+ * bottoming out current at C/20 (ichgterm)
+ */
+static void msc_logic_ramp_rate(struct batt_drv *batt_drv, int vbatt,
+				int ibatt, int *fv_uv)
+{
+	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
+	int next_cc_max = (batt_drv->cc_max *
+				profile->chg_last_tier_ramp_rate_dpct) / 1000;
+
+	/* bypass this algo if google,chg-last-tier isn't in device-tree  */
+	if (profile->chg_last_tier < 0)
+		return;
+
+	/* during cv mode of last tier, micro-adjust cc_max to avoid vpack
+	 * exceeding the spec criteria
+	 */
+	if (*fv_uv == profile->chg_last_tier &&
+				profile->chg_last_tier_vpack_tol > 0) {
+		const int vpack_margin = profile->chg_last_tier *
+				profile->chg_last_tier_vpack_tol / (10 * 1000);
+
+		if ((vbatt - profile->chg_last_tier) > vpack_margin)
+			batt_drv->cc_max -= profile->chg_last_tier_cc_ma;
+	} else if (*fv_uv < profile->chg_last_tier &&
+				-ibatt < next_cc_max && vbatt >= *fv_uv) {
+		batt_drv->cc_max = next_cc_max;
+		*fv_uv += profile->chg_last_tier_ramp_rate_mv;
+		if (*fv_uv >= profile->chg_last_tier)
+			*fv_uv = profile->chg_last_tier;
+	}
+}
+
 /* TODO: factor msc_logic_irdop from the logic about tier switch */
 static int msc_logic(struct batt_drv *batt_drv)
 {
@@ -1866,6 +1901,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 	int vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv, temp_idx;
 	int temp, ibatt, vbatt, ioerr;
 	int update_interval = MSC_DEFAULT_UPDATE_INTERVAL;
+	bool is_msc_last = false;
 	const time_t now = get_boot_sec();
 	time_t elap = now - batt_drv->ce_data.last_update;
 
@@ -1936,6 +1972,8 @@ static int msc_logic(struct batt_drv *batt_drv)
 	} else if (batt_drv->vbatt_idx == profile->volt_nb_limits - 1) {
 		const int chg_type = batt_drv->chg_state.f.chg_type;
 
+		is_msc_last = (profile->chg_last_tier > 0) ? true : false;
+
 		/* will not adjust charger voltage only in the configured
 		 * last tier.
 		 * NOTE: might not be the "real" last tier since can I have
@@ -1949,6 +1987,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 			msc_state = MSC_TYPE;
 		} else {
 			msc_state = MSC_LAST;
+			msc_logic_ramp_rate(batt_drv, vbatt, ibatt, &fv_uv);
 		}
 
 		pr_info("MSC_LAST vbatt=%d ibatt=%d fv_uv=%d\n",
@@ -2059,10 +2098,9 @@ static int msc_logic(struct batt_drv *batt_drv)
 	batt_drv->ce_data.last_update = now;
 	mutex_unlock(&batt_drv->stats_lock);
 
-	batt_drv->vbatt_idx = vbatt_idx;
-	batt_drv->temp_idx = temp_idx;
-	batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
-	batt_drv->fv_uv = fv_uv;
+	if (!is_msc_last)
+		batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
+						    vbatt_idx);
 
 	/* next update */
 	batt_drv->msc_update_interval = update_interval;
@@ -2072,6 +2110,10 @@ static int msc_logic(struct batt_drv *batt_drv)
 		batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
 		vbatt_idx, batt_drv->fv_uv, fv_uv,
 		batt_drv->cc_max);
+
+	batt_drv->vbatt_idx = vbatt_idx;
+	batt_drv->temp_idx = temp_idx;
+	batt_drv->fv_uv = fv_uv;
 
 	return 0;
 }
