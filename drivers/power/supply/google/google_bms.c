@@ -436,13 +436,10 @@ EXPORT_SYMBOL_GPL(gbms_cycle_count_cstr_bc);
 /* parse the result of gbms_cycle_count_cstr_bc() back to array */
 int gbms_cycle_count_sscan_bc(u16 *ccount, int bcnt, const char *buff)
 {
-	/* FIXME: b/139264914,
-	 * the value is from GBMS_CCBIN_BUCKET_COUNT. will review it
-	 */
 	int i, val[10];
 
 	/* sscanf has 10 fixed conversions */
-	if (bcnt != 10)
+	if (bcnt != GBMS_CCBIN_BUCKET_COUNT)
 		return -ERANGE;
 
 	if (sscanf(buff, "%d %d %d %d %d %d %d %d %d %d",
