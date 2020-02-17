@@ -74,6 +74,7 @@ struct qg_dt {
 	bool			fvss_enable;
 	bool			multi_profile_load;
 	const char		*batt_type_name;
+	bool			qg_cycle_disable;
 	bool			tcss_enable;
 	bool			bass_enable;
 };
@@ -208,6 +209,7 @@ struct qpnp_qg {
 	struct cap_learning	*cl;
 	/* charge counter */
 	struct cycle_counter	*counter;
+	char			cycle_str[BUCKET_COUNT * 6 + 2];
 	/* ttf */
 	struct ttf		*ttf;
 };
