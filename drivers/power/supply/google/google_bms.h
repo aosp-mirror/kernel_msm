@@ -45,6 +45,11 @@ struct gbms_chg_profile {
 	u32 cv_update_interval;
 	u32 cv_tier_ov_cnt;
 	u32 cv_tier_switch_cnt;
+	u32 chg_last_tier;
+	u32 chg_last_tier_ramp_rate_mv;
+	u32 chg_last_tier_ramp_rate_dpct;
+	u32 chg_last_tier_vpack_tol;
+	u32 chg_last_tier_cc_ma;
 	/* taper step */
 	u32 fv_uv_resolution;
 	/* experimental */
