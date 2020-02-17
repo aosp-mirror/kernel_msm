@@ -311,6 +311,7 @@ struct rt5514_priv {
 	struct regmap *i2c_regmap, *regmap;
 	struct clk *mclk;
 	struct gpio_desc *gpiod_reset;
+	const struct firmware *fw[4];
 	int sysclk;
 	int sysclk_src;
 	int lrck;
@@ -330,6 +331,7 @@ struct rt5514_priv {
 	bool is_streaming;
 	bool need_reload;
 	struct mutex stream_lock;
+	unsigned int sound_model_addr[2];
 };
 
 #endif /* __RT5514_H__ */
