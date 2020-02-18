@@ -22,6 +22,8 @@
 #include "cam_packet_util.h"
 #include "../cam_fw_update/fw_update.h"
 
+#define VCM_COMPONENT_I2C_ADDR_WRITE 0xE4
+
 static bool ois_debug;
 module_param(ois_debug, bool, 0644);
 
@@ -309,6 +311,18 @@ static int cam_ois_slaveInfo_pkt_parser(struct cam_ois_ctrl_t *o_ctrl,
 			sizeof(struct cam_ois_opcode));
 		CAM_DBG(CAM_OIS, "Slave addr: 0x%x Freq Mode: %d",
 			ois_info->slave_addr, ois_info->i2c_freq_mode);
+
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+		memcpy(&(o_ctrl->af_io_master_info),
+			&(o_ctrl->io_master_info),
+			sizeof(struct camera_io_master));
+		memcpy(&(o_ctrl->af_cci_client),
+			(o_ctrl->io_master_info.cci_client),
+			sizeof(struct cam_sensor_cci_client));
+		o_ctrl->af_io_master_info.cci_client = &(o_ctrl->af_cci_client);
+		o_ctrl->af_io_master_info.cci_client->sid =
+			VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
+#endif
 	} else if (o_ctrl->io_master_info.master_type == I2C_MASTER) {
 		o_ctrl->io_master_info.client->addr = ois_info->slave_addr;
 		CAM_DBG(CAM_OIS, "Slave addr: 0x%x", ois_info->slave_addr);
@@ -489,17 +503,13 @@ static int read_af_lens_position(struct camera_io_master *io_master_info,
 	uint32_t *pData)
 {
 	int rc = 0;
-	uint16_t orig_slave_addr = io_master_info->cci_client->sid;
 	uint32_t data = 0;
 	uint32_t addr = 0x0A;
 
-	io_master_info->cci_client->sid = 0xE4 >> 1;
 
 	rc = camera_io_dev_read(io_master_info, addr,
 		&data, CAMERA_SENSOR_I2C_TYPE_BYTE,
 		CAMERA_SENSOR_I2C_TYPE_WORD);
-
-	io_master_info->cci_client->sid = orig_slave_addr;
 
 	if (rc < 0) {
 	    CAM_ERR(CAM_OIS,"%s failed(non-fatal): %d\n", __func__, rc);
@@ -548,7 +558,8 @@ static void cam_ois_read_work(struct work_struct *work)
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 	}
 
-	rc = read_af_lens_position(&ois_timer_in->o_ctrl->io_master_info,
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+	rc = read_af_lens_position(&ois_timer_in->o_ctrl->af_io_master_info,
 		&af_pos);
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
@@ -560,6 +571,7 @@ static void cam_ois_read_work(struct work_struct *work)
 		}
 		return;
 	}
+#endif
 
 	ois_timer_in->i2c_fail_count = 0;
 	ois_shift_data.time_readout =

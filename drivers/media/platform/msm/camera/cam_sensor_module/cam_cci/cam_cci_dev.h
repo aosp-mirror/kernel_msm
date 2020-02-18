@@ -208,8 +208,6 @@ enum cam_cci_state_t {
  * @irqs_disabled:              Mask for IRQs that are disabled
  * @mutex:                      Mutex for maintaining cci devices,
  *                              especially during read/write.
- * @mutex_act_rw:               Mutex for maintaining cci devices,
- *                              especially during read/write of actuator.
  */
 struct cci_device {
 	struct v4l2_subdev subdev;
@@ -239,7 +237,6 @@ struct cci_device {
 	bool is_burst_read;
 	uint32_t irqs_disabled;
 	struct mutex mutex;
-	struct mutex mutex_act_rw;
 };
 
 enum cam_cci_i2c_cmd_type {

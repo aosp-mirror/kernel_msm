@@ -13,8 +13,6 @@
 #include "cam_sensor_io.h"
 #include "cam_sensor_i2c.h"
 
-#define VCM_COMPONENT_I2C_ADDR_WRITE 0xE4
-
 int32_t camera_io_dev_poll(struct camera_io_master *io_master_info,
 	uint32_t addr, uint32_t data, uint32_t data_mask,
 	enum camera_sensor_i2c_type addr_type,
@@ -47,29 +45,14 @@ int32_t camera_io_dev_read(struct camera_io_master *io_master_info,
 	enum camera_sensor_i2c_type addr_type,
 	enum camera_sensor_i2c_type data_type)
 {
-#ifdef CONFIG_CAMERA_ACT_RW_PROTECT
-	int32_t rc = -EFAULT;
-	struct cci_device *cci_dev = NULL;
-#endif
-
 	if (!io_master_info) {
 		CAM_ERR(CAM_SENSOR, "Invalid Args");
 		return -EINVAL;
 	}
 
 	if (io_master_info->master_type == CCI_MASTER) {
-#ifdef CONFIG_CAMERA_ACT_RW_PROTECT
-		cci_dev = v4l2_get_subdevdata(
-			io_master_info->cci_client->cci_subdev);
-		mutex_lock(&cci_dev->mutex_act_rw);
-		rc = cam_cci_i2c_read(io_master_info->cci_client,
-			addr, data, addr_type, data_type);
-		mutex_unlock(&cci_dev->mutex_act_rw);
-		return rc;
-#else
 		return cam_cci_i2c_read(io_master_info->cci_client,
 			addr, data, addr_type, data_type);
-#endif
 	} else if (io_master_info->master_type == I2C_MASTER) {
 		return cam_qup_i2c_read(io_master_info->client,
 			addr, data, addr_type, data_type);
@@ -89,24 +72,9 @@ int32_t camera_io_dev_read_seq(struct camera_io_master *io_master_info,
 	enum camera_sensor_i2c_type addr_type,
 	enum camera_sensor_i2c_type data_type, int32_t num_bytes)
 {
-#ifdef CONFIG_CAMERA_ACT_RW_PROTECT
-	int32_t rc = -EFAULT;
-	struct cci_device *cci_dev = NULL;
-#endif
-
 	if (io_master_info->master_type == CCI_MASTER) {
-#ifdef CONFIG_CAMERA_ACT_RW_PROTECT
-		cci_dev = v4l2_get_subdevdata(
-			io_master_info->cci_client->cci_subdev);
-		mutex_lock(&cci_dev->mutex_act_rw);
-		rc = cam_camera_cci_i2c_read_seq(io_master_info->cci_client,
-			addr, data, addr_type, data_type, num_bytes);
-		mutex_unlock(&cci_dev->mutex_act_rw);
-		return rc;
-#else
 		return cam_camera_cci_i2c_read_seq(io_master_info->cci_client,
 			addr, data, addr_type, data_type, num_bytes);
-#endif
 	} else if (io_master_info->master_type == I2C_MASTER) {
 		return cam_qup_i2c_read_seq(io_master_info->client,
 			addr, data, addr_type, num_bytes);
@@ -124,11 +92,6 @@ int32_t camera_io_dev_read_seq(struct camera_io_master *io_master_info,
 int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 	struct cam_sensor_i2c_reg_setting *write_setting)
 {
-#ifdef CONFIG_CAMERA_ACT_RW_PROTECT
-	int32_t rc = -EFAULT;
-	struct cci_device *cci_dev = NULL;
-#endif
-
 	if (!write_setting || !io_master_info) {
 		CAM_ERR(CAM_SENSOR,
 			"Input parameters not valid ws: %pK ioinfo: %pK",
@@ -142,22 +105,8 @@ int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 	}
 
 	if (io_master_info->master_type == CCI_MASTER) {
-#ifdef CONFIG_CAMERA_ACT_RW_PROTECT
-		cci_dev = v4l2_get_subdevdata(
-			io_master_info->cci_client->cci_subdev);
-		mutex_lock(&cci_dev->mutex_act_rw);
-		if (io_master_info->cci_client->sid ==
-			(VCM_COMPONENT_I2C_ADDR_WRITE >> 1)) {
-			usleep_range(1, 2);
-		}
-		rc = cam_cci_i2c_write_table(io_master_info,
-			write_setting);
-		mutex_unlock(&cci_dev->mutex_act_rw);
-		return rc;
-#else
 		return cam_cci_i2c_write_table(io_master_info,
 			write_setting);
-#endif
 	} else if (io_master_info->master_type == I2C_MASTER) {
 		return cam_qup_i2c_write_table(io_master_info,
 			write_setting);
