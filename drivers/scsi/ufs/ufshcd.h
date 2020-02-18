@@ -699,7 +699,6 @@ struct ufshcd_clk_ctx {
  * @dme_err: tracks dme errors
  */
 struct ufs_stats {
-#ifdef CONFIG_DEBUG_FS
 	bool enabled;
 	u64 **tag_stats;
 	int q_depth;
@@ -709,7 +708,6 @@ struct ufs_stats {
 	struct ufshcd_io_stat io_write;
 	struct ufshcd_io_stat io_readwrite;
 
-#endif
 	u32 last_intr_status;
 	ktime_t last_intr_ts;
 	struct ufshcd_clk_ctx clk_hold;
@@ -1655,7 +1653,8 @@ static inline void ufshcd_vops_remove_debugfs(struct ufs_hba *hba)
 		hba->var->vops->remove_debugfs(hba);
 }
 #else
-static inline void ufshcd_vops_add_debugfs(struct ufs_hba *hba, struct dentry *)
+static inline void ufshcd_vops_add_debugfs(struct ufs_hba *hba,
+						struct dentry *root)
 {
 }
 
