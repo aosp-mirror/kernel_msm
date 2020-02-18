@@ -122,8 +122,6 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 		slowio_cnt, iotime_us, opcode_str, lba, transfer_len);
 }
 
-#ifdef CONFIG_DEBUG_FS
-
 static int ufshcd_tag_req_type(struct request *rq)
 {
 	int rq_type = TS_WRITE;
@@ -266,43 +264,6 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 	__update_io_stat(hba, is_read_opcode(opcode) ? &hba->ufs_stats.io_read:
 			&hba->ufs_stats.io_write, transfer_len, is_start);
 }
-
-#else
-static inline void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
-{
-}
-
-static inline void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
-		struct scsi_cmnd *cmd)
-{
-}
-
-static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
-{
-}
-
-static inline
-void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
-{
-	s64 delta = ktime_us_delta(lrbp->complete_time_stamp,
-		lrbp->issue_time_stamp);
-
-	/* Log for slow I/O */
-	ufshcd_log_slowio(hba, lrbp, delta);
-}
-
-static inline
-void ufshcd_update_query_stats(struct ufs_hba *hba,
-			       enum query_opcode opcode, u8 idn)
-{
-}
-
-static void
-update_io_stat(struct ufs_hba *hba, int tag, int is_start)
-{
-}
-
-#endif
 
 static void ufshcd_update_uic_error_cnt(struct ufs_hba *hba, u32 reg, int type)
 {
@@ -748,6 +709,7 @@ static inline void ufshcd_remove_non_printable(char *val)
 		*val = ' ';
 }
 
+#ifdef CONFIG_TRACEPOINTS
 static void ufshcd_add_cmd_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 		const char *str)
 {
@@ -777,9 +739,6 @@ static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 			&task_req->input_param1);
 }
 
-#define UFSHCD_MAX_CMD_LOGGING	200
-
-#ifdef CONFIG_TRACEPOINTS
 static inline void ufshcd_add_command_trace(struct ufs_hba *hba,
 			struct ufshcd_cmd_log_entry *entry)
 {
@@ -792,6 +751,21 @@ static inline void ufshcd_add_command_trace(struct ufs_hba *hba,
 	}
 }
 #else
+static void ufshcd_add_cmd_upiu_trace(struct ufs_hba *hba, unsigned int tag,
+		const char *str)
+{
+}
+
+static void ufshcd_add_query_upiu_trace(struct ufs_hba *hba, unsigned int tag,
+		const char *str)
+{
+}
+
+static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
+		const char *str)
+{
+}
+
 static inline void ufshcd_add_command_trace(struct ufs_hba *hba,
 			struct ufshcd_cmd_log_entry *entry)
 {
@@ -799,6 +773,7 @@ static inline void ufshcd_add_command_trace(struct ufs_hba *hba,
 #endif
 
 #ifdef CONFIG_SCSI_UFSHCD_CMD_LOGGING
+#define UFSHCD_MAX_CMD_LOGGING	200
 static void ufshcd_cmd_log_init(struct ufs_hba *hba)
 {
 	/* Allocate log entries */
