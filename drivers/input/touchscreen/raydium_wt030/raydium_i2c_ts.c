@@ -4169,7 +4169,6 @@ raydium_read_touchdata(struct raydium_ts_data *data,
 		goto reset_error;
 	}
 #endif
-	g_u8_resetflag = false;
 	/* inform IC to prepare next report */
 	if (u8_seq_no == tp_status[POS_SEQ]) {
 		dev_err(&data->client->dev,
@@ -4554,6 +4553,7 @@ raydium_ts_do_suspend(struct raydium_ts_data *ts)
 {
 	int i = 0;
 
+	g_u8_resetflag = false;
 	if (ts->is_suspend == 1) {
 		pr_info("[touch]Already in suspend state\n");
 		return;
