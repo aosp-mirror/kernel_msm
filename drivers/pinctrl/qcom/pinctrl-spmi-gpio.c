@@ -1333,7 +1333,9 @@ static struct platform_driver pmic_gpio_driver = {
 
 static int __init pinctrl_spmi_gpio_init(void)
 {
+#ifdef CONFIG_DEBUG_FS
 	pmic_gpio_dump_builtin_cb = pmic_gpio_dump;
+#endif
 	return platform_driver_register(&pmic_gpio_driver);
 }
 module_init(pinctrl_spmi_gpio_init);
