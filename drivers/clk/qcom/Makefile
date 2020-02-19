@@ -12,9 +12,10 @@ clk-qcom-y += clk-regmap-divider.o
 clk-qcom-y += clk-regmap-mux.o
 clk-qcom-y += clk-regmap-mux-div.o
 clk-qcom-y += reset.o clk-voter.o
-clk-qcom-y += clk-dummy.o clk-debug.o
+clk-qcom-y += clk-dummy.o
 clk-qcom-y += gdsc-regulator.o
 clk-qcom-$(CONFIG_QCOM_GDSC) += gdsc.o
+clk-qcom-$(CONFIG_DEBUG_FS) += clk-debug.o
 
 # Keep alphabetically sorted by config
 obj-$(CONFIG_APQ_GCC_8084) += gcc-apq8084.o

@@ -380,6 +380,7 @@ void clk_debug_bus_vote(struct clk_hw *hw, bool enable)
 		msm_bus_scale_client_update_request(hw->init->bus_cl_id,
 								enable);
 }
+EXPORT_SYMBOL_GPL(clk_debug_bus_vote);
 
 /**
  * map_debug_bases - maps each debug mux based on phandle
