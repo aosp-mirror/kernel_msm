@@ -37,6 +37,10 @@
 	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
 };
 
+&dsi_s6e3hc2_evt_dsc_1080p_cmd {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};
+
 &dsi_sim_vid {
 	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
 };
