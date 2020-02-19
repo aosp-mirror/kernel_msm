@@ -212,12 +212,12 @@ extern u8 print_limit_option;
 		}	\
 	} while (0)
 #else
-#define	SPS_DBG3(x...)		pr_debug(x)
-#define	SPS_DBG2(x...)		pr_debug(x)
-#define	SPS_DBG1(x...)		pr_debug(x)
-#define	SPS_DBG(x...)		pr_debug(x)
-#define	SPS_INFO(x...)		pr_info(x)
-#define	SPS_ERR(x...)		pr_err(x)
+#define	SPS_DBG3(dev, x...)		pr_debug(x)
+#define	SPS_DBG2(dev, x...)		pr_debug(x)
+#define	SPS_DBG1(dev, x...)		pr_debug(x)
+#define	SPS_DBG(dev, x...)		pr_debug(x)
+#define	SPS_INFO(dev, x...)		pr_info(x)
+#define	SPS_ERR(dev, x...)		pr_err(x)
 #define	SPS_DUMP(x...)		pr_info(x)
 #endif
 
