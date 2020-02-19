@@ -16,6 +16,8 @@
  * Reset - gpio8
  * Interrupt - gpio9
  * Bus master switch - gpio35
+ * LPI2AP - gpio57
+ * AP2LPI - gpio71
  */
 
 &pm8150_l17 {
@@ -41,14 +43,14 @@
 		};
 	};
 
-	sec_ts_irq_default: sec_ts_irq_default {
+	sec_ts_gpio_default: sec_ts_gpio_default {
 		mux {
-			pins = "gpio9";
+			pins = "gpio9", "gpio57", "gpio71";
 			function = "gpio";
 		};
 
 		config {
-			pins = "gpio9";
+			pins = "gpio9", "gpio57", "gpio71";
 			drive-strength = <2>;
 			bias-disable;
 		};
@@ -67,6 +69,65 @@
 			bias-disable;
 		};
 	};
+
+	/* bus active: MISO, MOSI, CLK and CS */
+	sec_ts_bus_active: sec_ts_bus_active {
+		mux {
+			pins = "gpio42", "gpio43", "gpio44", "gpio45";
+			function = "qup00";
+		};
+
+		config {
+			pins = "gpio42", "gpio43", "gpio44", "gpio45";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+
+	/* bus inactive: MISO */
+	sec_ts_bus_miso_inactive: sec_ts_bus_miso_inactive {
+		mux {
+			pins = "gpio42";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio42";
+			drive-strength = <8>;
+			input-enable;
+			bias-disable;
+		};
+	};
+
+	/* bus inactive: MOSI, CLK */
+	sec_ts_bus_inactive: sec_ts_bus_inactive {
+		mux {
+			pins = "gpio43", "gpio44";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio43", "gpio44";
+			drive-strength = <8>;
+			input-enable;
+			bias-pull-down;
+		};
+	};
+
+	/* bus inactive: CS */
+	sec_ts_bus_cs_inactive: sec_ts_bus_cs_inactive {
+		mux {
+			pins = "gpio45";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio45";
+			drive-strength = <8>;
+			input-enable;
+			bias-pull-up;
+		};
+	};
 };
 
 &qupv3_se0_i2c {
@@ -75,6 +136,9 @@
 
 &qupv3_se0_spi {
 	status = "ok";
+	pinctrl-0 = <>;
+	pinctrl-1 = <>;
+
 	redfin_spitouch: touchscreen@0 {
 		status = "ok";
 		compatible = "sec,sec_ts";
@@ -88,13 +152,16 @@
 
 		pinctrl-names = "default", "on_state", "off_state";
 		pinctrl-0 = <&sec_ts_reset_default
-				&sec_ts_irq_default
+				&sec_ts_gpio_default
 				&sec_ts_switch_default>;
-		pinctrl-1 = <&sec_ts_irq_default>;
-		pinctrl-2 = <&sec_ts_irq_default>;
+		pinctrl-1 = <&sec_ts_gpio_default
+				&sec_ts_bus_active>;
+		pinctrl-2 = <&sec_ts_gpio_default
+				&sec_ts_bus_miso_inactive
+				&sec_ts_bus_inactive
+				&sec_ts_bus_cs_inactive>;
 
 		sec,irq_gpio = <&tlmm 9 0>;
-		sec,switch_gpio = <&tlmm 35 0>;	// Low: AP, High: SLPI
 		sec,reset_gpio = <&tlmm 8 0>;
 		sec,firmware_name = "s6sy79x.bin";
 		sec,mis_cal_check = <1>;
@@ -106,5 +173,8 @@
 		sec,regulator_avdd = "avdd";
 		sec,panel_map = <&dsi_s6e3hc2_dsc_1080p_cmd 0>,
 				<&dsi_s6e3hc2_evt_dsc_1080p_cmd 0>;
+		tbn,lpi2ap_gpio = <&tlmm 57 0>;
+		tbn,ap2lpi_gpio = <&tlmm 71 0>;
+
 	};
 };
