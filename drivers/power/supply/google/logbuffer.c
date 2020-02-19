@@ -182,8 +182,12 @@ struct logbuffer *debugfs_logbuffer_register(char *name)
 	unsigned long flags;
 
 	if (IS_ERR_OR_NULL(rootdir)) {
+#ifdef CONFIG_DEBUG_FS
 		pr_err("rootdir not found\n");
 		return ERR_PTR(-EINVAL);
+#else
+		return NULL;
+#endif
 	}
 
 	instance = kzalloc(sizeof(struct logbuffer), GFP_KERNEL);
@@ -247,6 +251,7 @@ void debugfs_logbuffer_unregister(struct logbuffer *instance)
 }
 EXPORT_SYMBOL_GPL(debugfs_logbuffer_unregister);
 
+#ifdef CONFIG_DEBUG_FS
 int logbuffer_suspend(void)
 {
 	suspend_since_last_logged = true;
@@ -290,6 +295,7 @@ static void logbuffer_debugfs_exit(void)
 }
 early_initcall(logbuffer_debugfs_init);
 module_exit(logbuffer_debugfs_exit);
+#endif
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Google BMS debugfs logbuffer");
