@@ -89,11 +89,11 @@ struct tsens_device;
 		}	\
 	} while (0)
 #else
-#define	TSENS_DBG1(x...)		pr_debug(x)
-#define	TSENS_DBG(x...)		pr_debug(x)
-#define	TSENS_INFO(x...)		pr_info(x)
-#define	TSENS_ERR(x...)		pr_err(x)
-#define	TSENS_DUMP(x...)		pr_info(x)
+#define	TSENS_DBG1(dev, x...)		pr_debug(x)
+#define	TSENS_DBG(dev, x...)		pr_debug(x)
+#define	TSENS_INFO(dev, x...)		pr_info(x)
+#define	TSENS_ERR(dev, x...)		pr_err(x)
+#define	TSENS_DUMP(dev, x...)		pr_info(x)
 #endif
 
 #if IS_ENABLED(CONFIG_THERMAL_TSENS)
