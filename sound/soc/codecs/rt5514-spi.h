@@ -47,6 +47,10 @@
 #define SPI_SWITCH_MASK_NO_CHRE (1 << 8)
 #define SPI_SWITCH_MASK_RESET (1 << 9)
 
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_QMI)
+#define SPI_SWITCH_MASK_CHRE_QMI (1 << 10)
+#endif
+
 /* SPI Command */
 enum {
 	RT5514_SPI_CMD_16_READ = 0,

@@ -38,6 +38,9 @@
 #if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
 #include <linux/codec-misc.h>
 #endif
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_QMI)
+#include "rt5514-qmi.h"
+#endif
 
 struct rt5514_priv *g_rt5514;
 
@@ -968,6 +971,16 @@ static void rt5514_reload_firmware(struct rt5514_priv *rt5514)
 {
 	if (!rt5514 || (!rt5514->need_reload) || (rt5514->is_streaming))
 		return;
+
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_QMI)
+	if (rt5514->need_reset) {
+		rt5514_watchdog_handler();
+		rt5514->need_reload = false;
+		rt5514->need_reset = false;
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CHRE_QMI, 0);
+		return;
+	}
+#endif
 
 	rt5514->dsp_enabled_last = rt5514->dsp_enabled;
 	rt5514->dsp_enabled = 0;
@@ -2472,6 +2485,39 @@ static __maybe_unused int rt5514_i2c_resume(struct device *dev)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_QMI)
+static void rt5514_cb(uint8_t error_code)
+{
+	struct snd_soc_component *component = g_rt5514->component;
+	unsigned int val, buffer_a, buffer_b;
+
+	pm_wakeup_event(component->dev, 2000);
+	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		/* check codec status */
+		regmap_read(rt5514_g_i2c_regmap, 0x18002f04, &val);
+
+		/* check buffer address status */
+		regmap_read(rt5514_g_i2c_regmap, RT5514_BUFFER_VOICE_WP,
+				&buffer_a);
+		usleep_range(10000, 10005);
+		regmap_read(rt5514_g_i2c_regmap, RT5514_BUFFER_VOICE_WP,
+				&buffer_b);
+
+		if ((val & 0x2) || !(buffer_a - buffer_b)) {
+			pr_err("%s: reset: codec 0x%x, buffer 0x%x", __func__,
+				val & 0x2, (buffer_a - buffer_b));
+
+			mutex_lock(&g_rt5514->stream_lock);
+			rt5514_spi_request_switch(SPI_SWITCH_MASK_CHRE_QMI, 1);
+			g_rt5514->need_reload = true;
+			g_rt5514->need_reset = true;
+			rt5514_reload_firmware(g_rt5514);
+			mutex_unlock(&g_rt5514->stream_lock);
+		}
+	}
+}
+#endif
+
 static int rt5514_i2c_probe(struct i2c_client *i2c,
 		    const struct i2c_device_id *id)
 {
@@ -2580,6 +2626,15 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 	INIT_DELAYED_WORK(&rt5514->unmute_work, rt5514_unmute_work);
 
 	mutex_init(&rt5514->stream_lock);
+
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_QMI)
+	device_init_wakeup(&i2c->dev, true);
+
+	if (!rt5514_qmi_init(&i2c->dev, rt5514_cb)) {
+		dev_err(&i2c->dev, "Register rt5514-qmi fail!\n");
+		return -EFAULT;
+	}
+#endif
 
 	dev_info(&i2c->dev, "Register rt5514 success\n");
 

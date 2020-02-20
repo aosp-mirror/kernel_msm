@@ -332,6 +332,9 @@ struct rt5514_priv {
 	unsigned int fw_addr[4];
 	bool is_streaming;
 	bool need_reload;
+#if IS_ENABLED(CONFIG_SND_SOC_RT5514_QMI)
+	bool need_reset;
+#endif
 	struct mutex stream_lock;
 	unsigned int sound_model_addr[2];
 	bool load_default_sound_model;
