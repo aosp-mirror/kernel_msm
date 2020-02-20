@@ -345,6 +345,8 @@ ssize_t ttf_dump_details(char *buf, int max_size,
 
 /* Battery Google Part Number */
 #define GBMS_BGPN_LEN	10
+/* Battery device info length */
+#define GBMS_DINF_LEN	32
 
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
