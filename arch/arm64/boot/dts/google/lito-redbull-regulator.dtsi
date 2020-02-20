@@ -26,3 +26,16 @@
 	qcom,init-voltage = <3000000>;
 	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 };
+
+&apps_rsc {
+	rpmh-regulator-bobc1 {
+		qcom,supported-modes =
+			<RPMH_REGULATOR_MODE_AUTO
+			RPMH_REGULATOR_MODE_HPM>;
+		qcom,mode-threshold-currents = <0 2000000>;
+
+		BOB: pm8150a_bob: regulator-pm8150a-bob {
+			qcom,init-mode = <RPMH_REGULATOR_MODE_AUTO>;
+		};
+	};
+};
