@@ -30,6 +30,7 @@
 #include "sm7150-sunfish-touch-common.dtsi"
 #include "sm7150-sunfish-touch-proto.dtsi"
 #include "sm7150-sunfish-battery.dtsi"
+#include "sm7150-sunfish-regulator.dtsi"
 
 &tlmm {
 	goog,ignored-gpios = <59 60 61 62>;
