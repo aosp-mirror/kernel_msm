@@ -143,7 +143,7 @@ static u8 always_enable_data;
 /*
  * Logging
  */
-
+#ifdef CONFIG_DEBUG_FS
 static int pd_engine_debugfs_init(struct usbpd *pd)
 {
 	if (!pd->rootdir) {
@@ -166,6 +166,7 @@ static void pd_engine_debugfs_exit(struct usbpd *pd)
 {
 	debugfs_remove_recursive(pd->rootdir);
 }
+#endif /* CONFIG_DEBUG_FS */
 
 static const char * const get_typec_mode_name(
 		enum power_supply_typec_mode typec_mode)
@@ -2029,11 +2030,13 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (!pd)
 		return ERR_PTR(-ENOMEM);
 
+#ifdef CONFIG_DEBUG_FS
 	pd->log = debugfs_logbuffer_register("usbpd");
 	if (IS_ERR_OR_NULL(pd->log)) {
 		ret = PTR_ERR(pd->log);
 		goto free_pd;
 	}
+#endif
 
 	mutex_init(&pd->lock);
 
@@ -2053,9 +2056,11 @@ struct usbpd *usbpd_create(struct device *parent)
 	pd->wlc_supported = device_property_read_bool(parent,
 						      "goog,wlc-supported");
 
+#ifdef CONFIG_DEBUG_FS
 	ret = pd_engine_debugfs_init(pd);
 	if (ret < 0)
 		goto del_pd;
+#endif
 
 	device_init_wakeup(&pd->dev, true);
 
@@ -2218,12 +2223,16 @@ put_psy_usb:
 del_wq:
 	destroy_workqueue(pd->wq);
 exit_debugfs:
+#ifdef CONFIG_DEBUG_FS
 	pd_engine_debugfs_exit(pd);
 del_pd:
+#endif
 	device_del(&pd->dev);
 free_buffer:
+#ifdef CONFIG_DEBUG_FS
 	debugfs_logbuffer_unregister(pd->log);
 free_pd:
+#endif
 	num_pd_instances--;
 	put_device(&pd->dev);
 	return ERR_PTR(ret);
@@ -2247,8 +2256,10 @@ void usbpd_destroy(struct usbpd *pd)
 		power_supply_put(pd->wireless_psy);
 	power_supply_put(pd->usb_psy);
 	destroy_workqueue(pd->wq);
+#ifdef CONFIG_DEBUG_FS
 	pd_engine_debugfs_exit(pd);
 	debugfs_logbuffer_unregister(pd->log);
+#endif
 	num_pd_instances--;
 	device_unregister(&pd->dev);
 }
