@@ -338,6 +338,9 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 #define GBMS_STORAGE_ADDR_INVALID	-1
 #define GBMS_STORAGE_INDEX_INVALID	-1
 
+/* Battery Google Part Number */
+#define GBMS_BGPN_LEN	10
+
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
  * than one byte such as 'BGCE' are frown upon.

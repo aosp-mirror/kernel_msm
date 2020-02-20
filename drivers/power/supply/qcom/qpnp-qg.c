@@ -31,7 +31,6 @@
 #include <linux/pmic-voter.h>
 #include <linux/iio/consumer.h>
 #include <linux/qpnp/qpnp-revid.h>
-#include <linux/platform_data/at24.h>
 #include <uapi/linux/qg.h>
 #include <uapi/linux/qg-profile.h>
 #include "fg-alg.h"
@@ -4615,17 +4614,17 @@ static int qg_get_batt_type(struct qpnp_qg *chip)
 	bool defer;
 	int rc = 0;
 
-	chip->batt_gpn = kzalloc(BATT_EEPROM_TAG_BGPN_LEN + 1, GFP_KERNEL);
+	chip->batt_gpn = kzalloc(GBMS_BGPN_LEN + 1, GFP_KERNEL);
 
 	if (chip->batt_gpn == NULL) {
 		pr_err("Failed to get battery type, rc=%d\n", rc);
 		return 0;
 	}
 
-	*((char *)chip->batt_gpn + BATT_EEPROM_TAG_BGPN_LEN) = '\0';
+	*((char *)chip->batt_gpn + GBMS_BGPN_LEN) = '\0';
 
 	rc = gbms_storage_read(GBMS_TAG_BGPN, (void *)chip->batt_gpn,
-			       BATT_EEPROM_TAG_BGPN_LEN);
+			       GBMS_BGPN_LEN);
 
 	if (rc < 0) {
 		kfree(chip->batt_gpn);

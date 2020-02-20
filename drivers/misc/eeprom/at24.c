@@ -612,6 +612,14 @@ static void at24_get_pdata(struct device *dev, struct at24_platform_data *chip)
 	}
 }
 
+#define BATT_EEPROM_TAG_MINF_OFFSET	0x00
+#define BATT_EEPROM_TAG_MINF_LEN	32
+#define BATT_EEPROM_TAG_DINF_OFFSET	0x20
+#define BATT_EEPROM_TAG_DINF_LEN	32
+#define BATT_EEPROM_TAG_HIST_OFFSET	0x40
+#define BATT_EEPROM_TAG_HIST_LEN	960
+#define BATT_EEPROM_TAG_BGPN_OFFSET	0x03
+#define BATT_EEPROM_TAG_BGPN_LEN	GBMS_BGPN_LEN
 static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 			     void *ptr)
 {
