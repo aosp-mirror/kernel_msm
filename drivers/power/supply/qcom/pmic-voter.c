@@ -20,7 +20,9 @@
 static DEFINE_SPINLOCK(votable_list_slock);
 static LIST_HEAD(votable_list);
 
+#ifdef CONFIG_DEBUG_FS
 static struct dentry *debug_root;
+#endif
 
 struct client_vote {
 	bool	enabled;
@@ -615,6 +617,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(find_votable);
 
+#ifdef CONFIG_DEBUG_FS
 static int force_active_get(void *data, u64 *val)
 {
 	struct votable *votable = data;
@@ -716,6 +719,7 @@ static const struct file_operations votable_status_ops = {
 	.llseek		= seq_lseek,
 	.release	= single_release,
 };
+#endif /* CONFIG_DEBUG_FS */
 
 struct votable *create_votable(const char *name,
 				int votable_type,
@@ -735,6 +739,7 @@ struct votable *create_votable(const char *name,
 	if (votable)
 		return ERR_PTR(-EEXIST);
 
+#ifdef CONFIG_DEBUG_FS
 	if (debug_root == NULL) {
 		debug_root = debugfs_create_dir("pmic-votable", NULL);
 		if (!debug_root) {
@@ -742,6 +747,7 @@ struct votable *create_votable(const char *name,
 			return ERR_PTR(-ENOMEM);
 		}
 	}
+#endif
 
 	if (votable_type >= NUM_VOTABLE_TYPES) {
 		pr_err("Invalid votable_type specified for voter\n");
@@ -778,6 +784,7 @@ struct votable *create_votable(const char *name,
 	list_add(&votable->list, &votable_list);
 	spin_unlock_irqrestore(&votable_list_slock, flags);
 
+#ifdef CONFIG_DEBUG_FS
 	votable->root = debugfs_create_dir(name, debug_root);
 	if (!votable->root) {
 		pr_err("Couldn't create debug dir %s\n", name);
@@ -821,6 +828,7 @@ struct votable *create_votable(const char *name,
 		kfree(votable);
 		return ERR_PTR(-EEXIST);
 	}
+#endif /* CONFIG_DEBUG_FS */
 
 	return votable;
 }
@@ -838,7 +846,9 @@ void destroy_votable(struct votable *votable)
 	list_del(&votable->list);
 	spin_unlock_irqrestore(&votable_list_slock, flags);
 
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(votable->root);
+#endif
 
 	for (i = 0; i < votable->num_clients && votable->client_strs[i]; i++)
 		kfree(votable->client_strs[i]);
