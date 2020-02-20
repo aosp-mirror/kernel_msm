@@ -63,6 +63,17 @@
 
 #define UICURVE_MAX	3
 
+/* Initial data of history cycle count */
+#define HCC_INIT_DATA	0xFFFF
+#define HCC_WRITE_AGAIN	0xF0F0
+#define HCC_DEFAULT_DELTA_CYCLE_CNT	25
+
+#undef MODULE_PARAM_PREFIX
+#define MODULE_PARAM_PREFIX     "androidboot."
+#define DEV_SN_LENGTH         20
+static char dev_sn[DEV_SN_LENGTH];
+module_param_string(serialno, dev_sn, DEV_SN_LENGTH, 0000);
+
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
 #error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
 #endif
@@ -185,6 +196,28 @@ struct batt_chg_health {
 	int rest_fv_uv;
 };
 
+struct batt_history_data {
+	u16 cycle_cnt;
+	u16 fullcap;
+	u16 esr;
+	u16 rslow;
+	u8 soh;
+	s8 batt_temp;
+	u8 cutoff_soc;
+	u8 cc_soc;
+	u8 sys_soc;
+	u8 msoc;
+	u8 batt_soc;
+	u8 reserve;
+	s8 max_temp;
+	s8 min_temp;
+	u16 max_vbatt;
+	u16 min_vbatt;
+	s16 max_ibatt;
+	s16 min_ibatt;
+	u16 checksum;
+};
+
 /* battery driver state */
 struct batt_drv {
 	struct device *device;
@@ -280,6 +313,10 @@ struct batt_drv {
 
 	/* History */
 	struct gbms_storage_device *history;
+	struct batt_history_data hist_data;
+	bool eeprom_inside;
+	int hist_data_max_cnt;
+	int hist_delta_cycle_cnt;
 };
 
 static inline void batt_update_cycle_count(struct batt_drv *batt_drv)
@@ -3031,6 +3068,169 @@ void log_ttf_estimate(const char *label, int ssoc, struct batt_drv *batt_drv)
 		      res);
 }
 
+static void batt_check_device_sn(struct batt_drv *batt_drv)
+{
+	char dev_info[GBMS_DINF_LEN];
+	int ret = 0;
+
+	ret = gbms_storage_read(GBMS_TAG_DINF, (void *)dev_info, GBMS_DINF_LEN);
+	if (ret < 0) {
+		pr_err("read device SN fail, ret=%d\n", ret);
+		return;
+	}
+
+	// new battery, store the device SN
+	if (dev_info[0] == 0xFF) {
+		ret = gbms_storage_write(GBMS_TAG_DINF, dev_sn, strlen(dev_sn));
+		if (ret < 0)
+			pr_err("write device SN fail, ret=%d\n", ret);
+	}
+}
+
+static void batt_history_data_collect(struct batt_drv *batt_drv)
+{
+	struct batt_history_data *hist = &batt_drv->hist_data;
+	struct power_supply *fg_psy = batt_drv->fg_psy;
+	enum power_supply_property psp;
+	bool update_hist = false;
+	int hist_len = sizeof(struct batt_history_data);
+	int cycle_cnt, idx, val, ret;
+
+
+	if (batt_drv->hist_delta_cycle_cnt <= 0)
+		return;
+
+	if (batt_drv->hist_data_max_cnt <= 0)
+		return;
+
+	psp = POWER_SUPPLY_PROP_CYCLE_COUNT;
+	cycle_cnt = GPSY_GET_PROP(fg_psy, psp);
+	if (cycle_cnt < 0)
+		return;
+
+	idx = cycle_cnt / batt_drv->hist_delta_cycle_cnt;
+
+	// check if the cycle_cnt is valid
+	if (idx >= batt_drv->hist_data_max_cnt)
+		return;
+
+	// init history data
+	if (hist->cycle_cnt == HCC_INIT_DATA) {
+		ret = gbms_storage_read_data(GBMS_TAG_HIST, hist,
+					     hist_len, idx);
+		if (ret < 0) {
+			pr_err("read history data fail, ret=%d\n", ret);
+			return;
+		}
+
+		// empty battery data from storage
+		if (hist->cycle_cnt == HCC_INIT_DATA) {
+			memset(hist, 0, hist_len);
+			hist->cycle_cnt = HCC_INIT_DATA;
+		}
+	}
+
+	if (cycle_cnt != hist->cycle_cnt) {
+		// collect battery data
+		hist->cycle_cnt = cycle_cnt;
+
+		psp = POWER_SUPPLY_PROP_CHARGE_FULL;
+		hist->fullcap = GPSY_GET_PROP(fg_psy, psp) / 1000;
+
+		psp = POWER_SUPPLY_PROP_RESISTANCE_NOW;
+		hist->esr = GPSY_GET_PROP(fg_psy, psp);
+
+		psp = POWER_SUPPLY_PROP_RESISTANCE;
+		hist->rslow = GPSY_GET_PROP(fg_psy, psp) / 1000 - hist->esr;
+
+		psp = POWER_SUPPLY_PROP_SOH;
+		val = GPSY_GET_PROP(fg_psy, psp);
+		hist->soh = (val <= 0) ? 0 : val;
+
+		psp = POWER_SUPPLY_PROP_CUTOFF_SOC;
+		val = GPSY_GET_PROP(fg_psy, psp);
+		hist->cutoff_soc = (val == INT_MIN) ? 0 : val / 40;
+
+		psp = POWER_SUPPLY_PROP_CC_SOC;
+		val = GPSY_GET_PROP(fg_psy, psp);
+		hist->cc_soc = (val == INT_MIN) ? 0 : (val / 40);
+
+		psp = POWER_SUPPLY_PROP_SYS_SOC;
+		val = GPSY_GET_PROP(fg_psy, psp);
+		hist->sys_soc = (val == INT_MIN) ? 0 : (val / 40);
+
+		psp = POWER_SUPPLY_PROP_REAL_CAPACITY;
+		hist->msoc = GPSY_GET_PROP(fg_psy, psp);
+
+		psp = POWER_SUPPLY_PROP_BATT_SOC;
+		val = GPSY_GET_PROP(fg_psy, psp);
+		hist->batt_soc = (val == INT_MIN) ? 0 : (val / 40);
+
+		update_hist = true;
+	}
+
+	psp = POWER_SUPPLY_PROP_TEMP;
+	hist->batt_temp = GPSY_GET_PROP(fg_psy, psp) / 10;
+
+	// update life data
+	if (hist->max_temp == 0 && hist->min_temp == 0) {
+		hist->max_temp = hist->batt_temp;
+		hist->min_temp = hist->batt_temp;
+	} else if (hist->batt_temp > hist->max_temp) {
+		hist->max_temp = hist->batt_temp;
+	} else if (hist->batt_temp < hist->min_temp) {
+		hist->min_temp = hist->batt_temp;
+	}
+
+	psp = POWER_SUPPLY_PROP_VOLTAGE_NOW;
+	val = GPSY_GET_PROP(fg_psy, psp) / 1000;
+	if (hist->max_vbatt == 0 && hist->min_vbatt == 0) {
+		hist->max_vbatt = val;
+		hist->min_vbatt = val;
+	} else if (val > hist->max_vbatt) {
+		hist->max_vbatt = val;
+	} else if (val < hist->min_vbatt) {
+		hist->min_vbatt = val;
+	}
+
+	psp = POWER_SUPPLY_PROP_CURRENT_NOW;
+	val = GPSY_GET_PROP(fg_psy, psp) / 1000;
+	if (val > hist->max_ibatt)
+		hist->max_ibatt = val;
+	else if (val < hist->min_ibatt)
+		hist->min_ibatt = val;
+
+	hist->checksum = hist->cycle_cnt + hist->fullcap + hist->esr +
+		hist->rslow + hist->soh + hist->batt_temp + hist->cutoff_soc +
+		hist->cc_soc + hist->sys_soc + hist->msoc + hist->batt_soc +
+		hist->max_temp + hist->min_temp + hist->max_vbatt +
+		hist->min_vbatt + hist->max_ibatt + hist->min_ibatt;
+
+
+	pr_debug("battery history = %d %d %d %d %d %d %d %d %d %d %d [%d/%d] [%d/%d] [%d/%d] %d\n",
+		 hist->cycle_cnt, hist->fullcap,  hist->esr,
+		 hist->rslow, hist->soh, hist->batt_temp, hist->cutoff_soc,
+		 hist->cc_soc, hist->sys_soc, hist->msoc, hist->batt_soc,
+		 hist->max_temp, hist->min_temp, hist->max_vbatt,
+		 hist->min_vbatt, hist->max_ibatt, hist->min_ibatt,
+		 hist->checksum);
+
+	if (update_hist) {
+		ret = gbms_storage_write_data(GBMS_TAG_HIST, hist,
+					      hist_len, idx);
+		if (ret < 0) {
+			// keep the data if write fail and try to write again
+			hist->cycle_cnt = HCC_WRITE_AGAIN;
+			pr_err("write history data fail, ret=%d\n", ret);
+			return;
+		}
+
+		// clear the data if write successfully
+		memset(hist, 0, hist_len);
+		hist->cycle_cnt = HCC_INIT_DATA;
+	}
+}
+
 /* poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
  */
@@ -3151,6 +3351,9 @@ static void google_battery_work(struct work_struct *work)
 
 	if (notify_psy_changed)
 		power_supply_changed(batt_drv->psy);
+
+	if (batt_drv->eeprom_inside)
+		batt_history_data_collect(batt_drv);
 
 reschedule:
 
@@ -3736,6 +3939,24 @@ static void google_battery_init_work(struct work_struct *work)
 						       GBMS_TAG_HIST);
 	if (!batt_drv->history)
 		pr_err("history not available\n");
+
+	batt_drv->eeprom_inside =
+		of_property_read_bool(node, "google,eeprom-inside");
+
+	ret = of_property_read_u32(batt_drv->device->of_node,
+				   "google,history-delta-cycle-count",
+				   &batt_drv->hist_delta_cycle_cnt);
+	if (ret < 0)
+		batt_drv->hist_delta_cycle_cnt = HCC_DEFAULT_DELTA_CYCLE_CNT;
+
+	if (batt_drv->eeprom_inside) {
+		batt_check_device_sn(batt_drv);
+
+		batt_drv->hist_data_max_cnt =
+			gbms_storage_read_data(GBMS_TAG_HIST, NULL, 0, 0);
+
+		batt_drv->hist_data.cycle_cnt = HCC_INIT_DATA;
+	}
 
 	/* debugfs */
 	(void)batt_init_fs(batt_drv);
