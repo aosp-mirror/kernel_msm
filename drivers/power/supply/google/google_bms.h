@@ -340,6 +340,8 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 
 /* Battery Google Part Number */
 #define GBMS_BGPN_LEN	10
+/* Battery device info length */
+#define GBMS_DINF_LEN	32
 
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
