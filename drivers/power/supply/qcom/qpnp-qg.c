@@ -2294,6 +2294,15 @@ static int qg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CC_UAH:
 		rc = qg_get_cc(chip, &pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_CUTOFF_SOC:
+		pval->intval = chip->cutoff_soc;
+		break;
+	case POWER_SUPPLY_PROP_SYS_SOC:
+		pval->intval = chip->sys_soc;
+		break;
+	case POWER_SUPPLY_PROP_BATT_SOC:
+		pval->intval = chip->batt_soc;
+		break;
 	default:
 		pr_debug("Unsupported property %d\n", psp);
 		break;
@@ -2361,6 +2370,9 @@ static enum power_supply_property qg_psy_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_VOLTAGE_FIFO,
 	POWER_SUPPLY_PROP_CC_UAH,
+	POWER_SUPPLY_PROP_CUTOFF_SOC,
+	POWER_SUPPLY_PROP_SYS_SOC,
+	POWER_SUPPLY_PROP_BATT_SOC,
 };
 
 static const struct power_supply_desc qg_psy_desc = {
@@ -3360,6 +3372,7 @@ use_pon_ocv:
 			pr_err("Failed to lookup CUTOFF_SOC@PON rc=%d\n", rc);
 			goto done;
 		}
+		chip->cutoff_soc = cutoff_soc;
 
 		if ((full_soc > cutoff_soc) && (pon_soc > cutoff_soc)) {
 			soc = DIV_ROUND_UP(((pon_soc - cutoff_soc) * 100),
@@ -4805,6 +4818,7 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	chip->batt_soc = INT_MIN;
 	chip->cc_soc = INT_MIN;
 	chip->sys_soc = INT_MIN;
+	chip->cutoff_soc = INT_MIN;
 	chip->full_soc = QG_SOC_FULL;
 	chip->chg_iterm_ma = INT_MIN;
 	chip->soh = -EINVAL;

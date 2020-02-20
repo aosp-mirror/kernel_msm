@@ -203,6 +203,7 @@ struct qpnp_qg {
 	int			charge_counter;
 	int			full_soc;
 	int			sys_soc;
+	int			cutoff_soc;
 	int			last_adj_ssoc;
 	int			recharge_soc;
 	int			batt_age_level;
