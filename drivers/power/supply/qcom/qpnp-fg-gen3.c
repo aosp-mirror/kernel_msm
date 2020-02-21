@@ -3923,7 +3923,10 @@ static int fg_psy_get_property(struct power_supply *psy,
 		rc = fg_get_battery_current(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		rc = fg_get_battery_temp(chip, &pval->intval);
+		if (chip->fake_temp)
+			pval->intval = chip->fake_temp;
+		else
+			rc = fg_get_battery_temp(chip, &pval->intval);
 		if (!rc && !chip->monitor_batt_temp &&
 		    (pval->intval > chip->dt.batt_update_high_temp_threshold)) {
 			chip->monitor_batt_temp = true;
@@ -5566,6 +5569,51 @@ static struct thermal_zone_of_device_ops fg_gen3_tz_ops = {
 	.get_temp = fg_tz_get_temp,
 };
 
+static int get_fake_temp(void *data, u64 *val)
+{
+	struct fg_chip *chip = data;
+
+	*val = chip->fake_temp;
+	return 0;
+}
+
+static int set_fake_temp(void *data, u64 val)
+{
+	struct fg_chip *chip = data;
+
+	chip->fake_temp = val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(fake_temp_fops, get_fake_temp,
+	set_fake_temp, "%llu\n");
+
+static int fg_gen3_debugfs_create(struct fg_chip *chip)
+{
+	pr_debug("Creating debugfs file-system\n");
+	chip->dfs_root = debugfs_create_dir("fg_gen3", NULL);
+	if (IS_ERR_OR_NULL(chip->dfs_root)) {
+		if (PTR_ERR(chip->dfs_root) == -ENODEV)
+			pr_err("debugfs is not enabled in the kernel\n");
+		else
+			pr_err("error creating fg dfs root rc=%ld\n",
+				PTR_ERR(chip->dfs_root));
+		return PTR_ERR(chip->dfs_root);
+	}
+
+	if (!debugfs_create_file("fake_temp", 0600, chip->dfs_root,
+				   chip, &fake_temp_fops)) {
+		pr_err("failed to create alg_flags file\n");
+		goto err_remove_fs;
+	}
+
+	return 0;
+
+err_remove_fs:
+	debugfs_remove_recursive(chip->dfs_root);
+	return -ENOMEM;
+}
+
 #define FG_DELAY_BATT_ID_MS 1000
 static int fg_gen3_probe(struct platform_device *pdev)
 {
@@ -5585,6 +5633,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	chip->ki_coeff_full_soc = -EINVAL;
 	chip->online_status = -EINVAL;
 	chip->batt_id_ohms = -EINVAL;
+	chip->fake_temp = 0;
 	chip->regmap = dev_get_regmap(chip->dev->parent, NULL);
 	if (!chip->regmap) {
 		dev_err(chip->dev, "Parent regmap is unavailable\n");
@@ -5752,6 +5801,13 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	rc = fg_debugfs_create(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Error in creating debugfs entries, rc:%d\n",
+			rc);
+		goto exit;
+	}
+
+	rc = fg_gen3_debugfs_create(chip);
+	if (rc < 0) {
+		dev_err(chip->dev, "Error in creating fg_gen3 debugfs entries, rc:%d\n",
 			rc);
 		goto exit;
 	}

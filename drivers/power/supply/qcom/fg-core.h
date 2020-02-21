@@ -504,6 +504,12 @@ struct fg_chip {
 	ktime_t			last_delta_temp_time;
 	int			batt_temp;
 	bool			monitor_batt_temp;
+	/*
+	 * Thermal test:
+	 * fake_temp=0 means no fake
+	 * fake_temp>0 means fake the battery temp
+	 */
+	u16			fake_temp;
 };
 
 /* Debugfs data structures are below */
