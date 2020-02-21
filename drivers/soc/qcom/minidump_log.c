@@ -14,24 +14,22 @@
 #include <linux/mm.h>
 #include <linux/sched/task.h>
 #include <linux/vmalloc.h>
+#include <linux/printk.h>
 
 static void __init register_log_buf(void)
 {
-	char **log_bufp;
-	uint32_t *log_buf_lenp;
+	char *log_buf = log_buf_addr_get();
 	struct md_region md_entry;
 
-	log_bufp = (char **)kallsyms_lookup_name("log_buf");
-	log_buf_lenp = (uint32_t *)kallsyms_lookup_name("log_buf_len");
-	if (!log_bufp || !log_buf_lenp) {
-		pr_err("Unable to find log_buf by kallsyms!\n");
+	if (!log_buf) {
+		pr_err("Unable to find log_buf details!\n");
 		return;
 	}
 	/*Register logbuf to minidump, first idx would be from bss section */
 	strlcpy(md_entry.name, "KLOGBUF", sizeof(md_entry.name));
-	md_entry.virt_addr = (uintptr_t) (*log_bufp);
-	md_entry.phys_addr = virt_to_phys(*log_bufp);
-	md_entry.size = *log_buf_lenp;
+	md_entry.virt_addr = (uintptr_t) log_buf;
+	md_entry.phys_addr = virt_to_phys(log_buf);
+	md_entry.size = log_buf_len_get();
 	if (msm_minidump_add_region(&md_entry))
 		pr_err("Failed to add logbuf in Minidump\n");
 }
