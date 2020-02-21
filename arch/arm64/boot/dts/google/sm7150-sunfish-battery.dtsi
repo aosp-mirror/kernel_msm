@@ -70,8 +70,6 @@
 };
 
 &pm6150_qg {
-	qcom,hold-soc-while-full;
-	qcom,linearize-soc;
 	qcom,cl-feedback-on;
 
 	qcom,battery-data = <&sunfish_batterydata>;
