@@ -353,9 +353,14 @@ int qg_write_monotonic_soc(struct qpnp_qg *chip, int msoc)
 }
 
 #define WAKELOCK_TIMEOUT_MSEC	(2000)
+#define RECHECK_TEMP_DIFF	100
+#define RECHECK_TEMP_MS		200
+#define RECHECK_MAX_CNT		5
 int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 {
 	int rc = 0;
+	static int prev_temp = -INT_MAX;
+	static int rechk_cnt = -INT_MAX;
 
 	if (chip->battery_missing) {
 		*temp = 250;
@@ -371,6 +376,22 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 		return rc;
 	}
 	pr_debug("batt_temp = %d\n", *temp);
+
+	if (prev_temp == -INT_MAX) {
+		prev_temp = *temp;
+		rechk_cnt = 0;
+	} else if ((abs(*temp - prev_temp) > RECHECK_TEMP_DIFF) &&
+		 (rechk_cnt < RECHECK_MAX_CNT)) {
+		schedule_delayed_work(&chip->qg_temp_chk_work,
+					msecs_to_jiffies(RECHECK_TEMP_MS));
+		rechk_cnt++;
+		pr_err("%s: Temp:%d, Prev_Temp:%d, Over range, recheck cnt=%d",
+				__func__, *temp, prev_temp, rechk_cnt);
+		*temp = prev_temp;
+	} else {
+		prev_temp = *temp;
+		rechk_cnt = 0;
+	}
 
 	return 0;
 }

@@ -2645,6 +2645,14 @@ static void qg_sleep_exit_work(struct work_struct *work)
 	vote(chip->awake_votable, SLEEP_EXIT_VOTER, false, 0);
 }
 
+static void qg_temp_chk_work(struct work_struct *work)
+{
+	struct qpnp_qg *chip = container_of(work,
+			struct qpnp_qg, qg_temp_chk_work.work);
+
+	power_supply_changed(chip->qg_psy);
+}
+
 static void qg_status_change_work(struct work_struct *work)
 {
 	struct qpnp_qg *chip = container_of(work,
@@ -4372,6 +4380,7 @@ static int process_suspend(struct qpnp_qg *chip)
 		return 0;
 
 	cancel_delayed_work_sync(&chip->ttf->ttf_work);
+	cancel_delayed_work_sync(&chip->qg_temp_chk_work);
 
 	chip->suspend_data = false;
 
@@ -4788,6 +4797,7 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->udata_work, process_udata_work);
 	INIT_WORK(&chip->qg_status_change_work, qg_status_change_work);
 	INIT_DELAYED_WORK(&chip->qg_sleep_exit_work, qg_sleep_exit_work);
+	INIT_DELAYED_WORK(&chip->qg_temp_chk_work, qg_temp_chk_work);
 	mutex_init(&chip->bus_lock);
 	mutex_init(&chip->soc_lock);
 	mutex_init(&chip->data_lock);
@@ -4978,6 +4988,7 @@ static int qpnp_qg_remove(struct platform_device *pdev)
 	qg_soc_exit(chip);
 
 	cancel_delayed_work_sync(&chip->qg_sleep_exit_work);
+	cancel_delayed_work_sync(&chip->qg_temp_chk_work);
 	cancel_work_sync(&chip->udata_work);
 	cancel_work_sync(&chip->qg_status_change_work);
 	device_destroy(chip->qg_class, chip->dev_no);

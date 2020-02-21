@@ -110,6 +110,7 @@ struct qpnp_qg {
 	struct work_struct	scale_soc_work;
 	struct work_struct	qg_status_change_work;
 	struct delayed_work	qg_sleep_exit_work;
+	struct delayed_work	qg_temp_chk_work;
 	struct notifier_block	nb;
 	struct mutex		bus_lock;
 	struct mutex		data_lock;
