@@ -252,6 +252,14 @@
 		};
 	};
 
+	pm6150-ibat-lvl1 {
+		trips {
+			ibat_lvl1:ibat-lvl1 {
+				temperature = <5500>;
+			};
+		};
+	};
+
 	rf-pa0-therm-adc {
 		status = "disabled";
 	};
