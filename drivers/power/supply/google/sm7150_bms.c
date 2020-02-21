@@ -124,6 +124,8 @@ enum sm7150_chg_status {
 	SM7150_DISABLE_CHARGE	= 7,
 };
 
+static int sm7150_get_battery_temp(const struct bms_dev *bms, int *val);
+
 #define QG_STATUS2_REG				0x09
 static int sm7150_read(struct regmap *pmic_regmap, int addr, u8 *val, int len)
 {
@@ -203,9 +205,15 @@ static irqreturn_t sm7150_batt_temp_changed_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct bms_dev *chg = irq_data->parent_data;
+	u8 int_sts;
+	int temp;
+
+	sm7150_read(chg->pmic_regmap, 0x1210, &int_sts, 1);
+	sm7150_get_battery_temp(chg, &temp);
 
 	/* TODO: handle software jeita ? */
-	dev_dbg(chg->dev, "IRQ: %s\n", irq_data->name);
+	dev_info(chg->dev, "IRQ: %s, 1210:%02x, temp:%d, \n",
+			irq_data->name, int_sts, temp);
 	power_supply_changed(chg->psy);
 	return IRQ_HANDLED;
 }
