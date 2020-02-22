@@ -60,11 +60,21 @@
 		reg = <0 0xB09A1000 0 0x20000>;
 	};
 
-	ramoops@B09C1000 {
-		compatible = "ramoops";
+	ramoops_mem: ramoops_region@B09C1000 {
+		compatible = "removed-dma-pool";
+		no-map;
 		reg = <0 0xB09C1000 0 0x400000>;
-		record-size = <0x40000>;
-		console-size = <0x200000>;
-		pmsg-size = <0x100000>;
+	};
+
+	alt_ramoops_mem: alt_ramoops_region@B0DC1000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB0DC1000 0 0x400000>;
+	};
+
+	ramoops_meta_mem: ramoops_meta_region@0xB11C1000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB11C1000 0 0x1000>;
 	};
 };

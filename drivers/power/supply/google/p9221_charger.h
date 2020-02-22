@@ -234,6 +234,17 @@
 #define P9382_PROP_TX_ID_REG			0xC4
 #define P9382_EPP_TX_MFG_CODE_REG		0xBA
 
+/*
+ * Interrupt/Status flags for P9382
+ */
+#define P9382_STAT_RXCONNECTED			BIT(10)
+
+enum p9221_align_mfg_chk_state {
+	ALIGN_MFG_FAILED = -1,
+	ALIGN_MFG_CHECKING,
+	ALIGN_MFG_PASSED,
+};
+
 struct p9221_charger_platform_data {
 	int				irq_gpio;
 	int				irq_int;
@@ -255,6 +266,7 @@ struct p9221_charger_platform_data {
 	int				nb_alignment_freq;
 	int				*alignment_freq;
 	u32				alignment_scalar;
+	u32				alignment_hysteresis;
 	u32				icl_ramp_delay_ms;
 };
 
@@ -316,7 +328,7 @@ struct p9221_charger_data {
 	int				alignment;
 	u8				alignment_str[(sizeof(u32) * 3) + 1];
 	int				alignment_last;
-	bool				alignment_capable;
+	enum p9221_align_mfg_chk_state  alignment_capable;
 	int				mfg_check_count;
 	u16				mfg;
 	int				alignment_time;

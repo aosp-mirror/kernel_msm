@@ -184,7 +184,8 @@
 		google,chg-power-supply = "sm7250_bms";
 		google,bat-power-supply = "battery";
 		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
-		google,thermal-mitigation = <3700000 1850000 925000 500000>;
+		google,thermal-mitigation = <4000000 3500000 3000000
+						2500000 1500000 500000>;
 		google,fv-max-uv = <4450000>;
 		google,chg-termination-5v;
 

@@ -269,9 +269,6 @@ struct gpio_chip {
 
 	void			(*dbg_show)(struct seq_file *s,
 						struct gpio_chip *chip);
-#ifdef CONFIG_DEBUG_FS
-	int			(*gpio_dump)(struct seq_file *s);
-#endif
 	int			base;
 	u16			ngpio;
 	const char		*const *names;
@@ -351,8 +348,6 @@ struct gpio_chip {
 	int (*of_xlate)(struct gpio_chip *gc,
 			const struct of_phandle_args *gpiospec, u32 *flags);
 #endif
-	u32 *ignored_gpios;
-	int ignored_gpios_nr;
 };
 
 extern const char *gpiochip_is_requested(struct gpio_chip *chip,

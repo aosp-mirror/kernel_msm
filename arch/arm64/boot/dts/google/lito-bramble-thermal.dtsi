@@ -259,7 +259,7 @@
 			};
 			wired_charge-lv2-step {
 				trip = <&skin_moderate_lv3>;
-				cooling-device = <&google_charger 1 2>;
+				cooling-device = <&google_charger 1 3>;
 			};
 			/* thermal severe throttling */
 			cpu0-svs_l1-lock {
@@ -280,7 +280,7 @@
 			};
 			wired_charge-lv3-step {
 				trip = <&skin_severe>;
-				cooling-device = <&google_charger 2 3>;
+				cooling-device = <&google_charger 3 5>;
 			};
 			/* thermal critical throttling */
 			cpu0-svs-lock {
