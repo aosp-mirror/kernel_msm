@@ -477,6 +477,9 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(dead_battery),
 	POWER_SUPPLY_ATTR(voltage_fifo),
 	POWER_SUPPLY_ATTR(cc_uah),
+	POWER_SUPPLY_ATTR(cutoff_soc),
+	POWER_SUPPLY_ATTR(sys_soc),
+	POWER_SUPPLY_ATTR(batt_soc),
 	/* Capacity Estimation */
 	POWER_SUPPLY_ATTR(delta_cc_sum),
 	POWER_SUPPLY_ATTR(delta_vfsoc_sum),
