@@ -29,6 +29,11 @@
 #include "cam_sensor_vsync.h"
 
 static const char isp_dev_name[] = "cam-isp";
+/* Define max active request number as 3, this is to increase the request list,
+ * in order to handle timing issue of IRQ when system performance drop and SOC
+ * IFE hardware unstable.
+ */
+static const uint32_t isp_max_active_req_count = 3;
 
 #define INC_HEAD(head, max_entries) \
 	(atomic64_add_return(1, head) % \
@@ -922,7 +927,7 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 	 * helps the state machine to catch up the delay.
 	 */
 	if (ctx->ctx_crm_intf && ctx->ctx_crm_intf->notify_trigger &&
-		ctx_isp->active_req_cnt <= 2) {
+		ctx_isp->active_req_cnt <= isp_max_active_req_count) {
 		if (ctx_isp->subscribe_event & CAM_TRIGGER_POINT_SOF) {
 			notify.link_hdl = ctx->link_hdl;
 			notify.dev_hdl = ctx->dev_hdl;
@@ -1629,7 +1634,7 @@ static int __cam_isp_ctx_fs2_sof_in_sof_state(
 		goto end;
 
 	if (ctx->ctx_crm_intf && ctx->ctx_crm_intf->notify_trigger &&
-		ctx_isp->active_req_cnt <= 2) {
+		ctx_isp->active_req_cnt <= isp_max_active_req_count) {
 		if (ctx_isp->subscribe_event & CAM_TRIGGER_POINT_SOF) {
 			notify.link_hdl = ctx->link_hdl;
 			notify.dev_hdl = ctx->dev_hdl;
@@ -1800,7 +1805,7 @@ static int __cam_isp_ctx_fs2_reg_upd_in_applied_state(
 		goto end;
 
 	if (ctx->ctx_crm_intf && ctx->ctx_crm_intf->notify_trigger &&
-		ctx_isp->active_req_cnt <= 2) {
+		ctx_isp->active_req_cnt <= isp_max_active_req_count) {
 		list_for_each_entry(req, &ctx->active_req_list, list) {
 			if (req->request_id >
 				ctx_isp->req_info.reported_req_id) {
@@ -2040,7 +2045,7 @@ static int __cam_isp_ctx_apply_req_in_activated_state(
 		req->request_id, ctx_isp->substate_activated, ctx->ctx_id);
 	req_isp = (struct cam_isp_ctx_req *) req->req_priv;
 
-	if (ctx_isp->active_req_cnt >=  2) {
+	if (ctx_isp->active_req_cnt >= isp_max_active_req_count) {
 		CAM_ERR_RATE_LIMIT(CAM_ISP,
 			"Reject apply request (id %lld) due to congestion(cnt = %d) ctx %u",
 			req->request_id,
@@ -2617,7 +2622,7 @@ static int __cam_isp_ctx_rdi_only_sof_in_top_state(
 	 * helps the state machine to catch up the delay.
 	 */
 	if (ctx->ctx_crm_intf && ctx->ctx_crm_intf->notify_trigger &&
-		ctx_isp->active_req_cnt <= 2) {
+		ctx_isp->active_req_cnt <= isp_max_active_req_count) {
 		notify.link_hdl = ctx->link_hdl;
 		notify.dev_hdl = ctx->dev_hdl;
 		notify.frame_id = ctx_isp->frame_id;
