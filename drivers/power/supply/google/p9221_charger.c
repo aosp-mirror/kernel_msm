@@ -1137,18 +1137,20 @@ static int p9221_set_property(struct power_supply *psy,
 
 		changed = true;
 		break;
-
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (!charger->online || charger->last_capacity == val->intval)
+		if (charger->last_capacity == val->intval)
 			break;
 
 		charger->last_capacity = val->intval;
+
+		if (!charger->online)
+			break;
+
 		ret = p9221_send_csp(charger, charger->last_capacity);
 		if (ret)
 			dev_err(&charger->client->dev,
 				"Could send csp: %d\n", ret);
 		changed = true;
-
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		if (val->intval < 0) {
