@@ -10,6 +10,8 @@
 #include <linux/slab.h>
 #include <linux/genalloc.h>
 
+#include <asm/traps.h>
+
 #include <soc/qcom/scm.h>
 #include <soc/qcom/qseecomi.h>
 #include <soc/qcom/qtee_shmbridge.h>
@@ -399,6 +401,7 @@ static int __init qtee_shmbridge_init(void)
 	pr_debug("qtee shmbridge registered default bridge with size %d bytes\n",
 			DEFAULT_BRIDGE_SIZE);
 #ifdef MODULE
+	do_tlb_conf_fault_cb = do_tlb_conf_fault;
 	scm_enable_mem_protection();
 #endif
 

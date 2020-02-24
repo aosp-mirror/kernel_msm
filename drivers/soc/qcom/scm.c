@@ -14,6 +14,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/compiler.h>
+#include <asm/traps.h>
 
 #include <soc/qcom/scm.h>
 #include <soc/qcom/qtee_shmbridge.h>
@@ -497,6 +498,22 @@ int scm_call2_atomic(u32 fn_id, struct scm_desc *desc)
 	return ret;
 }
 EXPORT_SYMBOL(scm_call2_atomic);
+
+int do_tlb_conf_fault(unsigned long addr,
+		      unsigned int esr,
+		      struct pt_regs *regs)
+{
+#define SCM_TLB_CONFLICT_CMD	0x1F
+	struct scm_desc desc = {
+		.args[0] = addr,
+		.arginfo = SCM_ARGS(1),
+	};
+
+	if (scm_call2_atomic(SCM_SIP_FNID(SCM_SVC_MP, SCM_TLB_CONFLICT_CMD),
+						&desc))
+		return 1;
+	return 0;
+}
 
 u32 scm_get_version(void)
 {
