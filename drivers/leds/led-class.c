@@ -212,10 +212,14 @@ int led_classdev_register(struct device *parent, struct led_classdev *led_cdev)
 	if (ret < 0)
 		return ret;
 
+	mutex_init(&led_cdev->led_access);
+	mutex_lock(&led_cdev->led_access);
 	led_cdev->dev = device_create_with_groups(leds_class, parent, 0,
 				led_cdev, led_cdev->groups, "%s", name);
-	if (IS_ERR(led_cdev->dev))
+	if (IS_ERR(led_cdev->dev)) {
+		mutex_unlock(&led_cdev->led_access);
 		return PTR_ERR(led_cdev->dev);
+	}
 
 	if (ret)
 		dev_warn(parent, "Led %s renamed to %s due to name collision",
@@ -224,7 +228,6 @@ int led_classdev_register(struct device *parent, struct led_classdev *led_cdev)
 #ifdef CONFIG_LEDS_TRIGGERS
 	init_rwsem(&led_cdev->trigger_lock);
 #endif
-	mutex_init(&led_cdev->led_access);
 	/* add to the list of leds */
 	down_write(&leds_list_lock);
 	list_add_tail(&led_cdev->node, &leds_list);
@@ -242,6 +245,8 @@ int led_classdev_register(struct device *parent, struct led_classdev *led_cdev)
 #ifdef CONFIG_LEDS_TRIGGERS
 	led_trigger_set_default(led_cdev);
 #endif
+
+	mutex_unlock(&led_cdev->led_access);
 
 	dev_dbg(parent, "Registered led device: %s\n",
 			led_cdev->name);
