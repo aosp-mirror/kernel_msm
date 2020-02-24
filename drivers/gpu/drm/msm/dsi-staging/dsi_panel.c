@@ -2628,10 +2628,13 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	priv_info = mode->priv_info;
 
 	priv_info->dsc_enabled = false;
+	mode->timing.dsc_enabled = false;
 	compression = utils->get_property(utils->data,
 			"qcom,compression-mode", NULL);
-	if (compression && !strcmp(compression, "dsc"))
+	if (compression && !strcmp(compression, "dsc")) {
 		priv_info->dsc_enabled = true;
+		mode->timing.dsc_enabled = true;
+	}
 
 	if (!priv_info->dsc_enabled) {
 		pr_debug("dsc compression is not enabled for the mode");
@@ -2641,7 +2644,6 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-version", &data);
 	if (rc) {
 		priv_info->dsc.version = 0x11;
-		rc = 0;
 	} else {
 		priv_info->dsc.version = data & 0xff;
 		/* only support DSC 1.1 rev */
@@ -2656,7 +2658,6 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-scr-version", &data);
 	if (rc) {
 		priv_info->dsc.scr_rev = 0x0;
-		rc = 0;
 	} else {
 		priv_info->dsc.scr_rev = data & 0xff;
 		/* only one scr rev supported */
@@ -2728,10 +2729,13 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	dsi_dsc_populate_static_param(&priv_info->dsc);
 	dsi_dsc_pclk_param_calc(&priv_info->dsc, intf_width);
 
-	mode->timing.dsc_enabled = true;
 	mode->timing.dsc = &priv_info->dsc;
 
+	return 0;
+
 error:
+	priv_info->dsc_enabled = false;
+	mode->timing.dsc_enabled = false;
 	return rc;
 }
 
@@ -3269,7 +3273,8 @@ static int drm_panel_get_timings(struct drm_panel *panel,
 	if (timings)
 		for (i = 0; i < num_timings; i++) {
 			struct display_timing *t = &timings[i];
-			struct dsi_display_mode m;
+			struct dsi_display_mode m = {0};
+
 			rc = dsi_panel_get_mode(p, i, &m, -1);
 			if (rc)
 				break;
