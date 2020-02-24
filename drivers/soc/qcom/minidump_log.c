@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -30,6 +30,7 @@ static void __init register_log_buf(void)
 	md_entry.virt_addr = (uintptr_t) log_buf;
 	md_entry.phys_addr = virt_to_phys(log_buf);
 	md_entry.size = log_buf_len_get();
+	md_entry.id = MINIDUMP_DEFAULT_ID;
 	if (msm_minidump_add_region(&md_entry))
 		pr_err("Failed to add logbuf in Minidump\n");
 }
@@ -40,6 +41,7 @@ static void register_stack_entry(struct md_region *ksp_entry, u64 sp, u64 size,
 	struct page *sp_page;
 	struct vm_struct *stack_vm_area = task_stack_vm_area(current);
 
+	ksp_entry->id = MINIDUMP_DEFAULT_ID;
 	ksp_entry->virt_addr = sp;
 	ksp_entry->size = size;
 	if (stack_vm_area) {
@@ -65,6 +67,7 @@ static void __init register_kernel_sections(void)
 	ksec_entry.virt_addr = (uintptr_t)_sdata;
 	ksec_entry.phys_addr = virt_to_phys(_sdata);
 	ksec_entry.size = roundup((__bss_stop - _sdata), 4);
+	ksec_entry.id = MINIDUMP_DEFAULT_ID;
 	if (msm_minidump_add_region(&ksec_entry))
 		pr_err("Failed to add data section in Minidump\n");
 
@@ -78,6 +81,7 @@ static void __init register_kernel_sections(void)
 		ksec_entry.virt_addr = (uintptr_t)start;
 		ksec_entry.phys_addr = per_cpu_ptr_to_phys(start);
 		ksec_entry.size = static_size;
+		ksec_entry.id = MINIDUMP_DEFAULT_ID;
 		if (msm_minidump_add_region(&ksec_entry))
 			pr_err("Failed to add percpu sections in Minidump\n");
 	}
@@ -150,6 +154,7 @@ void dump_stack_minidump(u64 sp)
 	ktsk_entry.virt_addr = (u64)current;
 	ktsk_entry.phys_addr = virt_to_phys((uintptr_t *)current);
 	ktsk_entry.size = sizeof(struct task_struct);
+	ktsk_entry.id = MINIDUMP_DEFAULT_ID;
 	if (msm_minidump_add_region(&ktsk_entry))
 		pr_err("Failed to add current task %d in Minidump\n", cpu);
 }
