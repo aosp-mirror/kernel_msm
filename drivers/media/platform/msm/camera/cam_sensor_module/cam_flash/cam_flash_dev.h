@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,7 @@
 #include "cam_sensor_cmn_header.h"
 #include "cam_soc_util.h"
 #include "cam_debug_util.h"
+#include "cam_context.h"
 
 #define CAMX_FLASH_DEV_NAME "cam-flash-dev"
 
@@ -138,6 +139,7 @@ struct cam_flash_private_soc {
 
 /**
  *  struct cam_flash_ctrl
+ * @device_name         : Device name
  * @soc_info            : Soc related information
  * @pdev                : Platform device
  * @per_frame[]         : Per_frame setting array
@@ -158,6 +160,7 @@ struct cam_flash_private_soc {
  * @torch_trigger       : Torch trigger ptr
  */
 struct cam_flash_ctrl {
+	char device_name[CAM_CTX_DEV_NAME_MAX_LENGTH];
 	struct cam_hw_soc_info          soc_info;
 	struct platform_device         *pdev;
 	struct cam_flash_frame_setting  per_frame[MAX_PER_FRAME_ARRAY];

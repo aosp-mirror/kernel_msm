@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -15,6 +15,8 @@
 #include "cam_sensor_cmn_header.h"
 #include "cam_flash_core.h"
 #include "cam_res_mgr_api.h"
+#include "cam_common_util.h"
+#include "cam_packet_util.h"
 
 int cam_flash_prepare(struct cam_flash_ctrl *flash_ctrl,
 	bool regulator_enable)
@@ -515,6 +517,7 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 	uint32_t *offset = NULL;
 	uint32_t frm_offset = 0;
 	size_t len_of_buffer;
+	size_t remain_len;
 	struct cam_control *ioctl_ctrl = NULL;
 	struct cam_packet *csl_packet = NULL;
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
@@ -548,15 +551,26 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		return rc;
 	}
 
-	if (config.offset > len_of_buffer) {
+	remain_len = len_of_buffer;
+	if ((sizeof(struct cam_packet) > len_of_buffer) ||
+		((size_t)config.offset >= len_of_buffer -
+		sizeof(struct cam_packet))) {
 		CAM_ERR(CAM_FLASH,
 			"offset is out of bounds: offset: %lld len: %zu",
 			config.offset, len_of_buffer);
 		return -EINVAL;
 	}
 
+	remain_len -= (size_t)config.offset;
 	/* Add offset to the flash csl header */
-	csl_packet = (struct cam_packet *)(generic_ptr + config.offset);
+	csl_packet = (struct cam_packet *)(generic_ptr +
+			(uintptr_t)config.offset);
+
+	if (cam_packet_util_validate_packet(csl_packet,
+		remain_len)) {
+		CAM_ERR(CAM_FLASH, "Invalid packet params");
+		return -EINVAL;
+	}
 
 	switch (csl_packet->header.op_code & 0xFFFFFF) {
 	case CAM_FLASH_PACKET_OPCODE_INIT: {
@@ -567,7 +581,19 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		fctrl->flash_init_setting.cmn_attr.is_settings_valid = true;
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
-			(uint64_t *)&generic_ptr, &len_of_buffer);
+			&generic_ptr, &len_of_buffer);
+		if (rc) {
+			CAM_ERR(CAM_FLASH, "Fail in get buffer: %d", rc);
+			return -EINVAL;
+		}
+		if ((len_of_buffer < sizeof(struct cam_flash_init)) ||
+			(cmd_desc->offset >
+			(len_of_buffer - sizeof(struct cam_flash_init)))) {
+			CAM_ERR(CAM_FLASH, "Not enough buffer");
+			return -EINVAL;
+		}
+
+		remain_len = len_of_buffer - cmd_desc->offset;
 		cmd_buf = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 		cam_flash_info = (struct cam_flash_init *)cmd_buf;
@@ -582,20 +608,36 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 				CAM_FLASH_STATE_CONFIG;
 			break;
 		case CAMERA_SENSOR_FLASH_CMD_TYPE_INIT_FIRE:
-			CAM_DBG(CAM_FLASH, "Widget Flash Operation");
-				flash_operation_info =
-					(struct cam_flash_set_on_off *) cmd_buf;
-				fctrl->nrt_info.cmn_attr.count =
-					flash_operation_info->count;
-				fctrl->nrt_info.cmn_attr.request_id = 0;
-				fctrl->nrt_info.opcode =
-					flash_operation_info->opcode;
-				fctrl->nrt_info.cmn_attr.cmd_type =
-					CAMERA_SENSOR_FLASH_CMD_TYPE_INIT_FIRE;
-				for (i = 0;
-					i < flash_operation_info->count; i++)
-					fctrl->nrt_info.led_current_ma[i] =
-					flash_operation_info->led_current_ma[i];
+			CAM_DBG(CAM_FLASH, "INIT_FIRE Operation");
+
+			if (remain_len < sizeof(struct cam_flash_set_on_off)) {
+				CAM_ERR(CAM_FLASH, "Not enough buffer");
+				return -EINVAL;
+			}
+
+			flash_operation_info =
+				(struct cam_flash_set_on_off *) cmd_buf;
+			if (!flash_operation_info) {
+				CAM_ERR(CAM_FLASH,
+					"flash_operation_info Null");
+				return -EINVAL;
+			}
+			if (flash_operation_info->count >
+				CAM_FLASH_MAX_LED_TRIGGERS) {
+				CAM_ERR(CAM_FLASH, "led count out of limit");
+				return -EINVAL;
+			}
+			fctrl->nrt_info.cmn_attr.count =
+				flash_operation_info->count;
+			fctrl->nrt_info.cmn_attr.request_id = 0;
+			fctrl->nrt_info.opcode =
+				flash_operation_info->opcode;
+			fctrl->nrt_info.cmn_attr.cmd_type =
+				CAMERA_SENSOR_FLASH_CMD_TYPE_INIT_FIRE;
+			for (i = 0;
+				i < flash_operation_info->count; i++)
+				fctrl->nrt_info.led_current_ma[i] =
+				flash_operation_info->led_current_ma[i];
 
 				mutex_lock(&fctrl->flash_wq_mutex);
 				rc = cam_flash_apply_setting(fctrl, 0);
@@ -632,10 +674,23 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		flash_data->cmn_attr.is_settings_valid = true;
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
-			(uint64_t *)&generic_ptr, &len_of_buffer);
+			&generic_ptr, &len_of_buffer);
+		if (rc) {
+			CAM_ERR(CAM_FLASH, "Fail in get buffer: 0x%x",
+				cmd_desc->mem_handle);
+			return -EINVAL;
+		}
+
+		if ((len_of_buffer < sizeof(struct common_header)) ||
+			(cmd_desc->offset >
+			(len_of_buffer - sizeof(struct common_header)))) {
+			CAM_ERR(CAM_FLASH, "not enough buffer");
+			return -EINVAL;
+		}
+		remain_len = len_of_buffer - cmd_desc->offset;
+
 		cmd_buf = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
-
 		if (!cmd_buf)
 			return -EINVAL;
 
@@ -653,12 +708,21 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 				flash_data->cmn_attr.is_settings_valid = false;
 				return 0;
 			}
+			if (remain_len < sizeof(struct cam_flash_set_on_off)) {
+				CAM_ERR(CAM_FLASH, "Not enough buffer");
+				return -EINVAL;
+			}
 
 			flash_operation_info =
 				(struct cam_flash_set_on_off *) cmd_buf;
 			if (!flash_operation_info) {
 				CAM_ERR(CAM_FLASH,
 					"flash_operation_info Null");
+				return -EINVAL;
+			}
+			if (flash_operation_info->count >
+				CAM_FLASH_MAX_LED_TRIGGERS) {
+				CAM_ERR(CAM_FLASH, "led count out of limit");
 				return -EINVAL;
 			}
 
@@ -683,7 +747,19 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		fctrl->nrt_info.cmn_attr.is_settings_valid = true;
 		cmd_desc = (struct cam_cmd_buf_desc *)(offset);
 		rc = cam_mem_get_cpu_buf(cmd_desc->mem_handle,
-			(uint64_t *)&generic_ptr, &len_of_buffer);
+			&generic_ptr, &len_of_buffer);
+		if (rc) {
+			CAM_ERR(CAM_FLASH, "Fail in get buffer: %d", rc);
+			return -EINVAL;
+		}
+
+		if ((len_of_buffer < sizeof(struct common_header)) ||
+			(cmd_desc->offset >
+			(len_of_buffer - sizeof(struct common_header)))) {
+			CAM_ERR(CAM_FLASH, "Not enough buffer");
+			return -EINVAL;
+		}
+		remain_len = len_of_buffer - cmd_desc->offset;
 		cmd_buf = (uint32_t *)((uint8_t *)generic_ptr +
 			cmd_desc->offset);
 		cmn_hdr = (struct common_header *)cmd_buf;
@@ -691,8 +767,23 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		switch (cmn_hdr->cmd_type) {
 		case CAMERA_SENSOR_FLASH_CMD_TYPE_WIDGET: {
 			CAM_DBG(CAM_FLASH, "Widget Flash Operation");
+			if (remain_len < sizeof(struct cam_flash_set_on_off)) {
+				CAM_ERR(CAM_FLASH, "Not enough buffer");
+				return -EINVAL;
+			}
 			flash_operation_info =
 				(struct cam_flash_set_on_off *) cmd_buf;
+			if (!flash_operation_info) {
+				CAM_ERR(CAM_FLASH,
+					"flash_operation_info Null");
+				return -EINVAL;
+			}
+			if (flash_operation_info->count >
+				CAM_FLASH_MAX_LED_TRIGGERS) {
+				CAM_ERR(CAM_FLASH, "led count out of limit");
+				return -EINVAL;
+			}
+
 			fctrl->nrt_info.cmn_attr.count =
 				flash_operation_info->count;
 			fctrl->nrt_info.cmn_attr.request_id = 0;
@@ -716,6 +807,10 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		case CAMERA_SENSOR_FLASH_CMD_TYPE_QUERYCURR: {
 			int query_curr_ma = 0;
 
+			if (remain_len < sizeof(struct cam_flash_query_curr)) {
+				CAM_ERR(CAM_FLASH, "Not enough buffer");
+				return -EINVAL;
+			}
 			flash_query_info =
 				(struct cam_flash_query_curr *)cmd_buf;
 
@@ -733,7 +828,22 @@ int cam_flash_parser(struct cam_flash_ctrl *fctrl, void *arg)
 		}
 		case CAMERA_SENSOR_FLASH_CMD_TYPE_RER: {
 			rc = 0;
+			if (remain_len < sizeof(struct cam_flash_set_rer)) {
+				CAM_ERR(CAM_FLASH, "Not enough buffer");
+				return -EINVAL;
+			}
 			flash_rer_info = (struct cam_flash_set_rer *)cmd_buf;
+			if (!flash_rer_info) {
+				CAM_ERR(CAM_FLASH,
+					"flash_rer_info Null");
+				return -EINVAL;
+			}
+			if (flash_rer_info->count >
+				CAM_FLASH_MAX_LED_TRIGGERS) {
+				CAM_ERR(CAM_FLASH, "led count out of limit");
+				return -EINVAL;
+			}
+
 			fctrl->nrt_info.cmn_attr.cmd_type =
 				CAMERA_SENSOR_FLASH_CMD_TYPE_RER;
 			fctrl->nrt_info.opcode = flash_rer_info->opcode;

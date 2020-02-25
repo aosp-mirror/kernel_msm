@@ -34,6 +34,8 @@
 
 #define SYNC_LINK_SOF_CNT_MAX_LMT 1
 
+#define MAXIMUM_LINKS_PER_SESSION  4
+
 /**
  * enum crm_workq_task_type
  * @codes: to identify which type of task is present
@@ -305,6 +307,8 @@ struct cam_req_mgr_connected_device {
  *                         frame in sync link as well.
  * @open_req_cnt         : Counter to keep track of open requests that are yet
  *                         to be serviced in the kernel.
+ * @last_flush_id        : Last request to flush
+ * @is_used              : 1 if link is in use else 0
  *
  */
 struct cam_req_mgr_core_link {
@@ -329,6 +333,8 @@ struct cam_req_mgr_core_link {
 	bool                                 frame_skip_flag;
 	bool                                 sync_link_sof_skip;
 	int32_t                              open_req_cnt;
+	uint32_t                             last_flush_id;
+	atomic_t                             is_used;
 };
 
 /**
@@ -350,7 +356,7 @@ struct cam_req_mgr_core_link {
 struct cam_req_mgr_core_session {
 	int32_t                       session_hdl;
 	uint32_t                      num_links;
-	struct cam_req_mgr_core_link *links[MAX_LINKS_PER_SESSION];
+	struct cam_req_mgr_core_link *links[MAXIMUM_LINKS_PER_SESSION];
 	struct list_head              entry;
 	struct mutex                  lock;
 	int32_t                       force_err_recovery;

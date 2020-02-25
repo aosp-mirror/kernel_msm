@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3271,6 +3271,9 @@ static int cam_icp_mgr_prepare_hw_update(void *hw_mgr_priv,
 
 	packet = prepare_args->packet;
 
+	if (cam_packet_util_validate_packet(packet, prepare_args->remain_len))
+		return -EINVAL;
+
 	rc = cam_icp_mgr_pkt_validation(packet);
 	if (rc) {
 		mutex_unlock(&ctx_data->ctx_mutex);
@@ -3781,6 +3784,12 @@ static int cam_icp_get_acquire_info(struct cam_icp_hw_mgr *hw_mgr,
 		return -EFAULT;
 	}
 
+	/* To make sure num_out_res is same as allocated */
+	if (ctx_data->icp_dev_acquire_info->num_out_res !=
+		icp_dev_acquire_info.num_out_res) {
+		CAM_ERR(CAM_ICP, "num_out_res got changed");
+		return -EFAULT;
+	}
 	CAM_DBG(CAM_ICP, "%x %x %x %x %x %x %x %u",
 		ctx_data->icp_dev_acquire_info->dev_type,
 		ctx_data->icp_dev_acquire_info->in_res.format,
