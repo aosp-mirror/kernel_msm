@@ -432,11 +432,12 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	int bl_lvl;
 	int rc = 0;
 
+	mutex_lock(&panel->panel_lock);
+	mutex_lock(&bl->state_lock);
 	if ((bd->props.state & (BL_CORE_FBBLANK | BL_CORE_SUSPENDED)) ||
 			(bd->props.power != FB_BLANK_UNBLANK))
 		brightness = 0;
 
-	mutex_lock(&panel->panel_lock);
 	bl_lvl = dsi_backlight_calculate(bl, brightness);
 	if (bl_lvl == bl->bl_actual && bl->last_state == bd->props.state)
 		goto done;
@@ -477,6 +478,7 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 	bl->last_state = bd->props.state;
 
 done:
+	mutex_unlock(&bl->state_lock);
 	mutex_unlock(&panel->panel_lock);
 	return rc;
 }
@@ -843,7 +845,7 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 
 	pr_info("power_mode:%d state:0x%0x\n", power_mode, bd->props.state);
 
-	mutex_lock(&bd->ops_lock);
+	mutex_lock(&bl->state_lock);
 	state = get_state_after_dpms(bl, power_mode);
 
 	if (is_lp_mode(state)) {
@@ -852,7 +854,7 @@ int dsi_backlight_early_dpms(struct dsi_backlight_config *bl, int power_mode)
 			pr_warn("Error updating regulator state: 0x%x (%d)\n",
 				state, rc);
 	}
-	mutex_unlock(&bd->ops_lock);
+	mutex_unlock(&bl->state_lock);
 
 	return rc;
 }
@@ -867,7 +869,7 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 
 	pr_debug("power_mode:%d state:0x%0x\n", power_mode, bd->props.state);
 
-	mutex_lock(&bd->ops_lock);
+	mutex_lock(&bl->state_lock);
 	state = get_state_after_dpms(bl, power_mode);
 
 	if (!is_lp_mode(state)) {
@@ -882,7 +884,7 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 			FB_BLANK_UNBLANK;
 	bd->props.state = state;
 
-	mutex_unlock(&bd->ops_lock);
+	mutex_unlock(&bl->state_lock);
 	backlight_update_status(bd);
 	sysfs_notify(&bd->dev.kobj, NULL, "state");
 
@@ -895,10 +897,10 @@ int dsi_backlight_get_dpms(struct dsi_backlight_config *bl)
 	int power = 0;
 	int state = 0;
 
-	mutex_lock(&bd->ops_lock);
+	mutex_lock(&bl->state_lock);
 	power = bd->props.power;
 	state = bd->props.state;
-	mutex_unlock(&bd->ops_lock);
+	mutex_unlock(&bl->state_lock);
 
 	if (power == FB_BLANK_POWERDOWN)
 		return SDE_MODE_DPMS_OFF;
@@ -1143,6 +1145,7 @@ int dsi_panel_bl_register(struct dsi_panel *panel)
 	const struct of_device_id *match;
 	int (*register_func)(struct dsi_backlight_config *) = NULL;
 
+	mutex_init(&bl->state_lock);
 	match = of_match_node(dsi_backlight_dt_match, panel->panel_of_node);
 	if (match && match->data) {
 		register_func = match->data;

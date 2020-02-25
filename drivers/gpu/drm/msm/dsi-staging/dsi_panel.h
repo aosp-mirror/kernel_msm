@@ -191,6 +191,7 @@ struct dsi_backlight_config {
 	unsigned int last_state;
 	bool bl_update_pending;
 	bool allow_bl_update;
+	struct mutex state_lock;
 
 	struct bl_notifier_data *bl_notifier;
 	struct hbm_data *hbm;
