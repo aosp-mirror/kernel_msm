@@ -183,9 +183,9 @@
 		#thermal-sensor-cells = <0>;
 
 		google,ttf-adapter = <1800>;
-		google,ttf-soc-table =  <62 75 85 89  92  95  98  100>;
-		google,ttf-elap-table = <40 55 75 100 120 180 250 300>;
-		google,ttf-tier-table = <0 64 80>;
+		google,ttf-soc-table =  <47 66 72 82 94 96  98  100>;
+		google,ttf-elap-table = <35 45 50 59 80 121 152 284>;
+		google,ttf-tier-table = <0 69 83>;
 
 		/* soc smothing */
 		google,rl_delta-max-soc = <1>;
