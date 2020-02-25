@@ -323,6 +323,7 @@ EXPORT_SYMBOL_GPL(of_led_classdev_register);
  */
 void led_classdev_unregister(struct led_classdev *led_cdev)
 {
+	mutex_lock(&led_cdev->led_access);
 #ifdef CONFIG_LEDS_TRIGGERS
 	down_write(&led_cdev->trigger_lock);
 	if (led_cdev->trigger)
@@ -331,6 +332,8 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 #endif
 
 	led_cdev->flags |= LED_UNREGISTERING;
+	led_sysfs_disable(led_cdev);
+	mutex_unlock(&led_cdev->led_access);
 
 	/* Stop blinking */
 	led_stop_software_blink(led_cdev);
@@ -347,8 +350,6 @@ void led_classdev_unregister(struct led_classdev *led_cdev)
 	down_write(&leds_list_lock);
 	list_del(&led_cdev->node);
 	up_write(&leds_list_lock);
-
-	mutex_destroy(&led_cdev->led_access);
 }
 EXPORT_SYMBOL_GPL(led_classdev_unregister);
 
