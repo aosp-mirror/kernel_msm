@@ -88,6 +88,7 @@ int iaxxx_event_handler(struct iaxxx_priv *priv, struct iaxxx_event *evt)
 		dev_info(dev, "FW boot complete event %s: src:0x%.04x\n",
 						__func__, evt->event_src);
 		priv->boot_completed = true;
+		wake_up(&priv->boot_wq);
 		return ret;
 	}
 
