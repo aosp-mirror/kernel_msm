@@ -102,7 +102,7 @@ MODULE_PARM_DESC(io_limit, "Maximum bytes per I/O (default 128)");
  * Specs often allow 5 msec for a page write, sometimes 20 msec;
  * it's important to recover from write timeouts.
  */
-static unsigned write_timeout = 25;
+static unsigned int write_timeout = 100;
 module_param(write_timeout, uint, 0);
 MODULE_PARM_DESC(write_timeout, "Time (in ms) to try writes (default 25)");
 
