@@ -2836,6 +2836,20 @@ static DEVICE_ATTR(rtx, 0644, p9382_show_rtx, p9382_set_rtx);
 
 /* ------------------------------------------------------------------------ */
 
+static struct attribute *rtx_attributes[] = {
+	&dev_attr_rtx_sw.attr,
+	&dev_attr_rtx_boost.attr,
+	&dev_attr_rtx.attr,
+	&dev_attr_fwupdate.attr,
+	&dev_attr_rtx_status.attr,
+	&dev_attr_is_rtx_connected.attr,
+	NULL
+};
+
+static const struct attribute_group rtx_attr_group = {
+	.attrs		= rtx_attributes,
+};
+
 static struct attribute *p9221_attributes[] = {
 	&dev_attr_version.attr,
 	&dev_attr_status.attr,
@@ -2853,14 +2867,9 @@ static struct attribute *p9221_attributes[] = {
 	&dev_attr_force_epp.attr,
 	&dev_attr_dc_icl_bpp.attr,
 	&dev_attr_dc_icl_epp.attr,
-	&dev_attr_rtx_sw.attr,
-	&dev_attr_rtx_boost.attr,
-	&dev_attr_rtx.attr,
 	&dev_attr_alignment.attr,
 	&dev_attr_aicl_delay_ms.attr,
 	&dev_attr_aicl_icl_ua.attr,
-	&dev_attr_rtx_status.attr,
-	&dev_attr_is_rtx_connected.attr,
 	NULL
 };
 
@@ -3771,6 +3780,11 @@ static int p9221_charger_probe(struct i2c_client *client,
 	ret = sysfs_create_group(&charger->dev->kobj, &p9221_attr_group);
 	if (ret) {
 		dev_info(&client->dev, "sysfs_create_group failed\n");
+	}
+	if (charger->pdata->switch_gpio >= 0) {
+		ret = sysfs_create_group(&charger->dev->kobj, &rtx_attr_group);
+		if (ret)
+			dev_info(&client->dev, "rtx sysfs_create_group failed\n");
 	}
 
 	/*
