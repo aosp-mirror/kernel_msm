@@ -153,6 +153,8 @@ struct gbatt_ccbin_data {
 	char cyc_ctr_cstr[GBMS_CCBIN_CSTR_SIZE];
 	struct mutex lock;
 	int prev_soc;
+	u16 eeprom_count[GBMS_CCBIN_BUCKET_COUNT];
+	int prev_cnt;
 };
 
 #define DEFAULT_RES_TEMP_HIGH	390
@@ -2326,6 +2328,65 @@ static int batt_cycle_count_load(struct gbatt_ccbin_data *ccd)
 	return 0;
 }
 
+/* EEPROM cycle count */
+#define EEPROM_CYCLE_EMPTY		0xFFFF
+/* call holding mutex_unlock(&ccd->lock); */
+static int eeprom_batt_cycle_count_store(struct gbatt_ccbin_data *ccd)
+{
+	int ret;
+
+	ret = gbms_storage_write(GBMS_TAG_CNTB, ccd->eeprom_count,
+					sizeof(ccd->eeprom_count));
+	if (ret < 0 && ret != -ENOENT) {
+		pr_err("failed to set bin_counts in eeprom ret=%d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/* call holding mutex_unlock(&ccd->lock); */
+static int eeprom_batt_cycle_count_load(struct gbatt_ccbin_data *ccd)
+{
+	int ret;
+
+	ret = gbms_storage_read(GBMS_TAG_CNTB, ccd->eeprom_count,
+					sizeof(ccd->eeprom_count));
+	if (ret < 0 && ret != -ENOENT) {
+		pr_err("failed to get bin_counts in eeprom ret=%d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/* call holding mutex_unlock(&ccd->lock); */
+static void batt_cycle_count_init(struct gbatt_ccbin_data *ccd)
+{
+	int i;
+	bool eeprom_update = false;
+	bool gauge_update = false;
+
+	for(i = 0; i < GBMS_CCBIN_BUCKET_COUNT; i++) {
+		if ((ccd->count[i] > ccd->eeprom_count[i]) ||
+		    (ccd->eeprom_count[i] == EEPROM_CYCLE_EMPTY)) {
+			ccd->eeprom_count[i] = ccd->count[i];
+			eeprom_update = true;
+		} else {
+			ccd->count[i] = ccd->eeprom_count[i];
+			gauge_update = true;
+		}
+	}
+
+	if (eeprom_update)
+		(void)eeprom_batt_cycle_count_store(ccd);
+
+	if (gauge_update)
+		(void)batt_cycle_count_store(ccd);
+
+	return;
+}
+
 /* update only when SSOC is increasing, not need to check charging */
 static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 {
@@ -2350,6 +2411,22 @@ static void batt_cycle_count_update(struct batt_drv *batt_drv, int soc)
 	}
 
 	ccd->prev_soc = soc;
+
+	if (batt_drv->eeprom_inside) {
+		int gauge_cnt = GPSY_GET_PROP(batt_drv->fg_psy,
+					POWER_SUPPLY_PROP_CYCLE_COUNT);
+
+		if (ccd->prev_cnt != -1 && (gauge_cnt > ccd->prev_cnt)) {
+			int i;
+
+			for (i = 0; i < GBMS_CCBIN_BUCKET_COUNT; i++)
+				ccd->eeprom_count[i] = ccd->count[i];
+
+			(void)eeprom_batt_cycle_count_store(ccd);
+		}
+
+		ccd->prev_cnt = gauge_cnt;
+	}
 
 	mutex_unlock(&ccd->lock);
 }
@@ -3747,15 +3824,21 @@ static int gbatt_set_property(struct power_supply *psy,
 		break;
 	/* TODO: compat */
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
-		ret = gbms_cycle_count_sscan(batt_drv->cc_data.count,
-					     val->strval);
-		if (ret == 0) {
-			ret = batt_cycle_count_store(&batt_drv->cc_data);
-			if (ret < 0)
-				pr_err("cannot store bin count ret=%d\n", ret);
-		}
+		if (!batt_drv->eeprom_inside) {
+			mutex_lock(&batt_drv->cc_data.lock);
+			ret = gbms_cycle_count_sscan(batt_drv->cc_data.count,
+						     val->strval);
+			if (ret == 0) {
+				ret = batt_cycle_count_store(
+						      &batt_drv->cc_data);
+				if (ret < 0)
+					pr_err("can't store bin count ret=%d\n",
+						      ret);
+			}
+			mutex_unlock(&batt_drv->cc_data.lock);
+		} else
+			ret = -EINVAL;
 		break;
-
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
 		if (val->intval <= 0)
 			batt_drv->ttf_stats.ttf_fake = -1;
@@ -3889,10 +3972,24 @@ static void google_battery_init_work(struct work_struct *work)
 	wakeup_source_init(&batt_drv->poll_ws, "Poll");
 	wakeup_source_init(&batt_drv->msc_ws, "MSC");
 
+
+	batt_drv->eeprom_inside =
+		of_property_read_bool(node, "google,eeprom-inside");
+
 	mutex_lock(&batt_drv->cc_data.lock);
 	ret = batt_cycle_count_load(&batt_drv->cc_data);
 	if (ret < 0)
 		pr_err("cannot restore bin count ret=%d\n", ret);
+
+	/* eeprom cycle count */
+	if (batt_drv->eeprom_inside) {
+		batt_drv->cc_data.prev_cnt = -1;
+		ret = eeprom_batt_cycle_count_load(&batt_drv->cc_data);
+		if (ret < 0)
+			pr_err("cannot restore eeprom bin count ret=%d\n", ret);
+		else
+			batt_cycle_count_init(&batt_drv->cc_data);
+	}
 	mutex_unlock(&batt_drv->cc_data.lock);
 
 	batt_drv->fake_capacity = (batt_drv->batt_present) ? -EINVAL
@@ -3966,9 +4063,6 @@ static void google_battery_init_work(struct work_struct *work)
 						       GBMS_TAG_HIST);
 	if (!batt_drv->history)
 		pr_err("history not available\n");
-
-	batt_drv->eeprom_inside =
-		of_property_read_bool(node, "google,eeprom-inside");
 
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,history-delta-cycle-count",
