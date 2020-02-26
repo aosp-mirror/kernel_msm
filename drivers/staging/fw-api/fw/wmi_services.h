@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -250,7 +250,161 @@ typedef  enum  {
     WMI_SERVICE_GMAC_OFFLOAD_SUPPORT=154, /* Support for GMAC */
     WMI_SERVICE_SPOOF_MAC_SUPPORT=155,  /* support for SERVICE_SPOOF_MAC */
     WMI_SERVICE_PEER_TID_CONFIGS_SUPPORT=156,  /* Support TID specific configurations per peer (ack,aggr,retry,rate) */
+    WMI_SERVICE_VDEV_SWRETRY_PER_AC_CONFIG_SUPPORT=157,  /* Support vdev software retries configuration per AC (non aggr retry/aggr retry) */
+    WMI_SERVICE_DUAL_BEACON_ON_SINGLE_MAC_SCC_SUPPORT=158, /* Support dual beacon on same channel on single MAC */
+    WMI_SERVICE_DUAL_BEACON_ON_SINGLE_MAC_MCC_SUPPORT=159, /* Support dual beacon on different channel on single MAC */
+    WMI_SERVICE_MOTION_DET=160, /* support for motion detection config */
+    WMI_SERVICE_INFRA_MBSSID=161, /* support infra multi-BSSID feature */
+    WMI_SERVICE_OBSS_SPATIAL_REUSE=162, /* support spatial reuse feature */
+    WMI_SERVICE_VDEV_DIFFERENT_BEACON_INTERVAL_SUPPORT=163, /* Support different beacon intervals on different VDEVs */
+    WMI_SERVICE_NAN_DBS_SUPPORT=164, /* Support DBS for NAN discovery interface */
+    WMI_SERVICE_NDI_DBS_SUPPORT=165, /* Support DBS for NAN data interface */
+    WMI_SERVICE_NAN_SAP_SUPPORT=166, /* Support SAP Concurrency for NAN Discovery interface */
+    WMI_SERVICE_NDI_SAP_SUPPORT=167, /* Support SAP Concurrency for NAN Data interface */
+    WMI_SERVICE_CFR_CAPTURE_SUPPORT=168, /* Support to capture uncompressed Channel Frequency Response (CFR) */
+    WMI_SERVICE_CFR_CAPTURE_IND_MSG_TYPE_1=169, /* Message type HTT_PEER_CFR_CAPTURE_MSG_TYPE_1 in HTT_T2H_MSG_TYPE_CFR_DUMP_COMPL_IND */
+    WMI_SERVICE_ESP_SUPPORT=170, /* Support for Estimated Service Params IE */
+    WMI_SERVICE_PEER_CHWIDTH_CHANGE = 171, /* Support for host to update/re-intersect the node capability */
+    WMI_SERVICE_WLAN_HPCS_PULSE=172, /* Support for High Precision Clock Synchronization feature */
+    WMI_SERVICE_PER_VDEV_CHAINMASK_CONFIG_SUPPORT=173, /* Support for configuring chainmask per VDEV */
+    WMI_SERVICE_TX_DATA_MGMT_ACK_RSSI=174, /* ACK RSSI indication to host for host TX data and mgmt frame */
+    WMI_SERVICE_NAN_DISABLE_SUPPORT=175, /* indicates firmware is dependent on host to disable NAN incase of concurrencies */
+    WMI_SERVICE_NAN_DISABLE_SUPPORT__prototype = WMI_SERVICE_NAN_DISABLE_SUPPORT, /* alias, to clarify that NAN_DISABLE_SUPPORT is for prototype testing purposes */
+    WMI_SERVICE_HTT_H2T_NO_HTC_HDR_LEN_IN_MSG_LEN=176, /* indicates FW supports uniformly excluding the HTC header length from the HTT H2T message length */
+    WMI_SERVICE_COEX_SUPPORT_UNEQUAL_ISOLATION=177, /* indicates FW supports FDD coex with unequal isolation between BT and each of the WLAN chains */
 
+    /* WMI_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT:
+     * Support HW+FW db2dbm conversion for RSSI fields in rx descriptors
+     * and host/target messages.
+     * If enabled, HW and FW will convert SNR to RSSI by adding noise floor
+     * and rssi_offset from BDF to RSSI values that formerly had units of
+     * dB w.r.t. noise floor to convert the units to dBm.
+     * MAC beacon RSSI average register return a signed value for RSSI,
+     * as well as hw descriptors.
+     *-------------------------------------------------------------------------
+     * The RSSI field of below WMI messages will be changed to dBm units:
+     * WMI_MGMT_RX_EVENTID:
+     *     wmi_mgmt_rx_hdr.rssi_ctl;
+     * WMI_UPDATE_STATS_EVENTID:
+     *     wmi_rssi_stats.rssi_avg_beacon;
+     *     wmi_rssi_stats.rssi_avg_data;
+     *     wmi_snr_info.bcn_snr;
+     *     wmi_snr_info.dat_snr;
+     *     wmi_vdev_stats.bcn_rssi_history; (NOT USED IN FW)
+     *     wmi_peer_stats.peer_rssi;
+     * WMI_WOW_WAKEUP_HOST_EVENTID:
+     *     wmi_rssi_breach_event_fixed_param.rssi;
+     *     wmi_roam_event_fixed_param.rssi;
+     * WMI_PEER_STA_KICKOUT_EVENTID:
+     *     wmi_peer_sta_kickout_event_fixed_param.rssi;
+     * WMI_PASSPOINT_MATCH_EVENTID:
+     *     wmi_passpoint_event_hdr.rssi;(NOT USED IN FW)
+     * WMI_PEER_INFO_EVENTID:
+     *     wmi_peer_info.rssi;
+     * WMI_ROAM_SYNCH_EVENTID:
+     *     wmi_roam_synch_event_fixed_param.rssi;
+     * WMI_ROAM_SCAN_STATS_EVENTID:
+     *     wmi_roam_scan_stats_event_fixed_param.rssi;
+     *     wmi_pdev_div_rssi_antid_event_id:
+     *     wmi_pdev_div_rssi_antid_event_fixed_param.chain_rssi;
+     *     wmi_rssi_breach_event_id
+     * WMI_INST_RSSI_STATS_EVENTID:
+     *     wmi_inst_rssi_stats_resp_fixed_param.iRSSI;
+     * RSSI thresholds configured by host
+     * WMI_ROAM_SCAN_RSSI_THRESHOLD
+     *     roam_scan_rssi_thresh   snr
+     *     boost_threshold_5g  snr
+     *     penalty_threshold_5g    snr
+     *     good_rssi_threshold snr
+     *     roam_bg_scan_bad_rssi_thresh    snr
+     *     roam_earlystop_thres_min    snr
+     *     roam_earlystop_thres_max    snr
+     * WMI_ROAM_AP_PROFILE
+     *     rssi_abs_thresh snr
+     * WMI_ROAM_CONFIGURE_MAWC_CMDID:
+     *     best_ap_rssi_threshold  Snr
+     *     wmi_ap_profile.rssi_abs_thresh;
+     * WMI_ROAM_SCAN_RSSI_THRESHOLD:
+     *     wmi_roam_scan_extended_threshold_param.boost_threshold_5g;
+     *     wmi_roam_scan_extended_threshold_param.penalty_threshold_5g;
+     *     wmi_roam_scan_extended_threshold_param.good_rssi_threshold;
+     *     wmi_roam_scan_rssi_threshold_fixed_param.roam_scan_rssi_thresh;
+     *     wmi_roam_bg_scan_roaming_param.roam_bg_scan_bad_rssi_thresh;
+     * WMI_VDEV_SPECTRAL_SCAN_CONFIGURE_CMDID:
+     *     wmi_vdev_spectral_configure_cmd_fixed_param.spectral_scan_rssi_rpt_mode;
+     *     wmi_vdev_spectral_configure_cmd_fixed_param.spectral_scan_rssi_thr;
+     * WMI_RSSI_BREACH_MONITOR_CONFIG_CMDID:
+     *     wmi_rssi_breach_monitor_config_fixed_param.low_rssi_breach_threshold;
+     *     wmi_rssi_breach_monitor_config_fixed_param.hi_rssi_breach_threshold;
+     * WMI_STA_SMPS_PARAM_CMDID:
+     *     wmi_sta_smps_param.value of below cmd IDs:
+     *         // RSSI threshold to enter Dynamic SMPS mode from inactive mode
+     *         WMI_STA_SMPS_PARAM_UPPER_RSSI_THRESH = 0,
+     *         // RSSI threshold to enter Stalled-D-SMPS mode from D-SMPS mode
+     *         // or to enter D-SMPS mode from Stalled-D-SMPS mode
+     *         WMI_STA_SMPS_PARAM_STALL_RSSI_THRESH = 1,
+     *         // RSSI threshold to disable SMPS modes
+     *         WMI_STA_SMPS_PARAM_LOWER_RSSI_THRESH = 2,
+     *         // Upper threshold for beacon-RSSI. Used to reduce RX chainmask.
+     *         WMI_STA_SMPS_PARAM_UPPER_BRSSI_THRESH = 3,
+     *         // Lower threshold for beacon-RSSI. Used to increase RX chainmask
+     *         WMI_STA_SMPS_PARAM_LOWER_BRSSI_THRESH = 4,
+     *         // Enable/Disable DTIM 1chRx feature
+     *         WMI_STA_SMPS_PARAM_DTIM_1CHRX_ENABLE = 5
+     * WMI_TDLS_SET_STATE_CMDID:
+     *     wmi_tdls_set_state_cmd_fixed_param.rssi_teardown_threshold;
+     *     wmi_tdls_set_state_cmd_fixed_param.rssi_delta;
+     *-------------------------------------------------------------------------
+     * The RSSI fields of below HTT data type will change to dBm units:
+     * PREPACK struct htt_tx_wbm_completion.ack_frame_rssi;
+     * PREPACK struct htt_tx_wbm_transmit_status.ack_frame_rssi;
+     * htt_ppdu_stats_user_cmpltn_common_tlv.ack_rssi;
+     */
+    WMI_SERVICE_HW_DB2DBM_CONVERSION_SUPPORT = 178,
+    WMI_SERVICE_SUPPORT_EXTEND_ADDRESS=179, /* indicates firmware supports host memory addresses larger than 32 bit */
+    WMI_SERVICE_BEACON_RECEPTION_STATS=180, /* Support per vdev beacon stats info */
+    WMI_SERVICE_FETCH_TX_PN=181,
+    WMI_SERVICE_PEER_UNMAP_RESPONSE_SUPPORT = 182, /* support peer ids unmap response from host */
+    WMI_SERVICE_TX_PER_PEER_AMPDU_SIZE = 183, /* indicate FW support per peer TX AMPDU size */
+    WMI_SERVICE_BSS_COLOR_SWITCH_COUNT = 184, /* Firmware supports bss-color switch count handling */
+    WMI_SERVICE_HTT_PEER_STATS_SUPPORT = 185, /* Supports the feature where FW sends peer stats autonomously to Host via the HTT_T2H PEER_STATS_IND message */
+    WMI_SERVICE_UL_RU26_ALLOWED = 186, /* indicates support for RU26 in UL OFDMA */
+    WMI_SERVICE_GET_MWS_COEX_STATE = 187, /* FW provides MWS Coex info */
+    WMI_SERVICE_GET_MWS_DPWB_STATE = 188, /* FW provides LTE-Coex Dynamic Power Back-off info */
+    WMI_SERVICE_GET_MWS_TDM_STATE = 189, /* FW provides LTE-Coex TDM info */
+    WMI_SERVICE_GET_MWS_IDRX_STATE = 190, /* FW provides LTE-Coex IDRx info */
+    WMI_SERVICE_GET_MWS_ANTENNA_SHARING_STATE = 191, /* FW provides LTE-Coex Antenna sharing info */
+    WMI_SERVICE_ENHANCED_TPC_CONFIG_EVENT = 192, /* FW provides enhanced tx power control configuration dump */
+    WMI_SERVICE_WLM_STATS_REQUEST = 193, /* FW supports WLAN latency manager stats request */
+    WMI_SERVICE_EXT_PEER_TID_CONFIGS_SUPPORT = 194, /* Extended Peer Tid configuration support for QoS related settings */
+    WMI_SERVICE_WPA3_FT_SAE_SUPPORT = 195, /* FW roaming support for WPA3_FT_SAE */
+    WMI_SERVICE_WPA3_FT_SUITE_B_SUPPORT = 196, /* FW roaming support for WPA3_FT_SUITE_B */
+    WMI_SERVICE_VOW_ENABLE=197, /* FW supports a set of features to optimize VoW performance */
+    WMI_SERVICE_CFR_CAPTURE_IND_EVT_TYPE_1 = 198, /* support WMI_PEER_CFR_CAPTURE_EVENT msg */
+    WMI_SERVICE_BROADCAST_TWT = 199,  /* support of Broadcast TWT (Target Wake Time) for STA/AP */
+    WMI_SERVICE_RAP_DETECTION_SUPPORT = 200, /* indicate FW supports rogue AP detection */
+    WMI_SERVICE_PS_TDCC = 201, /* FW support tx_duty_cycle_control powersave */
+    WMI_SERVICE_THREE_WAY_COEX_CONFIG_LEGACY   = 202, /* BTCOEX Three-way CoEx Config Legacy Feature support */
+    WMI_SERVICE_THREE_WAY_COEX_CONFIG_OVERRIDE = 203, /* BTCOEX Three-way CoEx Config Override Feature support */
+    WMI_SERVICE_TX_PWR_PER_PEER = 204, /* target supports per-peer tx pwr spec via WMI_PEER_USE_FIXED_PWR */
+    WMI_SERVICE_STA_PLUS_STA_SUPPORT = 205, /* indicates target supports STA + STA concurrency */
+    WMI_SERVICE_WPA3_FT_FILS = 206,
+    WMI_SERVICE_ADAPTIVE_11R_ROAM = 207, /* Indicates FW supports adaptive 11r roaming */
+    WMI_SERVICE_CHAN_RF_CHARACTERIZATION_INFO = 208, /* FW provides RF scores for chans in the service ready extension msg */
+    WMI_SERVICE_FW_IFACE_COMBINATION_SUPPORT = 209, /* FW sends WMI_IFACE_COMBINATION_IND_EVENT msg immediately after WMI_SERVICE_READY_EXT_EVENT msg */
+    WMI_SERVICE_TX_COMPL_TSF64 = 210, /* FW supports 64-bit tx TSF in HTT_T2H TX_COMPL_IND msg */
+    WMI_SERVICE_DSM_ROAM_FILTER = 211, /* FW supports data stall AP mitigation while roaming */
+    WMI_SERVICE_PACKET_CAPTURE_SUPPORT = 212, /* target supports packet capture Mode (SMART MU) */
+    WMI_SERVICE_PER_PEER_HTT_STATS_RESET = 213, /* FW supports HTT per peer stats reset facility */
+    WMI_SERVICE_DELETE_ALL_PEER_SUPPORT = 214, /* target supports cmd to delete all peers within a vdev */
+    WMI_SERVICE_DYNAMIC_HW_MODE_SWITCH_SUPPORT = 215, /* target supports Dynamic HW mode switch */
+    WMI_SERVICE_MSDU_FLOW_OVERRIDE_BY_HOST = 216, /* target supports flow override feature */
+    WMI_SERVICE_WMI_CHAN_RF_CHARACTERIZATION_INFO_EVENT= 217, /* target will send WMI_CHAN_RF_CHARACTERIZATION_INFO_EVENT */
+    WMI_SERVICE_RX_FSE_SUPPORT = 218, /* target supports flow search through RxOLE FSE hw block */
+    WMI_SERVICE_FREQINFO_IN_METADATA = 219, /* FW provides freq_info during spectral scan */
+    WMI_SERVICE_EXT2_MSG = 220, /* WMI_SERVICE_READY_EXT2 msg is sent by target */
+    WMI_SERVICE_WPA3_SAE_ROAM_SUPPORT = 221, /* Indicates FW supports WPA3 SAE roaming */
+    WMI_SERVICE_WPA3_OWE_ROAM_SUPPORT = 222, /* Indicates FW supports WPA3 OWE roaming */
 
     /******* ADD NEW SERVICES HERE *******/
 
