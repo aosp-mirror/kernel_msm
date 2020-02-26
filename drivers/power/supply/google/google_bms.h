@@ -357,6 +357,8 @@ ssize_t ttf_dump_details(char *buf, int max_size,
 #define GBMS_BGPN_LEN	10
 /* Battery device info length */
 #define GBMS_DINF_LEN	32
+/* Battery device info length */
+#define GBMS_CNTB_LEN	16
 
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
@@ -375,6 +377,7 @@ enum gbms_tags {
 	GBMS_TAG_MINF = 0x4d494e46,
 	GBMS_TAG_DINF = 0x44494e46,
 	GBMS_TAG_BGPN = 0x4247504e,
+	GBMS_TAG_CNTB = 0x434e5442,
 	GBMS_TAG_CELL = 0x43454c4c,
 };
 
