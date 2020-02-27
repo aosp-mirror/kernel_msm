@@ -1327,7 +1327,7 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 
 	if (charger->ben_state) {
 		/* enable necessary INT for RTx mode */
-		mask = P9382_STAT_RXCONNECTED;
+		mask = P9382_STAT_RXCONNECTED | P9221R5_STAT_MODECHANGED;
 	} else {
 		mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
 		       P9221_STAT_VRECT;
@@ -2769,7 +2769,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 	int ret;
 
 	if (buf[0] == '0') {
-		dev_info(&charger->client->dev, "disable rtx\n");
+		logbuffer_log(charger->rtx_log, "disable rtx");
 		/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0000 */
 		ret = p9221_set_cmd_reg(charger, P9221R5_COM_RENEGOTIATE);
 		if (ret == 0) {
@@ -2787,7 +2787,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 			dev_err(&charger->client->dev,
 				"fail to enable dcin, ret=%d\n", ret);
 	} else if (buf[0] == '1') {
-		dev_info(&charger->client->dev, "enable rtx\n");
+		logbuffer_log(charger->rtx_log, "enable rtx");
 		if (!charger->dc_suspend_votable) {
 			charger->dc_suspend_votable = find_votable("DC_SUSPEND");
 			if (!charger->dc_suspend_votable) {
@@ -3111,23 +3111,40 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
 	int ret;
+	u8 mode_reg;
 	u16 status_reg;
 	bool attached = 0;
 
-	ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
-	if (ret) {
-		dev_err(&charger->client->dev,
-			"failed to read P9221_STATUS_REG reg: %d\n", ret);
-		return;
+	if (irq_src & P9221R5_STAT_MODECHANGED) {
+		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG,
+				       &mode_reg);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Failed to read P9221_SYSTEM_MODE_REG: %d\n",
+				ret);
+			return;
+		}
+		dev_info(&charger->client->dev,
+			 "P9221_SYSTEM_MODE_REG reg: %02x\n",
+			 mode_reg);
+		logbuffer_log(charger->rtx_log,
+			      "SYSTEM_MODE_REG=%02x", mode_reg);
 	}
 
 	if (irq_src & P9382_STAT_RXCONNECTED) {
+		ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"failed to read P9221_STATUS_REG reg: %d\n",
+				ret);
+			return;
+		}
 		attached = status_reg & P9382_STAT_RXCONNECTED;
-		dev_info(&charger->client->dev,
-			 "INT: %04x, Rx is %s\n",
-			 irq_src, attached ? "connected" : "disconnect");
+		logbuffer_log(charger->rtx_log,
+			      "Rx is %s. STATUS_REG=%04x",
+			      attached ? "connected" : "disconnect",
+			      status_reg);
 		schedule_work(&charger->uevent_work);
-		return;
 	}
 }
 
@@ -3258,6 +3275,7 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 
 	/* todo interrupt handling for rx */
 	if (charger->ben_state) {
+		logbuffer_log(charger->rtx_log, "INT=%04x", irq_src);
 		rtx_irq_handler(charger, irq_src);
 		goto out;
 	}
@@ -3806,6 +3824,15 @@ static int p9221_charger_probe(struct i2c_client *client,
 		charger->log = NULL;
 	}
 
+	charger->rtx_log = debugfs_logbuffer_register("rtx");
+	if (IS_ERR(charger->rtx_log)) {
+		ret = PTR_ERR(charger->rtx_log);
+		dev_err(charger->dev,
+			"failed to obtain rtx logbuffer instance, ret=%d\n",
+			ret);
+		charger->rtx_log = NULL;
+	}
+
 	dev_info(&client->dev, "p9221 Charger Driver Loaded\n");
 
 	if (online) {
@@ -3836,6 +3863,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 	mutex_destroy(&charger->io_lock);
 	if (charger->log)
 		debugfs_logbuffer_unregister(charger->log);
+	if (charger->rtx_log)
+		debugfs_logbuffer_unregister(charger->rtx_log);
 	return 0;
 }
 

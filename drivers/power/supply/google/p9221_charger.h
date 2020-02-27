@@ -292,6 +292,7 @@ struct p9221_charger_data {
 	struct timer_list		align_timer;
 	struct bin_attribute		bin;
 	struct logbuffer		*log;
+	struct logbuffer		*rtx_log;
 	u16				chip_id;
 	int				online;
 	bool				enabled;
