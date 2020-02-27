@@ -319,6 +319,10 @@ struct batt_drv {
 	bool eeprom_inside;
 	int hist_data_max_cnt;
 	int hist_delta_cycle_cnt;
+
+	/* Battery pack info for Suez*/
+	const char batt_pack_info[GBMS_MINF_LEN];
+	bool pack_info_ready;
 };
 
 static inline void batt_update_cycle_count(struct batt_drv *batt_drv)
@@ -3743,6 +3747,22 @@ static int gbatt_get_property(struct power_supply *psy,
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
 	 * fg_psy doesn't look it up in google_battery
 	 */
+	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
+		/* fall through if eeprom_inside is false */
+		if (batt_drv->eeprom_inside) {
+			if (batt_drv->pack_info_ready) {
+				val->strval = batt_drv->batt_pack_info;
+			} else {
+				err = gbms_storage_read(GBMS_TAG_MINF,
+					(void *)batt_drv->batt_pack_info,
+					GBMS_MINF_LEN);
+				if (err >= 0) {
+					val->strval = batt_drv->batt_pack_info;
+					batt_drv->pack_info_ready = true;
+				}
+			}
+			break;
+		}
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
 		/* fall through */
 	default:
@@ -4078,6 +4098,8 @@ static void google_battery_init_work(struct work_struct *work)
 
 		batt_drv->hist_data.cycle_cnt = HCC_INIT_DATA;
 	}
+
+	batt_drv->pack_info_ready = false;
 
 	/* debugfs */
 	(void)batt_init_fs(batt_drv);
