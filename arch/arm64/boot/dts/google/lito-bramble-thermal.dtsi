@@ -175,37 +175,37 @@
 		wake-capable-sensor;
 		trips {
 			skin_light_lv1: skin-light-lv1 {
-				temperature = <36000>;
-				hysteresis = <1000>;
-				type = "passive";
-			};
-			skin_light_lv2: skin-light-lv2 {
-				temperature = <37000>;
-				hysteresis = <1000>;
-				type = "passive";
-			};
-			skin_moderate_lv1: skin-moderate-lv1 {
 				temperature = <38000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
-			skin_moderate_lv2: skin-moderate-lv2 {
+			skin_light_lv2: skin-light-lv2 {
 				temperature = <39000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
-			skin_moderate_lv3: skin-moderate-lv3 {
+			skin_moderate_lv1: skin-moderate-lv1 {
 				temperature = <40000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
-			skin_severe: skin-severe {
+			skin_moderate_lv2: skin-moderate-lv2 {
 				temperature = <41000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
-			skin_critical: skin-critical {
+			skin_moderate_lv3: skin-moderate-lv3 {
 				temperature = <42000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_severe: skin-severe {
+				temperature = <43000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_critical: skin-critical {
+				temperature = <44000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
