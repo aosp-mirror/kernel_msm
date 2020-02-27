@@ -352,9 +352,11 @@ ssize_t ttf_dump_details(char *buf, int max_size,
 
 /* Battery Google Part Number */
 #define GBMS_BGPN_LEN	10
+/* Battery manufacturer info length */
+#define GBMS_MINF_LEN	32
 /* Battery device info length */
 #define GBMS_DINF_LEN	32
-/* Battery device info length */
+/* Battery cycle count bin length */
 #define GBMS_CNTB_LEN	16
 
 /**
