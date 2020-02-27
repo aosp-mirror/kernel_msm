@@ -332,6 +332,7 @@ struct rt5514_priv {
 	bool need_reload;
 	struct mutex stream_lock;
 	unsigned int sound_model_addr[2];
+	bool load_default_sound_model;
 };
 
 #endif /* __RT5514_H__ */
