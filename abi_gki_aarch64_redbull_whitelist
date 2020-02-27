@@ -237,7 +237,6 @@
   dma_request_slave_channel
   do_exit
   do_gettimeofday
-  down
   down_read
   down_write
   drain_workqueue
@@ -970,7 +969,6 @@
   unregister_netdevice_notifier
   unregister_netdevice_queue
   unregister_pm_notifier
-  up
   update_devfreq
   up_read
   up_write
@@ -1134,6 +1132,8 @@
   platform_device_register
 
 # required by cam_cci.ko
+  down
+  up
   video_usercopy
 
 # required by cam_ife_csid.ko
@@ -1453,7 +1453,8 @@
 
 # required by minidump_log.ko
   __bss_stop
-  kallsyms_lookup_name
+  log_buf_addr_get
+  log_buf_len_get
   __per_cpu_end
   per_cpu_ptr_to_phys
   __per_cpu_start
@@ -1920,7 +1921,6 @@
   irq_create_fwspec_mapping
   irq_domain_free_irqs_top
   msm_gpio_dump_builtin_cb
-  msm_show_resume_irq_mask
   of_irq_domain_map
   register_restart_handler
   unregister_restart_handler
@@ -2328,6 +2328,7 @@
   __cfg80211_send_event_skb
   cfg80211_tdls_oper_request
   cfg80211_unlink_bss
+  cfg80211_update_owe_info_event
   cfg80211_vendor_cmd_reply
   cld80211_get_genl_family
   complete_and_exit
@@ -2346,7 +2347,6 @@
   default_llseek
   deregister_cld_cmd_cb
   dev_alloc_name
-  down_timeout
   dump_stack
   hex_to_bin
   ieee80211_channel_to_frequency
@@ -2367,7 +2367,13 @@
   param_get_string
   param_ops_byte
   param_set_copystring
+  pci_read_config_dword
+  pci_read_config_word
+  pci_write_config_dword
+  pci_write_config_word
   PDE_DATA
+  pm_freezing
+  pm_system_wakeup
   print_stack_trace
   proc_create_data
   proc_mkdir
