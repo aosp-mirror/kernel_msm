@@ -3737,7 +3737,11 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 		val->intval = POWER_SUPPLY_STATUS_CHARGING;
 	} else if (val->intval == POWER_SUPPLY_STATUS_DISCHARGING) {
 		/* connected and discharging is NOT charging */
-		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		if (batt_drv->chg_health.rest_state == CHG_HEALTH_ACTIVE)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		else
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+
 	}
 
 	return 0;
