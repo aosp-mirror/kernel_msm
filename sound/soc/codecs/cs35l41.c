@@ -3160,7 +3160,7 @@ static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
 
 static int cs35l41_wait_for_pwrmgt_sts(struct cs35l41_private *cs35l41)
 {
-	int i, ret;
+	int i, ret = 0;
 	unsigned int wrpend_sts = 0x2;
 
 	for (i = 0; (i < 10) && (wrpend_sts & 0x2); i++)
