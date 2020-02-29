@@ -654,6 +654,9 @@ static int ttf_init_tier_parse_dt(struct batt_ttf_stats *stats,
 	int i, count, ret;
 	u32 tier_table[GBMS_STATS_TIER_COUNT];
 
+	if (!device)
+		return -ENODEV;
+
 	count = of_property_count_elems_of_size(device->of_node,
 						"google,ttf-tier-table",
 						sizeof(u32));
@@ -684,13 +687,47 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 	return dst;
 }
 
-/* must come after charge profile */
+/*
+ * TODO: need to be adjusted to more complex scenarios (adaptive charging,
+ * slow top off) that have more tiers, this implementation only fill 3
+ * tiers.
+ */
+static void ttf_stats_init_tier(struct batt_ttf_stats *stats,
+				int capacity_ma)
+{
+
+	/* TODO: use the soc stats to calculate cc_in */
+	stats->tier_stats[0].cc_in = 0;
+	stats->tier_stats[1].cc_in = (capacity_ma *
+					(stats->tier_stats[1].soc_in >> 8)) /
+					100;
+	stats->tier_stats[2].cc_in = (capacity_ma *
+					(stats->tier_stats[2].soc_in >> 8)) /
+					100;
+
+	/* TODO: use the soc stats to calculate cc_total */
+	stats->tier_stats[0].cc_total = (capacity_ma *
+					((stats->tier_stats[1].soc_in -
+					stats->tier_stats[0].soc_in) >> 8)) /
+					100;
+	stats->tier_stats[1].cc_total = (capacity_ma *
+					((stats->tier_stats[2].soc_in -
+					stats->tier_stats[1].soc_in) >> 8)) /
+					100;
+	stats->tier_stats[2].cc_total = capacity_ma -
+					stats->tier_stats[2].cc_in;
+}
+
+/*
+ * must come after charge profile
+ * TODO: tier statistics need the charge profile
+ */
 int ttf_stats_init(struct batt_ttf_stats *stats,
 		   struct device *device,
 		   int capacity_ma)
 {
 	u32 value;
-	int i, ret;
+	int i, soc, ret;
 	struct ttf_adapter_stats as;
 
 	memset(stats, 0, sizeof(*stats));
@@ -709,6 +746,8 @@ int ttf_stats_init(struct batt_ttf_stats *stats,
 	stats->ref_temp_idx = value;
 
 	/* initialize reference soc estimates */
+	/* TODO: allocate as->soc_table witk kzalloc, free here */
+
 	ret = ttf_init_soc_parse_dt(&as, device);
 	if (ret == 0) {
 		int table_i = 0;
@@ -723,10 +762,11 @@ int ttf_stats_init(struct batt_ttf_stats *stats,
 			stats->soc_ref.cc[i] = (cc * i) / 100;
 		}
 
-		/* TODO: allocate as->soc_table witk kzalloc, free here */
 	}
 
-	/* initialize tier-based estimates */
+	/* TODO: free as->soc_table here  */
+
+	/* tier estimates, avg time is filled from ref SOC */
 	ret = ttf_init_tier_parse_dt(stats, device);
 	if (ret < 0) {
 		stats->tier_stats[0].soc_in = 0;
@@ -734,24 +774,19 @@ int ttf_stats_init(struct batt_ttf_stats *stats,
 		stats->tier_stats[2].soc_in = 80 << 8;
 	}
 
-	/* TODO: use the soc stats to calculate cc_in */
-	stats->tier_stats[0].cc_in = 0;
-	stats->tier_stats[1].cc_in = (capacity_ma *
-					stats->tier_stats[1].soc_in) /
-					100;
-	stats->tier_stats[2].cc_in = (capacity_ma *
-					stats->tier_stats[2].soc_in) /
-					100;
+	ttf_stats_init_tier(stats, capacity_ma);
 
-	/* TODO: use the soc stats to calculate cc_total */
-	stats->tier_stats[0].cc_total = 0;
-	stats->tier_stats[1].cc_total = (capacity_ma *
-					(stats->tier_stats[2].soc_in -
-					stats->tier_stats[1].soc_in)) /
-					100;
-	stats->tier_stats[2].cc_total = capacity_ma -
-					stats->tier_stats[2].cc_in;
+	/* compute ref average time */
+	for (i = 0; i < 2; i++) {
+		const int soc_in = stats->tier_stats[i].soc_in >> 8;
+		const int soc_out = stats->tier_stats[i + 1].soc_in >> 8;
 
+		for (soc = soc_in;soc < soc_out; soc++)
+			stats->tier_stats[i].avg_time += stats->soc_ref.elap[soc];
+	}
+
+	for ( ;soc < 100; soc++)
+		stats->tier_stats[i].avg_time += stats->soc_ref.elap[soc];
 
 	return 0;
 }
