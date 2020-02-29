@@ -194,6 +194,8 @@ struct batt_ttf_stats {
 
 	struct ttf_soc_stats soc_stats; /* rolling */
 	struct ttf_tier_stat tier_stats[GBMS_STATS_TIER_COUNT];
+
+	struct logbuffer *ttf_log;
 };
 
 struct gbms_charging_event {
@@ -318,6 +320,7 @@ int ttf_stats_sscan(struct batt_ttf_stats *stats,
 struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 				     const struct batt_ttf_stats *src);
 
+void ttf_log(const struct batt_ttf_stats *stats, const char *fmt, ...);
 
 /**
  * GBMS Storage API
