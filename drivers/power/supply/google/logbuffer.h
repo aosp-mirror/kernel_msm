@@ -15,9 +15,12 @@
 #ifndef __GOOGLE_LOGBUFFER_H_
 #define __GOOGLE_LOGBUFFER_H_
 
+#include <stdarg.h>
+
 struct logbuffer;
 void logbuffer_log(struct logbuffer *instance, const char *fmt, ...);
-
+void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
+		    va_list args);
 /*
  * Registers a new log buffer entry.
  * param name: name of the file in the /d/logbuffer/ directory.
