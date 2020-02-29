@@ -2338,8 +2338,10 @@ int regulator_enable(struct regulator *regulator)
 	mutex_lock(&rdev->mutex);
 
 	ret = _regulator_enable(rdev);
+#ifdef CONFIG_DEBUG_FS
 	if (ret == 0)
 		regulator->enabled++;
+#endif
 
 	mutex_unlock(&rdev->mutex);
 
@@ -2449,8 +2451,10 @@ int regulator_disable(struct regulator *regulator)
 
 	mutex_lock(&rdev->mutex);
 	ret = _regulator_disable(rdev);
+#ifdef CONFIG_DEBUG_FS
 	if (ret == 0)
 		regulator->enabled--;
+#endif
 	mutex_unlock(&rdev->mutex);
 
 	if (ret == 0 && rdev->supply)
@@ -3725,7 +3729,7 @@ EXPORT_SYMBOL_GPL(regulator_set_load);
 int regulator_allow_bypass(struct regulator *regulator, bool enable)
 {
 	struct regulator_dev *rdev = regulator->rdev;
-	int ret = 0;
+	int ret = 0, offset = 0;
 
 	if (!rdev->desc->ops->set_bypass)
 		return 0;
@@ -3735,11 +3739,15 @@ int regulator_allow_bypass(struct regulator *regulator, bool enable)
 
 	regulator_lock(rdev);
 
+#ifdef CONFIG_DEBUG_FS
+	offset = rdev->open_offset;
+#endif
+
 	if (enable && !regulator->bypass) {
 		rdev->bypass_count++;
 
 		if (rdev->bypass_count == rdev->open_count -
-		    rdev->open_offset) {
+		    offset) {
 			ret = rdev->desc->ops->set_bypass(rdev, enable);
 			if (ret != 0)
 				rdev->bypass_count--;
@@ -3749,7 +3757,7 @@ int regulator_allow_bypass(struct regulator *regulator, bool enable)
 		rdev->bypass_count--;
 
 		if (rdev->bypass_count != rdev->open_count -
-		    rdev->open_offset) {
+		    offset) {
 			ret = rdev->desc->ops->set_bypass(rdev, enable);
 			if (ret != 0)
 				rdev->bypass_count++;
@@ -5180,6 +5188,7 @@ static const struct file_operations regulator_summary_fops = {
 #endif
 };
 
+#ifdef CONFIG_DEBUG_FS
 static int _regulator_debug_print_enabled(struct device *dev, void *data)
 {
 	struct regulator_dev *rdev = dev_to_rdev(dev);
@@ -5244,6 +5253,7 @@ void regulator_debug_print_enabled(void)
 			     _regulator_debug_print_enabled);
 }
 EXPORT_SYMBOL(regulator_debug_print_enabled);
+#endif
 
 static int __init regulator_init(void)
 {

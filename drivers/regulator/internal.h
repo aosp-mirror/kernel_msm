@@ -43,7 +43,9 @@ struct regulator {
 	unsigned int bypass:1;
 	int uA_load;
 	struct regulator_voltage voltage[REGULATOR_STATES_NUM];
+#ifdef CONFIG_DEBUG_FS
 	int enabled;
+#endif
 	const char *supply_name;
 	struct device_attribute dev_attr;
 	struct regulator_dev *rdev;
