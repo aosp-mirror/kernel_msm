@@ -33,6 +33,16 @@
 
 #define ELAP_LIMIT_S 60
 
+
+void ttf_log(const struct batt_ttf_stats *stats, const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	logbuffer_vlog(stats->ttf_log, fmt, args);
+	va_end(args);
+}
+
 /* actual adapter current capability for this charging event
  * NOTE: peformance for a tier are known only after entering the tier
  */

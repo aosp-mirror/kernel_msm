@@ -264,7 +264,6 @@ struct batt_drv {
 	struct batt_ttf_stats ttf_stats;
 
 	/* logging */
-	struct logbuffer *ttf_log;
 	struct logbuffer *ssoc_log;
 
 	/* thermal */
@@ -2998,7 +2997,8 @@ static int gbatt_get_capacity_level(struct batt_ssoc_state *ssoc_state,
 	return capacity_level;
 }
 
-void log_ttf_estimate(const char *label, int ssoc, struct batt_drv *batt_drv)
+void bat_log_ttf_estimate(const char *label, int ssoc,
+			  struct batt_drv *batt_drv)
 {
 	int cc, err;
 	time_t res = 0;
@@ -3006,13 +3006,14 @@ void log_ttf_estimate(const char *label, int ssoc, struct batt_drv *batt_drv)
 
 	err = batt_ttf_estimate(&res, batt_drv);
 	if (err < 0) {
-		logbuffer_log(batt_drv->ttf_log, "%s ssoc=%d time=%ld err=%d",
-			(label) ? label : "", ssoc, get_boot_sec(), err);
+		logbuffer_log(batt_drv->ttf_stats.ttf_log,
+			      "%s ssoc=%d time=%ld err=%d",
+			      (label) ? label : "", ssoc, get_boot_sec(), err);
 		return;
 	}
 
 	cc = GPSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER);
-	logbuffer_log(batt_drv->ttf_log,
+	logbuffer_log(batt_drv->ttf_stats.ttf_log,
 		      "%s ssoc=%d cc=%d time=%ld %d:%d:%d (est=%ld)",
 		      (label) ? label : "", ssoc, cc / 1000, get_boot_sec(),
 		      res / 3600, (res % 3600) / 60, (res % 3600) % 60,
@@ -3066,7 +3067,7 @@ static void google_battery_work(struct work_struct *work)
 		ssoc = ssoc_get_capacity(ssoc_state);
 		if (prev_ssoc != ssoc) {
 			if (ssoc > prev_ssoc)
-				log_ttf_estimate("SSOC", ssoc, batt_drv);
+				bat_log_ttf_estimate("SSOC", ssoc, batt_drv);
 			notify_psy_changed = true;
 		}
 
@@ -3091,7 +3092,7 @@ static void google_battery_work(struct work_struct *work)
 		/* fuel gauge triggered recharge logic. */
 		full = (ssoc == SSOC_FULL);
 		if (full && !batt_drv->batt_full)
-			log_ttf_estimate("Full", ssoc, batt_drv);
+			bat_log_ttf_estimate("Full", ssoc, batt_drv);
 		batt_drv->batt_full = full;
 	}
 
@@ -3117,7 +3118,7 @@ static void google_battery_work(struct work_struct *work)
 
 		if (fg_status != POWER_SUPPLY_STATUS_DISCHARGING &&
 		    fg_status != POWER_SUPPLY_STATUS_NOT_CHARGING) {
-			log_ttf_estimate("Start", prev_ssoc, batt_drv);
+			bat_log_ttf_estimate("Start", prev_ssoc, batt_drv);
 			batt_drv->batt_fast_update_cnt = 0;
 		} else {
 			update_interval = BATT_WORK_FAST_RETRY_MS;
@@ -3685,8 +3686,18 @@ static void google_battery_init_work(struct work_struct *work)
 	/* time to full */
 	ret = ttf_stats_init(&batt_drv->ttf_stats, batt_drv->device,
 			     batt_drv->battery_capacity);
-	if (ret < 0)
+	if (ret < 0) {
 		pr_info("time to full not available\n");
+	} else {
+		batt_drv->ttf_stats.ttf_log = debugfs_logbuffer_register("ttf");
+		if (IS_ERR(batt_drv->ttf_stats.ttf_log)) {
+			ret = PTR_ERR(batt_drv->ttf_stats.ttf_log);
+			dev_err(batt_drv->device,
+				"failed to create ttf_log, ret=%d\n", ret);
+
+			batt_drv->ttf_stats.ttf_log = NULL;
+		}
+	}
 
 	/* google_resistance  */
 	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
@@ -3810,14 +3821,6 @@ static int google_battery_probe(struct platform_device *pdev)
 		batt_drv->ssoc_log = NULL;
 	}
 
-	batt_drv->ttf_log = debugfs_logbuffer_register("ttf");
-	if (IS_ERR(batt_drv->ttf_log)) {
-		ret = PTR_ERR(batt_drv->ttf_log);
-		dev_err(batt_drv->device,
-			"failed to create ttf_log, ret=%d\n", ret);
-		batt_drv->ttf_log = NULL;
-	}
-
 	/* Resistance Estimation configuration */
 	ret = of_property_read_u32(pdev->dev.of_node, "google,res-temp-hi",
 				   &batt_drv->res_state.res_temp_high);
@@ -3861,6 +3864,8 @@ static int google_battery_remove(struct platform_device *pdev)
 	struct batt_drv *batt_drv = platform_get_drvdata(pdev);
 
 	if (batt_drv) {
+		struct batt_ttf_stats *ttf_stats = &batt_drv->ttf_stats;
+
 		if (batt_drv->history)
 			gbms_storage_cleanup_device(batt_drv->history);
 		if (batt_drv->fg_psy)
@@ -3875,8 +3880,8 @@ static int google_battery_remove(struct platform_device *pdev)
 
 		if (batt_drv->ssoc_log)
 			debugfs_logbuffer_unregister(batt_drv->ssoc_log);
-		if (batt_drv->ttf_log)
-			debugfs_logbuffer_unregister(batt_drv->ttf_log);
+		if (ttf_stats->ttf_log)
+			debugfs_logbuffer_unregister(ttf_stats->ttf_log);
 		if (batt_drv->tz_dev)
 			thermal_zone_of_sensor_unregister(batt_drv->device,
 					batt_drv->tz_dev);
