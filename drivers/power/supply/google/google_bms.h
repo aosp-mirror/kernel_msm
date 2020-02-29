@@ -296,7 +296,7 @@ int ttf_soc_estimate(time_t *res,
 
 void ttf_soc_init(struct ttf_soc_stats *dst);
 
-int ttf_tier_cstr(char *buff, int size, struct ttf_tier_stat *t_stat);
+int ttf_tier_cstr(char *buff, int size, const struct ttf_tier_stat *t_stat);
 
 int ttf_tier_estimate(time_t *res,
 		      const struct batt_ttf_stats *ttf_stats,
@@ -322,6 +322,9 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 
 void ttf_log(const struct batt_ttf_stats *stats, const char *fmt, ...);
 
+ssize_t ttf_dump_details(char *buf, int max_size,
+			 const struct batt_ttf_stats *ttf_stats,
+			 int last_soc);
 /**
  * GBMS Storage API
  * The API provides functions to access to data stored in the persistent and
