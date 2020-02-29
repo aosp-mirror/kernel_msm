@@ -957,8 +957,8 @@ done:
 
 /* ------------------------------------------------------------------------- */
 
-static void batt_chg_stats_init(struct gbms_charging_event *ce_data,
-				const struct gbms_chg_profile *profile)
+static void cev_stats_init(struct gbms_charging_event *ce_data,
+			   const struct gbms_chg_profile *profile)
 {
 	int i;
 
@@ -978,7 +978,6 @@ static void batt_chg_stats_init(struct gbms_charging_event *ce_data,
 		ce_data->tier_stats[i].vtier_idx = i;
 		ce_data->tier_stats[i].soc_in = -1;
 	}
-
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
@@ -990,7 +989,7 @@ static void batt_chg_stats_start(struct batt_drv *batt_drv)
 
 	mutex_lock(&batt_drv->stats_lock);
 	ad.v = batt_drv->ce_data.adapter_details.v;
-	batt_chg_stats_init(ce_data, &batt_drv->chg_profile);
+	cev_stats_init(ce_data, &batt_drv->chg_profile);
 	batt_drv->ce_data.adapter_details.v = ad.v;
 
 	vin = GPSY_GET_PROP(batt_drv->fg_psy,
@@ -2882,7 +2881,7 @@ static ssize_t batt_ctl_chg_stats(struct device *dev,
 	switch (buf[0]) {
 	case 0:
 	case '0': /* invalidate current qual */
-		batt_chg_stats_init(&batt_drv->ce_qual, &batt_drv->chg_profile);
+		cev_stats_init(&batt_drv->ce_qual, &batt_drv->chg_profile);
 		break;
 	}
 	mutex_unlock(&batt_drv->stats_lock);
@@ -2947,7 +2946,7 @@ static ssize_t batt_show_ttf_details(struct device *dev,
 	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
 	struct batt_ttf_stats *ttf_stats;
-	int i, len = 0;
+	int len;
 
 	if (!batt_drv->ssoc_state.buck_enabled)
 		return -ENODATA;
@@ -2959,39 +2958,11 @@ static ssize_t batt_show_ttf_details(struct device *dev,
 	mutex_lock(&batt_drv->stats_lock);
 	/* update a private copy of ttf stats */
 	ttf_stats_update(ttf_stats_dup(ttf_stats, &batt_drv->ttf_stats),
-			 &batt_drv->ce_data, true);
+			 &batt_drv->ce_data, false);
 	mutex_unlock(&batt_drv->stats_lock);
 
-	/* interleave tier with SOC data */
-	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
-		int next_soc_in;
-
-		len += scnprintf(&buf[len], PAGE_SIZE - len, "%d: ", i);
-		len += ttf_tier_cstr(&buf[len], PAGE_SIZE - len,
-				     &ttf_stats->tier_stats[i]);
-		len += scnprintf(&buf[len], PAGE_SIZE - len, "\n");
-
-		/* continue only first */
-		if (ttf_stats->tier_stats[i].avg_time == 0)
-			continue;
-
-		if (i == GBMS_STATS_TIER_COUNT - 1) {
-			next_soc_in = -1;
-		} else {
-			next_soc_in = ttf_stats->tier_stats[i + 1].soc_in >> 8;
-			if (next_soc_in == 0)
-				next_soc_in = -1;
-		}
-
-		if (next_soc_in == -1)
-			next_soc_in = batt_drv->ce_data.last_soc - 1;
-
-		len += ttf_soc_cstr(&buf[len], PAGE_SIZE - len,
-				    &ttf_stats->soc_stats,
-				    ttf_stats->tier_stats[i].soc_in >> 8,
-				    next_soc_in);
-	}
-
+	len = ttf_dump_details(buf, PAGE_SIZE, ttf_stats,
+			       batt_drv->ce_data.last_soc);
 	kfree(ttf_stats);
 
 	return len;
@@ -4144,8 +4115,8 @@ static void google_battery_init_work(struct work_struct *work)
 		gbms_dump_chg_profile(&batt_drv->chg_profile);
 	}
 
-	batt_chg_stats_init(&batt_drv->ce_data, &batt_drv->chg_profile);
-	batt_chg_stats_init(&batt_drv->ce_qual, &batt_drv->chg_profile);
+	cev_stats_init(&batt_drv->ce_data, &batt_drv->chg_profile);
+	cev_stats_init(&batt_drv->ce_qual, &batt_drv->chg_profile);
 
 	batt_drv->fg_nb.notifier_call = psy_changed;
 	ret = power_supply_reg_notifier(&batt_drv->fg_nb);
