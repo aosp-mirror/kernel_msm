@@ -22,7 +22,7 @@
 #include "msm_bus_adhoc.h"
 
 #define CREATE_TRACE_POINTS
-#include <trace/events/trace_msm_bus.h>
+#include <trace/events/trace_msm_bus_dbg.h>
 
 #define MAX_BUFF_SIZE 4096
 #define FILL_LIMIT 128
