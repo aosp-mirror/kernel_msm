@@ -1817,7 +1817,7 @@ static int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	 * process context, not interrupt context (or so documenation
 	 * for usb_set_interface() and usb_set_configuration() claim).
 	 */
-	if (xhci_endpoint_init(xhci, virt_dev, udev, ep, GFP_KERNEL) < 0) {
+	if (xhci_endpoint_init(xhci, virt_dev, udev, ep, GFP_NOIO) < 0) {
 		dev_dbg(&udev->dev, "%s - could not initialize ep %#x\n",
 				__func__, ep->desc.bEndpointAddress);
 		return -ENOMEM;
@@ -3536,7 +3536,7 @@ static int xhci_discover_or_reset_device(struct usb_hcd *hcd,
 	 * reset as part of error handling, so use GFP_NOIO instead of
 	 * GFP_KERNEL.
 	 */
-	reset_device_cmd = xhci_alloc_command(xhci, false, true, GFP_KERNEL);
+	reset_device_cmd = xhci_alloc_command(xhci, false, true, GFP_NOIO);
 	if (!reset_device_cmd) {
 		xhci_dbg(xhci, "Couldn't allocate command structure.\n");
 		return -ENOMEM;
@@ -3797,7 +3797,7 @@ int xhci_alloc_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	 * xhci_discover_or_reset_device(), which may be called as part of
 	 * mass storage driver error handling.
 	 */
-	if (!xhci_alloc_virt_device(xhci, slot_id, udev, GFP_KERNEL)) {
+	if (!xhci_alloc_virt_device(xhci, slot_id, udev, GFP_NOIO)) {
 		xhci_warn(xhci, "Could not allocate xHCI USB device data structures\n");
 		goto disable_slot;
 	}
@@ -5120,7 +5120,7 @@ static int  xhci_stop_endpoint(struct usb_hcd *hcd,
 	unsigned long flags;
 	int ret = 0;
 
-	cmd = xhci_alloc_command(xhci, false, true, GFP_KERNEL);
+	cmd = xhci_alloc_command(xhci, false, true, GFP_NOIO);
 	if (!cmd)
 		return -ENOMEM;
 

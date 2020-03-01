@@ -1063,7 +1063,7 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 			hcd = bus_to_hcd(hdev->bus);
 			if (hcd->driver->update_hub_device) {
 				ret = hcd->driver->update_hub_device(hcd, hdev,
-						&hub->tt, GFP_KERNEL);
+						&hub->tt, GFP_NOIO);
 				if (ret < 0) {
 					dev_err(hub->intfdev, "Host not "
 							"accepting hub info "
@@ -1231,7 +1231,7 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
  init3:
 	hub->quiescing = 0;
 
-	status = usb_submit_urb(hub->urb, GFP_KERNEL);
+	status = usb_submit_urb(hub->urb, GFP_NOIO);
 	if (status < 0)
 		dev_err(hub->intfdev, "activate --> %d\n", status);
 	if (hub->has_indicators && blinkenlights)
@@ -3766,7 +3766,7 @@ static int usb_req_set_sel(struct usb_device *udev, enum usb3_link_state state)
 	 * which may be initiated by an error path of a mass storage driver.
 	 * Therefore, use GFP_NOIO.
 	 */
-	sel_values = kmalloc(sizeof *(sel_values), GFP_KERNEL);
+	sel_values = kmalloc(sizeof *(sel_values), GFP_NOIO);
 	if (!sel_values)
 		return -ENOMEM;
 
@@ -4523,7 +4523,7 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 			}
 
 #define GET_DESCRIPTOR_BUFSIZE	64
-			buf = kmalloc(GET_DESCRIPTOR_BUFSIZE, GFP_KERNEL);
+			buf = kmalloc(GET_DESCRIPTOR_BUFSIZE, GFP_NOIO);
 			if (!buf) {
 				retval = -ENOMEM;
 				continue;
@@ -5413,7 +5413,7 @@ static int descriptors_changed(struct usb_device *udev,
 		len = max(len, old_length);
 	}
 
-	buf = kmalloc(len, GFP_KERNEL);
+	buf = kmalloc(len, GFP_NOIO);
 	if (!buf)
 		/* assume the worst */
 		return 1;

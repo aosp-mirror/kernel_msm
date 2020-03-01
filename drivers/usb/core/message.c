@@ -53,7 +53,7 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 	init_completion(&ctx.done);
 	urb->context = &ctx;
 	urb->actual_length = 0;
-	retval = usb_submit_urb(urb, GFP_KERNEL);
+	retval = usb_submit_urb(urb, GFP_NOIO);
 	if (unlikely(retval))
 		goto out;
 
@@ -90,7 +90,7 @@ static int usb_internal_control_msg(struct usb_device *usb_dev,
 	int retv;
 	int length;
 
-	urb = usb_alloc_urb(0, GFP_KERNEL);
+	urb = usb_alloc_urb(0, GFP_NOIO);
 	if (!urb)
 		return -ENOMEM;
 
@@ -138,7 +138,7 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request,
 	struct usb_ctrlrequest *dr;
 	int ret;
 
-	dr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL);
+	dr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_NOIO);
 	if (!dr)
 		return -ENOMEM;
 
@@ -524,7 +524,7 @@ void usb_sg_wait(struct usb_sg_request *io)
 		io->urbs[i]->dev = io->dev;
 		spin_unlock_irq(&io->lock);
 
-		retval = usb_submit_urb(io->urbs[i], GFP_KERNEL);
+		retval = usb_submit_urb(io->urbs[i], GFP_NOIO);
 
 		switch (retval) {
 			/* maybe we retrying will recover */
@@ -823,7 +823,7 @@ int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 	buf[0] = 0;
 	if (index <= 0 || index >= 256)
 		return -EINVAL;
-	tbuf = kmalloc(256, GFP_KERNEL);
+	tbuf = kmalloc(256, GFP_NOIO);
 	if (!tbuf)
 		return -ENOMEM;
 
@@ -871,11 +871,11 @@ char *usb_cache_string(struct usb_device *udev, int index)
 	if (index <= 0)
 		return NULL;
 
-	buf = kmalloc(MAX_USB_STRING_SIZE, GFP_KERNEL);
+	buf = kmalloc(MAX_USB_STRING_SIZE, GFP_NOIO);
 	if (buf) {
 		len = usb_string(udev, index, buf, MAX_USB_STRING_SIZE);
 		if (len > 0) {
-			smallbuf = kmalloc(++len, GFP_KERNEL);
+			smallbuf = kmalloc(++len, GFP_NOIO);
 			if (!smallbuf)
 				return buf;
 			memcpy(smallbuf, buf, len);
@@ -910,7 +910,7 @@ int usb_get_device_descriptor(struct usb_device *dev, unsigned int size)
 
 	if (size > sizeof(*desc))
 		return -EINVAL;
-	desc = kmalloc(sizeof(*desc), GFP_KERNEL);
+	desc = kmalloc(sizeof(*desc), GFP_NOIO);
 	if (!desc)
 		return -ENOMEM;
 
@@ -1776,14 +1776,14 @@ int usb_set_configuration(struct usb_device *dev, int configuration)
 	if (cp) {
 		nintf = cp->desc.bNumInterfaces;
 		new_interfaces = kmalloc(nintf * sizeof(*new_interfaces),
-				GFP_KERNEL);
+				GFP_NOIO);
 		if (!new_interfaces)
 			return -ENOMEM;
 
 		for (; n < nintf; ++n) {
 			new_interfaces[n] = kzalloc(
 					sizeof(struct usb_interface),
-					GFP_KERNEL);
+					GFP_NOIO);
 			if (!new_interfaces[n]) {
 				ret = -ENOMEM;
 free_interfaces:

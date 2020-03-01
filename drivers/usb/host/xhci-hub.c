@@ -401,7 +401,7 @@ static int xhci_stop_device(struct xhci_hcd *xhci, int slot_id, int suspend)
 
 	trace_xhci_stop_device(virt_dev);
 
-	cmd = xhci_alloc_command(xhci, false, true, GFP_KERNEL);
+	cmd = xhci_alloc_command(xhci, false, true, GFP_NOIO);
 	if (!cmd)
 		return -ENOMEM;
 
