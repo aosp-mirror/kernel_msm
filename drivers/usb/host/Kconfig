@@ -28,6 +28,11 @@ config USB_XHCI_HCD
 
 if USB_XHCI_HCD
 
+config USB_XHCI_REPLACE_POLICY
+	bool "use to replace memory alloc policy"
+	help
+	  say Y here if you want to change the memory alloc policy
+
 config USB_XHCI_PCI
        tristate
        depends on USB_PCI
