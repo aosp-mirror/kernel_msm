@@ -6,7 +6,7 @@
 #include <linux/of.h>
 #include <linux/batterydata-lib.h>
 
-#ifdef CONFIG_OF_BATTERYDATA
+#if IS_ENABLED(CONFIG_OF_BATTERYDATA)
 /**
  * of_batterydata_read_data() - Populate battery data from the device tree
  * @container_node: pointer to the battery-data container device node
