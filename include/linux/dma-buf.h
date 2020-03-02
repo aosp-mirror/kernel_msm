@@ -444,7 +444,9 @@ struct dma_buf {
 		__poll_t active;
 	} cb_excl, cb_shared;
 
+#if defined(CONFIG_DEBUG_DMA_BUF_REF)
 	struct list_head refs;
+#endif
 	dma_buf_destructor dtor;
 	void *dtor_data;
 };
