@@ -608,7 +608,9 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	init_waitqueue_head(&dmabuf->poll);
 	dmabuf->cb_excl.poll = dmabuf->cb_shared.poll = &dmabuf->poll;
 	dmabuf->cb_excl.active = dmabuf->cb_shared.active = 0;
+#if defined(CONFIG_DEBUG_FS)
 	dmabuf->ktime = ktime_get();
+#endif
 
 	if (!resv) {
 		resv = (struct reservation_object *)&dmabuf[1];
