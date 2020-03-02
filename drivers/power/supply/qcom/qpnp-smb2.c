@@ -1702,7 +1702,11 @@ static int smb2_init_hw(struct smb2 *chip)
 				SUSPEND_ON_COLLAPSE_USBIN_BIT
 					| USBIN_AICL_HDC_EN_BIT
 					| USBIN_AICL_RERUN_EN_BIT
-					| USBIN_AICL_EN_BIT, 1);
+					| USBIN_AICL_EN_BIT,
+				SUSPEND_ON_COLLAPSE_USBIN_BIT
+					| USBIN_AICL_HDC_EN_BIT
+					| USBIN_AICL_RERUN_EN_BIT
+					| USBIN_AICL_EN_BIT);
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't configure AICL rc=%d\n",
 									rc);
