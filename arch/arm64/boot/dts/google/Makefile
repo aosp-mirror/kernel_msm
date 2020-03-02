@@ -6,7 +6,9 @@ dtbo-$(CONFIG_BOARD_BRAMBLE) += \
 	lito-bramble-proto1_1-overlay.dtbo \
 	lito-v2-bramble-proto1_2-overlay.dtbo \
 	lito-bramble-proto1_6-overlay.dtbo \
-	lito-v2-bramble-evt-overlay.dtbo
+	lito-v2-bramble-evt-overlay.dtbo \
+	lito-v2-bramble-evt1_8-overlay.dtbo \
+	lito-v2-bramble-evt1_9-overlay.dtbo
 
 
 lito-bramble-dev1.0-overlay.dtbo-base := qcom-base/lito.dtb
@@ -14,8 +16,10 @@ lito-bramble-dev1.1-overlay.dtbo-base := qcom-base/lito.dtb
 lito-bramble-proto-overlay.dtbo-base := qcom-base/lito.dtb
 lito-bramble-proto1_1-overlay.dtbo-base := qcom-base/lito.dtb
 lito-v2-bramble-proto1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
-lito-v2-bramble-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-bramble-proto1_6-overlay.dtbo-base := qcom-base/lito.dtb
+lito-v2-bramble-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-bramble-evt1_8-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-bramble-evt1_9-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
 
 dtbo-$(CONFIG_BOARD_BRAMBLE) += \
