@@ -277,7 +277,7 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 			err = -EAGAIN;
 	}
 
-	if (err || !ufshcd_is_auto_hibern8_supported(hba)) {
+	if (err) {
 		pm_runtime_mark_last_busy(hba->dev);
 		pm_runtime_put_noidle(hba->dev);
 		return count;

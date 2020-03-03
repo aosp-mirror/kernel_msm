@@ -10915,11 +10915,6 @@ static void ufshcd_init_manual_gc(struct ufs_hba *hba)
 	struct ufs_manual_gc *mgc = &hba->manual_gc;
 	char wq_name[sizeof("ufs_mgc_hibern8_work")];
 
-	if (!ufshcd_is_auto_hibern8_supported(hba)) {
-		hba->manual_gc.state = MANUAL_GC_DISABLE;
-		return;
-	}
-
 	mgc->state = MANUAL_GC_ENABLE;
 	mgc->hagc_support = true;
 	mgc->delay_ms = UFSHCD_MANUAL_GC_HOLD_HIBERN8;
@@ -10935,9 +10930,6 @@ static void ufshcd_init_manual_gc(struct ufs_hba *hba)
 
 static void ufshcd_exit_manual_gc(struct ufs_hba *hba)
 {
-	if (!ufshcd_is_auto_hibern8_supported(hba))
-		return;
-
 	hrtimer_cancel(&hba->manual_gc.hrtimer);
 	cancel_work_sync(&hba->manual_gc.hibern8_work);
 	destroy_workqueue(hba->manual_gc.mgc_workq);
