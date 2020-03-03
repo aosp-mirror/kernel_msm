@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -287,12 +287,12 @@ static int cam_ois_apply_settings(struct cam_ois_ctrl_t *o_ctrl,
 }
 
 static int cam_ois_slaveInfo_pkt_parser(struct cam_ois_ctrl_t *o_ctrl,
-	uint32_t *cmd_buf, size_t len)
+	uint32_t *cmd_buf)
 {
 	int32_t rc = 0;
 	struct cam_cmd_ois_info *ois_info;
 
-	if (!o_ctrl || !cmd_buf || len < sizeof(struct cam_cmd_ois_info)) {
+	if (!o_ctrl || !cmd_buf) {
 		CAM_ERR(CAM_OIS, "Invalid Args");
 		return -EINVAL;
 	}
@@ -773,7 +773,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 	struct cam_cmd_buf_desc        *cmd_desc = NULL;
 	uint64_t                        generic_pkt_addr;
 	size_t                          pkt_len;
-	size_t                          remain_len = 0;
 	struct cam_packet              *csl_packet = NULL;
 	size_t                          len_of_buff = 0;
 	uint32_t                       *offset = NULL, *cmd_buf;
@@ -796,26 +795,15 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		return rc;
 	}
 
-	remain_len = pkt_len;
-	if ((sizeof(struct cam_packet) > pkt_len) ||
-		((size_t)dev_config.offset >= pkt_len -
-		sizeof(struct cam_packet))) {
+	if (dev_config.offset > pkt_len) {
 		CAM_ERR(CAM_OIS,
 			"offset is out of bound: off: %lld len: %zu",
 			dev_config.offset, pkt_len);
 		return -EINVAL;
 	}
 
-	remain_len -= (size_t)dev_config.offset;
 	csl_packet = (struct cam_packet *)
-		(generic_pkt_addr + (uint32_t)dev_config.offset);
-
-	if (cam_packet_util_validate_packet(csl_packet,
-		remain_len)) {
-		CAM_ERR(CAM_OIS, "Invalid packet params");
-		return -EINVAL;
-	}
-
+		(generic_pkt_addr + dev_config.offset);
 	switch (csl_packet->header.op_code & 0xFFFFFF) {
 	case CAM_OIS_PACKET_OPCODE_INIT:
 		offset = (uint32_t *)&csl_packet->payload;
@@ -839,22 +827,13 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				CAM_ERR(CAM_OIS, "invalid cmd buf");
 				return -EINVAL;
 			}
-
-			if ((len_of_buff < sizeof(struct common_header)) ||
-				(cmd_desc[i].offset > (len_of_buff -
-				sizeof(struct common_header)))) {
-				CAM_ERR(CAM_OIS,
-					"Invalid length for sensor cmd");
-				return -EINVAL;
-			}
-			remain_len = len_of_buff - cmd_desc[i].offset;
 			cmd_buf += cmd_desc[i].offset / sizeof(uint32_t);
 			cmm_hdr = (struct common_header *)cmd_buf;
 
 			switch (cmm_hdr->cmd_type) {
 			case CAMERA_SENSOR_CMD_TYPE_I2C_INFO:
 				rc = cam_ois_slaveInfo_pkt_parser(
-					o_ctrl, cmd_buf, remain_len);
+					o_ctrl, cmd_buf);
 				if (rc < 0) {
 					CAM_ERR(CAM_OIS,
 					"Failed in parsing slave info");
@@ -868,7 +847,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				rc = cam_sensor_update_power_settings(
 					cmd_buf,
 					total_cmd_buf_in_bytes,
-					power_info, remain_len);
+					power_info);
 				if (rc) {
 					CAM_ERR(CAM_OIS,
 					"Failed: parse power settings");

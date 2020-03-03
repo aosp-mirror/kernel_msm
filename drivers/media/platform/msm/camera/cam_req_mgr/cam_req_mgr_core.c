@@ -1253,9 +1253,9 @@ static struct cam_req_mgr_core_link *__cam_req_mgr_reserve_link(
 		return NULL;
 	}
 
-	if (session->num_links >= MAXIMUM_LINKS_PER_SESSION) {
+	if (session->num_links >= MAX_LINKS_PER_SESSION) {
 		CAM_ERR(CAM_CRM, "Reached max links %d per session limit %d",
-			session->num_links, MAXIMUM_LINKS_PER_SESSION);
+			session->num_links, MAX_LINKS_PER_SESSION);
 		return NULL;
 	}
 	for (i = 0; i < MAX_LINKS_PER_SESSION; i++) {
@@ -1290,7 +1290,7 @@ static struct cam_req_mgr_core_link *__cam_req_mgr_reserve_link(
 
 	mutex_lock(&session->lock);
 	/*  Loop through and find a free index */
-	for (i = 0; i < MAXIMUM_LINKS_PER_SESSION; i++) {
+	for (i = 0; i < MAX_LINKS_PER_SESSION; i++) {
 		if (!session->links[i]) {
 			CAM_DBG(CAM_CRM,
 				"Free link index %d found, num_links=%d",
@@ -1300,7 +1300,7 @@ static struct cam_req_mgr_core_link *__cam_req_mgr_reserve_link(
 		}
 	}
 
-	if (i == MAXIMUM_LINKS_PER_SESSION) {
+	if (i == MAX_LINKS_PER_SESSION) {
 		CAM_ERR(CAM_CRM, "Free link index not found");
 		goto error;
 	}
@@ -1363,7 +1363,7 @@ static void __cam_req_mgr_unreserve_link(
 		return;
 	}
 
-	for (i = 0; i < MAXIMUM_LINKS_PER_SESSION; i++) {
+	for (i = 0; i < MAX_LINKS_PER_SESSION; i++) {
 		if (session->links[i] == link)
 			session->links[i] = NULL;
 	}
@@ -1375,7 +1375,7 @@ static void __cam_req_mgr_unreserve_link(
 		 * of only having 2 links in a given session
 		 */
 		session->sync_mode = CAM_REQ_MGR_SYNC_MODE_NO_SYNC;
-		for (i = 0; i < MAXIMUM_LINKS_PER_SESSION; i++) {
+		for (i = 0; i < MAX_LINKS_PER_SESSION; i++) {
 			if (session->links[i])
 				session->links[i]->sync_link = NULL;
 		}
@@ -2291,7 +2291,7 @@ int cam_req_mgr_destroy_session(
 			ses_info->session_hdl,
 			cam_session->num_links);
 
-		for (i = 0; i < MAXIMUM_LINKS_PER_SESSION; i++) {
+		for (i = 0; i < MAX_LINKS_PER_SESSION; i++) {
 			link = cam_session->links[i];
 
 			if (!link)
@@ -2532,8 +2532,7 @@ int cam_req_mgr_sync_config(
 	}
 
 	if ((sync_info->num_links < 0) ||
-		(sync_info->num_links >
-		MAX_LINKS_PER_SESSION)) {
+		(sync_info->num_links > MAX_LINKS_PER_SESSION)) {
 		CAM_ERR(CAM_CRM, "Invalid num links %d", sync_info->num_links);
 		return -EINVAL;
 	}
@@ -2675,13 +2674,6 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control)
 
 	if (!control) {
 		CAM_ERR(CAM_CRM, "Control command is NULL");
-		rc = -EINVAL;
-		goto end;
-	}
-
-	if (control->num_links > MAX_LINKS_PER_SESSION) {
-		CAM_ERR(CAM_CRM, "Invalid number of links %d",
-			control->num_links);
 		rc = -EINVAL;
 		goto end;
 	}

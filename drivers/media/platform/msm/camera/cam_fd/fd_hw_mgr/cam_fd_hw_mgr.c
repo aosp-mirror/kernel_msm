@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,8 +30,7 @@
 
 static struct cam_fd_hw_mgr g_fd_hw_mgr;
 
-static int cam_fd_mgr_util_packet_validate(struct cam_packet *packet,
-	size_t remain_len)
+static int cam_fd_mgr_util_packet_validate(struct cam_packet *packet)
 {
 	struct cam_cmd_buf_desc *cmd_desc = NULL;
 	int i, rc;
@@ -51,7 +50,7 @@ static int cam_fd_mgr_util_packet_validate(struct cam_packet *packet,
 		packet->patch_offset, packet->num_patches,
 		packet->kmd_cmd_buf_offset, packet->kmd_cmd_buf_index);
 
-	if (cam_packet_util_validate_packet(packet, remain_len)) {
+	if (cam_packet_util_validate_packet(packet)) {
 		CAM_ERR(CAM_FD, "invalid packet:%d %d %d %d %d",
 			packet->kmd_cmd_buf_index,
 			packet->num_cmd_buf, packet->cmd_buf_offset,
@@ -608,13 +607,7 @@ static int cam_fd_mgr_util_prepare_io_buf_info(int32_t iommu_hdl,
 						rc);
 					return rc;
 				}
-				if (io_cfg[i].offsets[plane] >= size) {
-					CAM_ERR(CAM_FD,
-						"Invalid cpu buf %d %d %d",
-						io_cfg[i].direction,
-						io_cfg[i].resource_type, plane);
-					return -EINVAL;
-				}
+
 				cpu_addr[plane] += io_cfg[i].offsets[plane];
 			}
 
@@ -1578,8 +1571,7 @@ static int cam_fd_mgr_hw_prepare_update(void *hw_mgr_priv,
 		goto error;
 	}
 
-	rc = cam_fd_mgr_util_packet_validate(prepare->packet,
-		prepare->remain_len);
+	rc = cam_fd_mgr_util_packet_validate(prepare->packet);
 	if (rc) {
 		CAM_ERR(CAM_FD, "Error in packet validation %d", rc);
 		goto error;
