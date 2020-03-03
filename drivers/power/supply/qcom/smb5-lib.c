@@ -5338,6 +5338,17 @@ irqreturn_t usbin_uv_irq_handler(int irq, void *data)
 	int rc;
 	u8 stat = 0, max_pulses = 0;
 
+	/* Ignore IRQ if external vbus is enabled */
+	if (IS_ERR_OR_NULL(chg->ext_vbus)) {
+		chg->ext_vbus = devm_regulator_get(chg->dev, "ext-vbus");
+		if (IS_ERR_OR_NULL(chg->ext_vbus))
+			smblib_err(chg, "Can't find ext-vbus-supply\n");
+	}
+
+	if (!IS_ERR_OR_NULL(chg->ext_vbus)
+	    && regulator_is_enabled(chg->ext_vbus))
+		return IRQ_HANDLED;
+
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
 
 	if ((chg->wa_flags & WEAK_ADAPTER_WA)
@@ -5884,6 +5895,17 @@ irqreturn_t usb_source_change_irq_handler(int irq, void *data)
 
 	/* PD session is ongoing, ignore BC1.2 and QC detection */
 	if (chg->pd_active)
+		return IRQ_HANDLED;
+
+	/* Ignore IRQ if external vbus is enabled */
+	if (IS_ERR_OR_NULL(chg->ext_vbus)) {
+		chg->ext_vbus = devm_regulator_get(chg->dev, "ext-vbus");
+		if (IS_ERR_OR_NULL(chg->ext_vbus))
+			smblib_err(chg, "Can't find ext-vbus-supply\n");
+	}
+
+	if (!IS_ERR_OR_NULL(chg->ext_vbus)
+	    && regulator_is_enabled(chg->ext_vbus))
 		return IRQ_HANDLED;
 
 	rc = smblib_read(chg, APSD_STATUS_REG, &stat);
