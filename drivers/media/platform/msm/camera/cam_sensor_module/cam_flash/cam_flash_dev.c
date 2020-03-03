@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -351,6 +351,8 @@ static int32_t cam_flash_platform_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	strlcpy(flash_ctrl->device_name, CAM_FLASH_NAME,
+		sizeof(flash_ctrl->device_name));
 	flash_ctrl->v4l2_dev_str.internal_ops =
 		&cam_flash_internal_ops;
 	flash_ctrl->v4l2_dev_str.ops = &cam_flash_subdev_ops;

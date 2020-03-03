@@ -896,7 +896,8 @@ static int diag_cmd_set_msg_mask(unsigned char *src_buf, int src_len,
 		goto end;
 	if (mask_size + write_len > dest_len)
 		mask_size = dest_len - write_len;
-	memcpy(dest_buf + write_len, src_buf + header_len, mask_size);
+	if (mask_size && src_len >= header_len + mask_size)
+		memcpy(dest_buf + write_len, src_buf + header_len, mask_size);
 	write_len += mask_size;
 	for (i = 0; i < NUM_MD_SESSIONS; i++) {
 		if (i == APPS_DATA)
@@ -2302,6 +2303,8 @@ int diag_process_apps_masks(unsigned char *buf, int len, int pid)
 		return -EINVAL;
 
 	if (*buf == DIAG_CMD_LOG_CONFIG) {
+		if (len < (2 * sizeof(int)))
+			return -EINVAL;
 		sub_cmd = *(int *)(buf + sizeof(int));
 		switch (sub_cmd) {
 		case DIAG_CMD_OP_LOG_DISABLE:
@@ -2319,6 +2322,8 @@ int diag_process_apps_masks(unsigned char *buf, int len, int pid)
 			break;
 		}
 	} else if (*buf == DIAG_CMD_MSG_CONFIG) {
+		if (len < (2 * sizeof(uint8_t)))
+			return -EINVAL;
 		sub_cmd = *(uint8_t *)(buf + sizeof(uint8_t));
 		switch (sub_cmd) {
 		case DIAG_CMD_OP_GET_SSID_RANGE:

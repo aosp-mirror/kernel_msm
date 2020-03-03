@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2017 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -75,7 +75,8 @@ enum print_reason {
 #define OV_VOTER			"OV_VOTER"
 #define USBIN_PLUGIN_VOTER		"USBIN_PLUGIN_VOTER"
 #define CHARGER_MODE_VOTER		"CHARGER_MODE_VOTER"
-
+#define FG_ESR_VOTER			"FG_ESR_VOTER"
+#define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
@@ -365,6 +366,9 @@ struct smb_charger {
 	bool			is_audio_adapter;
 	bool			hvdcp_disable;
 	u8			in_explicit_contract;
+	bool			disable_stat_sw_override;
+	bool			in_chg_lock;
+	bool			fcc_stepper_enable;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -373,6 +377,8 @@ struct smb_charger {
 	bool			try_sink_active;
 	int			boost_current_ua;
 	int			temp_speed_reading_count;
+	int			qc2_max_pulses;
+	bool			non_compliant_chg_detected;
 	bool			fake_usb_insertion;
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
@@ -462,14 +468,6 @@ int smblib_get_prop_system_temp_level(struct smb_charger *chg,
 int smblib_get_prop_system_temp_level_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_input_current_limited(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_voltage_now(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_current_now(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_temp(struct smb_charger *chg,
-				union power_supply_propval *val);
-int smblib_get_prop_batt_charge_counter(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_charge_full(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -569,6 +567,9 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua);
 int smblib_get_icl_current(struct smb_charger *chg, int *icl_ua);
 int smblib_get_charge_current(struct smb_charger *chg, int *total_current_ua);
 int smblib_get_prop_pr_swap_in_progress(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_get_prop_from_bms(struct smb_charger *chg,
+				enum power_supply_property psp,
 				union power_supply_propval *val);
 int smblib_set_prop_pr_swap_in_progress(struct smb_charger *chg,
 				const union power_supply_propval *val);

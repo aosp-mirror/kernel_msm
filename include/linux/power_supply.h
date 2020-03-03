@@ -306,6 +306,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_PD_IN_EXPLICIT_CONTRACT,
 	POWER_SUPPLY_PROP_CHARGER_STATUS_FAST,
 	POWER_SUPPLY_PROP_BATT_CE_CTRL,
+	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_PROP_CHARGE_COUNTER_EXT,
 	/* Properties of type `const char *' */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -152,11 +152,12 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		return -EIO;
 	}
 	pid = session_info->pid;
-	mutex_unlock(&driver->md_session_lock);
 
 	ch = &diag_md[id];
-	if (!ch)
+	if (!ch) {
+		mutex_unlock(&driver->md_session_lock);
 		return -EINVAL;
+	}
 
 	spin_lock_irqsave(&ch->lock, flags);
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
@@ -172,8 +173,10 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 	}
 	spin_unlock_irqrestore(&ch->lock, flags);
 
-	if (found)
+	if (found) {
+		mutex_unlock(&driver->md_session_lock);
 		return -ENOMEM;
+	}
 
 	spin_lock_irqsave(&ch->lock, flags);
 	for (i = 0; i < ch->num_tbl_entries && !found; i++) {
@@ -186,6 +189,7 @@ int diag_md_write(int id, unsigned char *buf, int len, int ctx)
 		}
 	}
 	spin_unlock_irqrestore(&ch->lock, flags);
+	mutex_unlock(&driver->md_session_lock);
 
 	if (!found) {
 		pr_err_ratelimited("diag: Unable to find an empty space in table, please reduce logging rate, proc: %d\n",

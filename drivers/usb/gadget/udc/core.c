@@ -899,7 +899,7 @@ void usb_gadget_unmap_request_by_dev(struct device *dev,
 				is_in ? DMA_TO_DEVICE : DMA_FROM_DEVICE);
 
 		req->dma_mapped = 0;
-    }
+	}
 }
 EXPORT_SYMBOL_GPL(usb_gadget_unmap_request_by_dev);
 
