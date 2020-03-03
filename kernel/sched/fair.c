@@ -7663,11 +7663,15 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			 * The target CPU can be already at a capacity level higher
 			 * than the one required to boost the task.
 			 * However, if the task prefers idle cpu and that
-			 * cpu is idle, skip this check.
+			 * cpu is idle, skip this check, but still need to make
+			 * sure the task fits in that cpu after considering
+			 * capacity margin.
 			 */
 			new_util = max(min_util, new_util);
-			if (!(prefer_idle && idle_cpu(i))
-				&& new_util > capacity_orig)
+			if ((!(prefer_idle && idle_cpu(i)) &&
+			     new_util > capacity_orig) ||
+			    (is_min_capacity_cpu(i) &&
+			     !task_fits_capacity(p, capacity_orig, i)))
 				continue;
 
 			/*
