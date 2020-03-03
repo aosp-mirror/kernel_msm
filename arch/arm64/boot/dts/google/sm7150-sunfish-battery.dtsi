@@ -153,15 +153,23 @@
 
 		/* charge table for sunfish */
 		google,chg-temp-limits = <0 100 200 420 460 480 550>;
-		google,chg-cv-limits = <4200000 4300000 4420000 4450000>;
+		google,chg-cv-limits = <4200000 4300000 4420000>;
 		google,chg-cc-limits = <
-			 30  10   0   0
-			 50  30  30  17
-			100  70  50  17
-			 80  50  50  17
-			 50  50   0   0
-			 30   0   0   0
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
 		>;
+
+		google,chg-last-tier = <4450000>;
+		google,chg-last-tier-ramp-rate-mv = <10000>;
+		/* ramp rate unit : 1/1000 */
+		google,chg-last-tier-ramp-rate-dpct = <700>;
+		/* vpack tolerance unit : 1/10000 */
+		google,chg-last-tier-vpack-tolerance = <15>;
+		google,chg-last-tier-cc-tolerance = <50000>;
 
 		/* battery poll rate */
 		google,update-interval = <30000>;
