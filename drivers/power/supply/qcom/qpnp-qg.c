@@ -1769,6 +1769,25 @@ static int qg_get_battery_capacity_real(struct qpnp_qg *chip, int *soc)
 	return 0;
 }
 
+static int qg_get_battery_capacity_raw(struct qpnp_qg *chip, int *soc)
+{
+	int rc, vbat_uv = 0;
+
+	rc = qg_get_vbat_avg(chip, &vbat_uv);
+	if (rc < 0 || vbat_uv <= (chip->dt.fvss_vbat_mv * 1000))
+		return -EINVAL;
+
+	mutex_lock(&chip->soc_lock);
+	if (chip->msoc != chip->catch_up_soc) {
+		mutex_unlock(&chip->soc_lock);
+		return -EINVAL;
+	}
+
+	*soc = (chip->sys_soc * 256) / 100;
+	mutex_unlock(&chip->soc_lock);
+	return 0;
+}
+
 static int qg_get_charge_counter(struct qpnp_qg *chip, int *charge_counter)
 {
 	int rc, cc_soc = 0;
@@ -2121,8 +2140,15 @@ static int qg_psy_get_property(struct power_supply *psy,
 		 * to be compatible with other fuel gauge
 		 * for google_battery supporting
 		 */
-		rc = qg_get_battery_capacity(chip, &pval->intval);
-		pval->intval <<= 8;
+		rc = qg_get_battery_capacity_raw(chip, &pval->intval);
+		if (rc < 0) {
+			rc = qg_get_battery_capacity(chip, (int *)&temp);
+			if (rc == 0)
+				pval->intval = (int)temp * 256;
+			else
+				pr_err("qg_get_battery_capacity() rc=%d\n",
+				       rc);
+		}
 		break;
 	case POWER_SUPPLY_PROP_REAL_CAPACITY:
 		rc = qg_get_battery_capacity_real(chip, &pval->intval);
