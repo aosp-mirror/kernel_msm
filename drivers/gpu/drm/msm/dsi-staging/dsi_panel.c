@@ -3288,12 +3288,12 @@ static int drm_panel_get_timings(struct drm_panel *panel,
 			t->vfront_porch.typ = m.timing.v_front_porch;
 			t->vback_porch.typ = m.timing.v_back_porch;
 			t->vsync_len.typ = m.timing.v_sync_width;
-			t->flags = m.timing.h_sync_polarity ?
+			t->flags = (m.timing.h_sync_polarity ?
 				   DISPLAY_FLAGS_HSYNC_HIGH :
-				   DISPLAY_FLAGS_HSYNC_LOW |
-				   m.timing.v_sync_polarity ?
+				   DISPLAY_FLAGS_HSYNC_LOW) |
+				   (m.timing.v_sync_polarity ?
 				   DISPLAY_FLAGS_VSYNC_HIGH :
-				   DISPLAY_FLAGS_VSYNC_LOW;
+				   DISPLAY_FLAGS_VSYNC_LOW);
 
 			t->pixelclock.max = t->pixelclock.typ;
 			t->hactive.max = t->hactive.typ;
