@@ -3374,8 +3374,27 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 int smblib_get_prop_usb_present(struct smb_charger *chg,
 				union power_supply_propval *val)
 {
+	int suspend;
 	int rc;
 	u8 stat;
+
+	if (IS_ERR_OR_NULL(chg->ext_vbus)) {
+		chg->ext_vbus = devm_regulator_get(chg->dev, "ext-vbus");
+		if (IS_ERR_OR_NULL(chg->ext_vbus))
+			smblib_err(chg, "Can't find ext-vbus-supply");
+	}
+
+	if (!IS_ERR_OR_NULL(chg->ext_vbus)
+	    && regulator_is_enabled(chg->ext_vbus)) {
+		rc = smblib_get_usb_suspend(chg, &suspend);
+		if (rc < 0)
+			smblib_err(chg, "Can't get usb suspend");
+
+		if (suspend)
+			return !(val->intval = 0);
+		else
+			WARN_ONCE(!rc, "USB_IN is not suspend!\n");
+	}
 
 	rc = smblib_read(chg, USBIN_BASE + INT_RT_STS_OFFSET, &stat);
 	if (rc < 0) {
