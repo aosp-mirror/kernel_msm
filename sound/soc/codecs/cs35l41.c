@@ -1874,6 +1874,30 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 	return ret;
 }
 
+static int cs35l41_asprx_event(struct snd_soc_dapm_widget *w,
+		struct snd_kcontrol *kcontrol, int event)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+	struct cs35l41_private *cs35l41 = snd_soc_codec_get_drvdata(codec);
+	int ret = 0;
+
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		regmap_update_bits(cs35l41->regmap, CS35L41_AMP_OUT_MUTE,
+				CS35L41_AMP_MUTE_MASK, 0);
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		regmap_update_bits(cs35l41->regmap, CS35L41_AMP_OUT_MUTE,
+				CS35L41_AMP_MUTE_MASK, CS35L41_AMP_MUTE_MASK);
+		break;
+	default:
+		dev_err(codec->dev, "Invalid event = 0x%x\n", event);
+		ret = -EINVAL;
+		break;
+	}
+	return ret;
+}
+
 static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 
 	SND_SOC_DAPM_SPK("DSP1 Preload", NULL),
@@ -1884,8 +1908,13 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 				cs35l41_dsp_load_ev, SND_SOC_DAPM_POST_PMU),
 	SND_SOC_DAPM_OUTPUT("SPK"),
 
-	SND_SOC_DAPM_AIF_IN("ASPRX1", NULL, 0, CS35L41_SP_ENABLES, 16, 0),
-	SND_SOC_DAPM_AIF_IN("ASPRX2", NULL, 0, CS35L41_SP_ENABLES, 17, 0),
+	SND_SOC_DAPM_AIF_IN_E("ASPRX1", NULL, 0, CS35L41_SP_ENABLES, 16, 0,
+				cs35l41_asprx_event,
+				SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
+	SND_SOC_DAPM_AIF_IN_E("ASPRX2", NULL, 0, CS35L41_SP_ENABLES, 17, 0,
+				cs35l41_asprx_event,
+				SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
+
 	SND_SOC_DAPM_AIF_OUT("ASPTX1", NULL, 0, CS35L41_SP_ENABLES, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX2", NULL, 0, CS35L41_SP_ENABLES, 1, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX3", NULL, 0, CS35L41_SP_ENABLES, 2, 0),
