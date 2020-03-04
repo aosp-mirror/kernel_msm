@@ -3318,12 +3318,19 @@ int smblib_set_prop_voltage_wls_output(struct smb_charger *chg,
 
 int smblib_set_prop_dc_reset(struct smb_charger *chg)
 {
-	int rc;
+	int rc = -EAGAIN;
+
+	mutex_lock(&chg->dc_reset_lock);
+
+	if (chg->dc_reset) {
+		smblib_dbg(chg, PR_MISC, "DC reset skipped\n");
+		goto exit;
+	}
 
 	rc = vote(chg->dc_suspend_votable, VOUT_VOTER, true, 0);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't suspend DC rc=%d\n", rc);
-		return rc;
+		goto exit;
 	}
 
 	rc = smblib_masked_write(chg, DCIN_CMD_IL_REG, DCIN_EN_MASK,
@@ -3331,14 +3338,14 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't set DCIN_EN_OVERRIDE_BIT rc=%d\n",
 			rc);
-		return rc;
+		goto exit;
 	}
 
 	rc = smblib_write(chg, DCIN_CMD_PON_REG, DCIN_PON_BIT | MID_CHG_BIT);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't write %d to DCIN_CMD_PON_REG rc=%d\n",
 			DCIN_PON_BIT | MID_CHG_BIT, rc);
-		return rc;
+		goto exit;
 	}
 
 	/* Wait for 10ms to allow the charge to get drained */
@@ -3347,23 +3354,26 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 	rc = smblib_write(chg, DCIN_CMD_PON_REG, 0);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't clear DCIN_CMD_PON_REG rc=%d\n", rc);
-		return rc;
+		goto exit;
 	}
 
 	rc = smblib_masked_write(chg, DCIN_CMD_IL_REG, DCIN_EN_MASK, 0);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't clear DCIN_EN_OVERRIDE_BIT rc=%d\n",
 			rc);
-		return rc;
+		goto exit;
 	}
 
 	rc = vote(chg->dc_suspend_votable, VOUT_VOTER, false, 0);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't unsuspend  DC rc=%d\n", rc);
-		return rc;
+		goto exit;
 	}
 
 	smblib_dbg(chg, PR_MISC, "Wireless charger removal detection successful\n");
+	chg->dc_reset = true;
+exit:
+	mutex_unlock(&chg->dc_reset_lock);
 	return rc;
 }
 
@@ -6727,6 +6737,10 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 		chg->cp_ilim_votable = find_votable("CP_ILIM");
 
 	if (dcin_present && !vbus_present) {
+		mutex_lock(&chg->dc_reset_lock);
+		chg->dc_reset = false;
+		mutex_unlock(&chg->dc_reset_lock);
+
 		cancel_delayed_work_sync(&chg->dcin_aicl_delay_work);
 
 		/* Reset DCIN ICL to 100 mA */
@@ -6795,6 +6809,8 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 		schedule_delayed_work(&chg->dcin_aicl_delay_work,
 				      msecs_to_jiffies(delay_ms));
 	} else {
+		smblib_set_prop_dc_reset(chg);
+
 		if (chg->cp_reason == POWER_SUPPLY_CP_WIRELESS) {
 			sec_charger = chg->sec_pl_present ?
 					POWER_SUPPLY_CHARGER_SEC_PL :
@@ -7970,6 +7986,7 @@ int smblib_init(struct smb_charger *chg)
 	mutex_init(&chg->irq_status_lock);
 	mutex_init(&chg->dcin_aicl_lock);
 	mutex_init(&chg->dpdm_lock);
+	mutex_init(&chg->dc_reset_lock);
 	spin_lock_init(&chg->typec_pr_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->pl_update_work, pl_update_work);

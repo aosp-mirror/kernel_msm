@@ -394,6 +394,7 @@ struct smb_charger {
 	int			otg_delay_ms;
 	int			weak_chg_icl_ua;
 	bool			pd_not_supported;
+	bool			dc_reset;
 
 	/* locks */
 	struct mutex		smb_lock;
@@ -403,6 +404,7 @@ struct smb_charger {
 	spinlock_t		typec_pr_lock;
 	struct mutex		adc_lock;
 	struct mutex		dpdm_lock;
+	struct mutex		dc_reset_lock;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
