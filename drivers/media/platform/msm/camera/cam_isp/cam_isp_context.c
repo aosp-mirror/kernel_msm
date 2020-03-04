@@ -1039,7 +1039,7 @@ static int __cam_isp_ctx_handle_error(struct cam_isp_context *ctx_isp,
 	struct cam_isp_ctx_req          *req_isp = NULL;
 	struct cam_isp_ctx_req          *req_isp_to_report = NULL;
 	struct cam_req_mgr_error_notify  notify;
-	uint64_t                         error_request_id = 0;
+	uint64_t                         error_request_id;
 	struct cam_hw_fence_map_entry   *fence_map_out = NULL;
 	struct cam_req_mgr_message       req_msg;
 
@@ -1290,7 +1290,6 @@ static int __cam_isp_ctx_fs2_sof_in_sof_state(
 			notify.dev_hdl = ctx->dev_hdl;
 			notify.frame_id = ctx_isp->frame_id;
 			notify.trigger = CAM_TRIGGER_POINT_SOF;
-			notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
 			notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
 
 			ctx->ctx_crm_intf->notify_trigger(&notify);
@@ -1465,7 +1464,6 @@ static int __cam_isp_ctx_fs2_reg_upd_in_applied_state(
 			notify.dev_hdl = ctx->dev_hdl;
 			notify.frame_id = ctx_isp->frame_id;
 			notify.trigger = CAM_TRIGGER_POINT_SOF;
-			notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
 			notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
 
 			ctx->ctx_crm_intf->notify_trigger(&notify);
@@ -2042,7 +2040,6 @@ static int __cam_isp_ctx_rdi_only_sof_in_top_state(
 		notify.dev_hdl = ctx->dev_hdl;
 		notify.frame_id = ctx_isp->frame_id;
 		notify.trigger = CAM_TRIGGER_POINT_SOF;
-		notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
 		notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
 
 		ctx->ctx_crm_intf->notify_trigger(&notify);
@@ -2231,7 +2228,6 @@ static int __cam_isp_ctx_rdi_only_sof_in_bubble_state(
 		notify.dev_hdl = ctx->dev_hdl;
 		notify.frame_id = ctx_isp->frame_id;
 		notify.trigger = CAM_TRIGGER_POINT_SOF;
-		notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
 		notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
 
 		ctx->ctx_crm_intf->notify_trigger(&notify);
@@ -2303,7 +2299,6 @@ static int __cam_isp_ctx_rdi_only_reg_upd_in_bubble_applied_state(
 		notify.dev_hdl = ctx->dev_hdl;
 		notify.frame_id = ctx_isp->frame_id;
 		notify.trigger = CAM_TRIGGER_POINT_SOF;
-		notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
 		notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
 
 		ctx->ctx_crm_intf->notify_trigger(&notify);

@@ -2504,8 +2504,6 @@ static int cam_ife_csid_release(void *hw_priv,
 	res = (struct cam_isp_resource_node *)release_args;
 
 	mutex_lock(&csid_hw->hw_info->hw_mutex);
-	csid_hw->event_cb = NULL;
-	csid_hw->ctx = NULL;
 	if ((res->res_type == CAM_ISP_RESOURCE_CID &&
 		res->res_id >= CAM_IFE_CSID_CID_MAX) ||
 		(res->res_type == CAM_ISP_RESOURCE_PIX_PATH &&
@@ -3034,129 +3032,6 @@ static int cam_ife_csid_process_cmd(void *hw_priv,
 
 }
 
-static char *cam_csid_status_to_str(uint32_t status)
-{
-	switch (status) {
-	case CSID_IRQ_STATUS_TOP:
-		return "TOP";
-	case CSID_IRQ_STATUS_RX:
-		return "RX";
-	case CSID_IRQ_STATUS_IPP:
-		return "IPP";
-	case CSID_IRQ_STATUS_PPP:
-		return "PPP";
-	case CSID_IRQ_STATUS_RDI0:
-		return "RDI0";
-	case CSID_IRQ_STATUS_RDI1:
-		return "RDI1";
-	case CSID_IRQ_STATUS_RDI2:
-		return "RDI2";
-	case CSID_IRQ_STATUS_RDI3:
-		return "RDI3";
-	default:
-		return "Invalid IRQ";
-	}
-}
-
-static int cam_csid_event_dispatch_process(void *priv, void *data)
-{
-	struct cam_csid_hw_evt_payload evt_payload;
-	struct cam_ife_csid_hw *csid_hw;
-	struct cam_csid_hw_work_data *work_data;
-	int rc = 0;
-	int i;
-
-	csid_hw = (struct cam_ife_csid_hw *)priv;
-	if (!csid_hw) {
-		CAM_ERR(CAM_ISP, "Invalid parameters");
-		return -EINVAL;
-	}
-	if (!csid_hw->event_cb || !csid_hw->ctx) {
-		CAM_ERR_RATE_LIMIT(CAM_ISP,
-			"hw_idx %d Invalid args %pK %pK",
-			csid_hw->hw_intf->hw_idx,
-			csid_hw->event_cb,
-			csid_hw->ctx);
-		return -EINVAL;
-	}
-	work_data = (struct cam_csid_hw_work_data *)data;
-	if (csid_hw->ctx != work_data->ctx) {
-		CAM_ERR_RATE_LIMIT(CAM_ISP,
-			"hw_idx %d ctx mismatch %pK, %pK",
-			csid_hw->hw_intf->hw_idx,
-			csid_hw->ctx,
-			work_data->ctx);
-		return -EINVAL;
-	}
-
-	CAM_ERR_RATE_LIMIT(CAM_ISP, "idx %d err %d phy %d cnt %d",
-		csid_hw->hw_intf->hw_idx,
-		work_data->evt_type,
-		csid_hw->csi2_rx_cfg.phy_sel,
-		csid_hw->csi2_cfg_cnt);
-
-	for (i = 0; i < CSID_IRQ_STATUS_MAX; i++)
-		CAM_ERR_RATE_LIMIT(CAM_ISP, "status %s: %x",
-			cam_csid_status_to_str(i),
-			work_data->irq_status[i]);
-
-	evt_payload.hw_idx = csid_hw->hw_intf->hw_idx;
-	evt_payload.evt_type = work_data->evt_type;
-
-	switch (work_data->evt_type) {
-	case CAM_ISP_HW_ERROR_CSID_FATAL:
-		if (csid_hw->fatal_err_detected)
-			break;
-		csid_hw->fatal_err_detected = true;
-
-		if (csid_hw->csid_debug & CSID_DEBUG_RECOVERY_ENABLED)
-			rc = csid_hw->event_cb(work_data->ctx,
-				CAM_ISP_HW_EVENT_ERROR, &evt_payload);
-		break;
-
-	case CAM_ISP_HW_ERROR_CSID_NON_FATAL:
-		break;
-	default:
-		CAM_DBG(CAM_ISP, "CSID[%d] invalid error type %d",
-			csid_hw->hw_intf->hw_idx,
-			work_data->evt_type);
-		break;
-	}
-	return rc;
-}
-
-static int cam_csid_dispatch_irq(struct cam_ife_csid_hw *csid_hw,
-	int evt_type, uint32_t *irq_status)
-{
-	struct crm_workq_task *task;
-	struct cam_csid_hw_work_data *work_data;
-	int rc = 0;
-	int i;
-
-	CAM_DBG(CAM_ISP, "CSID[%d] error %d",
-		csid_hw->hw_intf->hw_idx, evt_type);
-
-	task = cam_req_mgr_workq_get_task(csid_hw->work);
-	if (!task) {
-		CAM_ERR_RATE_LIMIT(CAM_ISP,
-			"CSID[%d] Can not get task for worker, evt_type %d",
-			csid_hw->hw_intf->hw_idx,
-			evt_type);
-		return -ENOMEM;
-	}
-	work_data = (struct cam_csid_hw_work_data *)task->payload;
-	work_data->evt_type = evt_type;
-	work_data->ctx = csid_hw->ctx;
-	for (i = 0; i < CSID_IRQ_STATUS_MAX; i++)
-		work_data->irq_status[i] = irq_status[i];
-
-	task->process_cb = cam_csid_event_dispatch_process;
-	rc = cam_req_mgr_workq_enqueue_task(task, csid_hw,
-		CRM_TASK_PRIORITY_0);
-
-	return rc;
-}
-
 irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
 {
 	struct cam_ife_csid_hw                         *csid_hw;
@@ -3167,7 +3042,6 @@ irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
 	uint32_t irq_status_rdi[4] = {0, 0, 0, 0};
 	uint32_t val, irq_status_ppp = 0;
 	bool fatal_err_detected = false;
-	bool need_dump_csid_err = false;
 	uint32_t sof_irq_debug_en = 0;
 	unsigned long flags;
 
@@ -3257,19 +3131,15 @@ irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
 		}
 		if (irq_status_rx & CSID_CSI2_RX_ERROR_CPHY_EOT_RECEPTION) {
 			csid_hw->error_irq_count++;
-			need_dump_csid_err = true;
 		}
 		if (irq_status_rx & CSID_CSI2_RX_ERROR_CPHY_SOT_RECEPTION) {
 			csid_hw->error_irq_count++;
-			need_dump_csid_err = true;
 		}
 		if (irq_status_rx & CSID_CSI2_RX_ERROR_STREAM_UNDERFLOW) {
 			csid_hw->error_irq_count++;
-			need_dump_csid_err = true;
 		}
 		if (irq_status_rx & CSID_CSI2_RX_ERROR_UNBOUNDED_FRAME) {
 			csid_hw->error_irq_count++;
-			need_dump_csid_err = true;
 		}
 	}
 
@@ -3277,10 +3147,6 @@ irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
 		CAM_IFE_CSID_MAX_IRQ_ERROR_COUNT) {
 		fatal_err_detected = true;
 		csid_hw->error_irq_count = 0;
-	} else if (need_dump_csid_err) {
-		cam_csid_dispatch_irq(csid_hw,
-			CAM_ISP_HW_ERROR_CSID_NON_FATAL,
-			irq_status);
 	}
 
 handle_fatal_error:

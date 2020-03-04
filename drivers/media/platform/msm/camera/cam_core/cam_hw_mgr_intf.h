@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -144,11 +144,11 @@ struct cam_hw_stop_args {
  * struct cam_hw_mgr_dump_pf_data - page fault debug data
  *
  * packet:     pointer to packet
- * ctx:        pointer to cam context
+ * ctx_id:     context id
  */
 struct cam_hw_mgr_dump_pf_data {
-	void *packet;
-	void *ctx;
+	void    *packet;
+	uint32_t ctx_id;
 };
 
 /**
