@@ -325,7 +325,6 @@ DEFINE_EVENT(wakeup_source, wakeup_source_deactivate,
  * The clock events are used for clock enable/disable and for
  *  clock rate change
  */
-#if defined(CONFIG_COMMON_CLK_MSM)
 DECLARE_EVENT_CLASS(clock,
 
 	TP_PROTO(const char *name, unsigned int state, unsigned int cpu_id),
@@ -348,6 +347,14 @@ DECLARE_EVENT_CLASS(clock,
 		(unsigned long)__entry->state, (unsigned long)__entry->cpu_id)
 );
 
+DEFINE_EVENT(clock, clock_set_rate,
+
+	TP_PROTO(const char *name, unsigned int state, unsigned int cpu_id),
+
+	TP_ARGS(name, state, cpu_id)
+);
+
+#if defined(CONFIG_COMMON_CLK_MSM)
 DEFINE_EVENT(clock, clock_enable,
 
 	TP_PROTO(const char *name, unsigned int state, unsigned int cpu_id),
@@ -356,13 +363,6 @@ DEFINE_EVENT(clock, clock_enable,
 );
 
 DEFINE_EVENT(clock, clock_disable,
-
-	TP_PROTO(const char *name, unsigned int state, unsigned int cpu_id),
-
-	TP_ARGS(name, state, cpu_id)
-);
-
-DEFINE_EVENT(clock, clock_set_rate,
 
 	TP_PROTO(const char *name, unsigned int state, unsigned int cpu_id),
 
