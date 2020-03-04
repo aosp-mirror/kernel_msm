@@ -102,6 +102,7 @@ struct bias_config {
 
 #define CHG_P_DCIN_CMD_IL_REG			0x1440
 #define CHG_P_DCIN_EN_OVERRIDE_BIT		BIT(1)
+#define CHG_P_DCIN_EN_VALUE_BIT			BIT(2)
 
 #define CHG_P_DCIN_INT_RT_STS			0x1410
 #define CHG_P_DCIN_PLUGIN_BIT			BIT(4)
@@ -722,7 +723,7 @@ static int sm7250_get_chg_chgr_state(const struct bms_dev *bms,
 
 	if ((!rc) && (reg & CHG_P_DCIN_PLUGIN_BIT) &&
 	    (!(reg & CHG_P_DCIN_EN_BIT))) {
-		val = CHG_P_DCIN_EN_OVERRIDE_BIT;
+		val = CHG_P_DCIN_EN_OVERRIDE_BIT | CHG_P_DCIN_EN_VALUE_BIT;
 		pr_info("MSC_PCS: reset DCIN enable pin\n");
 		sm7250_write(bms->pmic_regmap, CHG_P_DCIN_CMD_IL_REG, &val, 1);
 	}
