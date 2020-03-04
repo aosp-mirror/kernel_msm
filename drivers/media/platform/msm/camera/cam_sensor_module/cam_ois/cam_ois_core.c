@@ -190,6 +190,20 @@ static int cam_ois_power_up(struct cam_ois_ctrl_t *o_ctrl)
 	rc = camera_io_init(&o_ctrl->io_master_info);
 	if (rc)
 		CAM_ERR(CAM_OIS, "cci_init failed: rc: %d", rc);
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+	else {
+		memcpy(&(o_ctrl->af_io_master_info),
+			&(o_ctrl->io_master_info),
+			sizeof(struct camera_io_master));
+		memcpy(&(o_ctrl->af_cci_client),
+			(o_ctrl->io_master_info.cci_client),
+			sizeof(struct cam_sensor_cci_client));
+		o_ctrl->af_io_master_info.cci_client =
+			&(o_ctrl->af_cci_client);
+		o_ctrl->af_io_master_info.cci_client->sid =
+			VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
+	}
+#endif
 
 	return rc;
 }
@@ -311,18 +325,6 @@ static int cam_ois_slaveInfo_pkt_parser(struct cam_ois_ctrl_t *o_ctrl,
 			sizeof(struct cam_ois_opcode));
 		CAM_DBG(CAM_OIS, "Slave addr: 0x%x Freq Mode: %d",
 			ois_info->slave_addr, ois_info->i2c_freq_mode);
-
-#ifdef CONFIG_CAMERA_ACT_READ_LENS
-		memcpy(&(o_ctrl->af_io_master_info),
-			&(o_ctrl->io_master_info),
-			sizeof(struct camera_io_master));
-		memcpy(&(o_ctrl->af_cci_client),
-			(o_ctrl->io_master_info.cci_client),
-			sizeof(struct cam_sensor_cci_client));
-		o_ctrl->af_io_master_info.cci_client = &(o_ctrl->af_cci_client);
-		o_ctrl->af_io_master_info.cci_client->sid =
-			VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
-#endif
 	} else if (o_ctrl->io_master_info.master_type == I2C_MASTER) {
 		o_ctrl->io_master_info.client->addr = ois_info->slave_addr;
 		CAM_DBG(CAM_OIS, "Slave addr: 0x%x", ois_info->slave_addr);
