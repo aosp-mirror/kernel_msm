@@ -22,6 +22,11 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
 
+/* TODO: revert this param b/149543749 */
+static int delay;
+module_param(delay, int, 0644);
+MODULE_PARM_DESC(delay, "GPIO delay");
+
 struct regulator_tps_data {
 	struct regulator_desc desc;
 	struct regulator_dev *dev;
@@ -199,7 +204,10 @@ static int tps_regulator_enable(struct regulator_dev *rdev)
 		gpiod_set_value_cansleep(drvdata->control_gpio_descs[
 					 drvdata->gpio_enable_sequence[i] - 1],
 					 1);
-		udelay(drvdata->gpio_enable_delay[i]);
+		if (i == 0 && delay)
+			udelay(delay);
+		else
+			udelay(drvdata->gpio_enable_delay[i]);
 	}
 
 	drvdata->enabled = true;
