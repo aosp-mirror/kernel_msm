@@ -668,7 +668,7 @@ static notrace void trace_event_raw_event_synth(void *__data,
 		}
 	}
 
-	trace_event_buffer_commit(&fbuffer, sizeof(*entry) + fields_size);
+	trace_event_buffer_commit(&fbuffer);
 out:
 	ring_buffer_nest_end(buffer);
 }
