@@ -491,3 +491,6 @@ ktime_t get_next_event_time(int cpu)
 	return next_event;
 }
 EXPORT_SYMBOL_GPL(get_next_event_time);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Event timer");
