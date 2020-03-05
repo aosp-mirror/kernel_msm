@@ -1921,6 +1921,7 @@ void dsi_panel_destroy_cmd_packets(struct dsi_panel_cmd_set *set)
 
 	dsi_panel_destroy_cmds_packets_buf(set);
 	kfree(set->cmds);
+	set->cmds = NULL;
 }
 
 static int dsi_panel_alloc_cmd_packets(struct dsi_panel_cmd_set *cmd,
@@ -3247,6 +3248,8 @@ static int drm_panel_get_timings(struct drm_panel *panel,
 			t->vfront_porch.min = t->vfront_porch.typ;
 			t->vback_porch.min = t->vback_porch.typ;
 			t->vsync_len.min = t->vsync_len.typ;
+
+			dsi_panel_put_mode(&m);
 		}
 
 	return rc ?: p->num_timing_nodes;
@@ -3952,7 +3955,7 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 	struct dsi_parser_utils *utils;
 	struct dsi_display_mode_priv_info *prv_info;
 	u32 child_idx = 0;
-	int rc = 0, num_timings;
+	int rc = 0, num_timings, i;
 	void *utils_data = NULL;
 
 	if (!panel || !mode) {
@@ -4031,15 +4034,21 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 		if (rc) {
 			pr_err(
 			"failed to parse panel phy timings, rc=%d\n", rc);
-			goto parse_fail;
+			goto free_cmd_set;
 		}
 
 		rc = dsi_panel_parse_partial_update_caps(mode, utils);
 		if (rc)
 			pr_err("failed to partial update caps, rc=%d\n", rc);
 	}
+
+	rc = 0;
 	goto done;
 
+free_cmd_set:
+	for (i = 0; i < DSI_CMD_SET_MAX; i++) {
+		dsi_panel_destroy_cmd_packets(&mode->priv_info->cmd_sets[i]);
+	}
 parse_fail:
 	kfree(mode->priv_info);
 	mode->priv_info = NULL;
