@@ -2236,32 +2236,35 @@ sap_dfs_is_channel_in_nol_list(ptSapContext sap_context,
 
 uint8_t sap_select_default_oper_chan(struct sap_acs_cfg *acs_cfg)
 {
-	uint8_t channel;
+	uint16_t i;
 
-	if (NULL == acs_cfg) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-			  "ACS config invalid!");
-		QDF_BUG(0);
+	if (!acs_cfg || !acs_cfg->ch_list || !acs_cfg->ch_list_count)
 		return 0;
+
+	/*
+	 * There could be both 2.4Ghz and 5ghz channels present in the list
+	 * based upon the Hw mode received from hostapd, it is always better
+	 * to chose a default 5ghz operating channel than 2.4ghz, as it can
+	 * provide a better throughput, latency than 2.4ghz. Also 40 Mhz is
+	 * rare in 2.4ghz band, so 5ghz should be preferred. If we get a 5Ghz
+	 * chan in the acs cfg ch list , we should go for that first else the
+	 * default channel can be 2.4ghz.
+	 */
+
+	for (i = 0; i < acs_cfg->ch_list_count; i++) {
+		if (CDS_IS_CHANNEL_5GHZ(acs_cfg->ch_list[i])) {
+			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
+				  FL("default 5ghz channel chosen as %d"),
+				  acs_cfg->ch_list[i]);
+			return acs_cfg->ch_list[i];
+		}
 	}
 
-	if (acs_cfg->hw_mode == eCSR_DOT11_MODE_11a) {
-		channel = SAP_DEFAULT_5GHZ_CHANNEL;
-	} else if ((acs_cfg->hw_mode == eCSR_DOT11_MODE_11n) ||
-		   (acs_cfg->hw_mode == eCSR_DOT11_MODE_11n_ONLY) ||
-		   (acs_cfg->hw_mode == eCSR_DOT11_MODE_11ac) ||
-		   (acs_cfg->hw_mode == eCSR_DOT11_MODE_11ac_ONLY)) {
-		if (CDS_IS_CHANNEL_5GHZ(acs_cfg->start_ch))
-			channel = SAP_DEFAULT_5GHZ_CHANNEL;
-		else
-			channel = SAP_DEFAULT_24GHZ_CHANNEL;
-	} else {
-		channel = SAP_DEFAULT_24GHZ_CHANNEL;
-	}
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
+		  FL("default channel chosen as %d"),
+		  acs_cfg->ch_list[0]);
 
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
-			FL("channel selected to start bss %d"), channel);
-	return channel;
+	return acs_cfg->ch_list[0];
 }
 
 /**
