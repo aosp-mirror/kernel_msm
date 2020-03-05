@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&thermal_zones {
+	/* B5M and B5 correlation is different in 4K60fps case. */
+	skin-therm {
+		trips {
+			skin_emergency_pre_lv1: skin-emergency-pre-lv1 {
+				temperature = <48000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			/* emergency pre level1 throttling */
+			cpu0-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device = <&CPU0 5 5>;
+			};
+			cpu6-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device = <&CPU6 6 6>;
+			};
+			cpu7-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device = <&CPU7 6 6>;
+			};
+		};
+	};
+};

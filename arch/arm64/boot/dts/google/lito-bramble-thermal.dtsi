@@ -194,6 +194,11 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
+			skin_cpu_critical: skin-cpu-critical {
+				temperature = <45000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
 		};
 		cooling-maps {
 			/* light throttling */
@@ -249,6 +254,22 @@
 				trip = <&skin_cpu_severe>;
 				cooling-device =
 					<&CPU7 5 5>;
+			};
+			/* critical throttling */
+			cpu0-svs {
+				trip = <&skin_cpu_critical>;
+				cooling-device =
+					<&CPU0 5 5>;
+			};
+			cpu6-svs {
+				trip = <&skin_cpu_critical>;
+				cooling-device =
+					<&CPU6 6 6>;
+			};
+			cpu7-svs {
+				trip = <&skin_cpu_critical>;
+				cooling-device =
+					<&CPU7 6 6>;
 			};
 		};
 	};
@@ -355,25 +376,9 @@
 				cooling-device = <&google_charger
 					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
-			cpu0-svs {
-				trip = <&skin_critical>;
-				cooling-device =
-					<&CPU0 5 5>;
-			};
-			cpu6-svs {
-				trip = <&skin_critical>;
-				cooling-device =
-					<&CPU6 6 6>;
-			};
-			cpu7-svs {
-				trip = <&skin_critical>;
-				cooling-device =
-					<&CPU7 6 6>;
-			};
 			gpu-svs-l1 {
 				trip = <&skin_critical>;
-				cooling-device =
-					<&msm_gpu 1 1>;
+				cooling-device = <&msm_gpu 1 1>;
 			};
 		};
 	};
