@@ -711,7 +711,7 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 	const char *statestr;
 	int rc;
 
-	mutex_lock(&bd->ops_lock);
+	mutex_lock(&bl->state_lock);
 	if (is_standby_mode(bd->props.state)) {
 		statestr = "Off";
 	} else if (is_lp_mode(bd->props.state)) {
@@ -723,7 +723,7 @@ static ssize_t state_show(struct device *dev, struct device_attribute *attr,
 		else
 			statestr = "On";
 	}
-	mutex_unlock(&bd->ops_lock);
+	mutex_unlock(&bl->state_lock);
 
 	if (show_mode) {
 		const struct dsi_display_mode *mode = panel->cur_mode;
@@ -1182,6 +1182,7 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 {
 	struct dsi_backlight_config *bl = &panel->bl_config;
 
+	mutex_destroy(&bl->state_lock);
 	if (bl->unregister)
 		bl->unregister(bl);
 
