@@ -32,3 +32,7 @@
 &pm7250b_qg {
 	qcom,battery-data = <&bramble_batterydata>;
 };
+
+&google_battery {
+	google,chg-battery-capacity = <3800>;
+};
