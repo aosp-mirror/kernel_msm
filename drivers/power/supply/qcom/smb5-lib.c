@@ -2073,6 +2073,16 @@ int smblib_set_prop_input_current_max(struct smb_charger *chg,
 	return rc;
 }
 
+#define EXT_VBUS_UV 5000000
+static int smblib_ext_vbus_is_enabled(struct regulator *reg)
+{
+	if (IS_ERR_OR_NULL(reg))
+		return -EINVAL;
+
+	return (0 < regulator_is_enabled(reg)) &&
+		(EXT_VBUS_UV == regulator_get_voltage(reg));
+}
+
 /********************
  * BATT PSY GETTERS *
  ********************/
@@ -3449,7 +3459,7 @@ int smblib_get_prop_usb_present(struct smb_charger *chg,
 	}
 
 	if (!IS_ERR_OR_NULL(chg->ext_vbus)
-	    && regulator_is_enabled(chg->ext_vbus)) {
+	    && (0 < smblib_ext_vbus_is_enabled(chg->ext_vbus))) {
 		rc = smblib_get_usb_suspend(chg, &suspend);
 		if (rc < 0)
 			smblib_err(chg, "Can't get usb suspend");
@@ -5495,7 +5505,7 @@ irqreturn_t usbin_uv_irq_handler(int irq, void *data)
 	}
 
 	if (!IS_ERR_OR_NULL(chg->ext_vbus)
-	    && regulator_is_enabled(chg->ext_vbus))
+	    && (0 < smblib_ext_vbus_is_enabled(chg->ext_vbus)))
 		return IRQ_HANDLED;
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
@@ -5851,7 +5861,7 @@ irqreturn_t usb_plugin_irq_handler(int irq, void *data)
 	}
 
 	if (!IS_ERR_OR_NULL(chg->ext_vbus)
-	    && regulator_is_enabled(chg->ext_vbus))
+	    && (0 < smblib_ext_vbus_is_enabled(chg->ext_vbus)))
 		return IRQ_HANDLED;
 
 	if (chg->pd_hard_reset)
@@ -6075,7 +6085,7 @@ irqreturn_t usb_source_change_irq_handler(int irq, void *data)
 	}
 
 	if (!IS_ERR_OR_NULL(chg->ext_vbus)
-	    && regulator_is_enabled(chg->ext_vbus))
+	    && (0 < smblib_ext_vbus_is_enabled(chg->ext_vbus)))
 		return IRQ_HANDLED;
 
 	rc = smblib_read(chg, APSD_STATUS_REG, &stat);
