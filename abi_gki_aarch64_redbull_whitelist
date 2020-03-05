@@ -17,6 +17,7 @@
   __arch_copy_to_user
   arch_setup_dma_ops
   arch_timer_read_ool_enabled
+  arm64_const_caps_ready
   atomic_notifier_call_chain
   atomic_notifier_chain_register
   atomic_notifier_chain_unregister
@@ -90,13 +91,14 @@
   contig_page_data
   cpu_bit_bitmap
   __cpuhp_setup_state
+  cpu_hwcap_keys
+  cpu_hwcaps
   __cpu_isolated_mask
   cpumask_next
   cpu_number
   __cpu_online_mask
   __cpu_possible_mask
   cpu_subsys
-  create_votable
   crypto_alloc_shash
   crypto_destroy_tfm
   crypto_shash_setkey
@@ -120,7 +122,6 @@
   delayed_work_timer_fn
   del_timer
   del_timer_sync
-  destroy_votable
   destroy_workqueue
   _dev_crit
   dev_driver_string
@@ -268,7 +269,6 @@
   find_next_bit
   find_next_zero_bit
   find_vma
-  find_votable
   finish_wait
   flush_delayed_work
   flush_work
@@ -304,11 +304,8 @@
   gen_pool_create
   gen_pool_destroy
   gen_pool_free
-  get_client_vote
   get_cpu_device
   get_device
-  get_effective_result
-  get_effective_result_locked
   __get_free_pages
   get_pid_task
   get_random_bytes
@@ -519,6 +516,7 @@
   mod_node_page_state
   mod_timer
   module_kset
+  module_layout
   module_put
   __msecs_to_jiffies
   msleep
@@ -563,7 +561,6 @@
   nvmem_device_write
   of_address_to_resource
   of_alias_get_id
-  of_batterydata_get_best_profile
   of_clk_add_provider
   of_clk_get
   of_clk_src_onecell_get
@@ -804,7 +801,6 @@
   request_firmware_into_buf
   request_firmware_nowait
   request_threaded_irq
-  rerun_election
   reset_control_assert
   reset_control_deassert
   rtc_time64_to_tm
@@ -1046,7 +1042,6 @@
   vmap
   vm_mmap
   vm_munmap
-  vote
   vscnprintf
   vsnprintf
   vunmap
@@ -2094,8 +2089,6 @@
 
 # required by qpnp-battery.ko
   __class_register
-  is_override_vote_enabled
-  is_override_vote_enabled_locked
 
 # required by qpnp-power-on.ko
   boot_reason
@@ -2104,22 +2097,13 @@
   devm_input_allocate_device
 
 # required by qpnp-qgauge.ko
-  of_batterydata_get_aged_profile_count
-  of_batterydata_get_best_aged_profile
-  of_batterydata_read_soh_aged_profiles
   rtc_class_close
   rtc_class_open
   rtc_read_time
 
 # required by qpnp-smb5-charger.ko
-  get_client_vote_locked
   iio_channel_release
-  is_client_vote_enabled
-  is_client_vote_enabled_locked
-  lock_votable
   of_find_node_by_phandle
-  unlock_votable
-  vote_override
 
 # required by qpnp_pdphy.ko
   device_get_named_child_node
