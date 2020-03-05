@@ -204,7 +204,7 @@ struct iaxxx_system_state {
 	struct list_head pkg_head_list;
 	enum iaxxx_power_state power_state;
 	struct iaxxx_block_err err;
-	unsigned long sleep_ts;
+	ktime_t ktime_sleep;
 };
 
 enum {
