@@ -197,6 +197,7 @@
   __devm_request_region
   devm_request_threaded_irq
   __devm_reset_control_get
+  devm_reset_controller_register
   devm_snd_soc_register_component
   devm_thermal_zone_of_sensor_register
   devm_usb_get_phy_by_phandle
@@ -214,8 +215,10 @@
   dma_alloc_from_dev_coherent
   dma_buf_attach
   dma_buf_begin_cpu_access
+  dma_buf_begin_cpu_access_partial
   dma_buf_detach
   dma_buf_end_cpu_access
+  dma_buf_end_cpu_access_partial
   dma_buf_fd
   dma_buf_get
   dma_buf_get_flags
@@ -240,7 +243,6 @@
   dma_release_from_dev_coherent
   dma_request_slave_channel
   do_exit
-  do_gettimeofday
   down_read
   down_write
   drain_workqueue
@@ -368,12 +370,15 @@
   input_close_device
   input_event
   input_free_device
+  input_mt_init_slots
+  input_mt_report_slot_state
   input_open_device
   input_register_device
   input_register_handle
   input_register_handler
   input_set_abs_params
   input_set_capability
+  input_set_timestamp
   input_unregister_device
   input_unregister_handle
   input_unregister_handler
@@ -720,11 +725,6 @@
   qmi_txn_cancel
   qmi_txn_init
   qmi_txn_wait
-  qtee_shmbridge_allocate_shm
-  qtee_shmbridge_deregister
-  qtee_shmbridge_free_shm
-  qtee_shmbridge_is_enabled
-  qtee_shmbridge_register
   queue_delayed_work_on
   queue_work_on
   ___ratelimit
@@ -815,12 +815,6 @@
   sched_setscheduler
   schedule
   schedule_timeout
-  scm_call2
-  scm_call2_atomic
-  scm_call2_noretry
-  scm_io_read
-  scm_io_write
-  scm_is_call_available
   scnprintf
   se_config_packing
   se_geni_clks_off
@@ -919,6 +913,7 @@
   __stack_chk_fail
   __stack_chk_guard
   strcasecmp
+  strchr
   strcmp
   strcpy
   strim
@@ -947,6 +942,7 @@
   sysfs_create_files
   sysfs_create_group
   sysfs_create_groups
+  sysfs_create_link
   sysfs_notify
   sysfs_remove_file_ns
   sysfs_remove_group
@@ -962,6 +958,10 @@
   tasklet_init
   tasklet_kill
   __tasklet_schedule
+  tbn_cleanup
+  tbn_init
+  tbn_release_bus
+  tbn_request_bus
   thermal_cdev_update
   thermal_cooling_device_unregister
   thermal_of_cooling_device_register
@@ -986,6 +986,11 @@
   trace_raw_output_prep
   trace_seq_printf
   try_module_get
+  typec_register_partner
+  typec_register_port
+  typec_set_data_role
+  typec_set_pwr_role
+  typec_unregister_partner
   __udelay
   uncached_logk
   __unregister_chrdev
@@ -1116,7 +1121,6 @@
   pci_request_acs
   regulator_disable_deferred
   report_iommu_fault
-  scm_restore_sec_cfg
   __tracepoint_smmu_init
   __tracepoint_tlbi_end
   __tracepoint_tlbi_start
@@ -1197,7 +1201,6 @@
   clk_unvote_rate_vdd
   clk_vote_rate_vdd
   devm_add_action
-  devm_reset_controller_register
   divider_get_val
   divider_recalc_rate
   divider_ro_round_rate_parent
@@ -1309,6 +1312,9 @@
   usb_gadget_vbus_draw
   usb_get_maximum_speed
 
+# required by early_random.ko
+  add_hwgenerator_randomness
+
 # required by ebtable_broute.ko
   br_should_route_hook
   synchronize_net
@@ -1350,14 +1356,7 @@
   of_find_i2c_device_by_node
 
 # required by ftm5.ko
-  input_mt_init_slots
-  input_mt_report_slot_state
-  input_set_timestamp
   proc_create
-  tbn_cleanup
-  tbn_init
-  tbn_release_bus
-  tbn_request_bus
 
 # required by google-battery.ko
   simple_strtoull
@@ -1432,6 +1431,7 @@
   pci_release_region
   pci_request_region
   remove_wait_queue
+  vm_iomap_memory
   wait_woken
   woken_wake_function
 
@@ -1480,10 +1480,6 @@
   snd_soc_card_jack_new
   snd_soc_jack_report
 
-# required by mdt_loader.ko
-  qcom_scm_pas_init_image
-  qcom_scm_pas_mem_setup
-
 # required by mem-offline.ko
   add_memory
   bootloader_memory_limit
@@ -1512,8 +1508,6 @@
   register_die_notifier
 
 # required by msm-vidc.ko
-  dma_buf_begin_cpu_access_partial
-  dma_buf_end_cpu_access_partial
   v4l2_ctrl_find
   v4l2_ctrl_get_name
   v4l2_ctrl_handler_free
@@ -1555,7 +1549,6 @@
   dma_fence_remove_callback
   getboottime64
   get_random_u32
-  get_seconds
   get_task_mm
   get_unmapped_area
   get_user_pages
@@ -1565,6 +1558,7 @@
   iterate_fd
   kern_addr_valid
   kernfs_create_link
+  ktime_get_real_seconds
   mmap_min_addr
   mmput
   noop_llseek
@@ -1576,7 +1570,6 @@
   set_page_dirty_lock
   sg_alloc_table_from_pages
   sysfs_create_bin_file
-  sysfs_create_link
   sysfs_remove_bin_file
   sysfs_remove_files
   trace_print_symbols_seq
@@ -1889,6 +1882,7 @@
 # required by msm_pm.ko
   arm_cpuidle_suspend
   clock_debug_print_enabled
+  cpu_do_idle
   cpuidle_dev
   cpuidle_register_device
   cpuidle_register_driver
@@ -1931,6 +1925,9 @@
 # required by msm_rtb.ko
   arch_timer_read_counter
   set_uncached_logk_func
+
+# required by msm_scm.ko
+  __arm_smccc_smc
 
 # required by msm_sharedmem.ko
   __uio_register_device
@@ -2118,8 +2115,14 @@
   __arch_copy_in_user
   firmware_request_nowarn
   get_option
-  qtee_shmbridge_query
   sigprocmask
+
+# required by qtee_shm_bridge.ko
+  do_tlb_conf_fault_cb
+  __flush_dcache_area
+  gen_pool_best_fit
+  gen_pool_set_algo
+  gen_pool_virt_to_phys
 
 # required by regmap-spmi.ko
   spmi_ext_register_read
@@ -2162,6 +2165,9 @@
   synchronize_rcu
   trace_print_hex_seq
   unregister_netdevice_many
+
+# required by rndis.ko
+  dev_get_stats
 
 # required by roles.ko
   class_find_device
@@ -2329,8 +2335,15 @@
   sock_diag_check_cookie
   sock_diag_save_cookie
 
+# required by sec_touch.ko
+  filp_close
+  filp_open
+  input_mt_destroy_slots
+  strncat
+  sysfs_remove_link
+  vfs_read
+
 # required by secure_buffer.ko
-  scm_get_feat_version
   trace_print_array_seq
 
 # required by slg51000-regulator.ko
@@ -2437,16 +2450,11 @@
   typec_partner_register_altmode
   typec_partner_set_identity
   typec_port_register_altmode
-  typec_register_partner
-  typec_register_port
-  typec_set_data_role
   typec_set_mode
   typec_set_orientation
   typec_set_pwr_opmode
-  typec_set_pwr_role
   typec_set_vconn_role
   typec_unregister_altmode
-  typec_unregister_partner
   typec_unregister_port
   usb_debug_root
 
@@ -2563,7 +2571,6 @@
   set_cpus_allowed_ptr
   skb_queue_purge
   skip_spaces
-  strchr
   strchrnul
   unregister_netevent_notifier
   unregister_sysctl_table
@@ -2611,20 +2618,6 @@
 # required by usb_f_gsi.ko
   dev_get_by_name
   kstrtou16_from_user
-  rndis_deregister
-  rndis_flow_control
-  rndis_free_response
-  rndis_get_next_response
-  rndis_msg_parser
-  rndis_register
-  rndis_set_host_mac
-  rndis_set_max_pkt_xfer
-  rndis_set_param_dev
-  rndis_set_param_medium
-  rndis_set_param_vendor
-  rndis_set_pkt_alignment_factor
-  rndis_signal_connect
-  rndis_uninit
   usb_composite_setup_continue
   usb_ep_autoconfig_by_name
   usb_ep_set_halt
