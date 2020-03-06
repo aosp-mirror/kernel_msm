@@ -300,7 +300,7 @@ config QCOM_MEMORY_DUMP_V2
 	  give a snapshot of the system at the time of the crash.
 
 config QCOM_SMEM_STATE
-	bool
+	tristate
 
 config QCOM_SMP2P
 	tristate "Qualcomm Shared Memory Point to Point support"

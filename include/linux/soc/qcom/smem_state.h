@@ -11,7 +11,7 @@ struct qcom_smem_state_ops {
 	int (*update_bits)(void *, u32, u32);
 };
 
-#ifdef CONFIG_QCOM_SMEM_STATE
+#if IS_ENABLED(CONFIG_QCOM_SMEM_STATE)
 
 struct qcom_smem_state *qcom_smem_state_get(struct device *dev, const char *con_id, unsigned *bit);
 void qcom_smem_state_put(struct qcom_smem_state *);

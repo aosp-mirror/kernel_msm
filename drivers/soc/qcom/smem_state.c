@@ -199,3 +199,4 @@ void qcom_smem_state_unregister(struct qcom_smem_state *state)
 	qcom_smem_state_put(state);
 }
 EXPORT_SYMBOL_GPL(qcom_smem_state_unregister);
+MODULE_LICENSE("GPL v2");
