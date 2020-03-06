@@ -1746,6 +1746,12 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 					CS35L41_BST_EN_SHIFT);
 	}
 
+	if (status[0] & CS35L41_VPBR_FLAG) {
+		dev_crit(cs35l41->dev, "VPBR Flag!\n");
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS1,
+					CS35L41_VPBR_FLAG);
+	}
+
 	if (status[3] & CS35L41_OTP_BOOT_DONE) {
 		regmap_update_bits(cs35l41->regmap, CS35L41_IRQ1_MASK4,
 				CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE);
