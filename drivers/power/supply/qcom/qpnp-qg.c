@@ -4676,7 +4676,6 @@ static int qg_storage_iter(int index, gbms_tag_t *tag, void *ptr)
 static int qg_storage_read(gbms_tag_t tag, void *buff, size_t size,
 			   void *ptr)
 {
-	struct qpnp_qg *chip = (struct qpnp_qg *)ptr;
 	int ret;
 	int offset = 0;
 
@@ -4708,7 +4707,6 @@ static int qg_storage_read(gbms_tag_t tag, void *buff, size_t size,
 static int qg_storage_write(gbms_tag_t tag, const void *buff, size_t size,
 				  void *ptr)
 {
-	struct qpnp_qg *chip = (struct qpnp_qg *)ptr;
 	int ret;
 	int offset = 0;
 
