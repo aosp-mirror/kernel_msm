@@ -1822,6 +1822,7 @@
   invalidate_mapping_pages
   ioremap_page_range
   irq_domain_xlate_onecell
+  irq_set_affinity_notifier
   kernfs_notify
   kernfs_put
   kthread_cancel_delayed_work_sync
