@@ -1832,7 +1832,7 @@ static int insert_pfn(struct vm_area_struct *vma, unsigned long addr,
 				goto out_unlock;
 			}
 			entry = pte_mkyoung(*pte);
-			entry = maybe_mkwrite(pte_mkdirty(entry), vma->vm_flags);
+			entry = maybe_mkwrite(pte_mkdirty(entry), vma);
 			if (ptep_set_access_flags(vma, addr, pte, entry, 1))
 				update_mmu_cache(vma, addr, pte);
 		}
@@ -2898,8 +2898,6 @@ int do_swap_page(struct vm_fault *vmf)
 	struct mem_cgroup *memcg;
 	struct vma_swap_readahead swap_ra;
 	swp_entry_t entry;
-	struct swap_info_struct *si;
-	bool skip_swapcache = false;
 	pte_t pte;
 	int locked;
 	int exclusive = 0;
