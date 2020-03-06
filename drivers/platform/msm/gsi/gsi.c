@@ -2490,7 +2490,7 @@ static void __gsi_write_channel_scratch(unsigned long chan_hdl,
 }
 
 static void __gsi_write_wdi3_channel_scratch2_reg(unsigned long chan_hdl,
-		union __packed gsi_wdi3_channel_scratch2_reg val)
+		union gsi_wdi3_channel_scratch2_reg val)
 {
 	gsi_writel(val.data.word1, gsi_ctx->base +
 		GSI_EE_n_GSI_CH_k_SCRATCH_2_OFFS(chan_hdl,
@@ -2550,7 +2550,7 @@ static void __gsi_read_channel_scratch(unsigned long chan_hdl,
 }
 
 static void __gsi_read_wdi3_channel_scratch2_reg(unsigned long chan_hdl,
-		union __packed gsi_wdi3_channel_scratch2_reg * val)
+		union gsi_wdi3_channel_scratch2_reg * val)
 {
 
 	val->data.word1 = gsi_readl(gsi_ctx->base +
@@ -2653,7 +2653,7 @@ int gsi_write_channel_scratch(unsigned long chan_hdl,
 EXPORT_SYMBOL(gsi_write_channel_scratch);
 
 int gsi_write_wdi3_channel_scratch2_reg(unsigned long chan_hdl,
-		union __packed gsi_wdi3_channel_scratch2_reg val)
+		union gsi_wdi3_channel_scratch2_reg val)
 {
 	struct gsi_chan_ctx *ctx;
 
@@ -2721,7 +2721,7 @@ int gsi_read_channel_scratch(unsigned long chan_hdl,
 EXPORT_SYMBOL(gsi_read_channel_scratch);
 
 int gsi_read_wdi3_channel_scratch2_reg(unsigned long chan_hdl,
-		union __packed gsi_wdi3_channel_scratch2_reg * val)
+		union gsi_wdi3_channel_scratch2_reg * val)
 {
 	struct gsi_chan_ctx *ctx;
 
