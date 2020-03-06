@@ -1327,7 +1327,8 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 
 	if (charger->ben_state) {
 		/* enable necessary INT for RTx mode */
-		mask = P9382_STAT_RXCONNECTED | P9221R5_STAT_MODECHANGED;
+		mask = P9382_STAT_RXCONNECTED | P9221R5_STAT_MODECHANGED |
+		       P9382_STAT_CSP;
 	} else {
 		mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
 		       P9221_STAT_VRECT;
@@ -2545,6 +2546,21 @@ static ssize_t aicl_icl_ua_store(struct device *dev,
 static DEVICE_ATTR_RW(aicl_icl_ua);
 
 /* ------------------------------------------------------------------------ */
+static ssize_t rx_lvl_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	if (charger->pdata->switch_gpio < 0)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->rtx_csp);
+}
+
+static DEVICE_ATTR_RO(rx_lvl);
+
 static ssize_t rtx_status_show(struct device *dev,
 				     struct device_attribute *attr,
 				     char *buf)
@@ -2805,6 +2821,8 @@ static ssize_t p9382_set_rtx(struct device *dev,
 			return ret;
 		}
 
+		charger->rtx_csp = 0;
+
 		ret = p9382_ben_cfg(charger, RTX_BEN_ON);
 		if (ret < 0)
 			return ret;
@@ -2843,6 +2861,7 @@ static struct attribute *rtx_attributes[] = {
 	&dev_attr_fwupdate.attr,
 	&dev_attr_rtx_status.attr,
 	&dev_attr_is_rtx_connected.attr,
+	&dev_attr_rx_lvl.attr,
 	NULL
 };
 
@@ -3107,11 +3126,12 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 
 	return false;
 }
+
 /* Handler for rtx mode */
 static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
 	int ret;
-	u8 mode_reg;
+	u8 mode_reg, csp_reg;
 	u16 status_reg;
 	bool attached = 0;
 
@@ -3131,20 +3151,38 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			      "SYSTEM_MODE_REG=%02x", mode_reg);
 	}
 
+	ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
+	if (ret) {
+		dev_err(&charger->client->dev,
+			"failed to read P9221_STATUS_REG reg: %d\n",
+			ret);
+		return;
+	}
+
 	if (irq_src & P9382_STAT_RXCONNECTED) {
-		ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
-		if (ret) {
-			dev_err(&charger->client->dev,
-				"failed to read P9221_STATUS_REG reg: %d\n",
-				ret);
-			return;
-		}
 		attached = status_reg & P9382_STAT_RXCONNECTED;
 		logbuffer_log(charger->rtx_log,
 			      "Rx is %s. STATUS_REG=%04x",
 			      attached ? "connected" : "disconnect",
 			      status_reg);
 		schedule_work(&charger->uevent_work);
+		if (attached == 0)
+			charger->rtx_csp = 0;
+	}
+
+	if (irq_src & P9382_STAT_CSP) {
+		if (status_reg & P9382_STAT_CSP) {
+			ret = p9221_reg_read_8(charger, P9382A_CHARGE_STAT_REG,
+					       &csp_reg);
+			if (ret) {
+				logbuffer_log(charger->rtx_log,
+					      "failed to read CSP_REG reg: %d",
+					      ret);
+			} else {
+				charger->rtx_csp = csp_reg;
+				schedule_work(&charger->uevent_work);
+			}
+		}
 	}
 }
 
@@ -3344,8 +3382,26 @@ static void p9221_uevent_work(struct work_struct *work)
 {
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, uevent_work);
+	int ret;
+	union power_supply_propval vout, iout;
 
 	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
+
+	if (charger->ben_state)
+		return;
+
+	ret = p9221_get_property_reg(charger, POWER_SUPPLY_PROP_CURRENT_NOW,
+				     &iout);
+	ret |= p9221_get_property_reg(charger, POWER_SUPPLY_PROP_VOLTAGE_NOW,
+				      &vout);
+	if (ret == 0) {
+		logbuffer_log(charger->rtx_log,
+			      "Vout=%dmV, Iout=%dmA, rx_lvl=%d",
+			      vout.intval/1000, iout.intval/1000,
+			      charger->rtx_csp);
+	} else {
+		logbuffer_log(charger->rtx_log, "failed to read rtx info.");
+	}
 }
 
 static int p9221_parse_dt(struct device *dev,

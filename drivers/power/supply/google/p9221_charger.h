@@ -226,6 +226,7 @@
 #define P9382A_DATA_RECV_BUF_START		0x1B0
 
 #define P9382A_STATUS_REG			0x34
+#define P9382A_CHARGE_STAT_REG			0x3E
 
 #define P9382A_MODE_TXMODE			BIT(2)
 
@@ -237,6 +238,7 @@
 /*
  * Interrupt/Status flags for P9382
  */
+#define P9382_STAT_CSP				BIT(4)
 #define P9382_STAT_RXCONNECTED			BIT(10)
 
 enum p9221_align_mfg_chk_state {
@@ -342,6 +344,7 @@ struct p9221_charger_data {
 	u32				aicl_delay_ms;
 	u32				aicl_icl_ua;
 	int				rtx_state;
+	u32				rtx_csp;
 };
 
 struct p9221_prop_reg_map_entry {
