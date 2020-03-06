@@ -51,6 +51,7 @@
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 		qcom,mdss-dsi-bl-min-level = <0x4>;
 		qcom,mdss-dsi-bl-max-level = <0x3ff>;
+		qcom,mdss-brightness-max-level = <1023>;
 		qcom,bl-update-flag = "delay_until_first_frame";
 		/* param1 = DBV[9:8], param2 = DBV[7:0] */
 		google,dsi-bl-cmd-high-byte-offset = <8>;
@@ -65,7 +66,7 @@
 		qcom,mdss-dsi-t-clk-post = <0x15>;
 		qcom,mdss-dsi-t-clk-pre = <0x12>;
 
-		qcom,mdss-dsi-bl-notifier-ranges = <33 40 47 255>;
+		qcom,mdss-dsi-bl-notifier-ranges = <129 157 187 1023>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
@@ -279,7 +280,7 @@
 
 			lp-mode@1 {
 				label = "low";
-				google,dsi-lp-brightness-threshold = <10>;
+				google,dsi-lp-brightness-threshold = <40>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
 					15 01 00 00 24 00 02 53 03
@@ -296,7 +297,7 @@
 
 			lp-mode@2 {
 				label = "high";
-				google,dsi-lp-brightness-threshold = <255>;
+				google,dsi-lp-brightness-threshold = <1023>;
 				google,dsi-lp-command = [
 					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
 					15 01 00 00 24 00 02 53 02
@@ -361,17 +362,17 @@
 			};
 
 			hbm-range@1 {
-				/* Normal brightness mode covers ~2 to 500
+				/* Normal brightness mode covers ~2 to 450
 				 * nits, using panel brightness values up to
 				 * 0x3ff. HBM extends the range to 700 nits,
-				 * and remaps user brightness 1-255 to cover
+				 * and remaps user brightness 1-1023 to cover
 				 * this extended range. In this extended range,
 				 * 500 nits / 0x3ff corresponds to user
-				 * brightness 182. Panel brightness is not
+				 * brightness 731. Panel brightness is not
 				 * adjustable in the 500-700 nit segment.
 				 */
 				google,dsi-hbm-range-brightness-threshold =
-					<182>;
+					<658>;
 
 				google,dsi-hbm-range-bl-min-level = <0x3ff>;
 				google,dsi-hbm-range-bl-max-level = <0x3ff>;
