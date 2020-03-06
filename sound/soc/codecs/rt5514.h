@@ -271,6 +271,8 @@
 #define DIVIDER_2_P048		2048000
 #define DIVIDER_3_P072		3072000
 
+#define UNMUTE_TIMEOUT_MS	1000
+
 /* System Clock Source */
 enum {
 	RT5514_SCLK_S_MCLK,
@@ -333,6 +335,7 @@ struct rt5514_priv {
 	struct mutex stream_lock;
 	unsigned int sound_model_addr[2];
 	bool load_default_sound_model;
+	struct delayed_work unmute_work;
 };
 
 #endif /* __RT5514_H__ */
