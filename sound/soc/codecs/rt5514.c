@@ -277,6 +277,21 @@ static const DECLARE_TLV_DB_RANGE(bst_tlv,
 
 static const DECLARE_TLV_DB_SCALE(adc_vol_tlv, -1725, 75, 0);
 
+static void rt5514_unmute_work(struct work_struct *work)
+{
+	struct rt5514_priv *rt5514 =
+		container_of(work, struct rt5514_priv, unmute_work.work);
+
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+		RT5514_AD_AD_MUTE, 0x0);
+}
+
 static int rt5514_dsp_voice_wake_up_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
@@ -1610,8 +1625,20 @@ static int rt5514_dmic_event(struct snd_soc_dapm_widget *w,
 	struct rt5514_priv *rt5514 = snd_soc_codec_get_drvdata(codec);
 
 	unsigned long delay_us = rt5514->mic_delay * 1000;
-	if (event & SND_SOC_DAPM_PRE_PMU && delay_us > 0)
+	if (event & SND_SOC_DAPM_PRE_PMU && delay_us > 0) {
 		usleep_range(delay_us, delay_us + 100);
+
+		/* un-mute all dmic path after power up */
+		cancel_delayed_work_sync(&rt5514->unmute_work);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+			RT5514_AD_AD_MUTE, 0x0);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+			RT5514_AD_AD_MUTE, 0x0);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+			RT5514_AD_AD_MUTE, 0x0);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+			RT5514_AD_AD_MUTE, 0x0);
+	}
 
 	return 0;
 }
@@ -1834,6 +1861,21 @@ static int rt5514_hw_params(struct snd_pcm_substream *substream,
 
 	mutex_lock(&rt5514->stream_lock);
 	rt5514->is_streaming = true;
+
+	/* mute all dmic path to prevent pop */
+	cancel_delayed_work_sync(&rt5514->unmute_work);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+
+	/* send un-mute with delay */
+	schedule_delayed_work(&rt5514->unmute_work,
+		msecs_to_jiffies(UNMUTE_TIMEOUT_MS));
 
 	if (rt5514->dsp_enabled | rt5514->dsp_adc_enabled) {
 		if (rt5514->dsp_adc_enabled) {
@@ -2487,6 +2529,8 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 	rt5514->mic_delay = 0;
 
 	rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, rt5514->spi_switch);
+
+	INIT_DELAYED_WORK(&rt5514->unmute_work, rt5514_unmute_work);
 
 	mutex_init(&rt5514->stream_lock);
 

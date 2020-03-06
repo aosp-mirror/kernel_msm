@@ -268,6 +268,7 @@
 #define RT5514_SPI_SWITCH_GPIO	5
 
 #define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
+#define UNMUTE_TIMEOUT_MS	1000
 
 /* System Clock Source */
 enum {
@@ -331,6 +332,7 @@ struct rt5514_priv {
 	unsigned long mic_delay;
 	unsigned int sound_model_addr[2];
 	bool load_default_sound_model;
+	struct delayed_work unmute_work;
 };
 
 int rt5514_set_gpio(int gpio, bool output);
