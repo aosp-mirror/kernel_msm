@@ -82,11 +82,16 @@ int of_get_regulator_tps_config(struct device *dev,
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < drvdata->nr_control_gpios; i++)
+	for (i = 0; i < drvdata->nr_control_gpios; i++) {
 		drvdata->control_gpio_descs[i] = devm_gpiod_get_index(dev,
 							       "control",
 							       i,
 							       GPIOD_OUT_LOW);
+		/* TODO: for debug only; remove this export. b/149543749 */
+		ret = gpiod_export(drvdata->control_gpio_descs[i], true);
+		if (ret)
+			dev_err(dev, "couldn't export gpio\n");
+	}
 
 	drvdata->nr_gpio_en = of_property_count_elems_of_size(np,
 							"gpio-enable-sequence",
