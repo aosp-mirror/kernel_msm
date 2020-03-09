@@ -205,7 +205,7 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 	struct cs35l41_private *cs35l41 =
 		snd_soc_component_get_drvdata(component);
 
-	dev_info(cs35l41->dev, "%s: event: %d halo_booted: %d\n",
+	dev_dbg(cs35l41->dev, "%s: event: %d halo_booted: %d\n",
 				__func__, event, cs35l41->halo_booted);
 
 	switch (event) {
@@ -2288,7 +2288,7 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 	asp_width = params_physical_width(params);
 
 	if (asp_wl > 24) {
-		dev_err(cs35l41->dev, "asp_wl: %d is over 24", asp_wl);
+		dev_dbg(cs35l41->dev, "asp_wl: %d is over 24", asp_wl);
 		asp_wl = 24;
 	}
 
