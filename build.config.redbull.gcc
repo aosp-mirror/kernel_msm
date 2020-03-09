@@ -1,5 +1,5 @@
 KERNEL_DIR=private/msm-google
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redfin.common
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common
 KCFLAGS='-fno-tree-vrp'
 POST_DEFCONFIG_CMDS="check_defconfig && update_gcc_config"
 

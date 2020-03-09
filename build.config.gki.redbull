@@ -1,8 +1,8 @@
 KERNEL_DIR=private/msm-google
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.bramble.no-cfi
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.no-cfi
 
 # Override the defconfig
-DEFCONFIG=bramble-gki_defconfig
+DEFCONFIG=redbull-gki_defconfig
 
 if [ ! -z "$BUILD_BOOT_IMG" ]; then
 BUILD_INITRAMFS=1

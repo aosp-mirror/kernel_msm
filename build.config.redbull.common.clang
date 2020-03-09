@@ -1,4 +1,4 @@
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.bramble.common
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common
 CC=clang
 if [ ! -n "${DISABLE_LLD}" ] ; then
    LD=ld.lld

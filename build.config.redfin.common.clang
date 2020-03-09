@@ -1,6 +1,0 @@
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redfin.common
-CC=clang
-if [ ! -n "${DISABLE_LLD}" ] ; then
-   LD=ld.lld
-fi
-CLANG_TRIPLE=aarch64-linux-gnu-
