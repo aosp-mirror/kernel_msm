@@ -1050,14 +1050,17 @@ static int rt5514_spi_hw_free(struct snd_pcm_substream *substream)
 	switch (cpu_dai->id) {
 	case 1:
 		cancel_delayed_work_sync(&rt5514_dsp->copy_work_1);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 		break;
 
 	case 2:
 		cancel_delayed_work_sync(&rt5514_dsp->copy_work_2);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		break;
 
 	default:
 		cancel_delayed_work_sync(&rt5514_dsp->copy_work_0);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 		break;
 	}
 
