@@ -3073,10 +3073,11 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 			chip->batt_age_level = avail_age_level;
 		}
 	} else {
-		const char *batt_type;
+		char *batt_type;
 
 		batt_type = (chip->dt.batt_type_name == NULL) ?
-			    chip->batt_gpn : chip->dt.batt_type_name;
+			    (char *)chip->batt_gpn :
+			    (char *)chip->dt.batt_type_name;
 
 		if (batt_type != NULL)
 			profile_node = of_batterydata_get_best_profile(
@@ -4694,6 +4695,23 @@ static int qpnp_qg_resume(struct device *dev)
 }
 
 #if IS_ENABLED(CONFIG_GOOGLE_BMS)
+#define BATT_TYPE_LEN	(GBMS_BGPN_LEN + 2) // GPN + CellType + NULL character
+static void qg_get_cell_type(struct qpnp_qg *chip)
+{
+	u8 cell_type = 0;
+	int rc = 0;
+
+	rc = gbms_storage_read(GBMS_TAG_CELL, &cell_type, sizeof(u8));
+
+	if (rc < 0) {
+		pr_err("Failed to get cell type, rc=%d\n", rc);
+		return;
+	}
+
+	scnprintf((char *)chip->batt_gpn + GBMS_BGPN_LEN,
+		  BATT_TYPE_LEN - GBMS_BGPN_LEN , "%d", cell_type);
+}
+
 #define MAX_DEFER_CNT	10
 static int qg_get_batt_type(struct qpnp_qg *chip)
 {
@@ -4701,14 +4719,12 @@ static int qg_get_batt_type(struct qpnp_qg *chip)
 	bool defer;
 	int rc = 0;
 
-	chip->batt_gpn = kzalloc(GBMS_BGPN_LEN + 1, GFP_KERNEL);
+	chip->batt_gpn = kzalloc(BATT_TYPE_LEN, GFP_KERNEL);
 
 	if (chip->batt_gpn == NULL) {
 		pr_err("Failed to get battery type, rc=%d\n", rc);
 		return 0;
 	}
-
-	*((char *)chip->batt_gpn + GBMS_BGPN_LEN) = '\0';
 
 	rc = gbms_storage_read(GBMS_TAG_BGPN, (void *)chip->batt_gpn,
 			       GBMS_BGPN_LEN);
@@ -4727,6 +4743,9 @@ static int qg_get_batt_type(struct qpnp_qg *chip)
 		if (defer_cnt <= MAX_DEFER_CNT)
 			return -EPROBE_DEFER;
 	}
+
+	if (chip->batt_gpn != NULL)
+		qg_get_cell_type(chip);
 
 	pr_info("eeprom ID=%s, len=%d, defer_cnt=%d\n",
 		chip->batt_gpn, rc, defer_cnt);
