@@ -7,7 +7,7 @@ qcom,4228969_Google_R3_LSN_4000mAh {
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <4250>;
 	qcom,battery-therm-kohm = <100>;
-	qcom,battery-type = "8230017201";
+	qcom,battery-type = "82300172013";
 	qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {

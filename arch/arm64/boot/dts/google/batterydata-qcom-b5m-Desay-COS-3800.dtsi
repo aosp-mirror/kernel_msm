@@ -7,7 +7,7 @@ qcom,4326220_GoogleLLC_B5M_Coslight_3800mAH_PM7250B {
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <3440>;
 	qcom,battery-therm-kohm = <10>;
-	qcom,battery-type = "8230021801";
+	qcom,battery-type = "82300218012";
 	qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {

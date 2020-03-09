@@ -7,7 +7,7 @@ qcom,4255243_Google_B5_ATL_3800mAH_PM7250 {
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <3440>;
 	qcom,battery-therm-kohm = <10>;
-	qcom,battery-type = "8230020101";
+	qcom,battery-type = "82300201011";
 	qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {
