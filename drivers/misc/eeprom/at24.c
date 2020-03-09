@@ -629,6 +629,8 @@ static unsigned int at24_get_offset_adj(u8 flags, unsigned int byte_len)
 #define BATT_EEPROM_TAG_HIST_LEN	960
 #define BATT_EEPROM_TAG_BGPN_OFFSET	0x03
 #define BATT_EEPROM_TAG_BGPN_LEN	GBMS_BGPN_LEN
+#define BATT_EEPROM_TAG_CELL_OFFSET	0x17
+#define BATT_EEPROM_TAG_CELL_LEN	1
 static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 			     void *ptr)
 {
@@ -650,6 +652,10 @@ static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 	case GBMS_TAG_BGPN:
 		*addr = BATT_EEPROM_TAG_BGPN_OFFSET;
 		*count = BATT_EEPROM_TAG_BGPN_LEN;
+		break;
+	case GBMS_TAG_CELL:
+		*addr = BATT_EEPROM_TAG_CELL_OFFSET;
+		*count = BATT_EEPROM_TAG_CELL_LEN;
 		break;
 	default:
 		ret = -ENOENT;
