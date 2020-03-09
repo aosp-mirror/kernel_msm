@@ -3392,8 +3392,6 @@ static void smb5_disable_interrupts(struct smb_charger *chg)
 	}
 }
 
-#if defined(CONFIG_DEBUG_FS)
-
 static int force_batt_psy_update_write(void *data, u64 val)
 {
 	struct smb_charger *chg = data;
@@ -3459,13 +3457,6 @@ static void smb5_create_debugfs(struct smb5 *chip)
 	if (IS_ERR_OR_NULL(file))
 		pr_err("Couldn't create debug_mask file rc=%ld\n", (long)file);
 }
-
-#else
-
-static void smb5_create_debugfs(struct smb5 *chip)
-{}
-
-#endif
 
 static int smb5_show_charger_status(struct smb5 *chip)
 {
@@ -3592,7 +3583,6 @@ static int smb5_probe(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(chg->log)) {
 		pr_err("failed to obtain logbuffer instance rc:%ld",
 		       PTR_ERR(chg->log));
-		return PTR_ERR(chg->log);
 	}
 #endif
 
