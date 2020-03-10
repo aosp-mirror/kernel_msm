@@ -18,7 +18,7 @@
 #include "cam_trace.h"
 #include "cam_common_util.h"
 #include "cam_packet_util.h"
-#include "cam_sensor_hw_sync.h"
+
 
 #ifdef CONFIG_CAMERA_FW_UPDATE
 #include "../cam_fw_update/fw_update.h"
@@ -103,24 +103,6 @@ static void cam_sensor_release_stream_rsc(
 		if (rc < 0)
 			CAM_ERR(CAM_SENSOR,
 				"failed while deleting Streamon settings");
-	}
-
-	i2c_set = &(s_ctrl->i2c_data.master_settings);
-	if (i2c_set->is_settings_valid == 1) {
-		i2c_set->is_settings_valid = -1;
-		rc = delete_request(i2c_set);
-		if (rc < 0)
-			CAM_ERR(CAM_SENSOR,
-				"failed while deleting Master settings");
-	}
-
-	i2c_set = &(s_ctrl->i2c_data.slave_settings);
-	if (i2c_set->is_settings_valid == 1) {
-		i2c_set->is_settings_valid = -1;
-		rc = delete_request(i2c_set);
-		if (rc < 0)
-			CAM_ERR(CAM_SENSOR,
-				"failed while deleting Slave settings");
 	}
 }
 
@@ -331,19 +313,6 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		i2c_reg_settings->is_settings_valid = 1;
 		break;
 	}
-	case CAM_SENSOR_PACKET_OPCODE_SENSOR_SYNC_MASTER: {
-		i2c_reg_settings = &i2c_data->master_settings;
-		i2c_reg_settings->request_id = 0;
-		i2c_reg_settings->is_settings_valid = 1;
-		break;
-	}
-
-	case CAM_SENSOR_PACKET_OPCODE_SENSOR_SYNC_SLAVE: {
-		i2c_reg_settings = &i2c_data->slave_settings;
-		i2c_reg_settings->request_id = 0;
-		i2c_reg_settings->is_settings_valid = 1;
-		break;
-	}
 
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE: {
 		if ((s_ctrl->sensor_state == CAM_SENSOR_INIT) ||
@@ -376,10 +345,6 @@ static int32_t cam_sensor_i2c_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_READREG: {
 		rc = cam_sensor_read_reg(s_ctrl, csl_packet);
-		return rc;
-	}
-	case CAM_SENSOR_PACKET_OPCODE_SENSOR_SYNC_CMD: {
-		rc = cam_sensor_sync_pkt_parse(s_ctrl, csl_packet);
 		return rc;
 	}
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_NOP: {
@@ -431,24 +396,6 @@ static int32_t cam_sensor_i2c_modes_util(
 {
 	int32_t rc = 0;
 	uint32_t i, size;
-<<<<<<< HEAD
-	uint16_t default_sid = 0;
-	struct cam_sensor_ctrl_t *s_ctrl;
-
-	s_ctrl = container_of(io_master_info,
-		struct cam_sensor_ctrl_t,
-		io_master_info);
-	if (s_ctrl)
-		cam_sensor_sync_audit(s_ctrl, i2c_list);
-
-	if ((io_master_info->master_type == CCI_MASTER) &&
-		(i2c_list->i2c_settings.slave_addr != 0)) {
-		default_sid = io_master_info->cci_client->sid;
-		io_master_info->cci_client->sid =
-			i2c_list->i2c_settings.slave_addr >> 1;
-	}
-=======
->>>>>>> partner/android-msm-sunfish-4.14
 
 	if (i2c_list->op_code == CAM_SENSOR_I2C_WRITE_RANDOM) {
 		rc = camera_io_dev_write(io_master_info,
@@ -752,6 +699,8 @@ void cam_sensor_query_cap(struct cam_sensor_ctrl_t *s_ctrl,
 		s_ctrl->sensordata->subdev_id[SUB_MODULE_LED_FLASH];
 	query_cap->ois_slot_id =
 		s_ctrl->sensordata->subdev_id[SUB_MODULE_OIS];
+	query_cap->ir_led_slot_id =
+		s_ctrl->sensordata->subdev_id[SUB_MODULE_IR_LED];
 	query_cap->slot_info =
 		s_ctrl->soc_info.index;
 }
@@ -999,7 +948,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		bridge_params.v4l2_sub_dev_flag = 0;
 		bridge_params.media_entity_flag = 0;
 		bridge_params.priv = s_ctrl;
-
+		bridge_params.dev_id = CAM_SENSOR;
 		sensor_acq_dev.device_handle =
 			cam_create_device_hdl(&bridge_params);
 		s_ctrl->bridge_intf.device_hdl = sensor_acq_dev.device_handle;
@@ -1150,6 +1099,16 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 	}
 		break;
 	case CAM_CONFIG_DEV: {
+		if (s_ctrl->sensor_state < CAM_SENSOR_ACQUIRE) {
+			rc = -EINVAL;
+			CAM_ERR(CAM_SENSOR,
+				"sensor_id:[0x%x] not acquired to configure [%d] ",
+				s_ctrl->sensordata->slave_info.sensor_id,
+				s_ctrl->sensor_state
+			);
+			goto release_mutex;
+		}
+
 		rc = cam_sensor_i2c_pkt_parse(s_ctrl, arg);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "Failed i2c pkt parse: %d", rc);
@@ -1399,14 +1358,6 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			i2c_set = &s_ctrl->i2c_data.streamoff_settings;
 			break;
 		}
-		case CAM_SENSOR_PACKET_OPCODE_SENSOR_SYNC_MASTER: {
-			i2c_set = &s_ctrl->i2c_data.master_settings;
-			break;
-		}
-		case CAM_SENSOR_PACKET_OPCODE_SENSOR_SYNC_SLAVE: {
-			i2c_set = &s_ctrl->i2c_data.slave_settings;
-			break;
-		}
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE:
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_PROBE:
 		default:
@@ -1511,9 +1462,6 @@ int32_t cam_sensor_apply_request(struct cam_req_mgr_apply_request *apply)
 	CAM_DBG(CAM_REQ, " Sensor update req id: %lld", apply->request_id);
 	trace_cam_apply_req("Sensor", apply->request_id);
 	mutex_lock(&(s_ctrl->cam_sensor_mutex));
-	if (s_ctrl->soc_info.index <= REAR_TELE)
-		cam_sensor_sync_trigger(s_ctrl, apply->request_id);
-
 	rc = cam_sensor_apply_settings(s_ctrl, apply->request_id,
 		CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE);
 	mutex_unlock(&(s_ctrl->cam_sensor_mutex));

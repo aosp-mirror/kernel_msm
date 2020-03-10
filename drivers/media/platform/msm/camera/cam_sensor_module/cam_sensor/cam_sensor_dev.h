@@ -100,7 +100,6 @@ struct intf_params {
  * @fw_update_flag: Update OIS firmware
  * @ois_fw_ver: OIS firmware version
  * @vcm_fw_ver: VCM firmware version
- * @hw_sync_ctrl: HW sync control structure
  */
 struct cam_sensor_ctrl_t {
 	char device_name[CAM_CTX_DEV_NAME_MAX_LENGTH];
@@ -130,18 +129,6 @@ struct cam_sensor_ctrl_t {
 	uint8_t fw_update_flag;
 	uint16_t ois_fw_ver;
 	uint16_t vcm_fw_ver;
-<<<<<<< HEAD
-	uint32_t hw_version;
-	struct cam_sensor_hw_sync_ctrl hw_sync_ctrl;
-	uint8_t cam_sensor_irq[CAM_SENSOR_GPIO_IRQ_MAX];
-	uint8_t cam_safety_gpio_idx[CAM_SENSOR_GPIO_IRQ_MAX];
-};
-
-struct sensor_status_t {
-	uint8_t streamon_mask;
-	bool is_strobe_disabled;
-=======
->>>>>>> partner/android-msm-sunfish-4.14
 };
 
 #endif /* _CAM_SENSOR_DEV_H_ */

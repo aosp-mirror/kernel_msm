@@ -17,7 +17,7 @@ int cam_sync_util_find_and_set_empty_row(struct sync_device *sync_dev,
 {
 	int rc = 0;
 
-	mutex_lock(&sync_dev->bitmap_lock);
+	mutex_lock(&sync_dev->table_lock);
 
 	*idx = find_first_zero_bit(sync_dev->bitmap, CAM_SYNC_MAX_OBJS);
 
@@ -26,7 +26,7 @@ int cam_sync_util_find_and_set_empty_row(struct sync_device *sync_dev,
 	else
 		rc = -1;
 
-	mutex_unlock(&sync_dev->bitmap_lock);
+	mutex_unlock(&sync_dev->table_lock);
 
 	return rc;
 }
@@ -280,14 +280,12 @@ int cam_sync_deinit_object(struct sync_table_row *table, uint32_t idx)
 	}
 
 	memset(row, 0, sizeof(*row));
+	clear_bit(idx, sync_dev->bitmap);
 	INIT_LIST_HEAD(&row->callback_list);
 	INIT_LIST_HEAD(&row->parents_list);
 	INIT_LIST_HEAD(&row->children_list);
 	INIT_LIST_HEAD(&row->user_payload_list);
 	spin_unlock_bh(&sync_dev->row_spinlocks[idx]);
-	mutex_lock(&sync_dev->bitmap_lock);
-	clear_bit(idx, sync_dev->bitmap);
-	mutex_unlock(&sync_dev->bitmap_lock);
 
 	CAM_DBG(CAM_SYNC, "Destroying sync obj:%d successful", idx);
 	return 0;

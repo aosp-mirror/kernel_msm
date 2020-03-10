@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -179,12 +179,12 @@ struct cam_signalable_info {
  * @sync_table      : Table of all sync objects
  * @row_spinlocks   : Spinlock array, one for each row in the table
  * @table_lock      : Mutex used to lock the table
- * @bitmap_lock     : Mutex used to lock the bitmap
  * @open_cnt        : Count of file open calls made on the sync driver
  * @dentry          : Debugfs entry
  * @work_queue      : Work queue used for dispatching kernel callbacks
  * @cam_sync_eventq : Event queue used to dispatch user payloads to user space
  * @bitmap          : Bitmap representation of all sync objects
+ * @err_cnt         : Error counter to dump fence table
  */
 struct sync_device {
 	struct video_device *vdev;
@@ -192,13 +192,13 @@ struct sync_device {
 	struct sync_table_row sync_table[CAM_SYNC_MAX_OBJS];
 	spinlock_t row_spinlocks[CAM_SYNC_MAX_OBJS];
 	struct mutex table_lock;
-	struct mutex bitmap_lock;
 	int open_cnt;
 	struct dentry *dentry;
 	struct workqueue_struct *work_queue;
 	struct v4l2_fh *cam_sync_eventq;
 	spinlock_t cam_sync_eventq_lock;
 	DECLARE_BITMAP(bitmap, CAM_SYNC_MAX_OBJS);
+	int err_cnt;
 };
 
 

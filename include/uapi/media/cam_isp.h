@@ -4,7 +4,9 @@
 #include "cam_defs.h"
 #include "cam_isp_vfe.h"
 #include "cam_isp_ife.h"
-
+#ifdef CONFIG_BOARD_SUNFISH
+#include "cam_cpas.h"
+#endif /*CONFIG_BOARD_SUNFISH*/
 
 /* ISP driver name */
 #define CAM_ISP_DEV_NAME                        "cam-isp"
@@ -91,6 +93,84 @@
 #define CAM_ISP_GENERIC_BLOB_TYPE_CSID_CLOCK_CONFIG   4
 #define CAM_ISP_GENERIC_BLOB_TYPE_FE_CONFIG           5
 #define CAM_ISP_GENERIC_BLOB_TYPE_BW_CONFIG_V2        6
+
+
+#ifdef CONFIG_BOARD_SUNFISH
+
+ /* ISP Generic Cmd Buffer Blob types */
+#define CAM_ISP_GENERIC_BLOB_TYPE_INIT_FRAME_DROP           10
+#define CAM_ISP_GENERIC_BLOB_TYPE_SENSOR_DIMENSION_CONFIG   11
+#define CAM_ISP_GENERIC_BLOB_TYPE_FPS_CONFIG                12
+
+/* Per Path Usage Data */
+#define CAM_ISP_USAGE_INVALID     0
+#define CAM_ISP_USAGE_LEFT_PX     1
+#define CAM_ISP_USAGE_RIGHT_PX    2
+#define CAM_ISP_USAGE_RDI         3
+
+/**
+ * struct cam_isp_bw_config_v2 - Bandwidth configuration
+ *
+ * @usage_type:                 Usage type (Single/Dual)
+ * @num_paths:                  Number of axi data paths
+ * @axi_path                    Per path vote info
+ */
+struct cam_isp_bw_config_v2 {
+       uint32_t                             usage_type;
+       uint32_t                             num_paths;
+       struct cam_axi_per_path_bw_vote      axi_path[1];
+} __attribute__((packed));
+
+/**
+ * struct cam_isp_sensor_path_dimension
+ *
+ * @width             expected width
+ * @height            expected height
+ * @measure_enabled   flag to indicate if pixel measurement is to be enabled
+ */
+struct cam_isp_sensor_dimension {
+       uint32_t width;
+       uint32_t height;
+       uint32_t measure_enabled;
+} __attribute__((packed));
+
+/**
+ * struct cam_isp_sensor_config - Sensor Dimension configuration
+ *
+ * @pix_path:                   expected ppp path configuration
+ * @pix_path:                   expected ipp path configuration
+ * @rdi_path:                   expected rdi path configuration
+ * @hbi:                        HBI value
+ * @vbi:                        VBI value
+ */
+struct cam_isp_sensor_config {
+       struct cam_isp_sensor_dimension  ppp_path;
+       struct cam_isp_sensor_dimension  ipp_path;
+       struct cam_isp_sensor_dimension  rdi_path[4];
+       uint32_t                   hbi;
+       uint32_t                   vbi;
+} __attribute__((packed));
+
+/**
+ * struct cam_isp_init_frame_drop_config - init frame drop configuration
+ *
+ * @init_frame_drop:            Initial number of frames needs to drop
+ */
+
+struct cam_isp_init_frame_drop_config {
+       uint32_t                       init_frame_drop;
+} __attribute__((packed));
+
+/**
+ * struct cam_fps_config - FPS blob support
+ *
+ * @fps:    FPS value
+ */
+struct cam_fps_config {
+       uint32_t        fps;
+} __attribute__((packed));
+
+#endif /*CONFIG_BOARD_SUNFISH*/
 
 /* Query devices */
 /**

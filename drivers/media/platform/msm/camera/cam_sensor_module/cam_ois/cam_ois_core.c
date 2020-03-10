@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -116,7 +116,7 @@ static int cam_ois_get_dev_handle(struct cam_ois_ctrl_t *o_ctrl,
 	bridge_params.v4l2_sub_dev_flag = 0;
 	bridge_params.media_entity_flag = 0;
 	bridge_params.priv = o_ctrl;
-
+	bridge_params.dev_id = CAM_OIS;
 	ois_acq_dev.device_handle =
 		cam_create_device_hdl(&bridge_params);
 	o_ctrl->bridge_intf.device_hdl = ois_acq_dev.device_handle;
@@ -534,24 +534,9 @@ static void cam_ois_read_work(struct work_struct *work)
 			0xE003, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
 			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
 		CAM_INFO(CAM_OIS,
-<<<<<<< HEAD
-			"[0xE003] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
-			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
-			buf[3], buf[4], buf[5], buf[6], buf[7]);
-
-		rc = camera_io_dev_read_seq(
-			&ois_timer_in->o_ctrl->io_master_info,
-			0xE005, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
-			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
-		CAM_INFO(CAM_OIS,
-			"[0xE005] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
-			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
-			buf[3], buf[4], buf[5], buf[6], buf[7]);
-=======
 			"[0xE003] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
 			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
 			buf[6], buf[7]);
->>>>>>> partner/android-msm-sunfish-4.14
 	}
 
 	rc = camera_io_dev_read_seq(&ois_timer_in->o_ctrl->io_master_info,
@@ -559,9 +544,8 @@ static void cam_ois_read_work(struct work_struct *work)
 		CAMERA_SENSOR_I2C_TYPE_DWORD, 6);
 	if (ois_debug) {
 		CAM_INFO(CAM_OIS,
-			"[0xE001] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x",
-			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
-			buf[3], buf[4], buf[5]);
+			"[0xE001] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x",
+			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 	}
 
 	rc = read_af_lens_position(&ois_timer_in->o_ctrl->io_master_info,

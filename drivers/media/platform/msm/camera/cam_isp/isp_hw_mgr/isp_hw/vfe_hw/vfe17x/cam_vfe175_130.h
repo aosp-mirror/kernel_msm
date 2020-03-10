@@ -181,8 +181,6 @@ struct cam_vfe_top_ver2_reg_offset_module_ctrl zoom_175_130_reg = {
 	.enable   = 0x0000004C,
 };
 
-<<<<<<< HEAD
-=======
 static struct cam_vfe_bus_ver2_stats_cfg_info stats_175_130_info  = {
 	.dmi_offset_info = {
 		.auto_increment = 0x00000100,
@@ -355,7 +353,6 @@ static struct cam_vfe_bus_ver2_stats_cfg_info stats_175_130_info  = {
 	},
 };
 
->>>>>>> partner/android-msm-sunfish-4.14
 static struct cam_vfe_top_ver2_reg_offset_common vfe175_130_top_common_reg = {
 	.hw_version               = 0x00000000,
 	.hw_capability            = 0x00000004,
@@ -426,6 +423,31 @@ static struct cam_vfe_top_ver2_hw_info vfe175_130_top_hw_info = {
 		.fe_reg     = &vfe175_130_fe_reg,
 		.reg_data       = &vfe_175_130_fe_reg_data,
 		},
+	.dump_data = {
+		.num_reg_dump_entries  =  2,
+		.num_lut_dump_entries  =  1,
+		.dmi_cfg               =  0xc24,
+		.dmi_addr              =  0xc28,
+		.dmi_data_path_hi      =  0xc2C,
+		.dmi_data_path_lo      =  0xc30,
+		.reg_entry = {
+			{
+				.reg_dump_start = 0x0,
+				.reg_dump_end   = 0x1160,
+			},
+			{
+				.reg_dump_start = 0x2000,
+				.reg_dump_end   = 0x3978,
+			},
+		},
+		.lut_entry = {
+			{
+				.lut_word_size = 64,
+				.lut_bank_sel  = 0x40,
+				.lut_addr_size = 180,
+			},
+		},
+	},
 	.mux_type = {
 		CAM_VFE_CAMIF_VER_2_0,
 		CAM_VFE_RDI_VER_1_0,
@@ -1283,6 +1305,7 @@ static struct cam_vfe_bus_ver2_hw_info vfe175_130_bus_hw_info = {
 		.ubwc_8bit_threshold_lossy_0 = 0x6210022,
 		.ubwc_8bit_threshold_lossy_1 = 0xE0E,
 	},
+	.stats_data = &stats_175_130_info,
 };
 
 struct cam_vfe_hw_info cam_vfe175_130_hw_info = {

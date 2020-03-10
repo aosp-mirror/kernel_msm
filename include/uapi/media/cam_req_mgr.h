@@ -22,8 +22,19 @@
 #define CAM_ACTUATOR_DEVICE_TYPE  (CAM_DEVICE_TYPE_BASE + 9)
 #define CAM_CCI_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 10)
 #define CAM_FLASH_DEVICE_TYPE     (CAM_DEVICE_TYPE_BASE + 11)
+
+#ifdef CONFIG_BOARD_FLORAL
+#define MAX_LINKS_PER_SESSION             4
+#endif /*CONFIG_BOARD_FLORAL*/
+
+#ifdef CONFIG_BOARD_SUNFISH
+#define CAM_REQ_MGR_MAX_HANDLES_V2        128
+#define MAX_LINKS_PER_SESSION             2
+#endif /*CONFIG_BOARD_SUNFISH*/
+
 #define CAM_EEPROM_DEVICE_TYPE    (CAM_DEVICE_TYPE_BASE + 12)
 #define CAM_OIS_DEVICE_TYPE       (CAM_DEVICE_TYPE_BASE + 13)
+#define CAM_IRLED_DEVICE_TYPE     (CAM_DEVICE_TYPE_BASE + 14)
 
 /* cam_req_mgr hdl info */
 #define CAM_REQ_MGR_HDL_IDX_POS           8
@@ -35,12 +46,6 @@
  * It includes both session and device handles
  */
 #define CAM_REQ_MGR_MAX_HANDLES           64
-<<<<<<< HEAD
-#define MAX_LINKS_PER_SESSION             4
-=======
-#define CAM_REQ_MGR_MAX_HANDLES_V2        128
-#define MAX_LINKS_PER_SESSION             2
->>>>>>> partner/android-msm-sunfish-4.14
 
 /* V4L event type which user space will subscribe to */
 #define V4L_EVENT_CAM_REQ_MGR_EVENT       (V4L2_EVENT_PRIVATE_START + 0)
@@ -80,6 +85,37 @@
  */
 #define CAM_REQ_MGR_SYNC_MODE_NO_SYNC   0
 #define CAM_REQ_MGR_SYNC_MODE_SYNC      1
+
+#ifdef CONFIG_BOARD_FLORAL
+
+enum laser_tag_type {
+	LASER_TAG_NONE,
+	LASER_TAG_FLOOD,
+	LASER_TAG_DOT
+};
+
+/**
+ * Notify laser safety ic status to user space
+ * NO_ERROR: No error detected
+ * LENS_CRACK : ITO-C/ITO-R detected lens crack and laser is been disabled
+ * LASER_OPERATION_FAULT : Multiple reason caused laser is been killed.
+ *                         1. Over current
+ *                         2. Over pulse width
+ *                         3. Dot/Flood strobe stacked
+ * TEMPERATURE_TOO_HIGH : Temperature too high and laser is beend disabled
+ * TEMPERATURE_TOO_LOW : Temperature too low and laser is beend disabled
+ * HUMIDITY_TOO_HIGH : Humidity too high and laser is beend disabled
+ */
+enum safety_ic_error_type {
+	NO_ERROR,
+	LENS_CRACK,
+	LASER_OPERATION_FAULT,
+	TEMPERATURE_TOO_HIGH,
+	TEMPERATURE_TOO_LOW,
+	HUMIDITY_TOO_HIGH
+};
+
+#endif /*CONFIG_BOARD_FLORAL*/
 
 /**
  * struct cam_req_mgr_event_data
@@ -220,6 +256,25 @@ struct cam_req_mgr_link_control {
 	int32_t link_hdls[MAX_LINKS_PER_SESSION];
 };
 
+#ifdef CONFIG_BOARD_SUNFISH
+
+struct cam_req_mgr_link_info_v2 {
+       int32_t session_hdl;
+       uint32_t num_devices;
+       int32_t dev_hdls[CAM_REQ_MGR_MAX_HANDLES_V2];
+       int32_t link_hdl;
+};
+
+struct cam_req_mgr_ver_info {
+       uint32_t version;
+       union {
+               struct cam_req_mgr_link_info link_info_v1;
+               struct cam_req_mgr_link_info_v2 link_info_v2;
+       } u;
+};
+
+#endif /*CONFIG_BOARD_SUNFISH*/
+
 /**
  * cam_req_mgr specific opcode ids
  */
@@ -236,6 +291,12 @@ struct cam_req_mgr_link_control {
 #define CAM_REQ_MGR_RELEASE_BUF                 (CAM_COMMON_OPCODE_MAX + 11)
 #define CAM_REQ_MGR_CACHE_OPS                   (CAM_COMMON_OPCODE_MAX + 12)
 #define CAM_REQ_MGR_LINK_CONTROL                (CAM_COMMON_OPCODE_MAX + 13)
+
+#ifdef CONFIG_BOARD_SUNFISH
+#define CAM_REQ_MGR_LINK_V2                     (CAM_COMMON_OPCODE_MAX + 14)
+#define CAM_REQ_MGR_REQUEST_DUMP                (CAM_COMMON_OPCODE_MAX + 15)
+#endif /*CONFIG_BOARD_SUNFISH*/
+
 /* end of cam_req_mgr opcodes */
 
 #define CAM_MEM_FLAG_HW_READ_WRITE              (1<<0)
@@ -390,11 +451,17 @@ struct cam_mem_cache_ops_cmd {
  * @CAM_REQ_MGR_ERROR_TYPE_REQUEST: Error on a single request, not fatal
  * @CAM_REQ_MGR_ERROR_TYPE_BUFFER: Buffer was not filled, not fatal
  * @CAM_REQ_MGR_ERROR_TYPE_RECOVERY: Fatal error, can be recovered
+ * @CAM_REQ_MGR_ERROR_TYPE_FULL_RECOVERY: Fatal error, need to recover
+ * the whole system
  */
 #define CAM_REQ_MGR_ERROR_TYPE_DEVICE           0
 #define CAM_REQ_MGR_ERROR_TYPE_REQUEST          1
 #define CAM_REQ_MGR_ERROR_TYPE_BUFFER           2
 #define CAM_REQ_MGR_ERROR_TYPE_RECOVERY         3
+
+#ifdef CONFIG_BOARD_SUNFISH
+#define CAM_REQ_MGR_ERROR_TYPE_FULL_RECOVERY    4
+#endif /*CONFIG_BOARD_SUNFISH*/
 
 /**
  * struct cam_req_mgr_error_msg
@@ -419,6 +486,8 @@ struct cam_req_mgr_error_msg {
  * @timestamp: timestamp of the frame
  * @link_hdl: link handle associated with this message
  * @sof_status: sof status success or fail
+ * @laser_tag: tag is the frame captured with dot or flood
+ * @safety_ic_status: laser safety ic status
  */
 struct cam_req_mgr_frame_msg {
 	uint64_t request_id;
@@ -426,6 +495,10 @@ struct cam_req_mgr_frame_msg {
 	uint64_t timestamp;
 	int32_t  link_hdl;
 	uint32_t sof_status;
+#ifdef CONFIG_BOARD_FLORAL
+	enum laser_tag_type laser_tag;
+	enum safety_ic_error_type safety_ic_status;
+#endif /*CONFIG_BOARD_FLORAL*/
 };
 
 /**

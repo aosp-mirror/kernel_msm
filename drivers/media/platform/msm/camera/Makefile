@@ -1,3 +1,5 @@
+ifeq ($(CONFIG_BOARD_SUNFISH),y)
+
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_req_mgr/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_hyp_intf/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_utils/
@@ -12,3 +14,5 @@ obj-$(CONFIG_SPECTRA_CAMERA) += cam_icp/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_jpeg/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_fd/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_lrme/
+
+endif #CONFIG_BOARD_SUNFISH

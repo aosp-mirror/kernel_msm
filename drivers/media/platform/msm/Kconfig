@@ -63,4 +63,11 @@ source "drivers/media/platform/msm/npu/Kconfig"
 source "drivers/media/platform/msm/npu_v2/Kconfig"
 source "drivers/media/platform/msm/dvb/Kconfig"
 source "drivers/media/platform/msm/broadcast/Kconfig"
+
+if BOARD_SUNFISH
 source "drivers/media/platform/msm/camera/Kconfig"
+endif
+
+if BOARD_FLORAL
+source "drivers/media/platform/msm/camera_floral/Kconfig"
+endif
