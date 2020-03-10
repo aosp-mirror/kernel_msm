@@ -1,0 +1,6 @@
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+DEFCONFIG=floral_defconfig
+EXT_MODULES="
+private/msm-google-modules/wlan/qcacld-3.0
+private/msm-google-modules/touch/fts
+"
