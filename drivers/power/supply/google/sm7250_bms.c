@@ -27,6 +27,7 @@
 #include <linux/regmap.h>
 #include <linux/bitops.h>
 #include <linux/iio/consumer.h>
+#include <linux/regulator/consumer.h>
 #include "google_bms.h"
 /* hackaroo... */
 #include <linux/qpnp/qpnp-revid.h>
@@ -48,6 +49,7 @@ struct bms_dev {
 	int				chg_term_voltage;
 	struct iio_channel		*batt_therm_chan;
 	struct iio_channel		*batt_id_chan;
+	struct regulator		*bob_vreg;
 };
 
 struct bias_config {
@@ -186,6 +188,20 @@ static int sm7250_rd8(struct regmap *pmic_regmap, int addr, u8 *val)
 
 /* ------------------------------------------------------------------------- */
 
+static void vbob_regulator_update(struct bms_dev *chg, bool on)
+{
+	int rc = 0;
+	/* load is measured as uA */
+	uint32_t load = (on) ? 1000000 : 0;
+
+	rc = regulator_set_load(chg->bob_vreg, load);
+	if (rc < 0) {
+		dev_err(chg->dev, "Can't set load %d uA to vbob. (%d)\n", load, rc);
+		return;
+	}
+	dev_dbg(chg->dev, "vbob-supply is voted by %d uA.\n", load);
+}
+
 static irqreturn_t sm7250_chg_state_change_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -204,6 +220,8 @@ static irqreturn_t sm7250_chg_state_change_irq_handler(int irq, void *data)
 	}
 
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
+	vbob_regulator_update(chg, SM7250_TERMINATE_CHARGE == stat);
+
 	power_supply_changed(chg->psy);
 	return IRQ_HANDLED;
 }
@@ -1344,6 +1362,20 @@ static int bms_probe(struct platform_device *pdev)
 	rc = sm7250_request_interrupts(bms);
 	if (rc < 0) {
 		pr_err("Couldn't register the interrupts rc = %d\n", rc);
+		goto exit;
+	}
+
+	bms->bob_vreg = devm_regulator_get(&pdev->dev, "vbob");
+	if (IS_ERR_OR_NULL(bms->bob_vreg)) {
+		pr_err("Can't find vbob-supply\n");
+		rc = PTR_ERR(bms->bob_vreg);
+		goto exit;
+	}
+
+	rc = regulator_enable(bms->bob_vreg);
+	if (rc < 0) {
+		pr_err("Can't enable vbob-supply(%d)\n", rc);
+		rc = PTR_ERR(bms->bob_vreg);
 		goto exit;
 	}
 
