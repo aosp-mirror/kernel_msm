@@ -2763,10 +2763,6 @@ static const struct ipa3_debugfs_file debugfs_files[] = {
 			.read = ipa3_read_ipahal_regs,
 		}
 	}, {
-		"ipa_statistics_msg", IPA_READ_ONLY_MODE, NULL, {
-			.read = ipa3_read_dump_debug_msg,
-		}
-	}, {
 		"wdi_gsi_stats", IPA_READ_ONLY_MODE, NULL, {
 			.read = ipa3_read_wdi_gsi_stats,
 		}
