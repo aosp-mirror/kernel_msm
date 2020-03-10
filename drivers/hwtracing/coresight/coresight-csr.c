@@ -77,31 +77,15 @@ struct csr_drvdata {
 	struct device		*dev;
 	struct coresight_device	*csdev;
 	uint32_t		blksize;
-	struct coresight_csr		csr;
-	spinlock_t		spin_lock;
-	bool			usb_bam_support;
-	bool			hwctrl_set_support;
-	bool			set_byte_cntr_support;
-	bool			timestamp_support;
 };
 
-static LIST_HEAD(csr_list);
-#define to_csr_drvdata(c) container_of(c, struct csr_drvdata, csr)
+static struct csr_drvdata *csrdrvdata;
 
-void msm_qdss_csr_enable_bam_to_usb(struct coresight_csr *csr)
+void msm_qdss_csr_enable_bam_to_usb(void)
 {
-	struct csr_drvdata *drvdata;
+	struct csr_drvdata *drvdata = csrdrvdata;
 	uint32_t usbbamctrl, usbflshctrl;
-	unsigned long flags;
 
-	if (csr == NULL)
-		return;
-
-	drvdata = to_csr_drvdata(csr);
-	if (IS_ERR_OR_NULL(drvdata) || !drvdata->usb_bam_support)
-		return;
-
-	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	CSR_UNLOCK(drvdata);
 
 	usbbamctrl = csr_readl(drvdata, CSR_USBBAMCTRL);
@@ -118,24 +102,14 @@ void msm_qdss_csr_enable_bam_to_usb(struct coresight_csr *csr)
 	csr_writel(drvdata, usbbamctrl, CSR_USBBAMCTRL);
 
 	CSR_LOCK(drvdata);
-	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
 }
 EXPORT_SYMBOL(msm_qdss_csr_enable_bam_to_usb);
 
-void msm_qdss_csr_disable_bam_to_usb(struct coresight_csr *csr)
+void msm_qdss_csr_disable_bam_to_usb(void)
 {
-	struct csr_drvdata *drvdata;
+	struct csr_drvdata *drvdata = csrdrvdata;
 	uint32_t usbbamctrl;
-	unsigned long flags;
 
-	if (csr == NULL)
-		return;
-
-	drvdata = to_csr_drvdata(csr);
-	if (IS_ERR_OR_NULL(drvdata) || !drvdata->usb_bam_support)
-		return;
-
-	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	CSR_UNLOCK(drvdata);
 
 	usbbamctrl = csr_readl(drvdata, CSR_USBBAMCTRL);
@@ -143,24 +117,14 @@ void msm_qdss_csr_disable_bam_to_usb(struct coresight_csr *csr)
 	csr_writel(drvdata, usbbamctrl, CSR_USBBAMCTRL);
 
 	CSR_LOCK(drvdata);
-	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
 }
 EXPORT_SYMBOL(msm_qdss_csr_disable_bam_to_usb);
 
-void msm_qdss_csr_disable_flush(struct coresight_csr *csr)
+void msm_qdss_csr_disable_flush(void)
 {
-	struct csr_drvdata *drvdata;
+	struct csr_drvdata *drvdata = csrdrvdata;
 	uint32_t usbflshctrl;
-	unsigned long flags;
 
-	if (csr == NULL)
-		return;
-
-	drvdata = to_csr_drvdata(csr);
-	if (IS_ERR_OR_NULL(drvdata) || !drvdata->usb_bam_support)
-		return;
-
-	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	CSR_UNLOCK(drvdata);
 
 	usbflshctrl = csr_readl(drvdata, CSR_USBFLSHCTRL);
@@ -168,25 +132,14 @@ void msm_qdss_csr_disable_flush(struct coresight_csr *csr)
 	csr_writel(drvdata, usbflshctrl, CSR_USBFLSHCTRL);
 
 	CSR_LOCK(drvdata);
-	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
 }
 EXPORT_SYMBOL(msm_qdss_csr_disable_flush);
 
-int coresight_csr_hwctrl_set(struct coresight_csr *csr, uint64_t addr,
-			 uint32_t val)
+int coresight_csr_hwctrl_set(uint64_t addr, uint32_t val)
 {
-	struct csr_drvdata *drvdata;
+	struct csr_drvdata *drvdata = csrdrvdata;
 	int ret = 0;
-	unsigned long flags;
 
-	if (csr == NULL)
-		return -EINVAL;
-
-	drvdata = to_csr_drvdata(csr);
-	if (IS_ERR_OR_NULL(drvdata) || !drvdata->hwctrl_set_support)
-		return -EINVAL;
-
-	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	CSR_UNLOCK(drvdata);
 
 	if (addr == (drvdata->pbase + CSR_STMEXTHWCTRL0))
@@ -201,24 +154,15 @@ int coresight_csr_hwctrl_set(struct coresight_csr *csr, uint64_t addr,
 		ret = -EINVAL;
 
 	CSR_LOCK(drvdata);
-	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
+
 	return ret;
 }
 EXPORT_SYMBOL(coresight_csr_hwctrl_set);
 
-void coresight_csr_set_byte_cntr(struct coresight_csr *csr, uint32_t count)
+void coresight_csr_set_byte_cntr(uint32_t count)
 {
-	struct csr_drvdata *drvdata;
-	unsigned long flags;
+	struct csr_drvdata *drvdata = csrdrvdata;
 
-	if (csr == NULL)
-		return;
-
-	drvdata = to_csr_drvdata(csr);
-	if (IS_ERR_OR_NULL(drvdata) || !drvdata->set_byte_cntr_support)
-		return;
-
-	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	CSR_UNLOCK(drvdata);
 
 	csr_writel(drvdata, count, CSR_BYTECNTVAL);
@@ -227,22 +171,8 @@ void coresight_csr_set_byte_cntr(struct coresight_csr *csr, uint32_t count)
 	mb();
 
 	CSR_LOCK(drvdata);
-	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
 }
 EXPORT_SYMBOL(coresight_csr_set_byte_cntr);
-
-struct coresight_csr *coresight_csr_get(const char *name)
-{
-	struct coresight_csr *csr;
-
-	list_for_each_entry(csr, &csr_list, link) {
-		if (!strcmp(csr->name, name))
-			return csr;
-	}
-
-	return ERR_PTR(-EINVAL);
-}
-EXPORT_SYMBOL(coresight_csr_get);
 
 static int csr_probe(struct platform_device *pdev)
 {
@@ -278,34 +208,6 @@ static int csr_probe(struct platform_device *pdev)
 	if (ret)
 		drvdata->blksize = BLKSIZE_256;
 
-	drvdata->usb_bam_support = of_property_read_bool(pdev->dev.of_node,
-						"qcom,usb-bam-support");
-	if (!drvdata->usb_bam_support)
-		dev_dbg(dev, "usb_bam support handled by other subsystem\n");
-	else
-		dev_dbg(dev, "usb_bam operation supported\n");
-
-	drvdata->hwctrl_set_support = of_property_read_bool(pdev->dev.of_node,
-						"qcom,hwctrl-set-support");
-	if (!drvdata->hwctrl_set_support)
-		dev_dbg(dev, "hwctrl_set_support handled by other subsystem\n");
-	else
-		dev_dbg(dev, "hwctrl_set_support operation supported\n");
-
-	drvdata->set_byte_cntr_support = of_property_read_bool(
-			pdev->dev.of_node, "qcom,set-byte-cntr-support");
-	if (!drvdata->set_byte_cntr_support)
-		dev_dbg(dev, "set byte_cntr_support handled by other subsystem\n");
-	else
-		dev_dbg(dev, "set_byte_cntr_support operation supported\n");
-
-	drvdata->timestamp_support = of_property_read_bool(pdev->dev.of_node,
-						"qcom,timestamp-support");
-	if (!drvdata->timestamp_support)
-		dev_dbg(dev, "timestamp_support handled by other subsystem\n");
-	else
-		dev_dbg(dev, "timestamp_support operation supported\n");
-
 	desc = devm_kzalloc(dev, sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return -ENOMEM;
@@ -317,23 +219,16 @@ static int csr_probe(struct platform_device *pdev)
 		return PTR_ERR(drvdata->csdev);
 
 	/* Store the driver data pointer for use in exported functions */
-	spin_lock_init(&drvdata->spin_lock);
-	drvdata->csr.name = ((struct coresight_platform_data *)
-					 (pdev->dev.platform_data))->name;
-	list_add_tail(&drvdata->csr.link, &csr_list);
-
-	dev_info(dev, "CSR initialized: %s\n", drvdata->csr.name);
+	csrdrvdata = drvdata;
+	dev_info(dev, "CSR initialized\n");
 	return 0;
 }
 
 static int csr_remove(struct platform_device *pdev)
 {
-	unsigned long flags;
 	struct csr_drvdata *drvdata = platform_get_drvdata(pdev);
 
-	spin_lock_irqsave(&drvdata->spin_lock, flags);
 	coresight_unregister(drvdata->csdev);
-	spin_unlock_irqrestore(&drvdata->spin_lock, flags);
 	return 0;
 }
 

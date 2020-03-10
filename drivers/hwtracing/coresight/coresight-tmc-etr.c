@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
  * Copyright(C) 2016 Linaro Limited. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
  *
@@ -183,7 +183,7 @@ static void __tmc_etr_enable_to_bam(struct tmc_drvdata *drvdata)
 		return;
 
 	/* Configure and enable required CSR registers */
-	msm_qdss_csr_enable_bam_to_usb(drvdata->csr);
+	msm_qdss_csr_enable_bam_to_usb();
 
 	/* Configure and enable ETR for usb bam output */
 
@@ -279,7 +279,7 @@ void __tmc_etr_disable_to_bam(struct tmc_drvdata *drvdata)
 		return;
 
 	/* Ensure periodic flush is disabled in CSR block */
-	msm_qdss_csr_disable_flush(drvdata->csr);
+	msm_qdss_csr_disable_flush();
 
 	CS_UNLOCK(drvdata->base);
 
@@ -289,7 +289,7 @@ void __tmc_etr_disable_to_bam(struct tmc_drvdata *drvdata)
 	CS_LOCK(drvdata);
 
 	/* Disable CSR configuration */
-	msm_qdss_csr_disable_bam_to_usb(drvdata->csr);
+	msm_qdss_csr_disable_bam_to_usb();
 	drvdata->enable_to_bam = false;
 }
 
