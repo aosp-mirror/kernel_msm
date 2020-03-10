@@ -1904,7 +1904,7 @@ static void log_rtc(struct tcpc_dev *dev)
 {
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 
-	logbuffer_log(pd->log, NULL);
+	logbuffer_log(pd->log, "");
 
 	return;
 }
