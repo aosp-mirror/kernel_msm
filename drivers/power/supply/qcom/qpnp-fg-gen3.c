@@ -1186,6 +1186,30 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		chip->bp.vbatt_full_mv = -EINVAL;
 	}
 
+	//If there is another battery for device, read the 2nd jeita
+	//from battery profile and overwrite the data
+	if (of_property_count_elems_of_size(profile_node,
+			"qcom,bp-jeita-soft-hot-fv-cc",
+			sizeof(u32)) == JEITA_FV_CC_COUNT) {
+		rc = of_property_read_u32_array(profile_node,
+				"qcom,bp-jeita-soft-hot-fv-cc",
+				chip->dt.jeita_soft_hot_fv_cc,
+				JEITA_FV_CC_COUNT);
+		if (rc < 0)
+			pr_err("bp-jeita-soft-hot-fv-cc unavailable\n");
+	}
+
+	if (of_property_count_elems_of_size(profile_node,
+			"qcom,bp-jeita-soft-cold-fv-cc",
+			sizeof(u32)) == JEITA_FV_CC_COUNT) {
+		rc = of_property_read_u32_array(profile_node,
+				"qcom,bp-jeita-soft-cold-fv-cc",
+				chip->dt.jeita_soft_cold_fv_cc,
+				JEITA_FV_CC_COUNT);
+		if (rc < 0)
+			pr_err("bp-jeita-soft-cold-fv-cc unavailable\n");
+	}
+
 	data = of_get_property(profile_node, "qcom,fg-profile-data", &len);
 	if (!data) {
 		pr_err("No profile data available\n");
