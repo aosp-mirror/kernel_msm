@@ -92,6 +92,12 @@
 	google,fg-psy-name = "bms";
 };
 
+&ibat_lvl1 {
+	temperature = <6000>;
+	hysteresis = <200>;
+	type = "passive";
+};
+
 &thermal_zones {
 	/* Bring up common thermal zones for Redfin and Bramble */
 	usbc-therm-adc {
