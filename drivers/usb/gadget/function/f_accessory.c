@@ -880,8 +880,6 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 	u16	w_value = le16_to_cpu(ctrl->wValue);
 	u16	w_length = le16_to_cpu(ctrl->wLength);
 	unsigned long flags;
-	char *envp51[2] = { "ACCESSORY=GETPROTOCOL", NULL };
-	char *envp52[2] = { "ACCESSORY=SENDSTRING", NULL };
 
 	/*
 	 * If instance is not created which is the case in power off charging
@@ -900,17 +898,11 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 	if (b_requestType == (USB_DIR_OUT | USB_TYPE_VENDOR)) {
 		if (b_request == ACCESSORY_START) {
 			dev->start_requested = 1;
-			dev_info(&cdev->gadget->dev, "%s: got ACCESSORY_START(53) request\n",
-				__func__);
 			schedule_delayed_work(
 				&dev->start_work, msecs_to_jiffies(10));
 			value = 0;
 			cdev->req->complete = acc_complete_setup_noop;
 		} else if (b_request == ACCESSORY_SEND_STRING) {
-			dev_info(&cdev->gadget->dev, "%s: got ACCESSORY_SEND_STRING(52) request\n",
-				__func__);
-			kobject_uevent_env(&acc_device.this_device->kobj,
-					   KOBJ_CHANGE, envp52);
 			dev->string_index = w_index;
 			cdev->gadget->ep0->driver_data = dev;
 			cdev->req->complete = acc_complete_set_string;
@@ -957,10 +949,6 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 		}
 	} else if (b_requestType == (USB_DIR_IN | USB_TYPE_VENDOR)) {
 		if (b_request == ACCESSORY_GET_PROTOCOL) {
-			dev_info(&cdev->gadget->dev, "%s: got ACCESSORY_GET_PROTOCOL(51) request\n",
-				__func__);
-			kobject_uevent_env(&acc_device.this_device->kobj,
-					   KOBJ_CHANGE, envp51);
 			*((u16 *)cdev->req->buf) = PROTOCOL_VERSION;
 			value = sizeof(u16);
 			cdev->req->complete = acc_complete_setup_noop;
