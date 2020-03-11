@@ -16,6 +16,7 @@ export DTC_EXT
 DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/libufdt/ufdt_apply_overlay
 export DTC_OVERLAY_TEST_EXT
 FILES="
+arch/arm64/boot/dtbo.img
 arch/arm64/boot/dtbo_bramble.img
 arch/arm64/boot/dtbo_redfin.img
 arch/arm64/boot/Image.lz4-dtb
