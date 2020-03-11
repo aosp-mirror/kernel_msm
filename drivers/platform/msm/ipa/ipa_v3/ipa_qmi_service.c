@@ -1702,14 +1702,6 @@ static struct qmi_msg_handler server_handlers[] = {
 	},
 	{
 		.type = QMI_REQUEST,
-		.msg_id = QMI_IPA_INIT_MODEM_DRIVER_CMPLT_REQ_V01,
-		.ei = ipa3_init_modem_driver_cmplt_req_msg_data_v01_ei,
-		.decoded_size = sizeof(
-			struct ipa_init_modem_driver_cmplt_req_msg_v01),
-		.fn = ipa3_handle_modem_init_cmplt_req,
-	},
-	{
-		.type = QMI_REQUEST,
 		.msg_id = QMI_IPA_MHI_ALLOC_CHANNEL_REQ_V01,
 		.ei = ipa_mhi_alloc_channel_req_msg_v01_ei,
 		.decoded_size = sizeof(
