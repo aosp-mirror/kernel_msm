@@ -1466,9 +1466,11 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 					TORCH_BUCK_MODE);
 
 	/* Do not configure ICL from SW for DAM cables */
+#if 0
 	if (smblib_get_prop_typec_mode(chg) ==
 			    POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY)
 		return 0;
+#endif
 
 	if (suspend)
 		return smblib_set_usb_suspend(chg, true);
@@ -1480,12 +1482,15 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB
 		&& (chg->typec_legacy
 		|| chg->typec_mode == POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
+		|| chg->typec_mode == POWER_SUPPLY_TYPEC_DAM_MEDIUM
 		|| chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)) {
 		rc = set_sdp_current(chg, icl_ua);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't set SDP ICL rc=%d\n", rc);
 			goto out;
 		}
+
+		icl_override = SW_OVERRIDE_USB51_MODE;
 	} else {
 		/*
 		 * Try USB 2.0/3,0 option first on USB path when maximum input
@@ -3904,13 +3909,54 @@ static const char * const smblib_typec_mode_name[] = {
 	[POWER_SUPPLY_TYPEC_SOURCE_DEFAULT]	  = "SOURCE_DEFAULT",
 	[POWER_SUPPLY_TYPEC_SOURCE_MEDIUM]	  = "SOURCE_MEDIUM",
 	[POWER_SUPPLY_TYPEC_SOURCE_HIGH]	  = "SOURCE_HIGH",
+	[POWER_SUPPLY_TYPEC_DAM_DEFAULT]	  = "DAM_DEFAULT",
+	[POWER_SUPPLY_TYPEC_DAM_MEDIUM]		  = "DAM_MEDIUM",
+	[POWER_SUPPLY_TYPEC_DAM_HIGH]		  = "DAM_HIGH",
 	[POWER_SUPPLY_TYPEC_NON_COMPLIANT]	  = "NON_COMPLIANT",
+	[POWER_SUPPLY_TYPEC_RP_STD_STD]		  = "RP_STD_STD",
+	[POWER_SUPPLY_TYPEC_RP_MED_MED]		  = "RP_MED_MED",
+	[POWER_SUPPLY_TYPEC_RP_HIGH_HIGH]	  = "RP_HIGH_HIGH",
 	[POWER_SUPPLY_TYPEC_SINK]		  = "SINK",
 	[POWER_SUPPLY_TYPEC_SINK_POWERED_CABLE]   = "SINK_POWERED_CABLE",
 	[POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY] = "SINK_DEBUG_ACCESSORY",
 	[POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER]   = "SINK_AUDIO_ADAPTER",
 	[POWER_SUPPLY_TYPEC_POWERED_CABLE_ONLY]   = "POWERED_CABLE_ONLY",
 };
+
+static int smblib_get_snk_dam_mode(struct smb_charger *chg)
+{
+	int rc;
+	u8 dam_stat;
+
+	rc = smblib_read(chg, TYPE_C_SNK_DAM_STATUS_REG, &dam_stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read TYPE_C_SNK_DAM_STATUS rc=%d\n",
+			   rc);
+		return POWER_SUPPLY_TYPEC_NON_COMPLIANT;
+	}
+
+	smblib_dbg(chg, PR_REGISTER, "TYPE_C_SNK_DAM_STATUS = 0x%02x\n",
+		   dam_stat);
+
+	switch (dam_stat & DETECTED_SNK_DAM_TYPE_MASK) {
+	case SNK_RPSTD_RPSTD_BIT:
+		return POWER_SUPPLY_TYPEC_RP_STD_STD;
+	case SNK_RPMID_RPMID_BIT:
+		return POWER_SUPPLY_TYPEC_RP_MED_MED;
+	case SNK_RPHIGH_RPHIGH_BIT:
+		return POWER_SUPPLY_TYPEC_RP_HIGH_HIGH;
+	case SNK_RPSTD_RPMID_BIT:
+		return POWER_SUPPLY_TYPEC_DAM_MEDIUM;
+	case SNK_RPSTD_RPHIGH_BIT:
+		return POWER_SUPPLY_TYPEC_DAM_HIGH;
+	case SNK_RPMID_RPHIGH_BIT:
+		return POWER_SUPPLY_TYPEC_DAM_DEFAULT;
+	default:
+		break;
+	}
+
+	return POWER_SUPPLY_TYPEC_NON_COMPLIANT;
+}
 
 static int smblib_get_prop_ufp_mode(struct smb_charger *chg)
 {
@@ -3934,9 +3980,10 @@ static int smblib_get_prop_ufp_mode(struct smb_charger *chg)
 	case SNK_RP_SHORT_BIT:
 		return POWER_SUPPLY_TYPEC_NON_COMPLIANT;
 	case SNK_DAM_500MA_BIT:
+		chg->dam_detected = true;
 	case SNK_DAM_1500MA_BIT:
 	case SNK_DAM_3000MA_BIT:
-		return POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY;
+		return smblib_get_snk_dam_mode(chg);
 	default:
 		break;
 	}
@@ -4500,6 +4547,17 @@ static int smblib_handle_usb_current(struct smb_charger *chg,
 {
 	int rc = 0, rp_ua, typec_mode;
 	union power_supply_propval val = {0, };
+
+	/* If DAM cable is detected limit current to 500mA */
+	if (chg->dam_detected) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true,
+			  SDP_CURRENT_UA);
+		if (rc < 0)
+			smblib_err(chg,
+				   "Couldn't vote ICL USB_PSY_VOTER rc=%d\n",
+				   rc);
+		return rc;
+	}
 
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB_FLOAT) {
 		if (usb_current == -ETIMEDOUT) {
@@ -5219,6 +5277,9 @@ int smblib_get_charge_current(struct smb_charger *chg,
 	case POWER_SUPPLY_TYPEC_SOURCE_HIGH:
 		current_ua = TYPEC_HIGH_CURRENT_UA;
 		break;
+	case POWER_SUPPLY_TYPEC_DAM_MEDIUM:
+		current_ua = SDP_CURRENT_UA;
+		break;
 	case POWER_SUPPLY_TYPEC_NON_COMPLIANT:
 	case POWER_SUPPLY_TYPEC_NONE:
 	default:
@@ -5920,6 +5981,10 @@ static void update_sw_icl_max(struct smb_charger *chg, int pst)
 		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
 		return;
+	} else if ((typec_mode != POWER_SUPPLY_TYPEC_SOURCE_DEFAULT) &&
+		   (typec_mode != POWER_SUPPLY_TYPEC_DAM_MEDIUM)) {
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, 0);
+		return;
 	}
 
 	/* rp-std or legacy, USB BC 1.2 */
@@ -6587,6 +6652,7 @@ static void typec_src_removal(struct smb_charger *chg)
 
 	del_timer_sync(&chg->apsd_timer);
 	chg->apsd_ext_timeout = false;
+	chg->dam_detected = false;
 }
 
 static void typec_mode_unattached(struct smb_charger *chg)

@@ -513,6 +513,7 @@ struct smb_charger {
 	bool			early_usb_attach;
 	bool			ok_to_pd;
 	bool			typec_legacy;
+	bool                    dam_detected;
 	bool			typec_irq_en;
 
 	/* cached status */
