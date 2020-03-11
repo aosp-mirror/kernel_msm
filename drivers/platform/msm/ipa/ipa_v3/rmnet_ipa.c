@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2125,7 +2125,7 @@ static void ipa3_wwan_setup(struct net_device *dev)
 	dev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
 	dev->needed_headroom = HEADROOM_FOR_QMAP;
 	dev->needed_tailroom = TAILROOM;
-	dev->watchdog_timeo = 1000;
+	dev->watchdog_timeo = 5000;
 }
 
 /* IPA_RM related functions start*/
