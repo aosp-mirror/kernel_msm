@@ -17,6 +17,7 @@
  */
 
 #include <linux/input/qmi_tbn_v01.h>
+#include <linux/module.h>
 
 struct qmi_elem_info tbn_kernel_request_bus_v01_ei[] = {
 	{
@@ -67,3 +68,5 @@ struct qmi_elem_info tbn_ssc_acquire_bus_v01_ei[] = {
 		.tlv_type = QMI_COMMON_TLV_TYPE,
 	},
 };
+
+MODULE_LICENSE("GPL v2");
