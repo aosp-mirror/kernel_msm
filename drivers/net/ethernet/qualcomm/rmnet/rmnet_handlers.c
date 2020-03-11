@@ -282,7 +282,7 @@ __rmnet_map_ingress_handler(struct sk_buff *skb,
 		__skb_queue_tail(&list, skb);
 	}
 
-#ifdef CONFIG_QCOM_QMI_HELPERS
+#if IS_ENABLED(CONFIG_QCOM_QMI_HELPERS)
 	if (port->data_format & RMNET_INGRESS_FORMAT_PS)
 		qmi_rmnet_work_maybe_restart(port);
 #endif
@@ -386,7 +386,7 @@ static int rmnet_map_egress_handler(struct sk_buff *skb,
 			return -ENOMEM;
 	}
 
-#ifdef CONFIG_QCOM_QMI_HELPERS
+#if IS_ENABLED(CONFIG_QCOM_QMI_HELPERS)
 	if (port->data_format & RMNET_INGRESS_FORMAT_PS)
 		qmi_rmnet_work_maybe_restart(port);
 #endif

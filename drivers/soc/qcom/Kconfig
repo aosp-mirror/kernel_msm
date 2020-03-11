@@ -188,7 +188,7 @@ config QCOM_PM
 	  low power modes.
 
 config QCOM_QMI_HELPERS
-	bool "QTI QMI Helpers"
+	tristate "QTI QMI Helpers"
 	depends on QRTR
 	help
 	  Helper library for handling QMI encoded messages.  QMI encoded
