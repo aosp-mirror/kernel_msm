@@ -2796,7 +2796,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 
 		ret = p9382_ben_cfg(charger, RTX_BEN_DISABLED);
 		if (ret < 0)
-			return ret;
+			goto exit;
 
 		ret = vote(charger->dc_suspend_votable, P9221_WLC_VOTER, false, 0);
 		if (ret)
@@ -2810,7 +2810,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 				dev_err(&charger->client->dev,
 					"Could not get DC_SUSPEND votable,"
 					"skip enable rTX mode\n");
-				return ret;
+				goto exit;
 			}
 		}
 		ret = vote(charger->dc_suspend_votable, P9221_WLC_VOTER, true, 0);
@@ -2818,36 +2818,39 @@ static ssize_t p9382_set_rtx(struct device *dev,
 			dev_err(&charger->client->dev,
 				"Could not vote DC_SUSPEND,"
 				"skip enable rTX mode %d\n", ret);
-			return ret;
+			goto exit;
 		}
 
 		charger->rtx_csp = 0;
 
 		ret = p9382_ben_cfg(charger, RTX_BEN_ON);
 		if (ret < 0)
-			return ret;
+			goto exit;
 
 		msleep(10);
 		/* write 0x0000 to 0x34, check 0x4C reads back as 0x04 */
 		ret = p9221_reg_write_16(charger, P9382A_STATUS_REG, 0);
 		if (ret == 0)
 			ret = p9382_wait_for_mode(charger, P9382A_MODE_TXMODE);
+		if (ret < 0) {
+			dev_err(&charger->client->dev,
+				"cannot enter rTX mode (%d)\n", ret);
+			goto exit;
+		}
 
 		ret = p9221_enable_interrupts(charger);
 		if (ret)
 			dev_err(&charger->client->dev,
 				"Could not enable interrupts: %d\n", ret);
-
-		if (ret < 0) {
-			pr_err("cannot enter rTX mode (%d)\n", ret);
-			return ret;
-		}
-
 	} else {
 		return -EINVAL;
 	}
-
-	return count;
+exit:
+	schedule_work(&charger->uevent_work);
+	if (ret < 0)
+		return ret;
+	else
+		return count;
 }
 
 static DEVICE_ATTR(rtx, 0644, p9382_show_rtx, p9382_set_rtx);
@@ -3387,7 +3390,7 @@ static void p9221_uevent_work(struct work_struct *work)
 
 	kobject_uevent(&charger->dev->kobj, KOBJ_CHANGE);
 
-	if (charger->ben_state)
+	if (!charger->ben_state)
 		return;
 
 	ret = p9221_get_property_reg(charger, POWER_SUPPLY_PROP_CURRENT_NOW,
