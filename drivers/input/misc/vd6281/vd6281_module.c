@@ -140,6 +140,9 @@ static int vd6281_power_up(struct rainbow_ctrl_t *ctrl)
 		ctrl->is_power_up[REGULATOR_VDD] = true;
 	}
 
+	/* At least 1 ms delay after VDD power up */
+	usleep_range(1000, 3000);
+
 	if (!ctrl->is_power_up[REGULATOR_VIO]) {
 		rc = regulator_set_voltage(ctrl->vio,
 			VIO_VOLTAGE_MIN, VIO_VOLTAGE_MAX);
@@ -167,17 +170,6 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 {
 	int rc = 0, is_error;
 
-	if (ctrl->is_power_up[REGULATOR_VDD]) {
-		is_error = regulator_disable(ctrl->vdd);
-		if (is_error < 0) {
-			rc = is_error;
-			dev_err(&ctrl->client->dev,
-				"%s vdd regulator_disable failed: rc: %d",
-				__func__, rc);
-		} else
-			ctrl->is_power_up[REGULATOR_VDD] = false;
-	}
-
 	if (ctrl->is_power_up[REGULATOR_VIO]) {
 		is_error = regulator_disable(ctrl->vio);
 		if (is_error < 0) {
@@ -187,6 +179,20 @@ static int vd6281_power_down(struct rainbow_ctrl_t *ctrl)
 				__func__, rc);
 		} else
 			ctrl->is_power_up[REGULATOR_VIO] = false;
+	}
+
+	/* At least 1 ms delay after VIO power down */
+	usleep_range(1000, 3000);
+
+	if (ctrl->is_power_up[REGULATOR_VDD]) {
+		is_error = regulator_disable(ctrl->vdd);
+		if (is_error < 0) {
+			rc = is_error;
+			dev_err(&ctrl->client->dev,
+				"%s vdd regulator_disable failed: rc: %d",
+				__func__, rc);
+		} else
+			ctrl->is_power_up[REGULATOR_VDD] = false;
 	}
 
 	return rc;
