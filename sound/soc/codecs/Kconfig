@@ -842,6 +842,9 @@ config SND_SOC_RT1305
 config SND_SOC_RT5514
 	tristate "Realtek RT5514 CODEC"
 
+config SND_SOC_RT5514_QMI
+	tristate "Realtek RT5514 CODEC QMI"
+
 config SND_SOC_RT5514_SPI
 	tristate "Realtek RT5514 CODEC SPI"
 
