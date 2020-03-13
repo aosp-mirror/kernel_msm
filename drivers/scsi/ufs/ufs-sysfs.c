@@ -1161,6 +1161,47 @@ static const struct attribute_group ufs_sysfs_io_stats_group = {
 	.attrs = ufs_sysfs_io_stats,
 };
 
+#define UFS_CTRL_CAP_RO(_name, _uname, zero_based)                             \
+	static ssize_t _name##_show(struct device *dev,                        \
+				    struct device_attribute *attr, char *buf)  \
+	{                                                                      \
+		struct ufs_hba *hba = dev_get_drvdata(dev);                    \
+		u32 value = ((hba->capabilities & MASK##_uname) >>             \
+			     SHIFT##_uname) +                                  \
+			    zero_based;                                        \
+		return snprintf(buf, PAGE_SIZE, "0x%08X\n", value);            \
+	}                                                                      \
+	static DEVICE_ATTR_RO(_name)
+
+UFS_CTRL_CAP_RO(support_crypto, _CRYPTO_SUPPORT, 0);
+UFS_CTRL_CAP_RO(support_uic_dme_test_mode, _UIC_DME_TEST_MODE_SUPPORT, 0);
+UFS_CTRL_CAP_RO(support_ooo_data_delivery, _OUT_OF_ORDER_DATA_DELIVERY_SUPPORT,
+		0);
+UFS_CTRL_CAP_RO(support_64bit_addressing, _64_ADDRESSING_SUPPORT, 0);
+UFS_CTRL_CAP_RO(support_auto_hibernation, _AUTO_HIBERN8_SUPPORT, 0);
+UFS_CTRL_CAP_RO(num_utp_tmr_slots, _TASK_MANAGEMENT_REQUEST_SLOTS, 1);
+UFS_CTRL_CAP_RO(num_outstanding_rtt_requests, _READY_TO_TRANSFER_REQUESTS, 1);
+UFS_CTRL_CAP_RO(num_utp_tr_slots, _TRANSFER_REQUESTS_SLOTS, 1);
+UFS_CTRL_CAP_RO(controller_capabilities, _CONTROLLER_CAPABILITIES_ALL, 0);
+
+static struct attribute *ufs_sysfs_controller_capabilities[] = {
+	&dev_attr_support_crypto.attr,
+	&dev_attr_support_uic_dme_test_mode.attr,
+	&dev_attr_support_ooo_data_delivery.attr,
+	&dev_attr_support_64bit_addressing.attr,
+	&dev_attr_support_auto_hibernation.attr,
+	&dev_attr_num_utp_tmr_slots.attr,
+	&dev_attr_num_outstanding_rtt_requests.attr,
+	&dev_attr_num_utp_tr_slots.attr,
+	&dev_attr_controller_capabilities.attr,
+	NULL,
+};
+
+static const struct attribute_group ufs_sysfs_controller_capabilities_group = {
+	.name = "controller_capabilities",
+	.attrs = ufs_sysfs_controller_capabilities,
+};
+
 static const struct attribute_group *ufs_sysfs_groups[] = {
 	&ufs_sysfs_default_group,
 	&ufs_sysfs_device_descriptor_group,
@@ -1173,6 +1214,7 @@ static const struct attribute_group *ufs_sysfs_groups[] = {
 	&ufs_sysfs_attributes_group,
 	&ufs_sysfs_req_stats_group,
 	&ufs_sysfs_io_stats_group,
+	&ufs_sysfs_controller_capabilities_group,
 	NULL,
 };
 
