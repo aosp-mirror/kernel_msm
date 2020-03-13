@@ -1512,6 +1512,9 @@ static int tcpm_start_toggling(struct tcpc_dev *dev,
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret;
 
+	if (port_type != TYPEC_PORT_DRP)
+		return -EOPNOTSUPP;
+
 	mutex_lock(&pd->lock);
 
 	val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
