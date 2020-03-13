@@ -30,9 +30,7 @@
 	qcom,auto-recharge-soc = <97>;
 	qcom,charger-temp-max = <800>;
 	qcom,smb-temp-max = <800>;
-	/* google,batt_psy_disable ; */
-	google,batt_psy_name = "smb5";
-	google,batt_psy_is_bms;
+	google,batt_psy_disable;
 	google,wdog_snarl_disable;
 	google,usb-port-tz-name = "usbc-therm-adc";
 	qcom,hvdcp-disable;
