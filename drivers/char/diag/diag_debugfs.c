@@ -670,7 +670,7 @@ static ssize_t diag_dbgfs_read_rpmsginfo(struct file *file, char __user *ubuf,
 	return ret;
 }
 
-#ifdef CONFIG_IPC_LOGGING
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 static ssize_t diag_dbgfs_write_debug(struct file *fp, const char __user *buf,
 				      size_t count, loff_t *ppos)
 {
@@ -958,7 +958,7 @@ const struct file_operations diag_dbgfs_power_ops = {
 	.read = diag_dbgfs_read_power,
 };
 
-#ifdef CONFIG_IPC_LOGGING
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 const struct file_operations diag_dbgfs_debug_ops = {
 	.write = diag_dbgfs_write_debug
 };
@@ -1012,7 +1012,7 @@ int diag_debugfs_init(void)
 	if (!entry)
 		goto err;
 
-#ifdef CONFIG_IPC_LOGGING
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 	entry = debugfs_create_file("debug", 0444, diag_dbgfs_dent, 0,
 				    &diag_dbgfs_debug_ops);
 	if (!entry)

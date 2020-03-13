@@ -19,7 +19,7 @@
 #define DIAG_DEBUG_CMD_INFO	0x0080
 #define DIAG_DEBUG_MHI		0x0100
 
-#ifdef CONFIG_IPC_LOGGING
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 extern uint16_t diag_debug_mask;
 extern void *diag_ipc_log;
 
