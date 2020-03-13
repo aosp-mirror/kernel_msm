@@ -11182,7 +11182,7 @@ manual_gc_store(struct device *dev, struct device_attribute *attr,
 			err = -EAGAIN;
 	}
 
-	if (err) {
+	if (err || hrtimer_active(&hba->manual_gc.hrtimer)) {
 		pm_runtime_mark_last_busy(hba->dev);
 		pm_runtime_put_noidle(hba->dev);
 		return count;
