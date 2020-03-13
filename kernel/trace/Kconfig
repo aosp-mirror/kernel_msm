@@ -88,7 +88,7 @@ config RING_BUFFER_ALLOW_SWAP
 	 Adds a very slight overhead to tracing when enabled.
 
 config IPC_LOGGING
-	bool "Debug Logging for IPC Drivers"
+	tristate "Debug Logging for IPC Drivers"
 	select GENERIC_TRACER
 	help
 	  IPC Logging driver provides a logging option for IPC Drivers.

@@ -5,7 +5,9 @@
 
 #include <linux/clk.h>
 #include <linux/dma-mapping.h>
+#ifndef CONFIG_IPC_LOGGING_MODULE
 #include <linux/ipc_logging.h>
+#endif
 #include <linux/io.h>
 #include <linux/list.h>
 #include <linux/module.h>
@@ -18,6 +20,18 @@
 #include <linux/qcom-geni-se.h>
 #include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
+
+/* Need to stub out these functions when the ipc logging driver is configured as
+   a module. */
+#ifdef CONFIG_IPC_LOGGING_MODULE
+static inline int ipc_log_string(void *ilctxt, const char *fmt, ...)
+{ return -EINVAL; }
+static inline void *ipc_log_context_create(int max_num_pages,
+	const char *modname, uint16_t user_version)
+{ return NULL; }
+static inline int ipc_log_context_destroy(void *ctxt)
+{ return 0; }
+#endif
 
 #define GENI_SE_IOMMU_VA_START	(0x40000000)
 #define GENI_SE_IOMMU_VA_SIZE	(0xC0000000)

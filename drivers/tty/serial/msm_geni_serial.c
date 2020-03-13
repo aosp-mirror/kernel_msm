@@ -13,7 +13,9 @@
 #include <linux/delay.h>
 #include <linux/console.h>
 #include <linux/io.h>
+#ifndef CONFIG_IPC_LOGGING_MODULE
 #include <linux/ipc_logging.h>
+#endif
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -121,6 +123,18 @@
 #define IPC_LOG_MISC_PAGES	(10)
 #define IPC_LOG_TX_RX_PAGES	(8)
 #define DATA_BYTES_PER_LINE	(32)
+
+/* Need to stub out these functions when the ipc logging driver is configured as
+   a module. */
+#ifdef CONFIG_IPC_LOGGING_MODULE
+static inline int ipc_log_string(void *ilctxt, const char *fmt, ...)
+{ return -EINVAL; }
+static inline void *ipc_log_context_create(int max_num_pages,
+	const char *modname, uint16_t user_version)
+{ return NULL; }
+static inline int ipc_log_context_destroy(void *ctxt)
+{ return 0; }
+#endif
 
 #define IPC_LOG_MSG(ctx, x...) do { \
 	if (ctx) \

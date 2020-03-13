@@ -40,6 +40,18 @@
 
 #define NUM_PAGES	10 /* # of pages for ipc logging */
 
+/* Need to stub out these functions when the ipc logging driver is configured as
+   a module. */
+#ifdef CONFIG_IPC_LOGGING_MODULE
+static inline int ipc_log_string(void *ilctxt, const char *fmt, ...)
+{ return -EINVAL; }
+static inline void *ipc_log_context_create(int max_num_pages,
+	const char *modname, uint16_t user_version)
+{ return NULL; }
+static inline int ipc_log_context_destroy(void *ctxt)
+{ return 0; }
+#endif
+
 #ifdef CONFIG_DYNAMIC_DEBUG
 #define ffs_log(fmt, ...) do { \
 	ipc_log_string(ffs->ipc_log, "%s: " fmt,  __func__, ##__VA_ARGS__); \
