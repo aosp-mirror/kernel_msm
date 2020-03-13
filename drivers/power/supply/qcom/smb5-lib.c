@@ -7135,7 +7135,7 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 	struct smb_charger *chg = irq_data->parent_data;
 	union power_supply_propval pval, val;
 	int input_present;
-	bool dcin_present, vbus_present;
+	bool dcin_present, vbus_present, usb_online;
 	int rc, wireless_vout = 0, wls_set = 0;
 	int sec_charger;
 	int delay_ms = DCIN_AICL_DELAY_DEFAULT;
@@ -7148,16 +7148,19 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 	wireless_vout = ((pval.intval * 2) / 100000) * 100000;
 
 	rc = smblib_is_input_present(chg, &input_present);
+	rc |= power_supply_get_property(chg->usb_psy,
+					POWER_SUPPLY_PROP_ONLINE, &pval);
 	if (rc < 0)
 		return IRQ_HANDLED;
 
 	dcin_present = input_present & INPUT_PRESENT_DC;
 	vbus_present = input_present & INPUT_PRESENT_USB;
+	usb_online = pval.intval;
 
 	if (!chg->cp_ilim_votable)
 		chg->cp_ilim_votable = find_votable("CP_ILIM");
 
-	if (dcin_present && !vbus_present) {
+	if (dcin_present && !usb_online) {
 		mutex_lock(&chg->dc_reset_lock);
 		chg->dc_reset = false;
 		mutex_unlock(&chg->dc_reset_lock);
