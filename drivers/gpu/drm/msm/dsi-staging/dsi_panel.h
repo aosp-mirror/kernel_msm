@@ -146,6 +146,7 @@ struct dsi_backlight_config {
 	/* Minimum safe brightness level during VR mode */
 	u32 bl_vr_min_safe_level;
 
+	struct mutex state_lock;
 	struct hbm_data *hbm;
 
 	int en_gpio;
