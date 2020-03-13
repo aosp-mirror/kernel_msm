@@ -814,3 +814,4 @@ EXPORT_SYMBOL(qmi_response_type_v01_ei);
 
 MODULE_DESCRIPTION("QMI encoder/decoder helper");
 MODULE_LICENSE("GPL v2");
+MODULE_SOFTDEP("pre: qrtr");
