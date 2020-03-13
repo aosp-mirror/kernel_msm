@@ -98,7 +98,7 @@
 
 		reg = <0>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <122 IRQ_TYPE_LEVEL_LOW>;
+		interrupts = <9 IRQ_TYPE_LEVEL_LOW>;
 
 		pinctrl-names = "default", "on_state", "off_state";
 //		pinctrl-0 = <&sec_ts_power_default
