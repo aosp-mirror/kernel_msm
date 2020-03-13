@@ -551,7 +551,7 @@ config USB_CONFIGFS_F_DIAG
 	  running on device.
 
 config USB_CONFIGFS_F_CDEV
-	bool "USB Serial Character function"
+	tristate "USB Serial Character function"
 	select USB_F_CDEV
 	depends on USB_CONFIGFS
 	help
@@ -563,7 +563,7 @@ config USB_CONFIGFS_F_CDEV
 	  used to support DUN/NMEA functions.
 
 config USB_CONFIGFS_F_CCID
-	bool "USB CCID function"
+	tristate "USB CCID function"
 	select USB_F_CCID
 	depends on USB_CONFIGFS
 	help
@@ -596,7 +596,7 @@ config USB_CONFIGFS_F_GSI
 	  path and control path.
 
 config USB_CONFIGFS_F_MTP
-	bool "MTP gadget"
+	tristate "MTP gadget"
 	select USB_F_MTP
 	depends on USB_CONFIGFS
 	help
@@ -606,7 +606,7 @@ config USB_CONFIGFS_F_MTP
 	  the system/restricted files.
 
 config USB_CONFIGFS_F_PTP
-	bool "PTP gadget"
+	tristate "PTP gadget"
 	select USB_F_PTP
 	depends on USB_CONFIGFS && USB_CONFIGFS_F_MTP
 	help
