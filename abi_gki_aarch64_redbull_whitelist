@@ -98,6 +98,8 @@
   cpu_number
   __cpu_online_mask
   __cpu_possible_mask
+  cpus_read_lock
+  cpus_read_unlock
   cpu_subsys
   crypto_alloc_shash
   crypto_destroy_tfm
@@ -199,6 +201,7 @@
   __devm_reset_control_get
   devm_reset_controller_register
   devm_snd_soc_register_component
+  devm_thermal_of_virtual_sensor_register
   devm_thermal_zone_of_sensor_register
   devm_usb_get_phy_by_phandle
   dev_pm_opp_add
@@ -343,8 +346,10 @@
   hrtimer_active
   hrtimer_cancel
   hrtimer_forward
+  __hrtimer_get_remaining
   hrtimer_init
   hrtimer_start_range_ns
+  hrtimer_try_to_cancel
   i2c_del_driver
   i2c_register_driver
   i2c_transfer
@@ -421,6 +426,7 @@
   irq_get_irq_data
   irq_modify_status
   irq_of_parse_and_map
+  irq_set_affinity_notifier
   irq_set_chip_and_handler_name
   irq_set_chip_data
   irq_set_irq_type
@@ -431,7 +437,10 @@
   jiffies_to_usecs
   kasprintf
   kernel_connect
+  kernel_getsockname
   kernel_kobj
+  kernel_recvmsg
+  kernel_sendmsg
   kernfs_find_and_get_ns
   kfree
   kfree_skb
@@ -712,19 +721,6 @@
   put_pid
   __put_task_struct
   put_unused_fd
-  qcom_smem_state_get
-  qcom_smem_state_update_bits
-  qmi_add_lookup
-  qmi_add_server
-  qmi_handle_init
-  qmi_handle_release
-  qmi_response_type_v01_ei
-  qmi_send_indication
-  qmi_send_request
-  qmi_send_response
-  qmi_txn_cancel
-  qmi_txn_init
-  qmi_txn_wait
   queue_delayed_work_on
   queue_work_on
   ___ratelimit
@@ -858,6 +854,7 @@
   skb_put
   skb_queue_tail
   skb_trim
+  smp_call_function_single
   snd_ctl_boolean_mono_info
   snd_hwdep_new
   snd_info_create_card_entry
@@ -958,10 +955,6 @@
   tasklet_init
   tasklet_kill
   __tasklet_schedule
-  tbn_cleanup
-  tbn_init
-  tbn_release_bus
-  tbn_request_bus
   thermal_cdev_update
   thermal_cooling_device_unregister
   thermal_of_cooling_device_register
@@ -1003,6 +996,7 @@
   unregister_net_sysctl_table
   unregister_pernet_subsys
   unregister_pm_notifier
+  unregister_syscore_ops
   update_devfreq
   up_read
   up_write
@@ -1239,10 +1233,7 @@
   cdev_alloc
   crc_ccitt
   crc_ccitt_table
-  kernel_getsockname
-  kernel_recvmsg
   kernel_restart
-  kernel_sendmsg
   kernel_setsockopt
   mempool_alloc
   mempool_create
@@ -1351,6 +1342,12 @@
   uart_register_driver
   uart_remove_one_port
   uart_unregister_driver
+
+# required by event_timer.ko
+  cpumask_next_and
+  timerqueue_add
+  timerqueue_del
+  timerqueue_iterate_next
 
 # required by fsa4480-i2c.ko
   of_find_i2c_device_by_node
@@ -1662,8 +1659,10 @@
   drm_crtc_handle_vblank
   drm_crtc_init_with_planes
   drm_crtc_send_vblank_event
+  drm_crtc_vblank_get
   drm_crtc_vblank_off
   drm_crtc_vblank_on
+  drm_crtc_vblank_put
   drm_crtc_vblank_reset
   drm_crtc_wait_one_vblank
   drm_dbg
@@ -1822,7 +1821,6 @@
   invalidate_mapping_pages
   ioremap_page_range
   irq_domain_xlate_onecell
-  irq_set_affinity_notifier
   kernfs_notify
   kernfs_put
   kthread_cancel_delayed_work_sync
@@ -1891,12 +1889,7 @@
   cpuidle_unregister_driver
   cpu_pm_enter
   cpu_pm_exit
-  cpus_read_lock
-  cpus_read_unlock
   get_next_event_cpu
-  get_next_event_time
-  __hrtimer_get_remaining
-  hrtimer_try_to_cancel
   param_get_bool
   param_get_uint
   pending_ipi
@@ -1962,7 +1955,6 @@
   of_irq_domain_map
   register_restart_handler
   unregister_restart_handler
-  unregister_syscore_ops
 
 # required by pinctrl-spmi-gpio.ko
   pmic_gpio_dump_builtin_cb
@@ -2085,6 +2077,9 @@
   sg_copy_from_buffer
   sg_copy_to_buffer
 
+# required by qmi_helpers.ko
+  sock_create_kern
+
 # required by qpnp-battery.ko
   __class_register
 
@@ -2102,9 +2097,11 @@
 # required by qpnp-smb5-charger.ko
   iio_channel_release
   of_find_node_by_phandle
+  regulator_get_voltage
 
 # required by qpnp_pdphy.ko
   device_get_named_child_node
+  devm_regulator_register_notifier
   hrtimer_init_sleeper
 
 # required by qrtr-smd.ko
@@ -2373,8 +2370,6 @@
 # required by smp2p.ko
   irq_domain_xlate_twocell
   irq_set_parent
-  qcom_smem_state_register
-  qcom_smem_state_unregister
 
 # required by snd-soc-cs35l41.ko
   regcache_drop_region
@@ -2459,11 +2454,11 @@
   typec_unregister_port
   usb_debug_root
 
-# required by thermal-tsens.ko
-  devm_thermal_of_virtual_sensor_register
-
 # required by tps-regulator.ko
-  devm_gpiod_get_index
+  gpiod_export
+  gpiod_get_from_of_node
+  regulator_list_voltage_table
+  regulator_map_voltage_ascend
 
 # required by ufs_qcom.ko
   ufsdbg_pr_buf_to_std
@@ -2646,7 +2641,6 @@
   free_percpu_irq
   panic_timeout
   __request_percpu_irq
-  smp_call_function_single
 
 # required by wcd938x_slave_dlkm.ko
   component_del
