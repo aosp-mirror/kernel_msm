@@ -1295,3 +1295,6 @@ static const struct file_operations rndis_proc_fops = {
 #define	NAME_TEMPLATE "driver/rndis-%03d"
 
 #endif /* CONFIG_USB_GADGET_DEBUG_FILES */
+
+MODULE_DESCRIPTION("Remote NDIS USB Gadget driver");
+MODULE_LICENSE("GPL v2");
