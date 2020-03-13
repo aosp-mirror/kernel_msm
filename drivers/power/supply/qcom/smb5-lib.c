@@ -2507,7 +2507,8 @@ int smblib_set_prop_input_suspend(struct smb_charger *chg,
 		return rc;
 	}
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 	return rc;
 }
 
@@ -2516,7 +2517,8 @@ int smblib_set_prop_batt_capacity(struct smb_charger *chg,
 {
 	chg->fake_capacity = val->intval;
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 	return 0;
 }
@@ -2530,7 +2532,8 @@ int smblib_set_prop_batt_status(struct smb_charger *chg,
 	else
 		chg->fake_batt_status = -EINVAL;
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 	return 0;
 }
@@ -7370,7 +7373,8 @@ irqreturn_t wdog_snarl_irq_handler(int irq, void *data)
 		schedule_delayed_work(&chg->thermal_regulation_work, 0);
 	}
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 	return IRQ_HANDLED;
 }

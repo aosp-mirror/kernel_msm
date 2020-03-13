@@ -3009,7 +3009,8 @@ static int smb5_determine_initial_status(struct smb5 *chip)
 	batt_temp_changed_irq_handler(0, &irq_data);
 	wdog_bark_irq_handler(0, &irq_data);
 	typec_or_rid_detection_change_irq_handler(0, &irq_data);
-	wdog_snarl_irq_handler(0, &irq_data);
+	if (!chip->dt.wdog_snarl_disable)
+		wdog_snarl_irq_handler(0, &irq_data);
 
 	return 0;
 }
