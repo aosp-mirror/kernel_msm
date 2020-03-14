@@ -616,6 +616,7 @@ static int mdss_dsi_get_dt_vreg_data(struct device *dev,
 	const char *pm_supply_name = NULL;
 	struct device_node *supply_root_node = NULL;
 
+    pr_err("%s: %s 1\n", __func__,of_node->name);
 	if (!dev || !mp) {
 		pr_err("%s: invalid input\n", __func__);
 		rc = -EINVAL;
@@ -637,16 +638,18 @@ static int mdss_dsi_get_dt_vreg_data(struct device *dev,
 		}
 	}
 
-
+    pr_err("%s: %s 2\n", __func__,supply_root_node->name);
+	
 	for_each_child_of_node(supply_root_node, supply_node) {
 		mp->num_vreg++;
+		pr_err("%s: %s 3\n", __func__,supply_node->name);
 	}
 
 	if (mp->num_vreg == 0) {
 		pr_debug("%s: no vreg\n", __func__);
 		goto novreg;
 	} else {
-		pr_debug("%s: vreg found. count=%d\n", __func__, mp->num_vreg);
+		pr_err("%s: vreg found. count=%d\n", __func__, mp->num_vreg);
 	}
 
 	mp->vreg_config = devm_kzalloc(dev, sizeof(struct mdss_vreg) *
@@ -658,6 +661,8 @@ static int mdss_dsi_get_dt_vreg_data(struct device *dev,
 
 	for_each_child_of_node(supply_root_node, supply_node) {
 		const char *st = NULL;
+
+		pr_err("%s: %s 4\n", __func__,supply_node->name);
 		/* vreg-name */
 		rc = of_property_read_string(supply_node,
 			"qcom,supply-name", &st);
@@ -2704,6 +2709,20 @@ static struct device_node *mdss_dsi_get_fb_node_cb(struct platform_device *pdev)
 	return fb_node;
 }
 
+int mdss_dsi_disp_disable(int index)
+{
+    struct mdss_dsi_ctrl_pdata *ctrl_pdata = mdss_dsi_get_ctrl(index);
+        pr_err("entet into mdss_dsi_disp_disable\n");
+    if (!ctrl_pdata)
+        return -EINVAL;
+
+    ctrl_pdata->disp_disabled = 1;
+    if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
+        gpio_direction_output(ctrl_pdata->disp_en_gpio, 0);
+
+    return 0;
+}
+
 static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 				  int event, void *arg)
 {
@@ -2721,6 +2740,10 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 	pinfo = &pdata->panel_info;
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+	if (ctrl_pdata->disp_disabled) {
+		pr_err("%s: direct return \n", __func__);
+		return -EINVAL;
+	}
 	pr_debug("%s+: ctrl=%d event=%d\n", __func__, ctrl_pdata->ndx, event);
 
 	MDSS_XLOG(event, arg, ctrl_pdata->ndx, 0x3333);
@@ -3007,6 +3030,11 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 			       __func__, __LINE__);
 			return NULL;
 		}
+
+		
+		pr_info("%s: mdss_node name:%s\n",
+			__func__, mdss_node->name);
+
 		dsi_pan_node = of_find_node_by_name(mdss_node, panel_name);
 		if (!dsi_pan_node) {
 			pr_err("%s: invalid pan node \"%s\"\n",

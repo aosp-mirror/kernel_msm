@@ -54,6 +54,7 @@
 #include "mdss_mdp.h"
 #include "mdp3_ctrl.h"
 #include "mdss_sync.h"
+#include "mdss_dsi.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
@@ -911,6 +912,93 @@ static ssize_t mdss_fb_idle_pc_notify(struct device *dev,
 	return scnprintf(buf, PAGE_SIZE, "idle power collapsed\n");
 }
 
+extern void mdss_dsi_panel_te_ctrl(struct mdss_dsi_ctrl_pdata *ctrl, int value);
+static ssize_t mdss_fb_set_disp_en_gpio(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct fb_info *fbi = dev_get_drvdata(dev);
+    struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+    struct mdss_panel_data *pdata;
+    struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+    unsigned int val;
+    pdata = dev_get_platdata(&mfd->pdev->dev);
+
+    if (!pdata) {
+        pr_err("no panel connected!\n");
+        return -EINVAL;
+    }
+
+    if (kstrtouint(buf, 0, &val)) {
+        pr_err("kstrtouint buf error!\n");
+        return -EINVAL;
+    }
+
+    ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+                panel_data);
+
+    ctrl_pdata->disp_disabled = !val;
+    if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
+        gpio_direction_output(ctrl_pdata->disp_en_gpio, !!val);
+
+    if(val == 0) {
+         pr_debug("power off panel\n");
+         mdss_dsi_panel_power_ctrl(pdata, MDSS_PANEL_POWER_OFF);
+    } else {
+         pr_debug("power on panel\n");
+         mdss_dsi_panel_power_ctrl(pdata, MDSS_PANEL_POWER_ON);
+    }
+
+    mdss_dsi_panel_te_ctrl(ctrl_pdata, 2);   /*TE = high*/
+
+    return count;
+}
+
+
+extern void mdss_dsi_panel_bklt_hbm_switch(struct mdss_dsi_ctrl_pdata *ctrl, int vaule);
+unsigned int hbm_flag = 0;
+static ssize_t mdss_hbm_enable_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    ssize_t ret = 0;
+    pr_info("%d\n", hbm_flag);
+    ret = snprintf(buf, PAGE_SIZE, "%d \n",hbm_flag);
+    return ret;
+}
+
+static ssize_t mdss_hbm_enable_store(struct device *dev,
+    struct device_attribute *attr, const char *buf, size_t count)
+{
+    struct fb_info *fbi = dev_get_drvdata(dev);
+    struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+    struct mdss_panel_data *pdata;
+    struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+    unsigned int val;
+
+    pdata = dev_get_platdata(&mfd->pdev->dev);
+    if (!pdata) {
+        pr_err("no panel connected!\n");
+        return -EINVAL;
+    }
+
+    if (kstrtouint(buf, 0, &val)) {
+        pr_err("kstrtouint buf error!\n");
+        return -EINVAL;
+    }
+
+    ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+          panel_data);
+
+    hbm_flag = val;
+    if(val == 0 || val == 1) {
+        mdss_dsi_panel_bklt_hbm_switch(ctrl_pdata, val);
+    } else {
+        pr_err("error value input:%d\n", val);
+        return -1;
+    }
+
+    return count;
+}
+
 static DEVICE_ATTR(msm_fb_type, 0444, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, 0644, mdss_fb_show_split,
 					mdss_fb_store_split);
@@ -932,6 +1020,42 @@ static DEVICE_ATTR(measured_fps, 0664,
 static DEVICE_ATTR(msm_fb_persist_mode, 0644,
 	mdss_fb_get_persist_mode, mdss_fb_change_persist_mode);
 static DEVICE_ATTR(idle_power_collapse, 0444, mdss_fb_idle_pc_notify, NULL);
+static DEVICE_ATTR(mdss_fb_disp_en_gpio, S_IRUGO | S_IWUSR,
+    NULL, mdss_fb_set_disp_en_gpio);
+static DEVICE_ATTR(mdss_hbm_enable, S_IRUGO | S_IWUSR,
+    mdss_hbm_enable_show, mdss_hbm_enable_store);
+
+
+static ssize_t mdss_fb_set_power(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = fbi->par;
+	int rc = 0;
+	int idle_time = 0;
+
+	rc = kstrtoint(buf, 10, &idle_time);
+	if (rc) {
+		pr_err("kstrtoint failed. rc=%d\n", rc);
+		return rc;
+	}
+
+	pr_debug("Idle time = %d\n", idle_time);
+	mfd->idle_time = idle_time;
+
+	return count;
+}
+
+static ssize_t mdss_fb_get_power(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+
+	return 0;
+}
+
+
+static DEVICE_ATTR(power_on, 0644, mdss_fb_get_power, mdss_fb_set_power);
+
 
 static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
@@ -947,6 +1071,9 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_measured_fps.attr,
 	&dev_attr_msm_fb_persist_mode.attr,
 	&dev_attr_idle_power_collapse.attr,
+	&dev_attr_power_on.attr,
+	&dev_attr_mdss_fb_disp_en_gpio.attr,
+	&dev_attr_mdss_hbm_enable.attr,
 	NULL,
 };
 

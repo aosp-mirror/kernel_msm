@@ -167,6 +167,11 @@ int msm_mdss_config_vreg(struct device *dev, struct mdss_vreg *in_vreg,
 					curr_vreg->vreg,
 					curr_vreg->min_voltage,
 					curr_vreg->max_voltage);
+
+				DEV_ERR("%d: %d  %s set vltg fail--czq\n",
+						curr_vreg->min_voltage,
+						curr_vreg->max_voltage,
+						curr_vreg->vreg_name);
 				if (rc < 0) {
 					DEV_ERR("%pS->%s: %s set vltg fail\n",
 						__builtin_return_address(0),
