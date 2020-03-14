@@ -68,8 +68,8 @@
 		#size-cells = <1>;
 		qcom,mdss-fb-map-prim = <&mdss_fb0>;
 		gdsc-supply = <&gdsc_mdss>;
-		vdda-supply = <&pm660_l2>;
-		vddio-supply = <&pm660_l6>;
+		vdda-supply = <&pm8909_l2>;
+		vddio-supply = <&pm8909_l6>;
 
 		/* Bus Scale Settings */
 		qcom,msm-bus,name = "mdss_dsi";
@@ -150,8 +150,8 @@
 			interrupts = <0 80 0>;
 
 			qcom,mdss-mdp = <&mdss_mdp>;
-			vdd-supply = <&pm660_l17>;
-			vddio-supply = <&pm660_l6>;
+			vdd-supply = <&pm8909_l17>;
+			vddio-supply = <&pm8909_l6>;
 
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
 				 <&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,
@@ -162,10 +162,8 @@
 
 			qcom,platform-strength-ctrl = [ff 06];
 			qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
-			qcom,platform-regulator-settings =
-					[00 01 01 00 20 07 00];
-			qcom,platform-lane-config =
-				[00 00 00 00 00 00 00 01 97
+			qcom,platform-regulator-settings = [00 01 01 00 20 07 00];
+			qcom,platform-lane-config = [00 00 00 00 00 00 00 01 97
 				00 00 00 00 05 00 00 01 97
 				00 00 00 00 0a 00 00 01 97
 				00 00 00 00 0f 00 00 01 97

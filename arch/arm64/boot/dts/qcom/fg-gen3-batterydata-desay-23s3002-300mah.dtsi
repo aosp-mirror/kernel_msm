@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2015, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+qcom,desay_23s3002_300mah {
+	qcom,battery-type = "Desay-23S3002-300mah";
+	qcom,nom-batt-capacity-mah = <300>;
+	qcom,batt-id-kohm = <105>;
+	qcom,battery-beta = <3380>;
+	qcom,battery-thermal-coefficients = [9d 50 ff];
+	qcom,default-rbatt-mohm = <200>;
+	qcom,max-voltage-uv = <4435000>;
+	qcom,fastchg-current-ma = <425>;
+	qcom,fg-cc-cv-threshold-mv = <4425>;
+
+	qcom,checksum = <0xF2FF>;
+	qcom,gui-version = "PM660GUI - 0.0.0.45";
+	qcom,fg-profile-data = [
+		 93 21 94 0D
+		 4E 12 22 04
+		 E3 1C B8 01
+		 EF 04 C7 03
+		 05 18 08 23
+		 A7 45 7F 52
+		 89 00 00 00
+		 14 00 00 00
+		 00 00 3D C4
+		 C7 BC 0A CA
+		 4A 00 08 00
+		 3D F2 A2 F4
+		 6D DA DD EC
+		 56 F2 18 02
+		 0D EA 39 42
+		 12 06 09 20
+		 27 00 14 00
+		 A2 20 38 04
+		 F0 0B A5 04
+		 CF 1C BF 02
+		 83 0C F5 0B
+		 7F 18 0D 23
+		 6B 45 0A 53
+		 70 00 00 00
+		 12 00 00 00
+		 00 00 26 CD
+		 06 BB 57 AD
+		 45 00 00 00
+		 41 FA A2 F4
+		 08 00 C7 EC
+		 D1 EB 4F F3
+		 25 F4 8A 1A
+		 A5 33 CC FF
+		 07 10 00 00
+		 33 01 33 47
+		 45 00 40 00
+		 D8 03 0A FA
+		 FF 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+		 00 00 00 00
+	];
+};

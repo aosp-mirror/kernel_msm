@@ -370,8 +370,10 @@
 		#size-cells = <1>;
 		qcom,pmic-revid = <&pm660_revid>;
 		io-channels = <&pm660_rradc 0>,
+                              <&pm660_rradc 4>,
 			      <&pm660_rradc 7>;
 		io-channel-names = "rradc_batt_id",
+                                   "rradc_usbin_vol",
 				   "rradc_die_temp";
 		qcom,rradc-base = <0x4500>;
 		qcom,fg-esr-timer-awake = <64 96>;
@@ -518,6 +520,17 @@
 			qcom,drive-strength = <2>;
 			bias-disable;
 		};
+	};
+	
+	/* GPIO 3 (BOB_EN) */
+	gpio@c200 {
+		status = "ok";
+		qcom,mode = <1>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <0>;
+		qcom,src-sel = <2>;
+		qcom,master-en = <1>;
+		qcom,out-strength = <2>;
 	};
 };
 

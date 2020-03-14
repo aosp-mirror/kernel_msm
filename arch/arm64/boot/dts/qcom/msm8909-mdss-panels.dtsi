@@ -11,6 +11,8 @@
  */
 
 #include "dsi-panel-390p-auo-cmd.dtsi"
+#include "dsi-panel-visionox-402x476-cmd.dtsi"
+#include "dsi-panel-everdisplay-320x360-cmd.dtsi"
 
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
@@ -69,7 +71,3 @@
 	};
 };
 
-&dsi_auo_390p_cmd {
-	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-	qcom,panel-supply-entries = <&dsi_pm660_panel_pwr_supply>;
-};
