@@ -980,7 +980,7 @@ no_scaling:
 		}
 	}
 
-	if (i == align_buckets) {
+	if (i >= align_buckets) {
 		logbuffer_log(charger->log, "align: freq above range");
 		return;
 	}
