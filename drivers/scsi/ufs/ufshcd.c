@@ -5382,8 +5382,12 @@ out:
 		ufshcd_print_pwr_info(hba);
 		ufshcd_print_host_regs(hba);
 		ufshcd_print_cmd_log(hba);
-		if (hba->crash_on_err)
-			BUG_ON(1);
+		if (hba->crash_on_err ||
+			(!hba->dev_info.pre_eol_info &&
+				!hba->dev_info.lifetime_a &&
+				!hba->dev_info.lifetime_b &&
+				!hba->dev_info.lifetime_c))
+			panic("ufshcd_uic_pwr_ctrl error\n");
 	}
 
 	ufshcd_save_tstamp_of_last_dme_cmd(hba);
