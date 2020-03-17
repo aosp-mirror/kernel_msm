@@ -10,22 +10,6 @@
 //===============================================
 #include "PhoneUpdate.h"
 #include "PmemCode.h"
-/* Actuator calibration parameters */
-#include "Calibration_Eve.h"   // Wide module
-#include "Calibration_Emily.h" // Tele module
-
-#if MODULE_VENDOR == 0x04
-#include "FromCode_04_17_02_00.h"
-#include "FromCode_04_17_02_01.h"
-#elif MODULE_VENDOR == 0x09
-#include "FromCode_09_17_02_00.h"
-#include "FromCode_09_17_02_01.h"
-#else
-#include "FromCode_04_17_02_00.h"
-#include "FromCode_04_17_02_01.h"
-#include "FromCode_09_17_02_00.h"
-#include "FromCode_09_17_02_01.h"
-#endif
 
 #define USER_RESERVE            3
 #define ERASE_BLOCKS            (16 - USER_RESERVE)
@@ -65,26 +49,7 @@ UINT_32 UlBufDat[64];
 //  Table of download file
 //==========================
 const DOWNLOAD_TBL DTbl[] = {
-#if MODULE_VENDOR == 0x04
-	{0x0402, CcMagicCodeF40_04_17_02_00, sizeof(CcMagicCodeF40_04_17_02_00),
-		CcFromCodeF40_04_17_02_00, sizeof(CcFromCodeF40_04_17_02_00)},
-	{0x0482, CcMagicCodeF40_04_17_02_01, sizeof(CcMagicCodeF40_04_17_02_01),
-		CcFromCodeF40_04_17_02_01, sizeof(CcFromCodeF40_04_17_02_01)},
-#elif MODULE_VENDOR == 0x09
-	{0x0902, CcMagicCodeF40_09_17_02_00, sizeof(CcMagicCodeF40_09_17_02_00),
-		CcFromCodeF40_09_17_02_00, sizeof(CcFromCodeF40_09_17_02_00)},
-	{0x0982, CcMagicCodeF40_09_17_02_01, sizeof(CcMagicCodeF40_09_17_02_01),
-		CcFromCodeF40_09_17_02_01, sizeof(CcFromCodeF40_09_17_02_01)},
-#else
-	{0x0402, CcMagicCodeF40_04_17_02_00, sizeof(CcMagicCodeF40_04_17_02_00),
-		CcFromCodeF40_04_17_02_00, sizeof(CcFromCodeF40_04_17_02_00)},
-	{0x0482, CcMagicCodeF40_04_17_02_01, sizeof(CcMagicCodeF40_04_17_02_01),
-		CcFromCodeF40_04_17_02_01, sizeof(CcFromCodeF40_04_17_02_01)},
-	{0x0902, CcMagicCodeF40_09_17_02_00, sizeof(CcMagicCodeF40_09_17_02_00),
-		CcFromCodeF40_09_17_02_00, sizeof(CcFromCodeF40_09_17_02_00)},
-	{0x0982, CcMagicCodeF40_09_17_02_01, sizeof(CcMagicCodeF40_09_17_02_01),
-		CcFromCodeF40_09_17_02_01, sizeof(CcFromCodeF40_09_17_02_01)},
-#endif
+	{0xFFFF, (void *)0, 0, (void *)0, 0},
 	{0xFFFF, (void *)0, 0, (void *)0, 0}
 };
 
@@ -151,226 +116,6 @@ UINT_8 F40_UnlockCodeClear(void)
 	WPBCtrl(WPB_ON);
 
 	return 0;
-}
-
-void F40_BootMode(void)
-{
-	F40_IOWrite32A(SYSDSP_REMAP, 0x00001440);
-}
-
-void F40_SetTempCompParameters(DOWNLOAD_TBL *ptr, UINT_8 *pNVR1)
-{
-	UINT_8 uiModule = (ptr->Index & 0x80);
-	ADJ_TEMP_COMPENSATION *TempCompPtr;
-	UINT_8 *NcDatVal;
-	UINT_16 Idx, PIdx;
-
-	PIdx = (ptr->Index & 0x0F) - 1;
-
-	if (uiModule == 0x00) { // Wide
-		TempCompPtr =
-			(ADJ_TEMP_COMPENSATION *)&Eve_TempCompParameter[PIdx];
-	} else if (uiModule == 0x80) { // Tele
-		TempCompPtr =
-			(ADJ_TEMP_COMPENSATION *)&Emily_TempCompParameter[PIdx];
-	}
-
-	Idx = 0x28 * 5 + 1; // rcodeX
-#ifdef _BIG_ENDIAN_
-	// for BIG ENDIAN SYSTEM
-	NcDatVal = (UINT_8 *)&TempCompPtr->rcodeX; // rcodeX
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // rcodeY
-	NcDatVal = (UINT_8 *)&TempCompPtr->rcodeY;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // rcodeZ
-	NcDatVal = (UINT_8 *)&TempCompPtr->rcodeZ;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shag
-	NcDatVal = (UINT_8 *)&TempCompPtr->shag;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shbg
-	NcDatVal = (UINT_8 *)&TempCompPtr->shbg;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shcg
-	NcDatVal = (UINT_8 *)&TempCompPtr->shcg;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shoutag
-	NcDatVal = (UINT_8 *)&TempCompPtr->shoutag;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shoutbg
-	NcDatVal = (UINT_8 *)&TempCompPtr->shoutbg;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shab
-	NcDatVal = (UINT_8 *)&TempCompPtr->shab;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shac
-	NcDatVal = (UINT_8 *)&TempCompPtr->shac;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shaa
-	NcDatVal = (UINT_8 *)&TempCompPtr->shaa;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shbb
-	NcDatVal = (UINT_8 *)&TempCompPtr->shbb;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shbc
-	NcDatVal = (UINT_8 *)&TempCompPtr->shbc;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shba
-	NcDatVal = (UINT_8 *)&TempCompPtr->shba;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shcb
-	NcDatVal = (UINT_8 *)&TempCompPtr->shcb;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shcc
-	NcDatVal = (UINT_8 *)&TempCompPtr->shcc;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // shca
-	NcDatVal = (UINT_8 *)&TempCompPtr->shca;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // tab
-	NcDatVal = (UINT_8 *)&TempCompPtr->tab;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // tac
-	NcDatVal = (UINT_8 *)&TempCompPtr->tac;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // taa
-	NcDatVal = (UINT_8 *)&TempCompPtr->taa;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // tbb
-	NcDatVal = (UINT_8 *)&TempCompPtr->tbb;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // tbc
-	NcDatVal = (UINT_8 *)&TempCompPtr->tbc;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // tba
-	NcDatVal = (UINT_8 *)&TempCompPtr->tba;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	Idx++; // TEMPOFF
-	NcDatVal = (UINT_8 *)&TempCompPtr->TEMPOFF;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-	pNVR1[Idx++] = *NcDatVal++;	pNVR1[Idx++] = *NcDatVal++;
-#else
-	// for LITTLE ENDIAN SYSTEM
-	NcDatVal = (UINT_8 *)&TempCompPtr->rcodeX;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // rcodeY
-	NcDatVal = (UINT_8 *)&TempCompPtr->rcodeY;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // rcodeZ
-	NcDatVal = (UINT_8 *)&TempCompPtr->rcodeZ;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shag
-	NcDatVal = (UINT_8 *)&TempCompPtr->shag;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shbg
-	NcDatVal = (UINT_8 *)&TempCompPtr->shbg;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shcg
-	NcDatVal = (UINT_8 *)&TempCompPtr->shcg;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shoutag
-	NcDatVal = (UINT_8 *)&TempCompPtr->shoutag;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shoutbg
-	NcDatVal = (UINT_8 *)&TempCompPtr->shoutbg;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shab
-	NcDatVal = (UINT_8 *)&TempCompPtr->shab;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shac
-	NcDatVal = (UINT_8 *)&TempCompPtr->shac;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shaa
-	NcDatVal = (UINT_8 *)&TempCompPtr->shaa;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shbb
-	NcDatVal = (UINT_8 *)&TempCompPtr->shbb;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shbc
-	NcDatVal = (UINT_8 *)&TempCompPtr->shbc;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shba
-	NcDatVal = (UINT_8 *)&TempCompPtr->shba;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shcb
-	NcDatVal = (UINT_8 *)&TempCompPtr->shcb;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shcc
-	NcDatVal = (UINT_8 *)&TempCompPtr->shcc;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // shca
-	NcDatVal = (UINT_8 *)&TempCompPtr->shca;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // tab
-	NcDatVal = (UINT_8 *)&TempCompPtr->tab;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // tac
-	NcDatVal = (UINT_8 *)&TempCompPtr->tac;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // taa
-	NcDatVal = (UINT_8 *)&TempCompPtr->taa;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // tbb
-	NcDatVal = (UINT_8 *)&TempCompPtr->tbb;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // tbc
-	NcDatVal = (UINT_8 *)&TempCompPtr->tbc;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // tba
-	NcDatVal = (UINT_8 *)&TempCompPtr->tba;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-	Idx += 5; // TEMPOFF
-	NcDatVal = (UINT_8 *)&TempCompPtr->TEMPOFF;
-	pNVR1[Idx+3] = *NcDatVal++;	pNVR1[Idx+2] = *NcDatVal++;
-	pNVR1[Idx+1] = *NcDatVal++;	pNVR1[Idx+0] = *NcDatVal++;
-#endif
 }
 
 UINT_8 F40_FlashBlockErase(UINT_32 SetAddress)
@@ -546,15 +291,13 @@ UINT_8 F40_FlashDownload(UINT_8 chiperase, UINT_8 ModuleVendor, UINT_8 MdlVer)
 	DOWNLOAD_TBL *ptr;
 
 	ptr = (DOWNLOAD_TBL *)DTbl;
-	while (ptr->Index != 0xFFFF) {
-		if (ptr->Index == (((UINT_16)ModuleVendor << 8) + MdlVer))
-			break;
+	do {
+		if (ptr->Index == (((UINT_16)ModuleVendor<<8) + MdlVer))
+			return F40_FlashUpdate(chiperase, ptr);
 		ptr++;
-	}
-	if (ptr->Index == 0xFFFF)
-		return 0xF0;
+	} while (ptr->Index != 0xFFFF);
 
-	return F40_FlashUpdate(chiperase, ptr);
+	return 0xF0;
 }
 
 UINT_8 F40_FlashUpdate(UINT_8 flag, DOWNLOAD_TBL *ptr)
@@ -565,12 +308,13 @@ UINT_8 F40_FlashUpdate(UINT_8 flag, DOWNLOAD_TBL *ptr)
 	UINT_32 UlReadVal, UlCnt;
 	UINT_8  ans, i;
 	UINT_16 UsChkBlocks;
-	UINT_8  UserMagicCode[SECTOR_SIZE];
+	UINT_8  UserMagicCode[ptr->SizeMagicCode];
 
 //----------------------------------------------------
 // 0.
 //----------------------------------------------------
-	WitTim(50);
+	F40_IOWrite32A(SYSDSP_REMAP, 0x00001440);
+	WitTim(25);
 	F40_IORead32A(SYSDSP_SOFTRES, (UINT_32 *)&SiWrkVl0);
 	SiWrkVl0 &= 0xFFFFEFFF;
 	F40_IOWrite32A(SYSDSP_SOFTRES, SiWrkVl0);
@@ -677,6 +421,7 @@ UINT_8 F40_FlashUpdate(UINT_8 flag, DOWNLOAD_TBL *ptr)
 //----------------------------------------------------
 // X.
 //----------------------------------------------------
+
 	if (!flag) {
 		UINT_32 sumH, sumL;
 		UINT_16 Idx;
@@ -717,23 +462,19 @@ UINT_8 F40_FlashUpdate(UINT_8 flag, DOWNLOAD_TBL *ptr)
 #endif
 		}
 		NcDatVal = UserMagicCode;
+
 	} else {
-		for (UlCnt = 0; UlCnt < ptr->SizeMagicCode; UlCnt++)
-			UserMagicCode[UlCnt] = ptr->MagicCode[UlCnt];
-		NcDatVal = UserMagicCode;
+		NcDatVal = ptr->MagicCode;
 	}
 
-//----------------------------------------------------
-// X-1.
-//----------------------------------------------------
-	F40_SetTempCompParameters(ptr, (UINT_8 *)NcDatVal);
 //----------------------------------------------------
 // 5.
 //----------------------------------------------------
 	ans = F40_UnlockCodeSet();
 	if (ans != 0)
 		return ans;
-	F40_FlashBurstWrite(NcDatVal, SECTOR_SIZE, 0x00010000);
+
+	F40_FlashBurstWrite(NcDatVal, ptr->SizeMagicCode, 0x00010000);
 	F40_UnlockCodeClear();
 
 //----------------------------------------------------
@@ -744,8 +485,11 @@ UINT_8 F40_FlashUpdate(UINT_8 flag, DOWNLOAD_TBL *ptr)
 	RamWrite32A(0xF00C, 0x00000100);
 
 	SiWrkVl0 = 0;
-	for (UlCnt = 0; UlCnt < SECTOR_SIZE; UlCnt++)
+	for (UlCnt = 0; UlCnt < ptr->SizeMagicCode; UlCnt++)
 		SiWrkVl0 += *NcDatVal++;
+
+	for (; UlCnt < 320; UlCnt++)
+		SiWrkVl0 += 0xFF;
 
 	UlCnt = 0;
 	do {
@@ -858,15 +602,14 @@ UINT_8 F40_WrGyroOffsetData(void)
 	UINT_32 UlCurrX, UlCurrY;
 	UINT_32 UlGofX, UlGofY;
 	UINT_32 UiChkSum1, UiChkSum2;
-	UINT_32 UlSrvStat, UlOisStat, UlAfTgtCod;
+	UINT_32 UlSrvStat, UlOisStat;
 	UINT_8  ans;
 	UINT_32 UlStCnt = 0;
 	UINT_8  UcSndDat;
 
 	RamRead32A(0xF010, &UlSrvStat);
 	RamRead32A(0xF012, &UlOisStat);
-	RamRead32A(0xF01A, &UlAfTgtCod);
-	RamWrite32A(0xF010, 0x00070000);
+	RamWrite32A(0xF010, 0x00000000);
 
 	F40_ReadCalData(UlBufDat, &UiChkSum2);
 
@@ -896,7 +639,12 @@ UINT_8 F40_WrGyroOffsetData(void)
 			ans = 0x10;
 	}
 
-	RamWrite32A(0xF010, UlSrvStat);
+	if (!UlSrvStat)
+		RamWrite32A(0xF010, 0x00000000);
+	else if (UlSrvStat == 3)
+		RamWrite32A(0xF010, 0x00000003);
+	else
+		RamWrite32A(0xF010, UlSrvStat);
 
 	do {
 		UcSndDat = F40_RdStatus(1);
@@ -909,9 +657,6 @@ UINT_8 F40_WrGyroOffsetData(void)
 			UcSndDat = F40_RdStatus(1);
 		} while (UcSndDat != 0 && (UlStCnt++ < CNT100MS));
 	}
-
-	if (UlSrvStat & 0x00000004)
-		RamWrite32A(0xF01A, UlAfTgtCod); // Resume AF target
 
 	return ans;
 }

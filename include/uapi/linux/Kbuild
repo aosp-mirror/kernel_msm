@@ -26,3 +26,5 @@ ifneq ($(VSERVICES_SUPPORT), "")
 include include/linux/Kbuild.vservices
 endif
 header-y += okl4-link-shbuf.h
+
+header-y += citadel.h

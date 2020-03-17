@@ -41,6 +41,10 @@
 #include "ipa_trace.h"
 #include "ipa_odl.h"
 
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+#include <linux/debugfs.h>
+#endif
+
 #define OUTSTANDING_HIGH_DEFAULT 256
 #define OUTSTANDING_HIGH_CTL_DEFAULT (OUTSTANDING_HIGH_DEFAULT + 32)
 #define OUTSTANDING_LOW_DEFAULT 128
@@ -136,6 +140,10 @@ struct ipa3_wwan_private {
 	struct completion resource_granted_completion;
 	enum ipa3_wwan_device_status device_status;
 	struct napi_struct napi;
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+	int tx_timeout_cnt;
+	u64 tx_timeout_time;
+#endif
 };
 
 struct rmnet_ipa3_context {
@@ -1364,6 +1372,88 @@ out:
 	return ret;
 }
 
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+#define DEFAULT_TX_TIMEOUT_THRESHOLD 60
+#define NSEC_PER_SEC 1000000000L
+#define MAX_IPA_DEBUG_LEN 4
+static bool enable_tx_timeout_detect;
+
+static ssize_t ipa_debugfs_get_debug_stats(struct file *file,
+	char __user *ubuf, size_t count, loff_t *ppos)
+{
+	int nbytes = 0;
+	char dbg_buff[MAX_IPA_DEBUG_LEN] = {0};
+
+	nbytes += scnprintf(dbg_buff + nbytes,
+		MAX_IPA_DEBUG_LEN - nbytes,
+		"%d\n",
+		(int)enable_tx_timeout_detect);
+
+	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, nbytes);
+}
+
+static ssize_t ipa_debugfs_set_debug_stats(struct file *file,
+	const char __user *buf, size_t count, loff_t *ppos)
+{
+	unsigned long missing;
+	s8 option = 0;
+	char dbg_buff[MAX_IPA_DEBUG_LEN] = {0};
+
+	if (MAX_IPA_DEBUG_LEN < count + 1)
+		return -EFAULT;
+
+	missing = copy_from_user(dbg_buff, buf, count);
+	if (missing)
+		return -EFAULT;
+
+	dbg_buff[count] = '\0';
+	if (kstrtos8(dbg_buff, 0, &option))
+		return -EFAULT;
+
+	if (option == 1)
+		enable_tx_timeout_detect = true;
+	else if (option == 0)
+		enable_tx_timeout_detect = false;
+	else
+		return -EFAULT;
+
+	return count;
+}
+
+static const struct file_operations
+	ipa3_wwan_debug_ops = {
+	.read = ipa_debugfs_get_debug_stats,
+	.write = ipa_debugfs_set_debug_stats,
+};
+
+static void ipa3_wwan_debugfs_init(void)
+{
+	struct dentry *dent;
+	struct dentry *file;
+	const mode_t read_write_mode = 0664;
+
+	enable_tx_timeout_detect = false;
+
+	dent = debugfs_create_dir("ipawwan", 0);
+	if (IS_ERR_OR_NULL(dent)) {
+		IPAWANERR("fail to create ipahal debugfs folder\n");
+		goto fail;
+	}
+
+	file = debugfs_create_file("debug", read_write_mode, dent, NULL,
+		&ipa3_wwan_debug_ops);
+	if (IS_ERR_OR_NULL(file)) {
+		IPAWANERR("fail to create debug file\n");
+		goto fail;
+	}
+
+	return;
+fail:
+	debugfs_remove_recursive(dent);
+}
+#endif //CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT && CONFIG_DEBUG_FS
+
+
 static void ipa3_wwan_tx_timeout(struct net_device *dev)
 {
 	struct ipa3_wwan_private *wwan_ptr = netdev_priv(dev);
@@ -1371,6 +1461,43 @@ static void ipa3_wwan_tx_timeout(struct net_device *dev)
 	if (atomic_read(&wwan_ptr->outstanding_pkts) != 0)
 		IPAWANERR("[%s] data stall in UL, %d outstanding\n",
 			dev->name, atomic_read(&wwan_ptr->outstanding_pkts));
+
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+	if (enable_tx_timeout_detect == true) {
+		u64 current_time = local_clock(), timeout_time = 0;
+
+		if (wwan_ptr->tx_timeout_cnt == 0) {
+			timeout_time = current_time;
+			wwan_ptr->tx_timeout_time = current_time;
+		} else {
+			timeout_time = wwan_ptr->tx_timeout_time;
+		}
+
+		wwan_ptr->tx_timeout_cnt++;
+
+		IPAWANERR("[%s] count=[%d], time=[%llu], latest time=[%llu]\n",
+			dev->name,
+			wwan_ptr->tx_timeout_cnt,
+			current_time,
+			timeout_time);
+
+		if (wwan_ptr->tx_timeout_cnt > 1) {
+			s32 interval = 0;
+
+			interval =
+				(s32)((current_time - timeout_time) /
+				NSEC_PER_SEC);
+
+			if (interval > DEFAULT_TX_TIMEOUT_THRESHOLD) {
+				int outstanding_pkts =
+				atomic_read(&wwan_ptr->outstanding_pkts);
+				panic("[%s] data stall in UL, %d outstanding\n",
+					dev->name,
+					outstanding_pkts);
+			}
+		}
+	}
+#endif //CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT && CONFIG_DEBUG_FS
 }
 
 /**
@@ -1423,6 +1550,12 @@ static void apps_ipa_tx_complete_notify(void *priv,
 			ipa_rm_inactivity_timer_release_resource(
 			IPA_RM_RESOURCE_WWAN_0_PROD);
 		}
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+		if (enable_tx_timeout_detect == true) {
+			wwan_ptr->tx_timeout_cnt = 0;
+			wwan_ptr->tx_timeout_time = U64_MAX;
+		}
+#endif
 	}
 	__netif_tx_unlock_bh(netdev_get_tx_queue(dev, 0));
 	dev_kfree_skb_any(skb);
@@ -2762,6 +2895,11 @@ static int ipa3_wwan_probe(struct platform_device *pdev)
 	init_completion(
 		&rmnet_ipa3_ctx->wwan_priv->resource_granted_completion);
 
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+	rmnet_ipa3_ctx->wwan_priv->tx_timeout_cnt = 0;
+	rmnet_ipa3_ctx->wwan_priv->tx_timeout_time = U64_MAX;
+#endif
+
 	if (!atomic_read(&rmnet_ipa3_ctx->is_ssr)) {
 		/* IPA_RM configuration starts */
 		if (ipa3_ctx->use_ipa_pm)
@@ -2967,6 +3105,14 @@ static int rmnet_ipa_ap_suspend(struct device *dev)
 		ipa_pm_deactivate_sync(rmnet_ipa3_ctx->pm_hdl);
 	else
 		ipa_rm_release_resource(IPA_RM_RESOURCE_WWAN_0_PROD);
+
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+	if (enable_tx_timeout_detect == true) {
+		wwan_ptr->tx_timeout_cnt = 0;
+		wwan_ptr->tx_timeout_time = U64_MAX;
+	}
+#endif
+
 	ret = 0;
 bail:
 	IPAWANDBG("Exit with %d\n", ret);
@@ -4860,6 +5006,9 @@ static int __init ipa3_wwan_init(void)
 	if (!rmnet_ipa3_ctx)
 		return -ENOMEM;
 
+#if defined(CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT)
+	ipa3_wwan_debugfs_init();
+#endif
 
 	atomic_set(&rmnet_ipa3_ctx->is_initialized, 0);
 	atomic_set(&rmnet_ipa3_ctx->is_ssr, 0);

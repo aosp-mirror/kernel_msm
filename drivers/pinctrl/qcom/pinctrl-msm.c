@@ -637,16 +637,75 @@ static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 	unsigned i;
 
 	for (i = 0; i < chip->ngpio; i++, gpio++) {
-		if (msm_gpio_is_ignored(chip, gpio))
+		if (msm_gpio_is_ignored(chip, i))
 			continue;
-
 		msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
 		seq_puts(s, "\n");
 	}
 }
 
+struct gpio_chip *g_chip;
+
+int msm_gpio_dump(struct seq_file *s)
+{
+	const struct msm_pingroup *g;
+	struct msm_pinctrl *pctrl = gpiochip_get_data(g_chip);
+	unsigned int func, i, len;
+	int is_out, drive, pull, io_value;
+	u32 ctl_reg, io_reg;
+	char *title_msg = "------------ MSM GPIO -------------";
+	char list_gpio[100];
+	const char *dir_state[3] = {" IN , ", " OUT, ", "----, "};
+	const char *val_state[3] = {" LOW, ", "HIGH, ", "----, "};
+	const char *pul_state[5] = {" NO , ", " PD , ", " KP , ", " PU , ",
+				    "----, "};
+	if (s)
+		seq_printf(s, "%s\n", title_msg);
+	else
+		pr_info("%s\n", title_msg);
+
+	for (i = 0; i < g_chip->ngpio; i++) {
+		if (msm_gpio_is_ignored(g_chip, i))
+			continue;
+		memset(list_gpio, 0, sizeof(list_gpio));
+		len = 0;
+		g = &pctrl->soc->groups[i];
+
+		ctl_reg = readl_relaxed(pctrl->regs + g->ctl_reg);
+		io_reg = readl_relaxed(pctrl->regs + g->io_reg);
+
+		is_out = !!(ctl_reg & BIT(g->oe_bit));
+		func = (ctl_reg >> g->mux_bit) & 7;
+		drive = (ctl_reg >> g->drv_bit) & 7;
+		pull = (ctl_reg >> g->pull_bit) & 3;
+
+		len += snprintf(list_gpio + len, sizeof(list_gpio) - len,
+				"GPIO[%3d]: [FS]0x%x ", i, func);
+
+		if (is_out)
+			io_value = (io_reg >> 1) & 0x1;
+		else
+			io_value = io_reg & 0x1;
+
+		len += snprintf(list_gpio + len, sizeof(list_gpio) - len,
+				"[DIR]%s[VAL]%5s[PULL]%s[DRV]%2dmA",
+				dir_state[is_out],
+				val_state[io_value],
+				pul_state[pull],
+				msm_regval_to_drive(drive));
+
+		list_gpio[99] = '\0';
+		if (s)
+			seq_printf(s, "%s\n", list_gpio);
+		else
+			pr_info("%s\n", list_gpio);
+	};
+	return 0;
+}
+
 #else
 #define msm_gpio_dbg_show NULL
+#define msm_gpio_dump NULL
 #endif
 
 static const struct gpio_chip msm_gpio_template = {
@@ -658,6 +717,7 @@ static const struct gpio_chip msm_gpio_template = {
 	.request          = gpiochip_generic_request,
 	.free             = gpiochip_generic_free,
 	.dbg_show         = msm_gpio_dbg_show,
+	.gpio_dump        = msm_gpio_dump,
 };
 
 /* For dual-edge interrupts in software, since some hardware has no
@@ -1806,6 +1866,10 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 				pctrl->irq, msm_gpio_irq_handler);
 
 	msm_gpio_setup_dir_connects(pctrl);
+#ifdef CONFIG_DEBUG_FS
+	g_chip = &pctrl->chip;
+#endif
+
 	return 0;
 }
 

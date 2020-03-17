@@ -117,6 +117,12 @@ struct acc_dev {
 	/* delayed work for handling ACCESSORY_START */
 	struct delayed_work start_work;
 
+	/* work for handling ACCESSORY GET PROTOCOL */
+	struct work_struct getprotocol_work;
+
+	/* work for handling ACCESSORY SEND STRING */
+	struct work_struct sendstring_work;
+
 	/* worker for registering and unregistering hid devices */
 	struct work_struct hid_work;
 
@@ -880,8 +886,6 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 	u16	w_value = le16_to_cpu(ctrl->wValue);
 	u16	w_length = le16_to_cpu(ctrl->wLength);
 	unsigned long flags;
-	char *envp51[2] = { "ACCESSORY=GETPROTOCOL", NULL };
-	char *envp52[2] = { "ACCESSORY=SENDSTRING", NULL };
 
 	/*
 	 * If instance is not created which is the case in power off charging
@@ -897,6 +901,10 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 			w_value, w_index, w_length);
 */
 
+	pr_debug("%s: %02x.%02x v%04x i%04x l%u\n",
+		  __func__, b_requestType, b_request,
+		  w_value, w_index, w_length);
+
 	if (b_requestType == (USB_DIR_OUT | USB_TYPE_VENDOR)) {
 		if (b_request == ACCESSORY_START) {
 			dev->start_requested = 1;
@@ -909,8 +917,7 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 		} else if (b_request == ACCESSORY_SEND_STRING) {
 			dev_info(&cdev->gadget->dev, "%s: got ACCESSORY_SEND_STRING(52) request\n",
 				__func__);
-			kobject_uevent_env(&acc_device.this_device->kobj,
-					   KOBJ_CHANGE, envp52);
+			schedule_work(&dev->sendstring_work);
 			dev->string_index = w_index;
 			cdev->gadget->ep0->driver_data = dev;
 			cdev->req->complete = acc_complete_set_string;
@@ -959,8 +966,7 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 		if (b_request == ACCESSORY_GET_PROTOCOL) {
 			dev_info(&cdev->gadget->dev, "%s: got ACCESSORY_GET_PROTOCOL(51) request\n",
 				__func__);
-			kobject_uevent_env(&acc_device.this_device->kobj,
-					   KOBJ_CHANGE, envp51);
+			schedule_work(&dev->getprotocol_work);
 			*((u16 *)cdev->req->buf) = PROTOCOL_VERSION;
 			value = sizeof(u16);
 			cdev->req->complete = acc_complete_setup_noop;
@@ -1116,6 +1122,20 @@ acc_function_unbind(struct usb_configuration *c, struct usb_function *f)
 		acc_request_free(dev->rx_req[i], dev->ep_out);
 
 	acc_hid_unbind(dev);
+}
+
+static void acc_getprotocol_work(struct work_struct *data)
+{
+	char *envp[2] = { "ACCESSORY=GETPROTOCOL", NULL };
+
+	kobject_uevent_env(&acc_device.this_device->kobj, KOBJ_CHANGE, envp);
+}
+
+static void acc_sendstring_work(struct work_struct *data)
+{
+	char *envp[2] = { "ACCESSORY=SENDSTRING", NULL };
+
+	kobject_uevent_env(&acc_device.this_device->kobj, KOBJ_CHANGE, envp);
 }
 
 static void acc_start_work(struct work_struct *data)
@@ -1284,6 +1304,8 @@ static int acc_setup(void)
 	INIT_LIST_HEAD(&dev->dead_hid_list);
 	INIT_DELAYED_WORK(&dev->start_work, acc_start_work);
 	INIT_WORK(&dev->hid_work, acc_hid_work);
+	INIT_WORK(&dev->getprotocol_work, acc_getprotocol_work);
+	INIT_WORK(&dev->sendstring_work, acc_sendstring_work);
 
 	ret = misc_register(&acc_device);
 	if (ret)

@@ -14,6 +14,7 @@
 
 #define pr_fmt(fmt)	"%s:%d: " fmt, __func__, __LINE__
 #include <linux/backlight.h>
+#include <linux/pwm.h>
 #include <linux/of_gpio.h>
 #include <linux/sysfs.h>
 #include <linux/list.h>
@@ -35,14 +36,19 @@
 #define BL_STATE_LP2		BL_CORE_DRIVER2
 
 struct dsi_backlight_pwm_config {
-	bool pwm_pmi_control;
-	u32 pwm_pmic_bank;
+	struct pwm_device *pwm_bl;
+	bool pwm_enabled;
 	u32 pwm_period_usecs;
-	int pwm_gpio;
 };
 
 static void dsi_panel_bl_hbm_free(struct device *dev,
 	struct dsi_backlight_config *bl);
+
+static void dsi_panel_bl_notifier_free(struct device *dev,
+	struct dsi_backlight_config *bl);
+
+static int dsi_panel_bl_find_range(struct dsi_backlight_config *bl,
+		int brightness, u32 *range);
 
 static inline bool is_standby_mode(unsigned long state)
 {
@@ -52,6 +58,11 @@ static inline bool is_standby_mode(unsigned long state)
 static inline bool is_lp_mode(unsigned long state)
 {
 	return (state & (BL_STATE_LP | BL_STATE_LP2)) != 0;
+}
+
+static inline bool is_on_mode(unsigned long state)
+{
+	return (!is_lp_mode(state) && !is_standby_mode(state));
 }
 
 static inline unsigned int regulator_mode_from_state(unsigned long state)
@@ -447,6 +458,20 @@ static int dsi_backlight_update_status(struct backlight_device *bd)
 			goto done;
 		}
 		bl->bl_update_pending = false;
+		if (bl->bl_notifier && is_on_mode(bd->props.state)
+				&& !(dsi_panel_get_hbm(panel))) {
+			u32 target_range = 0;
+
+			rc = dsi_panel_bl_find_range(bl, brightness, &target_range);
+			if (rc) {
+				pr_err("unable to find range from the backlight table (%d)\n", rc);
+			} else if (bl->bl_notifier->cur_range != target_range) {
+				bl->bl_notifier->cur_range = target_range;
+				sysfs_notify(&bd->dev.kobj, NULL, "brightness");
+				pr_debug("cur_range = %d, brightness = %d\n",
+						bl->bl_notifier->cur_range, brightness);
+			}
+		}
 	}
 	bl->bl_actual = bl_lvl;
 	bl->last_state = bd->props.state;
@@ -673,11 +698,52 @@ static ssize_t hbm_sv_enabled_show(struct device *dev,
 
 static DEVICE_ATTR_RW(hbm_sv_enabled);
 
+static ssize_t state_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	struct backlight_device *bd = to_backlight_device(dev);
+	struct dsi_backlight_config *bl = bl_get_data(bd);
+	struct dsi_panel *panel = container_of(bl,
+					struct dsi_panel, bl_config);
+	bool show_mode = false;
+	const char *statestr;
+	int rc;
+
+	mutex_lock(&bd->ops_lock);
+	if (is_standby_mode(bd->props.state)) {
+		statestr = "Off";
+	} else if (is_lp_mode(bd->props.state)) {
+		statestr = "LP";
+	} else {
+		show_mode = true;
+		if (dsi_panel_get_hbm(panel))
+			statestr = "HBM";
+		else
+			statestr = "On";
+	}
+	mutex_unlock(&bd->ops_lock);
+
+	if (show_mode) {
+		const struct dsi_display_mode *mode = panel->cur_mode;
+
+		rc = snprintf(buf, PAGE_SIZE, "%s: %dx%d@%d\n", statestr,
+			 mode->timing.h_active, mode->timing.v_active,
+			 mode->timing.refresh_rate);
+	} else {
+		rc = snprintf(buf, PAGE_SIZE, "%s\n", statestr);
+	}
+
+	return rc;
+}
+
+static DEVICE_ATTR_RO(state);
+
 static struct attribute *bl_device_attrs[] = {
 	&dev_attr_alpm_mode.attr,
 	&dev_attr_vr_mode.attr,
 	&dev_attr_hbm_mode.attr,
 	&dev_attr_hbm_sv_enabled.attr,
+	&dev_attr_state.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(bl_device);
@@ -816,6 +882,7 @@ int dsi_backlight_late_dpms(struct dsi_backlight_config *bl, int power_mode)
 
 	mutex_unlock(&bd->ops_lock);
 	backlight_update_status(bd);
+	sysfs_notify(&bd->dev.kobj, NULL, "state");
 
 	return 0;
 }
@@ -1117,67 +1184,68 @@ int dsi_panel_bl_unregister(struct dsi_panel *panel)
 		sysfs_remove_groups(&bl->bl_device->dev.kobj, bl_device_groups);
 
 	dsi_panel_bl_hbm_free(panel->parent, bl);
+	dsi_panel_bl_notifier_free(panel->parent, bl);
 
 	return 0;
 }
 
 static int dsi_panel_bl_parse_pwm_config(struct dsi_panel *panel,
-				struct dsi_backlight_pwm_config *config)
+							struct dsi_backlight_pwm_config *config)
 {
-	int rc = 0;
-	u32 val;
-	struct dsi_parser_utils *utils = &panel->utils;
+       int rc = 0;
+       u32 val;
+       struct dsi_parser_utils *utils = &panel->utils;
 
-	rc = utils->read_u32(utils->data, "qcom,dsi-bl-pmic-bank-select",
-				  &val);
-	if (rc) {
-		pr_err("bl-pmic-bank-select is not defined, rc=%d\n", rc);
-		goto error;
-	}
-	config->pwm_pmic_bank = val;
-
-	rc = utils->read_u32(utils->data, "qcom,dsi-bl-pmic-pwm-frequency",
-				  &val);
-	if (rc) {
-		pr_err("bl-pmic-bank-select is not defined, rc=%d\n", rc);
-		goto error;
-	}
-	config->pwm_period_usecs = val;
-
-	config->pwm_pmi_control = utils->read_bool(utils->data,
-						"qcom,mdss-dsi-bl-pwm-pmi");
-
-	config->pwm_gpio = utils->get_named_gpio(utils->data,
-					     "qcom,mdss-dsi-pwm-gpio",
-					     0);
-	if (!gpio_is_valid(config->pwm_gpio)) {
-		pr_err("pwm gpio is invalid\n");
-		rc = -EINVAL;
-		goto error;
-	}
+       rc = utils->read_u32(utils->data, "qcom,bl-pmic-pwm-period-usecs",
+                                 &val);
+       if (rc) {
+               pr_err("bl-pmic-pwm-period-usecs is not defined, rc=%d\n", rc);
+               goto error;
+       }
+       config->pwm_period_usecs = val;
 
 error:
-	return rc;
+       return rc;
+}
+
+static void dsi_panel_pwm_bl_unregister(struct dsi_backlight_config *bl)
+{
+	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
+	struct dsi_backlight_pwm_config *pwm_cfg = bl->priv;
+
+	devm_pwm_put(panel->parent, pwm_cfg->pwm_bl);
+	kfree(pwm_cfg);
 }
 
 static int dsi_panel_pwm_bl_register(struct dsi_backlight_config *bl)
 {
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
 	struct dsi_backlight_pwm_config *pwm_cfg;
-	int rc;
+	int rc = 0;
 
 	pwm_cfg = kzalloc(sizeof(*pwm_cfg), GFP_KERNEL);
 	if (!pwm_cfg)
 		return -ENOMEM;
 
-	rc = dsi_panel_bl_parse_pwm_config(panel, pwm_cfg);
-	if (rc) {
+	pwm_cfg->pwm_bl = devm_of_pwm_get(panel->parent, panel->panel_of_node, NULL);
+	if (IS_ERR_OR_NULL(pwm_cfg->pwm_bl)) {
+		rc = PTR_ERR(pwm_cfg->pwm_bl);
+		pr_err("[%s] failed to request pwm, rc=%d\n", panel->name,
+			rc);
 		kfree(pwm_cfg);
 		return rc;
 	}
 
+	rc = dsi_panel_bl_parse_pwm_config(panel, pwm_cfg);
+	if (rc) {
+		pr_err("[%s] failed to parse pwm config, rc=%d\n",
+		       panel->name, rc);
+		dsi_panel_pwm_bl_unregister(bl);
+		return rc;
+	}
+
 	bl->priv = pwm_cfg;
-	bl->unregister = dsi_panel_bl_free_unregister;
+	bl->unregister = dsi_panel_pwm_bl_unregister;
 
 	return 0;
 }
@@ -1385,6 +1453,63 @@ exit_free:
 	return rc;
 }
 
+static int dsi_panel_bl_find_range(struct dsi_backlight_config *bl,
+		int brightness, u32 *range)
+{
+	u32 i;
+
+	if (!bl || !bl->bl_notifier || !range)
+		return -EINVAL;
+
+	for (i = 0; i < bl->bl_notifier->num_ranges; i++) {
+		if (brightness <= bl->bl_notifier->ranges[i]) {
+			*range = i;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static void dsi_panel_bl_notifier_free(struct device *dev,
+	struct dsi_backlight_config *bl)
+{
+	struct bl_notifier_data *bl_notifier = bl->bl_notifier;
+
+	if (!bl_notifier)
+		return;
+
+	devm_kfree(dev, bl_notifier);
+	bl->bl_notifier = NULL;
+}
+
+static int dsi_panel_bl_parse_ranges(struct device *parent,
+		struct dsi_backlight_config *bl, struct device_node *of_node)
+{
+	int num_ranges = 0;
+
+	bl->bl_notifier = devm_kzalloc(parent, sizeof(struct bl_notifier_data), GFP_KERNEL);
+	if (bl->bl_notifier == NULL) {
+		pr_err("Failed to allocate memory for  bl_notifier_data\n");
+		return -ENOMEM;
+	}
+
+	num_ranges = of_property_read_variable_u32_array(of_node,
+						"qcom,mdss-dsi-bl-notifier-ranges",
+						(u32 *)&bl->bl_notifier->ranges,
+						0,
+						BL_RANGE_MAX);
+	if (num_ranges >= 0) {
+		bl->bl_notifier->num_ranges = num_ranges;
+	} else {
+		dsi_panel_bl_notifier_free(parent, bl);
+		pr_debug("Unable to parse optional backlight ranges (%d)\n", num_ranges);
+		return num_ranges;
+	}
+
+	return 0;
+}
+
 int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config *bl)
 {
 	struct dsi_panel *panel = container_of(bl, struct dsi_panel, bl_config);
@@ -1393,10 +1518,14 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 	const char *bl_type;
 	const char *data;
 	struct dsi_parser_utils *utils = &panel->utils;
+	char *bl_name;
 
-	bl_type = utils->get_property(utils->data,
-				  "qcom,mdss-dsi-bl-pmic-control-type",
-				  NULL);
+	if (!strcmp(panel->type, "primary"))
+		bl_name = "qcom,mdss-dsi-bl-pmic-control-type";
+    else
+		bl_name = "qcom,mdss-dsi-sec-bl-pmic-control-type";
+
+	bl_type = utils->get_property(utils->data, bl_name, NULL);
 	if (!bl_type) {
 		bl->type = DSI_BACKLIGHT_UNKNOWN;
 	} else if (!strcmp(bl_type, "bl_ctrl_pwm")) {
@@ -1405,6 +1534,8 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 		bl->type = DSI_BACKLIGHT_WLED;
 	} else if (!strcmp(bl_type, "bl_ctrl_dcs")) {
 		bl->type = DSI_BACKLIGHT_DCS;
+	} else if (!strcmp(bl_type, "bl_ctrl_external")) {
+		bl->type = DSI_BACKLIGHT_EXTERNAL;
 	} else {
 		pr_debug("[%s] bl-pmic-control-type unknown-%s\n",
 			 panel->name, bl_type);
@@ -1466,6 +1597,21 @@ int dsi_panel_bl_parse_config(struct device *parent, struct dsi_backlight_config
 	if (rc)
 		pr_err("[%s] error while parsing high brightness mode (hbm) details, rc=%d\n",
 			panel->name, rc);
+
+	rc = dsi_panel_bl_parse_ranges(parent, bl, utils->data);
+	if (rc)
+		pr_debug("[%s] error while parsing backlight ranges, rc=%d\n",
+			panel->name, rc);
+
+	rc = utils->read_u32(utils->data,
+                       "qcom,mdss-dsi-bl-default-level", &val);
+	if (rc) {
+		bl->brightness_default_level =
+                       bl->brightness_max_level;
+		pr_debug("set default brightness to max level\n");
+	} else {
+		bl->brightness_default_level = val;
+	}
 
 	panel->bl_config.en_gpio = utils->get_named_gpio(utils->data,
 					      "qcom,platform-bklight-en-gpio",

@@ -102,4 +102,5 @@ obj-$(CONFIG_OKL4_USER_VIPC)    += okl4-vipc.o
 obj-$(CONFIG_OKL4_GUEST)        += okl4-panic.o
 obj-$(CONFIG_OKL4_LINK_SHBUF)    += okl4-link-shbuf.o
 
+obj-$(CONFIG_CITADEL)          += citadel-spi.o
 obj-$(CONFIG_SYSTRACE) += systrace.o

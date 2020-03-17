@@ -1,5 +1,24 @@
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 
+dtbo-$(CONFIG_BOARD_SUNFISH) += \
+		sm7150-sunfish-dev1.0-overlay.dtbo \
+		sm7150-sunfish-dev1.1-overlay.dtbo \
+		sm7150-sunfish-dev1.2-overlay.dtbo \
+		sm7150-sunfish-evt1.0-overlay.dtbo \
+		sm7150-sunfish-evt1.1-overlay.dtbo \
+		sm7150-sunfish-dvt1.0-overlay.dtbo \
+		sm7150-sunfish-pvt1.0-overlay.dtbo \
+		sm7150-sunfish-mp1.0-overlay.dtbo
+
+sm7150-sunfish-dev1.0-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-dev1.1-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-dev1.2-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-evt1.0-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-evt1.1-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-dvt1.0-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-pvt1.0-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+sm7150-sunfish-mp1.0-overlay.dtbo-base := qcom-base/sdmmagpie.dtb
+
 dtbo-$(CONFIG_BOARD_FLORAL) += \
 	sm8150-floral-jaws-overlay.dtbo \
 	sm8150-coral-proto-overlay.dtbo \

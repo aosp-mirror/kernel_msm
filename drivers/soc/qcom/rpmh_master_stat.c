@@ -33,6 +33,7 @@
 #define REG_DATA_HI 0x8
 
 #define GET_ADDR(REG, UNIT_NO) (REG + (UNIT_DIST * UNIT_NO))
+#define MSM_ARCH_TIMER_FREQ	19200000
 
 enum master_smem_id {
 	MPSS = 605,
@@ -126,6 +127,69 @@ static ssize_t msm_rpmh_master_stats_print_data(char *prvbuf, ssize_t length,
 			name, record->version_id, record->counts,
 			record->last_entered, record->last_exited,
 			accumulated_duration);
+}
+
+static inline u64 get_time_in_sec(u64 counter)
+{
+	do_div(counter, MSM_ARCH_TIMER_FREQ);
+
+	return counter;
+}
+
+void msm_rpmh_master_stats_dump(void)
+{
+	int i = 0, len = 0;
+	size_t size = 0;
+	struct msm_rpmh_master_stats *record = NULL;
+	u64 temp_sleep_time = 0;
+	char read_buf[256];
+
+	mutex_lock(&rpmh_stats_mutex);
+
+	record = &apss_master_stats;
+	temp_sleep_time = record->accumulated_duration;
+
+	if (record->last_entered > record->last_exited) {
+		temp_sleep_time +=
+			(arch_counter_get_cntvct()
+			- record->last_entered);
+	}
+
+	len += snprintf(read_buf, sizeof(read_buf),
+		"%s(%d,sleep:%llus) ", "APSS", record->counts,
+		get_time_in_sec(temp_sleep_time));
+
+	for (i = 0; i < ARRAY_SIZE(rpmh_masters); i++) {
+		record = (struct msm_rpmh_master_stats *)qcom_smem_get(
+			rpmh_masters[i].pid,
+			rpmh_masters[i].smem_id, &size);
+		if (!IS_ERR_OR_NULL(record)) {
+			temp_sleep_time = record->accumulated_duration;
+
+			if (record->last_entered > record->last_exited) {
+				temp_sleep_time +=
+					(arch_counter_get_cntvct()
+					- record->last_entered);
+			}
+
+			if (len < sizeof(read_buf)) {
+				len += snprintf(read_buf + len,
+					sizeof(read_buf) - len,
+					"%s(%d,sleep:%llus) ",
+					rpmh_masters[i].master_name,
+					record->counts,
+					get_time_in_sec(temp_sleep_time));
+			}
+		}
+	}
+
+	if (len < sizeof(read_buf)) {
+		read_buf[len] = '\0';
+		pr_info("%s\n", read_buf);
+	} else
+		pr_err("Failed to allocate string range\n");
+
+	mutex_unlock(&rpmh_stats_mutex);
 }
 
 static ssize_t msm_rpmh_master_stats_show(struct kobject *kobj,

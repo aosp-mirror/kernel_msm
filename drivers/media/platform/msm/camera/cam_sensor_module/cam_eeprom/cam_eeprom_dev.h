@@ -35,7 +35,11 @@
 #define PROPERTY_MAXSIZE 32
 
 #define MSM_EEPROM_MEMORY_MAP_MAX_SIZE         80
+<<<<<<< HEAD
 #define MSM_EEPROM_MAX_MEM_MAP_CNT             47
+=======
+#define MSM_EEPROM_MAX_MEM_MAP_CNT             32
+>>>>>>> partner/android-msm-sunfish-4.14
 #define MSM_EEPROM_MEM_MAP_PROPERTIES_CNT      8
 
 enum cam_eeprom_state {

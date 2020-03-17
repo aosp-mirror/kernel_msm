@@ -51,6 +51,10 @@ overhead, I suggest these become part of the device name. The naming scheme
 above leaves scope for further attributes should they be needed. If sections
 of the name don't apply, just leave that section blank.
 
+Optionally, the driver may choose to register with the LED_BRIGHTNESS_FAST flag.
+This flag indicates that the driver implements the brightness_set() callback
+function using a fastpath so the LED core can use hrtimer if the driver requires
+high precision for the trigger timing.
 
 Brightness setting API
 ======================

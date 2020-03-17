@@ -1424,7 +1424,8 @@ static int msm_drm_object_supports_event(struct drm_device *dev,
 	int ret = -EINVAL;
 	struct drm_mode_object *arg_obj;
 
-	arg_obj = drm_mode_object_find(dev, req->object_id, req->object_type);
+	arg_obj = drm_mode_object_find(dev, NULL,
+				req->object_id, req->object_type);
 	if (!arg_obj)
 		return -ENOENT;
 
@@ -1451,7 +1452,8 @@ static int msm_register_event(struct drm_device *dev,
 	struct msm_kms *kms = priv->kms;
 	struct drm_mode_object *arg_obj;
 
-	arg_obj = drm_mode_object_find(dev, req->object_id, req->object_type);
+	arg_obj = drm_mode_object_find(dev, NULL,
+				req->object_id, req->object_type);
 	if (!arg_obj)
 		return -ENOENT;
 
@@ -1714,7 +1716,7 @@ int msm_ioctl_rmfb2(struct drm_device *dev, void *data,
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
 
-	fb = drm_framebuffer_lookup(dev, *id);
+	fb = drm_framebuffer_lookup(dev, file_priv, *id);
 	if (!fb)
 		return -ENOENT;
 
@@ -2129,6 +2131,33 @@ msm_gem_smmu_address_space_get(struct drm_device *dev,
 	return funcs->get_address_space(priv->kms, domain);
 }
 
+int msm_get_mixer_count(struct msm_drm_private *priv,
+		const struct drm_display_mode *mode,
+		u32 max_mixer_width, u32 *num_lm)
+{
+	struct msm_kms *kms;
+	const struct msm_kms_funcs *funcs;
+
+	if (!priv) {
+		DRM_ERROR("invalid drm private struct");
+		return -EINVAL;
+	}
+
+	kms = priv->kms;
+	if (!kms) {
+		DRM_ERROR("invalid msm kms struct");
+		return -EINVAL;
+	}
+
+	funcs = kms->funcs;
+	if (!funcs || !funcs->get_mixer_count) {
+		DRM_ERROR("invlaid function pointers");
+		return -EINVAL;
+	}
+
+	return funcs->get_mixer_count(priv->kms, mode,
+			max_mixer_width, num_lm);
+}
 /*
  * We don't know what's the best binding to link the gpu with the drm device.
  * Fow now, we just hunt for all the possible gpus that we support, and add them

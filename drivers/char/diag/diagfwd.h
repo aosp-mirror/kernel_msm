@@ -25,6 +25,9 @@
 #define GET_BUF_NUM(n)		((n & 0x0000FF))
 #define GET_PD_CTXT(u)		((u & 0xFF000000) >> 24)
 
+#define SET_HDLC_CTXT(u)	((u & 0xFF) << 24)
+#define GET_HDLC_CTXT(u)	((u & 0xFF000000) >> 24)
+
 #define CHK_OVERFLOW(bufStart, start, end, length) \
 	((((bufStart) <= (start)) && ((end) - (start) >= (length))) ? 1 : 0)
 
@@ -49,4 +52,5 @@ void diag_update_pkt_buffer(unsigned char *buf, uint32_t len, int type);
 int diag_process_stm_cmd(unsigned char *buf, int len, unsigned char *dest_buf);
 void diag_md_hdlc_reset_timer_func(unsigned long pid);
 void diag_update_md_clients(unsigned int type);
+void diag_update_md_clients_proc(unsigned int proc, unsigned int type);
 #endif

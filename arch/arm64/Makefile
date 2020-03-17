@@ -198,7 +198,6 @@ suffix_$(CONFIG_KERNEL_GZIP) = gz
 suffix_$(CONFIG_KERNEL_LZ4)  = lz4
 KBUILD_IMAGE	:= Image.$(suffix_y)
 
-
 # Default target when executing plain make
 boot		:= arch/arm64/boot
 ifeq ($(CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE),y)

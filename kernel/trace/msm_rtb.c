@@ -247,6 +247,10 @@ static int msm_rtb_probe(struct platform_device *pdev)
 #if defined(CONFIG_QCOM_RTB_SEPARATE_CPUS)
 	unsigned int cpu;
 #endif
+	struct device_node *np;
+	struct resource res;
+	void __iomem *imem_base;
+	int num_reg = 0;
 	int ret;
 
 	if (!pdev->dev.of_node) {
@@ -317,6 +321,41 @@ static int msm_rtb_probe(struct platform_device *pdev)
 	atomic_notifier_chain_register(&panic_notifier_list,
 						&msm_rtb_panic_blk);
 	msm_rtb.initialized = 1;
+
+	/* Store msm_rtb to imem for bootloader */
+	np = of_find_compatible_node(NULL, NULL, "msm-imem-rtb_info");
+	if (!np) {
+		pr_warn("%s: msm-imem-rtb_info node does not exist\n",
+				__func__);
+		return 0;
+	}
+
+	ret = of_address_to_resource(np, num_reg, &res);
+	if(ret) {
+		pr_warn("%s: invalid argument, ret %d\n", __func__, ret);
+		return 0;
+	}
+
+	if ((!res.start) ||
+		(resource_size(&res) < sizeof(struct msm_rtb_state))) {
+		pr_warn("%s: unexpected resource start %llx and size %llx\n",
+				__func__, res.start, resource_size(&res));
+		return 0;
+	}
+
+	imem_base = ioremap(res.start, resource_size(&res));
+	if (!imem_base) {
+		pr_warn("%s: rtb info imem offset mapping failed\n",
+				__func__);
+		return 0;
+	}
+
+	memset_io(imem_base, 0, resource_size(&res));
+
+	// Target to backup msm_rtb.rtb address for bootloader parser
+	memcpy_toio(imem_base, &msm_rtb, sizeof(struct msm_rtb_state));
+	iounmap(imem_base);
+
 	return 0;
 }
 

@@ -117,9 +117,6 @@ static int dsi_phy_regmap_init(struct platform_device *pdev,
 
 	phy->hw.base = ptr;
 
-	ptr = msm_ioremap(pdev, "dyn_refresh_base", phy->name);
-	phy->hw.dyn_pll_base = ptr;
-
 	pr_debug("[%s] map dsi_phy registers to %pK\n",
 		phy->name, phy->hw.base);
 
@@ -130,6 +127,19 @@ static int dsi_phy_regmap_init(struct platform_device *pdev,
 			phy->hw.phy_clamp_base = NULL;
 		else
 			phy->hw.phy_clamp_base = ptr;
+
+		ptr = msm_ioremap(pdev, "dyn_refresh_base", phy->name);
+		if (IS_ERR(ptr))
+			phy->hw.dyn_pll_base = NULL;
+		else
+			phy->hw.dyn_pll_base = ptr;
+		break;
+	case DSI_PHY_VERSION_3_0:
+		ptr = msm_ioremap(pdev, "dyn_refresh_base", phy->name);
+		if (IS_ERR(ptr))
+			phy->hw.dyn_pll_base = NULL;
+		else
+			phy->hw.dyn_pll_base = ptr;
 		break;
 	default:
 		break;
@@ -281,6 +291,32 @@ static int dsi_phy_parse_dt_per_lane_cfgs(struct platform_device *pdev,
 	return rc;
 }
 
+static int dsi_phy_parse_dt_per_lane_bits(struct platform_device *pdev,
+					  u8 *bits,
+					  char *property)
+{
+	int rc = 0, i = 0;
+	const u8 *data;
+	u32 len = 0;
+
+	data = of_get_property(pdev->dev.of_node, property, &len);
+	if (!data)
+		return 0;
+
+	if (len != DSI_LANE_MAX) {
+		pr_err("incorrect phy %s settings, exp=%d, act=%d\n",
+		       property, DSI_LANE_MAX, len);
+		return -EINVAL;
+	}
+
+	*bits = 0;
+
+	for (i = DSI_LOGICAL_LANE_0; i < DSI_LANE_MAX; i++)
+		*bits |= (data[i] & 0x01) << i;
+
+	return rc;
+}
+
 static int dsi_phy_settings_init(struct platform_device *pdev,
 				 struct msm_dsi_phy *phy)
 {
@@ -314,6 +350,13 @@ static int dsi_phy_settings_init(struct platform_device *pdev,
 			pr_err("failed to parse lane cfgs, rc=%d\n", rc);
 			goto err;
 		}
+	}
+
+	rc = dsi_phy_parse_dt_per_lane_bits(pdev, &phy->cfg.lane_pnswap,
+					    "qcom,platform-lane-pnswap");
+	if (rc) {
+		pr_err("failed to parse lane P/N swap map, rc=%d\n", rc);
+		goto err;
 	}
 
 	/* Actual timing values are dependent on panel */

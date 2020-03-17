@@ -1693,9 +1693,15 @@ int32_t cam_cci_core_cfg(struct v4l2_subdev *sd,
 {
 	int32_t rc = 0;
 	struct cci_device *cci_dev = v4l2_get_subdevdata(sd);
+<<<<<<< HEAD
 
 	CAM_DBG(CAM_CCI, "cmd %d", cci_ctrl->cmd);
 	mutex_lock(&cci_dev->mutex);
+=======
+	CAM_DBG(CAM_CCI, "cmd %d", cci_ctrl->cmd);
+	mutex_lock(&cci_dev->mutex);
+
+>>>>>>> partner/android-msm-sunfish-4.14
 	switch (cci_ctrl->cmd) {
 	case MSM_CCI_INIT:
 		rc = cam_cci_init(sd, cci_ctrl);

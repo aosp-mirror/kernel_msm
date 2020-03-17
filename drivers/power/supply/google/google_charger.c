@@ -284,7 +284,8 @@ static int chg_psy_changed(struct notifier_block *nb,
 	    (!strcmp(psy->desc->name, chg_drv->chg_psy_name) ||
 	     !strcmp(psy->desc->name, chg_drv->bat_psy_name) ||
 	     !strcmp(psy->desc->name, "usb") ||
-	     !strcmp(psy->desc->name, chg_drv->tcpm_psy_name) ||
+	     (chg_drv->tcpm_psy_name &&
+	      !strcmp(psy->desc->name, chg_drv->tcpm_psy_name)) ||
 	     (chg_drv->wlc_psy_name &&
 	      !strcmp(psy->desc->name, chg_drv->wlc_psy_name)))) {
 		schedule_work(&chg_drv->chg_psy_work);
@@ -344,7 +345,9 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 	chg_drv->pps_data.chg_flags = 0;
 	chg_drv->pps_data.keep_alive_cnt = 0;
 	chg_drv->pps_data.nr_src_cap = 0;
+#ifdef CONFIG_TYPEC_TCPM
 	tcpm_put_partner_src_caps(&chg_drv->pps_data.src_caps);
+#endif
 	chg_drv->pps_data.src_caps = NULL;
 	if (chg_drv->pps_data.stay_awake)
 		__pm_relax(&chg_drv->pps_data.pps_ws);
@@ -649,7 +652,9 @@ static int pps_get_src_cap(struct pd_pps_data *pps,
 	if (!pps || !port)
 		return -EINVAL;
 
+#ifdef CONFIG_TYPEC_TCPM
 	pps->nr_src_cap = tcpm_get_partner_src_caps(port, &pps->src_caps);
+#endif
 
 	return pps->nr_src_cap;
 }

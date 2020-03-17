@@ -90,6 +90,7 @@ struct batt_ssoc_rl_state {
 	/* rate limiter flags */
 	bool rl_no_zero;
 	int rl_fast_track;
+	int rl_slow_track;
 	int rl_track_target;
 	/* rate limiter config */
 	int rl_delta_max_time;
@@ -101,6 +102,7 @@ struct batt_ssoc_rl_state {
 
 	qnum_t rl_ft_low_limit;
 	qnum_t rl_ft_delta_limit;
+	qnum_t rl_st_delta_limit;
 };
 
 #define SSOC_STATE_BUF_SZ 128
@@ -462,6 +464,12 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 	const time_t now = get_boot_sec();
 	struct batt_ssoc_rl_state *rls = &ssoc->ssoc_rl_state;
 	qnum_t rl_val;
+	bool apply_slow_rate = false;
+
+	/* apply slow drop rate when enter slow track condition */
+	if (!ssoc->buck_enabled &&
+	    rls->rl_slow_track && ssoc->ssoc_uic == rls->rl_ssoc_target)
+		apply_slow_rate = true;
 
 	/* track ssoc_uic when buck is enabled or the minimum value of uic */
 	if (ssoc->buck_enabled ||
@@ -480,10 +488,12 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 	} else {
 		qnum_t step;
 		const time_t delta_time = now - rls->rl_ssoc_last_update;
-		const time_t max_delta = ssoc_rl_max_delta(rls,
-							   ssoc->buck_enabled,
-							   delta_time);
+		qnum_t max_delta = ssoc_rl_max_delta(rls,
+						     ssoc->buck_enabled,
+						     delta_time);
 
+		if (apply_slow_rate)
+			max_delta /= 3;
 		/* apply the rate limiter, delta_soc to target */
 		step = rls->rl_ssoc_target - ssoc->ssoc_rl;
 		if (step < -max_delta)
@@ -561,6 +571,8 @@ static void ssoc_update(struct batt_ssoc_state *ssoc, qnum_t soc)
 {
 	struct batt_ssoc_rl_state *rls =  &ssoc->ssoc_rl_state;
 	qnum_t delta;
+	const bool can_track = rls->rl_ft_delta_limit ||
+			       rls->rl_st_delta_limit;
 
 	/* low pass filter */
 	ssoc->ssoc_gdf = soc;
@@ -574,18 +586,27 @@ static void ssoc_update(struct batt_ssoc_state *ssoc, qnum_t soc)
 	}
 
 	/* enable fast track when target under configured limit */
-	rls->rl_fast_track |= rls->rl_ssoc_target < rls->rl_ft_low_limit;
+	rls->rl_fast_track = rls->rl_ssoc_target < rls->rl_ft_low_limit;
 
 	/* delta fast tracking during charge
 	 * NOTE: might use the stats from TTF to determine the maximum rate
 	 */
 	delta = rls->rl_ssoc_target - ssoc->ssoc_rl;
-	if (rls->rl_ft_delta_limit && ssoc->buck_enabled && delta > 0) {
+
+	if (can_track && ssoc->buck_enabled && delta > 0) {
 		/* only when SOC increase */
-		rls->rl_fast_track |= delta > rls->rl_ft_delta_limit;
-	} else if (rls->rl_ft_delta_limit && !ssoc->buck_enabled && delta < 0) {
+		if (rls->rl_ft_delta_limit)
+			rls->rl_fast_track |= delta > rls->rl_ft_delta_limit;
+		if (rls->rl_st_delta_limit)
+			rls->rl_slow_track = (delta < rls->rl_st_delta_limit) &
+					      !rls->rl_fast_track;
+	} else if (can_track && !ssoc->buck_enabled && delta < 0) {
 		/* enable fast track when target under configured limit */
-		rls->rl_fast_track |= -delta > rls->rl_ft_delta_limit;
+		if (rls->rl_ft_delta_limit)
+			rls->rl_fast_track |= -delta > rls->rl_ft_delta_limit;
+		if (rls->rl_st_delta_limit)
+		       rls->rl_slow_track = (-delta < rls->rl_st_delta_limit) &
+					     !rls->rl_fast_track;
 	}
 
 	/* Right now a simple test on target metric falling under 0.5%
@@ -726,6 +747,10 @@ static int ssoc_rl_read_dt(struct batt_ssoc_rl_state *rls,
 	ret = of_property_read_u32(node, "google,rl_ft-delta-limit", &tmp);
 	if (ret == 0)
 		rls->rl_ft_delta_limit = qnum_fromint(tmp);
+
+	ret = of_property_read_u32(node, "google,rl_st-delta-limit", &tmp);
+	if (ret == 0)
+		rls->rl_st_delta_limit = qnum_fromint(tmp);
 
 	rls->rl_delta_soc_cnt = of_property_count_elems_of_size(node,
 					      "google,rl_soc-limits",

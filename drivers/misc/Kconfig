@@ -631,6 +631,17 @@ config TEST_IRQ_REQUESTER
 
 	  If in doubt, say N.
 
+config CITADEL
+       tristate "Google Citadel"
+       depends on SPI
+       help
+         Say Y here if you have a Citadel security microcontroller from Google Inc.
+         It will be accessible using a TPM-style transport interface from within
+         Linux.
+
+         To compile this driver as a module, choose M here: the
+         module will be called citadel-spi.
+
 config SYSTRACE
 	bool "Android Systrace"
 	depends on TRACING

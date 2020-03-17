@@ -499,12 +499,15 @@ static int _load_legacy_gmu_fw(struct kgsl_device *device,
 	struct gmu_device *gmu)
 {
 	const struct firmware *fw = gmu->fw_image;
+	u32 *fwptr = (u32 *)fw->data;
+	int i;
 
 	if (fw->size > MAX_GMUFW_SIZE)
 		return -EINVAL;
 
-	gmu_core_blkwrite(device, A6XX_GMU_CM3_ITCM_START, fw->data,
-			fw->size);
+	for (i = 0; i < (fw->size >> 2); i++)
+		gmu_core_regwrite(device,
+			A6XX_GMU_CM3_ITCM_START + i, fwptr[i]);
 
 	/* Proceed only after the FW is written */
 	wmb();
@@ -515,6 +518,7 @@ static int load_gmu_fw(struct kgsl_device *device)
 {
 	struct gmu_device *gmu = KGSL_GMU_DEVICE(device);
 	uint8_t *fw = (uint8_t *)gmu->fw_image->data;
+	int j;
 	int tcm_addr;
 	struct gmu_block_header *blk;
 	struct gmu_memdesc *md;
@@ -540,6 +544,8 @@ static int load_gmu_fw(struct kgsl_device *device)
 		}
 
 		if (md->mem_type == GMU_ITCM || md->mem_type == GMU_DTCM) {
+			uint32_t *fwptr = (uint32_t *)fw;
+
 			tcm_addr = (blk->addr - (uint32_t)md->gmuaddr) /
 				sizeof(uint32_t);
 
@@ -548,7 +554,9 @@ static int load_gmu_fw(struct kgsl_device *device)
 			else
 				tcm_addr += A6XX_GMU_CM3_DTCM_START;
 
-			gmu_core_blkwrite(device, tcm_addr, fw, blk->size);
+			for (j = 0; j < blk->size / sizeof(uint32_t); j++)
+				gmu_core_regwrite_no_barrier(device,
+					tcm_addr + j, fwptr[j]);
 		} else {
 			uint32_t offset = blk->addr - (uint32_t)md->gmuaddr;
 
@@ -901,7 +909,7 @@ static int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 	if (!gmu_core_gpmu_isenabled(device))
 		return 0;
 
-	ts1 = read_AO_counter(device);
+	ts1 = a6xx_gmu_read_ao_counter(device);
 
 	t = jiffies + msecs_to_jiffies(GMU_IDLE_TIMEOUT);
 	do {
@@ -916,7 +924,7 @@ static int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 		usleep_range(10, 100);
 	} while (!time_after(jiffies, t));
 
-	ts2 = read_AO_counter(device);
+	ts2 = a6xx_gmu_read_ao_counter(device);
 	/* Check one last time */
 
 	gmu_core_regread(device, A6XX_GPU_GMU_CX_GMU_RPMH_POWER_STATE, &reg);
@@ -925,7 +933,7 @@ static int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 	if (idle_transition_complete(gmu->idle_level, reg, reg1))
 		return 0;
 
-	ts3 = read_AO_counter(device);
+	ts3 = a6xx_gmu_read_ao_counter(device);
 
 	/* Collect abort data to help with debugging */
 	gmu_core_regread(device, A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS, &reg2);
@@ -966,14 +974,14 @@ static int a6xx_gmu_wait_for_idle(struct adreno_device *adreno_dev)
 	unsigned int status2;
 	uint64_t ts1;
 
-	ts1 = read_AO_counter(device);
+	ts1 = a6xx_gmu_read_ao_counter(device);
 	if (timed_poll_check(device, A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS,
 			0, GMU_START_TIMEOUT, CXGXCPUBUSYIGNAHB)) {
 		gmu_core_regread(device,
 				A6XX_GPU_GMU_AO_GPU_CX_BUSY_STATUS2, &status2);
 		dev_err(&gmu->pdev->dev,
 				"GMU not idling: status2=0x%x %llx %llx\n",
-				status2, ts1, read_AO_counter(device));
+				status2, ts1, a6xx_gmu_read_ao_counter(device));
 		return -ETIMEDOUT;
 	}
 
@@ -1634,6 +1642,31 @@ static bool a6xx_gmu_is_initialized(struct adreno_device *adreno_dev)
 	return (val == PDC_ENABLE_REG_VALUE);
 }
 
+/*
+ * a6xx_gmu_read_ao_counter() - Returns the 64bit always on counter value
+ *
+ * @device: Pointer to KGSL device
+ */
+u64 a6xx_gmu_read_ao_counter(struct kgsl_device *device)
+{
+	unsigned int l, h, h1;
+
+	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_H, &h);
+	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_L, &l);
+	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_H, &h1);
+
+	/*
+	 * If there's no change in COUNTER_H we have no overflow so return,
+	 * otherwise read COUNTER_L again
+	 */
+
+	if (h == h1)
+		return (uint64_t) l | ((uint64_t) h << 32);
+
+	gmu_core_regread(device, A6XX_GMU_CX_GMU_ALWAYS_ON_COUNTER_L, &l);
+	return (uint64_t) l | ((uint64_t) h1 << 32);
+}
+
 struct gmu_dev_ops adreno_a6xx_gmudev = {
 	.load_firmware = a6xx_gmu_load_firmware,
 	.oob_set = a6xx_gmu_oob_set,
@@ -1651,6 +1684,7 @@ struct gmu_dev_ops adreno_a6xx_gmudev = {
 	.snapshot = a6xx_gmu_snapshot,
 	.wait_for_active_transition = a6xx_gmu_wait_for_active_transition,
 	.is_initialized = a6xx_gmu_is_initialized,
+	.read_ao_counter = a6xx_gmu_read_ao_counter,
 	.gmu2host_intr_mask = HFI_IRQ_MASK,
 	.gmu_ao_intr_mask = GMU_AO_INT_MASK,
 };

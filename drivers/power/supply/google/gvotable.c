@@ -65,12 +65,14 @@ int gvotable_comparator_any(void *a, void *b)
 int gvotable_vote_to_str_uint(char *str, void *vote, int len)
 {
 	unsigned long val = (unsigned long) vote;
+
 	return scnprintf(str, MAX_VOTE2STR_LEN, "%lu", val);
 }
 
 int gvotable_vote_to_str_uint_hex(char *str, void *vote, int len)
 {
 	unsigned long val = (unsigned long) vote;
+
 	return scnprintf(str, MAX_VOTE2STR_LEN, "0x%lx", val);
 }
 
@@ -209,7 +211,7 @@ struct election *gvotable_create_election(const char *name,
 							      void *),
 					  void *data)
 {
-	struct election_slot *slot,*tmp;
+	struct election_slot *slot, *tmp;
 
 	if (!cmp_fn)
 		return NULL;
@@ -316,7 +318,7 @@ int gvotable_list_elections(int (*vote2str)(char *, void *, int))
 		el_name = (el->has_name ? el->name : "<NULL>");
 
 		if (!rc &&
-		    (vote2str(str,vote,MAX_VOTE2STR_LEN) > 0))
+		    (vote2str(str, vote, MAX_VOTE2STR_LEN) > 0))
 			pr_info("\t [%s]:(vote %s, reason %s)", el_name,
 								str,
 								reason);
@@ -482,7 +484,7 @@ int gvotable_cast_vote(struct election *el,
 		       void *vote,
 		       bool enabled)
 {
-	struct ballot *ballot,*tmp;
+	struct ballot *ballot, *tmp;
 
 	if (!el || !reason)
 		return -EINVAL;
@@ -525,6 +527,7 @@ int gvotable_cast_vote(struct election *el,
 		list_add(&ballot->list, &el->votes);
 	else {
 		struct ballot *prev_tmp;
+
 		prev_tmp = list_first_entry(&el->votes, struct ballot, list);
 		list_for_each_entry(tmp, &el->votes, list) {
 			if (el->cmp(vote, tmp->vote[tmp->idx]) < 0) {
@@ -559,6 +562,7 @@ int gvotable_dump_votes(struct election *el,
 
 	list_for_each_entry(ballot, &el->votes, list) {
 		void *vote_tmp;
+
 		vote_tmp = ballot->vote[ballot->idx];
 		if (vote2str(str, vote_tmp, MAX_VOTE2STR_LEN) > 0)
 			pr_info("\t%c %-16s %16s (%u votes)",
@@ -596,7 +600,6 @@ static void __exit gvotable_exit(void)
 		gvotable_destroy_election(slot->el);
 	}
 	pr_info("Deinit completed\n\n");
-	return;
 }
 
 module_init(gvotable_init);

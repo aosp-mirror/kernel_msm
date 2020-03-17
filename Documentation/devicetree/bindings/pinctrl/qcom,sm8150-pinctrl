@@ -47,18 +47,19 @@ SM8150 platform.
 	Definition: must be 2. Specifying the pin number and flags, as defined
 		    in <dt-bindings/gpio/gpio.h>
 
-- goog,ignored-gpios:
-	Usage: optional
-	Value type: <prop-encoded-array>
-	Definition: List of gpio numbers should be ignored by the driver. It might
-		be useful if this gpio mmio is unmapped from Linux kernel address space
-		and that addresses should never be accessed.
 - dirconn-list:
 	Usage: optional
 	Value type: <prop-encoded-array>
 	Definition: a 3-tuple list which contains mapping of GPIO pin to
 		    hardware IRQ, and a boolean for enabling the TLMM direct
 		    connect interrupt for the pin.
+
+- goog,ignored-gpios:
+	Usage: optional
+	Value type: <prop-encoded-array>
+	Definition: List of gpio numbers should be ignored by the driver. It might
+		be useful if this gpio mmio is unmapped from Linux kernel address space
+		and that addresses should never be accessed.
 
 Please refer to ../gpio/gpio.txt and ../interrupt-controller/interrupts.txt for
 a general description of GPIO and interrupt bindings.

@@ -8,8 +8,8 @@
 #define CAM_SENSOR_PROBE_CMD   (CAM_COMMON_OPCODE_MAX + 1)
 #define CAM_FLASH_MAX_LED_TRIGGERS 3
 #define MAX_OIS_NAME_SIZE 32
-#define MAX_RAINBOW_CONFIG_SIZE 32
 #define CAM_CSIPHY_SECURE_MODE_ENABLED 1
+<<<<<<< HEAD
 
 enum rainbow_op_type {
 	RAINBOW_SEQ_READ,
@@ -51,6 +51,9 @@ struct silego_self_test_result {
 #define LM36011_SILEGO_SELF_TEST \
 	_IOWR('R', 1, struct silego_self_test_result)
 
+=======
+#define CAM_IR_LED_SUPPORTED
+>>>>>>> partner/android-msm-sunfish-4.14
 /**
  * struct cam_sensor_query_cap - capabilities info for sensor
  *
@@ -274,7 +277,7 @@ struct cam_cmd_power {
  * @ cmd_type        :   Command buffer type
  * @ data_type       :   I2C data type
  * @ addr_type       :   I2C address type
- * @ slave_addr      :   Slave address
+ * @ reserved
  */
 struct i2c_rdwr_header {
 	uint16_t    count;
@@ -282,7 +285,7 @@ struct i2c_rdwr_header {
 	uint8_t     cmd_type;
 	uint8_t     data_type;
 	uint8_t     addr_type;
-	uint16_t    slave_addr;
+	uint16_t    reserved;
 } __attribute__((packed));
 
 /**

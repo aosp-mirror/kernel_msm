@@ -3129,6 +3129,8 @@ int sde_rotator_core_init(struct sde_rot_mgr **pmgr,
 	} else if (IS_SDE_MAJOR_MINOR_SAME(mdata->mdss_version,
 			SDE_MDP_HW_REV_300) ||
 		IS_SDE_MAJOR_MINOR_SAME(mdata->mdss_version,
+			SDE_MDP_HW_REV_320) ||
+		IS_SDE_MAJOR_MINOR_SAME(mdata->mdss_version,
 			SDE_MDP_HW_REV_400) ||
 		IS_SDE_MAJOR_MINOR_SAME(mdata->mdss_version,
 			SDE_MDP_HW_REV_410) ||
@@ -3363,8 +3365,8 @@ int sde_rotator_pm_suspend(struct device *dev)
 		sde_rotator_update_clk(mgr);
 	}
 
-	SDEROT_DBG("end pm system active %d\n",
-			atomic_read(&mgr->device_suspended));
+	SDEROT_DBG("end pm system active %d clk_cnt %d\n",
+	 atomic_read(&mgr->device_suspended), mgr->pm_rot_enable_clk_cnt);
 	ATRACE_END("pm_system_active");
 	SDEROT_EVTLOG(mgr->pm_rot_enable_clk_cnt,
 			 atomic_read(&mgr->device_suspended));
@@ -3399,9 +3401,9 @@ int sde_rotator_pm_resume(struct device *dev)
 
 	SDEROT_DBG("PM system resume\n");
 	sde_rot_mgr_lock(mgr);
-	SDEROT_DBG("begin pm active %d clk_cnt %d\n",
+	SDEROT_DBG("begin pm system active %d clk_cnt %d\n",
 	 atomic_read(&mgr->device_suspended), mgr->pm_rot_enable_clk_cnt);
-	ATRACE_BEGIN("pm_active");
+	ATRACE_BEGIN("pm_system_active");
 	SDEROT_EVTLOG(mgr->pm_rot_enable_clk_cnt,
 			 atomic_read(&mgr->device_suspended));
 	atomic_dec(&mgr->device_suspended);

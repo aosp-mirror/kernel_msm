@@ -76,7 +76,6 @@ void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 	struct vb2_buffer *vb2_buf;
 	strength_t *data;
 	int total_bytes = v4l2->format.sizeimage;
-	strength_t temp_buffer[total_bytes];
 	bool read_success;
 
 	if (!vb2_is_streaming(&v4l2->queue)) {
@@ -101,7 +100,7 @@ void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 	}
 
 	/* This is a potentially slow operation */
-	read_success = v4l2->read_frame(v4l2, temp_buffer);
+	read_success = v4l2->read_frame(v4l2);
 	if (!read_success)
 		return;
 
@@ -135,7 +134,7 @@ void heatmap_read(struct v4l2_heatmap *v4l2, uint64_t timestamp)
 		return;
 	}
 
-	memcpy(data, temp_buffer, total_bytes);
+	memcpy(data, v4l2->frame, total_bytes);
 	vb2_set_plane_payload(vb2_buf, /* plane number */ 0, total_bytes);
 	vb2_buf->timestamp = timestamp;
 	vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
@@ -338,12 +337,19 @@ int heatmap_probe(struct v4l2_heatmap *v4l2)
 	/* init channel to zero */
 	heatmap_set_input(v4l2, 0);
 
+	v4l2->frame = devm_kzalloc(v4l2->parent_dev,
+		v4l2->format.sizeimage, GFP_KERNEL);
+	if(!v4l2->frame) {
+		error = -ENOMEM;
+		goto err_probe;
+	}
+
 	/* register video device */
 	strlcpy(v4l2->device.name, dev_name(v4l2->parent_dev),
 		V4L2_DEVICE_NAME_SIZE);
 	error = v4l2_device_register(v4l2->parent_dev, &v4l2->device);
 	if (error)
-		goto err_probe;
+		goto err_free_frame_storage;
 
 	INIT_LIST_HEAD(&v4l2->heatmap_buffer_list);
 
@@ -378,6 +384,8 @@ err_video_device_release:
 
 err_unreg_v4l2:
 	v4l2_device_unregister(&v4l2->device);
+err_free_frame_storage:
+	kfree(v4l2->frame);
 err_probe:
 	return error;
 }
@@ -387,6 +395,7 @@ void heatmap_remove(struct v4l2_heatmap *v4l2)
 {
 	video_unregister_device(&v4l2->vdev);
 	v4l2_device_unregister(&v4l2->device);
+	kfree(v4l2->frame);
 }
 EXPORT_SYMBOL(heatmap_remove);
 

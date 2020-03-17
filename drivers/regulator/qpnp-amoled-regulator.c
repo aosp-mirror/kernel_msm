@@ -290,7 +290,7 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 						unsigned int mode)
 {
 	struct qpnp_amoled *chip  = rdev_get_drvdata(rdev);
-	int rc;
+	int rc = 0;
 
 	if (mode != REGULATOR_MODE_NORMAL && mode != REGULATOR_MODE_STANDBY &&
 		mode != REGULATOR_MODE_IDLE) {
@@ -321,7 +321,8 @@ static int qpnp_ab_ibb_regulator_set_mode(struct regulator_dev *rdev,
 			queue_delayed_work(chip->wq, &chip->vout_work, delay);
 		}
 	}
-	return 0;
+
+	return rc;
 }
 
 static unsigned int qpnp_ab_ibb_regulator_get_mode(struct regulator_dev *rdev)
@@ -664,7 +665,6 @@ static struct platform_driver qpnp_amoled_regulator_driver = {
 	.driver		= {
 		.name		= QPNP_AMOLED_REGULATOR_DRIVER_NAME,
 		.of_match_table	= amoled_match_table,
-		.probe_type	= PROBE_FORCE_SYNCHRONOUS,
 	},
 	.probe		= qpnp_amoled_regulator_probe,
 	.remove		= qpnp_amoled_regulator_remove,

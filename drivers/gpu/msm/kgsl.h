@@ -165,9 +165,9 @@ struct kgsl_driver {
 	struct workqueue_struct *workqueue;
 	struct workqueue_struct *mem_workqueue;
 	struct kthread_worker worker;
-	struct kthread_worker low_prio_worker;
+        struct kthread_worker low_prio_worker;
 	struct task_struct *worker_thread;
-	struct task_struct *low_prio_worker_thread;
+        struct task_struct *low_prio_worker_thread;
 };
 
 extern struct kgsl_driver kgsl_driver;
@@ -303,9 +303,9 @@ typedef void (*kgsl_event_func)(struct kgsl_device *, struct kgsl_event_group *,
 		void *, int);
 
 enum kgsl_priority {
-	KGSL_EVENT_REGULAR_PRIORITY = 0,
-	KGSL_EVENT_LOW_PRIORITY,
-	KGSL_EVENT_NUM_PRIORITIES
+       KGSL_EVENT_REGULAR_PRIORITY = 0,
+       KGSL_EVENT_LOW_PRIORITY,
+       KGSL_EVENT_NUM_PRIORITIES
 };
 
 const char *prio_to_string(enum kgsl_priority prio);
@@ -331,9 +331,9 @@ struct kgsl_event {
 	void *priv;
 	struct list_head node;
 	unsigned int created;
-	struct work_struct work;
+        struct work_struct work;
 	int result;
-	enum kgsl_priority prio;
+        enum kgsl_priority prio;
 	struct kgsl_event_group *group;
 };
 

@@ -163,6 +163,8 @@ static void panel_switch_cmd_set_transfer(struct panel_switch_data *pdata,
 static void panel_switch_to_mode(struct panel_switch_data *pdata,
 				 const struct dsi_display_mode *mode)
 {
+	struct dsi_panel *panel = pdata->panel;
+
 	SDE_ATRACE_BEGIN(__func__);
 	if (pdata->funcs && pdata->funcs->perform_switch)
 		pdata->funcs->perform_switch(pdata, mode);
@@ -171,6 +173,10 @@ static void panel_switch_to_mode(struct panel_switch_data *pdata,
 		pdata->switch_pending = false;
 		wake_up_all(&pdata->switch_wq);
 	}
+
+	if (panel->bl_config.bl_device)
+		sysfs_notify(&panel->bl_config.bl_device->dev.kobj, NULL,
+					"state");
 
 	SDE_ATRACE_END(__func__);
 }

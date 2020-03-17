@@ -473,10 +473,8 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
 	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
 	if (!flow) {
 		flow = kzalloc(sizeof(*flow), GFP_KERNEL);
-		if (!flow) {
-			mutex_unlock(&node->qrtr_tx_lock);
+		if (!flow)
 			return 1;
-		}
 		INIT_LIST_HEAD(&flow->waiters);
 		radix_tree_insert(&node->qrtr_tx_flow, key, flow);
 	}

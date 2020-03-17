@@ -1,7 +1,7 @@
 /**
- * @brief		LC898123F40 Flash update
+ * @brief		LC898123F40 Global declaration & prototype declaration
  *
- * @author		Copyright (C) 2018, ON Semiconductor, all right reserved.
+ * @author		Copyright (C) 2017, ON Semiconductor, all right reserved.
  *
  **/
 
@@ -11,12 +11,8 @@
 //==============================================================================
 //
 //==============================================================================
-#ifndef MODULE_VENDOR
-#define MODULE_VENDOR 0x00
-#endif
-#ifndef MDL_VER
-#define MDL_VER 0x02
-#endif
+#define MODULE_VENDOR 0
+#define MDL_VER       2
 
 #ifdef DEBUG
 extern void dbg_printf(const char *, ...);
@@ -61,106 +57,13 @@ typedef struct {
 } DOWNLOAD_TBL;
 
 typedef struct STRECALIB {
-	INT_16 SsFctryOffX;
-	INT_16 SsFctryOffY;
-	INT_16 SsRecalOffX;
-	INT_16 SsRecalOffY;
-	INT_16 SsDiffX;
-	INT_16 SsDiffY;
-} stReCalib;
-
-typedef struct {
-	UINT_32 BiasInit;
-	UINT_32 OffsetInit;
-	UINT_32 OffsetMargin;
-	UINT_32 XTargetRange;
-	UINT_32 XTargetMax;
-	UINT_32 XTargetMin;
-	UINT_32 YTargetRange;
-	UINT_32 YTargetMax;
-	UINT_32 YTargetMin;
-	UINT_32 OisSinNum;
-	UINT_32 OisSinFreq;
-	UINT_32 OisSinGain;
-	UINT_32 AfSinNum;
-	UINT_32 AfSinFreq;
-	UINT_32 AfSinGainP;
-	UINT_32 AfSinGainM;
-	UINT_32 DecrementStep;
-	UINT_32 ZBiasInit;
-	UINT_32 ZOffsetInit;
-	UINT_32 ZTargetRange;
-	UINT_32 ZTargetMax;
-	UINT_32 ZTargetMin;
-	UINT_32 ZHighMargin;
-	UINT_32 ZLowMargin;
-} ADJ_HALL;
-
-typedef struct {
-	UINT_32 Hxgain;
-	UINT_32 Hygain;
-	UINT_32 XNoiseNum;
-	UINT_32 XNoiseFreq;
-	UINT_32 XNoiseGain;
-	UINT_32 XGap;
-	UINT_32 YNoiseNum;
-	UINT_32 YNoiseFreq;
-	UINT_32 YNoiseGain;
-	UINT_32 YGap;
-	UINT_32 XJudgeHigh;
-	UINT_32 XJudgeLow;
-	UINT_32 YJudgeHigh;
-	UINT_32 YJudgeLow;
-	UINT_32 Hzgain;
-	UINT_32 ZNoiseNum;
-	UINT_32 ZNoiseFreq;
-	UINT_32 ZNoiseGain;
-	UINT_32 ZGap;
-	UINT_32 ZJudgeHigh;
-	UINT_32 ZJudgeLow;
-} ADJ_LOPGAN;
-
-typedef struct {
-	INT_16 SltOffsetX;
-	INT_16 SltOffsetY;
-	INT_16 SltDirX;
-	INT_16 SltDirY;
-} ADJ_LINEARITY_MIXING;
-
-typedef struct {
-	UINT_32 rcodeX;
-	UINT_32 rcodeY;
-	UINT_32 rcodeZ;
-	UINT_32 shag;
-	UINT_32 shbg;
-	UINT_32 shcg;
-	UINT_32 shoutag;
-	UINT_32 shoutbg;
-	UINT_32 shab;
-	UINT_32 shac;
-	UINT_32 shaa;
-	UINT_32 shbb;
-	UINT_32 shbc;
-	UINT_32 shba;
-	UINT_32 shcb;
-	UINT_32 shcc;
-	UINT_32 shca;
-	UINT_32 tab;
-	UINT_32 tac;
-	UINT_32 taa;
-	UINT_32 tbb;
-	UINT_32 tbc;
-	UINT_32 tba;
-	UINT_32 TEMPOFF;
-	UINT_32 tag;
-	UINT_32 tbg;
-	UINT_32 shiftg;
-	UINT_32 shoutag1;
-	UINT_32 shoutbg1;
-	UINT_8 tcx;
-	UINT_8 tbx;
-	UINT_8 tax;
-} ADJ_TEMP_COMPENSATION;
+	INT_16	SsFctryOffX;
+	INT_16	SsFctryOffY;
+	INT_16	SsRecalOffX;
+	INT_16	SsRecalOffY;
+	INT_16	SsDiffX;
+	INT_16	SsDiffY;
+}	stReCalib;
 
 #define	WPB_OFF 0x01
 #define WPB_ON  0x00
@@ -192,16 +95,17 @@ typedef struct {
 #define	FLASHROM_F40_UNLK_CODE2         (FLASHROM_123F40 + 0xAA8)
 #define	FLASHROM_F40_UNLK_CODE3         (FLASHROM_123F40 + 0xCCC)
 
+
+
 //==============================================================================
 // Prototype
 //==============================================================================
+extern void   F40_Control(UINT_16);
 extern void   F40_IORead32A(UINT_32, UINT_32 *);
 extern void   F40_IOWrite32A(UINT_32, UINT_32);
 extern UINT_8 F40_ReadWPB(void);
 extern UINT_8 F40_UnlockCodeSet(void);
 extern UINT_8 F40_UnlockCodeClear(void);
-extern void   F40_BootMode(void);
-extern void   F40_SetTempCompParameters(DOWNLOAD_TBL *, UINT_8 *);
 extern UINT_8 F40_FlashDownload(UINT_8, UINT_8, UINT_8);
 extern UINT_8 F40_FlashUpdate(UINT_8, DOWNLOAD_TBL*);
 extern UINT_8 F40_FlashBlockErase(UINT_32);

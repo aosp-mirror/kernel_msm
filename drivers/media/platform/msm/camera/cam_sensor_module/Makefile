@@ -8,5 +8,9 @@ obj-$(CONFIG_SPECTRA_CAMERA) += cam_sensor/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_flash/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_eeprom/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_ois/
+<<<<<<< HEAD
+=======
+obj-$(CONFIG_SPECTRA_CAMERA) += cam_ir_led/
+>>>>>>> partner/android-msm-sunfish-4.14
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_sensor_vsync/
 obj-$(CONFIG_CAMERA_FW_UPDATE) += cam_fw_update/

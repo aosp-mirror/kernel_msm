@@ -403,7 +403,11 @@ static int cam_cci_platform_probe(struct platform_device *pdev)
 	}
 
 	g_cci_subdev[soc_info->index] = &new_cci_dev->v4l2_dev_str.sd;
+<<<<<<< HEAD
 	CAM_ERR(CAM_CCI, "Device Type :%d", soc_info->index);
+=======
+	CAM_INFO(CAM_CCI, "Device Type :%d", soc_info->index);
+>>>>>>> partner/android-msm-sunfish-4.14
 
 	cam_register_subdev_fops(&cci_v4l2_subdev_fops);
 	cci_v4l2_subdev_fops.unlocked_ioctl = cam_cci_subdev_fops_ioctl;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018 Google Inc.
  *
@@ -125,7 +126,7 @@ static ssize_t modem_smem_store(struct device *d,
 	return count;
 }
 
-static DEVICE_ATTR(modem_smem, 0664, modem_smem_show, modem_smem_store);
+static DEVICE_ATTR_RW(modem_smem);
 static struct attribute *modem_smem_attributes[] = {
 	&dev_attr_modem_smem.attr,
 	NULL
@@ -190,14 +191,15 @@ static int modem_smem_probe(struct platform_device *pdev)
 	modem_smem_set_u32(modem_smem, version, MODEM_SMEM_VERSION);
 
 	modem_smem_set_u32(modem_smem, major_id,
-		(socinfo_get_platform_version() >> 16) & 0xff);
+		(socinfo_get_g_platform_version() >> 16) & 0xff);
 
 	modem_smem_set_u32(modem_smem, minor_id,
-		socinfo_get_platform_version() & 0x00ff);
+		socinfo_get_g_platform_version() & 0x00ff);
 
-	modem_smem_set_u32(modem_smem, platform, socinfo_get_platform_type());
+	modem_smem_set_u32(modem_smem, platform, socinfo_get_g_platform_type());
 
-	modem_smem_set_u32(modem_smem, subtype, socinfo_get_platform_subtype());
+	modem_smem_set_u32(modem_smem, subtype,
+		socinfo_get_g_platform_subtype());
 
 	do {
 		dtnp = of_find_node_by_path(DEVICE_TREE_CDT_CDB2_PATH);

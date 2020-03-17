@@ -265,6 +265,9 @@ struct socinfo_v0_14 {
 struct socinfo_v0_15 {
 	struct socinfo_v0_14 v0_14;
 	uint32_t nmodem_supported;
+	uint32_t g_hw_platform;
+	uint32_t g_platform_version;
+	uint32_t g_hw_platform_subtype;
 };
 
 static union {
@@ -427,6 +430,9 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* atollp ID */
 	[424] = {MSM_CPU_ATOLLP, "ATOLLP"},
+
+	/* atollab ID */
+	[443] = {MSM_CPU_ATOLL_AB, "ATOLL-AB"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	 * MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -684,6 +690,30 @@ static uint32_t socinfo_get_nmodem_supported(void)
 	return socinfo ?
 		(socinfo_format >= SOCINFO_VERSION(0, 15) ?
 			socinfo->v0_15.nmodem_supported : 0)
+		: 0;
+}
+
+uint32_t socinfo_get_g_platform_type(void)
+{
+	return socinfo ?
+		(socinfo_format >= SOCINFO_VERSION(0, 15) ?
+			socinfo->v0_15.g_hw_platform : 0)
+		: 0;
+}
+
+uint32_t socinfo_get_g_platform_version(void)
+{
+	return socinfo ?
+		(socinfo_format >= SOCINFO_VERSION(0, 15) ?
+			socinfo->v0_15.g_platform_version : 0)
+		: 0;
+}
+
+uint32_t socinfo_get_g_platform_subtype(void)
+{
+	return socinfo ?
+		(socinfo_format >= SOCINFO_VERSION(0, 15) ?
+			socinfo->v0_15.g_hw_platform_subtype : 0)
 		: 0;
 }
 
@@ -1192,6 +1222,39 @@ msm_get_images(struct device *dev,
 	return pos;
 }
 
+static ssize_t
+msm_get_g_hw_platform(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	uint32_t g_hw_type;
+
+	g_hw_type = socinfo_get_g_platform_type();
+	return snprintf(buf, PAGE_SIZE, "%-.32s\n",
+			hw_platform[g_hw_type]);
+}
+
+static ssize_t
+msm_get_g_platform_version(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		socinfo_get_g_platform_version());
+}
+
+static ssize_t
+msm_get_g_platform_subtype_id(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	uint32_t g_hw_subtype;
+
+	g_hw_subtype = socinfo_get_g_platform_subtype();
+	return snprintf(buf, PAGE_SIZE, "%u\n",
+		g_hw_subtype);
+}
+
 static struct device_attribute msm_soc_attr_raw_version =
 	__ATTR(raw_version, 0444, msm_get_raw_version,  NULL);
 
@@ -1301,6 +1364,17 @@ static struct device_attribute select_image =
 
 static struct device_attribute images =
 	__ATTR(images, 0444, msm_get_images, NULL);
+
+static struct device_attribute msm_soc_attr_g_hw_platform =
+	__ATTR(g_hw_platform, 0444, msm_get_g_hw_platform, NULL);
+
+static struct device_attribute msm_soc_attr_g_platform_version =
+	__ATTR(g_platform_version, 0444,
+			msm_get_g_platform_version, NULL);
+
+static struct device_attribute msm_soc_attr_g_platform_subtype_id =
+	__ATTR(g_platform_subtype_id, 0444,
+			msm_get_g_platform_subtype_id, NULL);
 
 static void * __init setup_dummy_socinfo(void)
 {
@@ -1416,6 +1490,10 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 424;
 		strlcpy(dummy_socinfo.build_id, "atollp - ",
 		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_atoll_ab()) {
+		dummy_socinfo.id = 443;
+		strlcpy(dummy_socinfo.build_id, "atoll-ab - ",
+		sizeof(dummy_socinfo.build_id));
 	} else
 		strlcat(dummy_socinfo.build_id, "Dummy socinfo",
 			sizeof(dummy_socinfo.build_id));
@@ -1434,6 +1512,12 @@ static void __init populate_soc_sysfs_files(struct device *msm_soc_device)
 
 	switch (socinfo_format) {
 	case SOCINFO_VERSION(0, 15):
+		device_create_file(msm_soc_device,
+					&msm_soc_attr_g_platform_subtype_id);
+		device_create_file(msm_soc_device,
+					&msm_soc_attr_g_platform_version);
+		device_create_file(msm_soc_device,
+					&msm_soc_attr_g_hw_platform);
 		device_create_file(msm_soc_device,
 					&msm_soc_attr_nmodem_supported);
 	case SOCINFO_VERSION(0, 14):
@@ -1704,7 +1788,7 @@ static void socinfo_print(void)
 		break;
 
 	case SOCINFO_VERSION(0, 15):
-		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x num_clusters=0x%x ncluster_array_offset=0x%x num_defective_parts=0x%x ndefective_parts_array_offset=0x%x nmodem_supported=0x%x\n",
+		pr_info("v%u.%u, id=%u, ver=%u.%u, raw_id=%u, raw_ver=%u, hw_plat=%u, hw_plat_ver=%u\n accessory_chip=%u, hw_plat_subtype=%u, pmic_model=%u, pmic_die_revision=%u foundry_id=%u serial_number=%u num_pmics=%u chip_family=0x%x raw_device_family=0x%x raw_device_number=0x%x nproduct_id=0x%x num_clusters=0x%x ncluster_array_offset=0x%x num_defective_parts=0x%x ndefective_parts_array_offset=0x%x nmodem_supported=0x%x g_hw_plat=%u g_hw_plat_ver=%u g_hw_plat_subtype=%u\n",
 			f_maj, f_min, socinfo->v0_1.id, v_maj, v_min,
 			socinfo->v0_2.raw_id, socinfo->v0_2.raw_version,
 			socinfo->v0_3.hw_platform,
@@ -1724,7 +1808,10 @@ static void socinfo_print(void)
 			socinfo->v0_14.ncluster_array_offset,
 			socinfo->v0_14.num_defective_parts,
 			socinfo->v0_14.ndefective_parts_array_offset,
-			socinfo->v0_15.nmodem_supported);
+			socinfo->v0_15.nmodem_supported,
+			socinfo->v0_15.g_hw_platform,
+			socinfo->v0_15.g_platform_version,
+			socinfo->v0_15.g_hw_platform_subtype);
 		break;
 
 	default:

@@ -25,6 +25,8 @@
 
 #define CAM_ICP_CTX_MAX          54
 
+#define CAM_ICP_CTX_REQ_MAX       40
+
 #define CPAS_IPE1_BIT            0x2000
 
 int cam_icp_hw_mgr_init(struct device_node *of_node,

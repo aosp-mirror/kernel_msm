@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (C) 2013 ST Microelectronics S.A.
  * Copyright (C) 2010 Stollmann E+V GmbH

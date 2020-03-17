@@ -372,6 +372,8 @@ enum mhi_cmd_type {
 #define MHI_RSCTRE_DATA_DWORD0(cookie) (cookie)
 #define MHI_RSCTRE_DATA_DWORD1 (MHI_PKT_TYPE_COALESCING << 16)
 
+#define MHI_RSC_MIN_CREDITS (8)
+
 enum MHI_CMD {
 	MHI_CMD_RESET_CHAN,
 	MHI_CMD_START_CHAN,
@@ -442,6 +444,7 @@ enum MHI_ST_TRANSITION {
 	MHI_ST_TRANSITION_READY,
 	MHI_ST_TRANSITION_SBL,
 	MHI_ST_TRANSITION_MISSION_MODE,
+	MHI_ST_TRANSITION_DISABLE,
 	MHI_ST_TRANSITION_MAX,
 };
 
@@ -472,6 +475,7 @@ enum {
 	MHI_PM_BIT_SYS_ERR_PROCESS,
 	MHI_PM_BIT_SHUTDOWN_PROCESS,
 	MHI_PM_BIT_LD_ERR_FATAL_DETECT,
+	MHI_PM_BIT_SHUTDOWN_NO_ACCESS,
 	MHI_PM_BIT_MAX
 };
 
@@ -491,6 +495,7 @@ enum MHI_PM_STATE {
 	MHI_PM_SHUTDOWN_PROCESS = BIT(MHI_PM_BIT_SHUTDOWN_PROCESS),
 	/* link not accessible */
 	MHI_PM_LD_ERR_FATAL_DETECT = BIT(MHI_PM_BIT_LD_ERR_FATAL_DETECT),
+	MHI_PM_SHUTDOWN_NO_ACCESS = BIT(MHI_PM_BIT_SHUTDOWN_NO_ACCESS),
 };
 
 #define MHI_REG_ACCESS_VALID(pm_state) ((pm_state & (MHI_PM_POR | MHI_PM_M0 | \
@@ -498,7 +503,7 @@ enum MHI_PM_STATE {
 		MHI_PM_SYS_ERR_DETECT | MHI_PM_SYS_ERR_PROCESS | \
 		MHI_PM_SHUTDOWN_PROCESS | MHI_PM_FW_DL_ERR)))
 #define MHI_PM_IN_ERROR_STATE(pm_state) (pm_state >= MHI_PM_FW_DL_ERR)
-#define MHI_PM_IN_FATAL_STATE(pm_state) (pm_state == MHI_PM_LD_ERR_FATAL_DETECT)
+#define MHI_PM_IN_FATAL_STATE(pm_state) (pm_state >= MHI_PM_LD_ERR_FATAL_DETECT)
 #define MHI_DB_ACCESS_VALID(mhi_cntrl) (mhi_cntrl->pm_state & \
 					mhi_cntrl->db_access)
 #define MHI_WAKE_DB_CLEAR_VALID(pm_state) (pm_state & (MHI_PM_M0 | \
@@ -593,6 +598,7 @@ struct mhi_pm_transitions {
 struct state_transition {
 	struct list_head node;
 	enum MHI_ST_TRANSITION state;
+	enum MHI_PM_STATE pm_state;
 };
 
 struct mhi_ctxt {
@@ -832,6 +838,8 @@ void mhi_destroy_timesync(struct mhi_controller *mhi_cntrl);
 int mhi_create_sysfs(struct mhi_controller *mhi_cntrl);
 void mhi_destroy_sysfs(struct mhi_controller *mhi_cntrl);
 int mhi_early_notify_device(struct device *dev, void *data);
+void mhi_write_reg_offload(struct mhi_controller *mhi_cntrl,
+			void __iomem *base, u32 offset, u32 val);
 
 /* timesync log support */
 static inline void mhi_timesync_log(struct mhi_controller *mhi_cntrl)
@@ -901,6 +909,8 @@ void mhi_rddm_prepare(struct mhi_controller *mhi_cntrl,
 		      struct image_info *img_info);
 int mhi_prepare_channel(struct mhi_controller *mhi_cntrl,
 			struct mhi_chan *mhi_chan);
+void mhi_reset_reg_write_q(struct mhi_controller *mhi_cntrl);
+void mhi_force_reg_write(struct mhi_controller *mhi_cntrl);
 
 /* isr handlers */
 irqreturn_t mhi_msi_handlr(int irq_number, void *dev);

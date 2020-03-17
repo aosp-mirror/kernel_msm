@@ -25,9 +25,6 @@
 static bool ois_debug;
 module_param(ois_debug, bool, 0644);
 
-#define OIS_WIDE_SID (0x76 >> 1)
-#define OIS_TELE_SID (0x78 >> 1)
-
 int cam_ois_calibration(struct cam_ois_ctrl_t *o_ctrl,
 	stReCalib *cal_result)
 {
@@ -482,6 +479,38 @@ static int cam_ois_shift_data_enqueue(struct cam_ois_shift *o_shift_data,
 }
 
 /**
+ * read_af_lens_position - function of read af lens position
+ * @io_master_info:     Information about the communication master
+ * @pData:              The af position data read out
+ *
+ * Returns success or failure
+ */
+static int read_af_lens_position(struct camera_io_master *io_master_info,
+	uint32_t *pData)
+{
+	int rc = 0;
+	uint16_t orig_slave_addr = io_master_info->cci_client->sid;
+	uint32_t data = 0;
+	uint32_t addr = 0x0A;
+
+	io_master_info->cci_client->sid = 0xE4 >> 1;
+
+	rc = camera_io_dev_read(io_master_info, addr,
+		&data, CAMERA_SENSOR_I2C_TYPE_BYTE,
+		CAMERA_SENSOR_I2C_TYPE_WORD);
+
+	io_master_info->cci_client->sid = orig_slave_addr;
+
+	if (rc < 0) {
+	    CAM_ERR(CAM_OIS,"%s failed(non-fatal): %d\n", __func__, rc);
+	} else {
+		*pData = data;
+	}
+
+	return rc;
+}
+
+/**
  * cam_ois_read_work - worker function of read timer
  * @work:       work
  *
@@ -494,15 +523,10 @@ static void cam_ois_read_work(struct work_struct *work)
 	struct timespec ts;
 	struct cam_ois_shift ois_shift_data;
 	struct cam_ois_timer_t *ois_timer_in;
-	int8_t y_sign;
+	uint32_t af_pos = 0;
 
 	ois_timer_in = container_of(work, struct cam_ois_timer_t, g_work);
 	get_monotonic_boottime(&ts);
-
-	/* later ois module change the magnetic polarity,
-	 * sign of y axis needs to be corrected
-	 */
-	y_sign = ois_timer_in->o_ctrl->ois_version == 2 ? -1 : 1;
 
 	if (ois_debug) {
 		rc = camera_io_dev_read_seq(
@@ -510,6 +534,7 @@ static void cam_ois_read_work(struct work_struct *work)
 			0xE003, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
 			CAMERA_SENSOR_I2C_TYPE_DWORD, 8);
 		CAM_INFO(CAM_OIS,
+<<<<<<< HEAD
 			"[0xE003] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
 			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
 			buf[3], buf[4], buf[5], buf[6], buf[7]);
@@ -522,6 +547,11 @@ static void cam_ois_read_work(struct work_struct *work)
 			"[0xE005] %s: buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
 			ois_timer_in->o_ctrl->ois_name, buf[0], buf[1], buf[2],
 			buf[3], buf[4], buf[5], buf[6], buf[7]);
+=======
+			"[0xE003] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x, buf[6-7]=%02x%02x",
+			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
+			buf[6], buf[7]);
+>>>>>>> partner/android-msm-sunfish-4.14
 	}
 
 	rc = camera_io_dev_read_seq(&ois_timer_in->o_ctrl->io_master_info,
@@ -534,11 +564,8 @@ static void cam_ois_read_work(struct work_struct *work)
 			buf[3], buf[4], buf[5]);
 	}
 
-	rc = camera_io_dev_read_seq(
-		&ois_timer_in->o_ctrl->io_master_info,
-		0x0764, &buf[8], CAMERA_SENSOR_I2C_TYPE_WORD,
-		CAMERA_SENSOR_I2C_TYPE_WORD, 2);
-
+	rc = read_af_lens_position(&ois_timer_in->o_ctrl->io_master_info,
+		&af_pos);
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
 		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
@@ -556,10 +583,8 @@ static void cam_ois_read_work(struct work_struct *work)
 	ois_shift_data.ois_shift_x =
 		(int16_t)(((uint16_t)buf[0] << 8) + (uint16_t)buf[1]);
 	ois_shift_data.ois_shift_y =
-		(int16_t)((((uint16_t)buf[2] << 8) + (uint16_t)buf[3])
-		* y_sign);
-	ois_shift_data.af_lop1 =
-		(int16_t)(((uint16_t)buf[8] << 8) + (uint16_t)buf[9]);
+		(int16_t)(((uint16_t)buf[2] << 8) + (uint16_t)buf[3]);
+	ois_shift_data.af_lop1 = af_pos;
 
 	rc = cam_ois_shift_data_enqueue(&ois_shift_data, ois_timer_in->o_ctrl);
 	if (rc != 0)
@@ -788,36 +813,6 @@ static int cam_ois_util_validate_packet(struct cam_packet *packet)
 	return 0;
 }
 
-static void cam_ois_tele_standby(struct cam_ois_ctrl_t *o_ctrl)
-{
-	uint32_t rc = 0;
-	enum camera_sensor_i2c_type addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
-	enum camera_sensor_i2c_type data_type = CAMERA_SENSOR_I2C_TYPE_DWORD;
-	struct cam_sensor_i2c_reg_array servo_setting = {0xF010, 0x70000, 0, 0};
-	struct cam_sensor_i2c_reg_array standby_setting = {0xF01F, 0x2, 0, 0};
-	struct cam_sensor_i2c_reg_setting write_setting = {&servo_setting, 1,
-		addr_type, data_type, 0, OIS_TELE_SID};
-	uint32_t delay_ms = 3;
-	uint32_t orig_sid = o_ctrl->io_master_info.cci_client->sid;
-	uint32_t orig_master =
-		o_ctrl->io_master_info.cci_client->cci_i2c_master;
-
-	o_ctrl->io_master_info.cci_client->sid = OIS_TELE_SID;
-	o_ctrl->io_master_info.cci_client->cci_i2c_master = 1;
-	rc |= camera_io_dev_poll(&(o_ctrl->io_master_info),
-		0xF100, 0, 0, addr_type, data_type, delay_ms);
-	rc |= camera_io_dev_write(&(o_ctrl->io_master_info), &write_setting);
-	rc |= camera_io_dev_poll(&(o_ctrl->io_master_info),
-		0xF100, 0, 0, addr_type, data_type, delay_ms);
-	write_setting.reg_setting = &standby_setting;
-	rc |= camera_io_dev_write(&(o_ctrl->io_master_info), &write_setting);
-
-	if (rc != 0)
-		CAM_WARN(CAM_UTIL, "%s failed rc %d", __func__, rc);
-	o_ctrl->io_master_info.cci_client->sid = orig_sid;
-	o_ctrl->io_master_info.cci_client->cci_i2c_master = orig_master;
-}
-
 /**
  * cam_ois_pkt_parse - Parse csl packet
  * @o_ctrl:     ctrl structure
@@ -1020,10 +1015,6 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 				goto pwr_dwn;
 			}
 		}
-
-		/* OIS-tele enters standby mode on OIS-wide init */
-		if (o_ctrl->io_master_info.cci_client->sid == OIS_WIDE_SID)
-			cam_ois_tele_standby(o_ctrl);
 
 		rc = delete_request(&o_ctrl->i2c_init_data);
 		if (rc < 0) {
@@ -1376,6 +1367,8 @@ int cam_ois_driver_cmd(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 		}
 		o_ctrl->cam_ois_state = CAM_OIS_CONFIG;
 		break;
+	case CAM_FLUSH_REQ:
+		goto release_mutex;
 	default:
 		CAM_ERR(CAM_OIS, "invalid opcode");
 		goto release_mutex;

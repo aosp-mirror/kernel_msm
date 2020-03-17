@@ -1,5 +1,5 @@
 ARCH=arm64
-BRANCH=android-msm-floral-4.14
+BRANCH=android-msm-pixel-4.14
 CROSS_COMPILE=aarch64-linux-android-
 CROSS_COMPILE_ARM32=arm-linux-androideabi-
 DEFCONFIG=floral_defconfig
@@ -18,9 +18,9 @@ DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/libufdt/ufdt_ap
 export DTC_OVERLAY_TEST_EXT
 FILES="
 arch/arm64/boot/dtbo.img
+arch/arm64/boot/Image.lz4-dtb
 arch/arm64/boot/Image.lz4
-arch/arm64/boot/dts/google/qcom-base/sm8150-v2.dtb
-arch/arm64/boot/dts/google/qcom-base/sm8150.dtb
+arch/arm64/boot/dts/google/qcom-base/sdmmagpie.dtb
 vmlinux
 System.map
 .config

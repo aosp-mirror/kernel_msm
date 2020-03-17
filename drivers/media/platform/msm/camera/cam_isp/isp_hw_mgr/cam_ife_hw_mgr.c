@@ -334,7 +334,6 @@ static int cam_ife_hw_mgr_init_hw(
 {
 	struct cam_ife_hw_mgr_res *hw_mgr_res;
 	int rc = 0, i;
-	struct cam_hw_intf *hw_intf;
 
 	CAM_DBG(CAM_ISP, "INIT IFE CID ... in ctx id:%d",
 		ctx->ctx_index);
@@ -358,26 +357,6 @@ static int cam_ife_hw_mgr_init_hw(
 			CAM_ERR(CAM_ISP, "Can not INIT IFE CSID(id :%d)",
 				 hw_mgr_res->res_id);
 			goto deinit;
-		}
-	}
-
-	/* Enable CSID IRQ */
-	list_for_each_entry(hw_mgr_res, &ctx->res_list_ife_csid, list) {
-		if (hw_mgr_res->hw_res[0]) {
-			hw_intf = hw_mgr_res->hw_res[0]->hw_intf;
-			if (hw_intf->hw_ops.process_cmd) {
-				rc = hw_intf->hw_ops.process_cmd(
-					hw_intf->hw_priv,
-					CAM_IFE_CSID_ENABLE_IRQ,
-					hw_mgr_res->hw_res[0],
-					sizeof(struct cam_isp_resource_node));
-				if (rc < 0) {
-					CAM_ERR(CAM_ISP,
-						"Failed to enable CSID IRQ");
-					goto deinit;
-				}
-				break;
-			}
 		}
 	}
 
@@ -1281,11 +1260,8 @@ static int cam_ife_mgr_acquire_cid_res(
 	csid_acquire.res_id =  path_res_id;
 	CAM_DBG(CAM_ISP, "path_res_id %d", path_res_id);
 
-	if (in_port->num_out_res) {
+	if (in_port->num_out_res)
 		out_port = &(in_port->data[0]);
-		CAM_DBG(CAM_ISP, "Secure Mode: %d",
-			out_port->secure_mode);
-	}
 
 	/* Try acquiring CID resource from previously acquired HW */
 	list_for_each_entry(cid_res_iterator, &ife_ctx->res_list_ife_cid,
@@ -1295,15 +1271,10 @@ static int cam_ife_mgr_acquire_cid_res(
 			if (!cid_res_iterator->hw_res[i])
 				continue;
 
-			if (in_port->num_out_res &&
-				((cid_res_iterator->is_secure == 1 &&
-				out_port->secure_mode == 0) ||
+			if (cid_res_iterator->is_secure == 1 ||
 				(cid_res_iterator->is_secure == 0 &&
-				out_port->secure_mode == 1)))
-				continue;
-
-			if (!in_port->num_out_res &&
-				cid_res_iterator->is_secure == 1)
+				in_port->num_out_res &&
+				out_port->secure_mode == 1))
 				continue;
 
 			hw_intf = cid_res_iterator->hw_res[i]->hw_intf;
@@ -3180,6 +3151,57 @@ static int cam_isp_blob_fe_update(
 	return rc;
 }
 
+<<<<<<< HEAD
+=======
+static int cam_isp_blob_fps_config(
+	uint32_t                               blob_type,
+	struct cam_isp_generic_blob_info      *blob_info,
+	struct cam_fps_config                 *fps_config,
+	struct cam_hw_prepare_update_args     *prepare)
+{
+	struct cam_ife_hw_mgr_ctx             *ctx = NULL;
+	struct cam_ife_hw_mgr_res             *hw_mgr_res;
+	struct cam_hw_intf                    *hw_intf;
+	struct cam_vfe_fps_config_args         fps_config_args;
+	int                                    rc = 0;
+	uint32_t                               i;
+
+	ctx = prepare->ctxt_to_hw_map;
+
+	list_for_each_entry(hw_mgr_res, &ctx->res_list_ife_src, list) {
+		for (i = 0; i < CAM_ISP_HW_SPLIT_MAX; i++) {
+			if (!hw_mgr_res->hw_res[i])
+				continue;
+
+			if (hw_mgr_res->res_id == CAM_ISP_HW_VFE_IN_CAMIF) {
+				hw_intf = hw_mgr_res->hw_res[i]->hw_intf;
+				if (hw_intf && hw_intf->hw_ops.process_cmd) {
+					fps_config_args.fps =
+						fps_config->fps;
+					fps_config_args.node_res =
+						hw_mgr_res->hw_res[i];
+
+					rc = hw_intf->hw_ops.process_cmd(
+						hw_intf->hw_priv,
+						CAM_ISP_HW_CMD_FPS_CONFIG,
+						&fps_config_args,
+						sizeof(
+						struct cam_vfe_fps_config_args)
+						);
+					if (rc)
+						CAM_ERR(CAM_ISP,
+							"Failed fps config:%d",
+							fps_config->fps);
+				} else
+					CAM_WARN(CAM_ISP, "NULL hw_intf!");
+			}
+		}
+	}
+
+	return rc;
+}
+
+>>>>>>> partner/android-msm-sunfish-4.14
 static int cam_isp_blob_ubwc_update(
 	uint32_t                               blob_type,
 	struct cam_isp_generic_blob_info      *blob_info,
@@ -4461,8 +4483,12 @@ static int  cam_ife_hw_mgr_find_affected_ctx(
 		 * In the call back function corresponding ISP context
 		 * will update CRM about fatal Error
 		 */
-		notify_err_cb(ife_hwr_mgr_ctx->common.cb_priv,
-			CAM_ISP_HW_EVENT_ERROR, error_event_data);
+		if (notify_err_cb)
+			notify_err_cb(ife_hwr_mgr_ctx->common.cb_priv,
+				CAM_ISP_HW_EVENT_ERROR, error_event_data);
+		else
+			CAM_DBG(CAM_ISP, "No notify error cb for ctx %d",
+				ife_hwr_mgr_ctx->ctx_index);
 	}
 
 	/* fill the affected_core in recovery data */
@@ -5498,6 +5524,66 @@ static int cam_ife_hw_mgr_sort_dev_with_caps(
 	return 0;
 }
 
+<<<<<<< HEAD
+=======
+static int cam_ife_hw_mgr_handle_csid_event(
+	void      *priv,
+	uint32_t   evt_id,
+	void      *evt_data)
+{
+	struct cam_csid_hw_evt_payload  *payload;
+	struct cam_ife_hw_mgr_ctx   *ife_hwr_mgr_ctx = priv;
+	struct cam_isp_hw_error_event_data  error_event_data = {0};
+	struct cam_hw_event_recovery_data        recovery_data = {0};
+
+	if (!priv || !evt_data) {
+		CAM_ERR(CAM_ISP, "Invalid Parameters %pK %pK",
+			ife_hwr_mgr_ctx, evt_data);
+		return -EINVAL;
+	}
+
+	ife_hwr_mgr_ctx = (struct cam_ife_hw_mgr_ctx *)priv;
+	payload = (struct cam_csid_hw_evt_payload  *)evt_data;
+	CAM_DBG(CAM_ISP, "CSID[%d] type %d event %d",
+		payload->hw_idx, payload->evt_type,
+		evt_id);
+
+	/* We can be in this condition if due to scheduling delays
+	 * workq is late and by the time context is released
+	 */
+	if (!ife_hwr_mgr_ctx->ctx_in_use) {
+		CAM_INFO(CAM_ISP, "ctx %d not in use",
+			ife_hwr_mgr_ctx->ctx_index);
+		return 0;
+
+	}
+	switch (evt_id) {
+	case CAM_ISP_HW_EVENT_ERROR:
+		goto handle_error;
+	default:
+		break;
+	}
+	return 0;
+
+handle_error:
+	switch (payload->evt_type) {
+	case CAM_ISP_HW_ERROR_CSID_FATAL: {
+		error_event_data.error_type = payload->evt_type;
+		cam_ife_hw_mgr_find_affected_ctx(ife_hwr_mgr_ctx,
+			&error_event_data,
+			payload->hw_idx,
+			&recovery_data);
+		break;
+	}
+	case CAM_ISP_HW_ERROR_CSID_NON_FATAL:
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+>>>>>>> partner/android-msm-sunfish-4.14
 static int cam_ife_set_csid_debug(void *data, u64 val)
 {
 	g_ife_hw_mgr.debug_cfg.csid_debug = val;

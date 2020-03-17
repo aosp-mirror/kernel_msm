@@ -213,9 +213,12 @@ struct sde_connector_ops {
 	/**
 	 * post_kickoff - display to program post kickoff-time features
 	 * @connector: Pointer to drm connector structure
+	 * @params: Parameter bundle of connector-stored information for
+	 *	post kickoff programming into the display
 	 * Returns: Zero on success
 	 */
-	int (*post_kickoff)(struct drm_connector *connector);
+	int (*post_kickoff)(struct drm_connector *connector,
+		struct msm_display_conn_params *params);
 
 	/**
 	 * post_open - calls connector to process post open functionalities
@@ -302,6 +305,16 @@ struct sde_connector_ops {
 	 */
 	int (*get_panel_vfp)(void *display, int h_active, int v_active);
 
+        /**
+         * prepare_commit - trigger display to program pre-commit time features
+         * @display: Pointer to private display structure
+         * @params: Parameter bundle of connector-stored information for
+         *      pre commit time programming into the display
+         * Returns: Zero on success
+         */
+        int (*prepare_commit)(void *display,
+                        struct msm_display_conn_params *params);
+
 	/**
 	 * set_idle_hint - gives hint to display whether display is idle
 	 * @display: Pointer to private display handle
@@ -371,6 +384,7 @@ struct sde_connector_evt {
  * @bl_scale_dirty: Flag to indicate PP BL scale value(s) is changed
  * @bl_scale: BL scale value for ABA feature
  * @bl_scale_ad: BL scale value for AD feature
+ * @allow_bl_update: Flag to indicate if BL update is allowed currently or not
  * @qsync_mode: Cached Qsync mode, 0=disabled, 1=continuous mode
  * @qsync_updated: Qsync settings were updated
  * last_cmd_tx_sts: status of the last command transfer
@@ -420,7 +434,7 @@ struct sde_connector {
 	bool bl_scale_dirty;
 	u32 bl_scale;
 	u32 bl_scale_ad;
-
+	bool allow_bl_update;
 	u32 qsync_mode;
 	bool qsync_updated;
 
@@ -760,6 +774,13 @@ int sde_connector_register_custom_event(struct sde_kms *kms,
  * Returns: Zero on success
  */
 int sde_connector_pre_kickoff(struct drm_connector *connector);
+
+/**
+ * sde_connector_prepare_commit - trigger commit time feature programming
+ * @connector: Pointer to drm connector object
+ * Returns: Zero on success
+ */
+int sde_connector_prepare_commit(struct drm_connector *connector);
 
 /**
  * sde_connector_needs_offset - adjust the output fence offset based on

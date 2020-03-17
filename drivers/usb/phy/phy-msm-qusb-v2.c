@@ -142,6 +142,8 @@ struct qusb_phy {
 	u8                      bias_ctrl2;
 
 	bool			override_bias_ctrl2;
+
+	bool			skip_efuse_reg;
 };
 
 static void qusb_phy_enable_clocks(struct qusb_phy *qphy, bool on)
@@ -541,7 +543,7 @@ static int qusb_phy_init(struct usb_phy *phy)
 	if (qphy->qusb_phy_init_seq)
 		qusb_phy_write_seq(qphy->base, qphy->qusb_phy_init_seq,
 				qphy->init_seq_len, 0);
-	if (qphy->efuse_reg) {
+	if (!qphy->skip_efuse_reg && qphy->efuse_reg) {
 		if (!qphy->tune_val)
 			qusb_phy_get_tune1_param(qphy);
 
@@ -929,6 +931,9 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	if (res)
 		qphy->refgen_north_bg_reg = devm_ioremap(dev, res->start,
 						resource_size(res));
+
+	qphy->skip_efuse_reg = of_property_read_bool(dev->of_node,
+						     "skip_efuse_reg");
 
 	/* ref_clk_src is needed irrespective of SE_CLK or DIFF_CLK usage */
 	qphy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");

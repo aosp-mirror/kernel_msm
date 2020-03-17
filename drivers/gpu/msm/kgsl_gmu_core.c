@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -243,20 +243,25 @@ void gmu_core_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 	__raw_writel(value, reg);
 }
 
-void gmu_core_blkwrite(struct kgsl_device *device, unsigned int offsetwords,
-		const void *buffer, size_t size)
+void gmu_core_regwrite_no_barrier(struct kgsl_device *device,
+		unsigned int offsetwords, unsigned int value)
 {
-	void __iomem *base;
+	void __iomem *reg;
 
 	if (!gmu_core_is_register_offset(device, offsetwords)) {
 		WARN(1, "Out of bounds register write: 0x%x\n", offsetwords);
 		return;
 	}
 
-	offsetwords -= device->gmu_core.gmu2gpu_offset;
-	base = device->gmu_core.reg_virt + (offsetwords << 2);
+	trace_kgsl_regwrite(device, offsetwords, value);
 
-	memcpy_toio(base, buffer, size);
+	offsetwords -= device->gmu_core.gmu2gpu_offset;
+	reg = device->gmu_core.reg_virt + (offsetwords << 2);
+
+	/*
+	 * no barrier, only for firmware loading
+	 */
+	__raw_writel_no_log(value, reg);
 }
 
 void gmu_core_regrmw(struct kgsl_device *device,
@@ -285,3 +290,12 @@ bool gmu_core_is_initialized(struct kgsl_device *device)
 	return false;
 }
 
+u64 gmu_core_dev_read_ao_counter(struct kgsl_device *device)
+{
+	struct gmu_dev_ops *ops = GMU_DEVICE_OPS(device);
+
+	if (ops && ops->read_ao_counter)
+		return ops->read_ao_counter(device);
+
+	return 0;
+}

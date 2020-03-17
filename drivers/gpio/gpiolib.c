@@ -3792,11 +3792,58 @@ static const struct file_operations gpiolib_operations = {
 	.release	= seq_release,
 };
 
+static struct dentry *debugfs_base;
+
+static int list_gpios_show(struct seq_file *s, void *v)
+{
+	struct gpio_device *gdev = v;
+	struct gpio_chip *chip = gdev->chip;
+
+	if (chip->gpio_dump) {
+		msm_gpio_dump(s);
+		pmic_gpio_dump(s);
+	}
+	return 0;
+}
+
+static const struct seq_operations google_gpiolib_seq_ops = {
+	.start = gpiolib_seq_start,
+	.next = gpiolib_seq_next,
+	.stop = gpiolib_seq_stop,
+	.show = list_gpios_show,
+};
+
+static int list_gpios_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &google_gpiolib_seq_ops);
+}
+
+static const struct file_operations list_gpios_fops = {
+	.open           = list_gpios_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = seq_release,
+};
+
+bool pm_gpio_debug_mask;
+
 static int __init gpiolib_debugfs_init(void)
 {
 	/* /sys/kernel/debug/gpio */
 	(void) debugfs_create_file("gpio", S_IFREG | S_IRUGO,
 				NULL, NULL, &gpiolib_operations);
+	debugfs_base = debugfs_create_dir("google_gpio", NULL);
+	if (!debugfs_base)
+		return -ENOMEM;
+	if (!debugfs_create_file("list_gpios", 0444,
+				 debugfs_base, NULL, &list_gpios_fops))
+		return -ENOMEM;
+
+	pm_gpio_debug_mask = 0;
+
+	if (!debugfs_create_bool("enable_dump_gpio", 0664,
+				 debugfs_base, &pm_gpio_debug_mask))
+		return -ENOMEM;
 	return 0;
 }
 subsys_initcall(gpiolib_debugfs_init);

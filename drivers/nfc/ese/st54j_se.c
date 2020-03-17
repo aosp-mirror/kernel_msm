@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /* drivers/nfc/ese/st54j_se.c
  * Copyright (C) 2018 ST Microelectronics S.A.
  * Copyright 2019 Google Inc.
@@ -227,7 +228,7 @@ static int st54j_se_probe(struct spi_device *spi)
 		return -ENOMEM;
 	}
 
-	ese_dev->kbuf = devm_kzalloc(dev, ST54_MAX_BUF, GFP_KERNEL);
+	ese_dev->kbuf = devm_kzalloc(dev, ST54_MAX_BUF, GFP_KERNEL|GFP_DMA);
 	if (ese_dev->kbuf == NULL)
 		return -ENOMEM;
 

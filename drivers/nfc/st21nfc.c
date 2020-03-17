@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2016 ST Microelectronics S.A.
  * Copyright (C) 2010 Stollmann E+V GmbH
@@ -47,7 +48,7 @@
 #define ST21NFC_POWER_STATE_MAX 3
 #define WAKEUP_SRC_TIMEOUT		(2000)
 
-#define DRIVER_VERSION "2.0.14"
+#define DRIVER_VERSION "2.0.15"
 
 #define PROP_PWR_MON_RW_ON_NTF nci_opcode_pack(NCI_GID_PROPRIETARY, 5)
 #define PROP_PWR_MON_RW_OFF_NTF nci_opcode_pack(NCI_GID_PROPRIETARY, 6)
@@ -699,36 +700,7 @@ static const struct file_operations st21nfc_dev_fops = {
 #endif
 };
 
-static ssize_t st21nfc_show_i2c_addr(struct device *dev,
-				     struct device_attribute *attr, char *buf)
-{
-	struct i2c_client *client = to_i2c_client(dev);
-
-	if (client != NULL)
-		return scnprintf(buf, PAGE_SIZE, "0x%.2x\n", client->addr);
-	return -ENODEV;
-}
-
-static ssize_t st21nfc_change_i2c_addr(struct device *dev,
-				       struct device_attribute *attr,
-				       const char *buf, size_t count)
-{
-	struct st21nfc_device *data = dev_get_drvdata(dev);
-	long new_addr = 0;
-
-	if (data != NULL && data->client != NULL) {
-		if (!kstrtol(buf, 10, &new_addr)) {
-			mutex_lock(&data->read_mutex);
-			data->client->addr = new_addr;
-			mutex_unlock(&data->read_mutex);
-			return count;
-		}
-		return -EINVAL;
-	}
-	return 0;
-}
-
-static ssize_t st21nfc_version(struct device *dev,
+static ssize_t version_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%s\n", DRIVER_VERSION);
@@ -745,7 +717,7 @@ static uint64_t st21nfc_power_duration(struct st21nfc_device *data,
 		(current_time_ms - data->c_pw_states[pstate].last_entry);
 }
 
-static ssize_t st21nfc_show_power_stats(struct device *dev,
+static ssize_t power_stats_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
@@ -822,16 +794,13 @@ static ssize_t st21nfc_show_power_stats(struct device *dev,
 		idle_duration + active_ce_duration + active_rw_duration);
 }
 
-static DEVICE_ATTR(i2c_addr, S_IRUGO | S_IWUSR, st21nfc_show_i2c_addr,
-		   st21nfc_change_i2c_addr);
+static DEVICE_ATTR_RO(version);
 
-static DEVICE_ATTR(version, S_IRUGO, st21nfc_version, NULL);
-
-static DEVICE_ATTR(power_stats, 0444, st21nfc_show_power_stats, NULL);
+static DEVICE_ATTR_RO(power_stats);
 
 static struct attribute *st21nfc_attrs[] = {
-	&dev_attr_i2c_addr.attr,
 	&dev_attr_version.attr,
+	&dev_attr_power_stats.attr,
 	NULL,
 };
 
@@ -899,6 +868,7 @@ static int st21nfc_probe(struct i2c_client *client,
 			return -ENODEV;
 		mutex_init(&st21nfc_dev->pidle_mutex);
 		INIT_WORK(&(st21nfc_dev->st_p_work), st21nfc_pstate_wq);
+
 		/* Start the power stat in power mode idle */
 		st21nfc_dev->irq_pw_stats_idle =
 					gpiod_to_irq(st21nfc_dev->gpiod_pidle);
@@ -924,12 +894,10 @@ static int st21nfc_probe(struct i2c_client *client,
 			goto err_pidle_workqueue;
 		}
 
-		ret = sysfs_create_file(&dev->kobj,
-					&dev_attr_power_stats.attr);
+		ret = sysfs_create_group(&dev->kobj, &st21nfc_attr_grp);
 		if (ret) {
 			pr_err(
-			"%s : sysfs_create_file for power stats failed\n",
-			__func__);
+			"%s : sysfs_create_group failed\n", __func__);
 			goto err_pidle_workqueue;
 		}
 	}
@@ -987,25 +955,18 @@ static int st21nfc_probe(struct i2c_client *client,
 		goto err_misc_register;
 	}
 
-	ret = sysfs_create_group(&dev->kobj, &st21nfc_attr_grp);
-	if (ret) {
-		pr_err("%s : sysfs_create_group failed\n", __func__);
-		goto err_sysfs_create_group_failed;
-	}
 	device_init_wakeup(&client->dev, true);
 	device_set_wakeup_capable(&client->dev, true);
 	st21nfc_dev->irq_wake_up = false;
 
 	return 0;
 
-err_sysfs_create_group_failed:
-	misc_deregister(&st21nfc_dev->st21nfc_device);
 err_misc_register:
 	mutex_destroy(&st21nfc_dev->read_mutex);
 err_sysfs_power_stats:
 	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {
-		sysfs_remove_file(&client->dev.kobj,
-				  &dev_attr_power_stats.attr);
+		sysfs_remove_group(&client->dev.kobj,
+				  &st21nfc_attr_grp);
 	}
 err_pidle_workqueue:
 	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {

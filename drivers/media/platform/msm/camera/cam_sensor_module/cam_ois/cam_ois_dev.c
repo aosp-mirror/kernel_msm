@@ -355,7 +355,6 @@ static int cam_ois_platform_driver_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(&o_ctrl->v4l2_dev_str.sd, NULL);
 	mutex_destroy(&o_ctrl->ois_shift_mutex);
-
 	kfree(o_ctrl);
 
 	return 0;
