@@ -91,7 +91,7 @@
 
 	bootloader_log {
 		compatible = "qcom,bldr_log";
-		reg = <0xB09A1000 0xB400>, <0xB09AC400 0xB400>;
+		reg = <0xB7E01000 0xB400>, <0xB7E0C400 0xB400>;
 		reg-names = "bl_log", "bl_old_log";
 		memory-region = <&debug_info>;
 	};
