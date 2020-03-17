@@ -2,7 +2,7 @@ ARCH=arm64
 BRANCH=android-msm-pixel-4.14
 CROSS_COMPILE=aarch64-linux-android-
 CROSS_COMPILE_ARM32=arm-linux-androideabi-
-DEFCONFIG=floral_defconfig
+DEFCONFIG=sunfish_defconfig
 EXTRA_CMDS=''
 CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r370808/bin/
 LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-r370808/lib64:$LD_LIBRARY_PATH
@@ -27,7 +27,7 @@ System.map
 "
 EXT_MODULES="
 private/msm-google-modules/wlan/qcacld-3.0
-private/msm-google-modules/touch/fts/floral
+private/msm-google-modules/touch/fts/sunfish
 "
 IN_KERNEL_MODULES=1
 STOP_SHIP_TRACEPRINTK=1
