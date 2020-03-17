@@ -14,3 +14,7 @@ ifeq ($(CONFIG_PERF_EVENTS),y)
 obj-$(CONFIG_BPF_SYSCALL) += stackmap.o
 endif
 obj-$(CONFIG_CGROUP_BPF) += cgroup.o
+
+# TODO(https://bugs.llvm.org/show_bug.cgi?id=45030) false positive in UBSAN,
+# re-enable UBSAN once the bug is fixed.
+UBSAN_SANITIZE := n
