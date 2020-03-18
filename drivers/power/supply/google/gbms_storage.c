@@ -77,6 +77,18 @@ static char *tag2cstr(gbms_tag_cstr_t buff, gbms_tag_t tag)
 	return buff;
 }
 
+static gbms_tag_t cstr2tag(gbms_tag_cstr_t buff)
+{
+	gbms_tag_t tag;
+
+	tag = (u8)buff[0];
+	tag = (tag << 8) + (u8)buff[1];
+	tag = (tag << 8) + (u8)buff[2];
+	tag = (tag << 8) + (u8)buff[3];
+
+	return tag;
+}
+
 /* ------------------------------------------------------------------------- */
 
 static inline u64 gbms_cache_hash(gbms_tag_t tag)
@@ -105,7 +117,8 @@ static struct gbms_cache_entry *gbms_cache_lookup(gbms_tag_t tag, size_t *addr)
 }
 
 /* call only on a cache miss */
-static int gbms_cache_add(gbms_tag_t tag, struct gbms_storage_provider *slot)
+static struct gbms_cache_entry *gbms_cache_add(gbms_tag_t tag,
+					struct gbms_storage_provider *slot)
 {
 	unsigned long flags;
 	struct gbms_cache_entry *entry;
@@ -116,7 +129,7 @@ static int gbms_cache_add(gbms_tag_t tag, struct gbms_storage_provider *slot)
 	entry = (struct gbms_cache_entry *)
 		gen_pool_alloc(gbms_cache_pool, sizeof(*entry));
 	if (!entry)
-		return -ENOMEM;
+		return NULL;
 
 	/* cache provider */
 	memset(entry, 0, sizeof(*entry));
@@ -140,7 +153,7 @@ static int gbms_cache_add(gbms_tag_t tag, struct gbms_storage_provider *slot)
 	hash_add(gbms_cache, &entry->hnode, gbms_cache_hash(tag));
 	spin_unlock_irqrestore(&providers_lock, flags);
 
-	return 0;
+	return entry;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -649,6 +662,14 @@ static const struct file_operations gbms_providers_status_ops = {
 	.release	= single_release,
 };
 
+#define GBMS_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
+static const struct file_operations name = {	\
+	.owner	= THIS_MODULE,			\
+	.open	= simple_open,			\
+	.llseek	= no_llseek,			\
+	.read	= fn_read,			\
+	.write	= fn_write,			\
+}
 
 static ssize_t debug_set_offline(struct file *filp,
 				 const char __user *user_buf,
@@ -669,16 +690,155 @@ static ssize_t debug_set_offline(struct file *filp,
 
 }
 
-#define GBMS_DEBUG_ATTRIBUTE(name, fn_read, fn_write) \
-static const struct file_operations name = {	\
-	.owner		= THIS_MODULE,		\
-	.open	= simple_open,			\
-	.llseek	= no_llseek,			\
-	.read	= fn_read,			\
-	.write	= fn_write,			\
+GBMS_DEBUG_ATTRIBUTE(gbms_providers_offline_ops, NULL, debug_set_offline);
+
+static int debug_set_tag_size(void *data, u64 val)
+{
+	struct gbms_cache_entry *ce = data;
+
+	ce->count = val;
+	return 0;
 }
 
-GBMS_DEBUG_ATTRIBUTE(gbms_providers_offline_ops, NULL, debug_set_offline);
+static int debug_show_tag_size(void *data, u64 *val)
+{
+	struct gbms_cache_entry *ce = data;
+
+	*val = ce->count;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_tag_size_ops, debug_show_tag_size,
+			debug_set_tag_size, "%llu\n");
+
+static ssize_t debug_read_tag_data(struct file *filp,
+				   char __user *user_buf,
+				   size_t count, loff_t *ppos)
+{
+	struct gbms_cache_entry *ce = filp->private_data;
+	char buf[ce->count];
+	int ret;
+
+	if (!ce->count)
+		return -ENODATA;
+
+	ret = gbms_storage_read(ce->tag, buf, ce->count);
+	if (ret < 0)
+		return ret;
+
+	return simple_read_from_buffer(user_buf, count, ppos, buf, ce->count);
+}
+
+static ssize_t debug_write_tag_data(struct file *filp,
+				    const char __user *user_buf,
+				    size_t count, loff_t *ppos)
+{
+	struct gbms_cache_entry *ce = filp->private_data;
+	char buf[ce->count];
+	int ret;
+
+	if (!ce->count)
+		return -ENODATA;
+
+	ret = simple_write_to_buffer(buf, ce->count, ppos, user_buf, count);
+	if (!ret)
+		return -EFAULT;
+
+	ret = gbms_storage_write(ce->tag, buf, ce->count);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+GBMS_DEBUG_ATTRIBUTE(debug_tag_data_ops, debug_read_tag_data,
+		     debug_write_tag_data);
+
+static int gbms_find(struct gbms_storage_provider *slot, gbms_tag_t tag)
+{
+	int ret = 0, i;
+	gbms_tag_t tmp;
+
+	for (i = 0; ret == 0; i++) {
+		ret = slot->dsc->iter(i, &tmp, slot->ptr);
+		if (ret < 0)
+			break;
+		if (tag == tmp)
+			return 1;
+	}
+
+	return 0;
+}
+
+static struct gbms_cache_entry *gbms_cache_preload_tag(gbms_tag_t tag)
+{
+	struct gbms_storage_provider *slot = NULL;
+	int ret, i;
+
+	for (i = 0; !slot && i < gbms_providers_count; i++) {
+		struct gbms_storage_desc *dsc;
+
+		dsc = gbms_providers[i].dsc;
+		if (!dsc || !dsc->iter)
+			continue;
+
+		ret = gbms_find(&gbms_providers[i], tag);
+		if (ret == 1)
+			slot = &gbms_providers[i];
+	}
+
+	return gbms_cache_add(tag, slot);
+}
+
+
+/* [ugo]+TAG_NAME | -TAG_NAME | TAG_NAME */
+static ssize_t debug_export_tag(struct file *filp,
+				const char __user *user_buf,
+				size_t count, loff_t *ppos)
+{
+	size_t addr = GBMS_STORAGE_ADDR_INVALID;
+	struct gbms_cache_entry *ce;
+	gbms_tag_cstr_t name = { 0 };
+	struct dentry *de;
+	gbms_tag_t tag;
+	char temp[32];
+	int ret;
+
+	if (!rootdir)
+		return -ENODEV;
+
+	ret = simple_write_to_buffer(temp, sizeof(temp), ppos, user_buf, count);
+	if (!ret)
+		return -EFAULT;
+
+	if (temp[0] == '-') {
+		/* remove tag */
+		return -EINVAL;
+	}
+
+	memcpy(name, temp + (temp[0] == '+'), 4);
+	tag = cstr2tag(name);
+
+	ce = gbms_cache_lookup(tag, &addr);
+	if (!ce) {
+		ce = gbms_cache_preload_tag(tag);
+		if (!ce)
+			return -ENOMEM;
+	}
+
+	de = debugfs_create_dir(name, rootdir);
+	if (!de) {
+		pr_err("cannot create debufsentry for %s\n", name);
+		return -ENODEV;
+	}
+
+	debugfs_create_file("size", 0400, de, ce, &debug_tag_size_ops);
+	debugfs_create_file("data", 0600, de, ce, &debug_tag_data_ops);
+
+	return count;
+}
+
+GBMS_DEBUG_ATTRIBUTE(gbms_providers_export_ops, NULL, debug_export_tag);
 
 /* ------------------------------------------------------------------------ */
 
@@ -1001,6 +1161,8 @@ static int __init gbms_storage_init(void)
 				    NULL, &gbms_providers_status_ops);
 		debugfs_create_file("offline", S_IFREG | 0200, rootdir,
 				    NULL, &gbms_providers_offline_ops);
+		debugfs_create_file("export", S_IFREG | 0200, rootdir,
+				    NULL, &gbms_providers_export_ops);
 	}
 
 	return 0;
