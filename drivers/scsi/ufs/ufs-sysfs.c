@@ -369,6 +369,14 @@ static struct slowio_attr ufs_slowio_##_name##_cnt = {		\
 	.systype = UFSHCD_SLOWIO_CNT,				\
 }
 
+static ssize_t host_capabilities_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "0x%lx\n", hba->caps);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -378,6 +386,7 @@ static DEVICE_ATTR_RO(spm_target_link_state);
 static DEVICE_ATTR_RW(auto_hibern8);
 static DEVICE_ATTR_RW(manual_gc);
 static DEVICE_ATTR_RW(manual_gc_hold);
+static DEVICE_ATTR_RO(host_capabilities);
 SLOWIO_ATTR_RW(read, UFSHCD_SLOWIO_READ);
 SLOWIO_ATTR_RW(write, UFSHCD_SLOWIO_WRITE);
 SLOWIO_ATTR_RW(unmap, UFSHCD_SLOWIO_UNMAP);
@@ -393,6 +402,7 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_auto_hibern8.attr,
 	&dev_attr_manual_gc.attr,
 	&dev_attr_manual_gc_hold.attr,
+	&dev_attr_host_capabilities.attr,
 	&ufs_slowio_read_us.attr.attr,
 	&ufs_slowio_read_cnt.attr.attr,
 	&ufs_slowio_write_us.attr.attr,
