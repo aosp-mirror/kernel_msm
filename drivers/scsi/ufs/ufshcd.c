@@ -11265,6 +11265,14 @@ static void ufshcd_exit_manual_gc(struct ufs_hba *hba)
 	destroy_workqueue(hba->manual_gc.mgc_workq);
 }
 
+static ssize_t host_capabilities_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "0x%lx\n", hba->caps);
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RW(spm_lvl);
 static DEVICE_ATTR_RW(latency_hist);
@@ -11275,6 +11283,7 @@ static DEVICE_ATTR_RO(rev);
 static DEVICE_ATTR_RO(version);
 static DEVICE_ATTR_RW(manual_gc);
 static DEVICE_ATTR_RW(manual_gc_hold);
+static DEVICE_ATTR_RO(host_capabilities);
 
 static struct attribute *ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -11295,6 +11304,7 @@ static struct attribute *ufshcd_attrs[] = {
 	&ufs_slowio_unmap_cnt.attr.attr,
 	&ufs_slowio_sync_us.attr.attr,
 	&ufs_slowio_sync_cnt.attr.attr,
+	&dev_attr_host_capabilities.attr,
 	NULL
 };
 
