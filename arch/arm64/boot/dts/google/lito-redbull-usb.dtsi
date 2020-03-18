@@ -30,6 +30,7 @@
 };
 
 &pm7250b_charger {
+	qcom,typec-legacy-rp-icl;
 	qcom,otg-cl-ua = <1500000>;
 	google,otg-out-uv = <5100000>;
 	ext-vbus-supply = <&ext_boost>;
