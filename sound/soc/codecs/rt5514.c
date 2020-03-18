@@ -1268,7 +1268,7 @@ static int rt5514_ambient_payload_put(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 	int ret = 0;
-	char payload[AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE];
+	char payload[sizeof(struct _payload_st)];
 	unsigned int payload_addr;
 
 	if (copy_from_user(payload, bytes, size))
