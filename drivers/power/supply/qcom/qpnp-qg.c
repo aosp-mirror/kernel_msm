@@ -81,6 +81,27 @@ static ssize_t esr_count_store(struct device *dev, struct device_attribute
 }
 static DEVICE_ATTR_RW(esr_count);
 
+static int qg_fake_capacity = -EINVAL;
+static ssize_t fake_capacity_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", qg_fake_capacity);
+}
+
+static ssize_t fake_capacity_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int val;
+
+	if (kstrtos32(buf, 0, &val))
+		return -EINVAL;
+
+	qg_fake_capacity = val;
+
+	return count;
+}
+DEVICE_ATTR_RW(fake_capacity);
+
 static struct attribute *qg_attrs[] = {
 	&dev_attr_esr_mod_count.attr,
 	&dev_attr_esr_count.attr,
@@ -90,6 +111,7 @@ static struct attribute *qg_attrs[] = {
 	&dev_attr_fvss_delta_soc_interval_ms.attr,
 	&dev_attr_fvss_vbat_scaling.attr,
 	&dev_attr_qg_ss_feature.attr,
+	&dev_attr_fake_capacity.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(qg);
@@ -2172,7 +2194,10 @@ static int qg_psy_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
-		rc = qg_get_battery_capacity(chip, &pval->intval);
+		if (qg_fake_capacity >= 0 && qg_fake_capacity <= 100)
+			pval->intval = qg_fake_capacity;
+		else
+			rc = qg_get_battery_capacity(chip, &pval->intval);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		/*
