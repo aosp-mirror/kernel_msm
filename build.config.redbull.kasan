@@ -1,5 +1,4 @@
 KERNEL_DIR=private/msm-google
-DISABLE_LLD=1
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common.clang
 POST_DEFCONFIG_CMDS="update_kasan_config"
 
