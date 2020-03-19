@@ -938,6 +938,15 @@ void rt5514_watchdog_handler(void)
 #if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
 	codec_detect_status_notifier(WDSP_STAT_CRASH);
 #endif
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+
 	if (g_rt5514->gpiod_reset) {
 		gpiod_set_value(g_rt5514->gpiod_reset, 0);
 		usleep_range(1000, 2000);
@@ -949,6 +958,16 @@ void rt5514_watchdog_handler(void)
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
 	rt5514_dsp_enable(g_rt5514, false, true);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+
+	usleep_range(85000, 85100);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+		RT5514_AD_AD_MUTE, 0x0);
 }
 EXPORT_SYMBOL_GPL(rt5514_watchdog_handler);
 
@@ -1174,9 +1193,29 @@ static int rt5514_hw_reset_set(struct snd_kcontrol *kcontrol,
 		gpiod_set_value(rt5514->gpiod_reset, 0);
 		usleep_range(1000, 2000);
 		gpiod_set_value(rt5514->gpiod_reset, 1);
+
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
 		rt5514_dsp_enable(rt5514, false, true);
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+
+		usleep_range(85000, 85100);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+			RT5514_AD_AD_MUTE, 0x0);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+			RT5514_AD_AD_MUTE, 0x0);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+			RT5514_AD_AD_MUTE, 0x0);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+			RT5514_AD_AD_MUTE, 0x0);
 	}
 
 	return 0;
