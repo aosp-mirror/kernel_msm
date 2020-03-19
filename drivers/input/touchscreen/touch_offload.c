@@ -99,6 +99,7 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 	struct touch_offload_frame *frame;
 	size_t copy_size;
 	int result;
+	unsigned long remaining;
 
 	pr_debug("%s\n", __func__);
 
@@ -166,13 +167,12 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 
 	/* Transfer the maximum amount of data */
 	copy_size = min((long long)size, context->packed_frame_size - *offset);
-	result = copy_to_user(user_buffer, context->packed_frame + *offset,
+	remaining = copy_to_user(user_buffer, context->packed_frame + *offset,
 			      copy_size);
-	if (result != 0) {
-		pr_err("%s: copy_to_user returned %d!.\n", __func__, result);
-		return -EINVAL;
-	}
-	*offset += copy_size;
+	if (remaining != 0)
+		pr_err("%s: copy_to_user unexpectedly failed to copy %d bytes.\n",
+		       __func__, remaining);
+	*offset += copy_size - remaining;
 
 	/* Recycle the frame if transfer was complete */
 	if (*offset == context->packed_frame_size) {
@@ -181,15 +181,7 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 		*offset = 0;
 	}
 
-	return copy_size;
-}
-
-static ssize_t touch_offload_write(struct file *file, const char __user *buff,
-				   size_t len, loff_t *offset)
-{
-	pr_debug("%s\n", __func__);
-
-	return len;
+	return copy_size - remaining;
 }
 
 static int touch_offload_allocate_buffers(struct touch_offload_context *context,
@@ -517,7 +509,6 @@ const struct file_operations touch_offload_fops = {
 	.open	  = touch_offload_open,
 	.release  = touch_offload_release,
 	.read	  = touch_offload_read,
-	.write	  = touch_offload_write,
 	.unlocked_ioctl	  = touch_offload_ioctl
 };
 
