@@ -1536,6 +1536,23 @@ static ssize_t set_charge_start_level(struct device *dev,
 static DEVICE_ATTR(charge_start_level, 0660,
 		   show_charge_start_level, set_charge_start_level);
 
+static ssize_t
+charge_disable_show(struct device *dev,
+		    struct device_attribute *attr,
+		    char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int chg_disable = 0;
+
+	if (chg_drv->chg_psy)
+		chg_disable = GPSY_GET_PROP(chg_drv->chg_psy,
+					    POWER_SUPPLY_PROP_CHARGE_DISABLE);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", chg_disable);
+}
+
+static DEVICE_ATTR_RO(charge_disable);
+
 /* TODO: now created in qcom code, create in chg_create_votables() */
 static int chg_find_votables(struct chg_drv *chg_drv)
 {
@@ -1877,6 +1894,13 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 	ret = device_create_file(chg_drv->device, &dev_attr_charge_start_level);
 	if (ret != 0) {
 		pr_err("Failed to create charge_start_level files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_charge_disable);
+	if (ret != 0) {
+		pr_err("Failed to create charge_disable files, ret=%d\n",
 		       ret);
 		return ret;
 	}
