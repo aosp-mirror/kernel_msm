@@ -837,6 +837,9 @@ static void p9221_dcin_pon_work(struct work_struct *work)
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, dcin_pon_work.work);
 
+	if (!charger->dc_psy)
+		return;
+
 	ret = power_supply_get_property(charger->dc_psy,
 					POWER_SUPPLY_PROP_DC_RESET, &prop);
 	if (ret < 0) {
