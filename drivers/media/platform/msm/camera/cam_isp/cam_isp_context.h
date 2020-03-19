@@ -123,6 +123,7 @@ struct cam_isp_ctx_irq_ops {
  * @event_timestamp:       Timestamp for different stage of request
  * @bubble_detected:       Flag to indicate if bubble detected
  * @reapply:               True if reapplying after bubble
+ * @early_num_acked:       Count to track acked for early output
  *
  */
 struct cam_isp_ctx_req {
@@ -142,6 +143,7 @@ struct cam_isp_ctx_req {
 	    [CAM_ISP_CTX_EVENT_MAX];
 	bool                                  bubble_detected;
 	bool                                  reapply;
+	uint32_t                              early_num_acked;
 };
 
 /**

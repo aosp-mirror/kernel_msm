@@ -571,6 +571,28 @@ static void __cam_isp_ctx_handle_buf_done_fail_log(
 	}
 }
 
+static void __cam_isp_ctx_handle_early_buf_done(
+	struct cam_ctx_request *req,
+	struct cam_isp_hw_done_event_data *done)
+{
+	uint32_t i, j;
+	struct cam_isp_ctx_req *req_isp;
+
+	req_isp = (struct cam_isp_ctx_req *) req->req_priv;
+	for (i = 0; i < done->num_handles; i++) {
+		for (j = 0; j < req_isp->num_fence_map_out; j++) {
+			if (done->resource_handle[i] ==
+				req_isp->fence_map_out[j].resource_handle) {
+				req_isp->early_num_acked++;
+				break;
+			}
+		}
+		CAM_INFO(CAM_ISP, "req %lld early buf done type: %s",
+			req->request_id, __cam_isp_resource_handle_id_to_type(
+			req_isp->fence_map_out[j].resource_handle));
+	}
+}
+
 static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 	struct cam_isp_context *ctx_isp,
 	struct cam_isp_hw_done_event_data *done,
@@ -584,6 +606,11 @@ static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 
 	if (list_empty(&ctx->active_req_list)) {
 		CAM_WARN(CAM_ISP, "Buf done with no active request!");
+		if (!list_empty(&ctx->wait_req_list)) {
+			req = list_first_entry(&ctx->wait_req_list,
+				struct cam_ctx_request, list);
+			__cam_isp_ctx_handle_early_buf_done(req, done);
+		}
 		goto end;
 	}
 
@@ -680,14 +707,27 @@ static int __cam_isp_ctx_handle_buf_done_in_activated_state(
 		WARN_ON(req_isp->num_acked > req_isp->num_fence_map_out);
 	}
 
-	if (req_isp->num_acked != req_isp->num_fence_map_out)
-		return rc;
+	if (req_isp->num_acked != req_isp->num_fence_map_out) {
+		if (!req_isp->bubble_detected || !req_isp->bubble_report)
+			return rc;
+
+		/* Consider early buf done if bubble processing */
+		if ((req_isp->num_acked + req_isp->early_num_acked) !=
+			req_isp->num_fence_map_out) {
+			return rc;
+		}
+		CAM_INFO(CAM_ISP,
+			"req %lld, num_acked %d early acked %d total %d",
+			req->request_id, req_isp->num_acked,
+			req_isp->early_num_acked, req_isp->num_fence_map_out);
+	}
 
 	ctx_isp->active_req_cnt--;
 
 	if (req_isp->bubble_detected && req_isp->bubble_report) {
 		req_isp->num_acked = 0;
 		req_isp->bubble_detected = false;
+		req_isp->early_num_acked = 0;
 		list_del_init(&req->list);
 		list_add(&req->list, &ctx->pending_req_list);
 		atomic_set(&ctx_isp->process_bubble, 0);
@@ -3285,6 +3325,7 @@ static int __cam_isp_ctx_config_dev_in_top_state(
 	req_isp->num_fence_map_in = cfg.num_in_map_entries;
 	req_isp->num_acked = 0;
 	req_isp->bubble_detected = false;
+	req_isp->early_num_acked = 0;
 
 	for (i = 0; i < req_isp->num_fence_map_out; i++) {
 		rc = cam_sync_get_obj_ref(req_isp->fence_map_out[i].sync_id);
