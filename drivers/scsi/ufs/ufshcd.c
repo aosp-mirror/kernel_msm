@@ -116,8 +116,6 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 		slowio_cnt, iotime_us, opcode_str, lba, transfer_len);
 }
 
-#ifdef CONFIG_DEBUG_FS
-
 static int ufshcd_tag_req_type(struct request *rq)
 {
 	int rq_type = TS_WRITE;
@@ -136,13 +134,6 @@ static int ufshcd_tag_req_type(struct request *rq)
 		rq_type = TS_URGENT_WRITE;
 
 	return rq_type;
-}
-
-static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
-{
-	ufsdbg_set_err_state(hba);
-	if (type < UFS_ERR_MAX)
-		hba->ufs_stats.err_stats[type]++;
 }
 
 static void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
@@ -208,6 +199,15 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 			hba->ufs_stats.req_stats[rq_type].min = delta;
 }
 
+#ifdef CONFIG_DEBUG_FS
+
+static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
+{
+	ufsdbg_set_err_state(hba);
+	if (type < UFS_ERR_MAX)
+		hba->ufs_stats.err_stats[type]++;
+}
+
 static void
 ufshcd_update_query_stats(struct ufs_hba *hba, enum query_opcode opcode, u8 idn)
 {
@@ -261,24 +261,8 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 }
 
 #else
-static inline void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
-{
-}
-
-static inline void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
-		struct scsi_cmnd *cmd)
-{
-}
-
 static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 {
-}
-
-static inline
-void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp, s64 delta)
-{
-	/* Log for slow I/O */
-	ufshcd_log_slowio(hba, lrbp, delta);
 }
 
 static inline
@@ -11639,6 +11623,117 @@ static const struct attribute_group ufs_sysfs_device_descriptor_group = {
 	.attrs = ufs_sysfs_device_descriptor,
 };
 
+#define UFS_REQ_STATS_ATTR(_name, _type_name, _type_show)                      \
+	static ssize_t _name##_show(struct device *dev,                        \
+				    struct device_attribute *attr, char *buf)  \
+	{                                                                      \
+		struct ufs_hba *hba = dev_get_drvdata(dev);                    \
+		unsigned long flags;                                           \
+		u64 val;                                                       \
+		spin_lock_irqsave(hba->host->host_lock, flags);                \
+		switch (_type_show) {                                          \
+		case SHOW_IO_MIN:                                              \
+			val = hba->ufs_stats.req_stats[_type_name].min;        \
+			break;                                                 \
+		case SHOW_IO_MAX:                                              \
+			val = hba->ufs_stats.req_stats[_type_name].max;        \
+			break;                                                 \
+		case SHOW_IO_AVG:                                              \
+			val = div64_u64(                                       \
+				hba->ufs_stats.req_stats[_type_name].sum,      \
+				hba->ufs_stats.req_stats[_type_name].count);   \
+			break;                                                 \
+		case SHOW_IO_SUM:                                              \
+			val = hba->ufs_stats.req_stats[_type_name].sum;        \
+			break;                                                 \
+		default:                                                       \
+			val = 0;                                               \
+			break;                                                 \
+		}                                                              \
+		spin_unlock_irqrestore(hba->host->host_lock, flags);           \
+		return snprintf(buf, PAGE_SIZE, "%llu\n", val);                \
+	}                                                                      \
+	static DEVICE_ATTR_RO(_name)
+
+static ssize_t reset_req_status_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t reset_req_status_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+	unsigned long value;
+
+	if (kstrtoul(buf, 0, &value)) {
+		dev_err(hba->dev, "%s: Invalid argument\n", __func__);
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	ufshcd_init_req_stats(hba);
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	return count;
+}
+
+UFS_REQ_STATS_ATTR(all_min, TS_TAG, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(all_max, TS_TAG, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(all_avg, TS_TAG, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(all_sum, TS_TAG, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(read_min, TS_READ, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(read_max, TS_READ, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(read_avg, TS_READ, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(read_sum, TS_READ, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(write_min, TS_WRITE, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(write_max, TS_WRITE, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(write_avg, TS_WRITE, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(write_sum, TS_WRITE, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(urg_read_min, TS_URGENT_READ, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(urg_read_max, TS_URGENT_READ, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(urg_read_avg, TS_URGENT_READ, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(urg_read_sum, TS_URGENT_READ, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(urg_write_min, TS_URGENT_WRITE, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(urg_write_max, TS_URGENT_WRITE, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(urg_write_avg, TS_URGENT_WRITE, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(urg_write_sum, TS_URGENT_WRITE, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(flush_min, TS_FLUSH, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(flush_max, TS_FLUSH, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(flush_avg, TS_FLUSH, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(flush_sum, TS_FLUSH, SHOW_IO_SUM);
+UFS_REQ_STATS_ATTR(discard_min, TS_DISCARD, SHOW_IO_MIN);
+UFS_REQ_STATS_ATTR(discard_max, TS_DISCARD, SHOW_IO_MAX);
+UFS_REQ_STATS_ATTR(discard_avg, TS_DISCARD, SHOW_IO_AVG);
+UFS_REQ_STATS_ATTR(discard_sum, TS_DISCARD, SHOW_IO_SUM);
+DEVICE_ATTR_RW(reset_req_status);
+
+static struct attribute *ufs_sysfs_req_stats[] = {
+	&dev_attr_all_min.attr,		 &dev_attr_all_max.attr,
+	&dev_attr_all_avg.attr,		 &dev_attr_all_sum.attr,
+	&dev_attr_read_min.attr,	 &dev_attr_read_max.attr,
+	&dev_attr_read_avg.attr,	 &dev_attr_read_sum.attr,
+	&dev_attr_write_min.attr,	 &dev_attr_write_max.attr,
+	&dev_attr_write_avg.attr,	 &dev_attr_write_sum.attr,
+	&dev_attr_urg_read_min.attr,	 &dev_attr_urg_read_max.attr,
+	&dev_attr_urg_read_avg.attr,	 &dev_attr_urg_read_sum.attr,
+	&dev_attr_urg_write_min.attr,	 &dev_attr_urg_write_max.attr,
+	&dev_attr_urg_write_avg.attr,	 &dev_attr_urg_write_sum.attr,
+	&dev_attr_flush_min.attr,	 &dev_attr_flush_max.attr,
+	&dev_attr_flush_avg.attr,	 &dev_attr_flush_sum.attr,
+	&dev_attr_discard_min.attr,	 &dev_attr_discard_max.attr,
+	&dev_attr_discard_avg.attr,	 &dev_attr_discard_sum.attr,
+	&dev_attr_reset_req_status.attr, NULL,
+};
+
+static const struct attribute_group ufs_sysfs_req_stats_group = {
+	.name = "req_stats",
+	.attrs = ufs_sysfs_req_stats,
+};
+
 static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 {
 	if (sysfs_create_group(&hba->dev->kobj, &ufshcd_attr_group))
@@ -11650,7 +11745,8 @@ static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 		dev_err(hba->dev, "Failed to create ufs_sysfs_controller_capabilities_group\n");
 	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_device_descriptor_group))
 		dev_err(hba->dev, "Failed to create device descriptor group\n");
-
+	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_req_stats_group))
+		dev_err(hba->dev, "Failed to create req_stats group\n");
 #ifdef CONFIG_SCSI_UFS_IMPAIRED
 	ufs_impaired_init_sysfs(hba);
 #endif

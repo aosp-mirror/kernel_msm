@@ -609,6 +609,7 @@ struct debugfs_files {
 	struct fault_attr fail_attr;
 #endif
 };
+#endif
 
 /* tag stats statistics types */
 enum ts_types {
@@ -621,6 +622,13 @@ enum ts_types {
 	TS_FLUSH		= 5,
 	TS_DISCARD		= 6,
 	TS_NUM_STATS		= 7,
+};
+
+enum req_show_types {
+	SHOW_IO_MIN = 0,
+	SHOW_IO_MAX = 1,
+	SHOW_IO_AVG = 2,
+	SHOW_IO_SUM = 3,
 };
 
 /**
@@ -654,7 +662,6 @@ struct ufshcd_io_stat {
 	u64 max_diff_req_count;
 	u64 max_diff_total_bytes;
 };
-#endif
 
 enum ufshcd_ctx {
 	QUEUE_CMD,
@@ -692,7 +699,6 @@ struct ufshcd_clk_ctx {
  * @dme_err: tracks dme errors
  */
 struct ufs_stats {
-#ifdef CONFIG_DEBUG_FS
 	bool enabled;
 	u64 **tag_stats;
 	int q_depth;
@@ -703,7 +709,6 @@ struct ufs_stats {
 	struct ufshcd_io_stat io_write;
 	struct ufshcd_io_stat io_readwrite;
 
-#endif
 	u32 last_intr_status;
 	ktime_t last_intr_ts;
 	struct ufshcd_clk_ctx clk_hold;
