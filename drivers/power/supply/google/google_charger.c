@@ -1690,8 +1690,10 @@ static int chg_get_input_suspend(void *data, u64 *val)
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	*val = (get_client_vote(chg_drv->usb_icl_votable, USER_VOTER) == 0)
-	       && get_client_vote(chg_drv->dc_suspend_votable, USER_VOTER);
+	*val = (get_client_vote(chg_drv->usb_icl_votable,
+				DBG_SUSPEND_VOTER) == 0) &&
+	       get_client_vote(chg_drv->dc_suspend_votable,
+				DBG_SUSPEND_VOTER);
 
 	return 0;
 }
