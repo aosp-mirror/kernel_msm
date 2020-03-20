@@ -76,6 +76,7 @@
 		google_bms: google,bms {
 			compatible = "google,sm7250_bms";
 			google,psy-name = "sm7250_bms";
+			vbob-supply = <&BOB>;
 
 			io-channels = <&pm7250b_vadc ADC_BAT_THERM_PU2>,
 				      <&pm7250b_vadc ADC_BAT_ID_PU2>;
