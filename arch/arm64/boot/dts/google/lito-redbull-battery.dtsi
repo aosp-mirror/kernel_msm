@@ -157,6 +157,10 @@
 		/* rest charging */
 		google,chg-rest-rate = <10>;
 		google,chg-rest-soc = <80>;
+
+		/* battery history */
+		google,eeprom-inside;
+		google,history-delta-cycle-count = <25>;
 	};
 
 	google_charger: google,charger {
