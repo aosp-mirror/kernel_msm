@@ -199,22 +199,6 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 			hba->ufs_stats.req_stats[rq_type].min = delta;
 }
 
-#ifdef CONFIG_DEBUG_FS
-
-static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
-{
-	ufsdbg_set_err_state(hba);
-	if (type < UFS_ERR_MAX)
-		hba->ufs_stats.err_stats[type]++;
-}
-
-static void
-ufshcd_update_query_stats(struct ufs_hba *hba, enum query_opcode opcode, u8 idn)
-{
-	if (opcode < UPIU_QUERY_OPCODE_MAX && idn < MAX_QUERY_IDN)
-		hba->ufs_stats.query_stats_arr[opcode][idn]++;
-}
-
 static void
 __update_io_stat(struct ufs_hba *hba, struct ufshcd_io_stat *io_stat,
 		u32 transfer_len, int is_start)
@@ -260,6 +244,22 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 			&hba->ufs_stats.io_write, transfer_len, is_start);
 }
 
+#ifdef CONFIG_DEBUG_FS
+
+static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
+{
+	ufsdbg_set_err_state(hba);
+	if (type < UFS_ERR_MAX)
+		hba->ufs_stats.err_stats[type]++;
+}
+
+static void ufshcd_update_query_stats(struct ufs_hba *hba,
+				      enum query_opcode opcode, u8 idn)
+{
+	if (opcode < UPIU_QUERY_OPCODE_MAX && idn < MAX_QUERY_IDN)
+		hba->ufs_stats.query_stats_arr[opcode][idn]++;
+}
+
 #else
 static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 {
@@ -268,11 +268,6 @@ static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 static inline
 void ufshcd_update_query_stats(struct ufs_hba *hba,
 			       enum query_opcode opcode, u8 idn)
-{
-}
-
-static void
-update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 {
 }
 
@@ -11734,6 +11729,83 @@ static const struct attribute_group ufs_sysfs_req_stats_group = {
 	.attrs = ufs_sysfs_req_stats,
 };
 
+#define UFS_IO_STATS_ATTR(_name, _io_name, _type_show)                         \
+	static ssize_t _name##_show(struct device *dev,                        \
+				    struct device_attribute *attr, char *buf)  \
+	{                                                                      \
+		struct ufs_hba *hba = dev_get_drvdata(dev);                    \
+		unsigned long flags;                                           \
+		u64 val;                                                       \
+		spin_lock_irqsave(hba->host->host_lock, flags);                \
+		val = hba->ufs_stats._io_name._type_show;                      \
+		spin_unlock_irqrestore(hba->host->host_lock, flags);           \
+		return snprintf(buf, PAGE_SIZE, "%llu\n", val);                \
+	}                                                                      \
+	static DEVICE_ATTR_RO(_name)
+
+static ssize_t reset_io_status_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t reset_io_status_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	unsigned long flags;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	hba->ufs_stats.io_read.max_diff_req_count = 0;
+	hba->ufs_stats.io_read.max_diff_total_bytes = 0;
+	hba->ufs_stats.io_readwrite.max_diff_req_count = 0;
+	hba->ufs_stats.io_readwrite.max_diff_total_bytes = 0;
+	hba->ufs_stats.io_write.max_diff_req_count = 0;
+	hba->ufs_stats.io_write.max_diff_total_bytes = 0;
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	return count;
+}
+
+UFS_IO_STATS_ATTR(rcnt_start, io_read, req_count_started);
+UFS_IO_STATS_ATTR(rcnt_complete, io_read, req_count_completed);
+UFS_IO_STATS_ATTR(rcnt_maxdiff, io_read, max_diff_req_count);
+UFS_IO_STATS_ATTR(rbyte_start, io_read, total_bytes_started);
+UFS_IO_STATS_ATTR(rbyte_complete, io_read, total_bytes_completed);
+UFS_IO_STATS_ATTR(rbyte_maxdiff, io_read, max_diff_total_bytes);
+UFS_IO_STATS_ATTR(wcnt_start, io_write, req_count_started);
+UFS_IO_STATS_ATTR(wcnt_complete, io_write, req_count_completed);
+UFS_IO_STATS_ATTR(wcnt_maxdiff, io_write, max_diff_req_count);
+UFS_IO_STATS_ATTR(wbyte_start, io_write, total_bytes_started);
+UFS_IO_STATS_ATTR(wbyte_complete, io_write, total_bytes_completed);
+UFS_IO_STATS_ATTR(wbyte_maxdiff, io_write, max_diff_total_bytes);
+UFS_IO_STATS_ATTR(rwcnt_start, io_readwrite, req_count_started);
+UFS_IO_STATS_ATTR(rwcnt_complete, io_readwrite, req_count_completed);
+UFS_IO_STATS_ATTR(rwcnt_maxdiff, io_readwrite, max_diff_req_count);
+UFS_IO_STATS_ATTR(rwbyte_start, io_readwrite, total_bytes_started);
+UFS_IO_STATS_ATTR(rwbyte_complete, io_readwrite, total_bytes_completed);
+UFS_IO_STATS_ATTR(rwbyte_maxdiff, io_readwrite, max_diff_total_bytes);
+DEVICE_ATTR_RW(reset_io_status);
+
+static struct attribute *ufs_sysfs_io_stats[] = {
+	&dev_attr_rcnt_start.attr,	&dev_attr_rcnt_complete.attr,
+	&dev_attr_rcnt_maxdiff.attr,	&dev_attr_rbyte_start.attr,
+	&dev_attr_rbyte_complete.attr,	&dev_attr_rbyte_maxdiff.attr,
+	&dev_attr_wcnt_start.attr,	&dev_attr_wcnt_complete.attr,
+	&dev_attr_wcnt_maxdiff.attr,	&dev_attr_wbyte_start.attr,
+	&dev_attr_wbyte_complete.attr,	&dev_attr_wbyte_maxdiff.attr,
+	&dev_attr_rwcnt_start.attr,	&dev_attr_rwcnt_complete.attr,
+	&dev_attr_rwcnt_maxdiff.attr,	&dev_attr_rwbyte_start.attr,
+	&dev_attr_rwbyte_complete.attr, &dev_attr_rwbyte_maxdiff.attr,
+	&dev_attr_reset_io_status.attr, NULL,
+};
+
+static const struct attribute_group ufs_sysfs_io_stats_group = {
+	.name = "io_stats",
+	.attrs = ufs_sysfs_io_stats,
+};
+
 static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 {
 	if (sysfs_create_group(&hba->dev->kobj, &ufshcd_attr_group))
@@ -11747,6 +11819,8 @@ static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 		dev_err(hba->dev, "Failed to create device descriptor group\n");
 	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_req_stats_group))
 		dev_err(hba->dev, "Failed to create req_stats group\n");
+	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_io_stats_group))
+		dev_err(hba->dev, "Failed to create io_stats group\n");
 #ifdef CONFIG_SCSI_UFS_IMPAIRED
 	ufs_impaired_init_sysfs(hba);
 #endif
