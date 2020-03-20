@@ -238,6 +238,7 @@
 /*
  * Interrupt/Status flags for P9382
  */
+#define P9382_STAT_TXCONFLICT			BIT(3)
 #define P9382_STAT_CSP				BIT(4)
 #define P9382_STAT_RXCONNECTED			BIT(10)
 

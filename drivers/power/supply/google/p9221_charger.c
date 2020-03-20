@@ -1331,7 +1331,7 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 	if (charger->ben_state) {
 		/* enable necessary INT for RTx mode */
 		mask = P9382_STAT_RXCONNECTED | P9221R5_STAT_MODECHANGED |
-		       P9382_STAT_CSP;
+		       P9382_STAT_CSP | P9382_STAT_TXCONFLICT;
 	} else {
 		mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
 		       P9221_STAT_VRECT;
@@ -2741,17 +2741,6 @@ static ssize_t p9382_set_rtx_boost(struct device *dev,
 
 static DEVICE_ATTR(rtx_boost, 0644, p9382_show_rtx_boost, p9382_set_rtx_boost);
 
-
-static ssize_t p9382_show_rtx(struct device *dev,
-				     struct device_attribute *attr,
-				     char *buf)
-{
-	struct i2c_client *client = to_i2c_client(dev);
-	struct p9221_charger_data *charger = i2c_get_clientdata(client);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->ben_state);
-}
-
 static int p9382_wait_for_mode(struct p9221_charger_data *charger, int mode)
 {
 	int loops, ret;
@@ -2776,18 +2765,11 @@ static int p9382_wait_for_mode(struct p9221_charger_data *charger, int mode)
 	return -ETIMEDOUT;
 }
 
-/* write 1 to enable boost & switch, write 0 to 0x34, wait for 0x4c==0x4
- * write 0 to write 0x80 to 0x4E, wait for 0x4c==0, disable boost & switch
- */
-static ssize_t p9382_set_rtx(struct device *dev,
-				    struct device_attribute *attr,
-				    const char *buf, size_t count)
+static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 {
-	struct i2c_client *client = to_i2c_client(dev);
-	struct p9221_charger_data *charger = i2c_get_clientdata(client);
 	int ret;
 
-	if (buf[0] == '0') {
+	if (enable == 0) {
 		logbuffer_log(charger->rtx_log, "disable rtx");
 		/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0000 */
 		ret = p9221_set_cmd_reg(charger, P9221R5_COM_RENEGOTIATE);
@@ -2805,7 +2787,7 @@ static ssize_t p9382_set_rtx(struct device *dev,
 		if (ret)
 			dev_err(&charger->client->dev,
 				"fail to enable dcin, ret=%d\n", ret);
-	} else if (buf[0] == '1') {
+	} else {
 		logbuffer_log(charger->rtx_log, "enable rtx");
 		if (!charger->dc_suspend_votable) {
 			charger->dc_suspend_votable = find_votable("DC_SUSPEND");
@@ -2845,18 +2827,47 @@ static ssize_t p9382_set_rtx(struct device *dev,
 		if (ret)
 			dev_err(&charger->client->dev,
 				"Could not enable interrupts: %d\n", ret);
-	} else {
-		return -EINVAL;
 	}
 exit:
 	schedule_work(&charger->uevent_work);
-	if (ret < 0)
-		return ret;
-	else
-		return count;
+	return ret;
 }
 
-static DEVICE_ATTR(rtx, 0644, p9382_show_rtx, p9382_set_rtx);
+static ssize_t rtx_show(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->ben_state);
+}
+
+/* write 1 to enable boost & switch, write 0 to 0x34, wait for 0x4c==0x4
+ * write 0 to write 0x80 to 0x4E, wait for 0x4c==0, disable boost & switch
+ */
+static ssize_t rtx_store(struct device *dev,
+		       struct device_attribute *attr,
+		       const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+	int ret;
+
+	if (buf[0] == '0')
+		ret = p9382_set_rtx(charger, false);
+	else if (buf[0] == '1')
+		ret = p9382_set_rtx(charger, true);
+	else
+		return -EINVAL;
+
+	if (ret == 0)
+		return count;
+	else
+		return ret;
+}
+
+static DEVICE_ATTR_RW(rtx);
 
 /* ------------------------------------------------------------------------ */
 
@@ -3163,6 +3174,16 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			"failed to read P9221_STATUS_REG reg: %d\n",
 			ret);
 		return;
+	}
+
+	if (irq_src & P9382_STAT_TXCONFLICT) {
+		dev_info(&charger->client->dev,
+			 "TX conflict, disable RTx. STATUS_REG=%04x",
+			 status_reg);
+		logbuffer_log(charger->rtx_log,
+			      "TX conflict, disable RTx. STATUS_REG=%04x",
+			      status_reg);
+		p9382_set_rtx(charger, false);
 	}
 
 	if (irq_src & P9382_STAT_RXCONNECTED) {
