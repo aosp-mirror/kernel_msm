@@ -2660,6 +2660,7 @@ static int cs35l41_codec_probe(struct snd_soc_codec *codec)
 		snd_soc_dapm_ignore_suspend(dapm, "R VSENSE");
 		snd_soc_dapm_ignore_suspend(dapm, "R TEMP");
 		snd_soc_dapm_ignore_suspend(dapm, "R AMP Playback");
+		snd_soc_dapm_ignore_suspend(dapm, "R AMP Capture");
 	} else {
 		snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
 		snd_soc_dapm_ignore_suspend(dapm, "VBST");
@@ -2668,6 +2669,7 @@ static int cs35l41_codec_probe(struct snd_soc_codec *codec)
 		snd_soc_dapm_ignore_suspend(dapm, "ISENSE");
 		snd_soc_dapm_ignore_suspend(dapm, "VSENSE");
 		snd_soc_dapm_ignore_suspend(dapm, "TEMP");
+		snd_soc_dapm_ignore_suspend(dapm, "AMP Capture");
 	}
 
 	snd_soc_dapm_sync(dapm);
