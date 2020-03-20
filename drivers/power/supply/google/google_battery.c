@@ -3202,6 +3202,55 @@ static ssize_t batt_set_chg_deadline(struct device *dev,
 static const DEVICE_ATTR(charge_deadline, 0664, batt_show_chg_deadline,
 						batt_set_chg_deadline);
 
+enum batt_ssoc_status {
+	BATT_SSOC_STATUS_UNKNOWN = 0,
+	BATT_SSOC_STATUS_CONNECTED = 1,
+	BATT_SSOC_STATUS_DISCONNECTED = 2,
+	BATT_SSOC_STATUS_FULL = 3,
+};
+
+static ssize_t ssoc_details_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	int len = 0;
+	enum batt_ssoc_status status = BATT_SSOC_STATUS_UNKNOWN;
+	char buff[UICURVE_BUF_SZ] = { 0 };
+
+	mutex_lock(&batt_drv->chg_lock);
+
+	if (ssoc_state->buck_enabled == 0) {
+		status = BATT_SSOC_STATUS_DISCONNECTED;
+	} else if (ssoc_state->buck_enabled == 1) {
+		if (batt_drv->batt_full)
+			status = BATT_SSOC_STATUS_FULL;
+		else
+			status = BATT_SSOC_STATUS_CONNECTED;
+	}
+
+	len = scnprintf(
+		buf, sizeof(ssoc_state->ssoc_state_cstr),
+		"soc: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d\n"
+		"curve:%s\n"
+		"status: ct=%d rl=%d s=%d\n",
+		ssoc_get_capacity(ssoc_state), qnum_toint(ssoc_state->ssoc_gdf),
+		qnum_fracdgt(ssoc_state->ssoc_gdf),
+		qnum_toint(ssoc_state->ssoc_uic),
+		qnum_fracdgt(ssoc_state->ssoc_uic),
+		qnum_toint(ssoc_state->ssoc_rl),
+		qnum_fracdgt(ssoc_state->ssoc_rl),
+		ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve),
+		ssoc_state->ssoc_curve_type, ssoc_state->rl_status, status);
+
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return len;
+}
+
+static const DEVICE_ATTR_RO(ssoc_details);
+
 /* ------------------------------------------------------------------------- */
 
 static int batt_init_fs(struct batt_drv *batt_drv)
@@ -3226,6 +3275,10 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 	if (ret)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create charge_details\n");
+
+	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_ssoc_details);
+	if (ret)
+		dev_err(&batt_drv->psy->dev, "Failed to create ssoc_details\n");
 
 	/* health based charging */
 	ret = device_create_file(&batt_drv->psy->dev,
