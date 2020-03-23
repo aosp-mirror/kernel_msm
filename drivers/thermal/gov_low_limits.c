@@ -73,6 +73,14 @@ static void thermal_zone_trip_update(struct thermal_zone_device *tz, int trip)
 			}
 		}
 
+		if (old_target != instance->target) {
+			dev_info_ratelimited(
+				&tz->device,
+				"tz:%s, temp:%d, cdev:%s, target:%d\n",
+				tz->type, tz->temperature, instance->cdev->type,
+				instance->target);
+		}
+
 		instance->initialized = true;
 		instance->cdev->updated = false; /* cdev needs update */
 	}
