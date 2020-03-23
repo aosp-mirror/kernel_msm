@@ -1,6 +1,9 @@
 KERNEL_DIR=private/msm-google
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.no-cfi
 
+# b/151981957: filter out the -T module-lto.lds flag in the GKI build.
+DISABLE_LDFLAGS_PARM_T=1
+
 # Override the defconfig
 DEFCONFIG=redbull-gki_defconfig
 
