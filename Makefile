@@ -847,11 +847,7 @@ LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
 KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
 KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)
 
-ifdef DISABLE_LDFLAGS_PARM_T
-KBUILD_LDS_MODULE += $(srctree)/scripts/module-lto.lds
-else
 KBUILD_LDFLAGS_MODULE += -T $(srctree)/scripts/module-lto.lds
-endif
 
 # allow disabling only clang LTO where needed
 DISABLE_LTO_CLANG := -fno-lto
