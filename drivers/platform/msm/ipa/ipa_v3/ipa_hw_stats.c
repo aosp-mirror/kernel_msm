@@ -1845,9 +1845,6 @@ int ipa_reset_all_drop_stats(void)
 }
 
 
-#ifndef CONFIG_DEBUG_FS
-int ipa_debugfs_init_stats(struct dentry *parent) { return 0; }
-#else
 #define IPA_MAX_MSG_LEN 4096
 static char dbg_buff[IPA_MAX_MSG_LEN];
 
@@ -2306,4 +2303,3 @@ fail:
 	debugfs_remove_recursive(dent);
 	return -EFAULT;
 }
-#endif

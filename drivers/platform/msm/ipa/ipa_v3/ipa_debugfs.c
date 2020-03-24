@@ -3,7 +3,6 @@
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
-#ifdef CONFIG_DEBUG_FS
 
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
@@ -2731,7 +2730,7 @@ void ipa3_debugfs_init(void)
 	struct dentry *file;
 
 	dent = debugfs_create_dir("ipa", 0);
-	if (IS_ERR(dent)) {
+	if (IS_ERR_OR_NULL(dent)) {
 		IPAERR("fail to create folder in debug_fs.\n");
 		return;
 	}
@@ -4692,7 +4691,3 @@ static ssize_t ipa3_read_dump_debug_msg(
 	return ret;
 }
 
-#else /* !CONFIG_DEBUG_FS */
-void ipa3_debugfs_init(void) {}
-void ipa3_debugfs_remove(void) {}
-#endif

@@ -147,7 +147,6 @@ struct ipa_mhi_client_ctx {
 static struct ipa_mhi_client_ctx *ipa_mhi_client_ctx;
 static DEFINE_MUTEX(mhi_client_general_mutex);
 
-#ifdef CONFIG_DEBUG_FS
 #define IPA_MHI_MAX_MSG_LEN 512
 static char dbg_buff[IPA_MHI_MAX_MSG_LEN];
 static struct dentry *dent;
@@ -451,7 +450,7 @@ static void ipa_mhi_debugfs_init(void)
 	IPA_MHI_FUNC_ENTRY();
 
 	dent = debugfs_create_dir("ipa_mhi", 0);
-	if (IS_ERR(dent)) {
+	if (IS_ERR_OR_NULL(dent)) {
 		IPA_MHI_ERR("fail to create folder ipa_mhi\n");
 		return;
 	}
@@ -489,11 +488,6 @@ static void ipa_mhi_debugfs_init(void)
 fail:
 	debugfs_remove_recursive(dent);
 }
-
-#else
-static void ipa_mhi_debugfs_init(void) {}
-static void ipa_mhi_debugfs_destroy(void) {}
-#endif /* CONFIG_DEBUG_FS */
 
 static union IpaHwMhiDlUlSyncCmdData_t ipa_cached_dl_ul_sync_info;
 

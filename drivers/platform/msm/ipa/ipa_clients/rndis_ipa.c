@@ -2119,7 +2119,6 @@ static void rndis_ipa_dump_skb(struct sk_buff *skb)
 		("packet dump ended for skb->len=%d\n", skb->len);
 }
 
-#ifdef CONFIG_DEBUG_FS
 /**
  * Creates the root folder for the driver
  */
@@ -2137,7 +2136,7 @@ static void rndis_ipa_debugfs_init(struct rndis_ipa_dev *rndis_ipa_ctx)
 		return;
 
 	rndis_ipa_ctx->directory = debugfs_create_dir(DEBUGFS_DIR_NAME, NULL);
-	if (!rndis_ipa_ctx->directory) {
+	if (IS_ERR_OR_NULL(rndis_ipa_ctx->directory)) {
 		RNDIS_IPA_ERROR("could not create debugfs directory entry\n");
 		goto fail_directory;
 	}
@@ -2344,14 +2343,6 @@ static void rndis_ipa_debugfs_destroy(struct rndis_ipa_dev *rndis_ipa_ctx)
 {
 	debugfs_remove_recursive(rndis_ipa_ctx->directory);
 }
-
-#else /* !CONFIG_DEBUG_FS */
-
-static void rndis_ipa_debugfs_init(struct rndis_ipa_dev *rndis_ipa_ctx) {}
-
-static void rndis_ipa_debugfs_destroy(struct rndis_ipa_dev *rndis_ipa_ctx) {}
-
-#endif /* CONFIG_DEBUG_FS*/
 
 static int rndis_ipa_debugfs_aggr_open
 		(struct inode *inode,

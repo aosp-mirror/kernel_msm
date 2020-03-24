@@ -58,15 +58,10 @@
 #define IPADMA_FUNC_EXIT() \
 	IPADMA_DBG_LOW("EXIT\n")
 
-#ifdef CONFIG_DEBUG_FS
 #define IPADMA_MAX_MSG_LEN 1024
 static char dbg_buff[IPADMA_MAX_MSG_LEN];
 static void ipa3_dma_debugfs_init(void);
 static void ipa3_dma_debugfs_destroy(void);
-#else
-static void ipa3_dma_debugfs_init(void) {}
-static void ipa3_dma_debugfs_destroy(void) {}
-#endif
 
 /**
  * struct ipa3_dma_ctx -IPADMA driver context information
@@ -1118,7 +1113,6 @@ void ipa3_dma_async_memcpy_notify_cb(void *priv
 	IPADMA_FUNC_EXIT();
 }
 
-#ifdef CONFIG_DEBUG_FS
 static struct dentry *dent;
 static struct dentry *dfile_info;
 
@@ -1218,7 +1212,7 @@ static void ipa3_dma_debugfs_init(void)
 	const mode_t read_write_mode = 0666;
 
 	dent = debugfs_create_dir("ipa_dma", 0);
-	if (IS_ERR(dent)) {
+	if (IS_ERR_OR_NULL(dent)) {
 		IPADMA_ERR("fail to create folder ipa_dma\n");
 		return;
 	}
@@ -1240,4 +1234,3 @@ static void ipa3_dma_debugfs_destroy(void)
 	debugfs_remove_recursive(dent);
 }
 
-#endif /* !CONFIG_DEBUG_FS */

@@ -1430,8 +1430,7 @@ static void ipa3_wwan_debugfs_init(void)
 fail:
 	debugfs_remove_recursive(dent);
 }
-#endif //CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT && CONFIG_DEBUG_FS
-
+#endif //CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT
 
 static void ipa3_wwan_tx_timeout(struct net_device *dev)
 {
@@ -1476,7 +1475,7 @@ static void ipa3_wwan_tx_timeout(struct net_device *dev)
 			}
 		}
 	}
-#endif //CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT && CONFIG_DEBUG_FS
+#endif //CONFIG_RMNET_IPA3_TX_TIMEOUT_DETECT
 }
 
 /**
@@ -4833,7 +4832,6 @@ int rmnet_ipa3_query_per_client_stats(
 
 
 
-#ifdef CONFIG_DEBUG_FS
 static void rmnet_ipa_debugfs_init(void)
 {
 	const mode_t read_write_mode = 0664;
@@ -4841,7 +4839,7 @@ static void rmnet_ipa_debugfs_init(void)
 
 
 	dbgfs->dent = debugfs_create_dir("rmnet_ipa", 0);
-	if (IS_ERR(dbgfs->dent)) {
+	if (IS_ERR_OR_NULL(dbgfs->dent)) {
 		pr_err("fail to create folder in debug_fs\n");
 		return;
 	}
@@ -4889,12 +4887,6 @@ static void rmnet_ipa_debugfs_remove(void)
 	debugfs_remove_recursive(rmnet_ipa3_ctx->dbgfs.dent);
 	memset(&rmnet_ipa3_ctx->dbgfs, 0, sizeof(struct rmnet_ipa_debugfs));
 }
-#else /* CONFIG_DEBUG_FS */
-static void rmnet_ipa_debugfs_init(void){}
-static void rmnet_ipa_debugfs_remove(void){}
-#endif /* CONFIG_DEBUG_FS */
-
-
 
 int __init ipa3_wwan_init(void)
 {

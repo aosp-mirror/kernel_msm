@@ -148,10 +148,8 @@ struct odu_bridge_ctx {
 };
 static struct odu_bridge_ctx *odu_bridge_ctx;
 
-#ifdef CONFIG_DEBUG_FS
 #define ODU_MAX_MSG_LEN 512
 static char dbg_buff[ODU_MAX_MSG_LEN];
-#endif
 
 static void odu_bridge_emb_cons_cb(void *priv, enum ipa_dp_evt_type evt,
 	unsigned long data)
@@ -624,7 +622,6 @@ static long compat_odu_bridge_ioctl(struct file *file,
 }
 #endif
 
-#ifdef CONFIG_DEBUG_FS
 static struct dentry *dent;
 static struct dentry *dfile_stats;
 static struct dentry *dfile_mode;
@@ -727,7 +724,7 @@ static void odu_debugfs_init(void)
 	const mode_t read_write_mode = 0666;
 
 	dent = debugfs_create_dir("odu_ipa_bridge", 0);
-	if (IS_ERR(dent)) {
+	if (IS_ERR_OR_NULL(dent)) {
 		ODU_BRIDGE_ERR("fail to create folder odu_ipa_bridge\n");
 		return;
 	}
@@ -758,12 +755,6 @@ static void odu_debugfs_destroy(void)
 {
 	debugfs_remove_recursive(dent);
 }
-
-#else
-static void odu_debugfs_init(void) {}
-static void odu_debugfs_destroy(void) {}
-#endif /* CONFIG_DEBUG_FS */
-
 
 static const struct file_operations odu_bridge_drv_fops = {
 	.owner = THIS_MODULE,

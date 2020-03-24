@@ -115,13 +115,8 @@ struct ipa_wigig_context {
 
 static struct ipa_wigig_context *ipa_wigig_ctx;
 
-#ifdef CONFIG_DEBUG_FS
 static int ipa_wigig_init_debugfs(struct dentry *parent);
 static inline void ipa_wigig_deinit_debugfs(void);
-#else
-static int ipa_wigig_init_debugfs(struct dentry *parent) { return 0; }
-static inline void ipa_wigig_deinit_debugfs(void) { }
-#endif
 
 int ipa_wigig_init(struct ipa_wigig_init_in_params *in,
 	struct ipa_wigig_init_out_params *out)
@@ -1975,7 +1970,6 @@ int ipa_wigig_tx_dp(enum ipa_client_type dst, struct sk_buff *skb)
 EXPORT_SYMBOL(ipa_wigig_tx_dp);
 
 
-#ifdef CONFIG_DEBUG_FS
 #define IPA_MAX_MSG_LEN 4096
 
 static ssize_t ipa_wigig_read_conn_clients(struct file *file,
@@ -2125,4 +2119,3 @@ fail_smmu:
 fail_conn_clients:
 	return -EFAULT;
 }
-#endif

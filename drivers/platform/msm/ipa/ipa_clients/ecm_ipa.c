@@ -1220,8 +1220,6 @@ static ssize_t ecm_ipa_debugfs_atomic_read
 	return simple_read_from_buffer(ubuf, count, ppos, atomic_str, nbytes);
 }
 
-#ifdef CONFIG_DEBUG_FS
-
 static void ecm_ipa_debugfs_init(struct ecm_ipa_dev *ecm_ipa_ctx)
 {
 	const mode_t flags_read_write = 0666;
@@ -1234,7 +1232,7 @@ static void ecm_ipa_debugfs_init(struct ecm_ipa_dev *ecm_ipa_ctx)
 		return;
 
 	ecm_ipa_ctx->directory = debugfs_create_dir("ecm_ipa", NULL);
-	if (!ecm_ipa_ctx->directory) {
+	if (IS_ERR_OR_NULL(ecm_ipa_ctx->directory)) {
 		ECM_IPA_ERROR("could not create debugfs directory entry\n");
 		goto fail_directory;
 	}
@@ -1282,14 +1280,6 @@ static void ecm_ipa_debugfs_destroy(struct ecm_ipa_dev *ecm_ipa_ctx)
 {
 	debugfs_remove_recursive(ecm_ipa_ctx->directory);
 }
-
-#else /* !CONFIG_DEBUG_FS*/
-
-static void ecm_ipa_debugfs_init(struct ecm_ipa_dev *ecm_ipa_ctx) {}
-
-static void ecm_ipa_debugfs_destroy(struct ecm_ipa_dev *ecm_ipa_ctx) {}
-
-#endif /* CONFIG_DEBUG_FS */
 
 /**
  * ecm_ipa_ep_cfg() - configure the USB endpoints for ECM

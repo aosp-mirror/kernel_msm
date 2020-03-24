@@ -1245,7 +1245,6 @@ const char *ipahal_pkt_status_exception_str(
 	return ipahal_pkt_status_exception_to_str[exception];
 }
 
-#ifdef CONFIG_DEBUG_FS
 static void ipahal_debugfs_init(void)
 {
 	ipahal_ctx->dent = debugfs_create_dir("ipahal", 0);
@@ -1272,10 +1271,6 @@ static void ipahal_debugfs_remove(void)
 
 	debugfs_remove_recursive(ipahal_ctx->dent);
 }
-#else /* CONFIG_DEBUG_FS */
-static void ipahal_debugfs_init(void) {}
-static void ipahal_debugfs_remove(void) {}
-#endif /* CONFIG_DEBUG_FS */
 
 /*
  * ipahal_cp_hdr_to_hw_buff_v3() - copy header to hardware buffer according to

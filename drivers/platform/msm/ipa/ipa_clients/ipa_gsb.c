@@ -57,6 +57,9 @@
 	} while (0)
 
 #define IPA_GSB_MAX_MSG_LEN 512
+
+static struct dentry *dent;
+static struct dentry *dfile_stats;
 static char dbg_buff[IPA_GSB_MAX_MSG_LEN];
 
 #define IPA_GSB_SKB_HEADROOM 256
@@ -64,8 +67,6 @@ static char dbg_buff[IPA_GSB_MAX_MSG_LEN];
 #define IPA_GSB_AGGR_BYTE_LIMIT 14
 #define IPA_GSB_AGGR_TIME_LIMIT 1000 /* 1000 us */
 
-static struct dentry *dent;
-static struct dentry *dfile_stats;
 
 /**
  * struct stats - driver statistics,
@@ -159,7 +160,6 @@ struct ipa_gsb_context {
 
 static struct ipa_gsb_context *ipa_gsb_ctx;
 
-#ifdef CONFIG_DEBUG_FS
 static ssize_t ipa_gsb_debugfs_stats(struct file *file,
 				  char __user *ubuf,
 				  size_t count,
@@ -206,7 +206,7 @@ static void ipa_gsb_debugfs_init(void)
 	const mode_t read_only_mode = 00444;
 
 	dent = debugfs_create_dir("ipa_gsb", NULL);
-	if (IS_ERR(dent)) {
+	if (IS_ERR_OR_NULL(dent)) {
 		IPA_GSB_ERR("fail to create folder ipa_gsb\n");
 		return;
 	}
@@ -229,15 +229,6 @@ static void ipa_gsb_debugfs_destroy(void)
 {
 	debugfs_remove_recursive(dent);
 }
-#else
-static void ipa_gsb_debugfs_init(void)
-{
-}
-
-static void ipa_gsb_debugfs_destroy(void)
-{
-}
-#endif
 
 static int ipa_gsb_driver_init(struct odu_bridge_params *params)
 {

@@ -1659,7 +1659,6 @@ connect_fail:
 	return result;
 }
 
-#ifdef CONFIG_DEBUG_FS
 static char dbg_buff[IPA_USB_MAX_MSG_LEN];
 
 static int ipa3_usb_get_status_dbg_info(struct ipa3_usb_status_dbg_info *status)
@@ -1793,7 +1792,7 @@ static void ipa_usb_debugfs_init(void)
 	const mode_t read_only_mode = 0444;
 
 	ipa3_usb_ctx->dent = debugfs_create_dir("ipa_usb", 0);
-	if (IS_ERR(ipa3_usb_ctx->dent)) {
+	if (IS_ERR_OR_NULL(ipa3_usb_ctx->dent)) {
 		pr_err("fail to create folder in debug_fs\n");
 		return;
 	}
@@ -1823,10 +1822,6 @@ static void ipa_usb_debugfs_remove(void)
 
 	debugfs_remove_recursive(ipa3_usb_ctx->dent);
 }
-#else /* CONFIG_DEBUG_FS */
-static void ipa_usb_debugfs_init(void){}
-static void ipa_usb_debugfs_remove(void){}
-#endif /* CONFIG_DEBUG_FS */
 
 int ipa_usb_xdci_connect(struct ipa_usb_xdci_chan_params *ul_chan_params,
 			 struct ipa_usb_xdci_chan_params *dl_chan_params,
