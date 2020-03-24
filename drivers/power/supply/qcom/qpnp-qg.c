@@ -4391,7 +4391,7 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 
 		if (of_property_read_bool(node, "qcom,cl-wt-enable")) {
 			chip->cl->dt.cl_wt_enable = true;
-			chip->cl->dt.min_start_soc = DEFAULT_CL_WT_START_SOC;
+			chip->cl->dt.min_start_soc = -EINVAL;
 			chip->cl->dt.max_start_soc = -EINVAL;
 		}
 
