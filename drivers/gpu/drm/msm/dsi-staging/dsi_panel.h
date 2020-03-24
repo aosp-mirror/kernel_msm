@@ -158,6 +158,16 @@ struct hbm_data {
 	struct workqueue_struct *dimming_workq;
 	struct work_struct dimming_work;
 	struct dsi_panel *panel;
+
+	/* IRC register address */
+	u8 irc_addr;
+	u32 irc_bit_offset;
+	u8 *irc_data;
+
+	/* Command to be sent to the panel to irc unlock */
+	struct dsi_panel_cmd_set irc_unlock_cmd;
+	/* Command to be sent to the panel to irc lock  */
+	struct dsi_panel_cmd_set irc_lock_cmd;
 };
 
 struct bl_notifier_data {
@@ -181,6 +191,7 @@ struct dsi_backlight_config {
 	unsigned int last_state;
 	bool bl_update_pending;
 	bool allow_bl_update;
+	struct mutex state_lock;
 
 	struct bl_notifier_data *bl_notifier;
 	struct hbm_data *hbm;
@@ -507,6 +518,8 @@ int dsi_panel_get_vendor_extinfo(struct dsi_panel *panel);
 /* Set/get high brightness mode */
 int dsi_panel_update_hbm(struct dsi_panel *panel, enum hbm_mode_type);
 enum hbm_mode_type dsi_panel_get_hbm(struct dsi_panel *panel);
+
+int dsi_panel_bl_update_irc(struct dsi_backlight_config *bl, bool enable);
 
 int dsi_panel_switch_init(struct dsi_panel *panel);
 void dsi_panel_switch_destroy(struct dsi_panel *panel);

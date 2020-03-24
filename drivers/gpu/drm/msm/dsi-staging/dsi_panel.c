@@ -1980,6 +1980,7 @@ void dsi_panel_destroy_cmd_packets(struct dsi_panel_cmd_set *set)
 
 	dsi_panel_destroy_cmds_packets_buf(set);
 	kfree(set->cmds);
+	set->cmds = NULL;
 }
 
 static int dsi_panel_alloc_cmd_packets(struct dsi_panel_cmd_set *cmd,
@@ -2628,10 +2629,13 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	priv_info = mode->priv_info;
 
 	priv_info->dsc_enabled = false;
+	mode->timing.dsc_enabled = false;
 	compression = utils->get_property(utils->data,
 			"qcom,compression-mode", NULL);
-	if (compression && !strcmp(compression, "dsc"))
+	if (compression && !strcmp(compression, "dsc")) {
 		priv_info->dsc_enabled = true;
+		mode->timing.dsc_enabled = true;
+	}
 
 	if (!priv_info->dsc_enabled) {
 		pr_debug("dsc compression is not enabled for the mode");
@@ -2641,7 +2645,6 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-version", &data);
 	if (rc) {
 		priv_info->dsc.version = 0x11;
-		rc = 0;
 	} else {
 		priv_info->dsc.version = data & 0xff;
 		/* only support DSC 1.1 rev */
@@ -2656,7 +2659,6 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsc-scr-version", &data);
 	if (rc) {
 		priv_info->dsc.scr_rev = 0x0;
-		rc = 0;
 	} else {
 		priv_info->dsc.scr_rev = data & 0xff;
 		/* only one scr rev supported */
@@ -2728,10 +2730,13 @@ static int dsi_panel_parse_dsc_params(struct dsi_display_mode *mode,
 	dsi_dsc_populate_static_param(&priv_info->dsc);
 	dsi_dsc_pclk_param_calc(&priv_info->dsc, intf_width);
 
-	mode->timing.dsc_enabled = true;
 	mode->timing.dsc = &priv_info->dsc;
 
+	return 0;
+
 error:
+	priv_info->dsc_enabled = false;
+	mode->timing.dsc_enabled = false;
 	return rc;
 }
 
@@ -3269,7 +3274,8 @@ static int drm_panel_get_timings(struct drm_panel *panel,
 	if (timings)
 		for (i = 0; i < num_timings; i++) {
 			struct display_timing *t = &timings[i];
-			struct dsi_display_mode m;
+			struct dsi_display_mode m = {0};
+
 			rc = dsi_panel_get_mode(p, i, &m, -1);
 			if (rc)
 				break;
@@ -3283,12 +3289,12 @@ static int drm_panel_get_timings(struct drm_panel *panel,
 			t->vfront_porch.typ = m.timing.v_front_porch;
 			t->vback_porch.typ = m.timing.v_back_porch;
 			t->vsync_len.typ = m.timing.v_sync_width;
-			t->flags = m.timing.h_sync_polarity ?
+			t->flags = (m.timing.h_sync_polarity ?
 				   DISPLAY_FLAGS_HSYNC_HIGH :
-				   DISPLAY_FLAGS_HSYNC_LOW |
-				   m.timing.v_sync_polarity ?
+				   DISPLAY_FLAGS_HSYNC_LOW) |
+				   (m.timing.v_sync_polarity ?
 				   DISPLAY_FLAGS_VSYNC_HIGH :
-				   DISPLAY_FLAGS_VSYNC_LOW;
+				   DISPLAY_FLAGS_VSYNC_LOW);
 
 			t->pixelclock.max = t->pixelclock.typ;
 			t->hactive.max = t->hactive.typ;
@@ -3309,6 +3315,8 @@ static int drm_panel_get_timings(struct drm_panel *panel,
 			t->vfront_porch.min = t->vfront_porch.typ;
 			t->vback_porch.min = t->vback_porch.typ;
 			t->vsync_len.min = t->vsync_len.typ;
+
+			dsi_panel_put_mode(&m);
 		}
 
 	return rc ?: p->num_timing_nodes;
@@ -4014,7 +4022,7 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 	struct dsi_parser_utils *utils;
 	struct dsi_display_mode_priv_info *prv_info;
 	u32 child_idx = 0;
-	int rc = 0, num_timings;
+	int rc = 0, num_timings, i;
 	void *utils_data = NULL;
 
 	if (!panel || !mode) {
@@ -4093,7 +4101,7 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 		if (rc) {
 			pr_err(
 			"failed to parse panel phy timings, rc=%d\n", rc);
-			goto parse_fail;
+			goto free_cmd_set;
 		}
 
 		rc = dsi_panel_parse_partial_update_caps(mode, utils);
@@ -4107,8 +4115,14 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 		if (prv_info->dsc_enabled || prv_info->roi_caps.enabled)
 			prv_info->overlap_pixels = 0;
 	}
+
+	rc = 0;
 	goto done;
 
+free_cmd_set:
+	for (i = 0; i < DSI_CMD_SET_MAX; i++) {
+		dsi_panel_destroy_cmd_packets(&mode->priv_info->cmd_sets[i]);
+	}
 parse_fail:
 	kfree(mode->priv_info);
 	mode->priv_info = NULL;
@@ -4503,17 +4517,17 @@ static int dsi_panel_update_hbm_locked(struct dsi_panel *panel,
 	hbm->cur_range = HBM_RANGE_MAX;
 
 	if (hbm_mode == HBM_MODE_SV) {
-		int rc = panel->funcs->update_irc(panel, false);
+		int rc = dsi_panel_bl_update_irc(bl, false);
 
 		if (rc != 0 && rc != -EOPNOTSUPP)
 			pr_err("[%s] failed to disable IRC, rc=%d\n",
-			       panel->name, rc);
+				panel->name, rc);
 	} else if (hbm_mode == HBM_MODE_ON && panel->hbm_mode == HBM_MODE_SV) {
-		int rc = panel->funcs->update_irc(panel, true);
+		int rc = dsi_panel_bl_update_irc(bl, true);
 
 		if (rc != 0 && rc != -EOPNOTSUPP)
 			pr_err("[%s] failed to enable IRC, rc=%d\n",
-			       panel->name, rc);
+				panel->name, rc);
 	}
 
 	panel->hbm_mode = hbm_mode;

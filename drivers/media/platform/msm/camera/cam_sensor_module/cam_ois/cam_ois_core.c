@@ -22,8 +22,15 @@
 #include "cam_packet_util.h"
 #include "../cam_fw_update/fw_update.h"
 
+#define VCM_COMPONENT_I2C_ADDR_WRITE 0xE4
+
 static bool ois_debug;
 module_param(ois_debug, bool, 0644);
+
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+static bool disable_af_read_lens;
+module_param(disable_af_read_lens, bool, 0644);
+#endif
 
 int cam_ois_calibration(struct cam_ois_ctrl_t *o_ctrl,
 	stReCalib *cal_result)
@@ -188,6 +195,20 @@ static int cam_ois_power_up(struct cam_ois_ctrl_t *o_ctrl)
 	rc = camera_io_init(&o_ctrl->io_master_info);
 	if (rc)
 		CAM_ERR(CAM_OIS, "cci_init failed: rc: %d", rc);
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+	else {
+		memcpy(&(o_ctrl->af_io_master_info),
+			&(o_ctrl->io_master_info),
+			sizeof(struct camera_io_master));
+		memcpy(&(o_ctrl->af_cci_client),
+			(o_ctrl->io_master_info.cci_client),
+			sizeof(struct cam_sensor_cci_client));
+		o_ctrl->af_io_master_info.cci_client =
+			&(o_ctrl->af_cci_client);
+		o_ctrl->af_io_master_info.cci_client->sid =
+			VCM_COMPONENT_I2C_ADDR_WRITE >> 1;
+	}
+#endif
 
 	return rc;
 }
@@ -489,17 +510,13 @@ static int read_af_lens_position(struct camera_io_master *io_master_info,
 	uint32_t *pData)
 {
 	int rc = 0;
-	uint16_t orig_slave_addr = io_master_info->cci_client->sid;
 	uint32_t data = 0;
 	uint32_t addr = 0x0A;
 
-	io_master_info->cci_client->sid = 0xE4 >> 1;
 
 	rc = camera_io_dev_read(io_master_info, addr,
 		&data, CAMERA_SENSOR_I2C_TYPE_BYTE,
 		CAMERA_SENSOR_I2C_TYPE_WORD);
-
-	io_master_info->cci_client->sid = orig_slave_addr;
 
 	if (rc < 0) {
 	    CAM_ERR(CAM_OIS,"%s failed(non-fatal): %d\n", __func__, rc);
@@ -542,14 +559,6 @@ static void cam_ois_read_work(struct work_struct *work)
 	rc = camera_io_dev_read_seq(&ois_timer_in->o_ctrl->io_master_info,
 		0xE001, &buf[0], CAMERA_SENSOR_I2C_TYPE_WORD,
 		CAMERA_SENSOR_I2C_TYPE_DWORD, 6);
-	if (ois_debug) {
-		CAM_INFO(CAM_OIS,
-			"[0xE001] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x",
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
-	}
-
-	rc = read_af_lens_position(&ois_timer_in->o_ctrl->io_master_info,
-		&af_pos);
 	if (rc != 0) {
 		ois_timer_in->i2c_fail_count++;
 		CAM_ERR(CAM_OIS, "read seq fail. cnt = %d",
@@ -560,6 +569,19 @@ static void cam_ois_read_work(struct work_struct *work)
 		}
 		return;
 	}
+
+	if (ois_debug) {
+		CAM_INFO(CAM_OIS,
+			"[0xE001] buf[0-1]=%02x%02x, buf[2-3]=%02x%02x, buf[4-5]=%02x%02x",
+			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
+	}
+
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+	if (!disable_af_read_lens) {
+		read_af_lens_position(&ois_timer_in->o_ctrl->af_io_master_info,
+			&af_pos);
+	}
+#endif
 
 	ois_timer_in->i2c_fail_count = 0;
 	ois_shift_data.time_readout =

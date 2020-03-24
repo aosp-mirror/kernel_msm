@@ -92,6 +92,7 @@ struct bias_config {
 #define DCDC_SOFT_ILIMIT_BIT			BIT(6)
 
 #define DCDC_POWER_PATH_STATUS_REG		0x110B
+#define DCIN_SUSPEND_STS_BIT			BIT(5)
 #define USE_USBIN_BIT				BIT(4)
 #define USE_DCIN_BIT				BIT(3)
 #define VALID_INPUT_POWER_SOURCE_STS_BIT	BIT(0)
@@ -123,6 +124,8 @@ enum sm7150_chg_status {
 	SM7150_PAUSE_CHARGE	= 6,
 	SM7150_DISABLE_CHARGE	= 7,
 };
+
+static int sm7150_get_battery_temp(const struct bms_dev *bms, int *val);
 
 #define QG_STATUS2_REG				0x09
 static int sm7150_read(struct regmap *pmic_regmap, int addr, u8 *val, int len)
@@ -203,9 +206,15 @@ static irqreturn_t sm7150_batt_temp_changed_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct bms_dev *chg = irq_data->parent_data;
+	u8 int_sts;
+	int temp;
+
+	sm7150_read(chg->pmic_regmap, 0x1210, &int_sts, 1);
+	sm7150_get_battery_temp(chg, &temp);
 
 	/* TODO: handle software jeita ? */
-	dev_dbg(chg->dev, "IRQ: %s\n", irq_data->name);
+	dev_info(chg->dev, "IRQ: %s, 1210:%02x, temp:%d, \n",
+			irq_data->name, int_sts, temp);
 	power_supply_changed(chg->psy);
 	return IRQ_HANDLED;
 }
@@ -582,7 +591,7 @@ static int sm7150_get_chg_type(const struct bms_dev *bms)
 static int sm7150_get_chg_status(const struct bms_dev *bms,
 				 bool *dc_valid, bool *usb_valid)
 {
-	bool plugged, valid;
+	bool plugged, valid, input_suspend;
 	int rc, ret;
 	int vchrg = 0;
 	u8 pstat, stat1, stat2;
@@ -593,6 +602,8 @@ static int sm7150_get_chg_status(const struct bms_dev *bms,
 
 	valid = (pstat & VALID_INPUT_POWER_SOURCE_STS_BIT);
 	plugged = (pstat & USE_DCIN_BIT) || (pstat & USE_USBIN_BIT);
+	input_suspend = (pstat & DCIN_SUSPEND_STS_BIT) ||
+				    (pstat & USBIN_SUSPEND_STS_BIT);
 
 	*dc_valid = valid && (pstat & USE_DCIN_BIT);
 	*usb_valid = valid && (pstat & USE_USBIN_BIT);
@@ -647,7 +658,10 @@ static int sm7150_get_chg_status(const struct bms_dev *bms,
 		break;
 	/* disabled disconnect */
 	case SM7150_DISABLE_CHARGE:
-		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		if (input_suspend)
+			ret = POWER_SUPPLY_STATUS_DISCHARGING;
+		else
+			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	default:
 		ret = POWER_SUPPLY_STATUS_UNKNOWN;

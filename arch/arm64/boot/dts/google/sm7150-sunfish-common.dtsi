@@ -30,6 +30,7 @@
 #include "sm7150-sunfish-touch-common.dtsi"
 #include "sm7150-sunfish-touch-proto.dtsi"
 #include "sm7150-sunfish-battery.dtsi"
+#include "sm7150-sunfish-regulator.dtsi"
 
 &tlmm {
 	goog,ignored-gpios = <59 60 61 62>;
@@ -62,6 +63,13 @@
 		compatible = "access_ramoops";
 		label = "ramoops";
 		memory-region = <&alt_ramoops_mem>;
+	};
+
+	keydebug {
+		compatible = "keydebug";
+		key_down_delay = <7000>;
+		keys_down = <116>;
+		dbg_fn_delay = <2500>;
 	};
 
 	qcom,msm-imem@146aa000 {

@@ -82,6 +82,7 @@ struct qg_dt {
 	bool			tcss_enable;
 	bool			bass_enable;
 	const char		*batt_type_name;
+	bool			qg_cycle_disable;
 };
 
 struct qg_esr_data {
@@ -109,6 +110,7 @@ struct qpnp_qg {
 	struct work_struct	scale_soc_work;
 	struct work_struct	qg_status_change_work;
 	struct delayed_work	qg_sleep_exit_work;
+	struct delayed_work	qg_temp_chk_work;
 	struct notifier_block	nb;
 	struct mutex		bus_lock;
 	struct mutex		data_lock;
@@ -201,6 +203,7 @@ struct qpnp_qg {
 	int			charge_counter;
 	int			full_soc;
 	int			sys_soc;
+	int			cutoff_soc;
 	int			last_adj_ssoc;
 	int			recharge_soc;
 	int			batt_age_level;
@@ -214,6 +217,7 @@ struct qpnp_qg {
 	struct cap_learning	*cl;
 	/* charge counter */
 	struct cycle_counter	*counter;
+	char			cycle_str[BUCKET_COUNT * 6 + 2];
 	/* ttf */
 	struct ttf		*ttf;
 };

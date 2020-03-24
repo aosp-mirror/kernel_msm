@@ -643,7 +643,10 @@ int32_t cam_actuator_i2c_pkt_parse(struct cam_actuator_ctrl_t *a_ctrl,
 						((reg_sets->reg_addr == 0xB3) &&
 						(reg_sets->reg_data == 0x00)))
 						&& size == 1) {
+						vfree(i2c_list->i2c_settings
+							.reg_setting);
 						list_del(&(i2c_list->list));
+						kfree(i2c_list);
 					}
 				}
 			}

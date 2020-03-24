@@ -70,6 +70,7 @@
 #define RT5514_VENDOR_ID2			0x2ff4
 
 #define RT5514_DSP_MAPPING			0x18000000
+#define RT5514_DSP_CHRE_INFORM			0x18002fec
 
 /* RT5514_PWR_ANA1 (0x2004) */
 #define RT5514_POW_LDO18_IN			(0x1 << 5)
@@ -267,6 +268,7 @@
 #define RT5514_SPI_SWITCH_GPIO	5
 
 #define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
+#define UNMUTE_TIMEOUT_MS	1000
 
 /* System Clock Source */
 enum {
@@ -308,6 +310,7 @@ struct rt5514_priv {
 	struct regmap *i2c_regmap, *regmap;
 	struct clk *mclk;
 	struct gpio_desc *gpiod_reset;
+	const struct firmware *fw[4];
 	int sysclk;
 	int sysclk_src;
 	int lrck;
@@ -327,6 +330,9 @@ struct rt5514_priv {
 	bool need_reload;
 	struct mutex stream_lock;
 	unsigned long mic_delay;
+	unsigned int sound_model_addr[2];
+	bool load_default_sound_model;
+	struct delayed_work unmute_work;
 };
 
 int rt5514_set_gpio(int gpio, bool output);

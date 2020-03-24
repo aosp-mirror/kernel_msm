@@ -2042,6 +2042,7 @@ i2c_msm_qup_choose_mode(struct i2c_msm_ctrl *ctrl)
 	struct i2c_msm_xfer           *xfer = &ctrl->xfer;
 	size_t rx_cnt_sum = xfer->rx_cnt + xfer->rx_ovrhd_cnt;
 	size_t tx_cnt_sum = xfer->tx_cnt + xfer->tx_ovrhd_cnt;
+	int i;
 
 
 	if (ctrl->dbgfs.force_xfer_mode != I2C_MSM_XFER_MODE_NONE)
@@ -2053,6 +2054,11 @@ i2c_msm_qup_choose_mode(struct i2c_msm_ctrl *ctrl)
 
 	if (ctrl->rsrcs.disable_dma)
 		return I2C_MSM_XFER_MODE_BLOCK;
+
+	for (i = 0; i < xfer->msg_cnt; i++) {
+		if (object_is_on_stack(xfer->msgs[i].buf))
+			return I2C_MSM_XFER_MODE_BLOCK;
+	}
 
 	return I2C_MSM_XFER_MODE_DMA;
 }

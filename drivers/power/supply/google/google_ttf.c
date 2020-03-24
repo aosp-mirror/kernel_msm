@@ -16,12 +16,11 @@
 #include <linux/printk.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pm_wakeup.h>
-#include <linux/pmic-voter.h>
 #include <linux/thermal.h>
+#include <linux/slab.h>
 #include "google_bms.h"
 #include "google_psy.h"
 #include "qmath.h"
@@ -32,6 +31,16 @@
 #endif
 
 #define ELAP_LIMIT_S 60
+
+
+void ttf_log(const struct batt_ttf_stats *stats, const char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	logbuffer_vlog(stats->ttf_log, fmt, args);
+	va_end(args);
+}
 
 /* actual adapter current capability for this charging event
  * NOTE: peformance for a tier are known only after entering the tier
@@ -307,12 +316,14 @@ int ttf_soc_cstr(char *buff, int size,
 	if (start == 0 && end == 99)
 		split = 10;
 
+	/* dump elap time as T: */
 	for (i = start; i <= end; i++) {
 		if (i % split == 0 || i == start) {
-			len += scnprintf(&buff[len], size - len, "T:");
+			len += scnprintf(&buff[len], size - len, "T");
 			if (split == 10)
 				len += scnprintf(&buff[len], size - len,
 						"%d", i / 10);
+			len += scnprintf(&buff[len], size - len, ":");
 		}
 
 		len += scnprintf(&buff[len], size - len, " %4ld",
@@ -323,12 +334,14 @@ int ttf_soc_cstr(char *buff, int size,
 
 	len += scnprintf(&buff[len], size - len, "\n");
 
+	/* dump coulumb count as C: */
 	for (i = start; i <= end; i++) {
 		if (i % split == 0 || i == start) {
-			len += scnprintf(&buff[len], size - len, "C:");
+			len += scnprintf(&buff[len], size - len, "C");
 			if (split == 10)
 				len += scnprintf(&buff[len], size - len,
 						 "%d", i / 10);
+			len += scnprintf(&buff[len], size - len, ":");
 		}
 
 		len += scnprintf(&buff[len], size - len, " %4d",
@@ -342,6 +355,109 @@ int ttf_soc_cstr(char *buff, int size,
 	return len;
 }
 
+/* TODO: tune these values */
+
+/* discard updates for adapters that have less than 80% of nominal */
+#define TTF_SOC_QUAL_ELAP_RATIO_MAX	200
+/* cap updates of cc to no more of +-*_CUR_ABS_MAX from previous */
+#define TTF_SOC_QUAL_ELAP_DELTA_CUR_ABS_MAX	60
+/* cap udpdates to cc max to no more of +-20% of reference */
+#define TTF_SOC_QUAL_ELAP_DELTA_REF_PCT_MAX	20
+
+/* return the weight to apply to this change */
+static time_t ttf_soc_qual_elap(const struct batt_ttf_stats *stats,
+				const struct gbms_charging_event *ce_data,
+				int i)
+{
+	const struct ttf_soc_stats *src = &ce_data->soc_stats;
+	const struct ttf_soc_stats *dst = &stats->soc_stats;
+	const int limit = TTF_SOC_QUAL_ELAP_RATIO_MAX;
+	const int max_elap = ((100 + TTF_SOC_QUAL_ELAP_DELTA_REF_PCT_MAX) *
+			     stats->soc_ref.elap[i]) / 100;
+	const int min_elap = ((100 - TTF_SOC_QUAL_ELAP_DELTA_REF_PCT_MAX) *
+			     stats->soc_ref.elap[i]) / 100;
+	time_t elap, elap_new, elap_cur;
+	int ratio;
+
+	if (!src->elap[i])
+		return 0;
+
+	/* weight the adapter, discard if ratio is too high (poor adapter) */
+	ratio = ttf_pwr_ratio(stats, ce_data, i);
+	if (ratio <= 0 || ratio > limit) {
+		pr_debug("%d: ratio=%d limit=%d\n", i, ratio, limit);
+		return 0;
+	}
+
+	elap_new = (src->elap[i] * 100) / ratio;
+	elap_cur = dst->elap[i];
+	if (!elap_cur)
+		elap_cur = stats->soc_ref.elap[i];
+	elap = (elap_cur + elap_new) / 2;
+
+	/* bounds check to previous */
+	if (elap > (elap_cur + TTF_SOC_QUAL_ELAP_DELTA_CUR_ABS_MAX))
+		elap = elap_cur + TTF_SOC_QUAL_ELAP_DELTA_CUR_ABS_MAX;
+	else if (elap < (elap_cur - TTF_SOC_QUAL_ELAP_DELTA_CUR_ABS_MAX))
+		elap = elap_cur - TTF_SOC_QUAL_ELAP_DELTA_CUR_ABS_MAX;
+
+	/* bounds check to reference */
+	if (elap > max_elap)
+		elap = max_elap;
+	else if (elap < min_elap)
+		elap = min_elap;
+
+	pr_debug("%d: dst->elap=%ld, ref_elap=%ld, elap=%ld, src_elap=%ld ratio=%d, min=%d max=%d\n",
+		i, dst->elap[i], stats->soc_ref.elap[i], elap, src->elap[i],
+		ratio, min_elap, max_elap);
+
+	return elap;
+}
+
+/* cap updates of cc to no more of +-*_CUR_ABS_MAX from previous */
+#define TTF_SOC_QUAL_CC_DELTA_CUR_ABS_MAX	40
+/* cap udpdates to cc max to no more of +-20% of reference */
+#define TTF_SOC_QUAL_CC_DELTA_REF_PCT_MAX	20
+
+static int ttf_soc_qual_cc(const struct batt_ttf_stats *stats,
+			   const struct gbms_charging_event *ce_data,
+			   int i)
+{
+	const struct ttf_soc_stats *src = &ce_data->soc_stats;
+	const struct ttf_soc_stats *dst = &stats->soc_stats;
+	const int max_cc = ((100 + TTF_SOC_QUAL_CC_DELTA_REF_PCT_MAX) *
+			   stats->soc_ref.cc[i]) / 100;
+	const int min_cc = ((100 - TTF_SOC_QUAL_CC_DELTA_REF_PCT_MAX) *
+			   stats->soc_ref.cc[i]) / 100;
+	int cc, cc_cur;
+
+	if (!src->cc[i])
+		return 0;
+
+	cc_cur = dst->cc[i];
+	if (cc_cur <= 0)
+		cc_cur = stats->soc_ref.cc[i];
+
+	cc = (cc_cur + src->cc[i]) / 2;
+
+	/* bounds check to previous */
+	if (cc > cc_cur + TTF_SOC_QUAL_CC_DELTA_CUR_ABS_MAX)
+		cc = cc_cur + TTF_SOC_QUAL_CC_DELTA_CUR_ABS_MAX;
+	else if (cc < cc_cur  -TTF_SOC_QUAL_CC_DELTA_CUR_ABS_MAX)
+		cc = cc_cur - TTF_SOC_QUAL_CC_DELTA_CUR_ABS_MAX;
+
+	/* bounds check to reference */
+	if (cc > max_cc)
+		cc = max_cc;
+	else if (cc < min_cc)
+		cc = min_cc;
+
+	pr_info("%d: cc_cur=%d, ref_cc=%d src->cc=%d, cc=%d\n",
+		i, cc_cur, stats->soc_ref.cc[i], src->cc[i], cc);
+
+	return cc;
+}
+
 /* update soc_stats using the charging event
  * NOTE: first_soc and last_soc are inclusive, will skip socs that have no
  * elap and no cc.
@@ -351,42 +467,25 @@ static void ttf_soc_update(struct batt_ttf_stats *stats,
 			   int first_soc, int last_soc)
 {
 	const struct ttf_soc_stats *src = &ce_data->soc_stats;
-	struct ttf_soc_stats *dst = &stats->soc_stats;
 	int i;
 
 	for (i = first_soc; i <= last_soc; i++) {
+		time_t elap;
+		int cc;
 
-		/* TODO: qualify src->elap[i], src->cc[i] */
-		/* TODO: bound the changes */
+		/* need to have data on both */
+		if (!src->elap[i] || !src->cc[i])
+			continue;
 
-		/* average the weighted time at soc */
-		if (src->elap[i]) {
-			int ratio;
-			time_t elap;
+		/* average the elap time at soc */
+		elap = ttf_soc_qual_elap(stats, ce_data, i);
+		if (elap)
+			stats->soc_stats.elap[i] = elap;
 
-			ratio = ttf_pwr_ratio(stats, ce_data, i);
-			if (ratio < 0)
-				continue;
-
-			if (dst->elap[i] <= 0)
-				dst->elap[i] = stats->soc_ref.elap[i];
-
-			elap = (src->elap[i] * 100) / ratio;
-
-			pr_debug("%d: dst->elap=%ld, ref_elap=%ld, elap=%ld, src_elap=%ld ratio=%d\n",
-				i, dst->elap[i], stats->soc_ref.elap[i],
-				elap, src->elap[i], ratio);
-
-			dst->elap[i] = (dst->elap[i] + elap) / 2;
-		}
-
-		/* average the coulumb count at soc entry */
-		if (src->cc[i]) {
-			if (dst->cc[i] <= 0)
-				dst->cc[i] = stats->soc_ref.cc[i];
-
-			dst->cc[i] = (dst->cc[i] + src->cc[i]) / 2;
-		}
+		/* average the coulumb count at soc */
+		cc = ttf_soc_qual_cc(stats, ce_data, i);
+		if (cc)
+			stats->soc_stats.cc[i] = cc;
 	}
 }
 
@@ -452,7 +551,7 @@ static int ttf_tier_sscan(struct batt_ttf_stats *stats,
 	return 0;
 }
 
-int ttf_tier_cstr(char *buff, int size, struct ttf_tier_stat *tier_stats)
+int ttf_tier_cstr(char *buff, int size, const struct ttf_tier_stat *tier_stats)
 {
 	int len = 0;
 
@@ -465,7 +564,7 @@ int ttf_tier_cstr(char *buff, int size, struct ttf_tier_stat *tier_stats)
 	return len;
 }
 
-/* tier statistics keep track of average capacity at entry of */
+/* average soc_in, cc_in, cc_total an and avg time for charge tier */
 static void ttf_tier_update_stats(struct ttf_tier_stat *ttf_ts,
 			    	  const struct gbms_ce_tier_stats *chg_ts,
 				  bool force)
@@ -571,6 +670,38 @@ int ttf_tier_estimate(time_t *res, const struct batt_ttf_stats *stats,
 
 /* ----------------------------------------------------------------------- */
 
+/* QUAL DELTA >= 3 */
+#define TTF_STATS_QUAL_DELTA_MIN	3
+#define TTF_STATS_QUAL_DELTA		TTF_STATS_QUAL_DELTA_MIN
+
+static int ttf_soc_cstr_elap(char *buff, int size,
+			     const struct ttf_soc_stats *soc_stats,
+			     int start, int end)
+{
+	int i, len = 0;
+
+	len += scnprintf(&buff[len], size - len, "T%d:", start);
+	for (i = start; i < end; i++)
+		len += scnprintf(&buff[len], size - len, " %4ld",
+				 soc_stats->elap[i]);
+
+	return len;
+}
+
+static int ttf_soc_cstr_cc(char *buff, int size,
+			   const struct ttf_soc_stats *soc_stats,
+			   int start, int end)
+{
+	int i, len = 0;
+
+	len += scnprintf(&buff[len], size - len, "C%d:", start);
+	for (i = start; i < end; i++)
+		len += scnprintf(&buff[len], size - len, " %4d",
+				 soc_stats->cc[i]);
+
+	return len;
+}
+
 /* update ttf tier and soc stats using the charging event.
  * call holding stats->lock
  */
@@ -579,16 +710,50 @@ void ttf_stats_update(struct batt_ttf_stats *stats,
 		      bool force)
 {
 	int first_soc = ce_data->charging_stats.ssoc_in;
+	const int last_soc = ce_data->last_soc;
+	const int delta_soc = last_soc - first_soc;
+	const int limit = force ? TTF_STATS_QUAL_DELTA_MIN :
+			  TTF_STATS_QUAL_DELTA;
+	const int tmp_size = PAGE_SIZE;
+	char *tmp;
 
-	/* ignore the fist non zero because it's partial */
-	for ( ; first_soc <= ce_data->last_soc; first_soc++)
+	/* skip data short periods */
+	if (delta_soc < limit) {
+		ttf_log(stats, "no updates delta_soc=%d, limit=%d, force=%d",
+			delta_soc, limit, force);
+		return;
+	}
+
+	/* ignore fist nozero and last entry because they are partial */
+	for ( ; first_soc <= last_soc; first_soc++)
 		if (ce_data->soc_stats.elap[first_soc] != 0)
 			break;
 
-	/* ignore fist and last entry because they are partial */
-	ttf_soc_update(stats, ce_data, first_soc + 1, ce_data->last_soc - 1);
-
+	ttf_soc_update(stats, ce_data, first_soc + 1, last_soc - 1);
 	ttf_tier_update(stats, ce_data, force);
+
+	/* dump update stats to logbuffer */
+	tmp = kzalloc(tmp_size, GFP_KERNEL);
+	if (tmp) {
+		const int split = 10;
+		int i;
+
+		for (i = first_soc + 1;i < last_soc - 1; i += split) {
+			int end_soc = i + split;
+
+			if (end_soc > last_soc - 1)
+				end_soc = last_soc - 1;
+
+			ttf_soc_cstr_elap(tmp, tmp_size, &stats->soc_stats,
+					  i, end_soc);
+			ttf_log(stats, "%s", tmp);
+			ttf_soc_cstr_cc(tmp, tmp_size, &stats->soc_stats,
+					  i,  end_soc);
+			ttf_log(stats, "%s", tmp);
+		}
+
+		kfree(tmp);
+	}
 }
 
 static int ttf_init_soc_parse_dt(struct ttf_adapter_stats *as,
@@ -654,6 +819,9 @@ static int ttf_init_tier_parse_dt(struct batt_ttf_stats *stats,
 	int i, count, ret;
 	u32 tier_table[GBMS_STATS_TIER_COUNT];
 
+	if (!device)
+		return -ENODEV;
+
 	count = of_property_count_elems_of_size(device->of_node,
 						"google,ttf-tier-table",
 						sizeof(u32));
@@ -684,13 +852,47 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 	return dst;
 }
 
-/* must come after charge profile */
+/*
+ * TODO: need to be adjusted to more complex scenarios (adaptive charging,
+ * slow top off) that have more tiers, this implementation only fill 3
+ * tiers.
+ */
+static void ttf_stats_init_tier(struct batt_ttf_stats *stats,
+				int capacity_ma)
+{
+
+	/* TODO: use the soc stats to calculate cc_in */
+	stats->tier_stats[0].cc_in = 0;
+	stats->tier_stats[1].cc_in = (capacity_ma *
+					(stats->tier_stats[1].soc_in >> 8)) /
+					100;
+	stats->tier_stats[2].cc_in = (capacity_ma *
+					(stats->tier_stats[2].soc_in >> 8)) /
+					100;
+
+	/* TODO: use the soc stats to calculate cc_total */
+	stats->tier_stats[0].cc_total = (capacity_ma *
+					((stats->tier_stats[1].soc_in -
+					stats->tier_stats[0].soc_in) >> 8)) /
+					100;
+	stats->tier_stats[1].cc_total = (capacity_ma *
+					((stats->tier_stats[2].soc_in -
+					stats->tier_stats[1].soc_in) >> 8)) /
+					100;
+	stats->tier_stats[2].cc_total = capacity_ma -
+					stats->tier_stats[2].cc_in;
+}
+
+/*
+ * must come after charge profile
+ * TODO: tier statistics need the charge profile
+ */
 int ttf_stats_init(struct batt_ttf_stats *stats,
 		   struct device *device,
 		   int capacity_ma)
 {
 	u32 value;
-	int i, ret;
+	int i, soc, ret;
 	struct ttf_adapter_stats as;
 
 	memset(stats, 0, sizeof(*stats));
@@ -709,6 +911,8 @@ int ttf_stats_init(struct batt_ttf_stats *stats,
 	stats->ref_temp_idx = value;
 
 	/* initialize reference soc estimates */
+	/* TODO: allocate as->soc_table witk kzalloc, free here */
+
 	ret = ttf_init_soc_parse_dt(&as, device);
 	if (ret == 0) {
 		int table_i = 0;
@@ -723,10 +927,11 @@ int ttf_stats_init(struct batt_ttf_stats *stats,
 			stats->soc_ref.cc[i] = (cc * i) / 100;
 		}
 
-		/* TODO: allocate as->soc_table witk kzalloc, free here */
 	}
 
-	/* initialize tier-based estimates */
+	/* TODO: free as->soc_table here  */
+
+	/* tier estimates, avg time is filled from ref SOC */
 	ret = ttf_init_tier_parse_dt(stats, device);
 	if (ret < 0) {
 		stats->tier_stats[0].soc_in = 0;
@@ -734,24 +939,60 @@ int ttf_stats_init(struct batt_ttf_stats *stats,
 		stats->tier_stats[2].soc_in = 80 << 8;
 	}
 
-	/* TODO: use the soc stats to calculate cc_in */
-	stats->tier_stats[0].cc_in = 0;
-	stats->tier_stats[1].cc_in = (capacity_ma *
-					stats->tier_stats[1].soc_in) /
-					100;
-	stats->tier_stats[2].cc_in = (capacity_ma *
-					stats->tier_stats[2].soc_in) /
-					100;
+	ttf_stats_init_tier(stats, capacity_ma);
 
-	/* TODO: use the soc stats to calculate cc_total */
-	stats->tier_stats[0].cc_total = 0;
-	stats->tier_stats[1].cc_total = (capacity_ma *
-					(stats->tier_stats[2].soc_in -
-					stats->tier_stats[1].soc_in)) /
-					100;
-	stats->tier_stats[2].cc_total = capacity_ma -
-					stats->tier_stats[2].cc_in;
+	/* compute ref average time */
+	for (i = 0; i < 2; i++) {
+		const int soc_in = stats->tier_stats[i].soc_in >> 8;
+		const int soc_out = stats->tier_stats[i + 1].soc_in >> 8;
 
+		for (soc = soc_in;soc < soc_out; soc++)
+			stats->tier_stats[i].avg_time += stats->soc_ref.elap[soc];
+	}
+
+	for ( ;soc < 100; soc++)
+		stats->tier_stats[i].avg_time += stats->soc_ref.elap[soc];
 
 	return 0;
+}
+
+
+/* tier and soc details */
+ssize_t ttf_dump_details(char *buf, int max_size,
+			 const struct batt_ttf_stats *ttf_stats,
+			 int last_soc)
+{
+	int i, len = 0;
+
+	/* interleave tier with SOC data */
+	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
+		int next_soc_in;
+
+		len += scnprintf(&buf[len], max_size - len, "%d: ", i);
+		len += ttf_tier_cstr(&buf[len], max_size - len,
+				     &ttf_stats->tier_stats[i]);
+		len += scnprintf(&buf[len], max_size - len, "\n");
+
+		/* continue only first */
+		if (ttf_stats->tier_stats[i].avg_time == 0)
+			continue;
+
+		if (i == GBMS_STATS_TIER_COUNT - 1) {
+			next_soc_in = -1;
+		} else {
+			next_soc_in = ttf_stats->tier_stats[i + 1].soc_in >> 8;
+			if (next_soc_in == 0)
+				next_soc_in = -1;
+		}
+
+		if (next_soc_in == -1)
+			next_soc_in = last_soc - 1;
+
+		len += ttf_soc_cstr(&buf[len], max_size - len,
+				    &ttf_stats->soc_stats,
+				    ttf_stats->tier_stats[i].soc_in >> 8,
+				    next_soc_in);
+	}
+
+	return len;
 }

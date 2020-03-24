@@ -176,6 +176,10 @@ struct cam_ois_ctrl_t {
 	struct cam_ois_shift_buffer buf;
 	struct cam_ois_timer_t timer;
 	struct mutex ois_shift_mutex;
+#ifdef CONFIG_CAMERA_ACT_READ_LENS
+	struct camera_io_master af_io_master_info;
+	struct cam_sensor_cci_client af_cci_client;
+#endif
 };
 
 #endif /*_CAM_OIS_DEV_H_ */

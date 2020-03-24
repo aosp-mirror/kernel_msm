@@ -177,6 +177,16 @@
 				15 01 00 00 00 00 02 53 20
 			];
 			google,dsi-hbm-commands-state = "dsi_lp_mode";
+			google,dsi-irc-addr = <0xBE>;
+			google,dsi-irc-bit-offset = <21>;
+			google,dsi-irc-unlock-command = [
+				39 01 00 00 00 00 03 F0 5A 5A
+			];
+			google,dsi-irc-unlock-commands-state = "dsi_lp_mode";
+			google,dsi-irc-lock-command = [
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-irc-lock-commands-state = "dsi_lp_mode";
 
 			hbm-range@0 {
 				google,dsi-hbm-range-brightness-threshold = <1>;

@@ -38,12 +38,18 @@ struct gbms_chg_profile {
 	u32 capacity_ma;
 
 	/* behavior */
+	bool irdrop_disable;
 	u32 fv_uv_margin_dpct;
 	u32 cv_range_accuracy;
 	u32 cv_debounce_cnt;
 	u32 cv_update_interval;
 	u32 cv_tier_ov_cnt;
 	u32 cv_tier_switch_cnt;
+	u32 chg_last_tier;
+	u32 chg_last_tier_ramp_rate_mv;
+	u32 chg_last_tier_ramp_rate_dpct;
+	u32 chg_last_tier_vpack_tol;
+	u32 chg_last_tier_cc_ma;
 	/* taper step */
 	u32 fv_uv_resolution;
 	/* experimental */
@@ -194,6 +200,8 @@ struct batt_ttf_stats {
 
 	struct ttf_soc_stats soc_stats; /* rolling */
 	struct ttf_tier_stat tier_stats[GBMS_STATS_TIER_COUNT];
+
+	struct logbuffer *ttf_log;
 };
 
 struct gbms_charging_event {
@@ -271,6 +279,12 @@ const char *gbms_chg_ev_adapter_s(int adapter);
 
 /* Binned cycle count */
 #define GBMS_CCBIN_BUCKET_COUNT	10
+
+#ifdef CONFIG_QPNP_QG
+#undef GBMS_CCBIN_BUCKET_COUNT
+#define GBMS_CCBIN_BUCKET_COUNT	8
+#endif
+
 #define GBMS_CCBIN_CSTR_SIZE	(GBMS_CCBIN_BUCKET_COUNT * 6 + 2)
 
 int gbms_cycle_count_sscan_bc(u16 *ccount, int bcnt, const char *buff);
@@ -294,7 +308,7 @@ int ttf_soc_estimate(time_t *res,
 
 void ttf_soc_init(struct ttf_soc_stats *dst);
 
-int ttf_tier_cstr(char *buff, int size, struct ttf_tier_stat *t_stat);
+int ttf_tier_cstr(char *buff, int size, const struct ttf_tier_stat *t_stat);
 
 int ttf_tier_estimate(time_t *res,
 		      const struct batt_ttf_stats *ttf_stats,
@@ -318,7 +332,11 @@ int ttf_stats_sscan(struct batt_ttf_stats *stats,
 struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 				     const struct batt_ttf_stats *src);
 
+void ttf_log(const struct batt_ttf_stats *stats, const char *fmt, ...);
 
+ssize_t ttf_dump_details(char *buf, int max_size,
+			 const struct batt_ttf_stats *ttf_stats,
+			 int last_soc);
 /**
  * GBMS Storage API
  * The API provides functions to access to data stored in the persistent and
@@ -331,6 +349,15 @@ struct batt_ttf_stats *ttf_stats_dup(struct batt_ttf_stats *dst,
 
 #define GBMS_STORAGE_ADDR_INVALID	-1
 #define GBMS_STORAGE_INDEX_INVALID	-1
+
+/* Battery Google Part Number */
+#define GBMS_BGPN_LEN	10
+/* Battery manufacturer info length */
+#define GBMS_MINF_LEN	32
+/* Battery device info length */
+#define GBMS_DINF_LEN	32
+/* Battery cycle count bin length */
+#define GBMS_CNTB_LEN	16
 
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
@@ -349,6 +376,7 @@ enum gbms_tags {
 	GBMS_TAG_MINF = 0x4d494e46,
 	GBMS_TAG_DINF = 0x44494e46,
 	GBMS_TAG_BGPN = 0x4247504e,
+	GBMS_TAG_CNTB = 0x434e5442,
 };
 
 /**

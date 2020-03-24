@@ -70,8 +70,6 @@
 };
 
 &pm6150_qg {
-	qcom,hold-soc-while-full;
-	qcom,linearize-soc;
 	qcom,cl-feedback-on;
 
 	qcom,battery-data = <&sunfish_batterydata>;
@@ -90,6 +88,14 @@
 	google,fvss-interval-ms = <5000>;
 	qcom,s3-entry-ibat-ua = <14640>;
 	qcom,qg-sleep-config;
+
+	/* pon soc parameters */
+	/* 20% / 30 degree / 2 weeks */
+	qcom,shutdown_soc_threshold = <20>;
+	qcom,shutdown-temp-diff = <300>;
+	qcom,ignore-shutdown-soc-secs = <1209600>;
+
+	google,qg-cycle-disable;
 };
 
 &spmi_bus {
@@ -147,15 +153,23 @@
 
 		/* charge table for sunfish */
 		google,chg-temp-limits = <0 100 200 420 460 480 550>;
-		google,chg-cv-limits = <4200000 4300000 4420000 4450000>;
+		google,chg-cv-limits = <4200000 4300000 4420000>;
 		google,chg-cc-limits = <
-			 30  10   0   0
-			 50  30  30  17
-			100  70  50  17
-			 80  50  50  17
-			 50  50   0   0
-			 30   0   0   0
+			 30  10   0
+			 50  30  30
+			100  70  50
+			 80  50  50
+			 50  50   0
+			 30   0   0
 		>;
+
+		google,chg-last-tier = <4450000>;
+		google,chg-last-tier-ramp-rate-mv = <10000>;
+		/* ramp rate unit : 1/1000 */
+		google,chg-last-tier-ramp-rate-dpct = <700>;
+		/* vpack tolerance unit : 1/10000 */
+		google,chg-last-tier-vpack-tolerance = <15>;
+		google,chg-last-tier-cc-tolerance = <50000>;
 
 		/* battery poll rate */
 		google,update-interval = <30000>;
@@ -163,11 +177,7 @@
 		google,fv-uv-resolution = <10000>;
 		google,fv-uv-margin-dpct = <1020>;
 		/* tier switch */
-		google,cv-range-accuracy = <80000>;
-		google,cv-otv-margin = <90000>;
-		google,cv-debounce-cnt = <3>;
-		google,cv-tier-ov-cnt = <1>;
-		google,cv-tier-switch-cnt = <3>;
+		google,irdrop-disable;
 		/* charging stats */
 		google,chg-stats-qual-time = <900>;
 		google,chg-stats-delta-soc = <15>;
@@ -187,9 +197,26 @@
 		#thermal-sensor-cells = <0>;
 
 		google,ttf-adapter = <1800>;
-		google,ttf-soc-table =  <62 75 85 89  92  95  98  100>;
-		google,ttf-elap-table = <40 55 75 100 120 180 250 300>;
-		google,ttf-tier-table = <0 64 80>;
+		google,ttf-soc-table =  <47 66 72 82 94 96  98  100>;
+		google,ttf-elap-table = <35 45 50 59 80 121 152 284>;
+		google,ttf-tier-table = <0 69 83>;
+
+		/* soc smothing */
+		google,rl_delta-max-soc = <1>;
+		google,rl_delta-max-time = <12>;
+		google,rl_ft-low-limit = <7>;
+		google,rl_ft-delta-limit = <15>;
+		google,rl_st-delta-limit = <7>;
+		google,rl_st-max-count = <3>;
+		google,rl_no-zero;
+		google,rl_soc-limits = <20 30 40 50 60 70 90 100>;
+		google,rl_soc-rates =  <15 16 17 18 20 22 24 25>;
+
+		/* battery history */
+		google,eeprom-inside;
+		google,history-delta-cycle-count = <25>;
+
+		google,ssoc-delta = <2>;
 	};
 
 	google_charger: google,charger {

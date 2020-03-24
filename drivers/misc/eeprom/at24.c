@@ -102,7 +102,7 @@ MODULE_PARM_DESC(io_limit, "Maximum bytes per I/O (default 128)");
  * Specs often allow 5 msec for a page write, sometimes 20 msec;
  * it's important to recover from write timeouts.
  */
-static unsigned write_timeout = 25;
+static unsigned int write_timeout = 100;
 module_param(write_timeout, uint, 0);
 MODULE_PARM_DESC(write_timeout, "Time (in ms) to try writes (default 25)");
 
@@ -659,6 +659,21 @@ static void at24_get_pdata(struct device *dev, struct at24_platform_data *chip)
 	}
 }
 
+#define BATT_TOTAL_HIST_LEN	928
+#define BATT_ONE_HIST_LEN	28
+#define BATT_MAX_HIST_CNT	\
+		(BATT_TOTAL_HIST_LEN / BATT_ONE_HIST_LEN) // 33.14
+
+#define BATT_EEPROM_TAG_MINF_OFFSET	0x00
+#define BATT_EEPROM_TAG_MINF_LEN	GBMS_MINF_LEN
+#define BATT_EEPROM_TAG_DINF_OFFSET	0x20
+#define BATT_EEPROM_TAG_DINF_LEN	GBMS_DINF_LEN
+#define BATT_EEPROM_TAG_CNTB_OFFSET	0x40
+#define BATT_EEPROM_TAG_CNTB_LEN	GBMS_CNTB_LEN
+#define BATT_EEPROM_TAG_HIST_OFFSET	0x60
+#define BATT_EEPROM_TAG_HIST_LEN	BATT_ONE_HIST_LEN
+#define BATT_EEPROM_TAG_BGPN_OFFSET	0x03
+#define BATT_EEPROM_TAG_BGPN_LEN	GBMS_BGPN_LEN
 static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 			     void *ptr)
 {
@@ -681,6 +696,10 @@ static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 		*addr = BATT_EEPROM_TAG_BGPN_OFFSET;
 		*count = BATT_EEPROM_TAG_BGPN_LEN;
 		break;
+	case GBMS_TAG_CNTB:
+		*addr = BATT_EEPROM_TAG_CNTB_OFFSET;
+		*count = BATT_EEPROM_TAG_CNTB_LEN;
+		break;
 	default:
 		ret = -ENOENT;
 		break;
@@ -691,7 +710,7 @@ static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 
 static int at24_storage_iter(int index, gbms_tag_t *tag, void *ptr)
 {
-	static gbms_tag_t keys[] = { GBMS_TAG_BGPN, GBMS_TAG_MINF, GBMS_TAG_DINF, GBMS_TAG_HIST };
+	static gbms_tag_t keys[] = { GBMS_TAG_BGPN, GBMS_TAG_MINF, GBMS_TAG_DINF, GBMS_TAG_HIST, GBMS_TAG_CNTB };
 	const int count = ARRAY_SIZE(keys);
 
 	if (index >= 0 && index < count)
@@ -714,9 +733,6 @@ static int at24_storage_read(gbms_tag_t tag, void *buff, size_t size,
 	if (ret < 0)
 		return ret;
 
-	if (!len)
-		return -ENOENT;
-
 	if (len > size)
 		return -ENOMEM;
 
@@ -735,7 +751,8 @@ static int at24_storage_write(gbms_tag_t tag, const void *buff, size_t size,
 	int ret;
 
 	switch (tag) {
-	case GBMS_TAG_HIST:
+	case GBMS_TAG_CNTB:
+	case GBMS_TAG_DINF:
 		ret = at24_storage_info(tag, &offset, &len, ptr);
 		break;
 	default:
@@ -745,9 +762,6 @@ static int at24_storage_write(gbms_tag_t tag, const void *buff, size_t size,
 
 	if (ret < 0)
 		return ret;
-
-	if (!len)
-		return -ENOENT;
 
 	if (size > len)
 		return -ENOMEM;
@@ -759,11 +773,97 @@ static int at24_storage_write(gbms_tag_t tag, const void *buff, size_t size,
 	return ret;
 }
 
+static int at24_storage_read_data(gbms_tag_t tag, void *data, size_t count,
+				  int idx, void *ptr)
+{
+	struct at24_data *chip = (struct at24_data *)ptr;
+	size_t offset = 0, len = 0;
+	int ret;
+
+	switch (tag) {
+	case GBMS_TAG_HIST:
+		ret = at24_storage_info(tag, &offset, &len, ptr);
+		break;
+	default:
+		ret = -ENOENT;
+		break;
+	}
+
+	if (ret < 0)
+		return ret;
+
+	if (!data || !count) {
+		if (idx == GBMS_STORAGE_INDEX_INVALID)
+			return 0;
+		else
+			return BATT_MAX_HIST_CNT;
+	}
+
+	if (idx < 0)
+		return -EINVAL;
+
+	/* index == 0 is ok here */
+	if (idx >= BATT_MAX_HIST_CNT)
+		return -ENODATA;
+
+	if (len > count)
+		return -EINVAL;
+
+	offset += len * idx;
+
+	ret = nvmem_device_read(chip->nvmem, offset, len, data);
+	if (ret == 0)
+		ret = len;
+
+	return ret;
+}
+
+static int at24_storage_write_data(gbms_tag_t tag, const void *data,
+				   size_t count, int idx, void *ptr)
+{
+	struct at24_data *chip = (struct at24_data *)ptr;
+	size_t offset = 0, len = 0;
+	int ret;
+
+	switch (tag) {
+	case GBMS_TAG_HIST:
+		ret = at24_storage_info(tag, &offset, &len, ptr);
+		break;
+	default:
+		ret = -ENOENT;
+		break;
+	}
+
+	if (ret < 0)
+		return ret;
+
+	if (idx < 0 || !data || !count)
+		return -EINVAL;
+
+	/* index == 0 is ok here */
+	if (idx >= BATT_MAX_HIST_CNT)
+		return -ENODATA;
+
+	if (count > len)
+		return -EINVAL;
+
+	offset += len * idx;
+
+	ret = nvmem_device_write(chip->nvmem, offset, len, (void *)data);
+	if (ret == 0)
+		ret = len;
+
+	return ret;
+}
+
+
 static struct gbms_storage_desc at24_storage_dsc = {
 	.info = at24_storage_info,
 	.iter = at24_storage_iter,
 	.read = at24_storage_read,
 	.write = at24_storage_write,
+	.read_data = at24_storage_read_data,
+	.write_data = at24_storage_write_data,
 };
 
 #define AT24_DELAY_INIT_MS	100
