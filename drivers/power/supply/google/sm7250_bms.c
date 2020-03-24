@@ -92,6 +92,7 @@ struct bias_config {
 #define DCDC_SOFT_ILIMIT_BIT			BIT(6)
 
 #define DCDC_POWER_PATH_STATUS_REG		0x110B
+#define DCIN_SUSPEND_STS_BIT			BIT(5)
 #define USE_USBIN_BIT				BIT(4)
 #define USE_DCIN_BIT				BIT(3)
 #define VALID_INPUT_POWER_SOURCE_STS_BIT	BIT(0)
@@ -586,7 +587,7 @@ static int sm7250_get_chg_type(const struct bms_dev *bms)
 static int sm7250_get_chg_status(const struct bms_dev *bms,
 				 bool *dc_valid, bool *usb_valid)
 {
-	bool plugged, valid;
+	bool plugged, valid, input_suspend;
 	int rc, ret;
 	int vchrg = 0;
 	u8 pstat, stat1, stat2;
@@ -597,6 +598,8 @@ static int sm7250_get_chg_status(const struct bms_dev *bms,
 
 	valid = (pstat & VALID_INPUT_POWER_SOURCE_STS_BIT);
 	plugged = (pstat & USE_DCIN_BIT) || (pstat & USE_USBIN_BIT);
+	input_suspend = (pstat & DCIN_SUSPEND_STS_BIT) ||
+				    (pstat & USBIN_SUSPEND_STS_BIT);
 
 	*dc_valid = valid && (pstat & USE_DCIN_BIT);
 	*usb_valid = valid && (pstat & USE_USBIN_BIT);
@@ -651,7 +654,10 @@ static int sm7250_get_chg_status(const struct bms_dev *bms,
 		break;
 	/* disabled disconnect */
 	case SM7250_DISABLE_CHARGE:
-		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		if (input_suspend)
+			ret = POWER_SUPPLY_STATUS_DISCHARGING;
+		else
+			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	default:
 		ret = POWER_SUPPLY_STATUS_UNKNOWN;
