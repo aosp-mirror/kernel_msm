@@ -2622,6 +2622,18 @@ static ssize_t is_rtx_connected_show(struct device *dev,
 
 static DEVICE_ATTR_RO(is_rtx_connected);
 
+static ssize_t rtx_err_show(struct device *dev,
+			    struct device_attribute *attr,
+			    char *buf)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct p9221_charger_data *charger = i2c_get_clientdata(client);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", charger->rtx_err);
+}
+
+static DEVICE_ATTR_RO(rtx_err);
+
 static ssize_t p9382_show_rtx_sw(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
@@ -2807,6 +2819,7 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 		}
 
 		charger->rtx_csp = 0;
+		charger->rtx_err = RTX_NO_ERROR;
 
 		ret = p9382_ben_cfg(charger, RTX_BEN_ON);
 		if (ret < 0)
@@ -2879,6 +2892,7 @@ static struct attribute *rtx_attributes[] = {
 	&dev_attr_rtx_status.attr,
 	&dev_attr_is_rtx_connected.attr,
 	&dev_attr_rx_lvl.attr,
+	&dev_attr_rtx_err.attr,
 	NULL
 };
 
@@ -3177,6 +3191,7 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 	}
 
 	if (irq_src & P9382_STAT_TXCONFLICT) {
+		charger->rtx_err = RTX_TX_CONFLICT;
 		dev_info(&charger->client->dev,
 			 "TX conflict, disable RTx. STATUS_REG=%04x",
 			 status_reg);

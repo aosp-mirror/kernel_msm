@@ -346,6 +346,7 @@ struct p9221_charger_data {
 	u32				aicl_icl_ua;
 	int				rtx_state;
 	u32				rtx_csp;
+	int				rtx_err;
 };
 
 struct p9221_prop_reg_map_entry {
@@ -361,6 +362,14 @@ enum p9382_rtx_state {
 	RTX_ACTIVE,
 	RTX_DISABLED,
 };
+
+enum p9382_rtx_err {
+      RTX_NO_ERROR = 0,
+      RTX_BATT_LOW,
+      RTX_OVER_TEMP,
+      RTX_TX_CONFLICT,
+};
+
 
 #define P9221_SHOW(name, reg, width, mask, format)			\
 	static ssize_t p9221_show_##name(struct device *dev,		\
