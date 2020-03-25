@@ -249,7 +249,7 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 		profile->volt_limits[vi] = profile->volt_limits[vi] /
 		    profile->fv_uv_resolution * profile->fv_uv_resolution;
 
-	ret = of_property_read_u32(node, "google,chg-last-tier",
+	ret = of_property_read_s32(node, "google,chg-last-tier",
 				   &profile->chg_last_tier);
 	if (ret < 0)
 		profile->chg_last_tier = -EINVAL;
@@ -268,7 +268,7 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 			profile->chg_last_tier_ramp_rate_dpct =
 				    GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_DPCT;
 
-		ret = of_property_read_u32(node,
+		ret = of_property_read_s32(node,
 				    "google,chg-last-tier-vpack-tolerance",
 				    &profile->chg_last_tier_vpack_tol);
 		if (ret < 0)
