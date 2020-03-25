@@ -11,6 +11,9 @@
 /* Maximum number of channels of touch data */
 #define MAX_CHANNELS 5
 
+#define DEVICE_NAME "touch_offload"
+#define CLASS_NAME "touch_offload"
+
 /* Frame of touch data
  *
  * entry - list entry in either the free pool or the event queue
@@ -32,6 +35,9 @@ struct touch_offload_frame {
 /* Touch Offload Context
  *
  * dev - char device
+ * major_num - device major number
+ * cls - pointer to class associated class
+ * device - pointer to associated device
  * file - char device file for ioctl interface
  * file_lock - mutex for the ioctl interface
  * file_in_use - flag indicating the ioctl interface in use by one client
@@ -53,6 +59,9 @@ struct touch_offload_frame {
 struct touch_offload_context {
 	/* ioctl interface */
 	struct cdev dev;
+	int major_num;
+	struct class *cls;
+	struct device *device;
 	struct file file;
 	struct mutex file_lock;
 	bool file_in_use;
