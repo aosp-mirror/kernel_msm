@@ -2,10 +2,6 @@
 #ifndef _UAPI_TOUCH_OFFLOAD_H
 #define _UAPI_TOUCH_OFFLOAD_H
 
-// TODO(spfetsch): can major/minor be ignored?
-#define TOUCH_OFFLOAD_MAJOR 73
-#define TOUCH_OFFLOAD_MINOR 5
-
 #define TOUCH_OFFLOAD_MAGIC '7'
 
 /* Bus interface type */

@@ -579,13 +579,6 @@ int touch_offload_init(struct touch_offload_context *context)
 
 	pr_debug("%s\n", __func__);
 
-	/* Initialize char device */
-	ret = register_chrdev_region(MKDEV(TOUCH_OFFLOAD_MAJOR,
-					   TOUCH_OFFLOAD_MINOR), 1,
-				     "touch_offload");
-	if (ret != 0)
-		return ret;
-
 	/* Initialize ioctl interface */
 	context->file_in_use = false;
 	mutex_init(&context->file_lock);
@@ -599,9 +592,36 @@ int touch_offload_init(struct touch_offload_context *context)
 
 	init_completion(&context->frame_queued);
 
+	/* Initialize char device */
+	context->major_num = register_chrdev(0, DEVICE_NAME,
+					     &touch_offload_fops);
+	if (context->major_num < 0) {
+		pr_err("%s: register_chrdev failed with error = %d\n",
+		       __func__, context->major_num);
+		return context->major_num;
+	}
+
+	context->cls = class_create(THIS_MODULE, CLASS_NAME);
+	if (IS_ERR(context->cls)) {
+		pr_err("%s: class_create failed with error = %d.\n",
+		       __func__, PTR_ERR(context->cls));
+		unregister_chrdev(context->major_num, DEVICE_NAME);
+		return PTR_ERR(context->cls);
+	}
+
+	context->device = device_create(context->cls, NULL,
+					MKDEV(context->major_num, 0), NULL,
+					DEVICE_NAME);
+	if (IS_ERR(context->device)) {
+		pr_err("%s: device_create failed with error = %d.\n",
+		       __func__, PTR_ERR(context->device));
+		class_destroy(context->cls);
+		unregister_chrdev(context->major_num, DEVICE_NAME);
+		return PTR_ERR(context->device);
+	}
+
 	cdev_init(&context->dev, &touch_offload_fops);
-	cdev_add(&context->dev, MKDEV(TOUCH_OFFLOAD_MAJOR, TOUCH_OFFLOAD_MINOR),
-		 1);
+	cdev_add(&context->dev, MKDEV(context->major_num, 0), 1);
 
 	return ret;
 }
@@ -612,8 +632,12 @@ int touch_offload_cleanup(struct touch_offload_context *context)
 	pr_debug("%s\n", __func__);
 
 	cdev_del(&context->dev);
-	unregister_chrdev_region(MKDEV(TOUCH_OFFLOAD_MAJOR,
-				       TOUCH_OFFLOAD_MINOR), 1);
+
+	device_destroy(context->cls, MKDEV(context->major_num, 0));
+
+	class_destroy(context->cls);
+
+	unregister_chrdev(context->major_num, DEVICE_NAME);
 
 	touch_offload_free_buffers(context);
 
