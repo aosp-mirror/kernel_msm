@@ -140,10 +140,6 @@
 		google,cycle-counts;
 
 		#thermal-sensor-cells = <0>;
-		google,ttf-adapter = <1800>;
-		google,ttf-soc-table =  <62 75 85 89  92  95  98  100>;
-		google,ttf-elap-table = <40 55 75 100 120 180 250 300>;
-		google,ttf-tier-table = <0 64 80>;
 		/* soc smoothing */
 		google,rl_delta-max-soc = <1>;
 		google,rl_delta-max-time = <15>;
