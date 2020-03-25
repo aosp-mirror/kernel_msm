@@ -323,6 +323,42 @@
 		qca,bt-reset-gpio = <&tlmm 85 0>; /* BT_EN */
 		status = "ok";
 	};
+<<<<<<< HEAD
+=======
+
+	subsys_notif_virt: qcom,subsys_notif_virt@2D000000 {
+		compatible = "qcom,subsys-notif-virt";
+		reg = <0x2D000000 0x400>;
+		reg-names = "vdev_base";
+		adsp {
+			subsys-name = "adsp";
+			interrupts = <0 43 0>;
+			interrupt-names = "state-irq";
+			type = "virtual";
+			offset = <0>;
+		};
+		wlan {
+			subsys-name = "wlan";
+			type = "native";
+			offset = <512>;
+		};
+	};
+
+	qcom_rng: qrng@793000 {
+		compatible = "qcom,msm-rng";
+		reg = <0x793000 0x1000>;
+		qcom,msm-rng-iface-clk;
+		qcom,no-qrng-config;
+		qcom,msm-bus,name = "msm-rng-noc";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<1 618 0 0>,    /* No vote */
+			<1 618 0 300000>;  /* 75 MHz */
+		clocks = <&clock_virt GCC_PRNG_AHB_CLK>;
+		clock-names = "iface_clk";
+	};
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 };
 
 #include "sa6155p-vm-pinctrl.dtsi"

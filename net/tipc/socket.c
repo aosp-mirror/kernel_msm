@@ -714,14 +714,19 @@ static unsigned int tipc_poll(struct file *file, struct socket *sock,
 			mask |= POLLOUT;
 		/* fall thru' */
 	case TIPC_LISTEN:
+<<<<<<< HEAD
 		if (!skb_queue_empty(&sk->sk_receive_queue))
+=======
+	case TIPC_CONNECTING:
+		if (!skb_queue_empty_lockless(&sk->sk_receive_queue))
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 			mask |= (POLLIN | POLLRDNORM);
 		break;
 	case TIPC_OPEN:
 		if (!tsk->cong_link_cnt)
 			mask |= POLLOUT;
 		if (tipc_sk_type_connectionless(sk) &&
-		    (!skb_queue_empty(&sk->sk_receive_queue)))
+		    (!skb_queue_empty_lockless(&sk->sk_receive_queue)))
 			mask |= (POLLIN | POLLRDNORM);
 		break;
 	case TIPC_DISCONNECTING:

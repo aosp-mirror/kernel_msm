@@ -192,6 +192,22 @@ Charger specific properties:
 		to be get from these properties defined in battery profile:
 		qcom,step-chg-ranges, qcom,jeita-fcc-ranges, qcom,jeita-fv-ranges.
 
+<<<<<<< HEAD
+=======
+- qcom,disable-stat-sw-override
+  Usage:      optional
+  Value type: bool
+  Definition: Boolean flag which when present disables STAT pin default software
+		override configuration.
+
+- qcom,fcc-stepping-enable
+  Usage:      optional
+  Value type: bool
+  Definition: Boolean flag which when present enables stepwise change in FCC.
+		The default stepping rate is 100mA/sec.
+
+
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 =============================================
 Second Level Nodes - SMB2 Charger Peripherals
 =============================================

@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -20,3 +20,12 @@
 		"qcom,sdxprairie", "qcom,ccard";
 	qcom,board-id = <25 2>, <25 0x102>;
 };
+<<<<<<< HEAD
+=======
+
+&ipa_hw {
+	qcom,ipa-config-is-auto;
+	qcom,use-xbl-boot;
+};
+
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030

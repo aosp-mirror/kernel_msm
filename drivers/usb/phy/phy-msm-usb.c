@@ -83,6 +83,7 @@ enum msm_usb_phy_type {
 #define IUNIT		100
 
 /**
+<<<<<<< HEAD
  * Different states involved in USB charger detection.
  *
  * USB_CHG_STATE_UNDEFINED	USB charger is not connected or detection
@@ -124,6 +125,8 @@ enum usb_chg_type {
 };
 
 /**
+=======
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
  * struct msm_otg_platform_data - platform device data
  *              for msm_otg driver.
  * @phy_init_seq: PHY configuration sequence values. Value of -1 is reserved as

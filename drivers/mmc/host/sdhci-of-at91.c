@@ -364,6 +364,12 @@ static int sdhci_at91_probe(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 50);
 	pm_runtime_use_autosuspend(&pdev->dev);
 
+<<<<<<< HEAD
+=======
+	/* HS200 is broken at this moment */
+	host->quirks2 |= SDHCI_QUIRK2_BROKEN_HS200;
+
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	ret = sdhci_add_host(host);
 	if (ret)
 		goto pm_runtime_disable;

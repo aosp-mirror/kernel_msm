@@ -167,5 +167,30 @@ config ARCH_SDXPRAIRIE
 	select COMMON_CLK_QCOM
 	select QCOM_GDSC
 	select GENERIC_CLOCKEVENTS_BROADCAST
+<<<<<<< HEAD
+=======
+
+config ARCH_MDM9607
+	bool "MDM9607"
+	select ARM_GIC
+	select CPU_V7
+	select REGULATOR
+	select REGULATOR_RPM_SMD
+	select HAVE_ARM_ARCH_TIMER
+	select MSM_RPM_SMD
+	select MEMORY_HOLE_CARVEOUT
+	select MSM_CORTEX_A7
+	select PINCTRL
+	select USE_PINCTRL_IRQ
+	select MSM_IRQ
+	select MSM_PM_LEGACY if PM
+	select PM_DEVFREQ
+	select QCOM_DEVFREQ_DEVBW
+	select QCOM_BIMC_BWMON
+	select DEVFREQ_GOV_QCOM_BW_HWMON
+	select HWSPINLOCK
+	select HAVE_CLK_PREPARE
+
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 endmenu
 endif

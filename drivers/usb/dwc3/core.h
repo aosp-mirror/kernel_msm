@@ -980,6 +980,7 @@ struct dwc3_scratchpad_array {
  * @irq_dbg_index: index for capturing IRQ stats
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
  * @vbus_draw: current to be drawn from USB
+ * @dis_metastability_quirk: set to disable metastability quirk.
  * @imod_interval: set the interrupt moderation interval in 250ns
  *                 increments or 0 to disable.
  * @index: dwc3's instance number
@@ -992,6 +993,7 @@ struct dwc3_scratchpad_array {
  * @bh_completion_time: time taken for taklet completion
  * @bh_handled_evt_cnt: no. of events handled by tasklet per interrupt
  * @bh_dbg_index: index for capturing bh_completion_time and bh_handled_evt_cnt
+ * @last_run_stop: timestamp denoting the last run_stop update
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1167,6 +1169,8 @@ struct dwc3 {
 	bool			b_suspend;
 	unsigned int		vbus_draw;
 
+	unsigned		dis_metastability_quirk:1;
+
 	u16			imod_interval;
 	struct workqueue_struct *dwc_wq;
 	struct work_struct      bh_work;
@@ -1207,6 +1211,7 @@ struct dwc3 {
 	 */
 	bool			host_poweroff_in_pm_suspend;
 	int			retries_on_error;
+	ktime_t			last_run_stop;
 };
 
 #define work_to_dwc(w)		(container_of((w), struct dwc3, drd_work))

@@ -291,6 +291,13 @@ struct htt_aggr_conf {
 	u8 max_num_amsdu_subframes;
 } __packed;
 
+struct htt_aggr_conf_v2 {
+	u8 max_num_ampdu_subframes;
+	/* amsdu_subframes is limited by 0x1F mask */
+	u8 max_num_amsdu_subframes;
+	u8 reserved;
+} __packed;
+
 #define HTT_MGMT_FRM_HDR_DOWNLOAD_LEN 32
 struct htt_mgmt_tx_desc_qca99x0 {
 	__le32 rate;
@@ -1518,7 +1525,13 @@ struct htt_cmd {
 		struct htt_stats_req stats_req;
 		struct htt_oob_sync_req oob_sync_req;
 		struct htt_aggr_conf aggr_conf;
+<<<<<<< HEAD
 		struct htt_frag_desc_bank_cfg frag_desc_bank_cfg;
+=======
+		struct htt_aggr_conf_v2 aggr_conf_v2;
+		struct htt_frag_desc_bank_cfg32 frag_desc_bank_cfg32;
+		struct htt_frag_desc_bank_cfg64 frag_desc_bank_cfg64;
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 		struct htt_tx_fetch_resp tx_fetch_resp;
 	};
 } __packed;
@@ -1726,6 +1739,31 @@ struct ath10k_htt {
 	bool tx_mem_allocated;
 };
 
+<<<<<<< HEAD
+=======
+struct ath10k_htt_tx_ops {
+	int (*htt_send_rx_ring_cfg)(struct ath10k_htt *htt);
+	int (*htt_send_frag_desc_bank_cfg)(struct ath10k_htt *htt);
+	int (*htt_alloc_frag_desc)(struct ath10k_htt *htt);
+	void (*htt_free_frag_desc)(struct ath10k_htt *htt);
+	int (*htt_tx)(struct ath10k_htt *htt, enum ath10k_hw_txrx_mode txmode,
+		      struct sk_buff *msdu);
+	int (*htt_alloc_txbuff)(struct ath10k_htt *htt);
+	void (*htt_free_txbuff)(struct ath10k_htt *htt);
+	int (*htt_h2t_aggr_cfg_msg)(struct ath10k_htt *htt,
+				    u8 max_subfrms_ampdu,
+				    u8 max_subfrms_amsdu);
+};
+
+struct ath10k_htt_rx_ops {
+	size_t (*htt_get_rx_ring_size)(struct ath10k_htt *htt);
+	void (*htt_config_paddrs_ring)(struct ath10k_htt *htt, void *vaddr);
+	void (*htt_set_paddrs_ring)(struct ath10k_htt *htt, dma_addr_t paddr,
+				    int idx);
+	void* (*htt_get_vaddr_ring)(struct ath10k_htt *htt);
+	void (*htt_reset_paddrs_ring)(struct ath10k_htt *htt, int idx);
+};
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 #define RX_HTT_HDR_STATUS_LEN 64
 
 /* This structure layout is programmed via rx ring setup

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 /* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+=======
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -387,6 +391,7 @@ int habmem_hyp_grant(unsigned long address,
 		int *compressed,
 		int *compressed_size)
 {
+<<<<<<< HEAD
 	int i;
 	struct grantable *item;
 	void *kva = (void *)(uintptr_t)address;
@@ -402,6 +407,44 @@ int habmem_hyp_grant(unsigned long address,
 			item[i].pfn = page_to_pfn(virt_to_page(kva));
 	}
 
+=======
+	int ret = 0;
+	struct dma_buf *dmabuf = NULL;
+
+	if (HABMM_EXPIMP_FLAGS_DMABUF & flags) {
+		dmabuf = (struct dma_buf *)address;
+		if (dmabuf)
+			get_dma_buf(dmabuf);
+	} else if (HABMM_EXPIMP_FLAGS_FD & flags)
+		dmabuf = dma_buf_get(address);
+
+	if (IS_ERR_OR_NULL(dmabuf)) {
+		pr_err("failed, invalid input addr: %pK\n", address);
+		return -EINVAL;
+	}
+
+	ret = habmem_add_export_compress(vchan,
+			0,
+			page_count,
+			dmabuf,
+			flags,
+			payload_size,
+			export_id);
+
+	return ret;
+}
+
+int habmem_exp_release(struct export_desc_super *exp_super)
+{
+	struct dma_buf *dmabuf =
+			(struct dma_buf *) exp_super->platform_data;
+
+	if (dmabuf)
+		dma_buf_put(dmabuf);
+	else
+		pr_debug("release failed, dmabuf is null!!!\n");
+
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	return 0;
 }
 

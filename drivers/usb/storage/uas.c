@@ -800,6 +800,7 @@ static int uas_slave_alloc(struct scsi_device *sdev)
 	sdev->hostdata = devinfo;
 
 	/*
+<<<<<<< HEAD
 	 * USB has unusual DMA-alignment requirements: Although the
 	 * starting address of each scatter-gather element doesn't matter,
 	 * the length of each element except the last must be divisible
@@ -814,6 +815,11 @@ static int uas_slave_alloc(struct scsi_device *sdev)
 	 * But it doesn't suffice for Wireless USB, where Bulk maxpacket
 	 * values can be as large as 2048.  To make that work properly
 	 * will require changes to the block layer.
+=======
+	 * The protocol has no requirements on alignment in the strict sense.
+	 * Controllers may or may not have alignment restrictions.
+	 * As this is not exported, we use an extremely conservative guess.
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	 */
 	blk_queue_update_dma_alignment(sdev->request_queue, (512 - 1));
 

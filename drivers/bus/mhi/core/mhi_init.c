@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -608,7 +608,6 @@ int mhi_init_timesync(struct mhi_controller *mhi_cntrl)
 		return -ENOMEM;
 
 	spin_lock_init(&mhi_tsync->lock);
-	mutex_init(&mhi_tsync->lpm_mutex);
 	INIT_LIST_HEAD(&mhi_tsync->head);
 	init_completion(&mhi_tsync->completion);
 
@@ -1356,7 +1355,7 @@ static int of_parse_dt(struct mhi_controller *mhi_cntrl,
 	return 0;
 
 error_ev_cfg:
-	kfree(mhi_cntrl->mhi_chan);
+	vfree(mhi_cntrl->mhi_chan);
 
 	return ret;
 }
@@ -1394,11 +1393,11 @@ int of_register_mhi_controller(struct mhi_controller *mhi_cntrl)
 
 	INIT_LIST_HEAD(&mhi_cntrl->transition_list);
 	mutex_init(&mhi_cntrl->pm_mutex);
+	mutex_init(&mhi_cntrl->tsync_mutex);
 	rwlock_init(&mhi_cntrl->pm_lock);
 	spin_lock_init(&mhi_cntrl->transition_lock);
 	spin_lock_init(&mhi_cntrl->wlock);
 	INIT_WORK(&mhi_cntrl->st_worker, mhi_pm_st_worker);
-	INIT_WORK(&mhi_cntrl->fw_worker, mhi_fw_load_worker);
 	INIT_WORK(&mhi_cntrl->syserr_worker, mhi_pm_sys_err_worker);
 	INIT_WORK(&mhi_cntrl->low_priority_worker, mhi_low_priority_worker);
 	init_waitqueue_head(&mhi_cntrl->state_event);
@@ -1522,7 +1521,7 @@ error_alloc_dev:
 	kfree(mhi_cntrl->mhi_cmd);
 
 error_alloc_cmd:
-	kfree(mhi_cntrl->mhi_chan);
+	vfree(mhi_cntrl->mhi_chan);
 	kfree(mhi_cntrl->mhi_event);
 
 	return ret;
@@ -1536,7 +1535,7 @@ void mhi_unregister_mhi_controller(struct mhi_controller *mhi_cntrl)
 
 	kfree(mhi_cntrl->mhi_cmd);
 	kfree(mhi_cntrl->mhi_event);
-	kfree(mhi_cntrl->mhi_chan);
+	vfree(mhi_cntrl->mhi_chan);
 	kfree(mhi_cntrl->mhi_tsync);
 
 	if (sfr_info) {
@@ -1610,9 +1609,6 @@ int mhi_prepare_for_power_up(struct mhi_controller *mhi_cntrl)
 
 			mhi_cntrl->bhie = mhi_cntrl->regs + bhie_off;
 		}
-
-		memset_io(mhi_cntrl->bhie + BHIE_RXVECADDR_LOW_OFFS, 0,
-			  BHIE_RXVECSTATUS_OFFS - BHIE_RXVECADDR_LOW_OFFS + 4);
 
 		if (mhi_cntrl->rddm_image)
 			mhi_rddm_prepare(mhi_cntrl, mhi_cntrl->rddm_image);

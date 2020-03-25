@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 /* Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+=======
+/* Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -68,6 +72,13 @@ enum print_reason {
 #define OTG_VOTER			"OTG_VOTER"
 #define PL_FCC_LOW_VOTER		"PL_FCC_LOW_VOTER"
 #define WBC_VOTER			"WBC_VOTER"
+<<<<<<< HEAD
+=======
+#define OV_VOTER			"OV_VOTER"
+#define MOISTURE_VOTER			"MOISTURE_VOTER"
+#define FG_ESR_VOTER			"FG_ESR_VOTER"
+#define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 #define VCONN_MAX_ATTEMPTS	3
 #define OTG_MAX_ATTEMPTS	3
@@ -344,6 +355,11 @@ struct smb_charger {
 	u8			float_cfg;
 	bool			use_extcon;
 	bool			otg_present;
+<<<<<<< HEAD
+=======
+	bool			disable_stat_sw_override;
+	bool			fcc_stepper_enable;
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 	/* workaround flag */
 	u32			wa_flags;

@@ -118,8 +118,23 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 			*mod->arch.ftrace_trampoline = trampoline;
 			module_enable_ro(mod, true);
 
+<<<<<<< HEAD
 			/* update trampoline before patching in the branch */
 			smp_wmb();
+=======
+			/*
+			 * Ensure updated trampoline is visible to instruction
+			 * fetch before we patch in the branch. Although the
+			 * architecture doesn't require an IPI in this case,
+			 * Neoverse-N1 erratum #1542419 does require one
+			 * if the TLB maintenance in module_enable_ro() is
+			 * skipped due to rodata_enabled. It doesn't seem worth
+			 * it to make it conditional given that this is
+			 * certainly not a fast-path.
+			 */
+			flush_icache_range((unsigned long)&dst[0],
+					   (unsigned long)&dst[1]);
+>>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 		}
 		addr = (unsigned long)(void *)mod->arch.ftrace_trampoline;
 #else /* CONFIG_ARM64_MODULE_PLTS */
