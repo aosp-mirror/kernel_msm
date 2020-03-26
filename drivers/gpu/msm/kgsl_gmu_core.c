@@ -243,27 +243,6 @@ void gmu_core_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 	__raw_writel(value, reg);
 }
 
-void gmu_core_regwrite_no_barrier(struct kgsl_device *device,
-		unsigned int offsetwords, unsigned int value)
-{
-	void __iomem *reg;
-
-	if (!gmu_core_is_register_offset(device, offsetwords)) {
-		WARN(1, "Out of bounds register write: 0x%x\n", offsetwords);
-		return;
-	}
-
-	trace_kgsl_regwrite(device, offsetwords, value);
-
-	offsetwords -= device->gmu_core.gmu2gpu_offset;
-	reg = device->gmu_core.reg_virt + (offsetwords << 2);
-
-	/*
-	 * no barrier, only for firmware loading
-	 */
-	__raw_writel_no_log(value, reg);
-}
-
 void gmu_core_regrmw(struct kgsl_device *device,
 		unsigned int offsetwords,
 		unsigned int mask, unsigned int bits)

@@ -218,9 +218,6 @@ void gmu_core_regread(struct kgsl_device *device, unsigned int offsetwords,
 		unsigned int *value);
 void gmu_core_regwrite(struct kgsl_device *device, unsigned int offsetwords,
 		unsigned int value);
-void gmu_core_regwrite_no_barrier(struct kgsl_device *device,
-		unsigned int offsetwords,
-		unsigned int value);
 void gmu_core_regrmw(struct kgsl_device *device, unsigned int offsetwords,
 		unsigned int mask, unsigned int bits);
 const char *gmu_core_oob_type_str(enum oob_request req);
