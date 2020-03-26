@@ -265,7 +265,8 @@ static int __init logbuffer_debugfs_init(void)
 	rootdir = debugfs_create_dir("logbuffer", NULL);
 	if (IS_ERR_OR_NULL(rootdir)) {
 		pr_err("Unable to create rootdir %ld\n", PTR_ERR(rootdir));
-		return PTR_ERR(rootdir);
+		rootdir = NULL;
+		return 0;
 	}
 
 	register_syscore_ops(&logbuffer_ops);
@@ -277,6 +278,9 @@ static void logbuffer_debugfs_exit(void)
 {
 	struct logbuffer *instance, *next;
 	unsigned long flags;
+
+	if (!rootdir)
+		return;
 
 	spin_lock_irqsave(&instances_lock, flags);
 	list_for_each_entry_safe(instance, next, &instances, entry) {
