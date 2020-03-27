@@ -57,6 +57,7 @@
 #define WLC_CURRENT_FILTER_LENGTH	10
 #define WLC_ALIGN_DEFAULT_SCALAR	4
 #define WLC_ALIGN_IRQ_THRESHOLD		10
+#define WLC_ALIGN_DEFAULT_HYSTERESIS	5000
 
 static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger);
@@ -874,9 +875,9 @@ static void p9221_init_align(struct p9221_charger_data *charger)
 
 static void p9221_align_work(struct work_struct *work)
 {
-	int res, align_buckets, i;
+	int res, align_buckets, i, wlc_freq_threshold, wlc_adj_freq;
 	u16 current_now, current_filter_sample;
-	u32 wlc_freq, current_scaling;
+	u32 wlc_freq, current_scaling = 0;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, align_work.work);
 
@@ -963,24 +964,39 @@ no_scaling:
 	align_buckets = charger->pdata->nb_alignment_freq - 1;
 
 	charger->alignment = -1;
+	wlc_adj_freq = wlc_freq + current_scaling;
+
+	if (wlc_adj_freq < charger->pdata->alignment_freq[0]) {
+		logbuffer_log(charger->log, "align: freq below range");
+		return;
+	}
 
 	for (i = 0; i < align_buckets; i += 1) {
-		if ((wlc_freq > (charger->pdata->alignment_freq[i] -
-				 current_scaling)) &&
-		    (wlc_freq <= (charger->pdata->alignment_freq[i + 1] -
-				  current_scaling))) {
+		if ((wlc_adj_freq > charger->pdata->alignment_freq[i]) &&
+		    (wlc_adj_freq <= charger->pdata->alignment_freq[i + 1])) {
 			charger->alignment = (WLC_ALIGNMENT_MAX * i) /
-						 (align_buckets - 1);
+					     (align_buckets - 1);
 			break;
 		}
 	}
 
-	if (i > align_buckets) {
-		logbuffer_log(charger->log, "align: freq out of bounds");
+	if (i >= align_buckets) {
+		logbuffer_log(charger->log, "align: freq above range");
 		return;
 	}
 
-	if (charger->alignment != charger->alignment_last) {
+	if (charger->alignment == charger->alignment_last)
+		return;
+
+	/*
+	 *  Frequency needs to be higher than frequency + hysteresis before
+	 *  increasing alignment score.
+	 */
+	wlc_freq_threshold = charger->pdata->alignment_freq[i] +
+			     charger->pdata->alignment_hysteresis;
+
+	if ((charger->alignment < charger->alignment_last) ||
+	    (wlc_adj_freq >= wlc_freq_threshold)) {
 		schedule_work(&charger->uevent_work);
 		logbuffer_log(charger->log,
 			      "align: alignment=%i. op_freq=%u. current_avg=%u",
@@ -2909,6 +2925,15 @@ static int p9221_parse_dt(struct device *dev,
 			dev_info(dev, "google,alignment_scalar updated to: %d\n",
 				 pdata->alignment_scalar);
 	}
+
+	ret = of_property_read_u32(node, "google,alignment_hysteresis", &data);
+	if (ret < 0)
+		pdata->alignment_hysteresis = WLC_ALIGN_DEFAULT_HYSTERESIS;
+	else
+		pdata->alignment_hysteresis = data;
+
+	dev_info(dev, "google,alignment_hysteresis set to: %d\n",
+				 pdata->alignment_hysteresis);
 
 	ret = of_property_read_bool(node, "idt,ramp-disable");
 	if (ret)

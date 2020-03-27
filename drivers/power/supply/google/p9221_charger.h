@@ -217,6 +217,12 @@
 #define P9221R5_MODE_EXTENDED			BIT(3)
 #define P9221R5_MODE_WPCMODE			BIT(0)
 
+enum p9221_align_mfg_chk_state {
+	ALIGN_MFG_FAILED = -1,
+	ALIGN_MFG_CHECKING,
+	ALIGN_MFG_PASSED,
+};
+
 struct p9221_charger_platform_data {
 	int				irq_gpio;
 	int				irq_int;
@@ -236,6 +242,7 @@ struct p9221_charger_platform_data {
 	int				nb_alignment_freq;
 	int				*alignment_freq;
 	u32				alignment_scalar;
+	u32				alignment_hysteresis;
 	u32				icl_ramp_delay_ms;
 };
 
@@ -291,7 +298,7 @@ struct p9221_charger_data {
 	int				alignment;
 	u8				alignment_str[(sizeof(u32) * 3) + 1];
 	int				alignment_last;
-	int				alignment_capable;
+	enum p9221_align_mfg_chk_state  alignment_capable;
 	int				mfg_check_count;
 	u16				mfg;
 	int				alignment_time;
@@ -306,12 +313,6 @@ struct p9221_prop_reg_map_entry {
 	u16				reg;
 	bool				get;
 	bool				set;
-};
-
-enum p9221_align_mfg_check_state {
-	ALIGN_MFG_FAILED = -1,
-	ALIGN_MFG_CHECKING,
-	ALIGN_MFG_PASSED,
 };
 
 #define P9221_SHOW(name, reg, width, mask, format)			\
