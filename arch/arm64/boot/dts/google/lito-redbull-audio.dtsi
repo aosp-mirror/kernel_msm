@@ -21,6 +21,10 @@
 	status = "disabled";
 };
 
+&va_macro {
+	status = "disabled";
+};
+
 &wcd938x_codec {
 	qcom,cdc-micbias2-mv = <2700>;
 };
