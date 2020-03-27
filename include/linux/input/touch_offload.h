@@ -48,7 +48,7 @@ struct touch_offload_frame {
  * free_pool - list of buffers available for use
  * frame_queue - list of captured frames queued for the service
  * reserved_frame - buffer ready to be filled with the next touch frame
- * frame_queued - completion used to indicate the new frame is in the queue
+ * read_queue - waitqueue for blocked readers
  * packed_frame - serialized frame being read by the char device client
  * packed_frame_size - size of the array pointed to by packed_frame
  * buffer_lock - mutex protecting buffer management
@@ -80,7 +80,7 @@ struct touch_offload_context {
 	struct list_head free_pool;
 	struct list_head frame_queue;
 	struct touch_offload_frame *reserved_frame;
-	struct completion frame_queued;
+	wait_queue_head_t read_queue;
 	char *packed_frame;
 	__u32 packed_frame_size;
 	struct mutex buffer_lock;
