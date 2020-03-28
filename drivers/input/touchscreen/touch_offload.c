@@ -173,7 +173,7 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 	remaining = copy_to_user(user_buffer, context->packed_frame + *offset,
 			      copy_size);
 	if (remaining != 0)
-		pr_err("%s: copy_to_user unexpectedly failed to copy %d bytes.\n",
+		pr_err("%s: copy_to_user unexpectedly failed to copy %lu bytes.\n",
 		       __func__, remaining);
 	*offset += copy_size - remaining;
 
@@ -345,6 +345,13 @@ static int touch_offload_free_buffers(struct touch_offload_context *context)
 
 	mutex_lock(&context->buffer_lock);
 
+	/* Ensure there is no outstanding reserved_frame before continuing */
+	while (context->reserved_frame != NULL) {
+		mutex_unlock(&context->buffer_lock);
+		wait_for_completion(&context->reserve_returned);
+		mutex_lock(&context->buffer_lock);
+	}
+
 	if (context->num_buffers > 0) {
 		while (!list_empty(&context->free_pool)) {
 			struct list_head *next = context->free_pool.next;
@@ -367,17 +374,6 @@ static int touch_offload_free_buffers(struct touch_offload_context *context)
 			for (chan = 0; chan < frame->num_channels; chan++)
 				kfree(frame->channel_data[chan]);
 			kfree(frame);
-			freed++;
-		}
-
-		if (context->reserved_frame != NULL) {
-			for (chan = 0;
-			     chan < context->reserved_frame->num_channels;
-			     chan++) {
-				kfree(
-				  context->reserved_frame->channel_data[chan]);
-			}
-			kfree(context->reserved_frame);
 			freed++;
 		}
 	}
@@ -552,6 +548,7 @@ int touch_offload_reserve_frame(struct touch_offload_context *context,
 		pr_debug("%s: buffer not available.\n", __func__);
 		ret = -EINVAL;
 	} else {
+		reinit_completion(&context->reserve_returned);
 		context->reserved_frame =
 			list_entry(context->free_pool.next,
 				   struct touch_offload_frame, entry);
@@ -585,6 +582,7 @@ int touch_offload_queue_frame(struct touch_offload_context *context,
 
 		list_add_tail(&frame->entry, &context->frame_queue);
 		context->reserved_frame = NULL;
+		complete_all(&context->reserve_returned);
 
 		wake_up(&context->read_queue);
 	}
@@ -614,18 +612,21 @@ int touch_offload_init(struct touch_offload_context *context)
 
 	init_waitqueue_head(&context->read_queue);
 
+	init_completion(&context->reserve_returned);
+	complete_all(&context->reserve_returned);
+
 	/* Initialize char device */
 	context->major_num = register_chrdev(0, DEVICE_NAME,
 					     &touch_offload_fops);
 	if (context->major_num < 0) {
-		pr_err("%s: register_chrdev failed with error = %d\n",
+		pr_err("%s: register_chrdev failed with error = %u\n",
 		       __func__, context->major_num);
 		return context->major_num;
 	}
 
 	context->cls = class_create(THIS_MODULE, CLASS_NAME);
 	if (IS_ERR(context->cls)) {
-		pr_err("%s: class_create failed with error = %d.\n",
+		pr_err("%s: class_create failed with error = %ld.\n",
 		       __func__, PTR_ERR(context->cls));
 		unregister_chrdev(context->major_num, DEVICE_NAME);
 		return PTR_ERR(context->cls);
@@ -635,7 +636,7 @@ int touch_offload_init(struct touch_offload_context *context)
 					MKDEV(context->major_num, 0), NULL,
 					DEVICE_NAME);
 	if (IS_ERR(context->device)) {
-		pr_err("%s: device_create failed with error = %d.\n",
+		pr_err("%s: device_create failed with error = %ld.\n",
 		       __func__, PTR_ERR(context->device));
 		class_destroy(context->cls);
 		unregister_chrdev(context->major_num, DEVICE_NAME);

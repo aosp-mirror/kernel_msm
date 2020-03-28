@@ -52,6 +52,7 @@ struct touch_offload_frame {
  * packed_frame - serialized frame being read by the char device client
  * packed_frame_size - size of the array pointed to by packed_frame
  * buffer_lock - mutex protecting buffer management
+ * reserve_returned - indicates that the reserved buffer was released
  * hcallback - handle/pointer to driver's private callback context
  * report_cb - driver callback used to report touch events
  * offload_running - indicates whether the offload path is in use
@@ -84,6 +85,7 @@ struct touch_offload_context {
 	char *packed_frame;
 	__u32 packed_frame_size;
 	struct mutex buffer_lock;
+	struct completion reserve_returned;
 
 	/* callbacks */
 	void *hcallback;
