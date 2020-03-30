@@ -145,16 +145,6 @@
 				hysteresis = <0>;
 				type = "passive";
 			};
-			modem_mon_trip0: modem-mon-trip0 {
-				temperature = <47000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			modem_mon_trip1: modem-mon-trip1 {
-				temperature = <55000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
 			cpu1_hotplug_trip: cpu1-hotplug-trip {
 				temperature = <49000>;
 				hysteresis = <3000>;
@@ -181,14 +171,6 @@
 				trip = <&cpu_freq_trip>;
 				cooling-device =
 					<&CPU3 THERMAL_NO_LIMIT 2>;
-			};
-			modem_lvl1 {
-				trip = <&modem_mon_trip0>;
-				cooling-device = <&modem_pa 2 2>;
-			};
-			modem_lvl2 {
-				trip = <&modem_mon_trip1>;
-				cooling-device = <&modem_pa 3 3>;
 			};
 			hotplug_cpu1_cdev {
 				trip = <&cpu1_hotplug_trip>;
