@@ -30,6 +30,25 @@
 #include <linux/usb/typec_altmode.h>
 #include <linux/workqueue.h>
 
+#define FOREACH_CHUNK_STATE(S)			\
+	S(INVALID_CHUNK_STATE),			\
+	S(RCH_WAIT_FOR_MESSAGE),		\
+	S(RCH_PASS_UP_MESSAGE),			\
+	S(RCH_PROCESSING_EXTENDED_MESSAGE),	\
+	S(RCH_REQUESTING_CHUNK),		\
+	S(RCH_WAITING_CHUNK),			\
+	S(RCH_REPORT_ERROR),			\
+	S(TCH_WAIT_FOR_MESSAGE_REQUEST),	\
+	S(TCH_PASS_DOWN_MESSAGE),		\
+	S(TCH_WAIT_FOR_TRANSMISSION_COMPLETE),	\
+	S(TCH_MESSAGE_SENT),			\
+	S(TCH_PREPARE_TO_SEND_CHUNKED_MESSAGE),	\
+	S(TCH_CONSTRUCT_CHUNKED_MESSAGE),	\
+	S(TCH_SENDING_CHUNKED_MESSAGE),		\
+	S(TCH_WAIT_CHUNK_REQUEST),		\
+	S(TCH_MESSAGE_RECEIVED),		\
+	S(TCH_REPORT_ERROR)
+
 #define FOREACH_STATE(S)			\
 	S(INVALID_STATE),			\
 	S(TOGGLING),			\
@@ -132,7 +151,9 @@
 	S(PORT_RESET_WAIT_OFF),			\
 						\
 	S(AMS_START),				\
-	S(CHUNK_NOT_SUPP)
+	S(CHUNK_NOT_SUPP),			\
+	S(CHUNK_RX),				\
+	S(CHUNK_RX_FINISH)
 
 #define FOREACH_AMS(S)				\
 	S(NONE_AMS),				\
@@ -189,6 +210,14 @@ static const char * const tcpm_ams_str[] = {
 	FOREACH_AMS(GENERATE_STRING)
 };
 
+enum tcpm_chunk_state {
+	FOREACH_CHUNK_STATE(GENERATE_ENUM)
+};
+
+static const char * const tcpm_chunk_state[] = {
+	FOREACH_CHUNK_STATE(GENERATE_STRING)
+};
+
 enum vdm_states {
 	VDM_STATE_ERR_BUSY = -3,
 	VDM_STATE_ERR_SEND = -2,
@@ -241,6 +270,13 @@ struct pd_pps_data {
 	u32 op_curr;
 	bool supported;
 	bool active;
+};
+
+struct pd_chunk_event {
+	struct pd_message msg;
+	enum pd_ext_msg_type expected_type;
+	u8 chunk_num_expected;
+	u16 num_bytes;
 };
 
 struct tcpm_port {
@@ -394,8 +430,21 @@ struct tcpm_port {
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 #endif
 
+	/* Chunk */
+	struct mutex chunk_lock;	/* chunk lock */
+	struct pd_chunk_event *chunk_event;
+	struct delayed_work chunk_state_machine;
+	enum tcpm_chunk_state chunk_tx_state;
+	enum tcpm_chunk_state chunk_rx_state;
+	enum tcpm_chunk_state delayed_chunk_state;
+	unsigned long chunk_delay_ms;
 	bool unchunk_supp;
+	bool complete_msg;
+	bool is_chunk_tx;
+	bool chunk_abort;
 	bool chunking;
+	u8 *ext_rx_buf;		/* store chunk rx data block */
+	u16 ext_rx_buf_size;
 };
 
 struct pd_rx_event {
@@ -2521,18 +2570,10 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 				    const struct pd_message *msg)
 {
 	enum pd_ext_msg_type type = pd_header_type_le(msg->header);
-	unsigned int data_size = pd_ext_header_data_size_le(msg->ext_msg.header);
 
 	if (!(msg->ext_msg.header & PD_EXT_HDR_CHUNKED)) {
 		tcpm_pd_handle_msg(port, PD_MSG_CTRL_NOT_SUPP, NONE_AMS);
 		tcpm_log(port, "Unchunked extended messages unsupported");
-		return;
-	}
-
-	if (data_size > PD_EXT_MAX_CHUNK_DATA) {
-		tcpm_pd_handle_state(port, CHUNK_NOT_SUPP, NONE_AMS,
-				     PD_T_CHUNK_NOT_SUPP);
-		tcpm_log(port, "Chunk handling not yet supported");
 		return;
 	}
 
@@ -2558,16 +2599,18 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 		 */
 		tcpm_pd_handle_state(port, ready_state(port), NONE_AMS, 0);
 		break;
+	case PD_EXT_SECURITY_RESPONSE:
+	case PD_EXT_SECURITY_REQUEST:
+	case PD_EXT_FW_UPDATE_RESPONSE:
+	case PD_EXT_FW_UPDATE_REQUEST:
+		tcpm_set_state(port, CHUNK_RX_FINISH, 0);
+		break;
 	case PD_EXT_SOURCE_CAP_EXT:
 	case PD_EXT_GET_BATT_CAP:
 	case PD_EXT_GET_BATT_STATUS:
 	case PD_EXT_BATT_CAP:
 	case PD_EXT_GET_MANUFACTURER_INFO:
 	case PD_EXT_MANUFACTURER_INFO:
-	case PD_EXT_SECURITY_REQUEST:
-	case PD_EXT_SECURITY_RESPONSE:
-	case PD_EXT_FW_UPDATE_REQUEST:
-	case PD_EXT_FW_UPDATE_RESPONSE:
 	case PD_EXT_COUNTRY_INFO:
 	case PD_EXT_COUNTRY_CODES:
 		tcpm_pd_handle_msg(port, PD_MSG_CTRL_NOT_SUPP, NONE_AMS);
@@ -2579,12 +2622,394 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 	}
 }
 
+static void tcpm_set_chunk_state(struct tcpm_port *port,
+				 enum tcpm_chunk_state state,
+				 unsigned int delay_ms)
+{
+	bool is_tx = (state > RCH_REPORT_ERROR) ? true : false;
+
+	if (delay_ms) {
+		tcpm_log(port, "pending chunk state change %s -> %s @ %u ms",
+			 is_tx ? tcpm_chunk_state[port->chunk_tx_state] :
+			 tcpm_chunk_state[port->chunk_rx_state],
+			 tcpm_chunk_state[state],
+			 delay_ms);
+		port->delayed_chunk_state = state;
+		port->chunk_delay_ms = delay_ms;
+	} else {
+		tcpm_log(port, "Chunk state change %s -> %s",
+			 is_tx ? tcpm_chunk_state[port->chunk_tx_state] :
+			 tcpm_chunk_state[port->chunk_rx_state],
+			 tcpm_chunk_state[state]);
+		port->delayed_chunk_state = INVALID_CHUNK_STATE;
+		if (is_tx)
+			port->chunk_tx_state = state;
+		else
+			port->chunk_rx_state = state;
+	}
+
+	mod_delayed_work(port->wq,
+			 &port->chunk_state_machine,
+			 delay_ms > 0 ? msecs_to_jiffies(delay_ms) : 0);
+}
+
+static void tcpm_rx_chunk_handler(struct tcpm_port *port)
+{
+	const struct pd_message *msg = &port->chunk_event->msg;
+	bool is_ext_msg = msg->header & PD_HEADER_EXT_HDR;
+	enum pd_ext_msg_type ext_msg_type = 0;
+	unsigned int data_size = 0;
+	bool request_chunk = false;
+	bool chunked = false;
+
+	tcpm_log(port, "rx_hdlr: state: %s, ext_msg: %s",
+		 tcpm_chunk_state[port->chunk_rx_state],
+		 is_ext_msg ? "yes" : "no");
+
+	if (is_ext_msg) {
+		chunked = msg->ext_msg.header & PD_EXT_HDR_CHUNKED;
+		ext_msg_type = pd_header_type_le(msg->header);
+		request_chunk = msg->ext_msg.header & PD_EXT_HDR_REQ_CHUNK;
+		data_size = pd_ext_header_data_size_le(msg->ext_msg.header);
+
+		if (data_size > PD_MAX_EXT_MSG_LEN) {
+			tcpm_log(port, "%s: exntended data size: %d overflow",
+				 __func__, data_size);
+			return;
+		}
+		tcpm_log(port,
+			 "rx_hdlr: e_type:%d req:%d chunked:%d, d_size:%d",
+			 ext_msg_type, request_chunk, chunked, data_size);
+	}
+
+	switch (port->chunk_rx_state) {
+	case RCH_WAIT_FOR_MESSAGE:
+		if (!is_ext_msg || (!port->chunking && !chunked)) {
+			tcpm_set_chunk_state(port, RCH_PASS_UP_MESSAGE, 0);
+		} else if (is_ext_msg && port->chunking && chunked) {
+			switch (ext_msg_type) {
+			case PD_EXT_SECURITY_RESPONSE:
+			case PD_EXT_SECURITY_REQUEST:
+				tcpm_pd_handle_state(port, CHUNK_RX, SECURITY,
+						     0);
+				break;
+			case PD_EXT_FW_UPDATE_RESPONSE:
+			case PD_EXT_FW_UPDATE_REQUEST:
+				tcpm_pd_handle_state(port, CHUNK_RX,
+						     FIRMWARE_UPDATE, 0);
+				break;
+			default:
+				break;
+			}
+
+			tcpm_set_chunk_state(port,
+					     RCH_PROCESSING_EXTENDED_MESSAGE,
+					     0);
+		/* This should only happen when port->chunking != chunked */
+		} else {
+			tcpm_set_chunk_state(port, RCH_REPORT_ERROR, 0);
+		}
+		break;
+	case RCH_WAITING_CHUNK:
+		if (is_ext_msg && chunked && !request_chunk &&
+		    (ext_msg_type == port->chunk_event->expected_type))
+			tcpm_set_chunk_state(port,
+					     RCH_PROCESSING_EXTENDED_MESSAGE,
+					     0);
+		else
+			tcpm_set_chunk_state(port, RCH_REPORT_ERROR, 0);
+		break;
+	case RCH_PASS_UP_MESSAGE:
+	case RCH_PROCESSING_EXTENDED_MESSAGE:
+	case RCH_REQUESTING_CHUNK:
+	case RCH_REPORT_ERROR:
+		/*
+		 * Any Message Received anda we are not in state
+		 * RCH_WAITING_CHUNK or
+		 * RCH_WAIT_FOR_MESSAGE, send to RCH_REPORT_ERROR
+		 */
+		tcpm_log(port, "rx_hdlr: unexpected msg, state: %s",
+			 tcpm_chunk_state[port->chunk_rx_state]);
+		tcpm_set_chunk_state(port, RCH_REPORT_ERROR, 0);
+		break;
+	default:
+		tcpm_log(port, "rx_hdlr: unknown state: %d",
+			 port->chunk_rx_state);
+		break;
+	}
+}
+
+static void run_chunked_rx_state_machine(struct tcpm_port *port)
+{
+	const struct pd_message *msg = &port->chunk_event->msg;
+	unsigned int cnt = pd_header_cnt_le(msg->header);
+	enum pd_ext_msg_type ext_msg_type = 0;
+	unsigned int data_size = 0;
+	int chunk_num_expected = 0;
+	int chunk_num = 0;
+	int ret = 0;
+	bool is_ext_msg = msg->header & PD_HEADER_EXT_HDR;
+	bool request_chunk = false;
+	bool chunked = false;
+
+	tcpm_log(port, "rx_sm: state: %s, ext_msg: %s",
+		 tcpm_chunk_state[port->chunk_rx_state],
+		 is_ext_msg ? "yes" : "no");
+
+	if (is_ext_msg) {
+		chunked = msg->ext_msg.header & PD_EXT_HDR_CHUNKED;
+		ext_msg_type = pd_header_type_le(msg->header);
+		request_chunk = msg->ext_msg.header & PD_EXT_HDR_REQ_CHUNK;
+
+		if (chunked) {//6.2.1.2.2
+			chunk_num =
+				pd_ext_header_chunk_num(msg->ext_msg.header);
+		}
+		data_size = pd_ext_header_data_size_le(msg->ext_msg.header);
+		tcpm_log(port,
+			 "rx_sm: e_type:%d chunked:%d ch_num:%d req:%d d_size:%d",
+			 ext_msg_type, chunked, chunk_num, request_chunk,
+			 data_size);
+	}
+
+	switch (port->chunk_rx_state) {
+	case RCH_WAIT_FOR_MESSAGE:
+		kfree(port->ext_rx_buf);
+		port->ext_rx_buf = NULL;
+		port->ext_rx_buf_size = 0;
+		port->chunk_abort = false;
+		break;
+	case RCH_PASS_UP_MESSAGE:
+		tcpm_set_chunk_state(port, RCH_WAIT_FOR_MESSAGE, 0);
+
+		if (is_ext_msg)
+			tcpm_pd_ext_msg_request(port, msg);
+		else if (cnt)
+			tcpm_pd_data_request(port, msg);
+		else
+			tcpm_pd_ctrl_request(port, msg);
+
+		memset(&port->chunk_event->msg, 0,
+		       sizeof(port->chunk_event->msg));
+		break;
+	case RCH_PROCESSING_EXTENDED_MESSAGE:
+		if (port->chunk_abort) {
+			tcpm_set_chunk_state(port, RCH_WAIT_FOR_MESSAGE, 0);
+			memset(&port->chunk_event->msg, 0,
+			       sizeof(port->chunk_event->msg));
+			break;
+		}
+
+		if (chunk_num == 0) {
+			port->chunk_event->chunk_num_expected = 0;
+			port->chunk_event->num_bytes = 0;
+			port->chunk_event->expected_type = 0;
+			if (!port->ext_rx_buf) {
+				port->ext_rx_buf =
+						kzalloc(data_size, GFP_KERNEL);
+				if (!port->ext_rx_buf) {
+					tcpm_log(port,
+						 "failed to alloc ext_rx_buf");
+					tcpm_set_chunk_state(port,
+							     RCH_REPORT_ERROR,
+							     0);
+					break;
+				}
+			}
+		}
+
+		if (chunk_num == port->chunk_event->chunk_num_expected) {
+			u16 last_chunk_num = data_size / PD_EXT_MAX_CHUNK_DATA;
+			u16 size_ext_msg = 0;
+			u16 num_bytes = port->chunk_event->num_bytes;
+
+			if (data_size <= PD_EXT_MAX_CHUNK_DATA) {
+				size_ext_msg = data_size;
+			} else if (chunk_num < last_chunk_num) {
+				size_ext_msg = PD_EXT_MAX_CHUNK_DATA;
+			} else if (chunk_num == last_chunk_num) {
+				size_ext_msg = data_size -
+					(PD_EXT_MAX_CHUNK_DATA * chunk_num);
+			} else {
+				tcpm_log(port, "rx_sm: data length is invalid");
+				tcpm_set_chunk_state(port, RCH_REPORT_ERROR, 0);
+			}
+
+			memcpy(port->ext_rx_buf + num_bytes, msg->ext_msg.data,
+			       size_ext_msg);
+			port->chunk_event->num_bytes = num_bytes + size_ext_msg;
+			port->ext_rx_buf_size = port->chunk_event->num_bytes;
+			if (chunk_num < last_chunk_num)
+				port->chunk_event->chunk_num_expected++;
+
+		} else {
+			tcpm_log(port, "rx_sm: chunk_num:%d isn't expected:%d",
+				 chunk_num,
+				 port->chunk_event->chunk_num_expected);
+			tcpm_set_chunk_state(port, RCH_REPORT_ERROR, 0);
+			break;
+		}
+
+		if (port->ext_rx_buf_size >= data_size) {
+			tcpm_log(port, "rx_sm: chunked data is complete");
+			tcpm_set_chunk_state(port, RCH_PASS_UP_MESSAGE, 0);
+		} else {
+			port->chunk_event->expected_type = ext_msg_type;
+			memset(&port->chunk_event->msg, 0,
+			       sizeof(port->chunk_event->msg));
+			tcpm_set_chunk_state(port, RCH_REQUESTING_CHUNK, 0);
+		}
+		break;
+	case RCH_REQUESTING_CHUNK:
+	{
+		/* Prepare chunk request */
+		struct pd_message req_msg;
+		enum pd_ext_msg_type ext_msg_type =
+					port->chunk_event->expected_type;
+		chunk_num_expected = port->chunk_event->chunk_num_expected;
+
+		memset(&req_msg, 0, sizeof(req_msg));
+
+		req_msg.header = PD_HEADER_LE(ext_msg_type,
+					      port->pwr_role,
+					      port->data_role,
+					      port->negotiated_rev,
+					      port->message_id, 1, 1);
+		req_msg.ext_msg.header = PD_EXT_HDR_LE(0,/* data size */
+						       1,/* req_chunk */
+						       chunk_num_expected,
+						       /* chunk_num */
+						       1/* chunked */);
+		mutex_lock(&port->lock);
+		ret = tcpm_pd_transmit(port, TCPC_TX_SOP, &req_msg);
+		mutex_unlock(&port->lock);
+		if (ret == 0) {
+			tcpm_set_chunk_state(port, RCH_WAITING_CHUNK, 0);
+		} else {
+			//It should not have msg while entering this state
+			tcpm_log(port,
+				 "chunk request(%d) isn't sent, ret = %d",
+				 chunk_num_expected, ret);
+			tcpm_set_chunk_state(port, RCH_REPORT_ERROR, 0);
+		}
+		break;
+	}
+	case RCH_WAITING_CHUNK:
+		tcpm_set_chunk_state(port, RCH_REPORT_ERROR,
+				     PD_T_CHUNK_SENDER_RESPONSE);
+		break;
+	case RCH_REPORT_ERROR:
+		tcpm_log(port, "rx_sm: report error, %s the message",
+			 port->complete_msg ? "handle" : "drop");
+
+		tcpm_set_chunk_state(port, RCH_WAIT_FOR_MESSAGE, 0);
+
+		if (msg && port->complete_msg) {
+			if (is_ext_msg)
+				tcpm_pd_ext_msg_request(port, msg);
+			else if (cnt)
+				tcpm_pd_data_request(port, msg);
+			else
+				tcpm_pd_ctrl_request(port, msg);
+		}
+		memset(&port->chunk_event->msg, 0,
+		       sizeof(port->chunk_event->msg));
+		break;
+	default:
+		tcpm_log(port, "rx_sm: unknown chunk state");
+		break;
+	}
+
+	return;
+}
+
+static void chunk_state_machine_work(struct work_struct *work)
+{
+	struct tcpm_port *port = container_of(work, struct tcpm_port,
+					      chunk_state_machine.work);
+
+	mutex_lock(&port->chunk_lock);
+
+	tcpm_log(port, "chunk_work: is_tx:%d, rx:%s, tx:%s, d_state:%s",
+		 port->is_chunk_tx, tcpm_chunk_state[port->chunk_rx_state],
+		 tcpm_chunk_state[port->chunk_tx_state],
+		 tcpm_chunk_state[port->delayed_chunk_state]);
+
+	/* FIXME: handle chunk tx */
+	if (!port->is_chunk_tx) {
+		if (port->delayed_chunk_state) {
+			tcpm_log(port,
+				 "Chunk state change %s -> %s [delayed %ld ms]",
+				 tcpm_chunk_state[port->chunk_rx_state],
+				 tcpm_chunk_state[port->delayed_chunk_state],
+				 port->chunk_delay_ms);
+			port->chunk_rx_state = port->delayed_chunk_state;
+			port->delayed_chunk_state = INVALID_CHUNK_STATE;
+		}
+		run_chunked_rx_state_machine(port);
+	}
+
+	mutex_unlock(&port->chunk_lock);
+}
+
+static void chunked_msg_router(struct tcpm_port *port,
+					      const struct pd_message *msg)
+{
+	enum pd_ctrl_msg_type ctrl_type;
+	u8 cnt = pd_header_cnt_le(msg->header);
+	u16 data_size = 0;
+	bool is_ext_msg = msg->header & PD_HEADER_EXT_HDR;
+	bool chunked = false;
+
+	mutex_lock(&port->chunk_lock);
+
+	if (!is_ext_msg) {
+		port->complete_msg = true;
+	} else {
+		data_size = pd_ext_header_data_size_le(msg->ext_msg.header);
+		chunked = msg->ext_msg.header & PD_EXT_HDR_CHUNKED;
+		if (data_size <= PD_EXT_MAX_CHUNK_DATA || chunked == 0)
+			port->complete_msg = true;
+		else
+			port->complete_msg = false;
+	}
+
+	if (!cnt)
+		ctrl_type = pd_header_type_le(msg->header);
+
+	if (ctrl_type == PD_CTRL_PING) {
+		/* Handle the PING message directly */
+		tcpm_pd_ctrl_request(port, msg);
+		goto done;
+	} else {
+		port->is_chunk_tx =
+			(port->chunk_tx_state != TCH_WAIT_FOR_MESSAGE_REQUEST) ?
+			true : false;
+	}
+
+	memset(&port->chunk_event->msg, 0, sizeof(port->chunk_event->msg));
+	memcpy(&port->chunk_event->msg, msg, sizeof(*msg));
+
+	tcpm_log(port, "msg_router: %s-msg rx:%s tx:%s d_state %s",
+		 port->complete_msg ? "complete" : "chunked",
+		 tcpm_chunk_state[port->chunk_rx_state],
+		 tcpm_chunk_state[port->chunk_tx_state],
+		 tcpm_chunk_state[port->delayed_chunk_state]);
+
+	/* FIXME: handle chunk tx */
+	if (!port->is_chunk_tx)
+		tcpm_rx_chunk_handler(port);
+
+done:
+	mutex_unlock(&port->chunk_lock);
+	return;
+}
+
 static void tcpm_pd_rx_handler(struct work_struct *work)
 {
 	struct pd_rx_event *event = container_of(work,
 						 struct pd_rx_event, work);
 	const struct pd_message *msg = &event->msg;
-	unsigned int cnt = pd_header_cnt_le(msg->header);
 	struct tcpm_port *port = event->port;
 
 	mutex_lock(&port->lock);
@@ -2619,12 +3044,8 @@ static void tcpm_pd_rx_handler(struct work_struct *work)
 				 "Data role mismatch, initiating error recovery");
 			tcpm_set_state(port, ERROR_RECOVERY, 0);
 		} else {
-			if (msg->header & PD_HEADER_EXT_HDR)
-				tcpm_pd_ext_msg_request(port, msg);
-			else if (cnt)
-				tcpm_pd_data_request(port, msg);
-			else
-				tcpm_pd_ctrl_request(port, msg);
+			//FIXME: make property to switch mechanism
+			chunked_msg_router(port, msg);
 		}
 	}
 
@@ -3361,6 +3782,12 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	port->pps_data.supported = false;
 	port->usb_comm_capable = false;
 
+	port->chunk_rx_state = RCH_WAIT_FOR_MESSAGE;
+	port->chunk_tx_state = TCH_WAIT_FOR_MESSAGE_REQUEST;
+	kfree(port->ext_rx_buf);
+	port->ext_rx_buf = NULL;
+	port->ext_rx_buf_size = 0;
+
 	/*
 	 * First Rx ID should be 0; set this to a sentinel of -1 so that
 	 * we can check tcpm_pd_rx_handler() if we had seen it before.
@@ -4065,6 +4492,8 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_unregister_altmodes(port);
 		port->send_discover = true;
 		port->usb_comm_capable = false;
+		if (port->chunk_rx_state != RCH_WAIT_FOR_MESSAGE)
+			tcpm_set_chunk_state(port, RCH_WAIT_FOR_MESSAGE, 0);
 		if (port->pwr_role == TYPEC_SOURCE)
 			tcpm_set_state(port, SRC_HARD_RESET_VBUS_OFF,
 				       PD_T_PS_HARD_RESET);
@@ -4412,6 +4841,12 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_pd_send_control(port, PD_CTRL_NOT_SUPP);
 		tcpm_set_state(port, port->pwr_role == TYPEC_SOURCE ?
 			       SRC_READY : SNK_READY, 0);
+		break;
+	case CHUNK_RX:
+		break;
+	case CHUNK_RX_FINISH:
+		tcpm_ams_finish(port);
+		tcpm_set_state(port, ready_state(port), 0);
 		break;
 	default:
 		WARN(1, "Unexpected port state %d\n", port->state);
@@ -5880,6 +6315,15 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 		}
 	}
 
+	port->chunk_event = kzalloc(sizeof(struct pd_chunk_event), GFP_KERNEL);
+	if (!port->chunk_event) {
+		tcpm_log(port, "%s: failed to alloc chunk_event");
+		goto out_destroy_wq;
+	}
+
+	INIT_DELAYED_WORK(&port->chunk_state_machine,
+			  chunk_state_machine_work);
+
 	mutex_lock(&port->lock);
 	tcpm_init(port);
 	mutex_unlock(&port->lock);
@@ -5907,6 +6351,7 @@ void tcpm_unregister_port(struct tcpm_port *port)
 	usb_role_switch_put(port->role_sw);
 	tcpm_debugfs_exit(port);
 	destroy_workqueue(port->wq);
+	kfree(port->chunk_event);
 }
 EXPORT_SYMBOL_GPL(tcpm_unregister_port);
 

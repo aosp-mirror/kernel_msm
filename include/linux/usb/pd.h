@@ -184,6 +184,7 @@ static inline unsigned int pd_ext_header_data_size_le(__le16 ext_header)
 
 #define PD_MAX_PAYLOAD		7
 #define PD_EXT_MAX_CHUNK_DATA	26
+#define PD_MAX_EXT_MSG_LEN	260
 
 /**
   * struct pd_chunked_ext_message_data - PD chunked extended message data as
@@ -458,6 +459,7 @@ static inline unsigned int rdo_max_power(u32 rdo)
 #define PD_T_NEWSRC            250     /* Maximum of 275ms */
 #define PD_T_SINK_TX		16	/* 16 - 20 ms */
 #define PD_T_CHUNK_NOT_SUPP	42	/* 40 - 50 ms */
+#define PD_T_CHUNK_SENDER_RESPONSE	30	/* 24 - 30 ms */
 
 #define PD_T_DRP_TRY		100	/* 75 - 150 ms */
 #define PD_T_DRP_TRYWAIT	600	/* 400 - 800 ms */
