@@ -251,3 +251,9 @@ Description:
 		If checkpoint=disable, it displays the number of blocks that are unusable.
                 If checkpoint=enable it displays the enumber of blocks that would be unusable
                 if checkpoint=disable were to be set.
+
+What:		/sys/fs/f2fs/<disk>/iostat_period_ms
+Date:		April 2020
+Contact:	"Daeho Jeong" <daehojeong@google.com>
+Description:	Give a way to change iostat_period time. 3secs by default.
+		The new iostat trace gives stats gap given the period.
