@@ -52,15 +52,29 @@
 		//MOSI,MISO,SS pin: input pull down
 		ts_bus_sleep: ts_bus_sleep {
 			mux {
-				pins = "gpio42", "gpio43", "gpio44";
+				pins = "gpio43", "gpio44";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio42", "gpio43", "gpio44";
+				pins = "gpio43", "gpio44";
 				drive-strength = <8>;
 				input-enable;
 				bias-pull-down;
+			};
+		};
+
+		ts_bus_sleep_miso: ts_bus_sleep_miso {
+			mux {
+				pins = "gpio42";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio42";
+				drive-strength = <8>;
+				input-enable;
+				bias-disable;
 			};
 		};
 
@@ -103,7 +117,8 @@
 
 		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
 		pinctrl-0 = <&ts_active_suspend &ts_bus_active>;
-		pinctrl-1 = <&ts_active_suspend &ts_bus_sleep &ts_bus_sleep_cs>;
+		pinctrl-1 = <&ts_active_suspend &ts_bus_sleep &ts_bus_sleep_miso
+			     &ts_bus_sleep_cs>;
 
 		st,irq-gpio = <&tlmm 9 0>;
 		st,reset-gpio = <&tlmm 8 0>;
