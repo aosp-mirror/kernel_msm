@@ -194,21 +194,21 @@ unsigned int capacity_margin				= 1280;
 
 /* Migration margins */
 unsigned int sysctl_sched_capacity_margin_up[MAX_MARGIN_LEVELS] = {
-			[0 ... MAX_MARGIN_LEVELS-1] = 1280}; /* ~20% margin */
+			[0 ... MAX_MARGIN_LEVELS-1] = 1078}; /* ~5% margin */
 unsigned int sysctl_sched_capacity_margin_down[MAX_MARGIN_LEVELS] = {
-			[0 ... MAX_MARGIN_LEVELS-1] = 1280}; /* ~20% margin */
+			[0 ... MAX_MARGIN_LEVELS-1] = 1205}; /* ~15% margin */
 unsigned int sched_capacity_margin_up[NR_CPUS] = {
-			[0 ... NR_CPUS-1] = 1280}; /* ~20% margin */
+			[0 ... NR_CPUS-1] = 1078}; /* ~5% margin */
 unsigned int sched_capacity_margin_down[NR_CPUS] = {
-			[0 ... NR_CPUS-1] = 1280}; /* ~20% margin */
+			[0 ... NR_CPUS-1] = 1205}; /* ~15% margin */
 unsigned int sysctl_sched_capacity_margin_up_boosted[MAX_MARGIN_LEVELS] = {
-			[0 ... MAX_MARGIN_LEVELS-1] = 1280}; /* ~20% margin */
+			[0 ... MAX_MARGIN_LEVELS-1] = 4096}; /* ~75% margin */
 unsigned int sysctl_sched_capacity_margin_down_boosted[MAX_MARGIN_LEVELS] = {
-			[0 ... MAX_MARGIN_LEVELS-1] = 1280}; /* ~20% margin */
+			[0 ... MAX_MARGIN_LEVELS-1] = 4096}; /* ~75% margin */
 unsigned int sched_capacity_margin_up_boosted[NR_CPUS] = {
-			[0 ... NR_CPUS-1] = 1280}; /* ~20% margin */
+			[0 ... NR_CPUS-1] = 4096}; /* ~75% margin */
 unsigned int sched_capacity_margin_down_boosted[NR_CPUS] = {
-			[0 ... NR_CPUS-1] = 1280}; /* ~20% margin */
+			[0 ... NR_CPUS-1] = 4096}; /* ~75% margin */
 
 #ifdef CONFIG_SCHED_WALT
 /* 1ms default for 20ms window size scaled to 1024 */
