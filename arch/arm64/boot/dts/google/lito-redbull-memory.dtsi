@@ -54,27 +54,27 @@
 	};
 
 &reserved_memory {
-	debug_info: debug_info@B09A1000 {
+	debug_info: debug_info@B7E01000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xB7E01000 0 0x20000>;
+		reg = <0 0xB7E01000 0 0x40000>;
 	};
 
-	ramoops_mem: ramoops_region@B09C1000 {
+	ramoops_mem: ramoops_region@B7E41000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xB7E21000 0 0x400000>;
+		reg = <0 0xB7E41000 0 0x400000>;
 	};
 
-	alt_ramoops_mem: alt_ramoops_region@B0DC1000 {
+	alt_ramoops_mem: alt_ramoops_region@B8241000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xB8221000 0 0x400000>;
+		reg = <0 0xB8241000 0 0x400000>;
 	};
 
-	ramoops_meta_mem: ramoops_meta_region@0xB11C1000 {
+	ramoops_meta_mem: ramoops_meta_region@0xB8641000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xB8621000 0 0x1000>;
+		reg = <0 0xB8641000 0 0x1000>;
 	};
 };
