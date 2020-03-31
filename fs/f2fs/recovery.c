@@ -143,6 +143,14 @@ static int recover_dentry(struct inode *inode, struct page *ipage,
 		goto out;
 	}
 retry:
+	if (IS_ENCRYPTED(dir) && IS_CASEFOLDED(dir)) {
+		if (fname.disk_name.len > F2FS_NAME_LEN - sizeof(f2fs_hash_t))
+			return -EINVAL;
+
+		fname.hash = le32_to_cpu(*((f2fs_hash_t *)
+				&raw_inode->i_name[fname.disk_name.len]));
+		fname.minor_hash = 1;
+	}
 	de = __f2fs_find_entry(dir, &fname, &page);
 	if (de && inode->i_ino == le32_to_cpu(de->ino))
 		goto out_put;
@@ -174,6 +182,8 @@ retry:
 	} else if (IS_ERR(page)) {
 		err = PTR_ERR(page);
 	} else {
+		if (IS_ENCRYPTED(dir) && IS_CASEFOLDED(dir))
+			fname.minor_hash = 0;
 		err = f2fs_add_dentry(dir, &fname, inode,
 					inode->i_ino, inode->i_mode);
 	}

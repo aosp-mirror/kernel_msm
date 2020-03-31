@@ -87,6 +87,8 @@ static f2fs_hash_t __f2fs_dentry_hash(const struct inode *dir,
 		return 0;
 
 	if (IS_CASEFOLDED(dir) && IS_ENCRYPTED(dir)) {
+		if (fname && fname->minor_hash)
+			return cpu_to_le32(fname->hash);
 		f2fs_hash = cpu_to_le32(fscrypt_fname_siphash(dir, name_info));
 		return f2fs_hash;
 	}
