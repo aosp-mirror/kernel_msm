@@ -6213,6 +6213,7 @@ static void lpd_recheck_work(struct work_struct *work)
 			goto exit;
 		}
 		chg->moisture_present = false;
+		vote(chg->usb_icl_votable, LPD_VOTER, false, 0);
 		power_supply_changed(chg->usb_psy);
 	} else {
 		rc = smblib_masked_write(chg, TYPE_C_INTERRUPT_EN_CFG_2_REG,
@@ -6265,6 +6266,7 @@ int enable_moisture_detection(struct smb_charger *chg, bool enable)
 				   "Could not enable drp toggling %d\n", rc);
 			goto exit;
 		}
+		vote(chg->usb_icl_votable, LPD_VOTER, false, 0);
 
 		/*
 		 * Possible that the LPD_VOTER was initially false which implies
