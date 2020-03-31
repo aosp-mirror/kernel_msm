@@ -687,6 +687,8 @@ struct ufs_stats {
 	int q_depth;
 	int err_stats[UFS_ERR_MAX];
 	struct ufshcd_req_stat req_stats[TS_NUM_STATS];
+	u64 peak_reqs[TS_NUM_STATS];
+	u64 peak_queue_depth;
 	int query_stats_arr[UPIU_QUERY_OPCODE_MAX][MAX_QUERY_IDN];
 	struct ufshcd_io_stat io_read;
 	struct ufshcd_io_stat io_write;
@@ -1356,9 +1358,14 @@ static inline bool ufshcd_is_embedded_dev(struct ufs_hba *hba)
 }
 
 #ifdef CONFIG_DEBUG_FS
+extern u64 ufshcd_prev_sum[TS_NUM_STATS];
+extern u64 ufshcd_prev_count[TS_NUM_STATS];
+
 static inline void ufshcd_init_req_stats(struct ufs_hba *hba)
 {
 	memset(hba->ufs_stats.req_stats, 0, sizeof(hba->ufs_stats.req_stats));
+	memset(ufshcd_prev_sum, 0, sizeof(ufshcd_prev_sum));
+	memset(ufshcd_prev_count, 0, sizeof(ufshcd_prev_count));
 }
 #else
 static inline void ufshcd_init_req_stats(struct ufs_hba *hba) {}
