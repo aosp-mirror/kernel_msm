@@ -38,7 +38,6 @@ struct gbms_chg_profile {
 	u32 capacity_ma;
 
 	/* behavior */
-	bool irdrop_disable;
 	u32 fv_uv_margin_dpct;
 	u32 cv_range_accuracy;
 	u32 cv_debounce_cnt;
