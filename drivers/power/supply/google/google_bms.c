@@ -252,7 +252,7 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 	ret = of_property_read_u32(node, "google,chg-last-tier",
 				   &profile->chg_last_tier);
 	if (ret < 0)
-		profile->chg_last_tier = -EINVAL;
+		profile->chg_last_tier = 0;
 	if (profile->chg_last_tier > 0) {
 		ret = of_property_read_u32(node,
 				    "google,chg-last-tier-ramp-rate-mv",
@@ -272,7 +272,7 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 				    "google,chg-last-tier-vpack-tolerance",
 				    &profile->chg_last_tier_vpack_tol);
 		if (ret < 0)
-			profile->chg_last_tier_vpack_tol = -EINVAL;
+			profile->chg_last_tier_vpack_tol = 0;
 
 		if (profile->chg_last_tier_vpack_tol > 0) {
 			ret = of_property_read_u32(node,

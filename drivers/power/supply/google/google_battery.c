@@ -1864,7 +1864,7 @@ static void msc_logic_ramp_rate(struct batt_drv *batt_drv, int vbatt,
 				profile->chg_last_tier_ramp_rate_dpct) / 1000;
 
 	/* bypass this algo if google,chg-last-tier isn't in device-tree  */
-	if (profile->chg_last_tier < 0)
+	if (!profile->chg_last_tier)
 		return;
 
 	/* during cv mode of last tier, micro-adjust cc_max to avoid vpack
