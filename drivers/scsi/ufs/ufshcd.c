@@ -53,6 +53,9 @@
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/ufs.h>
+
 static void ufshcd_update_slowio_min_us(struct ufs_hba *hba)
 {
 	enum ufshcd_slowio_optype i;
@@ -188,6 +191,50 @@ static void ufshcd_update_tag_stats_completion(struct ufs_hba *hba,
 		hba->ufs_stats.q_depth--;
 }
 
+/* record_ufs_stats() is following mm/mm_event.c style */
+static const unsigned long period_ms = 3000;
+static unsigned long next_period_ufs_stats;
+
+u64 ufshcd_prev_sum[TS_NUM_STATS] = { 0, };
+u64 ufshcd_prev_count[TS_NUM_STATS] = { 0, };
+static struct ufshcd_io_stat prev_io_read = { 0, };
+static struct ufshcd_io_stat prev_io_write = { 0, };
+
+static inline void record_ufs_stats(struct ufs_stats *ufs_stats)
+{
+	int i;
+	u64 avg_time[TS_NUM_STATS] = { 0, };
+
+	if (time_is_after_jiffies(next_period_ufs_stats))
+		return;
+	next_period_ufs_stats = jiffies + msecs_to_jiffies(period_ms);
+
+	for (i = 0; i < TS_NUM_STATS; i++) {
+		u64 count_diff = ufs_stats->req_stats[i].count
+					- ufshcd_prev_count[i];
+
+		if (count_diff) {
+			u64 sum_diff = ufs_stats->req_stats[i].sum
+					- ufshcd_prev_sum[i];
+			avg_time[i] = div64_u64(sum_diff, count_diff);
+		}
+	}
+
+	trace_ufs_stats(ufs_stats, &prev_io_read, &prev_io_write, avg_time);
+
+	for (i = 0; i < TS_NUM_STATS; i++) {
+		ufs_stats->peak_reqs[i] = 0;
+		ufshcd_prev_sum[i] = ufs_stats->req_stats[i].sum;
+		ufshcd_prev_count[i] = ufs_stats->req_stats[i].count;
+	}
+	ufs_stats->peak_queue_depth = 0;
+
+	memcpy(&prev_io_read, &ufs_stats->io_read,
+			sizeof(struct ufshcd_io_stat));
+	memcpy(&prev_io_write, &ufs_stats->io_write,
+			sizeof(struct ufshcd_io_stat));
+}
+
 static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		s64 delta)
 {
@@ -205,10 +252,12 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		hba->ufs_stats.req_stats[TS_TAG].max = delta;
 	if (delta < hba->ufs_stats.req_stats[TS_TAG].min)
 			hba->ufs_stats.req_stats[TS_TAG].min = delta;
+	if (delta > hba->ufs_stats.peak_reqs[TS_TAG])
+		hba->ufs_stats.peak_reqs[TS_TAG] = delta;
 
 	rq_type = ufshcd_tag_req_type(lrbp);
 	if (rq_type == TS_NOT_SUPPORTED)
-		return;
+		goto out;
 
 	/* update request type specific statistics */
 	if (hba->ufs_stats.req_stats[rq_type].count == 0)
@@ -219,6 +268,10 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		hba->ufs_stats.req_stats[rq_type].max = delta;
 	if (delta < hba->ufs_stats.req_stats[rq_type].min)
 			hba->ufs_stats.req_stats[rq_type].min = delta;
+	if (delta > hba->ufs_stats.peak_reqs[rq_type])
+		hba->ufs_stats.peak_reqs[rq_type] = delta;
+out:
+	record_ufs_stats(&hba->ufs_stats);
 }
 
 static void
@@ -251,6 +304,7 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	u8 opcode;
 	u32 transfer_len;
+	u64 inflight_req;
 
 	if (!lrbp->cmd)
 		return;
@@ -264,6 +318,13 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 			is_start);
 	__update_io_stat(hba, is_read_opcode(opcode) ? &hba->ufs_stats.io_read:
 			&hba->ufs_stats.io_write, transfer_len, is_start);
+
+	inflight_req = hba->ufs_stats.io_readwrite.req_count_started
+			- hba->ufs_stats.io_readwrite.req_count_completed;
+	if (inflight_req > hba->ufs_stats.peak_queue_depth)
+		hba->ufs_stats.peak_queue_depth = inflight_req;
+
+	record_ufs_stats(&hba->ufs_stats);
 }
 
 static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
@@ -317,9 +378,6 @@ static void ufshcd_update_uic_error_cnt(struct ufs_hba *hba, u32 reg, int type)
 		break;
 	}
 }
-
-#define CREATE_TRACE_POINTS
-#include <trace/events/ufs.h>
 
 #define PWR_INFO_MASK	0xF
 #define PWR_RX_OFFSET	4
