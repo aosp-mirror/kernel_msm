@@ -1600,16 +1600,6 @@ void ufsdbg_add_debugfs(struct ufs_hba *hba)
 		goto err;
 	}
 
-	hba->debugfs_files.err_stats =
-		debugfs_create_file("err_stats", S_IRUSR | S_IWUSR,
-					   hba->debugfs_files.stats_folder, hba,
-					   &ufsdbg_err_stats_fops);
-	if (!hba->debugfs_files.err_stats) {
-		dev_err(hba->dev, "%s:  NULL err_stats file, exiting",
-			__func__);
-		goto err;
-	}
-
 	if (ufshcd_init_statistics(hba)) {
 		dev_err(hba->dev, "%s: Error initializing statistics",
 			__func__);
