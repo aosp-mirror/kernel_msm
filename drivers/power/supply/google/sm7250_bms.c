@@ -759,7 +759,6 @@ static int sm7250_get_batt_health(struct bms_dev *bms)
 			rc);
 		return POWER_SUPPLY_HEALTH_UNKNOWN;
 	}
-	pr_info("BATTERY_CHARGER_STATUS_2 = 0x%02x\n", stat);
 
 	if (stat & CHG_ERR_STATUS_BAT_OV) {
 		rc = sm7250_get_battery_voltage(bms, &vchrg);
@@ -791,7 +790,6 @@ static int sm7250_get_batt_health(struct bms_dev *bms)
 			rc);
 		return POWER_SUPPLY_HEALTH_UNKNOWN;
 	}
-	pr_info("BATTERY_CHARGER_STATUS_7 = 0x%02x\n", stat);
 	if (stat & BAT_TEMP_STATUS_TOO_COLD)
 		ret = POWER_SUPPLY_HEALTH_COLD;
 	else if (stat & BAT_TEMP_STATUS_TOO_HOT)
