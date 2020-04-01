@@ -245,8 +245,6 @@ update_io_stat(struct ufs_hba *hba, int tag, int is_start)
 			&hba->ufs_stats.io_write, transfer_len, is_start);
 }
 
-#ifdef CONFIG_DEBUG_FS
-
 static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 {
 	ufsdbg_set_err_state(hba);
@@ -254,6 +252,7 @@ static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
 		hba->ufs_stats.err_stats[type]++;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static void ufshcd_update_query_stats(struct ufs_hba *hba,
 				      enum query_opcode opcode, u8 idn)
 {
@@ -262,9 +261,6 @@ static void ufshcd_update_query_stats(struct ufs_hba *hba,
 }
 
 #else
-static inline void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
-{
-}
 
 static inline
 void ufshcd_update_query_stats(struct ufs_hba *hba,
@@ -11805,6 +11801,83 @@ static const struct attribute_group ufs_sysfs_io_stats_group = {
 	.attrs = ufs_sysfs_io_stats,
 };
 
+#define UFS_ERR_STATS_ATTR(_name, _err_name)                                   \
+	static ssize_t _name##_show(struct device *dev,                        \
+				    struct device_attribute *attr, char *buf)  \
+	{                                                                      \
+		struct ufs_hba *hba = dev_get_drvdata(dev);                    \
+		unsigned long flags;                                           \
+		u64 val;                                                       \
+		spin_lock_irqsave(hba->host->host_lock, flags);                \
+		val = hba->ufs_stats.err_stats[_err_name];                     \
+		spin_unlock_irqrestore(hba->host->host_lock, flags);           \
+		return snprintf(buf, PAGE_SIZE, "%llu\n", val);                \
+	}                                                                      \
+	static DEVICE_ATTR_RO(_name)
+
+static ssize_t reset_err_status_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
+static ssize_t reset_err_status_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_stats *stats = &hba->ufs_stats;
+	unsigned long flags;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	memset(stats->err_stats, 0, sizeof(hba->ufs_stats.err_stats));
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	return count;
+}
+
+UFS_ERR_STATS_ATTR(err_hibern8_exit, UFS_ERR_HIBERN8_EXIT);
+UFS_ERR_STATS_ATTR(err_vops_suspend, UFS_ERR_VOPS_SUSPEND);
+UFS_ERR_STATS_ATTR(err_eh, UFS_ERR_EH);
+UFS_ERR_STATS_ATTR(err_clear_pend_xfer_tm, UFS_ERR_CLEAR_PEND_XFER_TM);
+UFS_ERR_STATS_ATTR(err_int_fatal_error, UFS_ERR_INT_FATAL_ERRORS);
+UFS_ERR_STATS_ATTR(err_int_uic_error, UFS_ERR_INT_UIC_ERROR);
+UFS_ERR_STATS_ATTR(err_crypto_engine, UFS_ERR_CRYPTO_ENGINE);
+UFS_ERR_STATS_ATTR(err_hibern8_enter, UFS_ERR_HIBERN8_ENTER);
+UFS_ERR_STATS_ATTR(err_resume, UFS_ERR_RESUME);
+UFS_ERR_STATS_ATTR(err_suspend, UFS_ERR_SUSPEND);
+UFS_ERR_STATS_ATTR(err_linkstartup, UFS_ERR_LINKSTARTUP);
+UFS_ERR_STATS_ATTR(err_power_mode_change, UFS_ERR_POWER_MODE_CHANGE);
+UFS_ERR_STATS_ATTR(err_task_abort, UFS_ERR_TASK_ABORT);
+UFS_ERR_STATS_ATTR(err_autoh8_enter, UFS_ERR_AUTOH8_ENTER);
+UFS_ERR_STATS_ATTR(err_autoh8_exit, UFS_ERR_AUTOH8_EXIT);
+DEVICE_ATTR_RW(reset_err_status);
+
+static struct attribute *ufs_sysfs_err_stats[] = {
+	&dev_attr_err_hibern8_exit.attr,
+	&dev_attr_err_vops_suspend.attr,
+	&dev_attr_err_eh.attr,
+	&dev_attr_err_clear_pend_xfer_tm.attr,
+	&dev_attr_err_int_fatal_error.attr,
+	&dev_attr_err_int_uic_error.attr,
+	&dev_attr_err_crypto_engine.attr,
+	&dev_attr_err_hibern8_enter.attr,
+	&dev_attr_err_resume.attr,
+	&dev_attr_err_suspend.attr,
+	&dev_attr_err_linkstartup.attr,
+	&dev_attr_err_power_mode_change.attr,
+	&dev_attr_err_task_abort.attr,
+	&dev_attr_err_autoh8_enter.attr,
+	&dev_attr_err_autoh8_exit.attr,
+	&dev_attr_reset_err_status.attr,
+	NULL,
+};
+
+static const struct attribute_group ufs_sysfs_err_stats_group = {
+	.name = "err_stats",
+	.attrs = ufs_sysfs_err_stats,
+};
+
 static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 {
 	if (sysfs_create_group(&hba->dev->kobj, &ufshcd_attr_group))
@@ -11821,6 +11894,8 @@ static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 		dev_err(hba->dev, "Failed to create req_stats group\n");
 	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_io_stats_group))
 		dev_err(hba->dev, "Failed to create io_stats group\n");
+	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_err_stats_group))
+		dev_err(hba->dev, "Failed to create err_stats group\n");
 #ifdef CONFIG_SCSI_UFS_IMPAIRED
 	ufs_impaired_init_sysfs(hba);
 #endif
