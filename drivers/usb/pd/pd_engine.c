@@ -50,6 +50,7 @@
 
 #define OTG_ICL_VOTER "OTG_ICL_VOTER"
 #define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
+#define TCPM_DISABLE_CC_VOTER "TCPM_DISABLE_CC_VOTER"
 
 #define SUZYQ_ENABLED "enabled"
 
@@ -140,6 +141,7 @@ struct usbpd {
 	struct logbuffer *log;
 
 	bool pd_disabled;
+	struct votable *disable_power_role_switch;
 };
 
 static u8 always_enable_data;
@@ -1056,7 +1058,6 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 
 	switch (cc) {
 	case TYPEC_CC_OPEN:
-		val.intval = POWER_SUPPLY_TYPEC_PR_NONE;
 		break;
 	case TYPEC_CC_RD:
 		val.intval = POWER_SUPPLY_TYPEC_PR_SINK;
@@ -1103,15 +1104,40 @@ static int tcpm_set_cc(struct tcpc_dev *dev, enum typec_cc_status cc)
 	    (port_is_sink(pd) && cc_is_source(cc)))
 		goto unlock;
 
-	ret = power_supply_set_property(pd->usb_psy,
+	/*
+	 * Vote true to ensure that CC will not be set toggling by others and at
+	 * the same time CC will be set to Open in the callback of the votable.
+	 *
+	 * Vote false to remove the vote of TCPM_DISABLE_CC_VOTER. If the voting
+	 * result is changed, it will set the power role to PR_DUAL in smblib.
+	 */
+	ret = vote(pd->disable_power_role_switch, TCPM_DISABLE_CC_VOTER,
+		   cc == TYPEC_CC_OPEN ? true : false, 0);
+
+	if (ret < 0) {
+		logbuffer_log(pd->log,
+			      "unable to vote DISABLE_POWER_ROLE_SWITCH to %s, ret=%d",
+			      cc == TYPEC_CC_OPEN ? true : false, ret);
+		goto unlock;
+	}
+
+	/*
+	 * power role would be set in the callback of DISABLE_POWER_ROLE_SWITCH
+	 * if we are going to set cc to Open.
+	 */
+	if (cc != TYPEC_CC_OPEN) {
+		ret = power_supply_set_property(pd->usb_psy,
 					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
 					&val);
-	if (ret < 0)
-		logbuffer_log(pd->log, "unable to set POWER_ROLE, ret=%d",
-			      ret);
-	else
-		logbuffer_log(pd->log, "set POWER_ROLE to %d",
-			      cc);
+		if (ret < 0)
+			logbuffer_log(pd->log,
+				      "unable to set POWER_ROLE to %d, ret=%d",
+				      cc, ret);
+		else
+			logbuffer_log(pd->log, "set POWER_ROLE to %d", cc);
+	} else {
+		logbuffer_log(pd->log, "set POWER_ROLE to CC_OPEN");
+	}
 
 unlock:
 	mutex_unlock(&pd->lock);
@@ -1508,7 +1534,6 @@ static int tcpm_start_toggling(struct tcpc_dev *dev,
 	 * Ignore the typec_cc_status for now. As current no
 	 * src_pdo is configured, the default is Rp_def.
 	 */
-	union power_supply_propval val = {0};
 	struct usbpd *pd = container_of(dev, struct usbpd, tcpc_dev);
 	int ret;
 
@@ -1517,19 +1542,24 @@ static int tcpm_start_toggling(struct tcpc_dev *dev,
 
 	mutex_lock(&pd->lock);
 
-	val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
-
-	ret = power_supply_set_property(pd->usb_psy,
-					POWER_SUPPLY_PROP_TYPEC_POWER_ROLE,
-					&val);
+	ret = vote(pd->disable_power_role_switch, TCPM_DISABLE_CC_VOTER,
+		   false, 0);
 	if (ret < 0) {
 		logbuffer_log(pd->log,
-			      "unable to set POWER_ROLE to PR_DUAL, ret=%d",
+			      "unable to unvote DISABLE_POWER_ROLE_SWITCH, ret=%d",
 			      ret);
 		goto unlock;
 	}
 
-	logbuffer_log(pd->log, "start toggling");
+	ret = rerun_election(pd->disable_power_role_switch);
+	if (ret < 0)
+		logbuffer_log(pd->log,
+			      "error rerunning election of DISABLE_POWER_ROLE_SWITCH, ret=%d",
+			      ret);
+
+	logbuffer_log(pd->log, "start toggling, cc is %s",
+		      get_effective_result(pd->disable_power_role_switch) ?
+		      "disabled" : "toggling");
 
 	/* Force a recheck of the CC status since cc lines are
 	 * assumed to be open.
@@ -2241,9 +2271,19 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto put_psy_wireless;
 	}
 
+	pd->disable_power_role_switch =
+				find_votable("DISABLE_POWER_ROLE_SWITCH");
+	if (pd->disable_power_role_switch == NULL) {
+		dev_err(&pd->dev,
+			"Couldn't find DISABLE_POWER_ROLE_SWITCH votable, deferring probe");
+		ret = -EPROBE_DEFER;
+		goto put_psy_wireless;
+	}
+
 	/* initialize votable */
 	vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
 	vote(pd->apsd_disable_votable, OTG_DISABLE_APSD_VOTER, false, 0);
+	vote(pd->disable_power_role_switch, TCPM_DISABLE_CC_VOTER, false, 0);
 
 	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
 	ext_vbus_register_notify(&pd->ext_vbus_nb);
