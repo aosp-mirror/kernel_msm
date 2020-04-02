@@ -978,6 +978,10 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 		ce_data->tier_stats[i].vtier_idx = i;
 		ce_data->tier_stats[i].soc_in = -1;
 	}
+
+	ce_data->health_stats.temp_idx = -1;
+	ce_data->health_stats.vtier_idx = i;
+	ce_data->health_stats.soc_in = -1;
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
@@ -1065,11 +1069,10 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 				  int temp_idx, int tier_idx,
 				  int ibatt_ma, int temp, time_t elap)
 {
-	int cc;
-	const int msc_state = batt_drv->msc_state;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
-	struct gbms_ce_tier_stats *tier =
-				&batt_drv->ce_data.tier_stats[tier_idx];
+	const int msc_state = batt_drv->msc_state;
+	struct gbms_ce_tier_stats *tier;
+	int cc;
 
 	/* TODO: read at start of tier and update cc_total of previous */
 	cc = GPSY_GET_PROP(batt_drv->fg_psy,
@@ -1080,13 +1083,22 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 	}
 	cc = cc / 1000;
 
-	/* book to previous soc unless discharging */
-	if (msc_state != MSC_DSG) {
-		qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
+	if (msc_state == MSC_HEALTH) {
+		tier = &batt_drv->ce_data.health_stats;
 
-		/* TODO: should I use ssoc instead? */
-		batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
-					  tier_idx, cc);
+		/* TODO: book time to health ttf stats */
+	} else {
+		const qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
+
+		/* book to previous soc unless discharging */
+		if (msc_state != MSC_DSG) {
+
+			/* TODO: should I use ssoc instead? */
+			batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
+						tier_idx, cc);
+		}
+
+		tier = &batt_drv->ce_data.tier_stats[tier_idx];
 	}
 
 	/* book to previous state */
@@ -1248,13 +1260,71 @@ static int batt_chg_stats_soc_next(const struct gbms_charging_event *ce_data,
 	return soc_next;
 }
 
+static int batt_chg_tier_stats_cstr(char *buff, int size,
+				    const struct gbms_ce_tier_stats *tier_stat,
+				    bool verbose)
+{
+	const int soc_in = tier_stat->soc_in >> 8;
+	const long elap = tier_stat->time_fast + tier_stat->time_taper +
+			  tier_stat->time_other;
+	const static char *codes[] = {"n", "s", "d", "l", "v", "vo", "p", "f",
+					"t", "dl", "st", "tc", "r", "w", "rs",
+					"n", "ny", "h"};
+	int j, len = 0;
+
+	if (!elap)
+		return 0;
+
+	len += scnprintf(&buff[len], size - len, "\n%d%c ",
+		tier_stat->vtier_idx,
+		(verbose) ? ':' : ',');
+
+	len += scnprintf(&buff[len], size - len,
+		"%d.%d,%d,%d, %d,%d,%d, %d,%ld,%d, %d,%ld,%d, %d,%ld,%d",
+			soc_in,
+			tier_stat->soc_in & 0xff,
+			tier_stat->cc_in,
+			tier_stat->temp_in,
+			tier_stat->time_fast,
+			tier_stat->time_taper,
+			tier_stat->time_other,
+			tier_stat->temp_min,
+			tier_stat->temp_sum / elap,
+			tier_stat->temp_max,
+			tier_stat->ibatt_min,
+			tier_stat->ibatt_sum / elap,
+			tier_stat->ibatt_max,
+			tier_stat->icl_min,
+			tier_stat->icl_sum / elap,
+			tier_stat->icl_max);
+
+	if (!verbose)
+		return len;
+
+	/* time spent in every multi step charging state */
+	len += scnprintf(&buff[len], size - len, "\n%d:",
+			tier_stat->vtier_idx);
+
+	for (j = 0; j < MSC_STATES_COUNT; j++)
+		len += scnprintf(&buff[len], size - len, " %s=%d",
+			codes[j], tier_stat->msc_elap[j]);
+
+	/* count spent in each step charging state */
+	len += scnprintf(&buff[len], size - len, "\n%d:",
+			tier_stat->vtier_idx);
+
+	for (j = 0; j < MSC_STATES_COUNT; j++)
+		len += scnprintf(&buff[len], size - len, " %s=%d",
+			codes[j], tier_stat->msc_cnt[j]);
+
+	return len;
+}
+
 static int batt_chg_stats_cstr(char *buff, int size,
 			       const struct gbms_charging_event *ce_data,
 			       bool verbose)
 {
-	int i, j, len = 0;
-	static char *codes[] = { "n", "s", "d", "l", "v", "vo", "p", "f", "t",
-				"dl", "st", "tc", "r", "w", "rs", "n", "ny" };
+	int i, len = 0;
 
 	if (verbose) {
 		const char *adapter_name =
@@ -1290,62 +1360,23 @@ static int batt_chg_stats_cstr(char *buff, int size,
 	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
 		const int soc_next = batt_chg_stats_soc_next(ce_data, i);
 		const int soc_in = ce_data->tier_stats[i].soc_in >> 8;
-		const long elap = ce_data->tier_stats[i].time_fast +
-				  ce_data->tier_stats[i].time_taper +
-				  ce_data->tier_stats[i].time_other;
 
-		if (!elap)
-			continue;
-
-		len += scnprintf(&buff[len], size - len, "\n%d%c ",
-			ce_data->tier_stats[i].vtier_idx,
-			(verbose) ? ':' : ',');
-
-		len += scnprintf(&buff[len], size - len,
-			"%d.%d,%d,%d, %d,%d,%d, %d,%ld,%d, %d,%ld,%d, %d,%ld,%d",
-				soc_in,
-				ce_data->tier_stats[i].soc_in & 0xff,
-				ce_data->tier_stats[i].cc_in,
-				ce_data->tier_stats[i].temp_in,
-				ce_data->tier_stats[i].time_fast,
-				ce_data->tier_stats[i].time_taper,
-				ce_data->tier_stats[i].time_other,
-				ce_data->tier_stats[i].temp_min,
-				ce_data->tier_stats[i].temp_sum / elap,
-				ce_data->tier_stats[i].temp_max,
-				ce_data->tier_stats[i].ibatt_min,
-				ce_data->tier_stats[i].ibatt_sum / elap,
-				ce_data->tier_stats[i].ibatt_max,
-				ce_data->tier_stats[i].icl_min,
-				ce_data->tier_stats[i].icl_sum / elap,
-				ce_data->tier_stats[i].icl_max);
-
-		if (!verbose)
-			continue;
-
-		/* time spent in every multi step charging state */
-		len += scnprintf(&buff[len], size - len, "\n%d:",
-				ce_data->tier_stats[i].vtier_idx);
-
-		for (j = 0; j < MSC_STATES_COUNT; j++)
-			len += scnprintf(&buff[len], size - len, " %s=%d",
-				codes[j], ce_data->tier_stats[i].msc_elap[j]);
-
-		/* count spent in each step charging state */
-		len += scnprintf(&buff[len], size - len, "\n%d:",
-				ce_data->tier_stats[i].vtier_idx);
-
-		for (j = 0; j < MSC_STATES_COUNT; j++)
-			len += scnprintf(&buff[len], size - len, " %s=%d",
-				codes[j], ce_data->tier_stats[i].msc_cnt[j]);
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->tier_stats[i],
+						verbose);
 
 		if (soc_next) {
 			len += scnprintf(&buff[len], size - len, "\n");
 			len += ttf_soc_cstr(&buff[len], size - len,
-					&ce_data->soc_stats,
-					soc_in, soc_next);
+					    &ce_data->soc_stats,
+					    soc_in, soc_next);
 		}
 	}
+
+	/* halth based charging stats (when elap in health > 0) */
+	len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+					&ce_data->health_stats,
+					verbose);
 
 	len += scnprintf(&buff[len], size - len, "\n");
 
@@ -1852,6 +1883,11 @@ static int msc_pm_hold(int msc_state)
 	case MSC_VSWITCH:
 	case MSC_NEXT:
 	case MSC_LAST:
+	case MSC_HEALTH:
+		pm_state = 0;  /* pm_relax */
+		break;
+	default:
+		pr_info("hold not defined for msc_state=%d\n", msc_state);
 		pm_state = 0;  /* pm_relax */
 		break;
 	}
@@ -2101,21 +2137,19 @@ static int msc_logic(struct batt_drv *batt_drv)
 	batt_drv->ce_data.last_update = now;
 	mutex_unlock(&batt_drv->stats_lock);
 
-	if (!is_msc_last)
-		batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
-						    vbatt_idx);
-
-	/* next update */
-	batt_drv->msc_update_interval = update_interval;
-
 	pr_info("MSC_LOGIC cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
 		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
 		batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
 		vbatt_idx, batt_drv->fv_uv, fv_uv,
 		batt_drv->cc_max);
 
+	/* next update */
+	batt_drv->msc_update_interval = update_interval;
 	batt_drv->vbatt_idx = vbatt_idx;
 	batt_drv->temp_idx = temp_idx;
+	if (!is_msc_last)
+		batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
+						    vbatt_idx);
 	batt_drv->fv_uv = fv_uv;
 
 	return 0;
@@ -2229,6 +2263,8 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 	 * based charging is active
 	 */
 	changed |= msc_logic_health(&batt_drv->chg_health, batt_drv);
+	if (batt_drv->chg_health.rest_state == CHG_HEALTH_ACTIVE)
+		batt_drv->msc_state = MSC_HEALTH;
 
 msc_logic_done:
 	/* set ->cc_max = 0 on RL and SW_JEITA, no vote on interval in RL_DSG */

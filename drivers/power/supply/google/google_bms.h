@@ -107,6 +107,7 @@ enum gbms_msc_states_t {
 	MSC_RSTC,	/* in taper */
 	MSC_NEXT,	/* in taper */
 	MSC_NYET,	/* in taper */
+	MSC_HEALTH,
 	MSC_STATES_COUNT,
 };
 
@@ -212,6 +213,8 @@ struct gbms_charging_event {
 	/* charge event and tier tracking */
 	struct gbms_ce_stats		charging_stats;
 	struct gbms_ce_tier_stats	tier_stats[GBMS_STATS_TIER_COUNT];
+	struct gbms_ce_tier_stats	health_stats;
+
 	/* soc tracking for time to full */
 	struct ttf_soc_stats soc_stats;
 	int last_soc;
