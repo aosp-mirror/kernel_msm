@@ -139,30 +139,29 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 
 	vbatt_idx = ttf_pwr_tier(stats, soc);
 	if (vbatt_idx < 0)
-		return -1;
+		return -EINVAL;
 
 	/* TODO: compensate with average increase/decrease of temperature? */
 	temp_idx = ce_data->tier_stats[vbatt_idx].temp_idx;
 	if (temp_idx == -1) {
+		int64_t t_avg;
 		const int elap = ce_data->tier_stats[vbatt_idx].time_fast +
 		 		 ce_data->tier_stats[vbatt_idx].time_taper +
 		 		 ce_data->tier_stats[vbatt_idx].time_other;
-		int64_t t_avg = ce_data->tier_stats[vbatt_idx].temp_sum / elap;
 
-		if (ce_data->tier_stats[vbatt_idx].temp_sum == 0 || elap == 0)
+		if (ce_data->tier_stats[vbatt_idx].temp_sum != 0 || elap == 0)
 			t_avg = ce_data->tier_stats[vbatt_idx].temp_in;
 		if (t_avg == 0)
 			t_avg = 250;
 
 		temp_idx = gbms_msc_temp_idx(profile, t_avg);
-
 		pr_debug("%d: temp_idx=%d t_avg=%ld sum=%ld elap=%d\n",
 			soc, temp_idx, t_avg,
 			ce_data->tier_stats[vbatt_idx].temp_sum,
 			elap);
 
 		if (temp_idx < 0)
-			return -1;
+			return -EINVAL;
 	}
 
 	/* max tier demand at this temperature index */
@@ -185,7 +184,7 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 	act_icl = ttf_pwr_icl(ce_data, temp_idx, vbatt_idx);
 	if (act_icl <= 0) {
 		pr_debug("%d: negative, null act_icl=%d\n", soc, act_icl);
-		return -1;
+		return -EINVAL;
 	}
 
 	/* compensate for temperature (might not need) */
@@ -201,14 +200,16 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 	act_ibatt = ttf_pwr_ibatt(ce_data, temp_idx, vbatt_idx);
 	if (act_ibatt < 0) {
 		pr_debug("%d: ibatt=%d, discharging\n", soc, act_ibatt);
-		return -1;
+		return -EINVAL;
 	} else if (act_ibatt > 0 && act_ibatt < act_icl) {
 		pr_debug("%d: sysload ibatt=%d, avg_cc=%d, reduce icl %d->%d\n",
 			soc, act_ibatt, avg_cc, act_icl, act_ibatt);
 		act_icl = act_ibatt;
 	}
 
-	pwr_avail = (ce_data->adapter_details.ad_voltage * 10 ) * act_icl;
+	pwr_avail = (ce_data->adapter_details.ad_voltage * 10) * act_icl;
+	if (!pwr_avail)
+		return -EINVAL;
 
 	/* TODO: scale for efficiency? */
 
