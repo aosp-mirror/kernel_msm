@@ -228,6 +228,7 @@ struct chg_drv {
 	/* pps charging */
 	struct pd_pps_data pps_data;
 	unsigned int pps_cc_tolerance_pct;
+	bool auto_switch_pps_pdo;
 
 	/* override voltage and current */
 	bool enable_user_fcc_fv;
@@ -1552,6 +1553,9 @@ static int chg_init_chg_profile(struct chg_drv *chg_drv)
 
 	of_node_put(dn);
 
+	chg_drv->auto_switch_pps_pdo =
+			of_property_read_bool(node, "google,pps-auto-switch");
+
 	pr_info("charging profile in the battery\n");
 
 	return 0;
@@ -2206,7 +2210,8 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	/* demand more power */
 	if ((-ibatt < cc_max * (100 - chg_drv->pps_cc_tolerance_pct) / 100) ||
 	    flags & GBMS_CS_FLAG_ILIM) {
-		if (pps->out_uv == pps->max_uv) {
+		if (chg_drv->auto_switch_pps_pdo &&
+		    (pps->out_uv == pps->max_uv)) {
 			ret = pps_switch_profile(chg_drv, true);
 			if (ret == 0)
 				return -ECANCELED;
@@ -2223,9 +2228,11 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 		if (pps->keep_alive_cnt < PPS_KEEP_ALIVE_MAX)
 			return 0;
 
-		ret = pps_switch_profile(chg_drv, false);
-		if (ret == 0)
-			return -ECANCELED;
+		if (chg_drv->auto_switch_pps_pdo) {
+			ret = pps_switch_profile(chg_drv, false);
+			if (ret == 0)
+				return -ECANCELED;
+		}
 
 		pps_adjust_volt(pps, -100000);
 		/* TODO: b/134799977 adjust the max current */
