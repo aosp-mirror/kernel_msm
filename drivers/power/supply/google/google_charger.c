@@ -583,11 +583,8 @@ static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 	return disable_charging;
 }
 
-#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
-
-/* false when not present or error (either way don't run) */
-static unsigned int pps_is_avail(struct pd_pps_data *pps,
-				 struct power_supply *tcpm_psy)
+static int pps_update_status(struct pd_pps_data *pps,
+			     struct power_supply *tcpm_psy)
 {
 	pps->max_uv = GPSY_GET_PROP(tcpm_psy,
 					POWER_SUPPLY_PROP_VOLTAGE_MAX);
@@ -601,6 +598,21 @@ static unsigned int pps_is_avail(struct pd_pps_data *pps,
 					POWER_SUPPLY_PROP_CURRENT_NOW);
 	if (pps->max_uv < 0 || pps->min_uv < 0 || pps->max_ua < 0 ||
 		pps->out_uv < 0 || pps->op_ua < 0)
+		return -EINVAL;
+
+	return 0;
+}
+
+#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
+
+/* false when not present or error (either way don't run) */
+static unsigned int pps_is_avail(struct pd_pps_data *pps,
+				 struct power_supply *tcpm_psy)
+{
+	int rc;
+
+	rc = pps_update_status(pps, tcpm_psy);
+	if (rc < 0)
 		return PPS_NONE;
 
 	/* TODO: lower the loglevel after the development stage */
@@ -1804,7 +1816,6 @@ static int set_chg_mode(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(chg_mode_fops, get_chg_mode, set_chg_mode, "%llu\n");
 
-
 static int debug_get_pps_out_uv(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
@@ -2108,6 +2119,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 {
 	struct pd_pps_data *pps = &chg_drv->pps_data;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
+	struct power_supply *tcpm_psy = chg_drv->tcpm_psy;
 	const uint8_t flags = chg_drv->pps_data.chg_flags;
 	int ret = 0, ibatt, vbatt, ioerr;
 	unsigned long exp_mw;
@@ -2138,6 +2150,12 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	/* TODO: should we compensate for the round down here? */
 	exp_mw = (unsigned long)vbatt * (unsigned long)cc_max * 1.1 /
 		 1000000000;
+
+	ret = pps_update_status(pps, tcpm_psy);
+	if (ret < 0) {
+		logbuffer_log(pps->log, "Failed to get pps status");
+		return -EINVAL;
+	}
 
 	logbuffer_log(pps->log,
 		"ibatt %d, vbatt %d, vbatt*cc_max*1.1 %lu mw, adapter %ld, keep_alive_cnt %d",
