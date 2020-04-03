@@ -1796,6 +1796,34 @@ static int chg_set_update_interval(void *data, u64 val)
 DEFINE_SIMPLE_ATTRIBUTE(chg_ui_fops, chg_get_update_interval,
 				     chg_set_update_interval, "%llu\n");
 
+static int debug_set_pps_max_out_uv(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	struct pd_pps_data *pps = &chg_drv->pps_data;
+	u32 pdo;
+	int ret;
+
+	/* TODO: validate the input */
+	pdo = PDO_PPS_APDO(pps->min_uv / 1000 ? : 5000,
+			   val / 1000,
+			   pps->max_ua / 1000 ? : 3000);
+	ret = chg_update_capability(chg_drv->tcpm_psy, PDO_PPS, pdo);
+	if (ret < 0)
+		logbuffer_log(pps->log,
+			      "Failed to update debug sink caps, ret %d",
+			      ret);
+	else
+		logbuffer_log(pps->log,
+			      "update debug sink caps, %uuV-%uuV@%uuA",
+			      pps->min_uv ? : 5000000,
+			      (u32)val,
+			      pps->max_ua ? : 3000000);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_pps_max_out_uv_fops, NULL,
+				debug_set_pps_max_out_uv, "%llu\n");
 
 /* use qcom VS maxim fg and more... */
 static int get_chg_mode(void *data, u64 *val)
@@ -2010,6 +2038,8 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 		debugfs_create_file("force_reschedule", 0600, de,
 				chg_drv, &chg_reschedule_work_fops);
 
+		debugfs_create_file("pps_max_out_uv", 0600, de,
+				   chg_drv, &debug_pps_max_out_uv_fops);
 		debugfs_create_file("pps_out_uv", 0600, de,
 				   chg_drv, &debug_pps_out_uv_fops);
 		debugfs_create_file("pps_op_ua", 0600, de,
