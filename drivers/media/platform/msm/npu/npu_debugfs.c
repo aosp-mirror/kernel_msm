@@ -441,6 +441,9 @@ void npu_debugfs_deinit(struct npu_device *npu_dev)
 {
 	struct npu_debugfs_ctx *debugfs = &npu_dev->debugfs_ctx;
 
+	if (IS_ERR_OR_NULL(debugfs->root))
+		return;
+
 	debugfs->log_num_bytes_buffered = 0;
 	debugfs->log_read_index = 0;
 	debugfs->log_write_index = 0;
