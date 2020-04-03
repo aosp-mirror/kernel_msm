@@ -2,9 +2,15 @@ KERNEL_DIR=private/msm-google
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common.clang
 POST_DEFCONFIG_CMDS="check_defconfig && update_perf_config"
 
+EN_THINLTO=
+if [[ "${ENABLE_THINLTO:-0}" -eq 1 ]]; then
+	EN_THINLTO="-e THINLTO"
+fi
+
 function update_perf_config() {
   # Disable debug options
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+    ${EN_THINLTO} \
     -d CGROUP_DEBUG \
     -d CMA_DEBUGFS \
     -d PM_DEBUG \
