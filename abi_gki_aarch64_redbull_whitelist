@@ -1469,8 +1469,6 @@
   devres_alloc_node
   devres_free
   devres_release
-  fb_register_client
-  fb_unregister_client
 
 # required by lpm-stats.ko
   kobject_get
