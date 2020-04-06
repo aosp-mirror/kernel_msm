@@ -1832,7 +1832,14 @@ static int qg_get_battery_capacity_raw(struct qpnp_qg *chip, int *soc)
 	int rc, vbat_uv = 0;
 
 	rc = qg_get_vbat_avg(chip, &vbat_uv);
-	if (rc < 0 || vbat_uv <= (chip->dt.fvss_vbat_mv * 1000))
+	if (rc != 0)
+		return -EINVAL;
+
+	if (vbat_uv <= chip->dt.fvss_vbat_mv * 1000)
+		return -EINVAL;
+
+	/* return if vbat is more than fvss_entry but sys_soc is less than 1% */
+	if (chip->sys_soc < 100)
 		return -EINVAL;
 
 	mutex_lock(&chip->soc_lock);
