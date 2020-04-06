@@ -473,6 +473,13 @@ static const struct midr_range spectre_v2_safe_list[] = {
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A35),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A53),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A55),
+	MIDR_ALL_VERSIONS(MIDR_KRYO3S),
+	MIDR_ALL_VERSIONS(MIDR_KRYO4S),
+	MIDR_ALL_VERSIONS(MIDR_KRYO2XX_SILVER),
+	MIDR_RANGE(MIDR_KRYO4G, 0, 0, 12, 13),
+	MIDR_RANGE(MIDR_KRYO4G, 13, 15,
+		   (MIDR_VARIANT_MASK >> MIDR_VARIANT_SHIFT),
+		   MIDR_REVISION_MASK),
 	{ /* sentinel */ }
 };
 
@@ -665,15 +672,15 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 	/* Cortex-A76 r0p0 to r3p0 */
 		.desc = "ARM erratum 1286807",
 		.capability = ARM64_WORKAROUND_REPEAT_TLBI,
-		MIDR_RANGE(MIDR_CORTEX_A76,
-			   MIDR_CPU_VAR_REV(0, 0),
-			   MIDR_CPU_VAR_REV(3, 0)),
+		ERRATA_MIDR_RANGE(MIDR_CORTEX_A76,
+				  0, 0,
+				  3, 0),
 	},
 	{
 		.capability = ARM64_WORKAROUND_REPEAT_TLBI,
-		MIDR_RANGE(MIDR_KRYO4G,
-			   MIDR_CPU_VAR_REV(12, 14),
-			   MIDR_CPU_VAR_REV(13, 14)),
+		ERRATA_MIDR_RANGE(MIDR_KRYO4G,
+				  12, 14,
+				  13, 14),
 	},
 #endif
 #ifdef CONFIG_ARM64_ERRATUM_858921

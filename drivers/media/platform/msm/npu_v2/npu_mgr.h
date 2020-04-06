@@ -13,15 +13,17 @@
 #ifndef _NPU_MGR_H
 #define _NPU_MGR_H
 
-/*
+/* -------------------------------------------------------------------------
  * Includes
+ * -------------------------------------------------------------------------
  */
 #include <linux/spinlock.h>
 #include "npu_hw_access.h"
 #include "npu_common.h"
 
-/*
+/* -------------------------------------------------------------------------
  * Defines
+ * -------------------------------------------------------------------------
  */
 #define NW_RSC_TIMEOUT_MS (1000 * 5) /* set for 5 seconds */
 #define NW_RSC_TIMEOUT msecs_to_jiffies(NW_RSC_TIMEOUT_MS)
@@ -41,8 +43,9 @@
 #define FW_DBG_MODE_INC_TIMEOUT  (1 << 1)
 #define FW_DBG_DISABLE_WDOG      (1 << 2)
 
-/*
+/* -------------------------------------------------------------------------
  * Data Structures
+ * -------------------------------------------------------------------------
  */
 
 struct npu_network_cmd {
@@ -143,8 +146,9 @@ struct npu_host_ctx {
 
 struct npu_device;
 
-/*
+/* -------------------------------------------------------------------------
  * Function Prototypes
+ * -------------------------------------------------------------------------
  */
 int npu_host_init(struct npu_device *npu_dev);
 void npu_host_deinit(struct npu_device *npu_dev);

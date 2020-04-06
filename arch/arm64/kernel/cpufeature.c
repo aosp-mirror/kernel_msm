@@ -811,7 +811,7 @@ static bool runs_at_el2(const struct arm64_cpu_capabilities *entry, int __unused
 {
 	return is_kernel_in_hyp_mode();
 }
-#endif	/* CONFIG_ARM64_VHE */
+#endif
 
 static bool hyp_offset_low(const struct arm64_cpu_capabilities *entry,
 			   int __unused)
@@ -1078,7 +1078,7 @@ static void cpu_enable_ssbs(const struct arm64_cpu_capabilities *__unused)
 	} else {
 		arm64_set_ssbd_mitigation(true);
 	}
-
+}
 #endif /* CONFIG_ARM64_SSBD */
 
 static const struct arm64_cpu_capabilities arm64_features[] = {
@@ -1214,6 +1214,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		 *
 		 */
 		.capability = ARM64_HW_DBM,
+		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
 		.sys_reg = SYS_ID_AA64MMFR1_EL1,
 		.sign = FTR_UNSIGNED,
 		.field_pos = ID_AA64MMFR1_HADBS_SHIFT,

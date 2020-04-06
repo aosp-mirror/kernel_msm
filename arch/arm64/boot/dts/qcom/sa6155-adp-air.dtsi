@@ -35,6 +35,7 @@
 &soc {
 	qcom,lpass@62400000 {
 		status = "ok";
+		qcom,pil-force-shutdown;
 	};
 
 	qcom,glink {
@@ -64,8 +65,8 @@
 		clock-names = "core_clk", "wr0_mem_clk",
 			      "wr1_mem_clk", "wr2_mem_clk",
 			      "csr_hclk";
-		bit-clock-hz = <20000000>;
-		interrupt-interval-ms = <10>;
+		number-of-rate-detectors = <2>;
+		rate-detector-interfaces = <0 1>;
 
 		sdr0: qcom,hs0_i2s {
 			compatible = "qcom,hsi2s-interface";
@@ -80,6 +81,23 @@
 			iommus = <&apps_smmu 0x035C 0x0>;
 			qcom,smmu-s1-bypass;
 			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 
 		sdr1: qcom,hs1_i2s {
@@ -95,6 +113,23 @@
 			iommus = <&apps_smmu 0x035D 0x0>;
 			qcom,smmu-s1-bypass;
 			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 	};
 
@@ -225,6 +260,7 @@
 	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on &sdc1_rclk_on>;
 	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off &sdc1_rclk_off>;
 
+	qcom,restore-after-cx-collapse;
 	status = "ok";
 };
 
@@ -243,6 +279,7 @@
 
 	cd-gpios = <&tlmm 99 1>;
 
+	qcom,restore-after-cx-collapse;
 	status = "ok";
 };
 

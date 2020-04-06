@@ -13,8 +13,9 @@
 #ifndef _NPU_COMMON_H
 #define _NPU_COMMON_H
 
-/*
+/* -------------------------------------------------------------------------
  * Includes
+ * -------------------------------------------------------------------------
  */
 #include <asm/dma-iommu.h>
 #include <linux/cdev.h>
@@ -34,8 +35,9 @@
 
 #include "npu_mgr.h"
 
-/*
+/* -------------------------------------------------------------------------
  * Defines
+ * -------------------------------------------------------------------------
  */
 #define NPU_MAX_MBOX_NUM	    4
 #define NPU_MBOX_LOW_PRI	    0
@@ -76,8 +78,9 @@ enum npu_power_level {
 #define NPU_DBG(fmt, args...)                           \
 	pr_debug("NPU_DBG: %s: %d " fmt, __func__,  __LINE__, ##args)
 
-/*
+/* -------------------------------------------------------------------------
  * Data Structures
+ * -------------------------------------------------------------------------
  */
 struct npu_smmu_ctx {
 	int domain;
@@ -318,8 +321,9 @@ struct ipcc_mbox_chan {
 	struct npu_device *npu_dev;
 };
 
-/*
+/* -------------------------------------------------------------------------
  * Function Prototypes
+ * -------------------------------------------------------------------------
  */
 int npu_debugfs_init(struct npu_device *npu_dev);
 void npu_debugfs_deinit(struct npu_device *npu_dev);

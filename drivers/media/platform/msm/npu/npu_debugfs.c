@@ -97,16 +97,6 @@ static int npu_debug_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int npu_debug_reg_release(struct inode *inode, struct file *file)
-{
-	struct npu_debugfs_reg_ctx *reg_ctx = file->private_data;
-
-	kfree(reg_ctx->buf);
-	kfree(reg_ctx);
-	file->private_data = NULL;
-	return 0;
-}
-
 static int npu_debug_reg_open(struct inode *inode, struct file *file)
 {
 	struct npu_debugfs_reg_ctx *reg_ctx;
@@ -119,6 +109,16 @@ static int npu_debug_reg_open(struct inode *inode, struct file *file)
 	file->f_mode &= ~(FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE);
 	reg_ctx->npu_dev = inode->i_private;
 	file->private_data = reg_ctx;
+	return 0;
+}
+
+static int npu_debug_reg_release(struct inode *inode, struct file *file)
+{
+	struct npu_debugfs_reg_ctx *reg_ctx = file->private_data;
+
+	kfree(reg_ctx->buf);
+	kfree(reg_ctx);
+	file->private_data = NULL;
 	return 0;
 }
 

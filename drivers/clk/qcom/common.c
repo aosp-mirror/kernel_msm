@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2014, 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -38,6 +38,9 @@ struct freq_tbl *qcom_find_freq(const struct freq_tbl *f, unsigned long rate)
 {
 	if (!f)
 		return NULL;
+
+	if (!f->freq)
+		return f;
 
 	for (; f->freq; f++)
 		if (rate <= f->freq)
@@ -345,5 +348,24 @@ int qcom_cc_register_rcg_dfs(struct platform_device *pdev,
 	return ret;
 }
 EXPORT_SYMBOL(qcom_cc_register_rcg_dfs);
+
+int qcom_cc_enable_critical_clks(const struct qcom_cc_critical_desc *desc)
+{
+	struct clk_regmap **clkr = desc->clks;
+	size_t num_clks = desc->num_clks;
+	int i, ret = 0;
+
+	for (i = 0; i < num_clks; i++) {
+		ret = clk_enable_regmap(&(clkr[i]->hw));
+		if (ret) {
+			pr_err("Failed to enable %s\n",
+					clk_hw_get_name(&(clkr[i]->hw)));
+			break;
+		}
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(qcom_cc_enable_critical_clks);
 
 MODULE_LICENSE("GPL v2");

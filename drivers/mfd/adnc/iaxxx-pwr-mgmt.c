@@ -152,8 +152,6 @@ int iaxxx_pm_put_autosuspend(struct device *dev)
 int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 {
 	int rc, reg_val;
-	unsigned long ts_now;
-	unsigned int ts_diff;
 	uint32_t status;
 	long wake_timeout = HZ;
 
@@ -208,10 +206,12 @@ int iaxxx_wakeup_chip(struct iaxxx_priv *priv)
 	}
 chip_woken_up:
 	if (priv->iaxxx_state->power_state == IAXXX_SLEEP_MODE) {
-
-		ts_now = jiffies;
-		ts_diff = ts_now - priv->iaxxx_state->sleep_ts;
-		ts_diff = jiffies_to_msecs(ts_diff);
+		s64 ts_diff = ktime_ms_delta(ktime_get_boottime(),
+					     priv->iaxxx_state->ktime_sleep);
+		if (ts_diff > U32_MAX)
+			ts_diff = U32_MAX;
+		else if (ts_diff < 0)
+			ts_diff = 0;
 
 		/* switch to internal oscillator if dt entry
 		 * is selected for internal oscillator mode.
@@ -229,7 +229,8 @@ chip_woken_up:
 
 		/* program SRB */
 		rc = regmap_write(priv->regmap_no_pm,
-				IAXXX_SRB_SYSTEM_SLEEP_DURATION_ADDR, ts_diff);
+				  IAXXX_SRB_SYSTEM_SLEEP_DURATION_ADDR,
+				  ts_diff);
 		if (!rc) {
 			/* Update block lock is not taken for no_pm calls
 			 * because those can trigger PM wakeup which will
@@ -467,7 +468,7 @@ int iaxxx_suspend_chip(struct iaxxx_priv *priv)
 				UPDATE_BLOCK_NO_LOCK_OPTION,
 				&status);
 
-		priv->iaxxx_state->sleep_ts = jiffies;
+		priv->iaxxx_state->ktime_sleep = ktime_get_boottime();
 
 		/* Disable external clock */
 		if (priv->iaxxx_mclk_cb)

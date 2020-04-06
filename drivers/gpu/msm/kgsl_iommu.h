@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -63,6 +63,9 @@
 #define KGSL_IOMMU_SCTLR_CFCFG_SHIFT		7
 #define KGSL_IOMMU_SCTLR_CFIE_SHIFT		6
 
+/* FSR fields */
+#define KGSL_IOMMU_FSR_SS_SHIFT		30
+
 enum kgsl_iommu_reg_map {
 	KGSL_IOMMU_CTX_SCTLR = 0,
 	KGSL_IOMMU_CTX_TTBR0,
@@ -126,6 +129,7 @@ struct kgsl_iommu_context {
  * @setstate: Scratch GPU memory for IOMMU operations
  * @clk_enable_count: The ref count of clock enable calls
  * @clks: Array of pointers to IOMMU clocks
+ * @vddcx_regulator: Handle to IOMMU regulator
  * @micro_mmu_ctrl: GPU register offset of this glob al register
  * @smmu_info: smmu info used in a5xx preemption
  * @protect: register protection settings for the iommu.
@@ -140,6 +144,7 @@ struct kgsl_iommu {
 	struct kgsl_memdesc setstate;
 	atomic_t clk_enable_count;
 	struct clk *clks[KGSL_IOMMU_MAX_CLKS];
+	struct regulator *vddcx_regulator;
 	unsigned int micro_mmu_ctrl;
 	struct kgsl_memdesc smmu_info;
 	unsigned int version;

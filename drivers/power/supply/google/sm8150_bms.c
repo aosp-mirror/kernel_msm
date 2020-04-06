@@ -650,18 +650,8 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 
 	stat1 = stat1 & CHGR_BATTERY_CHARGER_STATUS_MASK;
 
-	if (!plugged) {
-		switch (stat1) {
-		case SM8150_TERMINATE_CHARGE:
-		case SM8150_INHIBIT_CHARGE:
-			ret = POWER_SUPPLY_STATUS_FULL;
-			break;
-		default:
-			ret = POWER_SUPPLY_STATUS_DISCHARGING;
-			break;
-		}
-		return ret;
-	}
+	if (!plugged)
+		return POWER_SUPPLY_STATUS_DISCHARGING;
 
 	switch (stat1) {
 	case SM8150_TRICKLE_CHARGE:

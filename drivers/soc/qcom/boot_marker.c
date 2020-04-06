@@ -30,7 +30,7 @@
 #include <soc/qcom/boot_stats.h>
 
 #define MAX_STRING_LEN 256
-#define BOOT_MARKER_MAX_LEN 40
+#define BOOT_MARKER_MAX_LEN 50
 #define MSM_ARCH_TIMER_FREQ     19200000
 
 struct boot_marker {
@@ -83,17 +83,78 @@ static void _create_boot_marker(const char *name,
 	spin_unlock(&boot_marker_list.slock);
 }
 
+static void _update_boot_marker(const char *name, const char *new_name,
+				unsigned long long int timer_value)
+{
+	struct boot_marker *marker;
+	struct boot_marker *temp_addr;
+
+	spin_lock(&boot_marker_list.slock);
+	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
+			list) {
+		if (strnstr(marker->marker_name, name,
+			strlen(marker->marker_name))) {
+			if (new_name)
+				strlcpy(marker->marker_name, new_name,
+					sizeof(marker->marker_name));
+			marker->timer_value = timer_value;
+			spin_unlock(&boot_marker_list.slock);
+			return;
+		}
+
+		if (!new_name)
+			continue;
+
+		if (strnstr(marker->marker_name, new_name,
+			strlen(marker->marker_name))) {
+			marker->timer_value = timer_value;
+			spin_unlock(&boot_marker_list.slock);
+			return;
+		}
+	}
+	spin_unlock(&boot_marker_list.slock);
+	_create_boot_marker(name, timer_value);
+}
+
 static void set_bootloader_stats(void)
 {
-	_create_boot_marker("M - ABL Start - ",
+	_create_boot_marker("M - APPSBL Start - ",
 		readl_relaxed(&boot_stats->bootloader_start));
-	_create_boot_marker("M - ABL End - ",
+	_create_boot_marker("D - APPSBL Kernel Load Start - ",
+		readl_relaxed(&boot_stats->load_kernel_start));
+	_create_boot_marker("D - APPSBL Kernel Load End - ",
+		readl_relaxed(&boot_stats->load_kernel_done));
+	_create_boot_marker("D - APPSBL Kernel Load Time - ",
+		readl_relaxed(&boot_stats->bootloader_load_kernel));
+	_create_boot_marker("D - APPSBL Kernel Auth Time - ",
+		readl_relaxed(&boot_stats->bootloader_chksum_time));
+	_create_boot_marker("M - APPSBL End - ",
 		readl_relaxed(&boot_stats->bootloader_end));
 }
 
+#ifdef CONFIG_HIBERNATION
+static void update_bootloader_stats(void)
+{
+	_update_boot_marker("M - APPSBL Start - ", NULL,
+			readl_relaxed(&boot_stats->bootloader_start));
+	_update_boot_marker("D - APPSBL Kernel Load Start - ",
+		"D - APPSBL Hibernation Image Load Start - ",
+		readl_relaxed(&boot_stats->load_kernel_start));
+	_update_boot_marker("D - APPSBL Kernel Load End - ",
+		"D - APPSBL Hibernation Image Load End - ",
+		readl_relaxed(&boot_stats->load_kernel_done));
+	_update_boot_marker("M - APPSBL End - ", NULL,
+		readl_relaxed(&boot_stats->bootloader_end));
+}
+#endif /* CONFIG_HIBERNATION */
+
 void place_marker(const char *name)
 {
-	_create_boot_marker((char *) name, msm_timer_get_sclk_ticks());
+#ifdef CONFIG_HIBERNATION
+	if (!strcmp(name, "M - Image Kernel Start"))
+		update_bootloader_stats();
+#endif /* CONFIG_HIBERNATION */
+	_update_boot_marker((char *)name, NULL, msm_timer_get_sclk_ticks());
 }
 EXPORT_SYMBOL(place_marker);
 

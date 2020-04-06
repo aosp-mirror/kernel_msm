@@ -37,8 +37,7 @@
 		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM
 						   | PDO_FIXED_DATA_SWAP
 						   | PDO_FIXED_DUAL_ROLE)
-			    PDO_FIXED(9000, 2200, 0)
-			    PDO_PPS_APDO(5000, 6000, 3000)>;
+			    PDO_FIXED(9000, 2200, 0)>;
 		op-sink-microwatt = <2500000>;
 		sink-vdos = <VDO_IDH(IDH_USB_HOST | IDH_USB_DEVICE,
 				     IDH_PTYPE_PERIPH,

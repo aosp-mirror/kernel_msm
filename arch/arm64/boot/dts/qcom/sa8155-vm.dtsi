@@ -8,6 +8,7 @@
 #include <dt-bindings/clock/qcom,scc-sm8150.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
 #include "quin-vm-common.dtsi"
 
 / {
@@ -17,6 +18,7 @@
 
 	aliases {
 		pci-domain0 = &pcie0; /* PCIe0 domain */
+		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
 	};
 
 	reserved_memory: reserved-memory {
@@ -25,8 +27,15 @@
 			reg = <0x0 0xa0000000 0x0 0x20000000>;
 			label = "pmem_shared_mem";
 		};
+
+		secure_display_memory: secure_display_region { /* Secure UI */
+			compatible = "shared-dma-pool";
+			reusable;
+			reg = <0x0 0xc0000000 0x0 0x14400000>;
+		};
 	};
 };
+
 
 &soc {
 	hsi2s: qcom,hsi2s {
@@ -36,8 +45,8 @@
 		      <0x17080000 0xE000>;
 		reg-names = "lpa_if", "lpass_tcsr";
 		interrupts = <GIC_SPI 267 0>;
-		bit-clock-hz = <20000000>;
-		interrupt-interval-ms = <10>;
+		number-of-rate-detectors = <2>;
+		rate-detector-interfaces = <0 1>;
 
 		sdr0: qcom,hs0_i2s {
 			compatible = "qcom,hsi2s-interface";
@@ -49,6 +58,23 @@
 			pinctrl-1 = <&hs1_i2s_mclk_sleep &hs1_i2s_sck_sleep
 				     &hs1_i2s_ws_sleep &hs1_i2s_data0_sleep
 				     &hs1_i2s_data1_sleep>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 
 		sdr1: qcom,hs1_i2s {
@@ -61,6 +87,23 @@
 			pinctrl-1 = <&hs2_i2s_mclk_sleep &hs2_i2s_sck_sleep
 				     &hs2_i2s_ws_sleep &hs2_i2s_data0_sleep
 				     &hs2_i2s_data1_sleep>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
 
 		sdr2: qcom,hs2_i2s {
@@ -73,7 +116,29 @@
 			pinctrl-1 = <&hs3_i2s_mclk_sleep &hs3_i2s_sck_sleep
 				     &hs3_i2s_ws_sleep &hs3_i2s_data0_sleep
 				     &hs3_i2s_data1_sleep>;
+			bit-clock-hz = <12288000>;
+			data-buffer-ms = <10>;
+			bit-depth = <32>;
+			spkr-channel-count = <2>;
+			mic-channel-count = <2>;
+			pcm-rate = <2>;
+			pcm-sync-src = <0>;
+			aux-mode = <0>;
+			rpcm-width = <1>;
+			tpcm-width = <1>;
+			enable-tdm = <1>;
+			tdm-rate = <32>;
+			tdm-rpcm-width = <16>;
+			tdm-tpcm-width = <16>;
+			tdm-sync-delay = <2>;
+			tdm-inv-sync = <0>;
+			pcm-lane-config = <1>;
 		};
+	};
+
+	ptp_virtual {
+		compatible = "qcom,ptp_virtual";
+		reg = <0xeb600000 0x1000>;
 	};
 
 	clock_virt: qcom,virtio-gcc {
@@ -346,6 +411,21 @@
 		qca,bt-vdd-pa-supply = <&vreg_conn_pa>;
 		/* PWR_CTR2_VDD_1P8 */
 		qca,bt-chip-pwd-supply = <&vreg_conn_1p8>;
+
+		qca,bt-vdd-vl-supply = <&pm8150_1_s6>;
+		qca,bt-vdd-vm-supply = <&pm8150_2_s4>;
+		qca,bt-vdd-5c-supply = <&pm8150_2_s5>;
+		qca,bt-vdd-vh-supply = <&pm8150_2_l15>;
+
+		qca,bt-vdd-vl-voltage-level = <1055000 1055000>;
+		qca,bt-vdd-vm-voltage-level = <1370000 1370000>;
+		qca,bt-vdd-5c-voltage-level = <2040000 2040000>;
+		qca,bt-vdd-vh-voltage-level = <1900000 1900000>;
+
+		qca,bt-vdd-vl-current-level = <0>;
+		qca,bt-vdd-vm-current-level = <0>;
+		qca,bt-vdd-5c-current-level = <0>;
+		qca,bt-vdd-vh-current-level = <450000>;
 		status = "ok";
 	};
 
@@ -422,6 +502,8 @@
 			mhi,timeout = <10000>;
 
 			mhi_channels {
+				#address-cells = <1>;
+				#size-cells = <0>;
 				mhi_chan@0 {
 					reg = <0>;
 					label = "LOOPBACK";
@@ -511,6 +593,214 @@
 				};
 			};
 		};
+
+		chip_cfg@2 {
+			reg = <0xa0000000 0x10000000>,
+			    <0xb0000000 0x10000>;
+			reg-names = "smmu_iova_base", "smmu_iova_ipa";
+
+			supported-ids = <0x1102>;
+			wlan_vregs = "vdd-wlan-aon", "vdd-wlan-rfa1",
+				   "vdd-wlan-rfa2", "vdd-wlan-rfa3";
+			qcom,vdd-wlan-aon-info = <1055000 1055000 0 0>;
+			qcom,vdd-wlan-rfa1-info = <1370000 1370000 0 0>;
+			qcom,vdd-wlan-rfa2-info = <2040000 2040000 0 0>;
+			qcom,vdd-wlan-rfa3-info = <1900000 1900000 0 0>;
+
+			qcom,wlan-ramdump-dynamic = <0x300000>;
+			mhi,max-channels = <30>;
+			mhi,timeout = <10000>;
+			mhi,ee = <0x3>, <0x4>;
+			mhi,ee-names = "SBL", "RDDM";
+			mhi,bhie-offset = <0x0324>;
+
+			mhi_channels {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				mhi_chan@0 {
+					reg = <0>;
+					label = "LOOPBACK";
+					mhi,num-elements = <32>;
+					mhi,event-ring = <1>;
+					mhi,chan-dir = <1>;
+					mhi,data-type = <0>;
+					mhi,doorbell-mode = <2>;
+					mhi,ee = <0x14>;
+				};
+
+				mhi_chan@1 {
+					reg = <1>;
+					label = "LOOPBACK";
+					mhi,num-elements = <32>;
+					mhi,event-ring = <1>;
+					mhi,chan-dir = <2>;
+					mhi,data-type = <0>;
+					mhi,doorbell-mode = <2>;
+					mhi,ee = <0x14>;
+				};
+
+				mhi_chan@4 {
+					reg = <4>;
+					label = "DIAG";
+					mhi,num-elements = <32>;
+					mhi,event-ring = <1>;
+					mhi,chan-dir = <1>;
+					mhi,data-type = <0>;
+					mhi,doorbell-mode = <2>;
+					mhi,ee = <0x14>;
+				};
+
+				mhi_chan@5 {
+					reg = <5>;
+					label = "DIAG";
+					mhi,num-elements = <32>;
+					mhi,event-ring = <1>;
+					mhi,chan-dir = <2>;
+					mhi,data-type = <0>;
+					mhi,doorbell-mode = <2>;
+					mhi,ee = <0x14>;
+				};
+
+				mhi_chan@16 {
+					reg = <16>;
+					label = "IPCR";
+					mhi,num-elements = <32>;
+					mhi,event-ring = <1>;
+					mhi,chan-dir = <1>;
+					mhi,data-type = <1>;
+					mhi,doorbell-mode = <2>;
+					mhi,ee = <0x14>;
+					mhi,auto-start;
+				};
+
+				mhi_chan@17 {
+					reg = <17>;
+					label = "IPCR";
+					mhi,num-elements = <32>;
+					mhi,event-ring = <1>;
+					mhi,chan-dir = <2>;
+					mhi,data-type = <0>;
+					mhi,doorbell-mode = <2>;
+					mhi,ee = <0x14>;
+					mhi,auto-queue;
+					mhi,auto-start;
+				};
+			};
+
+			mhi_events {
+				mhi_event@0 {
+					mhi,num-elements = <32>;
+					mhi,intmod = <1>;
+					mhi,msi = <1>;
+					mhi,priority = <1>;
+					mhi,brstmode = <2>;
+					mhi,data-type = <1>;
+				};
+
+				mhi_event@1 {
+					mhi,num-elements = <256>;
+					mhi,intmod = <1>;
+					mhi,msi = <2>;
+					mhi,priority = <1>;
+					mhi,brstmode = <2>;
+				};
+			};
+		};
+	};
+
+	sdhc_2: sdhci@8804000 {
+		compatible = "qcom,sdhci-msm-v5";
+		reg = <0x8804000 0x1000>;
+		reg-names = "hc_mem";
+
+		interrupts = <0 204 0>, <0 222 0>;
+		interrupt-names = "hc_irq", "pwr_irq";
+
+		qcom,bus-width = <4>;
+		qcom,large-address-bus;
+
+		qcom,msm-bus,name = "sdhc2";
+		qcom,msm-bus,num-cases = <8>;
+		qcom,msm-bus,num-paths = <2>;
+		qcom,msm-bus,vectors-KBps =
+			/* No vote */
+			<81 512 0 0>, <1 608 0 0>,
+			/* 400 KB/s*/
+			<81 512 1046 1600>,
+			<1 608 1600 1600>,
+			/* 20 MB/s */
+			<81 512 52286 80000>,
+			<1 608 80000 80000>,
+			/* 25 MB/s */
+			<81 512 65360 100000>,
+			<1 608 100000 100000>,
+			/* 50 MB/s */
+			<81 512 130718 200000>,
+			<1 608 133320 133320>,
+			/* 100 MB/s */
+			<81 512 261438 200000>,
+			<1 608 150000 150000>,
+			/* 200 MB/s */
+			<81 512 261438 400000>,
+			<1 608 300000 300000>,
+			/* Max. bandwidth */
+			<81 512 1338562 4096000>,
+			<1 608 1338562 4096000>;
+		qcom,bus-bw-vectors-bps = <0 400000 20000000 25000000 50000000
+			100750000 200000000 4294967295>;
+
+		qcom,restore-after-cx-collapse;
+
+		qcom,clk-rates = <400000 20000000 25000000
+					50000000 100000000 201500000>;
+		qcom,bus-speed-mode = "SDR12", "SDR25", "SDR50", "DDR50",
+				      "SDR104";
+
+		qcom,devfreq,freq-table = <50000000 201500000>;
+		clocks = <&clock_virt GCC_SDCC2_AHB_CLK>,
+			<&clock_virt GCC_SDCC2_APPS_CLK>;
+		clock-names = "iface_clk", "core_clk";
+
+		/* PM QoS */
+		qcom,pm-qos-irq-type = "affine_irq";
+		qcom,pm-qos-irq-latency = <44 44>;
+		qcom,pm-qos-cpu-groups = <0x3f 0xc0>;
+		qcom,pm-qos-legacy-latency-us = <44 44>, <44 44>;
+
+		vdd-supply = <&pm8150_1_l17>;
+		qcom,vdd-voltage-level = <2950000 2960000>;
+		qcom,vdd-current-level = <200 800000>;
+
+		vdd-io-supply = <&pm8150_2_l13>;
+		qcom,vdd-io-voltage-level = <1808000 2960000>;
+		qcom,vdd-io-current-level = <200 22000>;
+
+		pinctrl-names = "active", "sleep";
+		pinctrl-0 = <&sdc2_clk_on
+			&sdc2_cmd_on &sdc2_data_on &storage_cd_default>;
+		pinctrl-1 = <&sdc2_clk_off
+			&sdc2_cmd_off &sdc2_data_off &storage_cd_default>;
+
+		broken-cd;
+		status = "disabled";
+	};
+
+	subsys_notif_virt: qcom,subsys_notif_virt@2D000000 {
+		compatible = "qcom,subsys-notif-virt";
+		reg = <0x2D000000 0x400>;
+		reg-names = "vdev_base";
+		adsp {
+			subsys-name = "adsp";
+			interrupts = <0 43 0>;
+			interrupt-names = "state-irq";
+			type = "virtual";
+			offset = <0>;
+		};
+		wlan {
+			subsys-name = "wlan";
+			type = "native";
+			offset = <512>;
+		};
 	};
 };
 
@@ -525,4 +815,12 @@
 
 &tlmm {
 	dirconn-list = <37 216 1>;
+};
+
+&msm_ion {
+	qcom,ion-heap@10 { /* SECURE DISPLAY HEAP */
+		reg = <10>;
+		memory-region = <&secure_display_memory>;
+		qcom,ion-heap-type = "HYP_CMA";
+	};
 };

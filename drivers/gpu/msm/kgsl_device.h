@@ -472,10 +472,10 @@ struct kgsl_process_private {
 	struct kobject kobj;
 	struct dentry *debug_root;
 	struct {
-		uint64_t cur;
-		uint64_t max;
+		atomic64_t cur;
+		atomic64_t max;
 	} stats[KGSL_MEM_ENTRY_MAX];
-	uint64_t gpumem_mapped;
+	atomic64_t gpumem_mapped;
 	struct idr syncsource_idr;
 	spinlock_t syncsource_lock;
 	int fd_count;
@@ -569,15 +569,16 @@ struct kgsl_device *kgsl_get_device(int dev_idx);
 static inline void kgsl_process_add_stats(struct kgsl_process_private *priv,
 	unsigned int type, uint64_t size)
 {
-	priv->stats[type].cur += size;
-	if (priv->stats[type].max < priv->stats[type].cur)
-		priv->stats[type].max = priv->stats[type].cur;
+	u64 ret = atomic64_add_return(size, &priv->stats[type].cur);
+
+	if (ret > atomic64_read(&priv->stats[type].max))
+		atomic64_set(&priv->stats[type].max, ret);
 }
 
 static inline void kgsl_process_sub_stats(struct kgsl_process_private *priv,
 	unsigned int type, uint64_t size)
 {
-	priv->stats[type].cur -= size;
+	atomic64_sub(size, &priv->stats[type].cur);
 }
 
 static inline bool kgsl_is_register_offset(struct kgsl_device *device,

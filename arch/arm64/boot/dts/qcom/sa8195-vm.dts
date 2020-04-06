@@ -29,6 +29,10 @@
 	status = "ok";
 };
 
+&qupv3_se13_4uart {
+	status = "ok";
+};
+
 &usb0 {
 	status = "ok";
 };
@@ -37,10 +41,14 @@
 	status = "ok";
 };
 
-&spmi_bus {
-	status = "disabled";
+&pcie0_msi {
+	status = "ok";
 };
 
-&viospmi {
-	status = "disabled";
+&pcie0 {
+	status = "ok";
+};
+
+&sdhc_2 {
+	status = "ok";
 };

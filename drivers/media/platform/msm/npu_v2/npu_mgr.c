@@ -10,8 +10,9 @@
  * GNU General Public License for more details.
  */
 
-/*
+/* -------------------------------------------------------------------------
  * Includes
+ * -------------------------------------------------------------------------
  */
 #include "npu_hw_access.h"
 #include "npu_mgr.h"
@@ -22,8 +23,9 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 
-/*
+/* -------------------------------------------------------------------------
  * Defines
+ * -------------------------------------------------------------------------
  */
 #define LOG_MSG_HEADER_SIZE      20
 #define LOG_MSG_START_MSG_INDEX  5
@@ -33,8 +35,9 @@
 #define NPU_FW_TIMEOUT_POLL_INTERVAL_MS  10
 #define NPU_FW_TIMEOUT_MS                5000
 
-/*
+/* -------------------------------------------------------------------------
  * File Scope Function Prototypes
+ * -------------------------------------------------------------------------
  */
 static void npu_ipc_irq_work(struct work_struct *work);
 static void npu_wdg_err_irq_work(struct work_struct *work);
@@ -92,8 +95,9 @@ static void npu_dequeue_misc_cmd(struct npu_host_ctx *ctx,
 static struct npu_misc_cmd *npu_find_misc_cmd(struct npu_host_ctx *ctx,
 	uint32_t trans_id);
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - Init / Deinit
+ * -------------------------------------------------------------------------
  */
 
 static int wait_npu_cpc_power_off(struct npu_device *npu_dev)
@@ -772,8 +776,9 @@ void npu_host_deinit(struct npu_device *npu_dev)
 	mutex_destroy(&host_ctx->lock);
 }
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - Interrupt Handler
+ * -------------------------------------------------------------------------
  */
 irqreturn_t npu_ipc_intr_hdlr(int irq, void *ptr)
 {
@@ -853,8 +858,9 @@ irqreturn_t npu_wdg_intr_hdlr(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - Control
+ * -------------------------------------------------------------------------
  */
 static int host_error_hdlr(struct npu_device *npu_dev, bool force)
 {
@@ -1200,8 +1206,9 @@ static int npu_notify_aop(struct npu_device *npu_dev, bool on)
 	return rc;
 }
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - Network Management
+ * -------------------------------------------------------------------------
  */
 static int network_put(struct npu_network *network)
 {
@@ -1332,8 +1339,9 @@ static void free_network(struct npu_host_ctx *ctx, struct npu_client *client,
 	}
 }
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - IPC
+ * -------------------------------------------------------------------------
  */
 static struct npu_network_cmd *npu_alloc_network_cmd(struct npu_host_ctx *ctx,
 	uint32_t stats_buf_size)
@@ -1874,8 +1882,9 @@ skip_read_msg:
 	mutex_unlock(&host_ctx->lock);
 }
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - Functionality
+ * -------------------------------------------------------------------------
  */
 int32_t npu_host_get_info(struct npu_device *npu_dev,
 			struct msm_npu_get_info_ioctl *get_info_ioctl)

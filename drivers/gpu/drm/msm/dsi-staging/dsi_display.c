@@ -1109,7 +1109,17 @@ static int debugfs_dump_info_read(struct seq_file *seq, void *data)
 			   mode->htotal, mode->vtotal, mode->vrefresh,
 			   mode->clock, priv_info->clk_rate_hz,
 			   mode->type & DRM_MODE_TYPE_PREFERRED ? "*" : "");
-	}
+        }
+
+		seq_puts(seq, "\tList of modes:\n");
+		list_for_each_entry(mode, &conn->modes, head) {
+			struct dsi_display_mode_priv_info *priv_info;
+			priv_info = (typeof(priv_info)) mode->private;
+			seq_printf(seq, "\t\t%dx%d@%d drm_clk:%u dsi_clk:%llu %s\n",
+				mode->htotal, mode->vtotal, mode->vrefresh,
+				mode->clock, priv_info->clk_rate_hz,
+				mode->type & DRM_MODE_TYPE_PREFERRED ? "*" : "");
+		}
 
 	return 0;
 }

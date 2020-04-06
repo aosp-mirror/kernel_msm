@@ -27,6 +27,7 @@
 #include <linux/async.h>
 #include <linux/pm_runtime.h>
 #include <linux/pinctrl/devinfo.h>
+#include <linux/platform_device.h>
 
 #include "base.h"
 #include "power/power.h"
@@ -55,6 +56,10 @@ static LIST_HEAD(deferred_probe_pending_list);
 static LIST_HEAD(deferred_probe_active_list);
 static atomic_t deferred_trigger_count = ATOMIC_INIT(0);
 static bool initcalls_done;
+
+/* Save the async probe drivers' name from kernel cmdline */
+#define ASYNC_DRV_NAMES_MAX_LEN	256
+static char async_probe_drv_names[ASYNC_DRV_NAMES_MAX_LEN];
 
 /*
  * In some cases, like suspend to RAM or hibernation, It might be reasonable
@@ -604,6 +609,23 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
 	return ret;
 }
 
+static inline bool cmdline_requested_async_probing(const char *drv_name)
+{
+	return parse_option_str(async_probe_drv_names, drv_name);
+}
+
+/* The option format is "driver_async_probe=drv_name1,drv_name2,..." */
+static int __init save_async_options(char *buf)
+{
+	if (strlen(buf) >= ASYNC_DRV_NAMES_MAX_LEN)
+		printk(KERN_WARNING
+			"Too long list of driver names for 'driver_async_probe'!\n");
+
+	strlcpy(async_probe_drv_names, buf, ASYNC_DRV_NAMES_MAX_LEN);
+	return 0;
+}
+__setup("driver_async_probe=", save_async_options);
+
 bool driver_allows_async_probing(struct device_driver *drv)
 {
 	switch (drv->probe_type) {
@@ -620,6 +642,9 @@ bool driver_allows_async_probing(struct device_driver *drv)
 		else
 			return IS_ENABLED(CONFIG_BUILTINS_ASYNC_PROBE);
 #else
+		if (cmdline_requested_async_probing(drv->name))
+			return true;
+
 		if (module_requested_async_probing(drv->owner))
 			return true;
 
@@ -803,6 +828,21 @@ void device_initial_probe(struct device *dev)
 {
 	__device_attach(dev, true);
 }
+
+#ifdef CONFIG_PLATFORM_AUTO
+static inline int lock_parent(struct device *dev)
+{
+	if (!dev->parent || dev->bus == &platform_bus_type)
+		return 0;
+
+	return 1;
+}
+#else
+static inline int lock_parent(struct device *dev)
+{
+	return dev->parent ? 1 : 0;
+}
+#endif
 
 static int __driver_attach(struct device *dev, void *data)
 {

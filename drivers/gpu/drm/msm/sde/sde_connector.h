@@ -306,14 +306,14 @@ struct sde_connector_ops {
 	int (*get_panel_vfp)(void *display, int h_active, int v_active);
 
         /**
-         * prepare_commit - trigger display to program pre-commit time features
-         * @display: Pointer to private display structure
-         * @params: Parameter bundle of connector-stored information for
-         *      pre commit time programming into the display
-         * Returns: Zero on success
-         */
-        int (*prepare_commit)(void *display,
-                        struct msm_display_conn_params *params);
+	 * prepare_commit - trigger display to program pre-commit time features
+	 * @display: Pointer to private display structure
+	 * @params: Parameter bundle of connector-stored information for
+	 *	pre commit time programming into the display
+	 * Returns: Zero on success
+	 */
+	int (*prepare_commit)(void *display,
+			struct msm_display_conn_params *params);
 
 	/**
 	 * set_idle_hint - gives hint to display whether display is idle

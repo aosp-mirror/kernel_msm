@@ -28,8 +28,12 @@ dtb-$(CONFIG_ARCH_QCS405) += qcs405-iot-sku1.dtb \
 		qcs407-iot-sku9.dtb \
 		qcs405-iot-sku12.dtb \
 		qcs407-iot-sku12.dtb \
+		sa2150p-ccard-emmc.dtb \
+		sa2150p-ccard-nand.dtb \
 		qcs405-iot-sku13.dtb \
-		qcs407-iot-sku13.dtb
+		qcs407-iot-sku13.dtb \
+		qcs405-iot-robot-reference-board.dtb \
+		qcs404-iot-robot-reference-board.dtb
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SM8150) += \
@@ -107,7 +111,9 @@ dtb-$(CONFIG_QTI_GVM) += sa8155-vm.dtb \
 	sa8155-vm-lv-mt.dtb \
 	sa8155-vm-la-mt.dtb \
 	sa6155p-vm.dtb \
-	sa8195-vm.dtb
+	sa8195-vm.dtb \
+	sa8195-vm-lv.dtb \
+	sa8195-vm-lv-mt.dtb
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SDMSHRIKE) += \
@@ -144,6 +150,7 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 		sa6155p-v2-adp-star-overlay.dtbo \
 		sa6155p-v2-adp-air-overlay.dtbo \
 		qcs610-iot-overlay.dtbo \
+		qcs610-ipc-overlay.dtbo \
 		qcs410-iot-overlay.dtbo
 
 sm6150-rumi-overlay.dtbo-base := sm6150.dtb
@@ -162,6 +169,7 @@ sa6155-adp-air-overlay.dtbo-base := sa6155.dtb
 sa6155p-adp-air-overlay.dtbo-base := sa6155p.dtb
 sa6155p-v2-adp-air-overlay.dtbo-base := sa6155p.dtb
 qcs610-iot-overlay.dtbo-base := sm6150.dtb
+qcs610-ipc-overlay.dtbo-base := sm6150.dtb
 qcs410-iot-overlay.dtbo-base := sm6150.dtb
 else
 dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
@@ -180,6 +188,7 @@ dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
 	sa6155p-v2-adp-star.dtb \
 	sa6155p-v2-adp-air.dtb \
 	qcs610-iot.dtb \
+	qcs610-ipc.dtb \
 	qcs410-iot.dtb
 
 endif
@@ -310,9 +319,44 @@ dtb-$(CONFIG_ARCH_SDXPRAIRIE) += sdxprairie-rumi.dtb \
 	sdxprairie-dsda-mtp.dtb \
 	sdxprairie-v2-cdp.dtb \
 	sdxprairie-v2-mtp.dtb \
+        sa515m-v2-ttp.dtb \
+        sa515m-v2-ttp-usb-ep.dtb \
+        sa515m-v2-ttp-pcie-ep.dtb \
+        sa515m-v2-ttp-flashless-usb-ep.dtb \
+        sa515m-v2-ttp-flashless-pcie-ep.dtb \
 	sa515m-ccard.dtb \
 	sa515m-ccard-pcie-ep.dtb \
-	sa515m-ccard-usb-ep.dtb
+	sa515m-ccard-usb-ep.dtb \
+        sa515m-v2-ccard-flashless-pcie-ep.dtb \
+        sa515m-v2-ccard-flashless-usb-ep.dtb \
+	sa515m-v2-ccard.dtb \
+	sa515m-v2-ccard-pcie-ep.dtb \
+	sa515m-v2-ccard-usb-ep.dtb
+
+dtb-$(CONFIG_ARCH_MDM9607) += mdm9607-mtp.dtb
+
+dtb-$(CONFIG_ARCH_SDM660) += sdm660-sim.dtb \
+	sdm660-internal-codec-cdp.dtb \
+	sdm660-internal-codec-mtp.dtb \
+	sdm660-internal-codec-rcm.dtb \
+	sdm660-cdp.dtb \
+	sdm660-mtp.dtb \
+	sdm660-qrd.dtb \
+	sdm660-rcm.dtb \
+	sdm660-pm660a-cdp.dtb \
+	sdm660-pm660a-mtp.dtb \
+	sdm660-pm660a-qrd.dtb \
+	sdm660-pm660a-rcm.dtb \
+	sdm660-internal-codec-pm660a-cdp.dtb \
+	sdm660-internal-codec-pm660a-mtp.dtb \
+	sdm660-internal-codec-pm660a-rcm.dtb \
+	sdm660-pm660a-sim.dtb \
+	sdm660-headset-jacktype-no-cdp.dtb \
+	sdm660-headset-jacktype-no-rcm.dtb \
+	sdm660-pm660a-headset-jacktype-no-cdp.dtb \
+	sdm660-pm660a-headset-jacktype-no-rcm.dtb \
+	sdm660-usbc-audio-mtp.dtb \
+	sdm660-usbc-audio-rcm.dtb \
 
 endif #ifneq ($(filter y,$(CONFIG_BOARD_SUNFISH) $(CONFIG_BOARD_FLORAL)),y)
 

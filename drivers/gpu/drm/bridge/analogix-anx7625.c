@@ -35,6 +35,7 @@
 #include <drm/drm_edid.h>
 
 #include "analogix-anx7625.h"
+#include <soc/qcom/boot_stats.h>
 
 #define TX_P0			0x70
 #define TX_P1			0x7A
@@ -138,6 +139,9 @@ struct anx7625 {
 
 	bool powered;
 	bool enabled;
+#ifdef CONFIG_PM_SLEEP
+	bool out_of_hibr;
+#endif
 	int connected;
 	bool hpd_status;
 	bool skip_enable;
@@ -1279,7 +1283,12 @@ static void anx7625_bridge_enable(struct drm_bridge *bridge)
 	mutex_lock(&anx7625->lock);
 
 	anx7625->enabled = true;
-
+#ifdef CONFIG_PM_SLEEP
+	if (anx7625->out_of_hibr) {
+		anx7625->out_of_hibr = false;
+		place_marker("Hiber: Display up");
+	}
+#endif
 	if (!anx7625->powered)
 		goto out;
 
@@ -1555,6 +1564,7 @@ static int anx7625_restore(struct device *dev)
 
 		anx7625_start(anx7625);
 	}
+	anx7625->out_of_hibr = true;
 
 	mutex_unlock(&anx7625->lock);
 
