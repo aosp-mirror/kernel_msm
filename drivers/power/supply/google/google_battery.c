@@ -202,25 +202,28 @@ struct batt_chg_health {
 };
 
 struct batt_history_data {
-	u16 cycle_cnt;
-	u16 fullcap;
-	u16 esr;
-	u16 rslow;
-	u8 soh;
-	s8 batt_temp;
-	u8 cutoff_soc;
-	u8 cc_soc;
-	u8 sys_soc;
-	u8 msoc;
-	u8 batt_soc;
-	u8 reserve;
-	s8 max_temp;
-	s8 min_temp;
-	u16 max_vbatt;
-	u16 min_vbatt;
-	s16 max_ibatt;
-	s16 min_ibatt;
-	u16 checksum;
+	/* 2 bytes data alignment
+	 * type name;	// start address
+	 */
+	u16 cycle_cnt;	// 0x00
+	u16 fullcap;	// 0x02
+	u16 esr;	// 0x04
+	u16 rslow;	// 0x06
+	u8 soh;		// 0x08
+	s8 batt_temp;	// 0x09
+	u8 cutoff_soc;	// 0x0A
+	u8 cc_soc;	// 0x0B
+	u8 sys_soc;	// 0x0C
+	u8 msoc;	// 0x0D
+	u8 batt_soc;	// 0x0E
+	u8 reserve;	// 0x0F
+	s8 max_temp;	// 0x10
+	s8 min_temp;	// 0x11
+	u16 max_vbatt;	// 0x12
+	u16 min_vbatt;	// 0x14
+	s16 max_ibatt;	// 0x16
+	s16 min_ibatt;	// 0x18
+	u16 checksum;	// 0x1A
 };
 
 /* battery driver state */
@@ -322,7 +325,7 @@ struct batt_drv {
 	struct batt_history_data hist_data;
 	bool eeprom_inside;
 	int hist_data_max_cnt;
-	int hist_delta_cycle_cnt;
+	u32 hist_delta_cycle_cnt;
 
 	/* Battery pack info for Suez*/
 	const char batt_pack_info[GBMS_MINF_LEN];
@@ -3364,6 +3367,7 @@ static void batt_check_device_sn(struct batt_drv *batt_drv)
 	}
 }
 
+#define HIST_DELTA_CYCLE_CNT_MAX	50
 static void batt_history_data_collect(struct batt_drv *batt_drv)
 {
 	struct batt_history_data *hist = &batt_drv->hist_data;
@@ -3374,7 +3378,8 @@ static void batt_history_data_collect(struct batt_drv *batt_drv)
 	int cycle_cnt, idx, val, ret;
 
 
-	if (batt_drv->hist_delta_cycle_cnt <= 0)
+	if (batt_drv->hist_delta_cycle_cnt == 0 ||
+	    batt_drv->hist_delta_cycle_cnt > HIST_DELTA_CYCLE_CNT_MAX)
 		return;
 
 	if (batt_drv->hist_data_max_cnt <= 0)

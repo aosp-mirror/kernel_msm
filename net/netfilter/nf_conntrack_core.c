@@ -1219,6 +1219,7 @@ __nf_conntrack_alloc(struct net *net,
 	 * SLAB_TYPESAFE_BY_RCU.
 	 */
 	ct = kmem_cache_alloc(nf_conntrack_cachep, gfp);
+	kmemleak_not_leak(ct);
 	if (ct == NULL)
 		goto out;
 
