@@ -131,6 +131,8 @@ struct pd_pps_data {
 	int max_ua;
 	int out_uv;
 	int op_ua;
+	unsigned int uv_ovrd;
+	unsigned int ua_ovrd;
 
 	/* logging client */
 	struct logbuffer *log;
@@ -343,6 +345,8 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 	chg_drv->pps_data.chg_flags = 0;
 	chg_drv->pps_data.keep_alive_cnt = 0;
 	chg_drv->pps_data.nr_src_cap = 0;
+	chg_drv->pps_data.uv_ovrd = 0;
+	chg_drv->pps_data.ua_ovrd = 0;
 	tcpm_put_partner_src_caps(&chg_drv->pps_data.src_caps);
 	chg_drv->pps_data.src_caps = NULL;
 	if (chg_drv->pps_data.stay_awake)
@@ -1852,7 +1856,7 @@ static int debug_get_pps_out_uv(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 
-	*val = chg_drv->pps_data.out_uv;
+	*val = chg_drv->pps_data.uv_ovrd;
 	return 0;
 }
 
@@ -1861,7 +1865,7 @@ static int debug_set_pps_out_uv(void *data, u64 val)
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 
 	/* TODO: use votable */
-	chg_drv->pps_data.out_uv = val;
+	chg_drv->pps_data.uv_ovrd = val;
 	return 0;
 }
 
@@ -1874,7 +1878,7 @@ static int debug_get_pps_op_ua(void *data, u64 *val)
 {
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 
-	*val = chg_drv->pps_data.op_ua;
+	*val = chg_drv->pps_data.ua_ovrd;
 	return 0;
 }
 
@@ -1883,7 +1887,7 @@ static int debug_set_pps_op_ua(void *data, u64 val)
 	struct chg_drv *chg_drv = (struct chg_drv *)data;
 
 	/* TODO: use votable */
-	chg_drv->pps_data.op_ua = val;
+	chg_drv->pps_data.ua_ovrd = val;
 	return 0;
 }
 
@@ -2157,6 +2161,14 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	const uint8_t flags = chg_drv->pps_data.chg_flags;
 	int ret = 0, ibatt, vbatt, ioerr;
 	unsigned long exp_mw;
+
+	if (pps->uv_ovrd || pps->ua_ovrd) {
+		pps->out_uv = pps->uv_ovrd ? : pps->out_uv;
+		pps->op_ua = pps->ua_ovrd ? : pps->op_ua;
+		logbuffer_log(pps->log, "override with %u uV %u uA ",
+			      pps->out_uv, pps->op_ua);
+		return 0;
+	}
 
 	/* TODO: Now we only need to adjust the pps in CC state.
 	 * Consider CV state in the future.
