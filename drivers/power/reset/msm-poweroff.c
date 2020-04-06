@@ -159,8 +159,8 @@ static int panic_prep_restart(struct notifier_block *this,
 		goto out;
 
 	if (tombstone) { /* tamper the panic message for Oops */
-		char pc_symn[KSYM_NAME_LEN] = "<unknown>";
-		char lr_symn[KSYM_NAME_LEN] = "<unknown>";
+		char pc_symn[KSYM_SYMBOL_LEN] = "<unknown>";
+		char lr_symn[KSYM_SYMBOL_LEN] = "<unknown>";
 
 #if defined(CONFIG_ARM)
 		sprint_symbol(pc_symn, tombstone->regs->ARM_pc);
@@ -170,11 +170,11 @@ static int panic_prep_restart(struct notifier_block *this,
 		sprint_symbol(lr_symn, tombstone->regs->regs[30]);
 #endif
 
-		snprintf(kernel_panic_msg, rst_msg_size - 1,
+		scnprintf(kernel_panic_msg, rst_msg_size - 1,
 				"KP: %s PC:%s LR:%s",
 				current->comm, pc_symn, lr_symn);
 	} else {
-		snprintf(kernel_panic_msg, rst_msg_size - 1,
+		scnprintf(kernel_panic_msg, rst_msg_size - 1,
 				"KP: %s", (char *)ptr);
 	}
 
