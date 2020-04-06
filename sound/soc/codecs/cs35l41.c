@@ -49,6 +49,8 @@
 #if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
 #include <linux/codec-misc.h>
 
+#define MAX_PCBCFG_LENGTH 128
+
 struct cs35l41_misc_priv_type {
 	struct cs35l41_private *cs35l41_priv;
 	int r_channel;
@@ -2660,6 +2662,7 @@ static int cs35l41_codec_probe(struct snd_soc_codec *codec)
 		snd_soc_dapm_ignore_suspend(dapm, "R VSENSE");
 		snd_soc_dapm_ignore_suspend(dapm, "R TEMP");
 		snd_soc_dapm_ignore_suspend(dapm, "R AMP Playback");
+		snd_soc_dapm_ignore_suspend(dapm, "R AMP Capture");
 	} else {
 		snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
 		snd_soc_dapm_ignore_suspend(dapm, "VBST");
@@ -2668,6 +2671,7 @@ static int cs35l41_codec_probe(struct snd_soc_codec *codec)
 		snd_soc_dapm_ignore_suspend(dapm, "ISENSE");
 		snd_soc_dapm_ignore_suspend(dapm, "VSENSE");
 		snd_soc_dapm_ignore_suspend(dapm, "TEMP");
+		snd_soc_dapm_ignore_suspend(dapm, "AMP Capture");
 	}
 
 	snd_soc_dapm_sync(dapm);
@@ -3034,6 +3038,74 @@ static const struct reg_sequence cs35l41_revb2_errata_patch[] = {
 	{0x00000040,			0x00003333},
 };
 
+static void bin_name_override_by_pcb(struct cs35l41_private *cs35l41)
+{
+	struct device_node *np = cs35l41->dev->of_node;
+	struct device_node *pcbcfg_node = NULL;
+	int ret = 0, pcb_count = 0;
+	unsigned int i = 0;
+	const char *pcbcfg = NULL;
+	const char **pcb_name_array = NULL;
+
+	if (!np) {
+		dev_err(cs35l41->dev, "Failed to get cs35l41 of_node\n");
+		return;
+	}
+
+	pcb_count = of_property_count_strings(np, "cirrus,pcbcfg");
+	if (pcb_count <= 0)
+		return;
+
+	pcbcfg_node = of_find_node_by_path("/chosen/cdt/cdb2");
+	if (!pcbcfg_node) {
+		dev_err(cs35l41->dev,
+			"Failed to get node in /chosen/cdt/cdb2\n");
+		goto exit;
+	}
+
+	ret = of_property_read_string(pcbcfg_node, "pcbcfg",
+					&pcbcfg);
+	if (ret != 0) {
+		dev_err(cs35l41->dev,
+			"Failed to get pcbcfg string\n");
+		goto exit;
+	}
+
+	dev_info(cs35l41->dev, "pcbcfg: %s, pcb_count: %d\n",
+		pcbcfg, pcb_count);
+
+	pcb_name_array = kmalloc(pcb_count * sizeof(char *),
+				GFP_KERNEL);
+	if (!pcb_name_array) {
+		dev_err(cs35l41->dev,
+			"Failed to kmalloc on pcb_name_array\n");
+		goto exit;
+	}
+
+	ret = of_property_read_string_array(np, "cirrus,pcbcfg",
+					pcb_name_array, pcb_count);
+	if (ret < 0) {
+		dev_err(cs35l41->dev,
+			"Failed to get pcbcfg string array\n");
+		goto exit;
+	}
+
+	for (i = 0; i < pcb_count; i++) {
+		ret = strncmp(pcbcfg, pcb_name_array[i],
+				strnlen(pcbcfg, MAX_PCBCFG_LENGTH));
+		if (ret == 0) {
+			cs35l41->dsp.part = "cs35l41-revB2";
+			goto exit;
+		}
+	}
+exit:
+	if (pcbcfg_node != NULL)
+		of_node_put(pcbcfg_node);
+
+	if (pcb_name_array != NULL)
+		kfree(pcb_name_array);
+}
+
 static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 {
 	struct wm_adsp *dsp;
@@ -3050,6 +3122,8 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 
 	if (!cs35l41->pdata.fwname_use_revid)
 		dsp->part = "cs35l41";
+
+	bin_name_override_by_pcb(cs35l41);
 
 	dsp->base = CS35L41_DSP1_CTRL_BASE;
 	dsp->base_sysinfo = CS35L41_DSP1_SYS_ID;

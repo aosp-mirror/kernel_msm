@@ -29,9 +29,13 @@
 #define SLG51000_LDOHP_LV_MIN           1200000
 #define SLG51000_LDOHP_HV_MIN           2400000
 
-#define MAX_RETRY 3
+#define MAX_RETRY 10
 #define MIN_SLEEP_USEC 3000
 #define MAX_SLEEP_USEC 6000
+#define SLEEP_2000_USEC 2000
+#define SLEEP_3000_USEC 3000
+#define SLEEP_5000_USEC 5000
+#define SLEEP_6000_USEC 6000
 
 u8 chip_id[3];
 
@@ -629,10 +633,12 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 	struct slg51000 *chip;
 	int error, cs_gpio, ret;
 
+	pr_info("[slg51000] probe start");
 	chip = devm_kzalloc(dev, sizeof(struct slg51000), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
+	pr_info("[slg51000] try to enable cam buck pin");
 	cs_gpio = of_get_named_gpio(dev->of_node, "dlg,cs-gpios", 1);
 	if (cs_gpio > 0) {
 		if (!gpio_is_valid(cs_gpio)) {
@@ -649,9 +655,11 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		}
 
 		chip->chip_cam_buck = cs_gpio;
-		usleep_range(1000, 1000);
+		// To follow HW recommend timing(b/151405422#comment21)
+		usleep_range(SLEEP_5000_USEC, SLEEP_6000_USEC);
 	}
 
+	pr_info("[slg51000] try to enable cs pin");
 	cs_gpio = of_get_named_gpio(dev->of_node, "dlg,cs-gpios", 0);
 	if (cs_gpio > 0) {
 		if (!gpio_is_valid(cs_gpio)) {
@@ -668,6 +676,8 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		}
 
 		chip->chip_cs_pin = cs_gpio;
+		// To follow HW recommend timing(b/151405422#comment21)
+		usleep_range(SLEEP_2000_USEC, SLEEP_3000_USEC);
 	}
 
 	cs_gpio = of_get_named_gpio(dev->of_node, "dlg,enable-gpios", 0);
@@ -751,6 +761,8 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		dev_err(dev, "Failed to create attribute group: %d\n", ret);
 		return ret;
 	}
+
+	pr_info("[slg51000] probe end");
 
 	return ret;
 }
