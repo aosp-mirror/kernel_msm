@@ -29,9 +29,11 @@
 #define SLG51000_LDOHP_LV_MIN           1200000
 #define SLG51000_LDOHP_HV_MIN           2400000
 
-#define MAX_RETRY 3
+#define MAX_RETRY 10
 #define MIN_SLEEP_USEC 3000
 #define MAX_SLEEP_USEC 6000
+#define SLEEP_10000_USEC 10000
+#define SLEEP_RANGE_USEC 1000
 
 u8 chip_id[3];
 
@@ -695,6 +697,11 @@ static int slg51000_i2c_probe(struct i2c_client *client,
 		}
 
 		chip->chip_cs_pin = cs_gpio;
+
+		/* According to datasheet, turn-on time from CS HIGH to Ready
+		state is ~10ms */
+		usleep_range(SLEEP_10000_USEC,
+			     SLEEP_10000_USEC + SLEEP_RANGE_USEC);
 	}
 
 	cs_gpio = of_get_named_gpio(dev->of_node, "dlg,enable-gpios", 0);
