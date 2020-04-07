@@ -40,8 +40,6 @@ function update_perf_config() {
     -d RD_BZIP2 \
     -d RD_LZMA \
     -d SYSFS_SYSCALL \
-    -d SLAB_FREELIST_RANDOM \
-    -d SLAB_FREELIST_HARDENED \
     -d CMA_DEBUGFS \
     -e UNMAP_KERNEL_AT_EL0 \
     -e HARDEN_BRANCH_PREDICTOR \
