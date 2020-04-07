@@ -31,7 +31,6 @@
 #include <linux/err.h>
 #include <linux/pci.h>
 #include <linux/bitops.h>
-#include <linux/debugfs.h>
 #include <linux/property.h>
 #include <trace/events/iommu.h>
 
