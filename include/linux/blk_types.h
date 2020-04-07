@@ -6,6 +6,7 @@
 #define __LINUX_BLK_TYPES_H
 
 #include <linux/types.h>
+#include <linux/ktime.h>
 #include <linux/bvec.h>
 
 struct bio_set;
@@ -94,6 +95,8 @@ struct bio {
 	struct bio_vec		*bi_io_vec;	/* the actual vec list */
 
 	struct bio_set		*bi_pool;
+
+	ktime_t bi_alloc_ts;
 
 	/*
 	 * We can inline a number of vecs at the end of the bio, to avoid
