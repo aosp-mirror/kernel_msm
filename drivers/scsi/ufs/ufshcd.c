@@ -117,6 +117,26 @@ static void ufshcd_log_slowio(struct ufs_hba *hba,
 		slowio_cnt, iotime_us, opcode_str, lba, transfer_len);
 }
 
+static void ufshcd_event_record(struct scsi_cmnd *cmd, enum mm_event_type event)
+{
+	struct bio *bio;
+
+	if (!cmd || !cmd->request || !cmd->request->bio)
+		return;
+
+	if (likely(!is_read_opcode(*cmd->cmnd)))
+		return;
+
+	bio = cmd->request->bio;
+	while (bio) {
+		if (bio->bi_alloc_ts)
+			mm_event_end(event, bio->bi_alloc_ts);
+		bio = bio->bi_next;
+		if (bio == cmd->request->bio)
+			break;
+	}
+}
+
 static int ufshcd_tag_req_type(struct request *rq)
 {
 	int rq_type = TS_WRITE;
@@ -3257,6 +3277,7 @@ int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 			hba->lrb[task_tag].cmd ? "scsi_send" : "dev_cmd_send");
 	ufshcd_update_tag_stats(hba, task_tag);
 	update_io_stat(hba, task_tag, 1);
+	ufshcd_event_record(hba->lrb[task_tag].cmd, UFS_READ_SEND_CMD);
 	return 0;
 }
 
@@ -3971,6 +3992,7 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	hba->req_abort_count = 0;
+	ufshcd_event_record(cmd, UFS_READ_QUEUE_CMD);
 
 	/* acquire the tag to make sure device cmds don't use it */
 	if (test_and_set_bit_lock(tag, &hba->lrb_in_use)) {
@@ -6657,6 +6679,7 @@ void ufshcd_complete_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 	ufshcd_update_tag_stats_completion(hba, cmd);
 	update_io_stat(hba, index, 0);
 	update_req_stats(hba, lrbp, delta_us);
+	ufshcd_event_record(cmd, UFS_READ_COMPL_CMD);
 
 	/* Update IO svc time latency histogram */
 	if (hba->latency_hist_enabled) {
