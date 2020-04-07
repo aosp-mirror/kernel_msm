@@ -129,6 +129,8 @@ struct bio {
 
 	struct bio_set		*bi_pool;
 
+	ktime_t bi_alloc_ts;
+
 	/*
 	 * We can inline a number of vecs at the end of the bio, to avoid
 	 * double allocations for a small number of bio_vecs. This member
