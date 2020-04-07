@@ -235,6 +235,7 @@ static int p9221_cook_reg(struct p9221_charger_data *charger, u16 reg,
 	case P9221R5_IOUT_REG:		/* mA -> uA */
 	case P9221R5_VRECT_REG:		/* mV -> uV */
 	case P9221R5_VOUT_REG:		/* mV -> uV */
+	case P9382A_ILIM_SET_REG:	/* mA -> uA */
 		/* Fall through */
 
 	/* The following are in kilo- and need to go to their base */
@@ -1961,13 +1962,15 @@ static ssize_t p9221_show_status(struct device *dev,
 	int ret;
 	u8 tmp[P9221R5_NUM_FOD];
 	uint32_t tx_id = 0;
-	u16 tx_id_reg;
+	u16 tx_id_reg, ilim_set_reg;
 
 	if (!p9221_is_online(charger))
 		return -ENODEV;
 
 	tx_id_reg = (charger->chip_id == P9382A_CHIP_ID) ?
 		      P9382_PROP_TX_ID_REG : P9221R5_PROP_TX_ID_REG;
+	ilim_set_reg = (charger->ben_state == 1) ?
+		      P9382A_ILIM_SET_REG : P9221R5_ILIM_SET_REG;
 
 	count += p9221_add_reg_buffer(charger, buf, count,
 				      P9221_STATUS_REG, 16, 0,
@@ -1999,7 +2002,7 @@ static ssize_t p9221_show_status(struct device *dev,
 				      "iout        : ", "%d uA\n");
 
 	count += p9221_add_reg_buffer(charger, buf, count,
-				      P9221R5_ILIM_SET_REG, 16, 1,
+				      ilim_set_reg, 16, 1,
 				      "ilim        : ", "%d uA\n");
 
 	count += p9221_add_reg_buffer(charger, buf, count,
