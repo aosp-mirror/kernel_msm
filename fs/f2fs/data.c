@@ -1095,6 +1095,9 @@ static struct bio *f2fs_grab_read_bio(struct inode *inode, block_t blkaddr,
 
 static void f2fs_release_read_bio(struct bio *bio)
 {
+	if (bio->bi_alloc_ts)
+		mm_event_end(F2FS_READ_DATA, bio->bi_alloc_ts);
+
 	if (bio->bi_private)
 		mempool_free(bio->bi_private, bio_post_read_ctx_pool);
 	bio_put(bio);
@@ -2115,6 +2118,7 @@ submit_and_realloc:
 			bio = NULL;
 			goto out;
 		}
+		mm_event_start(&bio->bi_alloc_ts);
 	}
 
 	/*
@@ -2256,6 +2260,8 @@ submit_and_realloc:
 				*bio_ret = bio;
 				return ret;
 			}
+			if (!for_write)
+				mm_event_start(&bio->bi_alloc_ts);
 		}
 
 		f2fs_wait_on_block_writeback(inode, blkaddr);
