@@ -45,24 +45,24 @@
 	debug_info: debug_info@A47DF000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xA47DF000 0 0x20000>;
+		reg = <0 0xA47DF000 0 0x40000>;
 	};
 
-	ramoops_mem: ramoops_region@A47FF000 {
+	ramoops_mem: ramoops_region@A481F000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xA47FF000 0 0x400000>;
+		reg = <0 0xA481F000 0 0x400000>;
 	};
 
-	alt_ramoops_mem: alt_ramoops_region@A4BFF000 {
+	alt_ramoops_mem: alt_ramoops_region@A4C1F000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xA4BFF000 0 0x400000>;
+		reg = <0 0xA4C1F000 0 0x400000>;
 	};
 
-	ramoops_meta_mem: ramoops_meta_region@0xA4FFF000 {
+	ramoops_meta_mem: ramoops_meta_region@0xA501F000 {
 		compatible = "removed-dma-pool";
 		no-map;
-		reg = <0 0xA4FFF000 0 0x1000>;
+		reg = <0 0xA501F000 0 0x1000>;
 	};
 };

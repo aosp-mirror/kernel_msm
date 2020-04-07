@@ -39,7 +39,7 @@
 &soc {
 	bootloader_log {
 		compatible = "qcom,bldr_log";
-		reg = <0xA47DF000 0xB400>, <0xA47EA400 0xB400>;
+		reg = <0xA47DF000 0x16800>, <0xA47F5800 0x16800>;
 		reg-names = "bl_log", "bl_old_log";
 		memory-region = <&debug_info>;
 	};
