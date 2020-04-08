@@ -138,24 +138,27 @@ static void ufshcd_event_record(struct scsi_cmnd *cmd, enum mm_event_type event)
 	}
 }
 
-static int ufshcd_tag_req_type(struct request *rq)
+static int ufshcd_tag_req_type(struct ufshcd_lrb *lrbp)
 {
-	int rq_type = TS_WRITE;
+	u8 opcode;
 
-	if (!rq || !(rq->cmd_type & REQ_TYPE_FS))
-		rq_type = TS_NOT_SUPPORTED;
-	else if ((rq->cmd_flags & REQ_PREFLUSH) ||
-		 (req_op(rq) == REQ_OP_FLUSH))
-		rq_type = TS_FLUSH;
-	else if (req_op(rq) == REQ_OP_DISCARD)
-		rq_type = TS_DISCARD;
-	else if (rq_data_dir(rq) == READ)
-		rq_type = (rq->cmd_flags & REQ_URGENT) ?
-			TS_URGENT_READ : TS_READ;
-	else if (rq->cmd_flags & REQ_URGENT)
-		rq_type = TS_URGENT_WRITE;
+	if (!lrbp->cmd)
+		return TS_NOT_SUPPORTED;
 
-	return rq_type;
+	opcode = (u8)(*lrbp->cmd->cmnd);
+	switch (opcode) {
+	case READ_10:
+	case READ_16:
+		return TS_READ;
+	case WRITE_10:
+	case WRITE_16:
+		return TS_WRITE;
+	case UNMAP:
+		return TS_DISCARD;
+	case SYNCHRONIZE_CACHE:
+		return TS_FLUSH;
+	}
+	return TS_NOT_SUPPORTED;
 }
 
 static void ufshcd_update_error_stats(struct ufs_hba *hba, int type)
@@ -177,7 +180,7 @@ static void ufshcd_update_tag_stats(struct ufs_hba *hba, int tag)
 		return;
 
 	WARN_ON(hba->ufs_stats.q_depth > hba->nutrs);
-	rq_type = ufshcd_tag_req_type(rq);
+	rq_type = ufshcd_tag_req_type(&hba->lrb[tag]);
 	if (!(rq_type < 0 || rq_type > TS_NUM_STATS))
 		tag_stats[hba->ufs_stats.q_depth++][rq_type]++;
 }
@@ -195,7 +198,6 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 		s64 delta)
 {
 	int rq_type;
-	struct request *rq = lrbp->cmd ? lrbp->cmd->request : NULL;
 
 	/* Log for slow I/O */
 	ufshcd_log_slowio(hba, lrbp, delta);
@@ -210,7 +212,7 @@ static void update_req_stats(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 	if (delta < hba->ufs_stats.req_stats[TS_TAG].min)
 			hba->ufs_stats.req_stats[TS_TAG].min = delta;
 
-	rq_type = ufshcd_tag_req_type(rq);
+	rq_type = ufshcd_tag_req_type(lrbp);
 	if (rq_type == TS_NOT_SUPPORTED)
 		return;
 
