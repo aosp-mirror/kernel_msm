@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -49,6 +49,8 @@
 #define EUPGRADE			140
 #define QTIMER_DIV				192
 #define QTIMER_MUL				10000
+#define TIME_OFFSET_MAX_THD		5
+#define TIME_OFFSET_MIN_THD		-5
 
 struct qti_can {
 	struct net_device	**netdev;
@@ -147,7 +149,8 @@ struct spi_miso { /* TLV for MISO line */
 #define IFR_DATA_OFFSET		0x100
 struct can_fw_resp {
 	u8 maj;
-	u8 min;
+	u8 min : 4;
+	u8 sub_min : 4;
 	u8 ver[48];
 } __packed;
 
@@ -259,7 +262,8 @@ struct qti_can_buffer {
 
 struct can_fw_br_resp {
 	u8 maj;
-	u8 min;
+	u8 min : 4;
+	u8 sub_min : 4;
 	u8 ver[32];
 	u8 br_maj;
 	u8 br_min;
@@ -311,6 +315,9 @@ static void qti_can_receive_frame(struct qti_can *priv_data,
 	struct net_device *netdev;
 	int i;
 	struct device *dev;
+	s64 ts_offset_corrected;
+	static u16 buff_frames_disc_cntr;
+	static u8 disp_disc_cntr = 1;
 
 	dev = &priv_data->spidev->dev;
 	if (frame->can_if >= priv_data->max_can_channels) {
@@ -335,14 +342,31 @@ static void qti_can_receive_frame(struct qti_can *priv_data,
 	for (i = 0; i < cf->can_dlc; i++)
 		cf->data[i] = frame->data[i];
 
-	nsec = ms_to_ktime(le64_to_cpu(frame->ts)
-		+ priv_data->time_diff);
-	skt = skb_hwtstamps(skb);
-	skt->hwtstamp = nsec;
-	skb->tstamp = nsec;
-	netif_rx(skb);
-	LOGDI("hwtstamp: %lld\n", ktime_to_ms(skt->hwtstamp));
-	netdev->stats.rx_packets++;
+	ts_offset_corrected = le64_to_cpu(frame->ts)
+		+ priv_data->time_diff;
+
+	/* CAN frames which are received before SOC powers up are discarded */
+	if (ts_offset_corrected > 0) {
+		if (disp_disc_cntr == 1) {
+			dev_info(&priv_data->spidev->dev,
+				 "No of buff frames discarded is %lld\n",
+				 buff_frames_disc_cntr);
+			disp_disc_cntr = 0;
+		}
+
+		nsec = ms_to_ktime(ts_offset_corrected);
+		skt = skb_hwtstamps(skb);
+		skt->hwtstamp = nsec;
+		skb->tstamp = nsec;
+
+		netif_rx(skb);
+
+		LOGDI("hwtstamp: %lld\n", ktime_to_ms(skt->hwtstamp));
+		netdev->stats.rx_packets++;
+	} else {
+		buff_frames_disc_cntr++;
+		dev_kfree_skb(skb);
+	}
 }
 
 static void qti_can_receive_property(struct qti_can *priv_data,
@@ -390,6 +414,9 @@ static int qti_can_process_response(struct qti_can *priv_data,
 {
 	int ret = 0;
 	u64 mstime;
+	static s64 prev_time_diff;
+	static u8 first_offset_est = 1;
+	s64 offset_variation = 0;
 
 	LOGDI("<%x %2d [%d]\n", resp->cmd, resp->len, resp->seq);
 	if (resp->cmd == CMD_CAN_RECEIVE_FRAME) {
@@ -428,16 +455,16 @@ static int qti_can_process_response(struct qti_can *priv_data,
 	} else if (resp->cmd  == CMD_GET_FW_VERSION) {
 		struct can_fw_resp *fw_resp = (struct can_fw_resp *)resp->data;
 
-		dev_info(&priv_data->spidev->dev, "fw %d.%d",
-			 fw_resp->maj, fw_resp->min);
+		dev_info(&priv_data->spidev->dev, "fw %d.%d.%d",
+			 fw_resp->maj, fw_resp->min, fw_resp->sub_min);
 		dev_info(&priv_data->spidev->dev, "fw string %s",
 			 fw_resp->ver);
 	} else if (resp->cmd  == CMD_GET_FW_BR_VERSION) {
 		struct can_fw_br_resp *fw_resp =
 				(struct can_fw_br_resp *)resp->data;
 
-		dev_info(&priv_data->spidev->dev, "fw_can %d.%d",
-			 fw_resp->maj, fw_resp->min);
+		dev_info(&priv_data->spidev->dev, "fw_can %d.%d.%d",
+			 fw_resp->maj, fw_resp->min, fw_resp->sub_min);
 		dev_info(&priv_data->spidev->dev, "fw string %s",
 			 fw_resp->ver);
 		dev_info(&priv_data->spidev->dev, "fw_br %d.%d exec_mode %d",
@@ -447,7 +474,8 @@ static int qti_can_process_response(struct qti_can *priv_data,
 		ret |= (fw_resp->br_maj & 0xF) << 24;
 		ret |= (fw_resp->br_min & 0xFF) << 16;
 		ret |= (fw_resp->maj & 0xF) << 8;
-		ret |= (fw_resp->min & 0xFF);
+		ret |= (fw_resp->min & 0xF) << 4;
+		ret |= (fw_resp->sub_min & 0xF);
 	} else if (resp->cmd == CMD_UPDATE_TIME_INFO) {
 		struct can_time_info *time_data =
 			(struct can_time_info *)resp->data;
@@ -458,6 +486,33 @@ static int qti_can_process_response(struct qti_can *priv_data,
 			mstime = ktime_to_ms(ktime_get_boottime());
 
 		priv_data->time_diff = mstime - (le64_to_cpu(time_data->time));
+
+		if (first_offset_est == 1) {
+			prev_time_diff = priv_data->time_diff;
+			first_offset_est = 0;
+		}
+
+		offset_variation = priv_data->time_diff -
+					prev_time_diff;
+
+		if (offset_variation > TIME_OFFSET_MAX_THD ||
+		    offset_variation < TIME_OFFSET_MIN_THD) {
+			dev_info(&priv_data->spidev->dev,
+				 "Off Exceeded: Curr off is %lld\n",
+				 priv_data->time_diff);
+			dev_info(&priv_data->spidev->dev,
+				 "Prev off is %lld\n",
+				prev_time_diff);
+			/* Set curr off to prev off if */
+			/* variation is beyond threshold */
+			priv_data->time_diff = prev_time_diff;
+
+		} else {
+			/* Set prev off to curr off if */
+			/* variation is within threshold */
+			prev_time_diff = priv_data->time_diff;
+		}
+
 	}
 
 exit:

@@ -109,7 +109,7 @@ static void swap_slot_free_notify(struct page *page)
 	 */
 	disk = sis->bdev->bd_disk;
 	if (disk->fops->swap_slot_free_notify) {
-		swp_entry_t entry;
+                swp_entry_t entry;
 		unsigned long offset;
 		entry.val = page_private(page);
 		offset = swp_offset(entry);

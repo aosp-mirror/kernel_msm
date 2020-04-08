@@ -1388,6 +1388,7 @@ Example:
 				"msm-dai-q6-tdm.36880", "msm-dai-q6-tdm.36881",
 				"msm-dai-q6-tdm.36896", "msm-dai-q6-tdm.36897",
 				"msm-dai-q6-tdm.36912", "msm-dai-q6-tdm.36913";
+
 		asoc-codec = <&stub_codec>, <&ext_disp_audio_codec>;
 		asoc-codec-names = "msm-stub-codec.1",
 				   "msm-ext-disp-audio-codec-rx";
@@ -1438,6 +1439,19 @@ Optional properties:
 - qcom,csra-devs : List of phandles of all possible CSRA66x0 devices supported for the target
 - qcom,csra-aux-dev-prefix : Name prefix in multi-channel configuration for CSRA66x0 device
 - qcom,afe-rxtx-lb: AFE RX to TX loopback.
+- qcom,ext-mclk-gpio: pinctrl referring to external mclk
+- qcom,ext-mclk-src: Device tree node referring to external mclk clock
+- #ext-mclk-1-cfg-cells: Number of cells in ext-mclk-1-cfg-* nodes. Must be 6.
+- ext-mclk-1 cfg-11p2896: Frequnency table for 11.2896MHz mclk frequnecy.
+			  Fields are clock rate, div2x, m, n, d and clock root.
+- ext-mclk-1 cfg-12p288: Frequnency table for 12.288MHz mclk frequnecy.
+			 Fields are clock rate, div2x, m, n, d and clock root.
+- ext-mclk-1 cfg-16p384: Frequnency table for 16.384MHz mclk frequnecy.
+			 Fields are clock rate, div2x, m, n, d and clock root.
+- ext-mclk-1-cfg-22p5792: Frequency table for 22.5792MHz mclk frequency.
+                          Fields are clock rate, div2x, m, n, d and clock root.
+- ext-mclk-1 cfg-24p576: Frequnency table for 24.576MHz mclk frequnecy.
+			 Fields are clock rate, div2x, m, n, d and clock root.
 Example:
 
 	qcs405_snd {
@@ -1914,7 +1928,8 @@ Example:
 				<&afe_pcm_rx>, <&afe_pcm_tx>, <&afe_proxy_rx>,
 				<&afe_proxy_tx>, <&incall_record_rx>,
 				<&incall_record_tx>, <&incall_music_rx>,
-				<&dai_sec_auxpcm>;
+				<&dai_sec_auxpcm>, <&incall2_record_rx>,
+				<&incall_music_2_rx>;
 		asoc-cpu-names = "msm-dai-q6-auxpcm.1",
 				"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
 				"msm-dai-stub-dev.4", "msm-dai-stub-dev.5",
@@ -1923,7 +1938,8 @@ Example:
 				"msm-dai-q6-dev.225", "msm-dai-q6-dev.241",
 				"msm-dai-q6-dev.240", "msm-dai-q6-dev.32771",
 				"msm-dai-q6-dev.32772", "msm-dai-q6-dev.32773",
-				"msm-dai-q6-auxpcm.2";
+				"msm-dai-q6-auxpcm.2", "msm-dai-q6-dev.32769",
+				"msm-dai-q6-dev.32770";
 	};
 
 * SDX ASoC Auto Machine driver
@@ -1981,7 +1997,8 @@ Example:
 				<&incall_record_tx>, <&incall_music_rx>,
 				<&dai_pri_tdm_rx_0>, <&dai_pri_tdm_tx_0>,
 				<&dai_sec_tdm_rx_0>, <&dai_sec_tdm_tx_0>,
-				<&dai_sec_auxpcm>;
+				<&dai_sec_auxpcm>, <&incall2_record_rx>,
+				<&incall_music_2_rx>;
 		asoc-cpu-names = "msm-dai-q6-auxpcm.1",
 				"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
 				"msm-dai-stub-dev.4", "msm-dai-stub-dev.5",
@@ -1992,7 +2009,8 @@ Example:
 				"msm-dai-q6-dev.32772", "msm-dai-q6-dev.32773",
 				"msm-dai-q6-tdm.36864", "msm-dai-q6-tdm.36865",
 				"msm-dai-q6-tdm.36880", "msm-dai-q6-tdm.36881",
-				"msm-dai-q6-auxpcm.2";
+				"msm-dai-q6-auxpcm.2", "msm-dai-q6-dev.32769",
+				"msm-dai-q6-dev.32770";
 		asoc-codec = <&tlv320aic3x_codec>, <&stub_codec>;
 		asoc-codec-names = "tlv320aic3x-codec", "msm-stub-codec.1";
 	};
@@ -2042,6 +2060,7 @@ Optional properties:
 - qcom,wcn-btfm : Property to specify if WCN BT/FM chip is used for the target
 - qcom,mi2s-audio-intf: Property to specify if MI2S interface is used for the target
 - qcom,auxpcm-audio-intf: Property to specify if Aux PCM interface is used for the target
+- qcom,tdm-audio-intf: Property to specify if Aux PCM interface is used for the target
 - qcom,cdc-dmic-gpios : phandle for Digital mic clk and data gpios.
 - qcom,msm_audio_ssr_devs: List the snd event framework clients
 - qcom,afe-rxtx-lb: AFE RX to TX loopback.
@@ -2054,6 +2073,7 @@ Example:
 		qcom,wcn-btfm = <1>;
 		qcom,mi2s-audio-intf = <1>;
 		qcom,auxpcm-audio-intf = <1>;
+		qcom,tdm-audio-intf = <1>;
 		qcom,afe-rxtx-lb = <1>;
 
 		asoc-platform = <&pcm0>, <&pcm1>, <&pcm2>, <&voip>, <&voice>,

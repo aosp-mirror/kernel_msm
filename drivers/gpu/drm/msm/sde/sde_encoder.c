@@ -79,6 +79,9 @@
 /* Maximum number of VSYNC wait attempts for RSC state transition */
 #define MAX_RSC_WAIT	5
 
+/* Primary panel worst case VSYNC expected to be no less than 30fps */
+#define PRIMARY_VBLANK_WORST_CASE_MS 34
+
 #define TOPOLOGY_DUALPIPE_MERGE_MODE(x) \
 		(((x) == SDE_RM_TOPOLOGY_DUALPIPE_DSCMERGE) || \
 		((x) == SDE_RM_TOPOLOGY_DUALPIPE_3DMERGE) || \
@@ -1929,7 +1932,6 @@ static int _sde_encoder_update_rsc_client(
 	int pipe = -1;
 	int rc = 0;
 	int wait_refcount = 0;
-	u32 qsync_mode = 0;
 	bool force_vid_rsc = false;
         struct msm_drm_private *priv;
         struct sde_kms *sde_kms;
@@ -1975,51 +1977,32 @@ static int _sde_encoder_update_rsc_client(
 	 * secondary command mode panel.
 	 * Clone mode encoder can request CLK STATE only.
 	 */
-	if (sde_enc->cur_master)
-		qsync_mode = sde_connector_get_qsync_mode(
-			sde_enc->cur_master->connector);
+        if (sde_enc->force_vid_rsc) {
+                force_vid_rsc = true;
+        } else if (crtc->state && crtc->state->mode_changed &&
+                   msm_is_mode_seamless_dms_fps(&crtc->state->adjusted_mode)) {
+                SDE_DEBUG_ENC(sde_enc, "seamless dms with fps\n");
+                force_vid_rsc = true;
+        } else if (sde_enc->cur_master && sde_connector_get_qsync_mode(
+                        sde_enc->cur_master->connector)) {
+                force_vid_rsc = true;
+        }
 
-	if (IS_SDE_MAJOR_SAME(sde_kms->core_rev, SDE_HW_VER_620)) {
-		if (rsc_state == SDE_RSC_VID_STATE)
-			rsc_state = SDE_RSC_CLK_STATE;
-		else if (sde_encoder_in_clone_mode(drm_enc) ||
-			!disp_info->is_primary || (disp_info->is_primary &&
-				qsync_mode))
-			rsc_state = enable ? SDE_RSC_CLK_STATE :
-					SDE_RSC_IDLE_STATE;
-		else if (disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
-			rsc_state = enable ? SDE_RSC_CMD_STATE :
-					SDE_RSC_IDLE_STATE;
-		else if (disp_info->capabilities & MSM_DISPLAY_CAP_VID_MODE)
-			rsc_state = enable ? SDE_RSC_VID_STATE :
-					SDE_RSC_IDLE_STATE;
+        if (!enable)
+                rsc_state = SDE_RSC_IDLE_STATE;
+        else if (sde_encoder_in_clone_mode(drm_enc))
+                rsc_state = SDE_RSC_CLK_STATE;
+        else if ((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE) &&
+                 disp_info->is_primary && !force_vid_rsc)
+                rsc_state = SDE_RSC_CMD_STATE;
+        else
+                rsc_state = SDE_RSC_VID_STATE;
 
-		SDE_EVT32(rsc_state, qsync_mode);
+        if (IS_SDE_MAJOR_SAME(sde_kms->core_rev, SDE_HW_VER_620) &&
+                        (rsc_state == SDE_RSC_VID_STATE))
+                rsc_state = SDE_RSC_CLK_STATE;
 
-	} else {
-		if (sde_enc->force_vid_rsc) {
-			force_vid_rsc = true;
-		} else if (crtc->state && crtc->state->mode_changed &&
-			   msm_is_mode_seamless_dms_fps(
-					&crtc->state->adjusted_mode)) {
-			SDE_DEBUG_ENC(sde_enc, "seamless dms with fps\n");
-			force_vid_rsc = true;
-		} else if (sde_enc->cur_master && qsync_mode) {
-			force_vid_rsc = true;
-		}
-
-		if (!enable)
-			rsc_state = SDE_RSC_IDLE_STATE;
-		else if (sde_encoder_in_clone_mode(drm_enc))
-			rsc_state = SDE_RSC_CLK_STATE;
-		else if ((disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE) &&
-			 disp_info->is_primary && !force_vid_rsc)
-			rsc_state = SDE_RSC_CMD_STATE;
-		else
-			rsc_state = SDE_RSC_VID_STATE;
-
-		SDE_EVT32(rsc_state, force_vid_rsc);
-	}
+        SDE_EVT32(rsc_state, force_vid_rsc);
 
 	prefill_lines = config ? mode_info.prefill_lines +
 		config->inline_rotate_prefill : mode_info.prefill_lines;
@@ -2099,11 +2082,23 @@ static int _sde_encoder_update_rsc_client(
 				sde_enc->rsc_client))
 			break;
 
-		if (crtc->base.id == wait_vblank_crtc_id)
+		/*
+		 * if primary is inactive or modeset is needed, we'll wait
+		 * for worst case ms for best effort as we don't know when
+		 * primary display will be committed.
+		 */
+		if (crtc->base.id == wait_vblank_crtc_id) {
 			ret = sde_encoder_wait_for_event(drm_enc,
 					MSM_ENC_VBLANK);
-		else
+		} else if (primary_crtc->state->active &&
+				!drm_atomic_crtc_needs_modeset(
+						primary_crtc->state)) {
 			drm_wait_one_vblank(drm_enc->dev, pipe);
+		} else {
+			SDE_EVT32(DRMID(drm_enc),
+					wait_vblank_crtc_id, crtc->base.id);
+			msleep(PRIMARY_VBLANK_WORST_CASE_MS);
+		}
 
 		if (ret) {
 			SDE_ERROR_ENC(sde_enc,

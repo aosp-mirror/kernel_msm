@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015, Sony Mobile Communications AB.
- * Copyright (c) 2012-2013, 2017, 2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2017, 2019-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1053,6 +1053,12 @@ static int qcom_smem_probe(struct platform_device *pdev)
 static int qcom_smem_remove(struct platform_device *pdev)
 {
 	hwspin_lock_free(__smem->hwlock);
+	/* In case of Hibernation Restore __smem object is still valid
+	 * and we call probe again so same object get allocated again
+	 * that result into possible memory leak, hence explicitly freeing
+	 * it here.
+	 */
+	devm_kfree(&pdev->dev, __smem);
 	__smem = NULL;
 
 	return 0;
@@ -1088,8 +1094,9 @@ static int qcom_smem_restore(struct device *dev)
 }
 
 static const struct dev_pm_ops qcom_smem_pm_ops = {
-	.freeze = qcom_smem_freeze,
-	.restore = qcom_smem_restore,
+	.freeze_late = qcom_smem_freeze,
+	.restore_early = qcom_smem_restore,
+	.thaw_early = qcom_smem_restore,
 };
 
 static const struct of_device_id qcom_smem_of_match[] = {

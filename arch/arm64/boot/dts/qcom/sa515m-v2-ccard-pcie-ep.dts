@@ -33,6 +33,7 @@
 &ipa_hw {
 	qcom,use-ipa-in-mhi-mode;
 	qcom,ipa-config-is-auto;
+	qcom,use-xbl-boot;
 	qcom,mhi-event-ring-id-limits = <7 11>; /* start and end */
 };
 
@@ -58,4 +59,12 @@
 
 &usb {
 	qcom,smmu-s1-bypass;
+};
+
+&sdx_ext_ipc {
+		compatible = "qcom,sa515m-ccard";
+		qcom,ap2mdm-status-gpio = <&tlmm 76 0x00>;
+		qcom,mdm2ap-status-gpio = <&tlmm 33 0x00>;
+		qcom,mdm2ap-status2-gpio = <&tlmm 31 0x00>;
+		status = "okay";
 };

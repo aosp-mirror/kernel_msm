@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -553,9 +553,11 @@ struct cam_ife_csid_hw {
 	uint64_t                         clk_rate;
 	struct cam_isp_sensor_dimension  ipp_path_config;
 	struct cam_isp_sensor_dimension  ppp_path_config;
-	struct cam_isp_sensor_dimension  rdi_path_config[4];
+	struct cam_isp_sensor_dimension  rdi_path_config[CAM_IFE_CSID_RDI_MAX];
 	uint32_t                         hbi;
 	uint32_t                         vbi;
+	uint32_t                         vc_info[CAM_IFE_CSID_RDI_MAX];
+	bool                             ipp_cfg;
 	bool                             sof_irq_triggered;
 	uint32_t                         irq_debug_cnt;
 	uint32_t                         error_irq_count;
@@ -564,8 +566,8 @@ struct cam_ife_csid_hw {
 	uint32_t                         dual_usage;
 	uint32_t                         init_frame_drop;
 	uint32_t                         res_sof_cnt[CAM_IFE_PIX_PATH_RES_MAX];
-	uint64_t                         prev_boot_timestamp;
-	uint64_t                         prev_qtimer_ts;
+	uint64_t             prev_boot_timestamp[CAM_IFE_PIX_PATH_RES_MAX];
+	uint64_t             prev_qtimer_ts[CAM_IFE_PIX_PATH_RES_MAX];
 	struct cam_hw_intf              *ppi_hw_intf[CAM_CSID_PPI_HW_MAX];
 	bool                             ppi_enable;
 	bool                             fatal_err_detected;

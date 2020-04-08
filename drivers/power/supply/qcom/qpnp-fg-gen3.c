@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2475,7 +2475,6 @@ done:
 static enum alarmtimer_restart
 	fg_esr_sw_timer(struct alarm *alarm, ktime_t now)
 {
-	union power_supply_propval pval = {0, };
 	struct fg_dev *fg = container_of(alarm,
 			struct fg_dev, esr_sw_timer);
 
@@ -3271,15 +3270,18 @@ static int fg_get_time_to_empty(struct fg_dev *fg, int *val)
 	struct fg_gen3_chip *chip = container_of(fg, struct fg_gen3_chip, fg);
 	int rc, ibatt_avg, msoc, full_soc, act_cap_mah, divisor;
 
+	mutex_lock(&chip->ttf.lock);
 	rc = fg_circ_buf_median(&chip->ttf.ibatt, &ibatt_avg);
 	if (rc < 0) {
 		/* try to get instantaneous current */
 		rc = fg_get_battery_current(fg, &ibatt_avg);
 		if (rc < 0) {
 			pr_err("failed to get battery current, rc=%d\n", rc);
+			mutex_unlock(&chip->ttf.lock);
 			return rc;
 		}
 	}
+	mutex_unlock(&chip->ttf.lock);
 
 	ibatt_avg /= MILLI_UNIT;
 	/* clamp ibatt_avg to 100mA */
