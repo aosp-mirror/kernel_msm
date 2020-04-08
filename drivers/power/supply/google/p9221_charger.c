@@ -1367,12 +1367,6 @@ static void p9382_check_neg_power(struct p9221_charger_data *charger)
 	if ((charger->chip_id != P9382A_CHIP_ID) || !p9221_is_epp(charger))
 		return;
 
-	if (charger->is_mfg_google) {
-		dev_info(&charger->client->dev,
-			 "mfg code=%02x, ignore!\n", WLC_MFG_GOOGLE);
-		return;
-	}
-
 	ret = p9221_reg_read_8(charger, P9221R5_EPP_CUR_NEGOTIATED_POWER_REG,
 			       &np8);
 	if (ret)
