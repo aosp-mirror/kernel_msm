@@ -26,16 +26,12 @@
 #include <asm/vmx.h>
 #include <asm/paravirt.h>
 #include <asm/alternative.h>
+#include <asm/hypervisor.h>
 #include <asm/pgtable.h>
 #include <asm/set_memory.h>
 #include <asm/intel-family.h>
 #include <asm/e820/api.h>
 
-<<<<<<< HEAD
-static void __init spectre_v2_select_mitigation(void);
-static void __init ssb_select_mitigation(void);
-static void __init l1tf_select_mitigation(void);
-=======
 #include "cpu.h"
 
 static void __init spectre_v1_select_mitigation(void);
@@ -44,7 +40,6 @@ static void __init ssb_select_mitigation(void);
 static void __init l1tf_select_mitigation(void);
 static void __init mds_select_mitigation(void);
 static void __init taa_select_mitigation(void);
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 /* The base value of the SPEC_CTRL MSR that always has to be preserved. */
 u64 x86_spec_ctrl_base;
@@ -70,6 +65,13 @@ DEFINE_STATIC_KEY_FALSE(switch_to_cond_stibp);
 DEFINE_STATIC_KEY_FALSE(switch_mm_cond_ibpb);
 /* Control unconditional IBPB in switch_mm() */
 DEFINE_STATIC_KEY_FALSE(switch_mm_always_ibpb);
+
+/* Control MDS CPU buffer clear before returning to user space */
+DEFINE_STATIC_KEY_FALSE(mds_user_clear);
+EXPORT_SYMBOL_GPL(mds_user_clear);
+/* Control MDS CPU buffer clear before idling (halt, mwait) */
+DEFINE_STATIC_KEY_FALSE(mds_idle_clear);
+EXPORT_SYMBOL_GPL(mds_idle_clear);
 
 void __init check_bugs(void)
 {
@@ -98,22 +100,15 @@ void __init check_bugs(void)
 	if (boot_cpu_has(X86_FEATURE_STIBP))
 		x86_spec_ctrl_mask |= SPEC_CTRL_STIBP;
 
-	/* Select the proper spectre mitigation before patching alternatives */
+	/* Select the proper CPU mitigations before patching alternatives: */
+	spectre_v1_select_mitigation();
 	spectre_v2_select_mitigation();
-
-	/*
-	 * Select proper mitigation for any exposure to the Speculative Store
-	 * Bypass vulnerability.
-	 */
 	ssb_select_mitigation();
-<<<<<<< HEAD
-=======
 	l1tf_select_mitigation();
 	mds_select_mitigation();
 	taa_select_mitigation();
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
-	l1tf_select_mitigation();
+	arch_smt_update();
 
 #ifdef CONFIG_X86_32
 	/*
@@ -221,8 +216,6 @@ static void x86_amd_ssb_disable(void)
 }
 
 #undef pr_fmt
-<<<<<<< HEAD
-=======
 #define pr_fmt(fmt)	"MDS: " fmt
 
 /* Default mitigation for MDS-affected CPUs */
@@ -464,7 +457,6 @@ static int __init nospectre_v1_cmdline(char *str)
 early_param("nospectre_v1", nospectre_v1_cmdline);
 
 #undef pr_fmt
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 #define pr_fmt(fmt)     "Spectre V2 : " fmt
 
 static enum spectre_v2_mitigation spectre_v2_enabled __ro_after_init =
@@ -688,7 +680,8 @@ static enum spectre_v2_mitigation_cmd __init spectre_v2_parse_cmdline(void)
 	char arg[20];
 	int ret, i;
 
-	if (cmdline_find_option_bool(boot_command_line, "nospectre_v2"))
+	if (cmdline_find_option_bool(boot_command_line, "nospectre_v2") ||
+	    cpu_mitigations_off())
 		return SPECTRE_V2_CMD_NONE;
 
 	ret = cmdline_find_option(boot_command_line, "spectre_v2", arg, sizeof(arg));
@@ -820,9 +813,6 @@ specv2_set_mode:
 
 	/* Set up IBPB and STIBP depending on the general spectre V2 command */
 	spectre_v2_user_select_mitigation(cmd);
-
-	/* Enable STIBP if appropriate */
-	arch_smt_update();
 }
 
 static void update_stibp_msr(void * __unused)
@@ -856,8 +846,6 @@ static void update_indir_branch_cond(void)
 		static_branch_disable(&switch_to_cond_stibp);
 }
 
-<<<<<<< HEAD
-=======
 #undef pr_fmt
 #define pr_fmt(fmt) fmt
 
@@ -884,7 +872,6 @@ static void update_mds_branch_idle(void)
 #define MDS_MSG_SMT "MDS CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/mds.html for more details.\n"
 #define TAA_MSG_SMT "TAA CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/tsx_async_abort.html for more details.\n"
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 void arch_smt_update(void)
 {
 	mutex_lock(&spec_ctrl_mutex);
@@ -901,8 +888,6 @@ void arch_smt_update(void)
 		break;
 	}
 
-<<<<<<< HEAD
-=======
 	switch (mds_mitigation) {
 	case MDS_MITIGATION_FULL:
 	case MDS_MITIGATION_VMWERV:
@@ -925,7 +910,6 @@ void arch_smt_update(void)
 		break;
 	}
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	mutex_unlock(&spec_ctrl_mutex);
 }
 
@@ -967,7 +951,8 @@ static enum ssb_mitigation_cmd __init ssb_parse_cmdline(void)
 	char arg[20];
 	int ret, i;
 
-	if (cmdline_find_option_bool(boot_command_line, "nospec_store_bypass_disable")) {
+	if (cmdline_find_option_bool(boot_command_line, "nospec_store_bypass_disable") ||
+	    cpu_mitigations_off()) {
 		return SPEC_STORE_BYPASS_CMD_NONE;
 	} else {
 		ret = cmdline_find_option(boot_command_line, "spec_store_bypass_disable",
@@ -1029,6 +1014,16 @@ static enum ssb_mitigation __init __ssb_select_mitigation(void)
 	}
 
 	/*
+	 * If SSBD is controlled by the SPEC_CTRL MSR, then set the proper
+	 * bit in the mask to allow guests to use the mitigation even in the
+	 * case where the host does not enable it.
+	 */
+	if (static_cpu_has(X86_FEATURE_SPEC_CTRL_SSBD) ||
+	    static_cpu_has(X86_FEATURE_AMD_SSBD)) {
+		x86_spec_ctrl_mask |= SPEC_CTRL_SSBD;
+	}
+
+	/*
 	 * We have three CPU feature flags that are in play here:
 	 *  - X86_BUG_SPEC_STORE_BYPASS - CPU is susceptible.
 	 *  - X86_FEATURE_SSBD - CPU is able to turn off speculative store bypass
@@ -1045,7 +1040,6 @@ static enum ssb_mitigation __init __ssb_select_mitigation(void)
 			x86_amd_ssb_disable();
 		} else {
 			x86_spec_ctrl_base |= SPEC_CTRL_SSBD;
-			x86_spec_ctrl_mask |= SPEC_CTRL_SSBD;
 			wrmsrl(MSR_IA32_SPEC_CTRL, x86_spec_ctrl_base);
 		}
 	}
@@ -1291,6 +1285,11 @@ static void __init l1tf_select_mitigation(void)
 	if (!boot_cpu_has_bug(X86_BUG_L1TF))
 		return;
 
+	if (cpu_mitigations_off())
+		l1tf_mitigation = L1TF_MITIGATION_OFF;
+	else if (cpu_mitigations_auto_nosmt())
+		l1tf_mitigation = L1TF_MITIGATION_FLUSH_NOSMT;
+
 	override_cache_bits(&boot_cpu_data);
 
 	switch (l1tf_mitigation) {
@@ -1319,7 +1318,7 @@ static void __init l1tf_select_mitigation(void)
 		pr_info("You may make it effective by booting the kernel with mem=%llu parameter.\n",
 				half_pa);
 		pr_info("However, doing so will make a part of your RAM unusable.\n");
-		pr_info("Reading https://www.kernel.org/doc/html/latest/admin-guide/l1tf.html might help you decide.\n");
+		pr_info("Reading https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html might help you decide.\n");
 		return;
 	}
 
@@ -1352,6 +1351,7 @@ static int __init l1tf_cmdline(char *str)
 early_param("l1tf", l1tf_cmdline);
 
 #undef pr_fmt
+#define pr_fmt(fmt) fmt
 
 #ifdef CONFIG_SYSFS
 
@@ -1403,8 +1403,6 @@ static ssize_t itlb_multihit_show_state(char *buf)
 }
 #endif
 
-<<<<<<< HEAD
-=======
 static ssize_t mds_show_state(char *buf)
 {
 	if (boot_cpu_has(X86_FEATURE_HYPERVISOR)) {
@@ -1437,7 +1435,6 @@ static ssize_t tsx_async_abort_show_state(char *buf)
 		       sched_smt_active() ? "vulnerable" : "disabled");
 }
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 static char *stibp_state(void)
 {
 	if (spectre_v2_enabled == SPECTRE_V2_IBRS_ENHANCED)
@@ -1482,7 +1479,7 @@ static ssize_t cpu_show_common(struct device *dev, struct device_attribute *attr
 		break;
 
 	case X86_BUG_SPECTRE_V1:
-		return sprintf(buf, "Mitigation: __user pointer sanitization\n");
+		return sprintf(buf, "%s\n", spectre_v1_strings[spectre_v1_mitigation]);
 
 	case X86_BUG_SPECTRE_V2:
 		return sprintf(buf, "%s%s%s%s%s%s\n", spectre_v2_strings[spectre_v2_enabled],
@@ -1499,8 +1496,6 @@ static ssize_t cpu_show_common(struct device *dev, struct device_attribute *attr
 		if (boot_cpu_has(X86_FEATURE_L1TF_PTEINV))
 			return l1tf_show_state(buf);
 		break;
-<<<<<<< HEAD
-=======
 
 	case X86_BUG_MDS:
 		return mds_show_state(buf);
@@ -1511,7 +1506,6 @@ static ssize_t cpu_show_common(struct device *dev, struct device_attribute *attr
 	case X86_BUG_ITLB_MULTIHIT:
 		return itlb_multihit_show_state(buf);
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	default:
 		break;
 	}
@@ -1543,8 +1537,6 @@ ssize_t cpu_show_l1tf(struct device *dev, struct device_attribute *attr, char *b
 {
 	return cpu_show_common(dev, attr, buf, X86_BUG_L1TF);
 }
-<<<<<<< HEAD
-=======
 
 ssize_t cpu_show_mds(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1560,5 +1552,4 @@ ssize_t cpu_show_itlb_multihit(struct device *dev, struct device_attribute *attr
 {
 	return cpu_show_common(dev, attr, buf, X86_BUG_ITLB_MULTIHIT);
 }
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 #endif

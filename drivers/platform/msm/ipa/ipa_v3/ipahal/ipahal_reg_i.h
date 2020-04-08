@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
-=======
 /* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -636,9 +632,6 @@ int ipahal_reg_init(enum ipa_hw_type ipa_hw_type);
 #define IPA_COAL_EVICTION_EN_SHFT 0
 #define IPA_COAL_QMAP_CFG_BMSK 0x1
 #define IPA_COAL_QMAP_CFG_SHFT 0
-<<<<<<< HEAD
-
-=======
 #define IPA_NAT_UC_EXTERNAL_CFG_BMSK 0xFFFFFFFF
 #define IPA_NAT_UC_EXTERNAL_CFG_SHFT 0
 #define IPA_NAT_UC_LOCAL_CFG_BMSK 0xFFFFFFFF
@@ -702,6 +695,5 @@ int ipahal_reg_init(enum ipa_hw_type ipa_hw_type);
 #define IPA_STATE_TX_WRAPPER_TX1_IDLE_SHFT_v4_7 1
 #define IPA_STATE_TX_WRAPPER_TX0_IDLE_BMSK_v4_7 0x1
 #define IPA_STATE_TX_WRAPPER_TX0_IDLE_SHFT_v4_7 0
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 #endif /* _IPAHAL_REG_I_H_ */

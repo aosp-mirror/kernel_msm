@@ -3730,13 +3730,13 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 		mutex_lock(&driver->md_session_lock);
 		session_info = diag_md_session_get_peripheral(DIAG_LOCAL_PROC,
 								APPS_DATA);
-		if (!session_info)
-			mutex_unlock(&driver->md_session_lock);
 		COPY_USER_SPACE_OR_ERR(buf, data_type, sizeof(int));
 		if (ret == -EFAULT) {
 			mutex_unlock(&driver->md_session_lock);
-			goto exit;
+			goto end;
 		}
+		if (!session_info)
+			mutex_unlock(&driver->md_session_lock);
 		write_len = diag_copy_to_user_msg_mask(buf + ret, count,
 						       session_info);
 		if (session_info)
@@ -3759,7 +3759,7 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 		COPY_USER_SPACE_OR_ERR(buf, data_type, 4);
 		if (ret == -EFAULT) {
 			mutex_unlock(&driver->md_session_lock);
-			goto exit;
+			goto end;
 		}
 		if (session_info && session_info->event_mask &&
 		    session_info->event_mask->ptr) {
@@ -3768,7 +3768,7 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 					session_info->event_mask->mask_len);
 			if (ret == -EFAULT) {
 				mutex_unlock(&driver->md_session_lock);
-				goto exit;
+				goto end;
 			}
 		} else {
 			COPY_USER_SPACE_OR_ERR(buf + sizeof(int),
@@ -3776,7 +3776,7 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 						event_mask.mask_len);
 			if (ret == -EFAULT) {
 				mutex_unlock(&driver->md_session_lock);
-				goto exit;
+				goto end;
 			}
 		}
 		mutex_unlock(&driver->md_session_lock);
@@ -3793,15 +3793,13 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 		mutex_lock(&driver->md_session_lock);
 		session_info = diag_md_session_get_peripheral(DIAG_LOCAL_PROC,
 								APPS_DATA);
-		if (!session_info)
-			mutex_unlock(&driver->md_session_lock);
 		COPY_USER_SPACE_OR_ERR(buf, data_type, sizeof(int));
 		if (ret == -EFAULT) {
-			if ((session_info))
-				mutex_unlock(&driver->md_session_lock);
-			goto exit;
+			mutex_unlock(&driver->md_session_lock);
+			goto end;
 		}
-
+		if (!session_info)
+			mutex_unlock(&driver->md_session_lock);
 		write_len = diag_copy_to_user_log_mask(buf + ret, count,
 						       session_info);
 		if (session_info)

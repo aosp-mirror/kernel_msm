@@ -392,8 +392,6 @@
 		};
 	};
 
-<<<<<<< HEAD
-=======
 	/* GNSS UART Instance for CDP/MTP platform */
 	qupv3_se4_2uart: qcom,qup_uart@a84000 {
 		compatible = "qcom,msm-geni-serial-hs";
@@ -412,7 +410,6 @@
 		status = "disabled";
 	};
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	/* 2-wire UART */
 
 	/* Debug UART Instance for CDP/MTP platform */

@@ -12,6 +12,7 @@
 
 /dts-v1/;
 
+#include "sdxprairie.dtsi"
 #include "sa515m-ccard.dtsi"
 
 / {
@@ -20,12 +21,9 @@
 		"qcom,sdxprairie", "qcom,ccard";
 	qcom,board-id = <25 2>, <25 0x102>;
 };
-<<<<<<< HEAD
-=======
 
 &ipa_hw {
 	qcom,ipa-config-is-auto;
 	qcom,use-xbl-boot;
 };
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030

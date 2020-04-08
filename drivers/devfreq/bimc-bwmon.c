@@ -201,7 +201,7 @@ void mon_clear(struct bwmon *m, bool clear_all, enum mon_reg_type type)
 	mb();
 }
 
-#define	SAMPLE_WIN_LIM	0xFFFFF
+#define	SAMPLE_WIN_LIM	0xFFFFFF
 static __always_inline
 void mon_set_hw_sampling_window(struct bwmon *m, unsigned int sample_ms,
 				enum mon_reg_type type)
@@ -1291,6 +1291,9 @@ static struct platform_driver bimc_bwmon_driver = {
 		.name = "bimc-bwmon",
 		.of_match_table = bimc_bwmon_match_table,
 		.suppress_bind_attrs = true,
+#ifdef CONFIG_PLATFORM_AUTO
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+#endif
 	},
 };
 

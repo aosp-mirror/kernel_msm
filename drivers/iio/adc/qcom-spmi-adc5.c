@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -794,6 +794,8 @@ static const struct adc_channels adc_chans_rev2[ADC_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
 	[ADC_XO_THERM_PU2]	= ADC_CHAN_TEMP("xo_therm", 1,
 					SCALE_HW_CALIB_THERM_100K_PULLUP)
+	[ANA_IN]		= ADC_CHAN_TEMP("drax_temp", 1,
+					SCALE_HW_CALIB_PMIC_THERM)
 };
 
 static int adc_get_dt_channel_data(struct device *dev,
@@ -1138,6 +1140,7 @@ static int adc_freeze(struct device *dev)
 static const struct dev_pm_ops adc_pm_ops = {
 	.freeze = adc_freeze,
 	.restore = adc_restore,
+	.thaw = adc_restore,
 };
 
 static struct platform_driver adc_driver = {

@@ -461,19 +461,21 @@
 		qcom,pas-id = <4>;
 		qcom,smem-id = <421>;
 		qcom,sysmon-id = <0>;
-		qcom,ssctl-instance-id = <0x12>;
+		qcom,ssctl-instance-id = <0x22>;
 
 		interrupts-extended = <&intc 0 250 1>,
 				<&modem_smp2p_in 0 0>,
 				<&modem_smp2p_in 2 0>,
 				<&modem_smp2p_in 1 0>,
-				<&modem_smp2p_in 3 0>;
+				<&modem_smp2p_in 3 0>,
+				<&modem_smp2p_in 7 0>;
 
 		interrupt-names = "qcom,wdog",
 				"qcom,err-fatal",
 				"qcom,proxy-unvote",
 				"qcom,err-ready",
-				"qcom,stop-ack";
+				"qcom,stop-ack",
+				"qcom,shutdown-ack";
 
 		qcom,smem-states = <&modem_smp2p_out 0>;
 		qcom,smem-state-names = "qcom,force-stop";
@@ -1059,6 +1061,7 @@
 		qcom,smmu-s1-enable;
 
 		mhi,max-channels = <30>;
+		mhi,buffer-len = <0x8000>;
 		mhi,timeout = <10000>;
 
 		mhi_channels {
@@ -1405,8 +1408,6 @@
 		status = "disabled";
 	};
 
-<<<<<<< HEAD
-=======
 	mtl_rx_setup: rx-queues-config {
 		snps,rx-queues-to-use = <4>;
 		snps,rx-sched-sp;
@@ -1465,7 +1466,6 @@
 		};
 	};
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	ethqos_hw: qcom,ethernet@00020000 {
 		compatible = "qcom,sdxprairie-ethqos";
 		qcom,arm-smmu;
@@ -1484,18 +1484,21 @@
 			<&tlmm 90 2>, <&pdc 0 290 1>, <&pdc 0 291 1>;
 		interrupt-names = "macirq", "eth_lpi",
 			"phy-intr",	"ptp_pps_irq_0", "ptp_pps_irq_1";
-
+		qcom,msm-bus,name = "emac";
+		qcom,msm-bus,num-cases = <4>;
+		qcom,msm-bus,num-paths = <2>;
+		qcom,msm-bus,vectors-KBps =
+			<98 512 0 0>, <1 781 0 0>,  /* No vote */
+			<98 512 2500 0>, <1 781 0 40000>,  /* 10Mbps vote */
+			<98 512 25000 0>, <1 781 0 40000>,  /* 100Mbps vote */
+			<98 512 250000 0>, <1 781 0 40000>; /* 1000Mbps vote */
+		qcom,bus-vector-names = "0", "10", "100", "1000";
 		snps,tso;
-<<<<<<< HEAD
-		rx-fifo-depth = <4096>;
-		tx-fifo-depth = <4096>;
-=======
 		snps,pbl = <32>;
 		rx-fifo-depth = <16384>;
 		tx-fifo-depth = <20480>;
 		snps,mtl-rx-config = <&mtl_rx_setup>;
 		snps,mtl-tx-config = <&mtl_tx_setup>;
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 		vreg_rgmii-supply = <&pmxprairie_vref_rgmii>;
 		vreg_emac_phy-supply =  <&vreg_emac_phy>;

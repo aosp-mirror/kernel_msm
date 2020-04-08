@@ -59,11 +59,10 @@ static void configfs_d_iput(struct dentry * dentry,
 		/* Coordinate with configfs_readdir */
 		spin_lock(&configfs_dirent_lock);
 		/*
-		 * Set sd->s_dentry to null only when this dentry is the
-		 * one that is going to be killed.
-		 * If not do so, configfs_d_iput may run just after
-		 * configfs_attach_attr and set sd->s_dentry to null
-		 * even it's still in use.
+		 * Set sd->s_dentry to null only when this dentry is the one
+		 * that is going to be killed.  Otherwise configfs_d_iput may
+		 * run just after configfs_attach_attr and set sd->s_dentry to
+		 * NULL even it's still in use.
 		 */
 		if (sd->s_dentry == dentry)
 			sd->s_dentry = NULL;
@@ -1813,15 +1812,6 @@ int configfs_register_group(struct config_group *parent_group,
 	parent = parent_group->cg_item.ci_dentry;
 
 	inode_lock_nested(d_inode(parent), I_MUTEX_PARENT);
-<<<<<<< HEAD
-	ret = create_default_group(parent_group, group);
-	if (!ret) {
-		spin_lock(&configfs_dirent_lock);
-		configfs_dir_set_ready(group->cg_item.ci_dentry->d_fsdata);
-		spin_unlock(&configfs_dirent_lock);
-	}
-	inode_unlock(d_inode(parent));
-=======
 	ret = create_default_group(parent_group, group, frag);
 	if (ret)
 		goto err_out;
@@ -1838,7 +1828,6 @@ err_out:
 	unlink_group(group);
 	mutex_unlock(&subsys->su_mutex);
 	put_fragment(frag);
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 	return ret;
 }
 EXPORT_SYMBOL(configfs_register_group);

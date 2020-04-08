@@ -45,6 +45,15 @@ static struct ethqos_prv_ipa_data eth_ipa_ctx;
 
 static void __ipa_eth_free_msg(void *buff, u32 len, u32 type) {}
 
+static inline void *ethqos_get_priv(struct qcom_ethqos *ethqos)
+{
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	return priv;
+}
+
 static int eth_ipa_send_msg(struct qcom_ethqos *ethqos,
 			    enum ipa_peripheral_event event)
 {
@@ -981,10 +990,12 @@ static void ethqos_configure_ipa_rx_dma_channel(unsigned int QINX,
 
 static int ethqos_init_offload(struct qcom_ethqos *ethqos)
 {
+	struct stmmac_priv *priv = ethqos_get_priv(ethqos);
+
 	ETHQOSDBG("\n");
 
 	ethqos_configure_ipa_tx_dma_channel(IPA_DMA_TX_CH, ethqos);
-	MTL_RQDCM0R_RGWR(0x3020100);
+	priv->hw->mac->map_mtl_to_dma(priv->hw, 0, 0);
 	ethqos_configure_ipa_rx_dma_channel(IPA_DMA_RX_CH, ethqos);
 
 	ETHQOSDBG("\n");
@@ -1665,7 +1676,7 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos)
 	in.clnt_hndl = eth_ipa->ipa_client_hndl;
 
 	/* Uplink Setup */
-	if (emac_emb_smmu_ctx.valid)
+	if (stmmac_emb_smmu_ctx.valid)
 		rx_setup_info.smmu_enabled = true;
 	else
 		rx_setup_info.smmu_enabled = false;
@@ -1694,7 +1705,7 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos)
 	(((unsigned long)(DMA_CR0_RGOFFADDR - BASE_ADDRESS))  +
 	 (unsigned long)ethqos->emac_mem_base);
 	/* Downlink Setup */
-	if (emac_emb_smmu_ctx.valid)
+	if (stmmac_emb_smmu_ctx.valid)
 		tx_setup_info.smmu_enabled = true;
 	else
 		tx_setup_info.smmu_enabled = false;
@@ -1762,7 +1773,7 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos)
 			= eth_ipa_ctx.tx_queue->ipa_tx_buff_phy_addr[i];
 	}
 
-	if (emac_emb_smmu_ctx.valid) {
+	if (stmmac_emb_smmu_ctx.valid) {
 		ret = ethqos_set_ul_dl_smmu_ipa_params(ethqos, &rx_setup_info,
 						       &tx_setup_info);
 		if (ret) {
@@ -1812,7 +1823,7 @@ static int ethqos_ipa_offload_connect(struct qcom_ethqos *ethqos)
 	kfree(tx_setup_info.data_buff_list);
 	tx_setup_info.data_buff_list = NULL;
 
-	if (emac_emb_smmu_ctx.valid) {
+	if (stmmac_emb_smmu_ctx.valid) {
 		if (rx_setup_info.ring_base_sgt) {
 			sg_free_table(rx_setup_info.ring_base_sgt);
 			kfree(rx_setup_info.ring_base_sgt);

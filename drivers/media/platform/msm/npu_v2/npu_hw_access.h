@@ -13,13 +13,15 @@
 #ifndef _NPU_HW_ACCESS_H
 #define _NPU_HW_ACCESS_H
 
-/*
+/* -------------------------------------------------------------------------
  * Includes
+ * -------------------------------------------------------------------------
  */
 #include "npu_common.h"
 
-/*
+/* -------------------------------------------------------------------------
  * Defines
+ * -------------------------------------------------------------------------
  */
 #define IPC_MEM_OFFSET_FROM_SSTCM 0x00018000
 #define SYS_CACHE_SCID 23
@@ -44,8 +46,9 @@
 #define INTERRUPT_RAISE_NPU(npu_dev) npu_interrupt_raise_m0(npu_dev)
 #define INTERRUPT_RAISE_DSP(npu_dev) npu_interrupt_raise_dsp(npu_dev)
 
-/*
+/* -------------------------------------------------------------------------
  * Data Structures
+ * -------------------------------------------------------------------------
  */
 struct npu_device;
 struct npu_ion_buf_t;
@@ -53,8 +56,9 @@ struct npu_host_ctx;
 struct npu_client;
 typedef irqreturn_t (*intr_hdlr_fn)(int32_t irq, void *ptr);
 
-/*
+/* -------------------------------------------------------------------------
  * Function Prototypes
+ * -------------------------------------------------------------------------
  */
 uint32_t npu_core_reg_read(struct npu_device *npu_dev, uint32_t off);
 void npu_core_reg_write(struct npu_device *npu_dev, uint32_t off, uint32_t val);

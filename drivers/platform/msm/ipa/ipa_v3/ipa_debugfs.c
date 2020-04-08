@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -104,6 +104,8 @@ const char *ipa3_hdr_proc_type_name[] = {
 	__stringify(IPA_HDR_PROC_L2TP_HEADER_ADD),
 	__stringify(IPA_HDR_PROC_L2TP_HEADER_REMOVE),
 	__stringify(IPA_HDR_PROC_ETHII_TO_ETHII_EX),
+	__stringify(IPA_HDR_PROC_L2TP_UDP_HEADER_ADD),
+	__stringify(IPA_HDR_PROC_L2TP_UDP_HEADER_REMOVE),
 };
 
 static struct dentry *dent;
@@ -338,7 +340,6 @@ static ssize_t ipa3_write_keep_awake(struct file *file, const char __user *buf,
 {
 	unsigned long missing;
 	s8 option = 0;
-	uint32_t bw_mbps = 0;
 
 	if (sizeof(dbg_buff) < count + 1)
 		return -EFAULT;
@@ -351,34 +352,16 @@ static ssize_t ipa3_write_keep_awake(struct file *file, const char __user *buf,
 	if (kstrtos8(dbg_buff, 0, &option))
 		return -EFAULT;
 
-	switch (option) {
-	case 0:
-		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
-		bw_mbps = 0;
-		break;
-	case 1:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 0;
-		break;
-	case 2:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 700;
-		break;
-	case 3:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 3000;
-		break;
-	case 4:
-		IPA_ACTIVE_CLIENTS_INC_SIMPLE();
-		bw_mbps = 7000;
-		break;
-	default:
-		pr_err("Not support this vote (%d)\n", option);
-		return -EFAULT;
-	}
-	if (ipa3_vote_for_bus_bw(&bw_mbps)) {
-		IPAERR("Failed to vote for bus BW (%u)\n", bw_mbps);
-		return -EFAULT;
+	if (option == 0) {
+		if (ipa_pm_remove_dummy_clients()) {
+			pr_err("Failed to remove dummy clients\n");
+			return -EFAULT;
+		}
+	} else {
+		if (ipa_pm_add_dummy_clients(option - 1)) {
+			pr_err("Failed to add dummy clients\n");
+			return -EFAULT;
+		}
 	}
 
 	return count;
@@ -564,11 +547,16 @@ static int ipa3_attrib_dump(struct ipa_rule_attrib *attrib,
 	if ((attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_ETHER_II) ||
 		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_3) ||
 		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_L2TP) ||
-		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_1Q)) {
+		(attrib->attrib_mask & IPA_FLT_MAC_DST_ADDR_802_1Q) ||
+		(attrib->attrib_mask & IPA_FLT_L2TP_UDP_INNER_MAC_DST_ADDR)) {
 		pr_err("dst_mac_addr:%pM ", attrib->dst_mac_addr);
 	}
 
-	if (attrib->attrib_mask & IPA_FLT_MAC_ETHER_TYPE)
+	if (attrib->ext_attrib_mask & IPA_FLT_EXT_MTU)
+		pr_err("Payload Length:%d ", attrib->payload_length);
+
+	if (attrib->attrib_mask & IPA_FLT_MAC_ETHER_TYPE ||
+		attrib->ext_attrib_mask & IPA_FLT_EXT_L2TP_UDP_INNER_ETHER_TYPE)
 		pr_err("ether_type:%x ", attrib->ether_type);
 
 	if (attrib->attrib_mask & IPA_FLT_VLAN_ID)
@@ -577,7 +565,8 @@ static int ipa3_attrib_dump(struct ipa_rule_attrib *attrib,
 	if (attrib->attrib_mask & IPA_FLT_TCP_SYN)
 		pr_err("tcp syn ");
 
-	if (attrib->attrib_mask & IPA_FLT_TCP_SYN_L2TP)
+	if (attrib->attrib_mask & IPA_FLT_TCP_SYN_L2TP ||
+		attrib->ext_attrib_mask & IPA_FLT_EXT_L2TP_UDP_TCP_SYN)
 		pr_err("tcp syn l2tp ");
 
 	if (attrib->attrib_mask & IPA_FLT_L2TP_INNER_IP_TYPE)
@@ -1221,6 +1210,26 @@ static ssize_t ipa3_read_odlstats(struct file *file, char __user *ubuf,
 	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, cnt);
 }
 
+static ssize_t ipa3_read_page_recycle_stats(struct file *file,
+		char __user *ubuf, size_t count, loff_t *ppos)
+{
+	int nbytes;
+	int cnt = 0;
+
+	nbytes = scnprintf(dbg_buff, IPA_MAX_MSG_LEN,
+			"COAL : Total number of packets replenished =%llu\n"
+			"COAL : Number of tmp alloc packets  =%llu\n"
+			"DEF  : Total number of packets replenished =%llu\n"
+			"DEF  : Number of tmp alloc packets  =%llu\n",
+			ipa3_ctx->stats.page_recycle_stats[0].total_replenished,
+			ipa3_ctx->stats.page_recycle_stats[0].tmp_alloc,
+			ipa3_ctx->stats.page_recycle_stats[1].total_replenished,
+			ipa3_ctx->stats.page_recycle_stats[1].tmp_alloc);
+
+	cnt += nbytes;
+
+	return simple_read_from_buffer(ubuf, count, ppos, dbg_buff, cnt);
+}
 static ssize_t ipa3_read_wstats(struct file *file, char __user *ubuf,
 		size_t count, loff_t *ppos)
 {
@@ -2712,6 +2721,10 @@ static const struct ipa3_debugfs_file debugfs_files[] = {
 	}, {
 		"odlstats", IPA_READ_ONLY_MODE, NULL, {
 			.read = ipa3_read_odlstats,
+		}
+	}, {
+		"page_recycle_stats", IPA_READ_ONLY_MODE, NULL, {
+			.read = ipa3_read_page_recycle_stats,
 		}
 	}, {
 		"wdi", IPA_READ_ONLY_MODE, NULL, {

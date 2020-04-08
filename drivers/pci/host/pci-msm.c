@@ -50,6 +50,7 @@
 #include <linux/compiler.h>
 #include <linux/ipc_logging.h>
 #include <linux/msm_pcie.h>
+#include <linux/kthread.h>
 
 #define PCIE_VENDOR_ID_QCOM		0x17cb
 
@@ -201,7 +202,7 @@
 #define MSM_PCIE_MAX_VREG 4
 #define MSM_PCIE_MAX_CLK 13
 #define MSM_PCIE_MAX_PIPE_CLK 1
-#define MAX_RC_NUM 3
+#define MAX_RC_NUM 4
 #define MAX_DEVICE_NUM 20
 #define MAX_SHORT_BDF_NUM 16
 #define PCIE_TLP_RD_SIZE 0x5
@@ -881,6 +882,13 @@ msm_pcie_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_RESET] = {
 		{NULL, "pcie_phy_com_reset", false},
 		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
 		{NULL, "pcie_2_phy_reset", false}
+	},
+	{
+		{NULL, "pcie_3_core_reset", false},
+		{NULL, "pcie_phy_reset", false},
+		{NULL, "pcie_phy_com_reset", false},
+		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
+		{NULL, "pcie_3_phy_reset", false}
 	}
 };
 
@@ -895,6 +903,9 @@ msm_pcie_pipe_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_PIPE_RESET] = {
 	},
 	{
 		{NULL, "pcie_2_phy_pipe_reset", false}
+	},
+	{
+		{NULL, "pcie_3_phy_pipe_reset", false}
 	}
 };
 
@@ -937,10 +948,25 @@ static struct msm_pcie_clk_info_t
 	{NULL, "pcie_2_cfg_ahb_clk", 0, false, true},
 	{NULL, "pcie_2_mstr_axi_clk", 0, true, true},
 	{NULL, "pcie_2_slv_axi_clk", 0, true, true},
-	{NULL, "pcie_2_ldo", 0, false, true},
+	{NULL, "pcie_2_ldo", 0, false, false},
 	{NULL, "pcie_2_smmu_clk", 0, false, false},
 	{NULL, "pcie_2_slv_q2a_axi_clk", 0, false, false},
 	{NULL, "pcie_2_sleep_clk", 0, false, false},
+	{NULL, "pcie_phy_refgen_clk", 0, false, false},
+	{NULL, "pcie_tbu_clk", 0, false, false},
+	{NULL, "pcie_phy_cfg_ahb_clk", 0, false, false},
+	{NULL, "pcie_phy_aux_clk", 0, false, false}
+	},
+	{
+	{NULL, "pcie_3_ref_clk_src", 0, false, false},
+	{NULL, "pcie_3_aux_clk", 1010000, false, true},
+	{NULL, "pcie_3_cfg_ahb_clk", 0, false, true},
+	{NULL, "pcie_3_mstr_axi_clk", 0, true, true},
+	{NULL, "pcie_3_slv_axi_clk", 0, true, true},
+	{NULL, "pcie_3_ldo", 0, false, false},
+	{NULL, "pcie_3_smmu_clk", 0, false, false},
+	{NULL, "pcie_3_slv_q2a_axi_clk", 0, false, false},
+	{NULL, "pcie_3_sleep_clk", 0, false, false},
 	{NULL, "pcie_phy_refgen_clk", 0, false, false},
 	{NULL, "pcie_tbu_clk", 0, false, false},
 	{NULL, "pcie_phy_cfg_ahb_clk", 0, false, false},
@@ -959,6 +985,9 @@ static struct msm_pcie_clk_info_t
 	},
 	{
 	{NULL, "pcie_2_pipe_clk", 125000000, true, true},
+	},
+	{
+	{NULL, "pcie_3_pipe_clk", 125000000, true, true},
 	}
 };
 
@@ -1665,11 +1694,6 @@ static void msm_pcie_sel_debug_testcase(struct msm_pcie_dev_t *dev,
 
 		break;
 	case MSM_PCIE_DUMP_PCIE_REGISTER_SPACE:
-		if (!base_sel) {
-			PCIE_DBG_FS(dev, "Invalid base_sel: 0x%x\n", base_sel);
-			break;
-		}
-
 		if (((base_sel - 1) >= MSM_PCIE_MAX_RES) ||
 					(!dev->res[base_sel - 1].resource)) {
 			PCIE_DBG_FS(dev, "PCIe: RC%d Resource does not exist\n",
@@ -1677,7 +1701,10 @@ static void msm_pcie_sel_debug_testcase(struct msm_pcie_dev_t *dev,
 			break;
 		}
 
-		if (base_sel - 1 == MSM_PCIE_RES_PARF) {
+		if (!base_sel) {
+			PCIE_DBG_FS(dev, "Invalid base_sel: 0x%x\n", base_sel);
+			break;
+		} else if (base_sel - 1 == MSM_PCIE_RES_PARF) {
 			pcie_parf_dump(dev);
 			break;
 		} else if (base_sel - 1 == MSM_PCIE_RES_PHY) {
@@ -5685,12 +5712,14 @@ static void msm_pcie_check_l1ss_support_all(struct msm_pcie_dev_t *dev)
 	pci_walk_bus(dev->dev->bus, msm_pcie_check_l1ss_support, dev);
 }
 
-static int msm_pcie_probe(struct platform_device *pdev)
+static int __msm_pcie_probe(void *arg)
 {
 	int ret = 0;
 	int rc_idx = -1;
 	int i, j;
+	struct platform_device *pdev;
 
+	pdev = (struct platform_device *)arg;
 	PCIE_GEN_DBG("%s\n", __func__);
 
 	mutex_lock(&pcie_drv.drv_lock);
@@ -6169,6 +6198,24 @@ out:
 	return ret;
 }
 
+static int msm_pcie_probe(struct platform_device *pdev)
+{
+#ifdef CONFIG_PLATFORM_AUTO
+	struct task_struct *msm_pcie_task =
+			kthread_run(__msm_pcie_probe, pdev,
+					"msm_pcie_probe");
+	if (IS_ERR(msm_pcie_task))
+		return PTR_ERR(msm_pcie_task);
+	else
+		return 0;
+#else
+	int ret = 0;
+
+	ret = __msm_pcie_probe(pdev);
+	return ret;
+#endif
+}
+
 static int msm_pcie_remove(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -6564,7 +6611,7 @@ static int msm_pci_iommu_init(struct msm_root_dev_t *root_dev)
 	ret = arm_iommu_attach_device(&pci_dev->dev, mapping);
 	if (ret) {
 		PCIE_ERR(pcie_dev,
-			"failed to iommu attach device (%d)\n",
+			"PCIe: RC%d: failed to iommu attach device (%d)\n",
 			pcie_dev->rc_idx, ret);
 		goto release_mapping;
 	}

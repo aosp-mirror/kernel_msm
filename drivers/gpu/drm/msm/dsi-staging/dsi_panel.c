@@ -652,8 +652,8 @@ static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
 
 	rc = pwm_config(bl->pwm_bl, duty, period_ns);
 	if (rc) {
-		pr_err("[%s] failed to change pwm config, rc=\n", panel->name,
-			rc);
+		pr_err("[%s] failed to change pwm config, rc=%i\n",
+		       panel->name, rc);
 		goto error;
 	}
 
@@ -666,8 +666,8 @@ static int dsi_panel_update_pwm_backlight(struct dsi_panel *panel,
 	if (!bl->pwm_enabled) {
 		rc = pwm_enable(bl->pwm_bl);
 		if (rc) {
-			pr_err("[%s] failed to enable pwm, rc=\n", panel->name,
-				rc);
+			pr_err("[%s] failed to enable pwm, rc=%i\n",
+			       panel->name, rc);
 			goto error;
 		}
 
@@ -1185,7 +1185,6 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 {
 	u32 val = 0;
 	int rc = 0;
-	bool panel_cphy_mode = false;
 
 	rc = utils->read_u32(utils->data, "qcom,mdss-dsi-t-clk-post", &val);
 	if (!rc) {
@@ -1208,11 +1207,6 @@ static int dsi_panel_parse_misc_host_config(struct dsi_host_common_cfg *host,
 
 	host->force_hs_clk_lane = utils->read_bool(utils->data,
 					"qcom,mdss-dsi-force-clock-lane-hs");
-	panel_cphy_mode = utils->read_bool(utils->data,
-					"qcom,panel-cphy-mode");
-	host->phy_type = panel_cphy_mode ? DSI_PHY_TYPE_CPHY
-						: DSI_PHY_TYPE_DPHY;
-
 	return 0;
 }
 

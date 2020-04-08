@@ -1084,7 +1084,7 @@
 				config {
 					pins = "gpio63";
 					drive-strength = <2>;
-					bias-pull-up;
+					bias-disable;
 				};
 			};
 
@@ -1098,61 +1098,32 @@
 					pins = "gpio63";
 					drive-strength = <2>;
 					bias-pull-up;
-					output-high;
 				};
 			};
 
-			blsp1_uart2b_rx_active: blsp1_uart2b_rx_active {
+			blsp1_uart2b_rxcts_active: blsp1_uart2b_rxcts_active {
 				mux {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					function = "blsp_uart2";
 				};
 
 				config {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					drive-strength = <2>;
 					bias-disable;
 				};
 			};
 
-			blsp1_uart2b_rx_sleep: blsp1_uart2b_rx_sleep {
+			blsp1_uart2b_rxcts_sleep: blsp1_uart2b_rxcts_sleep {
 				mux {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					drive-strength = <2>;
-					bias-pull-down;
-					input-enable;
-				};
-			};
-
-			blsp1_uart2b_cts_active: blsp1_uart2b_cts_active {
-				mux {
-					pins = "gpio65";
-					function = "blsp_uart2";
-				};
-
-				config {
-					pins = "gpio65";
-					drive-strength = <2>;
-					bias-disable;
-				};
-			};
-
-			blsp1_uart2b_cts_sleep: blsp1_uart2b_cts_sleep {
-				mux {
-					pins = "gpio65";
-					function = "gpio";
-				};
-
-				config {
-					pins = "gpio65";
-					drive-strength = <2>;
-					bias-disable;
-					input-enable;
+					bias-no-pull;
 				};
 			};
 
@@ -1165,7 +1136,7 @@
 				config {
 					pins = "gpio66";
 					drive-strength = <2>;
-					bias-pull-down;
+					bias-disable;
 				};
 			};
 
@@ -1178,8 +1149,7 @@
 				config {
 					pins = "gpio66";
 					drive-strength = <2>;
-					bias-pull-down;
-					output-low;
+					bias-no-pull;
 				};
 			};
 		};
@@ -1662,6 +1632,45 @@
 					bias-disable;
 					output-high;
 				};
+			};
+		};
+		sensor_int1_default: sensor_int1_default {
+			     mux {
+				     pins = "gpio84";
+				     function = "gpio";
+			     };
+
+			     config {
+				     pins = "gpio84";
+				     drive-strength = <16>; /* 16 mA */
+				     bias-pull-down; /* pull down */
+			     };
+		     };
+
+		sensor_int2_default: sensor_int2_default {
+			     mux {
+				     pins = "gpio85";
+				     function = "gpio";
+			     };
+
+			     config {
+				     pins = "gpio85";
+				     drive-strength = <16>; /* 16 mA */
+				     bias-pull-down; /* pull down */
+			     };
+		     };
+
+		sensor_enable_default: sensor_enable_default {
+			mux {
+				pins = "gpio87";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio87";
+				drive-strength = <16>; /* 16 mA */
+				bias-pull-up; /* pull up */
+				output-high;
 			};
 		};
 

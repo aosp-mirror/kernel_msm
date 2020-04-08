@@ -1,5 +1,4 @@
 config MSM_NPU_V2
-
 	tristate "QTI MSM Neural Processing Unit support V2"
 	depends on ARCH_QCOM && MSM_NPU=n
 	help

@@ -12,19 +12,13 @@
 
 #define pr_fmt(fmt) "cnss_utils: " fmt
 
-<<<<<<< HEAD
-=======
 #include <linux/debugfs.h>
 #include <linux/etherdevice.h>
 #include <linux/bitops.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 #include <linux/module.h>
-#include <linux/kernel.h>
 #include <linux/slab.h>
-#include <linux/etherdevice.h>
-#include <linux/debugfs.h>
 #include <net/cnss_utils.h>
 
 #ifdef CONFIG_CNSS_TIMESYNC

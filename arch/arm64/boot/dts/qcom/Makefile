@@ -86,8 +86,12 @@ dtb-$(CONFIG_ARCH_QCS405) += qcs405-iot-sku1.dtb \
 		qcs407-iot-sku9.dtb \
 		qcs405-iot-sku12.dtb \
 		qcs407-iot-sku12.dtb \
+		sa2150p-ccard-emmc.dtb \
+		sa2150p-ccard-nand.dtb \
 		qcs405-iot-sku13.dtb \
-		qcs407-iot-sku13.dtb
+		qcs407-iot-sku13.dtb \
+		qcs405-iot-robot-reference-board.dtb \
+		qcs404-iot-robot-reference-board.dtb
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SM8150) += \
@@ -171,7 +175,9 @@ dtb-$(CONFIG_QTI_GVM) += sa8155-vm-la.dtb \
 	sa8155-vm-lv-mt.dtb \
 	sa8155-vm-la-mt.dtb \
 	sa6155p-vm.dtb \
-	sa8195-vm.dtb
+	sa8195-vm.dtb \
+	sa8195-vm-lv.dtb \
+	sa8195-vm-lv-mt.dtb
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 	dtbo-$(CONFIG_ARCH_SDMSHRIKE) += \
@@ -208,6 +214,7 @@ ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 		sa6155p-v2-adp-star-overlay.dtbo \
 		sa6155p-v2-adp-air-overlay.dtbo \
 		qcs610-iot-overlay.dtbo \
+		qcs610-ipc-overlay.dtbo \
 		qcs410-iot-overlay.dtbo
 
 sm6150-rumi-overlay.dtbo-base := sm6150.dtb
@@ -226,6 +233,7 @@ sa6155-adp-air-overlay.dtbo-base := sa6155.dtb
 sa6155p-adp-air-overlay.dtbo-base := sa6155p.dtb
 sa6155p-v2-adp-air-overlay.dtbo-base := sa6155p.dtb
 qcs610-iot-overlay.dtbo-base := sm6150.dtb
+qcs610-ipc-overlay.dtbo-base := sm6150.dtb
 qcs410-iot-overlay.dtbo-base := sm6150.dtb
 else
 dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
@@ -244,6 +252,7 @@ dtb-$(CONFIG_ARCH_SM6150)	+= sm6150-rumi.dtb \
 	sa6155p-v2-adp-star.dtb \
 	sa6155p-v2-adp-air.dtb \
 	qcs610-iot.dtb \
+	qcs610-ipc.dtb \
 	qcs410-iot.dtb
 
 endif
@@ -370,11 +379,6 @@ dtb-$(CONFIG_ARCH_SDXPRAIRIE) += sdxprairie-rumi.dtb \
 	sdxprairie-pcie-ep-mtp.dtb \
 	sdxprairie-dsda-mtp.dtb \
 	sdxprairie-v2-mtp.dtb \
-<<<<<<< HEAD
-	sa515m-ccard.dtb \
-	sa515m-ccard-pcie-ep.dtb \
-	sa515m-ccard-usb-ep.dtb
-=======
 	sdxprairie-v2-mtp-cpe.dtb \
 	sdxprairie-v2-pcie-ep-mtp.dtb \
 	sdxprairie-v2-mtp-v1.1-cpe.dtb \
@@ -461,7 +465,6 @@ dtb-$(CONFIG_ARCH_SDM660) += sdm660-sim.dtb \
 	sdm660-usbc-audio-mtp.dtb \
 	sdm660-usbc-audio-rcm.dtb
 endif
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 endif
 ifeq ($(CONFIG_ARM64),y)

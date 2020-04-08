@@ -2252,6 +2252,17 @@ static const struct power_supply_desc qg_psy_desc = {
 	.property_is_writeable = qg_property_is_writeable,
 };
 
+#define DEFAULT_CL_BEGIN_IBAT_UA	(-100000)
+static bool qg_cl_ok_to_begin(void *data)
+{
+	struct qpnp_qg *chip = data;
+
+	if (chip->last_fifo_i_ua < DEFAULT_CL_BEGIN_IBAT_UA)
+		return true;
+
+	return false;
+}
+
 #define DEFAULT_RECHARGE_SOC 95
 static int qg_charge_full_update(struct qpnp_qg *chip)
 {
@@ -3740,6 +3751,7 @@ static int qg_alg_init(struct qpnp_qg *chip)
 	cl->get_cc_soc = qg_get_cc_soc;
 	cl->get_learned_capacity = qg_get_learned_capacity;
 	cl->store_learned_capacity = qg_store_learned_capacity;
+	cl->ok_to_begin = qg_cl_ok_to_begin;
 	cl->data = chip;
 
 	rc = cap_learning_init(cl);
@@ -4205,7 +4217,6 @@ static int process_suspend(struct qpnp_qg *chip)
 		return 0;
 
 	cancel_delayed_work_sync(&chip->ttf->ttf_work);
-	cancel_delayed_work_sync(&chip->qg_sleep_exit_work);
 
 	chip->suspend_data = false;
 
@@ -4371,6 +4382,9 @@ static int qpnp_qg_suspend_noirq(struct device *dev)
 {
 	int rc;
 	struct qpnp_qg *chip = dev_get_drvdata(dev);
+
+	/* cancel any pending sleep_exit work */
+	cancel_delayed_work_sync(&chip->qg_sleep_exit_work);
 
 	mutex_lock(&chip->data_lock);
 

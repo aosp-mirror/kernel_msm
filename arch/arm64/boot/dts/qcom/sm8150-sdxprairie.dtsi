@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -105,6 +105,69 @@
 		};
 	};
 
+	mhi_events {
+		mhi_event@5 {
+			mhi,chan = <100>;
+			mhi,hw-ev;
+		};
+
+		mhi_event@6 {
+			mhi,chan = <101>;
+			mhi,hw-ev;
+			mhi,client-manage;
+		};
+
+		mhi_event@7 {
+			mhi,chan = <102>;
+			mhi,hw-ev;
+			mhi,client-manage;
+			mhi,offload;
+		};
+
+		mhi_event@8 {
+			mhi,chan = <103>;
+			mhi,hw-ev;
+		};
+
+		mhi_event@9 {
+			mhi,chan = <105>;
+			mhi,hw-ev;
+			mhi,client-manage;
+			mhi,offload;
+		};
+
+		mhi_event@10 {
+			mhi,chan = <106>;
+			mhi,hw-ev;
+			mhi,client-manage;
+			mhi,offload;
+		};
+
+		mhi_event@11 {
+			mhi,chan = <107>;
+			mhi,hw-ev;
+			mhi,client-manage;
+			mhi,offload;
+		};
+
+		mhi_event@12 {
+			mhi,chan = <108>;
+			mhi,hw-ev;
+			mhi,client-manage;
+			mhi,offload;
+		};
+
+		mhi_event@13 {
+			mhi,chan = <109>;
+			mhi,hw-ev;
+		};
+
+		mhi_event@14 {
+			mhi,chan = <110>;
+			mhi,hw-ev;
+		};
+	};
+
 	mhi_devices {
 		mhi_qrtr {
 			qcom,net-id = <3>;
@@ -198,6 +261,7 @@
 
 		qcom,bus-vector-names = "MIN", "SVS2", "SVS", "NOMINAL",
 		"TURBO";
+
 		qcom,throughput-threshold = <600 2500 5000>;
 		qcom,scaling-exceptions = "wdi", "0", "600", "1200",
 			"USB DPL", "0", "2500", "5000", "ODL", "0",

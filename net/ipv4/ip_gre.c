@@ -689,7 +689,7 @@ static void erspan_build_header(struct sk_buff *skb,
 				__be32 id, u32 index, bool truncate)
 {
 	struct iphdr *iphdr = ip_hdr(skb);
-	struct ethhdr *eth = eth_hdr(skb);
+	struct ethhdr *eth = (struct ethhdr *)skb->data;
 	enum erspan_encap_type enc_type;
 	struct erspanhdr *ershdr;
 	struct qtag_prefix {
@@ -1424,6 +1424,7 @@ nla_put_failure:
 static void erspan_setup(struct net_device *dev)
 {
 	ether_setup(dev);
+	dev->max_mtu = 0;
 	dev->netdev_ops = &erspan_netdev_ops;
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;

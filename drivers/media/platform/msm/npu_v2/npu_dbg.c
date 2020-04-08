@@ -10,8 +10,9 @@
  * GNU General Public License for more details.
  */
 
-/*
+/* -------------------------------------------------------------------------
  * Includes
+ * -------------------------------------------------------------------------
  */
 #include "npu_common.h"
 #include "npu_firmware.h"
@@ -19,8 +20,9 @@
 #include "npu_hw_access.h"
 #include "npu_mgr.h"
 
-/*
+/* -------------------------------------------------------------------------
  * Function Definitions - Debug
+ * -------------------------------------------------------------------------
  */
 void npu_dump_ipc_packet(struct npu_device *npu_dev, void *cmd_ptr)
 {

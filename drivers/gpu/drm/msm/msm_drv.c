@@ -2033,7 +2033,8 @@ static int add_gpu_components(struct device *dev,
 	if (!np)
 		return 0;
 
-	drm_of_component_match_add(dev, matchptr, compare_of, np);
+	if (of_device_is_available(np))
+		drm_of_component_match_add(dev, matchptr, compare_of, np);
 
 	of_node_put(np);
 
@@ -2071,7 +2072,7 @@ static int msm_pdev_probe(struct platform_device *pdev)
 
 	ret = add_gpu_components(&pdev->dev, &match);
 	if (ret)
-		return ret;
+		goto fail;
 
 	if (!match)
 		return -ENODEV;
@@ -2079,7 +2080,16 @@ static int msm_pdev_probe(struct platform_device *pdev)
 	device_enable_async_suspend(&pdev->dev);
 
 	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
-	return component_master_add_with_match(&pdev->dev, &msm_drm_ops, match);
+
+	ret = component_master_add_with_match(&pdev->dev, &msm_drm_ops, match);
+	if (ret)
+		goto fail;
+
+	return 0;
+
+fail:
+	of_platform_depopulate(&pdev->dev);
+	return ret;
 }
 
 static int msm_pdev_remove(struct platform_device *pdev)

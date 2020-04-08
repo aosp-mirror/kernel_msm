@@ -286,9 +286,6 @@ static int max14656_probe(struct i2c_client *client,
 	if (ret)
 		return -ENODEV;
 
-<<<<<<< HEAD
-	INIT_DELAYED_WORK(&chip->irq_work, max14656_irq_worker);
-=======
 	chip->detect_psy = devm_power_supply_register(dev,
 		       &chip->psy_desc, &psy_cfg);
 	if (IS_ERR(chip->detect_psy)) {
@@ -302,7 +299,6 @@ static int max14656_probe(struct i2c_client *client,
 		dev_err(dev, "devm_add_action %d failed\n", ret);
 		return ret;
 	}
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 
 	ret = devm_request_irq(dev, chip->irq, max14656_irq,
 			       IRQF_TRIGGER_FALLING,
@@ -312,13 +308,6 @@ static int max14656_probe(struct i2c_client *client,
 		return -EINVAL;
 	}
 	enable_irq_wake(chip->irq);
-
-	chip->detect_psy = devm_power_supply_register(dev,
-		       &chip->psy_desc, &psy_cfg);
-	if (IS_ERR(chip->detect_psy)) {
-		dev_err(dev, "power_supply_register failed\n");
-		return -EINVAL;
-	}
 
 	schedule_delayed_work(&chip->irq_work, msecs_to_jiffies(2000));
 

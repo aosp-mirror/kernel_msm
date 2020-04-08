@@ -5646,65 +5646,6 @@ int msm_vidc_check_scaling_supported(struct msm_vidc_inst *inst)
 	return 0;
 }
 
-static bool is_image_session(struct msm_vidc_inst *inst)
-{
-	if (inst->session_type == MSM_VIDC_ENCODER &&
-		get_hal_codec(inst->fmts[CAPTURE_PORT].fourcc) ==
-			HAL_VIDEO_CODEC_HEVC)
-		return (inst->profile == HAL_HEVC_PROFILE_MAIN_STILL_PIC ||
-				inst->grid_enable);
-	else
-		return false;
-}
-
-static int msm_vidc_check_image_session_capabilities(struct msm_vidc_inst *inst)
-{
-	int rc = 0;
-	struct msm_vidc_image_capability *capability = NULL;
-
-	u32 output_height = ALIGN(inst->prop.height[CAPTURE_PORT], 512);
-	u32 output_width = ALIGN(inst->prop.width[CAPTURE_PORT], 512);
-
-	if (inst->grid_enable)
-		capability = inst->core->platform_data->heic_image_capability;
-	else
-		capability = inst->core->platform_data->hevc_image_capability;
-
-	if (!capability)
-		return -EINVAL;
-
-	if (output_width < capability->width.min ||
-		output_height < capability->height.min) {
-		dprintk(VIDC_ERR,
-			"HEIC Unsupported WxH = (%u)x(%u), min supported is - (%u)x(%u)\n",
-			output_width,
-			output_height,
-			capability->width.min,
-			capability->height.min);
-		rc = -ENOTSUPP;
-	}
-	if (!rc && (output_width > capability->width.max ||
-		output_height > capability->height.max)) {
-		dprintk(VIDC_ERR,
-			"HEIC Unsupported WxH = (%u)x(%u), max supported is - (%u)x(%u)\n",
-			output_width,
-			output_height,
-			capability->width.max,
-			capability->height.max);
-		rc = -ENOTSUPP;
-	}
-	if (!rc && output_height * output_width >
-		capability->width.max * capability->height.max) {
-		dprintk(VIDC_ERR,
-		"HEIC Unsupported WxH = (%u)x(%u), max supported is - (%u)x(%u)\n",
-		output_width, output_height,
-		capability->width.max, capability->height.max);
-		rc = -ENOTSUPP;
-	}
-
-	return rc;
-}
-
 int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_capability *capability;
@@ -5748,11 +5689,6 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 			input_width, input_height,
 			output_width, output_height);
 		rc = -ENOTSUPP;
-	}
-
-	if (is_image_session(inst)) {
-		rc = msm_vidc_check_image_session_capabilities(inst);
-		return rc;
 	}
 
 	output_height = ALIGN(inst->prop.height[CAPTURE_PORT], 16);
@@ -6048,7 +5984,6 @@ exit:
 void msm_comm_print_inst_info(struct msm_vidc_inst *inst)
 {
 	struct msm_vidc_buffer *mbuf;
-	struct msm_vidc_cvp_buffer *cbuf;
 	struct internal_buf *buf;
 	bool is_decode = false;
 	enum vidc_ports port;
@@ -6104,14 +6039,6 @@ void msm_comm_print_inst_info(struct msm_vidc_inst *inst)
 				buf->buffer_type, buf->smem.device_addr,
 				buf->smem.size);
 	mutex_unlock(&inst->outputbufs.lock);
-
-	mutex_lock(&inst->cvpbufs.lock);
-	dprintk(VIDC_ERR, "cvp buffer list:\n");
-	list_for_each_entry(cbuf, &inst->cvpbufs.list, list)
-		dprintk(VIDC_ERR, "index: %u fd: %u offset: %u addr: %x\n",
-				cbuf->buf.index, cbuf->buf.fd,
-				cbuf->buf.offset, cbuf->smem.device_addr);
-	mutex_unlock(&inst->cvpbufs.lock);
 }
 
 int msm_comm_session_continue(void *instance)

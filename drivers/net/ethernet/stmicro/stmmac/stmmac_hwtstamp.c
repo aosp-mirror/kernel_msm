@@ -35,7 +35,7 @@ static u32 stmmac_config_sub_second_increment(void __iomem *ioaddr,
 					      u32 ptp_clock, int gmac4)
 {
 	u32 value = readl(ioaddr + PTP_TCR);
-	unsigned long ss_inc = 0, sns_inc = 0, ptpclock = 0;
+	u64 ss_inc = 0, sns_inc = 0, ptpclock = 0;
 	u32 reg_value;
 
 	/* For GMAC3.x, 4.x versions, convert the ptp_clock to nano second
@@ -43,19 +43,19 @@ static u32 stmmac_config_sub_second_increment(void __iomem *ioaddr,
 	 * where ptp_clock is 50MHz if fine method is used to update system
 	 */
 	if (value & PTP_TCR_TSCFUPDT)
-		ptpclock = (unsigned long)ptp_clock;
+		ptpclock = (u64)ptp_clock;
 	else
-		ptpclock = (unsigned long)ptp_clock;
+		ptpclock = (u64)ptp_clock;
 
-	ss_inc = ((1 * 1000000000ULL) / ptpclock);
+	ss_inc = div_u64((1 * 1000000000ULL), ptpclock);
 	sns_inc = 1000000000ULL - (ss_inc * ptpclock); //take remainder
 
 	//sns_inc needs to be multiplied by 2^8, per spec.
-	sns_inc = (sns_inc * 256) / ptpclock;
+	sns_inc = div_u64((sns_inc * 256), ptpclock);
 
 	/* 0.465ns accuracy */
 	if (!(value & PTP_TCR_TSCTRLSSR))
-		ss_inc = (ss_inc * 1000) / 465;
+		ss_inc = div_u64((ss_inc * 1000), 465);
 
 	ss_inc &= PTP_SSIR_SSINC_MASK;
 	sns_inc &= PTP_SSIR_SNSINC_MASK;
@@ -153,7 +153,7 @@ static int stmmac_adjust_systime(void __iomem *ioaddr, u32 sec, u32 nsec,
 		 * programmed with (2^32 – <new_sec_value>)
 		 */
 		if (gmac4)
-			sec = (100000000ULL - sec);
+			sec = -sec;
 
 		value = readl(ioaddr + PTP_TCR);
 		if (value & PTP_TCR_TSCTRLSSR)

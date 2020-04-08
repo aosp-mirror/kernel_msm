@@ -63,19 +63,19 @@
 			reg = <0x0 0x86400000 0x0 0x1000000>;
 		};
 
-		adsp_fw_mem: adsp_fw_mem@87500000 {
+		adsp_fw_mem: adsp_fw_mem@87400000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x87400000 0x0 0x1400000>;
 		};
 
-		cdsp_fw_mem: cdsp_fw_mem@88f00000 {
+		cdsp_fw_mem: cdsp_fw_mem@88800000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x88800000 0x0 0x800000>;
 		};
 
-		wlan_msa_mem: wlan_msa_region@89500000 {
+		wlan_msa_mem: wlan_msa_region@88E00000 {
 			compatible = "removed-dma-pool";
 			no-map;
 			reg = <0x0 0x89000000 0x0 0x100000>;
@@ -300,6 +300,153 @@
 		clock-frequency = <32768>;
 	};
 
+	pdm_pwm0: pdm_pwm@600000 {
+		compatible = "qcom,pdm-pwm";
+		reg = <0x600000 0xc000>;
+		clocks = <&clock_gcc GCC_PDM_AHB_CLK>,
+			<&clock_gcc GCC_PWM0_XO512_CLK>;
+		clock-names = "pdm_ahb_clk", "pwm_core_clk";
+		#pwm-cells = <2>;
+		pwm@0{
+			frame-index = <0>;
+			frame-offset = <0x1000>;
+		};
+		pwm@1{
+			frame-index = <1>;
+			frame-offset = <0x2000>;
+		};
+		pwm@2{
+			frame-index = <2>;
+			frame-offset = <0x3000>;
+		};
+		pwm@3{
+			frame-index = <3>;
+			frame-offset = <0x4000>;
+		};
+		pwm@4{
+			frame-index = <4>;
+			frame-offset = <0x5000>;
+		};
+		pwm@5{
+			frame-index = <5>;
+			frame-offset = <0x6000>;
+		};
+		pwm@6{
+			frame-index = <6>;
+			frame-offset = <0x7000>;
+		};
+		pwm@7{
+			frame-index = <7>;
+			frame-offset = <0x8000>;
+		};
+		pwm@8{
+			frame-index = <8>;
+			frame-offset = <0x9000>;
+		};
+		pwm@9{
+			frame-index = <9>;
+			frame-offset = <0xA000>;
+		};
+	};
+
+	pdm_pwm1: pdm_pwm@614000 {
+		compatible = "qcom,pdm-pwm";
+		reg = <0x614000 0xc000>;
+		clocks = <&clock_gcc GCC_PDM_AHB_CLK>,
+			<&clock_gcc GCC_PWM1_XO512_CLK>;
+		clock-names = "pdm_ahb_clk", "pwm_core_clk";
+		#pwm-cells = <2>;
+		pwm@0{
+			frame-index = <0>;
+			frame-offset = <0x1000>;
+		};
+		pwm@1{
+			frame-index = <1>;
+			frame-offset = <0x2000>;
+		};
+		pwm@2{
+			frame-index = <2>;
+			frame-offset = <0x3000>;
+		};
+		pwm@3{
+			frame-index = <3>;
+			frame-offset = <0x4000>;
+		};
+		pwm@4{
+			frame-index = <4>;
+			frame-offset = <0x5000>;
+		};
+		pwm@5{
+			frame-index = <5>;
+			frame-offset = <0x6000>;
+		};
+		pwm@6{
+			frame-index = <6>;
+			frame-offset = <0x7000>;
+		};
+		pwm@7{
+			frame-index = <7>;
+			frame-offset = <0x8000>;
+		};
+		pwm@8{
+			frame-index = <8>;
+			frame-offset = <0x9000>;
+		};
+		pwm@9{
+			frame-index = <9>;
+			frame-offset = <0xA000>;
+		};
+	};
+
+	pdm_pwm2: pdm_pwm@628000 {
+		compatible = "qcom,pdm-pwm";
+		reg = <0x628000 0xc000>;
+		clocks = <&clock_gcc GCC_PDM_AHB_CLK>,
+			<&clock_gcc GCC_PWM2_XO512_CLK>;
+		clock-names = "pdm_ahb_clk", "pwm_core_clk";
+		#pwm-cells = <2>;
+		pwm@0{
+			frame-index = <0>;
+			frame-offset = <0x1000>;
+		};
+		pwm@1{
+			frame-index = <1>;
+			frame-offset = <0x2000>;
+		};
+		pwm@2{
+			frame-index = <2>;
+			frame-offset = <0x3000>;
+		};
+		pwm@3{
+			frame-index = <3>;
+			frame-offset = <0x4000>;
+		};
+		pwm@4{
+			frame-index = <4>;
+			frame-offset = <0x5000>;
+		};
+		pwm@5{
+			frame-index = <5>;
+			frame-offset = <0x6000>;
+		};
+		pwm@6{
+			frame-index = <6>;
+			frame-offset = <0x7000>;
+		};
+		pwm@7{
+			frame-index = <7>;
+			frame-offset = <0x8000>;
+		};
+		pwm@8{
+			frame-index = <8>;
+			frame-offset = <0x9000>;
+		};
+		pwm@9{
+			frame-index = <9>;
+			frame-offset = <0xA000>;
+		};
+	};
+
 	clock_rpmcc: qcom,rpmcc {
 		compatible = "qcom,rpmcc-qcs405";
 		#clock-cells = <1>;
@@ -310,6 +457,7 @@
 		reg = <0x1800000 0x80000>;
 		reg-names = "cc_base";
 		vdd_cx-supply = <&pms405_s1_level>;
+		vdd_sr_pll-supply = <&pms405_l3>;
 		clocks = <&clock_rpmcc RPM_SMD_XO_CLK_SRC>;
 		qcom,gcc_oxili_gfx3d_clk-opp-handle = <&msm_gpu>;
 		clock-names = "cxo";
@@ -700,7 +848,7 @@
 		memory-region = <&adsp_mem>;
 	};
 
-	qcom,smp2p_sleepstate {
+	smp2p_sleepstate: qcom,smp2p_sleepstate {
 		compatible = "qcom,smp2p-sleepstate";
 		qcom,smem-states = <&sleepstate_smp2p_out 0>;
 	};

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -111,8 +111,8 @@ static int __init pfk_init(void)
 	if (ret != 0)
 		goto fail;
 
-	ret = pfk_kc_init();
-	if (ret != 0) {
+	ret = pfk_kc_init(true);
+	if (ret != 0 && ret != -EAGAIN) {
 		pr_err("could init pfk key cache, error %d\n", ret);
 		pfk_ext4_deinit();
 		pfk_f2fs_deinit();
@@ -197,6 +197,8 @@ static inline bool pfk_is_ready(void)
  */
 static struct inode *pfk_bio_get_inode(const struct bio *bio)
 {
+	struct address_space *mapping = NULL;
+
 	if (!bio)
 		return NULL;
 	if (!bio_has_data((struct bio *)bio))
@@ -216,10 +218,11 @@ static struct inode *pfk_bio_get_inode(const struct bio *bio)
 		return inode;
 	}
 
-	if (!page_mapping(bio->bi_io_vec->bv_page))
+	mapping = page_mapping(bio->bi_io_vec->bv_page);
+	if (!mapping)
 		return NULL;
 
-	return page_mapping(bio->bi_io_vec->bv_page)->host;
+	return mapping->host;
 }
 
 /**
@@ -297,7 +300,7 @@ static int pfk_get_key_for_bio(const struct bio *bio,
 	 * 4K dun - For ext4 ufs, f2fs ufs and f2fs emmc
 	 */
 
-	if (data_unit) {
+	if (data_unit && bio) {
 		if (!bio_dun(bio) && !memcmp(s_type, "sdcc", strlen("sdcc")))
 			*data_unit = 1 << ICE_CRYPTO_DATA_UNIT_512_B;
 		else

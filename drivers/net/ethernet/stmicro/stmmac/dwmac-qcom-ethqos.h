@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,10 +13,27 @@
 #define	_DWMAC_QCOM_ETHQOS_H
 
 #include <linux/ipc_logging.h>
+#include <linux/msm-bus.h>
+#include <linux/mailbox_client.h>
+#include <linux/mailbox/qmp.h>
+#include <linux/mailbox_controller.h>
 
-extern void *ipc_emac_log_ctxt;
+#include <linux/inetdevice.h>
+#include <linux/inet.h>
+
+#include <net/addrconf.h>
+#include <net/ipv6.h>
+#include <net/inet_common.h>
+
+#include <linux/uaccess.h>
+
+extern void *ipc_stmmac_log_ctxt;
+
+#define QCOM_ETH_QOS_MAC_ADDR_LEN 6
+#define QCOM_ETH_QOS_MAC_ADDR_STR_LEN 18
 
 #define IPCLOG_STATE_PAGES 50
+#define MAX_QMP_MSG_SIZE 96
 #define __FILENAME__ (strrchr(__FILE__, '/') ? \
 		strrchr(__FILE__, '/') + 1 : __FILE__)
 
@@ -26,8 +43,8 @@ extern void *ipc_emac_log_ctxt;
 #define ETHQOSERR(fmt, args...) \
 do {\
 	pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
-	if (ipc_emac_log_ctxt) { \
-		ipc_log_string(ipc_emac_log_ctxt, \
+	if (ipc_stmmac_log_ctxt) { \
+		ipc_log_string(ipc_stmmac_log_ctxt, \
 		"%s: %s[%u]:[emac] ERROR:" fmt, __FILENAME__,\
 		__func__, __LINE__, ## args); \
 	} \
@@ -57,6 +74,12 @@ do {\
 #define MAC_PPSX_INTERVAL(x)		(0x00000b88 + ((x) * 0x10))
 #define MAC_PPSX_WIDTH(x)		(0x00000b8c + ((x) * 0x10))
 
+#define PPS_START_DELAY 100000000
+#define ONE_NS 1000000000
+#define PPS_ADJUST_NS 32
+
+#define DWC_ETH_QOS_PPS_CH_0 0
+#define DWC_ETH_QOS_PPS_CH_1 1
 #define DWC_ETH_QOS_PPS_CH_2 2
 #define DWC_ETH_QOS_PPS_CH_3 3
 
@@ -160,11 +183,15 @@ do {\
 #define MICREL_PHY_ID PHY_ID_KSZ9031
 #define DWC_ETH_QOS_MICREL_PHY_INTCS 0x1b
 #define DWC_ETH_QOS_MICREL_PHY_CTL 0x1f
-#define DWC_ETH_QOS_MICREL_INTR_LEVEL 0x4000
 #define DWC_ETH_QOS_BASIC_STATUS     0x0001
 #define LINK_STATE_MASK 0x4
 #define AUTONEG_STATE_MASK 0x20
 #define MICREL_LINK_UP_INTR_STATUS BIT(0)
+
+#define VOTE_IDX_0MBPS 0
+#define VOTE_IDX_10MBPS 1
+#define VOTE_IDX_100MBPS 2
+#define VOTE_IDX_1000MBPS 3
 
 #define TLMM_BASE_ADDRESS (tlmm_central_base_addr)
 
@@ -242,7 +269,6 @@ do {\
 
 #define TLMM_RGMII_RX_HV_MODE_CTL_RGRD(data)\
 	((data) = ioread32((void __iomem *)TLMM_RGMII_RX_HV_MODE_CTL_ADDRESS))
-
 static inline u32 PPSCMDX(u32 x, u32 val)
 {
 	return (GENMASK(PPS_MINIDX(x) + 3, PPS_MINIDX(x)) &
@@ -259,6 +285,52 @@ static inline u32 PPSX_MASK(u32 x)
 {
 	return GENMASK(PPS_MAXIDX(x), PPS_MINIDX(x));
 }
+
+enum IO_MACRO_PHY_MODE {
+		RGMII_MODE,
+		RMII_MODE,
+		MII_MODE
+};
+
+#define RGMII_IO_BASE_ADDRESS ethqos->rgmii_base
+
+#define RGMII_IO_MACRO_CONFIG_RGOFFADDR_OFFSET (0x00000000)
+
+#define RGMII_IO_MACRO_CONFIG_RGWR(data)\
+	writel_relaxed(data, RGMII_IO_MACRO_CONFIG_RGOFFADDR)
+
+#define RGMII_IO_MACRO_CONFIG_RGOFFADDR \
+	(RGMII_IO_BASE_ADDRESS + RGMII_IO_MACRO_CONFIG_RGOFFADDR_OFFSET)
+
+#define RX_CONTEXT_DESC_RDES3_OWN_MLF_WR(ptr, data)\
+	SET_BITS(0x1f, 0x1f, ptr, data)
+
+#define RGMII_IO_MACRO_CONFIG_RGRD(data)\
+	((data) = (readl_relaxed((RGMII_IO_MACRO_CONFIG_RGOFFADDR))))
+
+#define RGMII_GPIO_CFG_TX_INT_MASK (unsigned long)(0x3)
+
+#define RGMII_GPIO_CFG_TX_INT_WR_MASK (unsigned long)(0xfff9ffff)
+
+#define RGMII_GPIO_CFG_TX_INT_UDFWR(data) do {\
+	unsigned long v;\
+	RGMII_IO_MACRO_CONFIG_RGRD(v);\
+	v = ((v & RGMII_GPIO_CFG_TX_INT_WR_MASK) | \
+	((data & RGMII_GPIO_CFG_TX_INT_MASK) << 17));\
+	RGMII_IO_MACRO_CONFIG_RGWR(v);\
+} while (0)
+
+#define RGMII_GPIO_CFG_RX_INT_MASK (unsigned long)(0x3)
+
+#define RGMII_GPIO_CFG_RX_INT_WR_MASK (unsigned long)(0xffe7ffff)
+
+#define RGMII_GPIO_CFG_RX_INT_UDFWR(data) do {\
+	unsigned long v;\
+	RGMII_IO_MACRO_CONFIG_RGRD(v);\
+	v = ((v & RGMII_GPIO_CFG_RX_INT_WR_MASK) | \
+	((data & RGMII_GPIO_CFG_RX_INT_MASK) << 19));\
+	RGMII_IO_MACRO_CONFIG_RGWR(v);\
+} while (0)
 
 struct ethqos_emac_por {
 	unsigned int offset;
@@ -286,10 +358,14 @@ static const struct ethqos_emac_por emac_v2_3_2_por[] = {
 struct qcom_ethqos {
 	struct platform_device *pdev;
 	void __iomem *rgmii_base;
+	void __iomem *ioaddr;
 
+	struct msm_bus_scale_pdata *bus_scale_vec;
+	u32 bus_hdl;
 	unsigned int rgmii_clk_rate;
 	struct clk *rgmii_clk;
 	unsigned int speed;
+	unsigned int vote_idx;
 
 	int gpio_phy_intr_redirect;
 	u32 phy_intr;
@@ -324,9 +400,6 @@ struct qcom_ethqos {
 	unsigned long avb_class_b_intr_cnt;
 	struct dentry *debugfs_dir;
 
-<<<<<<< HEAD
-	int always_on_phy;
-=======
 	/* saving state for Wake-on-LAN */
 	int wolopts;
 	/* state of enabled wol options in PHY*/
@@ -342,13 +415,20 @@ struct qcom_ethqos {
 	struct mbox_chan *qmp_mbox_chan;
 	struct mbox_client *qmp_mbox_client;
 	struct work_struct qmp_mailbox_work;
+	/* early ethernet parameters */
+	struct work_struct early_eth;
+	struct delayed_work ipv4_addr_assign_wq;
+	struct delayed_work ipv6_addr_assign_wq;
+	bool early_eth_enabled;
+
 	int disable_ctile_pc;
 
 	u32 emac_mem_base;
 	u32 emac_mem_size;
 
 	bool ipa_enabled;
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
+	/* Key Performance Indicators */
+	bool print_kpi;
 };
 
 struct pps_cfg {
@@ -357,6 +437,8 @@ struct pps_cfg {
 	unsigned int ppsout_ch;
 	unsigned int ppsout_duty;
 	unsigned int ppsout_start;
+	unsigned int ppsout_align;
+	unsigned int ppsout_align_ns;
 };
 
 struct ifr_data_struct {
@@ -376,6 +458,19 @@ struct pps_info {
 	int channel_no;
 };
 
+struct ip_params {
+	unsigned char mac_addr[QCOM_ETH_QOS_MAC_ADDR_LEN];
+	bool is_valid_mac_addr;
+	char link_speed[32];
+	bool is_valid_link_speed;
+	char ipv4_addr_str[32];
+	struct in_addr ipv4_addr;
+	bool is_valid_ipv4_addr;
+	char ipv6_addr_str[48];
+	struct in6_ifreq ipv6_addr;
+	bool is_valid_ipv6_addr;
+};
+
 int ethqos_init_reqgulators(struct qcom_ethqos *ethqos);
 void ethqos_disable_regulators(struct qcom_ethqos *ethqos);
 int ethqos_init_gpio(struct qcom_ethqos *ethqos);
@@ -384,13 +479,11 @@ int create_pps_interrupt_device_node(dev_t *pps_dev_t,
 				     struct cdev **pps_cdev,
 				     struct class **pps_class,
 				     char *pps_dev_node_name);
-<<<<<<< HEAD
-=======
 void qcom_ethqos_request_phy_wol(struct plat_stmmacenet_data *plat);
 bool qcom_ethqos_is_phy_link_up(struct qcom_ethqos *ethqos);
 void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos);
 
-int ppsout_config(struct stmmac_priv *priv, struct ifr_data_struct *req);
+int ppsout_config(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg);
 
 u16 dwmac_qcom_select_queue(
 	struct net_device *dev,
@@ -423,6 +516,8 @@ u16 dwmac_qcom_select_queue(
 #define IP_PKT_INT_MOD 32
 #define PTP_INT_MOD 1
 
+#define PPS_19_2_FREQ 19200000
+
 enum dwmac_qcom_queue_operating_mode {
 	DWMAC_QCOM_QDISABLED = 0X0,
 	DWMAC_QCOM_QAVB,
@@ -450,5 +545,4 @@ void dwmac_qcom_program_avb_algorithm(
 	struct stmmac_priv *priv, struct ifr_data_struct *req);
 unsigned int dwmac_qcom_get_plat_tx_coal_frames(
 	struct sk_buff *skb);
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 #endif

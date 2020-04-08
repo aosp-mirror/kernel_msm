@@ -439,8 +439,6 @@ config USB_GADGET_XILINX
 	  dynamically linked module called "udc-xilinx" and force all
 	  gadget drivers to also be dynamically linked.
 
-<<<<<<< HEAD
-=======
 config USB_CI13XXX_MSM
 	tristate "MIPS USB CI13xxx for MSM"
 	select USB_MSM_OTG
@@ -468,7 +466,6 @@ config USB_CI13XXX_MSM_HSIC
 	dynamically linked module called "ci13xxx_msm_hsic" and force all
 	gadget drivers to also be dynamically linked.
 
->>>>>>> LA.UM.9.1.R1.10.00.00.604.030
 #
 # LAST -- dummy/emulated controller
 #

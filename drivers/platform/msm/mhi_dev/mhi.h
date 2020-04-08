@@ -369,6 +369,11 @@ enum mhi_dev_transfer_type {
 	MHI_DEV_DMA_ASYNC,
 };
 
+struct msi_buf_cb_data {
+	u32 *buf;
+	dma_addr_t dma_addr;
+};
+
 struct mhi_dev_channel;
 
 struct mhi_dev_ring {
@@ -382,7 +387,11 @@ struct mhi_dev_ring {
 
 	enum mhi_dev_ring_type			type;
 	enum mhi_dev_ring_state			state;
-
+	/*
+	 * Lock to prevent race in updating event ring
+	 * which is shared by multiple channels
+	 */
+	struct mutex	event_lock;
 	/* device virtual address location of the cached host ring ctx data */
 	union mhi_dev_ring_element_type		*ring_cache;
 	/* Physical address of the cached ring copy on the device side */
@@ -393,6 +402,7 @@ struct mhi_dev_ring {
 	union mhi_dev_ring_ctx			*ring_ctx;
 	/* ring_ctx_shadow -> tracking ring_ctx in the host */
 	union mhi_dev_ring_ctx			*ring_ctx_shadow;
+	struct msi_buf_cb_data		msi_buf;
 	void (*ring_cb)(struct mhi_dev *dev,
 			union mhi_dev_ring_element_type *el,
 			void *ctx);
@@ -491,6 +501,9 @@ struct mhi_dev {
 
 	uint32_t			*mmio_backup;
 	struct mhi_config		cfg;
+	u32				msi_data;
+	u32				msi_lower;
+	spinlock_t			msi_lock;
 	bool				mmio_initialized;
 
 	spinlock_t			lock;
@@ -590,6 +603,9 @@ struct mhi_dev {
 	/*Register for interrupt*/
 	bool				mhi_int;
 	bool				mhi_int_en;
+	/* Enable M2 autonomous mode from MHI */
+	bool				enable_m2;
+
 	/* Registered client callback list */
 	struct list_head		client_cb_list;
 	/* Tx, Rx DMA channels */

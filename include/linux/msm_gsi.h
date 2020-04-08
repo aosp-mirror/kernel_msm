@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1169,6 +1169,15 @@ struct gsi_chan_info {
 int gsi_register_device(struct gsi_per_props *props, unsigned long *dev_hdl);
 
 /**
+ * gsi_is_mcs_enabled - Peripheral should call this function to
+ * check if MCS is already loaded.
+ *
+ * @Return -GSI_STATUS_NODEV if node is already created.
+ *	   other error codes for failure
+ */
+int gsi_is_mcs_enabled(void);
+
+/**
  * gsi_complete_clk_grant - Peripheral should call this function to
  * grant the clock resource requested by GSI previously that could not
  * be granted synchronously. GSI will release the clock resource using
@@ -1774,6 +1783,20 @@ int gsi_alloc_channel_ee(unsigned int chan_idx, unsigned int ee, int *code);
 
 int gsi_chk_intset_value(void);
 
+/**
+ * gsi_enable_flow_control_ee - Peripheral should call this function
+ * to enable flow control other EE's channel. This is usually done in USB
+ * connent and SSR scenarios.
+ *
+ * @chan_idx: Virtual channel index
+ * @ee: EE
+ * @code: [out] response code for operation
+
+ * @Return gsi_status
+ */
+int gsi_enable_flow_control_ee(unsigned int chan_idx, unsigned int ee,
+								int *code);
+
 /*
  * Here is a typical sequence of calls
  *
@@ -1804,6 +1827,11 @@ int gsi_chk_intset_value(void);
 #else
 static inline int gsi_register_device(struct gsi_per_props *props,
 		unsigned long *dev_hdl)
+{
+	return -GSI_STATUS_UNSUPPORTED_OP;
+}
+
+static inline int gsi_is_mcs_enabled(void)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
@@ -2043,8 +2071,13 @@ static inline int gsi_alloc_channel_ee(unsigned int chan_idx, unsigned int ee,
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }
 
-
 static inline int gsi_chk_intset_value(void)
+{
+	return -GSI_STATUS_UNSUPPORTED_OP;
+}
+
+static inline int gsi_enable_flow_control_ee(unsigned int chan_idx,
+			unsigned int ee, int *code)
 {
 	return -GSI_STATUS_UNSUPPORTED_OP;
 }

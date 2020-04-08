@@ -78,6 +78,14 @@ config CORESIGHT_DYNAMIC_REPLICATOR
 	  The programmable ATB replicator allows independent filtering of the
 	  trace data based on the traceid.
 
+config CORESIGHT_DBGUI
+	bool "CoreSight DebugUI driver"
+	help
+	  This driver provides support for DebugUI that helps to capture
+	  the value at a specified address. It allows configuring DebugUI
+	  to select specified address and trigger mode based on user
+	  input.
+
 config CORESIGHT_STM
 	bool "CoreSight System Trace Macrocell driver"
 	depends on (ARM && !(CPU_32v3 || CPU_32v4 || CPU_32v4T)) || ARM64
@@ -146,6 +154,14 @@ config CORESIGHT_TPDM_DEFAULT_ENABLE
 
 	  If unsure, say 'N' here to avoid potential power and performance
 	  penalty.
+
+config CORESIGHT_QPDI
+	bool "CoreSight PMIC debug interface support"
+	help
+	  This driver provides support for controlling the PMIC debug interface
+	  feature. When enabled via sysfs it allows disagnostic access to the
+	  PMIC. Similarly this debug feature can be disabled via sysfs which
+	  prevents debug dongle detection.
 
 config CORESIGHT_HWEVENT
 	bool "CoreSight Hardware Event driver"

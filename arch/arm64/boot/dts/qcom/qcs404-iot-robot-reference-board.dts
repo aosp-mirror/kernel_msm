@@ -15,7 +15,6 @@
 
 #include "qcs404.dtsi"
 #include "qcs405-wsa-audio-overlay.dtsi"
-#include "qcs405-circular-pca9956.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. QCS404 Turbox C404 IOT";
@@ -23,12 +22,39 @@
 	qcom,board-id = <0x010020 3>;
 };
 
+&mdss_rgb {
+	status = "disabled";
+};
+
 &i2c_5 {
 	status = "ok";
 };
 
+&i2c_2 {
+	status = "disabled";
+};
+
+&smp2p_sleepstate {
+	status = "disabled";
+};
+
 &smb1351_otg_supply {
 	status = "disabled";
+};
+
+&pms405_pon {
+	interrupts = <0x0 0x8 0x0 IRQ_TYPE_NONE>,
+		     <0x0 0x8 0x1 IRQ_TYPE_NONE>;
+	interrupt-names = "kpdpwr", "resin";
+	qcom,pon_2 {
+		qcom,pon-type = <1>;
+		qcom,pull-up = <1>;
+		qcom,support-reset = <1>;
+		qcom,s1-timer = <4480>;
+		qcom,s2-timer = <1000>;
+		qcom,s2-type = <1>;
+		linux,code = <KEY_KPEQUAL>;
+	};
 };
 
 &soc {
