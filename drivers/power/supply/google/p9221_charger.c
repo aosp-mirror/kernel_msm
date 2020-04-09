@@ -3233,6 +3233,54 @@ static bool p9221_dc_reset_needed(struct p9221_charger_data *charger,
 	return false;
 }
 
+static void p9382_txid_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, txid_work.work);
+	int ret;
+	char s[FAST_SERIAL_ID_SIZE * 3 + 1];
+
+	mutex_lock(&charger->cmd_lock);
+
+	// write packet type to 0x100
+	ret = p9221_reg_write_8(charger,
+				PROPRIETARY_PACKET_TYPE_ADDR,
+				PROPRIETARY_PACKET_TYPE);
+
+	memset(charger->tx_buf, 0, P9221R5_DATA_SEND_BUF_SIZE);
+
+	// write 0x4F as header to 0x104
+	charger->tx_buf[0] = FAST_SERIAL_ID_HEADER;
+	charger->tx_len = FAST_SERIAL_ID_SIZE;
+
+	// TODO: write txid to bit(23, 0)
+	memset(&charger->tx_buf[1], 0x12, FAST_SERIAL_ID_SIZE - 1);
+
+	// write accessory type to bit(31, 24)
+	charger->tx_buf[4] = TX_ACCESSORY_TYPE;
+
+	ret |= p9221_reg_write_n(charger, charger->addr_data_send_buf_start,
+				charger->tx_buf, charger->tx_len + 1);
+	if (ret) {
+		dev_err(&charger->client->dev, "Failed to load tx %d\n", ret);
+		goto error;
+	}
+
+	// send packet
+	ret = p9221_set_cmd_reg(charger, P9221R5_COM_CCACTIVATE);
+	if (ret) {
+		dev_err(&charger->client->dev, "Failed to send txid %d\n", ret);
+		goto error;
+	}
+
+	p9221_hex_str(&charger->tx_buf[1], FAST_SERIAL_ID_SIZE,
+		      s, FAST_SERIAL_ID_SIZE * 3 + 1, false);
+	dev_info(&charger->client->dev, "Fast serial ID send(%s)\n", s);
+
+error:
+	mutex_unlock(&charger->cmd_lock);
+}
+
 /* Handler for rtx mode */
 static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
@@ -3283,7 +3331,10 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			      attached ? "connected" : "disconnect",
 			      status_reg);
 		schedule_work(&charger->uevent_work);
-		if (attached == 0)
+		if (attached)
+			schedule_delayed_work(&charger->txid_work,
+					msecs_to_jiffies(TXID_SEND_DELAY_MS));
+		else
 			charger->rtx_csp = 0;
 	}
 
@@ -3893,6 +3944,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	timer_setup(&charger->align_timer, p9221_align_timer_handler, 0);
 	INIT_DELAYED_WORK(&charger->dcin_work, p9221_dcin_work);
 	INIT_DELAYED_WORK(&charger->tx_work, p9221_tx_work);
+	INIT_DELAYED_WORK(&charger->txid_work, p9382_txid_work);
 	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
 	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
 	INIT_DELAYED_WORK(&charger->dcin_pon_work, p9221_dcin_pon_work);
@@ -4092,6 +4144,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 
 	cancel_delayed_work_sync(&charger->dcin_work);
 	cancel_delayed_work_sync(&charger->tx_work);
+	cancel_delayed_work_sync(&charger->txid_work);
 	cancel_delayed_work_sync(&charger->icl_ramp_work);
 	cancel_delayed_work_sync(&charger->dcin_pon_work);
 	cancel_delayed_work_sync(&charger->align_work);

@@ -249,6 +249,19 @@
 #define P9382_STAT_CSP				BIT(4)
 #define P9382_STAT_RXCONNECTED			BIT(10)
 
+/*
+ * Send PPP in Tx mode
+ */
+#define PROPRIETARY_PACKET_TYPE_ADDR		0x100
+#define PROPRIETARY_PACKET_TYPE			0x80
+#define FAST_SERIAL_ID_HEADER			0x4F
+#define FAST_SERIAL_ID_SIZE			4
+#define ACCESSORY_TYPE_PHONE			BIT(2)
+#define AICL_ENABLED				BIT(7)
+#define TX_ACCESSORY_TYPE			(ACCESSORY_TYPE_PHONE | \
+						 AICL_ENABLED)
+#define TXID_SEND_DELAY_MS			(1 * 1000)
+
 enum p9221_align_mfg_chk_state {
 	ALIGN_MFG_FAILED = -1,
 	ALIGN_MFG_CHECKING,
@@ -298,6 +311,7 @@ struct p9221_charger_data {
 	struct delayed_work		align_work;
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
+	struct delayed_work		txid_work;
 	struct work_struct		uevent_work;
 	struct work_struct		rtx_disable_work;
 	struct alarm			icl_ramp_alarm;
