@@ -1340,8 +1340,7 @@ static int p9221_enable_interrupts(struct p9221_charger_data *charger)
 
 	if (charger->ben_state) {
 		/* enable necessary INT for RTx mode */
-		mask = P9382_STAT_RXCONNECTED | P9221R5_STAT_MODECHANGED |
-		       P9382_STAT_CSP | P9382_STAT_TXCONFLICT;
+		mask = P9382_STAT_RTX_MASK;
 	} else {
 		mask = P9221R5_STAT_LIMIT_MASK | P9221R5_STAT_CC_MASK |
 		       P9221_STAT_VRECT;
