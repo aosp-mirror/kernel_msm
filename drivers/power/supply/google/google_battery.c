@@ -3875,6 +3875,13 @@ static int gbatt_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		err = gbatt_get_temp(batt_drv, &val->intval);
 		break;
+	case POWER_SUPPLY_PROP_CURRENT_AVG:
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		if (!batt_drv->fg_psy)
+			return -EINVAL;
+		err = power_supply_get_property(batt_drv->fg_psy, psp, val);
+		val->intval *= (-1);
+		break;
 	/* TODO: "charger" will expose this but I'd rather use an API from
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
 	 * fg_psy doesn't look it up in google_battery
