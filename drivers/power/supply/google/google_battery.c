@@ -549,12 +549,10 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 			max_delta /= 3;
 		/* apply the rate limiter, delta_soc to target */
 		step = rls->rl_ssoc_target - ssoc->ssoc_rl;
-		if (step) {
-			if (step < -max_delta)
-				step = -max_delta;
-			else if (step > max_delta)
-				step = max_delta;
-		}
+		if (step < -max_delta)
+			step = -max_delta;
+		else if (step > max_delta)
+			step = max_delta;
 
 		rl_val = ssoc->ssoc_rl + step;
 	}
