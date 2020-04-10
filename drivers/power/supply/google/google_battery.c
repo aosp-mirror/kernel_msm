@@ -515,6 +515,7 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 	struct batt_ssoc_rl_state *rls = &ssoc->ssoc_rl_state;
 	qnum_t rl_val;
 	bool apply_slow_rate = false;
+	bool is_rl_val_error = false;
 
 	/* apply slow drop rate when enter slow track condition */
 	if (!ssoc->buck_enabled && ssoc->ssoc_uic == rls->rl_ssoc_target)
@@ -564,6 +565,31 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 	/* will report 0% when rl_no_zero clears */
 	if (rls->rl_no_zero && rl_val <= qnum_fromint(1))
 		rl_val = qnum_fromint(1);
+
+	/* sanity on rl_val */
+	if (rl_val > qnum_fromint(100)) {
+		is_rl_val_error = true;
+		rl_val = qnum_fromint(100);
+	}
+	if (rl_val < qnum_fromint(0)) {
+		is_rl_val_error = true;
+		rl_val = qnum_fromint(0);
+	}
+	if (is_rl_val_error) {
+		pr_warn("%s: Out of Range!\n",__func__);
+		pr_warn("%s: rl=%d.%02d t=%d.%02d r=%d.%02d\n",
+			__func__,
+			qnum_toint(rl_val),
+			qnum_fracdgt(rl_val),
+			qnum_toint(rls->rl_ssoc_target),
+			qnum_fracdgt(rls->rl_ssoc_target),
+			qnum_toint(ssoc->ssoc_rl),
+			qnum_fracdgt(ssoc->ssoc_rl));
+		pr_warn("%s: now=%d last_update=%d\n",
+			__func__,
+			now,
+			rls->rl_ssoc_last_update);
+	}
 
 	rls->rl_ssoc_last_update = now;
 	return rl_val;
