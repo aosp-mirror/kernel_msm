@@ -567,23 +567,19 @@ dtb-$(CONFIG_ARCH_MSM8917) += msm8917-pmi8950-mtp.dtb \
 dtb-$(CONFIG_ARCH_QM215) += qm215-qrd.dtb
 dtb-$(CONFIG_ARCH_QM215) += qm215-qrd-smb1360.dtb
 
-dtb-$(CONFIG_ARCH_MSM8909) += sdw3100-msm8909w-oppo-hwid-a.dtb \
-	sdw3100-msm8909w-oppo-hwid-4.dtb \
-	sdw3100-msm8909w-oppo-hwid-3.dtb 
+dtb-$(CONFIG_ARCH_MSM8909) += sdw3100-msm8909w-wtp.dtb \
+	sdw3100-apq8009w-wtp.dtb \
+	sdw3100-apq8009w-alpha.dtb \
+	apq8009-mtp-wcd9326-refboard.dtb \
+	apq8009-robot-som-refboard.dtb \
+	apq8009-robot-rome-refboard.dtb \
+	apq8009-robot-pronto-refboard.dtb \
+	apq8009-dragon.dtb \
+	apq8009-lat-v1.0.dtb \
+	sdw3100-msm8909w-1gb-wtp.dtb \
+	sdw2500-apq8009w-wtp.dtb \
+	sdw2500-msm8909w-wtp.dtb
 
-#       sdw3100-msm8909w-wtp.dtb \
-#	sdw3100-apq8009w-wtp.dtb \
-#	sdw3100-apq8009w-alpha.dtb \
-#	apq8009-mtp-wcd9326-refboard.dtb \
-#	apq8009-robot-som-refboard.dtb \
-#	apq8009-robot-rome-refboard.dtb \
-#	apq8009-robot-pronto-refboard.dtb \
-#	apq8009-dragon.dtb \
-#	apq8009-lat-v1.0.dtb \
-#	sdw2500-apq8009w-wtp.dtb \
-#	sdw2500-msm8909w-wtp.dtb
-
-#	sdw3100-msm8909w-1gb-wtp.dtb
 
 dtb-$(CONFIG_ARCH_SDM450) += sdm450-rcm.dtb \
 	sdm450-cdp.dtb \
