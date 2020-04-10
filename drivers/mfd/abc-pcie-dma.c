@@ -1571,11 +1571,12 @@ free_xfer:
  * @session[in] session to which this transfer belongs to.
  * @desc[in] Describes the transfer.
  * @new_xfer[out] Transfer structure that is re-used for the rest of the calls.
+ * @id[out] Newly assign ID for the created transfer.
  * @return 0 on success
  */
 int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 				struct abc_pcie_kernel_dma_desc *desc,
-				struct abc_dma_xfer **new_xfer)
+				struct abc_dma_xfer **new_xfer, uint64_t *id)
 {
 	int num_entries = 0;
 	struct abc_dma_xfer *xfer;
@@ -1603,7 +1604,8 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	dev_dbg(&abc_dma.pdev->dev, "%s: xfer_id:%0llu", __func__,
 		session->next_xfer_id);
 
-	*new_xfer = xfer;
+	if (new_xfer)
+		*new_xfer = xfer;
 	xfer->session = session;
 	lbuf = &xfer->local_buf;
 	rbuf = &xfer->remote_buf;
@@ -1702,6 +1704,8 @@ int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 	list_add_tail(&xfer->list_transfers, &session->transfers);
 	xfer->pending = false;
 	xfer->id = session->next_xfer_id;
+	if (id)
+		*id = xfer->id;
 	session->next_xfer_id++;
 	mutex_unlock(&session->lock);
 	up_read(&abc_dma.state_transition_rwsem);
@@ -1732,7 +1736,7 @@ EXPORT_SYMBOL(abc_pcie_create_dma_xfer);
 int abc_pcie_create_sessionless_dma_xfer(struct abc_pcie_kernel_dma_desc *desc,
 					struct abc_dma_xfer **new_xfer)
 {
-	return abc_pcie_create_dma_xfer(&global_session, desc, new_xfer);
+	return abc_pcie_create_dma_xfer(&global_session, desc, new_xfer, NULL);
 }
 
 /**
@@ -1908,7 +1912,7 @@ int abc_pcie_issue_dma_xfer_sync(struct abc_pcie_dma_session *session,
 	int xfer_error = 0;
 	uint32_t start_id;
 
-	err = abc_pcie_create_dma_xfer(session, desc, &xfer);
+	err = abc_pcie_create_dma_xfer(session, desc, &xfer, NULL);
 	if (err)
 		return err;
 
