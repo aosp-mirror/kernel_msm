@@ -2785,7 +2785,7 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 	int ret;
 
 	if (enable == 0) {
-		logbuffer_log(charger->rtx_log, "disable rtx");
+		logbuffer_log(charger->rtx_log, "disable rtx\n");
 		/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0000 */
 		ret = p9221_set_cmd_reg(charger, P9221R5_COM_RENEGOTIATE);
 		if (ret == 0) {
@@ -2804,6 +2804,14 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 				"fail to enable dcin, ret=%d\n", ret);
 	} else {
 		logbuffer_log(charger->rtx_log, "enable rtx");
+		if (charger->online) {
+			dev_err(&charger->client->dev,
+				"rTX is not allowed during WLC\n");
+			logbuffer_log(charger->rtx_log,
+				      "rTX is not allowed during WLC\n");
+			goto exit;
+		}
+
 		if (!charger->dc_suspend_votable) {
 			charger->dc_suspend_votable = find_votable("DC_SUSPEND");
 			if (!charger->dc_suspend_votable) {
@@ -2836,6 +2844,9 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 		if (ret < 0) {
 			dev_err(&charger->client->dev,
 				"cannot enter rTX mode (%d)\n", ret);
+			logbuffer_log(charger->rtx_log,
+				      "cannot enter rTX mode (%d)\n", ret);
+			p9382_ben_cfg(charger, RTX_BEN_DISABLED);
 			goto exit;
 		}
 
