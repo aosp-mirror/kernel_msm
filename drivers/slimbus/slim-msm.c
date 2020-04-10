@@ -30,7 +30,7 @@ int msm_slim_rx_enqueue(struct msm_slim_ctrl *dev, u32 *buf, u8 len)
 	spin_lock(&dev->rx_lock);
 	if ((dev->tail + 1) % MSM_CONCUR_MSG == dev->head) {
 		spin_unlock(&dev->rx_lock);
-		dev_err(dev->dev, "RX QUEUE full!");
+		dev_err(dev->dev, "RX QUEUE full!\n");
 		return -EXFULL;
 	}
 	memcpy((u8 *)dev->rx_msgs[dev->tail], (u8 *)buf, len);
@@ -228,15 +228,26 @@ int msm_slim_sps_mem_alloc(
 
 	mem->size = len;
 	mem->min_size = 0;
-	mem->base = dma_alloc_coherent(dma_dev, mem->size, &phys, GFP_KERNEL);
+	mem->base = dev->lpass_mem_usage ?
+			    dev->lpass.base :
+			    dma_alloc_coherent(dma_dev, mem->size, &phys,
+					       GFP_KERNEL);
 
 	if (!mem->base) {
-		dev_err(dma_dev, "dma_alloc_coherent(%d) failed\n", len);
+		dev_err(dma_dev, "dma_alloc_coherent (%d) failed\n", len);
 		return -ENOMEM;
 	}
 
-	mem->phys_base = phys;
-	memset(mem->base, 0x00, mem->size);
+	mem->phys_base = dev->lpass_mem_usage ?
+				 (unsigned long long)dev->lpass_mem->start :
+				 phys;
+	if (dev->lpass_mem_usage) {
+		memset_io(mem->base, 0x00, mem->size);
+		dev->lpass.base = dev->lpass.base + mem->size;
+		dev->lpass_mem->start = dev->lpass_mem->start + mem->size;
+	} else {
+		memset(mem->base, 0x00, mem->size);
+	}
 	return 0;
 }
 
@@ -245,12 +256,14 @@ msm_slim_sps_mem_free(struct msm_slim_ctrl *dev, struct sps_mem_buffer *mem)
 {
 	struct device *dma_dev = dev->iommu_desc.cb_dev ?
 					dev->iommu_desc.cb_dev : dev->dev;
+	if (!dev->lpass_mem_usage) {
+		if (mem->base && mem->phys_base)
+			dma_free_coherent(dma_dev, mem->size, mem->base,
+					  mem->phys_base);
+		else
+			dev_err(dev->dev, "Cannot free DMA as it is NULL\n");
+	}
 
-	if (mem->base && mem->phys_base)
-		dma_free_coherent(dma_dev, mem->size, mem->base,
-							mem->phys_base);
-	else
-		dev_err(dev->dev, "cant dma free. they are NULL\n");
 	mem->size = 0;
 	mem->base = NULL;
 	mem->phys_base = 0;
@@ -424,7 +437,7 @@ int msm_slim_connect_pipe_port(struct msm_slim_ctrl *dev, u8 pn)
 	ret = msm_slim_sps_mem_alloc(dev, &cfg->desc,
 				MSM_SLIM_DESC_NUM * sizeof(struct sps_iovec));
 	if (ret)
-		pr_err("mem alloc for descr failed:%d", ret);
+		pr_err("mem alloc for descr failed:%d\n", ret);
 	else
 		ret = sps_connect(dev->pipes[pn].sps, cfg);
 
@@ -605,7 +618,7 @@ static int msm_slim_post_tx_msgq(struct msm_slim_ctrl *dev, u8 *buf, int len)
 	phys_addr_t phys_addr = mem->phys_base + ix;
 
 	for (ret = 0; ret < ((len + 3) >> 2); ret++)
-		pr_debug("BAM TX buf[%d]:0x%x", ret, ((u32 *)buf)[ret]);
+		pr_debug("BAM TX buf[%d]:0x%x\n", ret, ((u32 *)buf)[ret]);
 
 	ret = sps_transfer_one(pipe, phys_addr, ((len + 3) & 0xFC), NULL,
 				SPS_IOVEC_FLAG_EOT);
@@ -640,7 +653,7 @@ void msm_slim_tx_msg_return(struct msm_slim_ctrl *dev, int err)
 		addr = DESC_FULL_ADDR(iovec.flags, iovec.addr);
 		if (ret || addr == 0) {
 			if (ret)
-				pr_err("SLIM TX get IOVEC failed:%d", ret);
+				pr_err("SLIM TX get IOVEC failed:%d\n", ret);
 			return;
 		}
 		if (addr == dev->bulk.wr_dma) {
@@ -1190,7 +1203,7 @@ init_pipes:
 		dev->pipes = kcalloc(dev->port_nums,
 				     sizeof(struct msm_slim_endp), GFP_KERNEL);
 		if (IS_ERR_OR_NULL(dev->pipes)) {
-			dev_err(dev->dev, "no memory for data ports");
+			dev_err(dev->dev, "no memory for data ports\n");
 			sps_deregister_bam_device(bam_handle);
 			return PTR_ERR(dev->pipes);
 		}
