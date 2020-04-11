@@ -9476,6 +9476,8 @@ static int ufshcd_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 		case QUERY_ATTR_IDN_EE_STATUS:
 		case QUERY_ATTR_IDN_SECONDS_PASSED:
 		case QUERY_ATTR_IDN_MANUAL_GC_STATUS:
+		case QUERY_ATTR_IDN_MANUAL_GC_CONT:
+		case QUERY_ATTR_IDN_MANUAL_GC_STATUS_1:
 			index = 0;
 			break;
 		case QUERY_ATTR_IDN_DYN_CAP_NEEDED:

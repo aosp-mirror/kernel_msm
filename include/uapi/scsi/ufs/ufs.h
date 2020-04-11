@@ -2,7 +2,7 @@
 #ifndef UAPI_UFS_H_
 #define UAPI_UFS_H_
 
-#define MAX_QUERY_IDN	0x18
+#define MAX_QUERY_IDN	0x20
 
 /* Flag idn for Query Requests*/
 enum flag_idn {
@@ -44,8 +44,8 @@ enum attr_idn {
 	QUERY_ATTR_IDN_SECONDS_PASSED           = 0x0F,
 	QUERY_ATTR_IDN_CNTX_CONF                = 0x10,
 	QUERY_ATTR_IDN_CORR_PRG_BLK_NUM         = 0x11,
-	QUERY_ATTR_IDN_RESERVED2                = 0x12,
-	QUERY_ATTR_IDN_RESERVED3                = 0x13,
+	QUERY_ATTR_IDN_MANUAL_GC_CONT		= 0x12,
+	QUERY_ATTR_IDN_MANUAL_GC_STATUS_1	= 0x13,
 	QUERY_ATTR_IDN_FFU_STATUS               = 0x14,
 	QUERY_ATTR_IDN_PSA_STATE                = 0x15,
 	QUERY_ATTR_IDN_PSA_DATA_SIZE            = 0x16,
