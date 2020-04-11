@@ -1911,8 +1911,14 @@ static void msc_logic_ramp_rate(struct batt_drv *batt_drv, int vbatt,
 		const int vpack_margin = profile->chg_last_tier *
 				profile->chg_last_tier_vpack_tol / (10 * 1000);
 
-		if ((vbatt - profile->chg_last_tier) > vpack_margin)
-			batt_drv->cc_max -= profile->chg_last_tier_cc_ma;
+		if ((vbatt - profile->chg_last_tier) > vpack_margin) {
+			int cc_max = batt_drv->cc_max;
+
+			cc_max -= profile->chg_last_tier_dec_cur;
+			if (cc_max <= profile->chg_last_tier_term_cur)
+				cc_max = profile->chg_last_tier_term_cur;
+			batt_drv->cc_max = cc_max;
+		}
 	} else if (*fv_uv < profile->chg_last_tier &&
 				-ibatt < next_cc_max && vbatt >= *fv_uv) {
 		batt_drv->cc_max = next_cc_max;
@@ -1932,7 +1938,6 @@ static int msc_logic(struct batt_drv *batt_drv)
 	int vbatt_idx = batt_drv->vbatt_idx, fv_uv = batt_drv->fv_uv, temp_idx;
 	int temp, ibatt, vbatt, ioerr;
 	int update_interval = MSC_DEFAULT_UPDATE_INTERVAL;
-	bool is_msc_last = false;
 	const time_t now = get_boot_sec();
 	time_t elap = now - batt_drv->ce_data.last_update;
 
@@ -2002,8 +2007,6 @@ static int msc_logic(struct batt_drv *batt_drv)
 			batt_drv->checked_ov_cnt);
 	} else if (batt_drv->vbatt_idx == profile->volt_nb_limits - 1) {
 		const int chg_type = batt_drv->chg_state.f.chg_type;
-
-		is_msc_last = (profile->chg_last_tier > 0) ? true : false;
 
 		/* will not adjust charger voltage only in the configured
 		 * last tier.
@@ -2127,6 +2130,10 @@ static int msc_logic(struct batt_drv *batt_drv)
 	batt_drv->ce_data.last_update = now;
 	mutex_unlock(&batt_drv->stats_lock);
 
+	if (fv_uv <= profile->volt_limits[profile->volt_nb_limits - 1])
+		batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
+						    vbatt_idx);
+
 	pr_info("MSC_LOGIC cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
 		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
 		batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
@@ -2137,9 +2144,6 @@ static int msc_logic(struct batt_drv *batt_drv)
 	batt_drv->msc_update_interval = update_interval;
 	batt_drv->vbatt_idx = vbatt_idx;
 	batt_drv->temp_idx = temp_idx;
-	if (!is_msc_last)
-		batt_drv->cc_max = GBMS_CCCM_LIMITS(profile, temp_idx,
-						    vbatt_idx);
 	batt_drv->fv_uv = fv_uv;
 
 	return 0;

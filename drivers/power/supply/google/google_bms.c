@@ -41,7 +41,8 @@
 #define GBMS_DEFAULT_CV_OTV_MARGIN      0
 #define GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_MV         20000
 #define GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_DPCT       750
-#define GBMS_DEFAULT_CHG_LAST_TIER_CC_MA                50000
+#define GBMS_DEFAULT_CHG_LAST_TIER_DEC_CUR              50000
+#define GBMS_DEFAULT_CHG_LAST_TIER_TER_CUR              150000
 
 static const char *psy_chgt_str[] = {
 	"Unknown", "None", "Trickle", "Fast", "Taper"
@@ -277,10 +278,16 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 		if (profile->chg_last_tier_vpack_tol > 0) {
 			ret = of_property_read_u32(node,
 				    "google,chg-last-tier-cc-adjust",
-				    &profile->chg_last_tier_cc_ma);
+				    &profile->chg_last_tier_dec_cur);
 			if (ret < 0)
-				profile->chg_last_tier_cc_ma =
-					    GBMS_DEFAULT_CHG_LAST_TIER_CC_MA;
+				profile->chg_last_tier_dec_cur =
+					    GBMS_DEFAULT_CHG_LAST_TIER_DEC_CUR;
+			ret = of_property_read_u32(node,
+				    "google,chg-last-tier-term-current",
+				    &profile->chg_last_tier_term_cur);
+			if (ret < 0)
+				profile->chg_last_tier_term_cur =
+					    GBMS_DEFAULT_CHG_LAST_TIER_TER_CUR;
 		}
 	}
 
