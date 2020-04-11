@@ -1,7 +1,7 @@
 #ifndef UAPI_UFS_H_
 #define UAPI_UFS_H_
 
-#define MAX_QUERY_IDN	0x18
+#define MAX_QUERY_IDN	0x20
 
 /* Flag idn for Query Requests*/
 enum flag_idn {
@@ -38,6 +38,8 @@ enum attr_idn {
 	QUERY_ATTR_IDN_SECONDS_PASSED		= 0x0F,
 	QUERY_ATTR_IDN_CNTX_CONF		= 0x10,
 	QUERY_ATTR_IDN_CORR_PRG_BLK_NUM		= 0x11,
+	QUERY_ATTR_IDN_MANUAL_GC_CONT		= 0x12,
+	QUERY_ATTR_IDN_MANUAL_GC_STATUS_1	= 0x13,
 	/* use one reserved bit */
 	QUERY_ATTR_IDN_MANUAL_GC_STATUS		= 0x17,
         /* should be 0x17 in UFS 3.0 */
