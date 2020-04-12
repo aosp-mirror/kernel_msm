@@ -57,6 +57,7 @@
 	/* vpack tolerance unit : 1/10000 */
 	google,chg-last-tier-vpack-tolerance = <15>;
 	google,chg-last-tier-cc-adjust = <50000>;
+	google,chg-last-tier-term-current = <190000>;
 
 	google,ttf-adapter = <1800>;
 	google,ttf-soc-table =  <37 77 82 89 92  96  98  100>;
