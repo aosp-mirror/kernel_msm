@@ -206,6 +206,7 @@ struct chg_drv {
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
+	struct votable	*tx_icl_votable;
 
 	bool batt_present;
 	bool dead_battery;
@@ -2567,6 +2568,8 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 
 	if (!chg_drv->dc_icl_votable)
 		chg_drv->dc_icl_votable = find_votable("DC_ICL");
+	if (!chg_drv->tx_icl_votable)
+		chg_drv->tx_icl_votable = find_votable("TX_ICL");
 
 	tdev->current_level = lvl;
 
@@ -2574,6 +2577,9 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 		if (chg_drv->dc_icl_votable)
 			vote(chg_drv->dc_icl_votable,
 				THERMAL_DAEMON_VOTER, true, 0);
+		if (chg_drv->tx_icl_votable)
+			vote(chg_drv->tx_icl_votable,
+			     THERMAL_DAEMON_VOTER, true, 0);
 
 		/* WLC set the wireless charger offline b/119501863 */
 		if (chg_drv->wlc_psy) {
@@ -2586,6 +2592,9 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 
 		return 0;
 	}
+
+	if (chg_drv->tx_icl_votable)
+		vote(chg_drv->tx_icl_votable, THERMAL_DAEMON_VOTER, false, 0);
 
 	if (chg_drv->wlc_psy) {
 		pval.intval = 1;
