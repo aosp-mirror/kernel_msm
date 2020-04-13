@@ -1355,7 +1355,9 @@ module_init(pinctrl_spmi_gpio_init);
 
 static void __exit pinctrl_spmi_gpio_exit(void)
 {
+#ifdef CONFIG_DEBUG_FS
 	pmic_gpio_dump_builtin_cb = NULL;
+#endif
 	platform_driver_unregister(&pmic_gpio_driver);
 }
 module_exit(pinctrl_spmi_gpio_exit);
