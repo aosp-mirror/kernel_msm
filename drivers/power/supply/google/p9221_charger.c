@@ -370,6 +370,12 @@ static int p9221_reg_write_cooked(struct p9221_charger_data *charger,
 			return -EINVAL;
 		data = i;
 		break;
+	case P9382A_ILIM_SET_REG:
+		/* mA */
+		if ((val < 0) || (val > P9382A_RTX_ICL_MAX_MA))
+			return -EINVAL;
+		data = val;
+		break;
 	default:
 		return -ENOENT;
 	}
@@ -2776,7 +2782,7 @@ static int p9382_wait_for_mode(struct p9221_charger_data *charger, int mode)
 
 static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 {
-	int ret;
+	int ret, tx_icl = -1;
 
 	if (enable == 0) {
 		logbuffer_log(charger->rtx_log, "disable rtx\n");
@@ -2798,6 +2804,15 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 				"fail to enable dcin, ret=%d\n", ret);
 	} else {
 		logbuffer_log(charger->rtx_log, "enable rtx");
+		/* Check if there is any one vote disabled */
+		if (charger->tx_icl_votable)
+			tx_icl = get_effective_result(charger->tx_icl_votable);
+		if (tx_icl == 0) {
+			dev_err(&charger->client->dev, "rtx be disabled\n");
+			logbuffer_log(charger->rtx_log, "rtx be disabled\n");
+			goto exit;
+		}
+		/* Check if WLC online */
 		if (charger->online) {
 			dev_err(&charger->client->dev,
 				"rTX is not allowed during WLC\n");
@@ -2848,6 +2863,23 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 		if (ret)
 			dev_err(&charger->client->dev,
 				"Could not enable interrupts: %d\n", ret);
+
+		/* configure TX_ICL */
+		if (charger->tx_icl_votable)
+			tx_icl = get_effective_result(charger->tx_icl_votable);
+		if ((tx_icl > 0) && (tx_icl != P9382A_RTX_ICL_MAX_MA)) {
+			ret = p9221_reg_write_cooked(charger,
+						     P9382A_ILIM_SET_REG,
+						     tx_icl);
+			if (ret == 0)
+				logbuffer_log(charger->rtx_log,
+					      "set Tx current limit: %dmA",
+					      tx_icl);
+			else
+				dev_err(&charger->client->dev,
+					"Could not set Tx current limit: %d\n",
+					ret);
+		}
 	}
 exit:
 	schedule_work(&charger->uevent_work);
@@ -3686,6 +3718,31 @@ static const struct power_supply_desc p9221_psy_desc = {
 	.no_thermal = true,
 };
 
+static int p9382a_tx_icl_vote_callback(struct votable *votable, void *data,
+				       int icl_ua, const char *client)
+{
+	struct p9221_charger_data *charger = data;
+	int ret = 0;
+
+	if (!charger->ben_state)
+		return ret;
+
+	if (icl_ua == 0) {
+		ret = p9382_set_rtx(charger, false);
+	} else {
+		ret = p9221_reg_write_cooked(charger,
+					     P9382A_ILIM_SET_REG, icl_ua);
+		if (ret == 0)
+			logbuffer_log(charger->rtx_log, "set TX_ICL to %dmA",
+				      icl_ua);
+		else
+			dev_err(&charger->client->dev,
+				"Couldn't set Tx current limit rc=%d\n", ret);
+	}
+
+	return ret;
+}
+
 /* return true when online */
 static bool p9221_get_chip_id(struct p9221_charger_data *charger, u16 *chip_id)
 {
@@ -3813,6 +3870,26 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return PTR_ERR(charger->wc_psy);
 	}
 
+
+	/*
+	 * Create the RTX_ICL votable, we use this to limit the current that
+	 * is taken for RTx mode
+	 */
+	if (charger->pdata->switch_gpio >= 0) {
+		charger->tx_icl_votable = create_votable("TX_ICL", VOTE_MIN,
+					p9382a_tx_icl_vote_callback, charger);
+		if (IS_ERR(charger->tx_icl_votable)) {
+			ret = PTR_ERR(charger->tx_icl_votable);
+			dev_err(&client->dev,
+				"Couldn't create TX_ICL rc=%d\n", ret);
+			charger->tx_icl_votable = NULL;
+		}
+	}
+
+	/* vote default TX_ICL for rtx mode */
+	if (charger->tx_icl_votable)
+		vote(charger->tx_icl_votable, P9382A_RTX_VOTER, true,
+		     P9382A_RTX_ICL_MAX_MA);
 	/*
 	 * Find the DC_ICL votable, we use this to limit the current that
 	 * is taken from the wireless charger.

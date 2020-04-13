@@ -19,12 +19,14 @@
 #define P9221_USER_VOTER			"WLC_USER_VOTER"
 #define P9221_OCP_VOTER				"OCP_VOTER"
 #define DCIN_AICL_VOTER                         "DCIN_AICL_VOTER"
+#define P9382A_RTX_VOTER			"RTX_VOTER"
 #define P9221_DC_ICL_BPP_UA			700000
 #define P9221_DC_ICL_BPP_RAMP_DEFAULT_UA	900000
 #define P9221_DC_ICL_BPP_RAMP_DELAY_DEFAULT_MS	(7 * 60 * 1000)  /* 7 mins */
 #define P9221_DC_ICL_EPP_UA			1100000
 #define P9221_EPP_THRESHOLD_UV			7000000
 #define P9221_MAX_VOUT_SET_MV_DEFAULT		9000
+#define P9382A_RTX_ICL_MAX_MA			1350
 
 /*
  * P9221 common registers
@@ -281,6 +283,7 @@ struct p9221_charger_data {
 	struct power_supply		*dc_psy;
 	struct votable			*dc_icl_votable;
 	struct votable			*dc_suspend_votable;
+	struct votable			*tx_icl_votable;
 	struct notifier_block		nb;
 	struct mutex			io_lock;
 	struct mutex			cmd_lock;
