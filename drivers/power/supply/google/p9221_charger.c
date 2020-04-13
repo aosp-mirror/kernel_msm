@@ -3460,6 +3460,29 @@ static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 	return IRQ_HANDLED;
 }
 
+static void p9382_rtx_disable_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, rtx_disable_work);
+	int tx_icl, ret = 0;
+
+	/* Set error reason if THERMAL_DAEMON_VOTER want to disable rtx */
+	tx_icl = get_client_vote(charger->tx_icl_votable,
+				 THERMAL_DAEMON_VOTER);
+	if (tx_icl == 0) {
+		charger->rtx_err = RTX_OVER_TEMP;
+		logbuffer_log(charger->rtx_log,
+			      "tdv vote %d to tx_icl",
+			      tx_icl);
+	}
+
+	/* Disable rtx mode */
+	ret = p9382_set_rtx(charger, false);
+	if (ret)
+		dev_err(&charger->client->dev,
+			"unable to disable rtx: %d\n", ret);
+}
+
 static void p9221_uevent_work(struct work_struct *work)
 {
 	struct p9221_charger_data *charger = container_of(work,
@@ -3728,7 +3751,7 @@ static int p9382a_tx_icl_vote_callback(struct votable *votable, void *data,
 		return ret;
 
 	if (icl_ua == 0) {
-		ret = p9382_set_rtx(charger, false);
+		schedule_work(&charger->rtx_disable_work);
 	} else {
 		ret = p9221_reg_write_cooked(charger,
 					     P9382A_ILIM_SET_REG, icl_ua);
@@ -3839,6 +3862,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
 	INIT_DELAYED_WORK(&charger->dcin_pon_work, p9221_dcin_pon_work);
 	INIT_WORK(&charger->uevent_work, p9221_uevent_work);
+	INIT_WORK(&charger->rtx_disable_work, p9382_rtx_disable_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
 		   p9221_icl_ramp_alarm_cb);
 
@@ -4037,6 +4061,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->dcin_pon_work);
 	cancel_delayed_work_sync(&charger->align_work);
 	cancel_work_sync(&charger->uevent_work);
+	cancel_work_sync(&charger->rtx_disable_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);
 	del_timer_sync(&charger->vrect_timer);
 	del_timer_sync(&charger->align_timer);

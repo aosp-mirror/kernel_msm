@@ -20,6 +20,7 @@
 #define P9221_OCP_VOTER				"OCP_VOTER"
 #define DCIN_AICL_VOTER                         "DCIN_AICL_VOTER"
 #define P9382A_RTX_VOTER			"RTX_VOTER"
+#define THERMAL_DAEMON_VOTER			"THERMAL_DAEMON_VOTER"
 #define P9221_DC_ICL_BPP_UA			700000
 #define P9221_DC_ICL_BPP_RAMP_DEFAULT_UA	900000
 #define P9221_DC_ICL_BPP_RAMP_DELAY_DEFAULT_MS	(7 * 60 * 1000)  /* 7 mins */
@@ -294,6 +295,7 @@ struct p9221_charger_data {
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
 	struct work_struct		uevent_work;
+	struct work_struct		rtx_disable_work;
 	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
 	struct timer_list		align_timer;
