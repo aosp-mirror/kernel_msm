@@ -9339,14 +9339,16 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 	 * Don't allow clock gating and hibern8 enter for faster device
 	 * detection.
 	 */
+	pm_runtime_get_sync(hba->dev);
 	ufshcd_hold_all(hba);
 	ret = ufshcd_probe_hba(hba);
 	while (ret && retry) {
 		pr_err("%s failed. Err = %d. Retry %d\n", __func__, ret, retry);
-		ret = ufshcd_host_reset_and_restore(hba);
+		ret = ufshcd_reset_and_restore(hba);
 		retry--;
 	}
 	ufshcd_release_all(hba);
+	pm_runtime_put_sync(hba->dev);
 
 	ufshcd_extcon_register(hba);
 }
