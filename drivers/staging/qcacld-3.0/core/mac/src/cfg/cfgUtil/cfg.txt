@@ -2762,10 +2762,10 @@ LIM
 WNI_CFG_VHT_RX_HIGHEST_SUPPORTED_DATA_RATE  I    4    19
 V    RW    NP
 LIM
-0    780   780
+0    866   866
 V    RW    NP
 LIM
-0    780   780
+0    866   866
 
 *
 * Tx Highest supported data rate.
@@ -2773,10 +2773,10 @@ LIM
 WNI_CFG_VHT_TX_HIGHEST_SUPPORTED_DATA_RATE  I    4    19
 V    RW    NP
 LIM
-0    780    780
+0    866    866
 V    RW    NP
 LIM
-0    780    780
+0    866    866
 
 *
 * Channel center freq Seg1
