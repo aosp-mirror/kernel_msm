@@ -71,6 +71,15 @@ struct iommu_domain_geometry {
 	bool force_aperture;       /* DMA only allowed in mappable range? */
 };
 
+/* iommu transaction flags */
+#define IOMMU_TRANS_WRITE	BIT(0)	/* 1 Write, 0 Read */
+#define IOMMU_TRANS_PRIV	BIT(1)	/* 1 Privileged, 0 Unprivileged */
+#define IOMMU_TRANS_INST	BIT(2)	/* 1 Instruction fetch, 0 Data access */
+#define IOMMU_TRANS_SEC	BIT(3)	/* 1 Secure, 0 Non-secure access*/
+
+/* Non secure unprivileged Data read operation */
+#define IOMMU_TRANS_DEFAULT	(0U)
+
 struct iommu_pgtbl_info {
 	void *ops;
 };
@@ -162,10 +171,11 @@ enum iommu_attr {
 	DOMAIN_ATTR_EARLY_MAP,
 	DOMAIN_ATTR_PAGE_TABLE_IS_COHERENT,
 	DOMAIN_ATTR_PAGE_TABLE_FORCE_COHERENT,
-	DOMAIN_ATTR_CB_STALL_DISABLE,
 	DOMAIN_ATTR_BITMAP_IOVA_ALLOCATOR,
 	DOMAIN_ATTR_USE_LLC_NWA,
-	DOMAIN_ATTR_NO_CFRE,
+	DOMAIN_ATTR_FAULT_MODEL_NO_CFRE,
+	DOMAIN_ATTR_FAULT_MODEL_NO_STALL,
+	DOMAIN_ATTR_FAULT_MODEL_HUPCF,
 	DOMAIN_ATTR_MAX,
 };
 
@@ -258,7 +268,7 @@ struct iommu_ops {
 	void (*iotlb_sync)(struct iommu_domain *domain);
 	phys_addr_t (*iova_to_phys)(struct iommu_domain *domain, dma_addr_t iova);
 	phys_addr_t (*iova_to_phys_hard)(struct iommu_domain *domain,
-					 dma_addr_t iova);
+				 dma_addr_t iova, unsigned long trans_flags);
 	int (*add_device)(struct device *dev);
 	void (*remove_device)(struct device *dev);
 	struct iommu_group *(*device_group)(struct device *dev);
@@ -370,7 +380,7 @@ extern size_t default_iommu_map_sg(struct iommu_domain *domain, unsigned long io
 			   struct scatterlist *sg,unsigned int nents, int prot);
 extern phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova);
 extern phys_addr_t iommu_iova_to_phys_hard(struct iommu_domain *domain,
-					   dma_addr_t iova);
+				   dma_addr_t iova, unsigned long trans_flags);
 extern bool iommu_is_iova_coherent(struct iommu_domain *domain,
 				dma_addr_t iova);
 extern void iommu_set_fault_handler(struct iommu_domain *domain,
@@ -606,7 +616,7 @@ static inline phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_ad
 }
 
 static inline phys_addr_t iommu_iova_to_phys_hard(struct iommu_domain *domain,
-						  dma_addr_t iova)
+				dma_addr_t iova, unsigned long trans_flags)
 {
 	return 0;
 }
@@ -626,7 +636,6 @@ static inline void iommu_get_resv_regions(struct device *dev,
 					struct list_head *list)
 {
 }
-
 static inline void iommu_put_resv_regions(struct device *dev,
 					struct list_head *list)
 {

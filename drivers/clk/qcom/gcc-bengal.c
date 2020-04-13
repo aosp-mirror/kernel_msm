@@ -2782,19 +2782,6 @@ static struct clk_branch gcc_gpu_throttle_core_clk = {
 	},
 };
 
-static struct clk_branch gcc_gpu_throttle_xo_clk = {
-	.halt_reg = 0x36044,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x36044,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "gcc_gpu_throttle_xo_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_pdm2_clk = {
 	.halt_reg = 0x2000c,
 	.halt_check = BRANCH_HALT,
@@ -3672,7 +3659,6 @@ static struct clk_regmap *gcc_bengal_clocks[] = {
 	[GCC_GPU_MEMNOC_GFX_CLK] = &gcc_gpu_memnoc_gfx_clk.clkr,
 	[GCC_GPU_SNOC_DVM_GFX_CLK] = &gcc_gpu_snoc_dvm_gfx_clk.clkr,
 	[GCC_GPU_THROTTLE_CORE_CLK] = &gcc_gpu_throttle_core_clk.clkr,
-	[GCC_GPU_THROTTLE_XO_CLK] = &gcc_gpu_throttle_xo_clk.clkr,
 	[GCC_PDM2_CLK] = &gcc_pdm2_clk.clkr,
 	[GCC_PDM2_CLK_SRC] = &gcc_pdm2_clk_src.clkr,
 	[GCC_PDM_AHB_CLK] = &gcc_pdm_ahb_clk.clkr,
@@ -3769,6 +3755,7 @@ static const struct qcom_reset_map gcc_bengal_resets[] = {
 	[GCC_QUSB2PHY_PRIM_BCR] = { 0x1c000 },
 	[GCC_QUSB2PHY_SEC_BCR] = { 0x1c004 },
 	[GCC_SDCC1_BCR] = { 0x38000 },
+	[GCC_SDCC2_BCR] = { 0x141E000 },
 	[GCC_UFS_PHY_BCR] = { 0x45000 },
 	[GCC_USB30_PRIM_BCR] = { 0x1a000 },
 	[GCC_USB_PHY_CFG_AHB2PHY_BCR] = { 0x1d000 },

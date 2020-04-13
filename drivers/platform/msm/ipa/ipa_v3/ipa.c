@@ -58,6 +58,11 @@
 
 #define IPA_SUSPEND_BUSY_TIMEOUT (msecs_to_jiffies(10))
 
+#define DEFAULT_MPM_RING_SIZE_UL 6
+#define DEFAULT_MPM_RING_SIZE_DL 16
+#define DEFAULT_MPM_TETH_AGGR_SIZE 24
+#define DEFAULT_MPM_UC_THRESH_SIZE 4
+
 /*
  * The following for adding code (ie. for EMULATION) not found on x86.
  */
@@ -6178,10 +6183,19 @@ static void ipa3_load_ipa_fw(struct work_struct *work)
 
 	if (ipa3_ctx->ipa3_hw_mode != IPA_HW_MODE_EMULATION &&
 	    ((ipa3_ctx->platform_type != IPA_PLAT_TYPE_MDM) ||
-	    (ipa3_ctx->ipa_hw_type >= IPA_HW_v3_5)))
-		result = ipa3_pil_load_ipa_fws(IPA_SUBSYSTEM_NAME);
-	else
+	    (ipa3_ctx->ipa_hw_type >= IPA_HW_v3_5))) {
+		/* some targets sharing same lunch option but
+		 * using different signing images, adding support to
+		 * load specific FW image to based on dt entry.
+		 */
+		if (ipa3_ctx->gsi_fw_file_name)
+			result = ipa3_pil_load_ipa_fws(
+						ipa3_ctx->gsi_fw_file_name);
+		else
+			result = ipa3_pil_load_ipa_fws(IPA_SUBSYSTEM_NAME);
+	} else {
 		result = ipa3_manual_load_ipa_fws();
+	}
 
 	IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 
@@ -6207,7 +6221,11 @@ static void ipa3_load_ipa_fw(struct work_struct *work)
 		/* Unvoting will happen when uC loaded event received. */
 		ipa3_proxy_clk_vote();
 
-		result = ipa3_pil_load_ipa_fws(IPA_UC_SUBSYSTEM_NAME);
+		if (ipa3_ctx->uc_fw_file_name)
+			result = ipa3_pil_load_ipa_fws(
+						ipa3_ctx->uc_fw_file_name);
+		else
+			result = ipa3_pil_load_ipa_fws(IPA_UC_SUBSYSTEM_NAME);
 		if (result) {
 			IPAERR("IPA uC loading process has failed result=%d\n",
 				result);
@@ -6559,6 +6577,40 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->do_ram_collection_on_crash =
 		resource_p->do_ram_collection_on_crash;
 	ipa3_ctx->lan_rx_napi_enable = resource_p->lan_rx_napi_enable;
+	ipa3_ctx->mpm_ring_size_ul_cache = DEFAULT_MPM_RING_SIZE_UL;
+	ipa3_ctx->mpm_ring_size_ul = DEFAULT_MPM_RING_SIZE_UL;
+	ipa3_ctx->mpm_ring_size_dl_cache = DEFAULT_MPM_RING_SIZE_DL;
+	ipa3_ctx->mpm_ring_size_dl = DEFAULT_MPM_RING_SIZE_DL;
+	ipa3_ctx->mpm_teth_aggr_size = DEFAULT_MPM_TETH_AGGR_SIZE;
+	ipa3_ctx->mpm_uc_thresh = DEFAULT_MPM_UC_THRESH_SIZE;
+
+	if (resource_p->gsi_fw_file_name) {
+		ipa3_ctx->gsi_fw_file_name =
+			kzalloc(((strlen(resource_p->gsi_fw_file_name)+1) *
+				sizeof(const char)), GFP_KERNEL);
+		if (ipa3_ctx->gsi_fw_file_name == NULL) {
+			IPAERR_RL("Failed to alloc GSI FW file name\n");
+			result = -ENOMEM;
+			goto fail_gsi_file_alloc;
+		}
+		memcpy(ipa3_ctx->gsi_fw_file_name,
+				(void const *)resource_p->gsi_fw_file_name,
+				strlen(resource_p->gsi_fw_file_name));
+	}
+
+	if (resource_p->uc_fw_file_name) {
+		ipa3_ctx->uc_fw_file_name =
+			kzalloc(((strlen(resource_p->uc_fw_file_name)+1) *
+				sizeof(const char)), GFP_KERNEL);
+		if (ipa3_ctx->uc_fw_file_name == NULL) {
+			IPAERR_RL("Failed to alloc uC FW file name\n");
+			result = -ENOMEM;
+			goto fail_uc_file_alloc;
+		}
+		memcpy(ipa3_ctx->uc_fw_file_name,
+			(void const *)resource_p->uc_fw_file_name,
+			strlen(resource_p->uc_fw_file_name));
+	}
 
 	if (ipa3_ctx->secure_debug_check_action == USE_SCM) {
 		if (ipa_is_mem_dump_allowed())
@@ -7044,6 +7096,9 @@ fail_mem_ctrl:
 fail_tz_unlock_reg:
 	if (ipa3_ctx->logbuf)
 		ipc_log_context_destroy(ipa3_ctx->logbuf);
+fail_uc_file_alloc:
+	kfree(ipa3_ctx->gsi_fw_file_name);
+fail_gsi_file_alloc:
 	kfree(ipa3_ctx);
 	ipa3_ctx = NULL;
 fail_mem_ctx:
@@ -7329,7 +7384,18 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	IPADBG(": Enable LAN rx NAPI = %s\n",
 		ipa_drv_res->lan_rx_napi_enable
 		? "True" : "False");
-
+	result = of_property_read_string(pdev->dev.of_node,
+			"qcom,use-gsi-ipa-fw", &ipa_drv_res->gsi_fw_file_name);
+	if (!result)
+		IPADBG("GSI IPA FW name %s\n", ipa_drv_res->gsi_fw_file_name);
+	else
+		IPADBG("GSI IPA FW file not defined. Using default one\n");
+	result = of_property_read_string(pdev->dev.of_node,
+			"qcom,use-uc-ipa-fw", &ipa_drv_res->uc_fw_file_name);
+	if (!result)
+		IPADBG("uC IPA FW name = %s\n", ipa_drv_res->uc_fw_file_name);
+	else
+		IPADBG("uC IPA FW file not defined. Using default one\n");
 	/* Get IPA wrapper address */
 	resource = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 			"ipa-base");
@@ -8494,6 +8560,7 @@ void ipa_pc_qmp_enable(void)
  *            PCIe Version
  *************************************************************/
 
+#ifdef CONFIG_PCI
 int ipa3_pci_drv_probe(
 	struct pci_dev            *pci_dev,
 	struct ipa_api_controller *api_ctrl,
@@ -8653,6 +8720,7 @@ int ipa3_pci_drv_probe(
 
 	return result;
 }
+#endif
 
 /*
  * The following returns transport register memory location and

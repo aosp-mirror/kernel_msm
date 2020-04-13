@@ -8,16 +8,21 @@
 
 #include <linux/leds.h>
 
-#define QUERY_MAX_AVAIL_CURRENT		BIT(0)
+#define ENABLE_REGULATOR		BIT(0)
+#define DISABLE_REGULATOR		BIT(1)
+#define QUERY_MAX_AVAIL_CURRENT		BIT(2)
+#define QUERY_MAX_CURRENT		BIT(3)
 
-#if IS_ENABLED(CONFIG_LEDS_QTI_FLASH)
-int qti_flash_led_prepare(struct led_trigger *trig,
-			int options, int *max_current);
+int qpnp_flash_register_led_prepare(struct device *dev, void *data);
+
+#if (defined CONFIG_LEDS_QTI_FLASH || defined CONFIG_LEDS_QPNP_FLASH_V2)
+int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
+					int *max_current);
 #else
-static inline int qti_flash_led_prepare(struct led_trigger *trig,
-					int options, int *max_current)
+static inline int qpnp_flash_led_prepare(struct led_trigger *trig, int options,
+					int *max_current)
 {
-	return -EINVAL;
+	return -ENODEV;
 }
 #endif
 #endif

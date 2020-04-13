@@ -62,6 +62,13 @@
 #define IPA_UC_FINISH_MAX 6
 #define IPA_UC_WAIT_MIN_SLEEP 1000
 #define IPA_UC_WAII_MAX_SLEEP 1200
+
+#define IPA_MPM_MAX_RING_LEN 64
+#define IPA_MAX_TETH_AGGR_BYTE_LIMIT 24
+#define IPA_MPM_MAX_UC_THRESH 4
+
+#define IPA_HOLB_TMR_DIS 0x0
+#define IPA_HOLB_TMR_EN 0x1
 /*
  * The transport descriptor size was changed to GSI_CHAN_RE_SIZE_16B, but
  * IPA users still use sps_iovec size as FIFO element size.
@@ -210,6 +217,7 @@
 #define IPA3_ACTIVE_CLIENTS_LOG_HASHTABLE_SIZE 50
 #define IPA3_ACTIVE_CLIENTS_LOG_NAME_LEN 40
 #define SMEM_IPA_FILTER_TABLE 497
+
 
 enum {
 	SMEM_APPS,
@@ -1032,6 +1040,8 @@ struct ipa3_sys_context {
 	struct workqueue_struct *repl_wq;
 	struct ipa3_status_stats *status_stat;
 	u32 pm_hdl;
+	unsigned int napi_sch_cnt;
+	unsigned int napi_comp_cnt;
 	/* ordering is important - other immutable fields go below */
 };
 
@@ -1817,6 +1827,12 @@ struct ipa3_app_clock_vote {
  * @uc_wigig_ctx: WIGIG specific fields for uC interface
  * @ipa_num_pipes: The number of pipes used by IPA HW
  * @skip_uc_pipe_reset: Indicates whether pipe reset via uC needs to be avoided
+ * @mpm_ring_size_dl_cache: To cache the dl ring size configured previously
+ * @mpm_ring_size_dl: MHIP all DL pipe's ring size
+ * @mpm_ring_size_ul_cache: To cache the ul ring size configured previously
+ * @mpm_ring_size_ul: MHIP all UL pipe's ring size
+ * @mpm_teth_aggr_size: MHIP teth aggregation byte size
+ * @mpm_uc_thresh: uc threshold for enabling uc flow control
  * @ipa_client_apps_wan_cons_agg_gro: RMNET_IOCTL_INGRESS_FORMAT_AGG_DATA
  * @apply_rg10_wa: Indicates whether to use register group 10 workaround
  * @gsi_ch20_wa: Indicates whether to apply GSI physical channel 20 workaround
@@ -1837,6 +1853,8 @@ struct ipa3_app_clock_vote {
  * @lan_ndev: dummy netdev for LAN rx NAPI
  * @napi_lan_rx: NAPI object for LAN rx
  * @coal_cmd_pyld: holds the coslescing close frame command payload
+ * @gsi_fw_file_name: GSI IPA fw file name
+ * @uc_fw_file_name: uC IPA fw file name
  */
 struct ipa3_context {
 	struct ipa3_char_device_context cdev;
@@ -1952,6 +1970,12 @@ struct ipa3_context {
 	u32 wan_rx_ring_size;
 	u32 lan_rx_ring_size;
 	bool skip_uc_pipe_reset;
+	int mpm_ring_size_dl_cache;
+	int mpm_ring_size_dl;
+	int mpm_ring_size_ul_cache;
+	int mpm_ring_size_ul;
+	int mpm_teth_aggr_size;
+	int mpm_uc_thresh;
 	unsigned long gsi_dev_hdl;
 	u32 ee;
 	bool apply_rg10_wa;
@@ -2010,6 +2034,8 @@ struct ipa3_context {
 	struct napi_struct napi_lan_rx;
 	struct ipahal_imm_cmd_pyld *coal_cmd_pyld;
 	struct ipa3_app_clock_vote app_clock_vote;
+	char *gsi_fw_file_name;
+	char *uc_fw_file_name;
 };
 
 struct ipa3_plat_drv_res {
@@ -2058,6 +2084,8 @@ struct ipa3_plat_drv_res {
 	bool ipa_endp_delay_wa;
 	bool skip_ieob_mask_wa;
 	bool ipa_wan_skb_page;
+	const char *gsi_fw_file_name;
+	const char *uc_fw_file_name;
 };
 
 /**
@@ -3198,4 +3226,5 @@ int ipa3_uc_send_enable_flow_control(uint16_t gsi_chid,
 int ipa3_uc_send_disable_flow_control(void);
 int ipa3_uc_send_update_flow_control(uint32_t bitmask,
 	uint8_t  add_delete);
+int ipa3_qmi_reg_dereg_for_bw(bool bw_reg);
 #endif /* _IPA3_I_H_ */
