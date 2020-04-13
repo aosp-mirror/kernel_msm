@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018, 2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1948,7 +1948,7 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 					  mbo_ie, DOT11F_IE_MBO_IE_MAX_LEN);
 		if (sir_status != eSIR_SUCCESS) {
 			pe_err("Failed to strip MBO IE");
-			goto free_mbo_ie;
+			goto end;
 		}
 
 		/* Include the EID and length fields */
@@ -2098,12 +2098,8 @@ lim_send_assoc_req_mgmt_frame(tpAniSirGlobal mac_ctx,
 		/* Pkt will be freed up by the callback */
 		goto end;
 	}
-
-free_mbo_ie:
-	if (mbo_ie)
-		qdf_mem_free(mbo_ie);
-
 end:
+	qdf_mem_free(mbo_ie);
 	/* Free up buffer allocated for mlm_assoc_req */
 	qdf_mem_free(mlm_assoc_req);
 	mlm_assoc_req = NULL;
