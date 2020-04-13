@@ -109,47 +109,47 @@ static ssize_t features_show(struct f2fs_attr *a,
 		return sprintf(buf, "0\n");
 
 	if (f2fs_sb_has_encrypt(sbi))
-		len += snprintf(buf, PAGE_SIZE - len, "%s",
+		len += scnprintf(buf, PAGE_SIZE - len, "%s",
 						"encryption");
 	if (f2fs_sb_has_blkzoned(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "blkzoned");
 	if (f2fs_sb_has_extra_attr(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "extra_attr");
 	if (f2fs_sb_has_project_quota(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "projquota");
 	if (f2fs_sb_has_inode_chksum(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "inode_checksum");
 	if (f2fs_sb_has_flexible_inline_xattr(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "flexible_inline_xattr");
 	if (f2fs_sb_has_quota_ino(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "quota_ino");
 	if (f2fs_sb_has_inode_crtime(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "inode_crtime");
 	if (f2fs_sb_has_lost_found(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "lost_found");
 	if (f2fs_sb_has_verity(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "verity");
 	if (f2fs_sb_has_sb_chksum(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "sb_checksum");
 	if (f2fs_sb_has_casefold(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "casefold");
 	if (f2fs_sb_has_compression(sbi))
-		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "compression");
-	len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+	len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "pin_file");
-	len += snprintf(buf + len, PAGE_SIZE - len, "\n");
+	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
 	return len;
 }
 
@@ -239,16 +239,16 @@ static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
 		int hot_count = sbi->raw_super->hot_ext_count;
 		int len = 0, i;
 
-		len += snprintf(buf + len, PAGE_SIZE - len,
+		len += scnprintf(buf + len, PAGE_SIZE - len,
 						"cold file extension:\n");
 		for (i = 0; i < cold_count; i++)
-			len += snprintf(buf + len, PAGE_SIZE - len, "%s\n",
+			len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
 								extlist[i]);
 
-		len += snprintf(buf + len, PAGE_SIZE - len,
+		len += scnprintf(buf + len, PAGE_SIZE - len,
 						"hot file extension:\n");
 		for (i = cold_count; i < cold_count + hot_count; i++)
-			len += snprintf(buf + len, PAGE_SIZE - len, "%s\n",
+			len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
 								extlist[i]);
 		return len;
 	}
@@ -580,7 +580,9 @@ F2FS_FEATURE_RO_ATTR(verity, FEAT_VERITY);
 #endif
 F2FS_FEATURE_RO_ATTR(sb_checksum, FEAT_SB_CHECKSUM);
 F2FS_FEATURE_RO_ATTR(casefold, FEAT_CASEFOLD);
+#ifdef CONFIG_F2FS_FS_COMPRESSION
 F2FS_FEATURE_RO_ATTR(compression, FEAT_COMPRESSION);
+#endif
 
 #define ATTR_LIST(name) (&f2fs_attr_##name.attr)
 static struct attribute *f2fs_attrs[] = {
@@ -661,7 +663,9 @@ static struct attribute *f2fs_feat_attrs[] = {
 #endif
 	ATTR_LIST(sb_checksum),
 	ATTR_LIST(casefold),
+#ifdef CONFIG_F2FS_FS_COMPRESSION
 	ATTR_LIST(compression),
+#endif
 	NULL,
 };
 
