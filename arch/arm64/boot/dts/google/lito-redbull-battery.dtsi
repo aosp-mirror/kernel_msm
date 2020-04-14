@@ -75,6 +75,8 @@
 	qcom,shutdown_soc_threshold = <20>;
 	qcom,shutdown-temp-diff = <300>;
 	qcom,ignore-shutdown-soc-secs = <1209600>;
+
+	google,qg-cycle-disable;
 };
 
 &spmi_bus {
