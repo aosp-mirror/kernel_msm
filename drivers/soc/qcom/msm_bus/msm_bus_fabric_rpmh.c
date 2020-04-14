@@ -16,7 +16,6 @@
 #include <soc/qcom/tcs.h>
 #include <trace/events/trace_msm_bus.h>
 #include <dt-bindings/msm/msm-bus-ids.h>
-#include <linux/qcom-geni-se.h>
 #include "msm_bus_core.h"
 #include "msm_bus_rpmh.h"
 #include "msm_bus_noc.h"
@@ -1798,15 +1797,6 @@ int msm_bus_device_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static void msm_bus_scale_api_register_callbacks(void)
-{
-	__msm_bus_scale_update_bw_cb = msm_bus_scale_update_bw;
-	__msm_bus_scale_client_update_request_cb =
-		msm_bus_scale_client_update_request;
-	__msm_bus_scale_register_client_cb = msm_bus_scale_register_client;
-	__msm_bus_scale_register_cb = msm_bus_scale_register;
-}
-
 static int msm_bus_device_probe(struct platform_device *pdev)
 {
 	unsigned int i = 1, ret;
@@ -1903,8 +1893,6 @@ static int msm_bus_device_probe(struct platform_device *pdev)
 
 	devm_kfree(&pdev->dev, pdata->info);
 	devm_kfree(&pdev->dev, pdata);
-
-	msm_bus_scale_api_register_callbacks();
 exit_device_probe:
 	return ret;
 }

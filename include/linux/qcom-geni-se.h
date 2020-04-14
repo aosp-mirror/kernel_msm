@@ -812,15 +812,6 @@ int geni_se_iommu_free_buf(struct device *wrapper_dev, dma_addr_t *iova,
  */
 void geni_se_dump_dbg_regs(struct se_geni_rsc *rsc, void __iomem *base,
 				void *ipc);
-
-extern int (*__msm_bus_scale_update_bw_cb)(struct msm_bus_client_handle *cl,
-					   u64 ab, u64 ib);
-extern int (*__msm_bus_scale_client_update_request_cb)(uint32_t cl,
-						       unsigned int index);
-extern uint32_t (*__msm_bus_scale_register_client_cb)(
-	struct msm_bus_scale_pdata *pdata);
-extern struct msm_bus_client_handle *(*__msm_bus_scale_register_cb)(
-	uint32_t mas, uint32_t slv, char *name, bool active_only);
 #else
 static inline unsigned int geni_read_reg_nolog(void __iomem *base, int offset)
 {
