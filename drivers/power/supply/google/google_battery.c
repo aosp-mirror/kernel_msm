@@ -5201,10 +5201,10 @@ static struct power_supply_desc gbatt_psy_desc = {
 
 static void google_battery_init_work(struct work_struct *work)
 {
-	struct power_supply *fg_psy;
 	struct batt_drv *batt_drv = container_of(work, struct batt_drv,
 						 init_work.work);
 	struct device_node *node = batt_drv->device->of_node;
+	struct power_supply *fg_psy = batt_drv->fg_psy;
 	int ret = 0;
 
 	batt_rl_reset(batt_drv);
