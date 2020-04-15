@@ -50,8 +50,8 @@ enum se_protocol_types {
  * @geni_pinctrl:	Handle to the pinctrl configuration.
  * @geni_gpio_active:	Handle to the default/active pinctrl state.
  * @geni_gpi_sleep:	Handle to the sleep pinctrl state.
- * @num_clk_levels:    Number of valid clock levels in clk_perf_tbl.
- * @clk_perf_tbl:      Table of clock frequency input to Serial Engine clock
+ * @num_clk_levels:	Number of valid clock levels in clk_perf_tbl.
+ * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;

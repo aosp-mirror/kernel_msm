@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -678,6 +678,8 @@ bool scm_is_secure_device(void)
 }
 EXPORT_SYMBOL(scm_is_secure_device);
 
+#ifdef CONFIG_ARM64
+
 /*
  * SCM call command ID to protect kernel memory
  * in Hyp Stage 2 page tables.
@@ -686,7 +688,7 @@ EXPORT_SYMBOL(scm_is_secure_device);
  */
 #define TZ_RTIC_ENABLE_MEM_PROTECTION	0x4
 #if IS_ENABLED(CONFIG_QCOM_QHEE_ENABLE_MEM_PROTECTION)
-int scm_enable_mem_protection(void)
+static int __init scm_mem_protection_init(void)
 {
 	struct scm_desc desc = {0};
 	int ret = 0, resp;
@@ -711,7 +713,10 @@ int scm_enable_mem_protection(void)
 
 	return resp;
 }
-EXPORT_SYMBOL(scm_enable_mem_protection);
+
+early_initcall(scm_mem_protection_init);
+#endif
+
 #endif
 
 MODULE_LICENSE("GPL v2");

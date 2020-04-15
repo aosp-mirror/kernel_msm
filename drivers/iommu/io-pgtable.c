@@ -21,10 +21,10 @@
 #define pr_fmt(fmt)	"io-pgtable: " fmt
 
 #include <linux/bug.h>
+#include <linux/iommu.h>
 #include <linux/io-pgtable.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
-#include <linux/iommu.h>
 #include <linux/debugfs.h>
 #include <linux/atomic.h>
 #include <linux/module.h>

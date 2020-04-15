@@ -601,9 +601,19 @@ int qti_flash_led_prepare(struct led_trigger *trig, int options,
 	snode = container_of(led_cdev, struct flash_switch_data, cdev);
 
 	if (options & QUERY_MAX_AVAIL_CURRENT) {
+		if (!max_current) {
+			pr_err("Invalid max_current pointer\n");
+			return -EINVAL;
+		}
 		*max_current = snode->led->max_current;
 		return 0;
 	}
+
+	if (options & ENABLE_REGULATOR)
+		return 0;
+
+	if (options & DISABLE_REGULATOR)
+		return 0;
 
 	return -EINVAL;
 }
@@ -1202,6 +1212,12 @@ static int qti_flash_led_probe(struct platform_device *pdev)
 	rc = qti_flash_led_register_interrupts(led);
 	if (rc < 0) {
 		pr_err("Failed to register LED interrupts rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = qpnp_flash_register_led_prepare(&pdev->dev, qti_flash_led_prepare);
+	if (rc < 0) {
+		pr_err("Failed to register flash_led_prepare, rc=%d\n", rc);
 		return rc;
 	}
 
