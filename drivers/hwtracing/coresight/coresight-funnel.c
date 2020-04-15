@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, 2017, 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, 2017, The Linux Foundation. All rights reserved.
  *
  * Description: CoreSight Funnel driver
  *
@@ -308,10 +308,6 @@ static int funnel_probe(struct device *dev, struct resource *res)
 		goto out_disable_clk;
 	}
 
-<<<<<<< HEAD
-	dev_info(drvdata->dev, "FUNNEL initialized\n");
-	return 0;
-=======
 	pm_runtime_put(dev);
 	ret = 0;
 
@@ -319,7 +315,6 @@ out_disable_clk:
 	if (ret && !IS_ERR_OR_NULL(drvdata->atclk))
 		clk_disable_unprepare(drvdata->atclk);
 	return ret;
->>>>>>> partner/android-msm-floral-4.14
 }
 
 #ifdef CONFIG_PM

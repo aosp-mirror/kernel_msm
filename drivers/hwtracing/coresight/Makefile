@@ -23,13 +23,6 @@ obj-$(CONFIG_CORESIGHT_CTI) += coresight-cti.o
 obj-$(CONFIG_CORESIGHT_OST) += coresight-ost.o
 obj-$(CONFIG_CORESIGHT_TPDA) += coresight-tpda.o
 obj-$(CONFIG_CORESIGHT_TPDM) += coresight-tpdm.o
-<<<<<<< HEAD
-obj-$(CONFIG_CORESIGHT_EVENT) += coresight-event.o
-obj-$(CONFIG_CORESIGHT_CTI) += coresight-cti.o
-obj-$(CONFIG_CORESIGHT_QPDI) += coresight-qpdi.o
-obj-$(CONFIG_CORESIGHT_CSR) += coresight-csr.o
-=======
->>>>>>> partner/android-msm-floral-4.14
 obj-$(CONFIG_CORESIGHT_HWEVENT) += coresight-hwevent.o
 obj-$(CONFIG_CORESIGHT_DUMMY) += coresight-dummy.o
 obj-$(CONFIG_CORESIGHT_REMOTE_ETM) += coresight-remote-etm.o

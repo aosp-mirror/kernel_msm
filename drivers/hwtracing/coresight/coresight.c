@@ -233,20 +233,8 @@ static int coresight_enable_sink(struct coresight_device *csdev,
 	 * We need to make sure the "new" session is compatible with the
 	 * existing "mode" of operation.
 	 */
-<<<<<<< HEAD
-	if (sink_ops(csdev)->enable) {
-		coresight_enable_reg_clk(csdev);
-		ret = sink_ops(csdev)->enable(csdev, mode);
-		if (ret) {
-			coresight_disable_reg_clk(csdev);
-			return ret;
-		}
-		csdev->enable = true;
-	}
-=======
 	if (!sink_ops(csdev)->enable)
 		return -EINVAL;
->>>>>>> partner/android-msm-floral-4.14
 
 	ret = sink_ops(csdev)->enable(csdev, mode, data);
 	if (ret)
