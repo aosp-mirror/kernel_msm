@@ -736,7 +736,7 @@ config SERIAL_HS_LPC32XX_CONSOLE
 	  Y to this option.
 
 config SERIAL_CORE
-	tristate
+	bool
 
 config SERIAL_CORE_CONSOLE
 	bool
@@ -999,8 +999,8 @@ config SERIAL_MSM_GENI
 	    The driver supports console and High speed UART functions.
 
 config SERIAL_MSM_GENI_CONSOLE
-	tristate "MSM on-chip GENI HW based console support"
-	depends on SERIAL_MSM_GENI=y
+	bool "MSM on-chip GENI HW based console support"
+	depends on SERIAL_MSM_GENI
 	select SERIAL_CORE_CONSOLE
 	select SERIAL_EARLYCON
 
