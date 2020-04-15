@@ -373,7 +373,7 @@ if (print) { \
 } while (0)
 
 
-#ifdef CONFIG_QCOM_GENI_SE
+#if IS_ENABLED(CONFIG_QCOM_GENI_SE)
 /**
  * geni_read_reg_nolog() - Helper function to read from a GENI register
  * @base:	Base address of the serial engine's register block.
