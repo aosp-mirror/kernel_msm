@@ -3174,6 +3174,7 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 	int timeout = 10, ret;
 	unsigned int status;
 	int retries = 5, i;
+	u32 *p_trim_data;
 
 	dev_dbg(cs35l41->dev, "%s: hibernate state %d\n",
 		__func__, cs35l41->amp_hibernate);
@@ -3245,6 +3246,22 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 		regmap_write(cs35l41->regmap,
 				cs35l41_ctl_cache_regs[i],
 				cs35l41->ctl_cache[i]);
+
+	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000055);
+	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000AA);
+
+	/* trim with cache values */
+	p_trim_data = cs35l41->trim_cache;
+	for (i = 0; i < CS35L41_TRIM_CACHE_REGIONS; i++) {
+		regmap_raw_write(cs35l41->regmap,
+				cs35l41_trim_cache_regs[i].reg,
+				p_trim_data, cs35l41_trim_cache_regs[i].size *
+				sizeof(u32));
+		p_trim_data += cs35l41_trim_cache_regs[i].size;
+	}
+
+	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000CC);
+	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000033);
 
 	retries = 5;
 
@@ -3335,8 +3352,6 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 		}
 		break;
 	}
-
-	cs35l41_otp_unpack(cs35l41);
 
 	dev_dbg(cs35l41->dev, "Restored CS35L41 (%x), Revision: %02X\n",
 		regid, reg_revid);
@@ -3483,6 +3498,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	u32 regid, reg_revid, i, mtl_revid, int_status, chipid_match;
 	int timeout = 100;
 	int irq_pol = 0;
+	u32 *p_trim_data;
 
 	cs35l41->fast_switch_en = false;
 	cs35l41->fast_switch_file_idx = 0;
@@ -3682,6 +3698,16 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "OTP Unpack failed\n");
 		goto err;
+	}
+
+	/* read all trim regs */
+	p_trim_data = cs35l41->trim_cache;
+	for (i = 0; i < CS35L41_TRIM_CACHE_REGIONS; i++) {
+		regmap_raw_read(cs35l41->regmap,
+				cs35l41_trim_cache_regs[i].reg,
+				p_trim_data, cs35l41_trim_cache_regs[i].size *
+				sizeof(u32));
+		p_trim_data += cs35l41_trim_cache_regs[i].size;
 	}
 
 	regmap_write(cs35l41->regmap,
