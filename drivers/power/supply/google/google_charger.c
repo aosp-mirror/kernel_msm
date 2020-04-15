@@ -2160,8 +2160,9 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	struct pd_pps_data *pps = &chg_drv->pps_data;
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	struct power_supply *tcpm_psy = chg_drv->tcpm_psy;
+	struct power_supply *chg_psy = chg_drv->chg_psy;
 	const uint8_t flags = chg_drv->pps_data.chg_flags;
-	int ret = 0, ibatt, vbatt, ioerr;
+	int ret = 0, vbatt, ioerr, ichg;
 	unsigned long exp_mw;
 
 	if (pps->uv_ovrd || pps->ua_ovrd) {
@@ -2186,12 +2187,12 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 		return 0;
 	}
 
-	ibatt = GPSY_GET_INT_PROP(bat_psy, POWER_SUPPLY_PROP_CURRENT_NOW,
-					   &ioerr);
+	ichg = GPSY_GET_INT_PROP(chg_psy, POWER_SUPPLY_PROP_CURRENT_NOW,
+				 &ioerr);
 	vbatt = GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
 
 	if (ioerr < 0 || vbatt < 0) {
-		logbuffer_log(pps->log,"Failed to get ibatt and vbatt");
+		logbuffer_log(pps->log,"Failed to get ichg and vbatt");
 		return -EIO;
 	}
 
@@ -2206,12 +2207,12 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	}
 
 	logbuffer_log(pps->log,
-		"ibatt %d, vbatt %d, vbatt*cc_max*1.1 %lu mw, adapter %ld, keep_alive_cnt %d",
-		ibatt, vbatt, exp_mw,
+		"ichg %d, vbatt %d, vbatt*cc_max*1.1 %lu mw, adapter %ld, keep_alive_cnt %d",
+		ichg, vbatt, exp_mw,
 		(long)pps->out_uv * (long)pps->op_ua / 1000000000,
 		pps->keep_alive_cnt);
 
-	if (ibatt >= 0)
+	if (ichg >= 0)
 		return 0;
 
 	/* always maximize the input current first */
@@ -2222,7 +2223,7 @@ static int pps_policy(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 	}
 
 	/* demand more power */
-	if ((-ibatt < cc_max * (100 - chg_drv->pps_cc_tolerance_pct) / 100) ||
+	if ((-ichg < cc_max * (100 - chg_drv->pps_cc_tolerance_pct) / 100) ||
 	    flags & GBMS_CS_FLAG_ILIM) {
 		if (chg_drv->auto_switch_pps_pdo &&
 		    (pps->out_uv == pps->max_uv)) {
