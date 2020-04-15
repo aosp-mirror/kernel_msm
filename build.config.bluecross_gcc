@@ -5,7 +5,7 @@ KCFLAGS='-fno-tree-vrp'
 POST_DEFCONFIG_CMDS="check_defconfig && update_gcc_config"
 
 function update_gcc_config() {
-  # Disable clang-specific options
+  # Disable clang-specific options in gcc build config
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
     -d LTO \
     -d LTO_CLANG \
