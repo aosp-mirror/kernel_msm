@@ -24,7 +24,8 @@
 #include "governor.h"
 #include "governor_memlat.h"
 
-#include <trace/events/power.h>
+#define CREATE_TRACE_POINTS
+#include "governor_memlat_trace.h"
 
 struct memlat_node {
 	unsigned int ratio_ceil;

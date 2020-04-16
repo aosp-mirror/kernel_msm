@@ -21,9 +21,11 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/devfreq.h>
-#include <trace/events/power.h>
 #include "governor.h"
 #include "governor_bw_hwmon.h"
+
+#define CREATE_TRACE_POINTS
+#include "governor_bw_hwmon_trace.h"
 
 #define NUM_MBPS_ZONES		10
 struct hwmon_node {
