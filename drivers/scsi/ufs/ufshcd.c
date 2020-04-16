@@ -3208,6 +3208,7 @@ static void ufshcd_init_hibern8_on_idle(struct ufs_hba *hba)
 		 * auto hibern8 is supported
 		 */
 		hba->caps &= ~UFSHCD_CAP_HIBERN8_ENTER_ON_IDLE;
+		hba->hibern8_on_idle.is_enabled = true;
 		return;
 	} else {
 		hba->hibern8_on_idle.delay_ms = 10;
