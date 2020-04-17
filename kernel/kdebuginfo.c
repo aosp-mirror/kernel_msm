@@ -40,6 +40,8 @@ extern const u16 kallsyms_token_index[] __weak;
 
 extern const unsigned long kallsyms_markers[] __weak;
 
+static phys_addr_t all_info_addr;
+
 /*
  * Header structure must be byte-packed, since the table is provided to
  * bootloader.
@@ -80,6 +82,9 @@ struct kernel_info {
 
 	/* For linux banner */
 	u8 last_uts_release[__NEW_UTS_LEN];
+
+	/* Info of running build */
+	char build_info[32];
 } __packed;
 
 struct kernel_all_info {
@@ -88,6 +93,24 @@ struct kernel_all_info {
 	struct kernel_info info;
 } __packed;
 
+static void update_all_info_toio(void __iomem *io_base,
+		struct kernel_all_info *all_info)
+{
+	int index;
+	struct kernel_info *info;
+	u32 *checksum_info;
+
+	all_info->magic_number = BOOT_DEBUG_MAGIC;
+	all_info->combined_checksum = 0;
+
+	info = &(all_info->info);
+	checksum_info = (u32 *)info;
+	for (index = 0; index < sizeof(*info)/sizeof(u32); index++)
+		all_info->combined_checksum ^= checksum_info[index];
+
+	memcpy_toio(io_base, all_info, sizeof(*all_info));
+}
+
 static void backup_kernel_info(void)
 {
 	struct device_node *np;
@@ -95,9 +118,8 @@ static void backup_kernel_info(void)
 	struct kernel_all_info all_info;
 	struct kernel_info *info;
 	void __iomem *imem_base;
-	u32 *checksum_info;
 	int num_reg = 0;
-	int ret, index;
+	int ret;
 
 	np = of_find_compatible_node(NULL, NULL, "msm-imem-kernel_info");
 	if (!np) {
@@ -118,6 +140,8 @@ static void backup_kernel_info(void)
 				__func__, res.start, resource_size(&res));
 		return;
 	}
+
+	all_info_addr = res.start;
 
 	imem_base= ioremap(res.start, resource_size(&res));
 	if (!imem_base) {
@@ -160,16 +184,48 @@ static void backup_kernel_info(void)
 	strlcpy(info->last_uts_release, init_utsname()->release,
 			sizeof(info->last_uts_release));
 
-	checksum_info = (u32 *)info;
-	for (index = 0; index < sizeof(struct kernel_info)/sizeof(u32);
-		index++) {
-		all_info.combined_checksum ^= checksum_info[index];
-	}
-
-	all_info.magic_number = BOOT_DEBUG_MAGIC;
-	memcpy_toio(imem_base, &all_info, sizeof(struct kernel_all_info));
+	update_all_info_toio(imem_base, &all_info);
 	iounmap(imem_base);
 }
+
+static int build_info_set(const char *str, const struct kernel_param *kp)
+{
+	void __iomem *imem_base;
+	struct kernel_all_info all_info;
+	const size_t build_info_size = sizeof(all_info.info.build_info);
+
+	if (all_info_addr == 0)
+		return -EPERM;
+
+	imem_base = ioremap(all_info_addr, sizeof(all_info));
+	if (!imem_base) {
+		pr_err("%s: Failed to map all_info\n", __func__);
+		return -EPERM;
+	}
+
+	memcpy_fromio(&all_info, imem_base, sizeof(all_info));
+	memcpy(&all_info.info.build_info, str,
+			min(build_info_size, strlen(str)));
+	update_all_info_toio(imem_base, &all_info);
+	iounmap(imem_base);
+
+	if (strlen(str) > build_info_size) {
+		pr_warn("%s: Build info buffer (len: %zd) can't hold entire "
+				"string '%s'\n",
+				__func__, build_info_size, str);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static const struct kernel_param_ops build_info_op = {
+	.set = build_info_set,
+};
+
+module_param_cb(build_info, &build_info_op, NULL, 0200);
+MODULE_PARM_DESC(build_info,
+		"Write build info to field 'build_info' of kdebuginfo.");
 
 static int __init kdebuginfo_init(void)
 {
