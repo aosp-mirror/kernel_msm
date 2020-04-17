@@ -2816,7 +2816,8 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 		if (ret < 0)
 			goto exit;
 
-		ret = vote(charger->dc_suspend_votable, P9221_WLC_VOTER, false, 0);
+		ret = vote(charger->disable_dcin_en_votable,
+			   P9221_WLC_VOTER, false, 0);
 		if (ret)
 			dev_err(&charger->client->dev,
 				"fail to enable dcin, ret=%d\n", ret);
@@ -2839,19 +2840,21 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 			goto exit;
 		}
 
-		if (!charger->dc_suspend_votable) {
-			charger->dc_suspend_votable = find_votable("DC_SUSPEND");
-			if (!charger->dc_suspend_votable) {
+		if (!charger->disable_dcin_en_votable) {
+			charger->disable_dcin_en_votable =
+				find_votable("DISABLE_DCIN_EN");
+			if (!charger->disable_dcin_en_votable) {
 				dev_err(&charger->client->dev,
-					"Could not get DC_SUSPEND votable,"
+					"Couldn't get DISABLE_DCIN_EN votable,"
 					"skip enable rTX mode\n");
 				goto exit;
 			}
 		}
-		ret = vote(charger->dc_suspend_votable, P9221_WLC_VOTER, true, 0);
+		ret = vote(charger->disable_dcin_en_votable,
+			   P9221_WLC_VOTER, true, 0);
 		if (ret) {
 			dev_err(&charger->client->dev,
-				"Could not vote DC_SUSPEND,"
+				"Could not vote DISABLE_DCIN_EN,"
 				"skip enable rTX mode %d\n", ret);
 			goto exit;
 		}
