@@ -2183,12 +2183,10 @@ int ipa_mhi_destroy_all_channels(void)
 	return 0;
 }
 
-#ifdef CONFIG_DEBUG_FS
 static void ipa_mhi_debugfs_destroy(void)
 {
 	debugfs_remove_recursive(dent);
 }
-#endif
 
 static void ipa_mhi_deregister_pm(void)
 {

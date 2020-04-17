@@ -58,11 +58,9 @@
 
 #define IPA_GSB_MAX_MSG_LEN 512
 
-#ifdef CONFIG_DEBUG_FS
 static struct dentry *dent;
 static struct dentry *dfile_stats;
 static char dbg_buff[IPA_GSB_MAX_MSG_LEN];
-#endif
 
 #define IPA_GSB_SKB_HEADROOM 256
 #define IPA_GSB_SKB_DUMMY_HEADER 42
