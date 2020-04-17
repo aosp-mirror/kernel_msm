@@ -1942,8 +1942,10 @@ static int sd_read_protection_type(struct scsi_disk *sdkp, unsigned char *buffer
 	u8 type;
 	int ret = 0;
 
-	if (scsi_device_protection(sdp) == 0 || (buffer[12] & 1) == 0)
+	if (scsi_device_protection(sdp) == 0 || (buffer[12] & 1) == 0) {
+		sdkp->protection_type = 0;
 		return ret;
+	}
 
 	type = ((buffer[12] >> 1) & 7) + 1; /* P_TYPE 0 = Type 1 */
 
@@ -2840,11 +2842,13 @@ static int sd_revalidate_disk(struct gendisk *disk)
 	if (sdkp->opt_xfer_blocks &&
 	    sdkp->opt_xfer_blocks <= dev_max &&
 	    sdkp->opt_xfer_blocks <= SD_DEF_XFER_BLOCKS &&
-	    sdkp->opt_xfer_blocks * sdp->sector_size >= PAGE_CACHE_SIZE)
+	    sdkp->opt_xfer_blocks * sdp->sector_size >= PAGE_CACHE_SIZE) {
 		rw_max = q->limits.io_opt =
 			sdkp->opt_xfer_blocks * sdp->sector_size;
-	else
+	} else {
+		q->limits.io_opt = 0;
 		rw_max = BLK_DEF_MAX_SECTORS;
+	}
 
 	/* Do not exceed controller limit */
 	rw_max = min(rw_max, queue_max_hw_sectors(q));
