@@ -1921,6 +1921,28 @@ static int smblib_disable_power_role_switch_callback(struct votable *votable,
 	return rc;
 }
 
+static int smblib_disable_dcin_en_callback(struct votable *votable,
+	void *data, int disable, const char *client)
+{
+	struct smb_charger *chg = data;
+	int rc;
+
+	if (disable)
+		rc = smblib_masked_write(chg, DCIN_CMD_IL_REG,
+					 DCIN_EN_MASK, DCIN_EN_OVERRIDE_BIT);
+	else
+		rc = smblib_masked_write(chg, DCIN_CMD_IL_REG,
+					 DCIN_EN_MASK, 0);
+
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't %s DCIN_EN rc=%d\n",
+			   disable ? "disable" : "enable", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 /*******************
  * VCONN REGULATOR *
  * *****************/
@@ -3403,8 +3425,7 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 		goto exit;
 	}
 
-	rc = smblib_masked_write(chg, DCIN_CMD_IL_REG, DCIN_EN_MASK,
-				DCIN_EN_OVERRIDE_BIT);
+	rc = vote(chg->disable_dcin_en_votable, VOUT_VOTER, true, 0);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't set DCIN_EN_OVERRIDE_BIT rc=%d\n",
 			rc);
@@ -3427,7 +3448,7 @@ int smblib_set_prop_dc_reset(struct smb_charger *chg)
 		goto exit;
 	}
 
-	rc = smblib_masked_write(chg, DCIN_CMD_IL_REG, DCIN_EN_MASK, 0);
+	rc = vote(chg->disable_dcin_en_votable, VOUT_VOTER, false, 0);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't clear DCIN_EN_OVERRIDE_BIT rc=%d\n",
 			rc);
@@ -8565,6 +8586,17 @@ static int smblib_create_votables(struct smb_charger *chg)
 		return rc;
 	}
 
+	chg->disable_dcin_en_votable =
+			create_votable("DISABLE_DCIN_EN",
+			VOTE_SET_ANY,
+			smblib_disable_dcin_en_callback,
+			chg);
+	if (IS_ERR(chg->disable_dcin_en_votable)) {
+		rc = PTR_ERR(chg->disable_dcin_en_votable);
+		chg->disable_dcin_en_votable = NULL;
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -8580,6 +8612,8 @@ static void smblib_destroy_votables(struct smb_charger *chg)
 		destroy_votable(chg->chg_disable_votable);
 	if (chg->disable_power_role_switch)
 		destroy_votable(chg->disable_power_role_switch);
+	if (chg->disable_dcin_en_votable)
+		destroy_votable(chg->disable_dcin_en_votable);
 }
 
 static void smblib_iio_deinit(struct smb_charger *chg)
