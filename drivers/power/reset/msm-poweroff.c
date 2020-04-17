@@ -77,6 +77,7 @@ static void scm_disable_sdi(void);
 static int download_mode = 1;
 static bool force_warm_reboot;
 static bool force_warm_reboot_on_thermal;
+static bool force_warm_reboot_on_ab_update;
 
 #ifdef CONFIG_QCOM_DLOAD_MODE
 #define EDL_MODE_PROP "qcom,msm-imem-emergency_download_mode"
@@ -435,9 +436,13 @@ static void msm_restart_prepare(const char *cmd)
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 		} else {
+			if (!strcmp(cmd, "reboot-ab-update") &&
+					force_warm_reboot_on_ab_update)
+				need_warm_reset = true;
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
+
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (force_warm_reboot || need_warm_reset)
@@ -814,6 +819,9 @@ skip_sysfs_create:
 
 	force_warm_reboot_on_thermal = of_property_read_bool(dev->of_node,
 						"qcom,force-warm-reboot-on-thermal-shutdown");
+
+	force_warm_reboot_on_ab_update = of_property_read_bool(dev->of_node,
+						"qcom,force-warm-reboot-on-reboot-ab-update");
 
 	return 0;
 

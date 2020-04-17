@@ -16,6 +16,9 @@ Optional Properties:
 -qcom,force-warm-reboot-on-thermal-shutdown: Issue a warm reboot on
 				"shutdown,thermal" restart reason.
 
+-qcom,force-warm-reboot-on-reboot-ab-update: Issue a warm reboot on
+				"reboot-ab-update" restart reason.
+
 Example:
 
 	restart@fc4ab000 {
