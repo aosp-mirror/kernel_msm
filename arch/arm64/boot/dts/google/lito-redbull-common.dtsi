@@ -232,9 +232,10 @@
 	qcom,dsi-default-panel = <&dsi_sw43404_amoled_video>;
 };
 
-// Force warm reboot on 'shutdown,thermal'
+// Force warm reboot on 'shutdown,thermal' & 'reboot-ab-update'.
 &msm_poweroff {
 	qcom,force-warm-reboot-on-thermal-shutdown;
+	qcom,force-warm-reboot-on-reboot-ab-update;
 };
 
 &tpdm_npu_dpm {
