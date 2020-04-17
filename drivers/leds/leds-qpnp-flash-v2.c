@@ -1783,7 +1783,7 @@ static int qpnp_flash_leds_prepare(struct led_trigger *trig, int options,
 
 	return rc;
 }
-EXPORT_SYMBOL_GPL(qpnp_flash_led_prepare);
+EXPORT_SYMBOL_GPL(qpnp_flash_leds_prepare);
 
 static void qpnp_flash_led_brightness_set(struct led_classdev *led_cdev,
 						enum led_brightness value)
