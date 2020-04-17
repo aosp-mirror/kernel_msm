@@ -75,6 +75,7 @@ static void scm_disable_sdi(void);
  */
 static int download_mode = 1;
 static struct kobject dload_kobj;
+#define KASLR_OFFSET_PROP "qcom,msm-imem-kaslr_offset"
 
 static int in_panic;
 static int dload_type = SCM_DLOAD_FULLDUMP;
@@ -85,6 +86,7 @@ static bool scm_dload_supported;
 
 static bool force_warm_reboot;
 static bool force_warm_reboot_on_thermal;
+static bool force_warm_reboot_on_ab_update;
 
 /* interface for exporting attributes */
 struct reset_attribute {
@@ -616,9 +618,13 @@ static void msm_restart_prepare(const char *cmd)
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 		} else {
+			if (!strcmp(cmd, "reboot-ab-update") &&
+					force_warm_reboot_on_ab_update)
+				need_warm_reset = true;
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
+
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (force_warm_reboot || need_warm_reset)
@@ -788,6 +794,9 @@ static int msm_restart_probe(struct platform_device *pdev)
 
 	force_warm_reboot_on_thermal = of_property_read_bool(dev->of_node,
 						"qcom,force-warm-reboot-on-thermal-shutdown");
+
+	force_warm_reboot_on_ab_update = of_property_read_bool(dev->of_node,
+						"qcom,force-warm-reboot-on-reboot-ab-update");
 
 	return 0;
 
