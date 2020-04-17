@@ -264,4 +264,10 @@ int sde_encoder_in_clone_mode(struct drm_encoder *enc);
  */
 void sde_encoder_control_idle_pc(struct drm_encoder *enc, bool enable);
 
+/**
+ * sde_encoder_trigger_early_wakeup - trigger early wake up
+ * @drm_enc:    Pointer to drm encoder structure
+ */
+void sde_encoder_trigger_early_wakeup(struct drm_encoder *drm_enc,
+				struct msm_drm_private *priv);
 #endif /* __SDE_ENCODER_H__ */
