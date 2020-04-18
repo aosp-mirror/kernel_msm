@@ -146,7 +146,6 @@
 #include <net/udp_tunnel.h>
 #include <linux/net_namespace.h>
 #include <linux/tcp.h>
-#include <net/tcp.h>
 
 #include "net-sysfs.h"
 
