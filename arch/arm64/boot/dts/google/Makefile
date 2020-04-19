@@ -28,13 +28,15 @@ dtbo-$(CONFIG_BOARD_BRAMBLE) += \
 	lito-v2-bramble_m-dev1_1-overlay.dtbo \
 	lito-v2-bramble_m-dev1_2-overlay.dtbo \
 	lito-v2-bramble_m-evt-overlay.dtbo \
-	lito-v2-bramble_m-evt1_1-overlay.dtbo
+	lito-v2-bramble_m-evt1_1-overlay.dtbo \
+	lito-v2-bramble_m-dvt-overlay.dtbo
 
 
 lito-v2-bramble_m-dev1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-bramble_m-dev1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-bramble_m-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-bramble_m-evt1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-bramble_m-dvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
 
 dtbo-redfin += \
