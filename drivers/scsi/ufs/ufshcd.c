@@ -1118,13 +1118,13 @@ static void ufshcd_print_host_state(struct ufs_hba *hba)
 					hba->sdev_ufs_device->rev);
 	}
 	dev_err(hba->dev, " pre_eol_info = 0x%x\n",
-		hba->dev_info.pre_eol_info);
+		hba->dev_info.eol_info);
 	dev_err(hba->dev, " LifeTimeA = 0x%x\n",
-		hba->dev_info.lifetime_a);
+		hba->dev_info.life_time_estimation_a);
 	dev_err(hba->dev, " LifeTimeB = 0x%x\n",
-		hba->dev_info.lifetime_b);
+		hba->dev_info.life_time_estimation_b);
 	dev_err(hba->dev, " LifeTimeC = 0x%x\n",
-		hba->dev_info.lifetime_c);
+		hba->dev_info.life_time_estimation_c);
 	dev_err(hba->dev, "lrb in use=0x%lx, outstanding reqs=0x%lx tasks=0x%lx\n",
 		hba->lrb_in_use, hba->outstanding_reqs, hba->outstanding_tasks);
 	dev_err(hba->dev, "saved_err=0x%x, saved_uic_err=0x%x, saved_ce_err=0x%x\n",
@@ -6232,6 +6232,35 @@ static inline void ufshcd_get_lu_power_on_wp_status(struct ufs_hba *hba,
 	}
 }
 
+int ufshcd_update_health(struct ufs_hba *hba)
+{
+	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
+	u8 desc_buf[QUERY_DESC_HEALTH_DEF_SIZE];
+	int err = 0;
+
+	pm_runtime_get_sync(hba->dev);
+	err = ufshcd_read_desc_param(hba, QUERY_DESC_IDN_HEALTH,
+				0, 0, desc_buf, buff_len);
+	pm_runtime_mark_last_busy(hba->dev);
+	pm_runtime_put_noidle(hba->dev);
+
+	if (err) {
+		dev_err(hba->dev, "%s: Failed to get health descriptor, err = %d",
+			__func__, err);
+	} else {
+		hba->dev_info.eol_info =
+			(u8)desc_buf[HEALTH_DESC_PARAM_EOL_INFO];
+		hba->dev_info.life_time_estimation_a =
+			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A];
+		hba->dev_info.life_time_estimation_b =
+			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_B];
+		hba->dev_info.life_time_estimation_c =
+			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_C];
+		hba->dev_info.health_cached_t = ktime_get();
+	}
+	return err;
+}
+
 /**
  * ufshcd_slave_alloc - handle initial SCSI device configurations
  * @sdev: pointer to SCSI device
@@ -6241,9 +6270,6 @@ static inline void ufshcd_get_lu_power_on_wp_status(struct ufs_hba *hba,
 static int ufshcd_slave_alloc(struct scsi_device *sdev)
 {
 	struct ufs_hba *hba;
-	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
-	u8 desc_buf[QUERY_DESC_HEALTH_DEF_SIZE];
-	int err;
 
 	hba = shost_priv(sdev->host);
 
@@ -6266,18 +6292,7 @@ static int ufshcd_slave_alloc(struct scsi_device *sdev)
 
 	ufshcd_get_lu_power_on_wp_status(hba, sdev);
 
-	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
-					desc_buf, buff_len);
-	if (!err) {
-		hba->dev_info.pre_eol_info =
-			(u8)desc_buf[HEALTH_DESC_PARAM_EOL_INFO];
-		hba->dev_info.lifetime_a =
-			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A];
-		hba->dev_info.lifetime_b =
-			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_B];
-		hba->dev_info.lifetime_c =
-			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_C];
-	}
+	ufshcd_update_health(hba);
 
 	return 0;
 }

@@ -653,8 +653,20 @@ static const struct attribute_group ufs_sysfs_geometry_descriptor_group = {
 	.attrs = ufs_sysfs_geometry_descriptor,
 };
 
+#define ONE_DAY_MS (24 * 60 * 60 * 1000)
 #define UFS_HEALTH_DESC_PARAM(_name, _uname, _size)			\
-	UFS_DESC_PARAM(_name, _uname, HEALTH, _size)
+static ssize_t _name##_show(struct device *dev,			\
+	struct device_attribute *attr, char *buf)			\
+{									\
+	struct ufs_hba *hba = dev_get_drvdata(dev);			\
+	ktime_t entry_t = ktime_get();					\
+	if (ktime_ms_delta(entry_t, hba->dev_info.health_cached_t)	\
+		> ONE_DAY_MS)						\
+		ufshcd_update_health(hba);				\
+	return snprintf(buf, PAGE_SIZE, "0x%02X\n",			\
+				hba->dev_info._name);			\
+}									\
+static DEVICE_ATTR_RO(_name)
 
 UFS_HEALTH_DESC_PARAM(eol_info, _EOL_INFO, 1);
 UFS_HEALTH_DESC_PARAM(life_time_estimation_a, _LIFE_TIME_EST_A, 1);

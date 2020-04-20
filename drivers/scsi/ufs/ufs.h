@@ -37,6 +37,7 @@
 #define _UFS_H
 
 #include <linux/mutex.h>
+#include <linux/ktime.h>
 #include <linux/types.h>
 #include <scsi/ufs/ufs.h>
 
@@ -627,10 +628,11 @@ struct ufs_dev_info {
 
 	bool wb_config_lun;
 
-	unsigned int pre_eol_info;
-	unsigned int lifetime_a;
-	unsigned int lifetime_b;
-	unsigned int lifetime_c;
+	unsigned int eol_info;
+	unsigned int life_time_estimation_a;
+	unsigned int life_time_estimation_b;
+	unsigned int life_time_estimation_c;
+	ktime_t health_cached_t;
 };
 
 #define MAX_MODEL_LEN 16
