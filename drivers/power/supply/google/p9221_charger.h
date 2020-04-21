@@ -231,6 +231,8 @@
 #define P9382A_STATUS_REG			0x34
 #define P9382A_CHARGE_STAT_REG			0x3E
 #define P9382A_ILIM_SET_REG			0x4A
+#define P9382A_TRX_ENABLE_REG			0x69
+#define P9382A_TX_INHIBIT			0x3
 
 #define P9382A_MODE_TXMODE			BIT(2)
 
@@ -238,6 +240,7 @@
 
 #define P9382_PROP_TX_ID_REG			0xC4
 #define P9382_EPP_TX_MFG_CODE_REG		0xBA
+#define P9382A_FW_REV_25			0x25
 
 /*
  * Interrupt/Status flags for P9382

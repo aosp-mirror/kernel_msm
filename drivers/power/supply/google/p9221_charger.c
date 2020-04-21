@@ -2783,6 +2783,7 @@ static int p9382_wait_for_mode(struct p9221_charger_data *charger, int mode)
 static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 {
 	int ret, tx_icl = -1;
+	u16 rev;
 
 	if (enable == 0) {
 		logbuffer_log(charger->rtx_log, "disable rtx\n");
@@ -2846,8 +2847,22 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 			goto exit;
 
 		msleep(10);
-		/* write 0x0000 to 0x34, check 0x4C reads back as 0x04 */
-		ret = p9221_reg_write_16(charger, P9382A_STATUS_REG, 0);
+		/* check FW revision */
+		ret = p9221_reg_read_16(charger,
+					P9221_OTP_FW_MINOR_REV_REG, &rev);
+		if (ret == 0) {
+			if (rev >= P9382A_FW_REV_25) {
+				/* write 0x0003 to 0x69 after rev 25 */
+				ret = p9221_reg_write_16(charger,
+							 P9382A_TRX_ENABLE_REG,
+							 P9382A_TX_INHIBIT);
+			} else {
+				/* write 0x0000 to 0x34 */
+				ret = p9221_reg_write_16(charger,
+							 P9382A_STATUS_REG, 0);
+			}
+		}
+		/* check 0x4C reads back as 0x04 */
 		if (ret == 0)
 			ret = p9382_wait_for_mode(charger, P9382A_MODE_TXMODE);
 		if (ret < 0) {
