@@ -153,7 +153,9 @@
 	S(AMS_START),				\
 	S(CHUNK_NOT_SUPP),			\
 	S(CHUNK_RX),				\
-	S(CHUNK_RX_FINISH)
+	S(CHUNK_RX_FINISH),			\
+	S(CHUNK_TX),				\
+	S(CHUNK_TX_FINISH)
 
 #define FOREACH_AMS(S)				\
 	S(NONE_AMS),				\
@@ -437,14 +439,20 @@ struct tcpm_port {
 	enum tcpm_chunk_state chunk_tx_state;
 	enum tcpm_chunk_state chunk_rx_state;
 	enum tcpm_chunk_state delayed_chunk_state;
+	enum tcpm_transmit_type tx_type;
+	enum pd_ext_msg_type ext_type;
 	unsigned long chunk_delay_ms;
 	bool unchunk_supp;
 	bool complete_msg;
 	bool is_chunk_tx;
 	bool chunk_abort;
+	bool abort_supported;
 	bool chunking;
 	u8 *ext_rx_buf;		/* store chunk rx data block */
 	u16 ext_rx_buf_size;
+	u8 *ext_tx_buf;
+	u16 ext_tx_buf_size;
+	u8 chunk_num_to_send;
 };
 
 struct pd_rx_event {
@@ -831,6 +839,21 @@ void tcpm_pd_transmit_complete(struct tcpm_port *port,
 }
 EXPORT_SYMBOL_GPL(tcpm_pd_transmit_complete);
 
+static int tcpm_tx_chunk_handler(struct tcpm_port *port, struct pd_message *msg,
+				 enum chunk_tx_source source);
+static int tcpm_chunk_transmit(struct tcpm_port *port,
+			       enum tcpm_transmit_type type,
+			       struct pd_message *msg)
+{
+	int ret;
+
+	mutex_lock(&port->chunk_lock);
+	port->tx_type = type;
+	ret = tcpm_tx_chunk_handler(port, msg, POLICY_ENGINE);
+	mutex_unlock(&port->chunk_lock);
+	return ret;
+}
+
 static int tcpm_mux_set(struct tcpm_port *port, int state,
 			enum usb_role usb_role,
 			enum typec_orientation orientation)
@@ -1088,7 +1111,7 @@ static int tcpm_pd_send_source_caps(struct tcpm_port *port)
 					  nr_pdo, 0);
 	}
 
-	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+	return tcpm_chunk_transmit(port, TCPC_TX_SOP, &msg);
 }
 
 static int tcpm_pd_send_sink_caps(struct tcpm_port *port)
@@ -1126,7 +1149,7 @@ static int tcpm_pd_send_sink_caps(struct tcpm_port *port)
 					  nr_pdo, 0);
 	}
 
-	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+	return tcpm_chunk_transmit(port, TCPC_TX_SOP, &msg);
 }
 
 static void tcpm_set_state(struct tcpm_port *port, enum tcpm_state state,
@@ -1851,7 +1874,7 @@ static void vdm_run_state_machine(struct tcpm_port *port)
 
 		for (i = 0; i < port->vdo_count; i++)
 			msg.payload[i] = cpu_to_le32(port->vdo_data[i]);
-		res = tcpm_pd_transmit(port, port->vdo_receiver, &msg);
+		res = tcpm_chunk_transmit(port, port->vdo_receiver, &msg);
 		if (res < 0) {
 			port->vdm_state = VDM_STATE_ERR_SEND;
 		} else {
@@ -2653,6 +2676,114 @@ static void tcpm_set_chunk_state(struct tcpm_port *port,
 			 delay_ms > 0 ? msecs_to_jiffies(delay_ms) : 0);
 }
 
+static int tcpm_tx_chunk_handler(struct tcpm_port *port, struct pd_message *msg,
+				 enum chunk_tx_source source)
+{
+	u8 chunk_num = 0;
+	bool is_ext_msg = false;
+	bool req_chunk = false;
+	bool pass_to_rx = false;
+	int ret = 0;
+
+	if (!msg)
+		return -EINVAL;
+
+	is_ext_msg = msg->header & PD_HEADER_EXT_HDR;
+
+	tcpm_log(port,
+		 "tx_hdlr: src %d comp %d is_ext %d tx:%s",
+		 source, port->complete_msg, is_ext_msg,
+		 tcpm_chunk_state[port->chunk_tx_state]);
+
+	/*
+	 * 6.11.2.1.3.9 TCH_Message_Received State:
+	 * The Chunked Tx State Machine Shall enter the TCH_Message_Received
+	 * state when any Message is received and the Chunked Tx State Machine
+	 * is not in the TCH_Wait_Chunk_Request state.
+	 */
+	if (source == PROTOCOL_LAYER &&
+	    port->chunk_tx_state != TCH_WAIT_CHUNK_REQUEST) {
+		tcpm_set_chunk_state(port, TCH_MESSAGE_RECEIVED, 0);
+		return 0;
+	}
+
+	if (source == POLICY_ENGINE &&
+	    port->chunk_tx_state != TCH_WAIT_FOR_MESSAGE_REQUEST)
+		return -EINVAL;
+
+	switch (port->chunk_tx_state) {
+	case TCH_WAIT_FOR_MESSAGE_REQUEST:
+		if (port->chunk_rx_state != RCH_WAIT_FOR_MESSAGE) {
+			if (port->abort_supported)
+				tcpm_set_chunk_state(port, TCH_REPORT_ERROR, 0);
+			else
+				return -EINVAL;
+			break;
+		}
+
+		if (!is_ext_msg || !port->chunking) {
+			/*
+			 * XXX:
+			 * No matter what the result of the transmission is,
+			 * Policy Engine will be informed from the return value.
+			 * Omit the states transition and stay in
+			 * TCH_WAIT_FOR_MESSAGE_REQUEST
+			 */
+			ret = tcpm_pd_transmit(port, port->tx_type, msg);
+			port->chunk_abort = false;
+		} else {
+			port->is_chunk_tx = true;
+			tcpm_set_chunk_state(port,
+					TCH_PREPARE_TO_SEND_CHUNKED_MESSAGE, 0);
+		}
+		break;
+	case TCH_PASS_DOWN_MESSAGE:
+	case TCH_WAIT_FOR_TRANSMISSION_COMPLETE:
+	case TCH_MESSAGE_SENT:
+	case TCH_PREPARE_TO_SEND_CHUNKED_MESSAGE:
+	case TCH_CONSTRUCT_CHUNKED_MESSAGE:
+	case TCH_SENDING_CHUNKED_MESSAGE:
+		break;
+	case TCH_WAIT_CHUNK_REQUEST:
+		/*
+		 * If the extended message type is not the same as what we are
+		 * waiting for, pass the Message to Rx.
+		 */
+		if (is_ext_msg &&
+		    (pd_header_type_le(msg->header) == port->ext_type))
+			req_chunk = msg->ext_msg.header & PD_EXT_HDR_REQ_CHUNK;
+		else
+			pass_to_rx = true;
+
+		/* If the Message is not a Chunk Request, pass it to Rx. */
+		if (req_chunk && !pass_to_rx)
+			chunk_num = pd_ext_header_chunk_num(
+							msg->ext_msg.header);
+		else
+			pass_to_rx = true;
+
+		if (pass_to_rx) {
+			tcpm_set_chunk_state(port, TCH_MESSAGE_RECEIVED, 0);
+			break;
+		}
+
+		if (chunk_num == port->chunk_num_to_send)
+			tcpm_set_chunk_state(port,
+					     TCH_CONSTRUCT_CHUNKED_MESSAGE, 0);
+		else
+			tcpm_set_chunk_state(port, TCH_REPORT_ERROR, 0);
+		break;
+	case TCH_MESSAGE_RECEIVED:
+	case TCH_REPORT_ERROR:
+		break;
+	default:
+		tcpm_log(port, "%s: unknown chunk state", __func__);
+		break;
+	}
+
+	return ret;
+}
+
 static void tcpm_rx_chunk_handler(struct tcpm_port *port)
 {
 	const struct pd_message *msg = &port->chunk_event->msg;
@@ -2735,6 +2866,119 @@ static void tcpm_rx_chunk_handler(struct tcpm_port *port)
 	default:
 		tcpm_log(port, "rx_hdlr: unknown state: %d",
 			 port->chunk_rx_state);
+		break;
+	}
+}
+
+static void run_chunked_tx_state_machine(struct tcpm_port *port)
+{
+	struct pd_message chunk_msg = {0};
+	bool last_chunk = false;
+	u8 cnt = 0;
+	u8 copy_size = 0;
+	u16 remaining_size = 0;
+	int ret = 0;
+
+	tcpm_log(port, "tx_sm: tx %s", tcpm_chunk_state[port->chunk_tx_state]);
+
+	switch (port->chunk_tx_state) {
+	case TCH_WAIT_FOR_MESSAGE_REQUEST:
+		port->chunk_abort = false;
+		break;
+	case TCH_PASS_DOWN_MESSAGE:
+	case TCH_WAIT_FOR_TRANSMISSION_COMPLETE:
+		break;
+	case TCH_MESSAGE_SENT:
+		tcpm_set_chunk_state(port, TCH_WAIT_FOR_MESSAGE_REQUEST, 0);
+		if (port->state == CHUNK_TX)
+			tcpm_set_state(port, CHUNK_TX_FINISH, 0);
+		break;
+	case TCH_PREPARE_TO_SEND_CHUNKED_MESSAGE:
+		port->chunk_num_to_send = 0;
+		tcpm_set_chunk_state(port, TCH_CONSTRUCT_CHUNKED_MESSAGE, 0);
+		break;
+	case TCH_CONSTRUCT_CHUNKED_MESSAGE:
+		if (port->chunk_abort) {
+			tcpm_set_chunk_state(port, TCH_WAIT_FOR_MESSAGE_REQUEST,
+					     0);
+			break;
+		}
+
+		tcpm_set_chunk_state(port, TCH_SENDING_CHUNKED_MESSAGE, 0);
+		/* fall through */
+	case TCH_SENDING_CHUNKED_MESSAGE:
+		remaining_size = port->ext_tx_buf_size -
+				 (PD_EXT_MAX_CHUNK_DATA *
+				  port->chunk_num_to_send);
+
+		if (remaining_size > PD_EXT_MAX_CHUNK_DATA) {
+			cnt = 7;
+			copy_size = PD_EXT_MAX_CHUNK_DATA;
+		} else {
+			last_chunk = true;
+			cnt = (remaining_size + 2) >> 2;
+			if ((remaining_size + 2) % 4)
+				cnt++;
+			copy_size = remaining_size;
+		}
+
+		tcpm_log(port, "chunk_num_to_send %d last_chunk %d cnt %d",
+			 port->chunk_num_to_send, last_chunk, cnt);
+		chunk_msg.header = PD_HEADER_LE(port->ext_type,
+						port->pwr_role,
+						port->data_role,
+						port->negotiated_rev,
+						port->message_id, cnt, 1);
+		chunk_msg.ext_msg.header = PD_EXT_HDR_LE(
+					port->ext_tx_buf_size, /* data size */
+					0, /* req_chunk */
+					port->chunk_num_to_send, /* chunk_num */
+					1 /* chunked */);
+		if (port->ext_tx_buf)
+			memcpy(chunk_msg.ext_msg.data,
+			       port->ext_tx_buf +
+			       PD_EXT_MAX_CHUNK_DATA * port->chunk_num_to_send,
+			       copy_size);
+
+		mutex_lock(&port->lock);
+		ret = tcpm_pd_transmit(port, TCPC_TX_SOP, &chunk_msg);
+		mutex_unlock(&port->lock);
+		if (ret == 0)
+			tcpm_set_chunk_state(port,
+					     last_chunk ?
+					     TCH_MESSAGE_SENT :
+					     TCH_WAIT_CHUNK_REQUEST,
+					     0);
+		else
+			tcpm_set_chunk_state(port, TCH_REPORT_ERROR, 0);
+		break;
+	case TCH_WAIT_CHUNK_REQUEST:
+		if (port->chunk_num_to_send > 0)
+			tcpm_set_chunk_state(port, TCH_REPORT_ERROR,
+					     PD_T_CHUNK_SENDER_REQUEST);
+		else
+			tcpm_set_chunk_state(port, TCH_MESSAGE_SENT,
+					     PD_T_CHUNK_SENDER_REQUEST);
+		port->chunk_num_to_send++;
+		break;
+	case TCH_MESSAGE_RECEIVED:
+		kfree(port->ext_tx_buf);
+		port->ext_tx_buf = NULL;
+		port->ext_tx_buf_size = 0;
+
+		// send msg to chunked Rx
+		port->chunk_abort = false;
+		port->is_chunk_tx = false;
+		port->chunk_tx_state = TCH_WAIT_FOR_MESSAGE_REQUEST;
+		tcpm_rx_chunk_handler(port);
+		break;
+	case TCH_REPORT_ERROR:
+		tcpm_set_chunk_state(port, TCH_WAIT_FOR_MESSAGE_REQUEST, 0);
+		if (port->state == CHUNK_TX)
+			tcpm_set_state(port, CHUNK_TX_FINISH, 0);
+		break;
+	default:
+		WARN(1, "Unexpected chunk tx state %d\n", port->chunk_tx_state);
 		break;
 	}
 }
@@ -2935,8 +3179,18 @@ static void chunk_state_machine_work(struct work_struct *work)
 		 tcpm_chunk_state[port->chunk_tx_state],
 		 tcpm_chunk_state[port->delayed_chunk_state]);
 
-	/* FIXME: handle chunk tx */
-	if (!port->is_chunk_tx) {
+	if (port->is_chunk_tx) {
+		if (port->delayed_chunk_state) {
+			tcpm_log(port,
+				 "Chunk state change %s -> %s [delayed %ld ms]",
+				 tcpm_chunk_state[port->chunk_tx_state],
+				 tcpm_chunk_state[port->delayed_chunk_state],
+				 port->chunk_delay_ms);
+			port->chunk_tx_state = port->delayed_chunk_state;
+			port->delayed_chunk_state = INVALID_CHUNK_STATE;
+		}
+		run_chunked_tx_state_machine(port);
+	} else {
 		if (port->delayed_chunk_state) {
 			tcpm_log(port,
 				 "Chunk state change %s -> %s [delayed %ld ms]",
@@ -2996,8 +3250,10 @@ static void chunked_msg_router(struct tcpm_port *port,
 		 tcpm_chunk_state[port->chunk_tx_state],
 		 tcpm_chunk_state[port->delayed_chunk_state]);
 
-	/* FIXME: handle chunk tx */
-	if (!port->is_chunk_tx)
+	if (port->is_chunk_tx)
+		tcpm_tx_chunk_handler(port, &port->chunk_event->msg,
+				      PROTOCOL_LAYER);
+	else
 		tcpm_rx_chunk_handler(port);
 
 done:
@@ -3082,7 +3338,26 @@ static int tcpm_pd_send_control(struct tcpm_port *port,
 				  port->negotiated_rev,
 				  port->message_id, 0, 0);
 
-	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+	return tcpm_chunk_transmit(port, TCPC_TX_SOP, &msg);
+}
+
+static int tcpm_pd_send_extend(struct tcpm_port *port)
+{
+	struct pd_message msg;
+
+	memset(&msg, 0, sizeof(msg));
+	msg.header = PD_HEADER_LE(port->ext_type,
+				  port->pwr_role,
+				  port->data_role,
+				  port->negotiated_rev,
+				  port->message_id, 0, 1);
+	msg.ext_msg.header = PD_EXT_HDR_LE(
+			port->ext_tx_buf_size,/* data size */
+			0,/* req_chunk: don't care here */
+			0,/* chunk_num: don't care here */
+			1/* chunked */);
+
+	return tcpm_chunk_transmit(port, TCPC_TX_SOP, &msg);
 }
 
 /*
@@ -3504,7 +3779,7 @@ static int tcpm_pd_send_request(struct tcpm_port *port)
 				  port->message_id, 1, 0);
 	msg.payload[0] = cpu_to_le32(rdo);
 
-	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+	return tcpm_chunk_transmit(port, TCPC_TX_SOP, &msg);
 }
 
 static int tcpm_pd_build_pps_request(struct tcpm_port *port, u32 *rdo)
@@ -3601,7 +3876,7 @@ static int tcpm_pd_send_pps_request(struct tcpm_port *port)
 				  port->message_id, 1, 0);
 	msg.payload[0] = cpu_to_le32(rdo);
 
-	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
+	return tcpm_chunk_transmit(port, TCPC_TX_SOP, &msg);
 }
 
 static int tcpm_set_vbus(struct tcpm_port *port, bool enable)
@@ -3787,6 +4062,12 @@ static void tcpm_reset_port(struct tcpm_port *port)
 	kfree(port->ext_rx_buf);
 	port->ext_rx_buf = NULL;
 	port->ext_rx_buf_size = 0;
+	port->ext_type = 0;
+	port->chunk_abort = false;
+	port->chunk_num_to_send = 0;
+	kfree(port->ext_tx_buf);
+	port->ext_tx_buf = NULL;
+	port->ext_tx_buf_size = 0;
 
 	/*
 	 * First Rx ID should be 0; set this to a sentinel of -1 so that
@@ -4494,6 +4775,9 @@ static void run_state_machine(struct tcpm_port *port)
 		port->usb_comm_capable = false;
 		if (port->chunk_rx_state != RCH_WAIT_FOR_MESSAGE)
 			tcpm_set_chunk_state(port, RCH_WAIT_FOR_MESSAGE, 0);
+		else if (port->chunk_tx_state != TCH_WAIT_FOR_MESSAGE_REQUEST)
+			tcpm_set_chunk_state(port, TCH_WAIT_FOR_MESSAGE_REQUEST,
+					     0);
 		if (port->pwr_role == TYPEC_SOURCE)
 			tcpm_set_state(port, SRC_HARD_RESET_VBUS_OFF,
 				       PD_T_PS_HARD_RESET);
@@ -4782,6 +5066,7 @@ static void run_state_machine(struct tcpm_port *port)
 	case BIST_RX:
 		switch (BDO_MODE_MASK(port->bist_request)) {
 		case BDO_MODE_CARRIER2:
+			// TODO: integrate this into chunk Tx
 			tcpm_pd_transmit(port, TCPC_TX_BIST_MODE_2, NULL);
 			break;
 		default:
@@ -4845,6 +5130,13 @@ static void run_state_machine(struct tcpm_port *port)
 	case CHUNK_RX:
 		break;
 	case CHUNK_RX_FINISH:
+		tcpm_ams_finish(port);
+		tcpm_set_state(port, ready_state(port), 0);
+		break;
+	case CHUNK_TX:
+		tcpm_pd_send_extend(port);
+		break;
+	case CHUNK_TX_FINISH:
 		tcpm_ams_finish(port);
 		tcpm_set_state(port, ready_state(port), 0);
 		break;

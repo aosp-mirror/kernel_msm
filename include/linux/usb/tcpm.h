@@ -64,6 +64,11 @@ enum usb_pd_sop_type {
 #define FRAME_FILTER_EN_HARD_RESET     BIT(5)
 #define FRAME_FILTER_EN_CABLE_RESET    BIT(6)
 
+enum chunk_tx_source {
+	POLICY_ENGINE,
+	PROTOCOL_LAYER,
+};
+
 /**
  * struct tcpc_config - Port configuration
  * @src_pdo:	PDO parameters sent to port partner as response to
