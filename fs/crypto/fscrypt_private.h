@@ -576,11 +576,6 @@ struct fscrypt_mode {
 
 extern struct fscrypt_mode fscrypt_modes[];
 
-static inline bool fscrypt_is_legacy_ice(const struct fscrypt_mode *mode)
-{
-	return mode - fscrypt_modes == FSCRYPT_MODE_LEGACY_ICE;
-}
-
 extern int fscrypt_prepare_key(struct fscrypt_prepared_key *prep_key,
 			       const u8 *raw_key, unsigned int raw_key_size,
 			       bool is_hw_wrapped,

@@ -41,10 +41,8 @@ void fscrypt_select_encryption_impl(struct fscrypt_info *ci)
 
 	/* The filesystem must be mounted with -o inlinecrypt */
 	if (!sb->s_cop->inline_crypt_enabled ||
-	    !sb->s_cop->inline_crypt_enabled(sb)) {
-		if (!fscrypt_is_legacy_ice(ci->ci_mode))
-			return;
-	}
+	    !sb->s_cop->inline_crypt_enabled(sb))
+		return;
 
 	ci->ci_inlinecrypt = true;
 }

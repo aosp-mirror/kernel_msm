@@ -101,15 +101,6 @@ config SCSI_UFS_QCOM
 	  Select this if you have UFS controller on QCOM chipset.
 	  If unsure, say N.
 
-config SCSI_UFS_QCOM_LEGACY_ICE
-	bool "Don't fix byte order of inline crypto key words"
-	depends on SCSI_UFS_QCOM && SCSI_UFS_CRYPTO
-	help
-	  Use the wrong byte order in the words of all inline encryption
-	  keys, for compatibility with the legacy QCOM wrapped keys
-	  solution.  Only enable this if compatibility with an existing
-	  Android build's fstab is needed.
-
 config SCSI_UFS_TEST
 	tristate "Universal Flash Storage host controller driver unit-tests"
 	depends on SCSI_UFSHCD && IOSCHED_TEST

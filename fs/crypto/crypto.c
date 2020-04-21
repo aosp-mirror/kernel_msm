@@ -74,8 +74,7 @@ void fscrypt_generate_iv(union fscrypt_iv *iv, u64 lblk_num,
 
 	memset(iv, 0, ci->ci_mode->ivsize);
 
-	if ((flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) ||
-	    fscrypt_is_legacy_ice(ci->ci_mode)) {
+	if (flags & FSCRYPT_POLICY_FLAG_IV_INO_LBLK_64) {
 		WARN_ON_ONCE((u32)lblk_num != lblk_num);
 		lblk_num |= (u64)ci->ci_inode->i_ino << 32;
 	} else if (flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY) {
