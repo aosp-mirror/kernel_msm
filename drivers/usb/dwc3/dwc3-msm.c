@@ -31,6 +31,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
 #include <linux/pm_wakeup.h>
+#include <linux/pmic-voter.h>
 #include <linux/power_supply.h>
 #include <linux/cdev.h>
 #include <linux/completion.h>
@@ -294,6 +295,7 @@ struct dwc3_msm {
 	struct usb_irq		wakeup_irq[USB_MAX_IRQ];
 	struct work_struct	resume_work;
 	struct work_struct	restart_usb_work;
+	struct work_struct	rerun_apsd_work;
 	bool			in_restart;
 	struct workqueue_struct *dwc3_wq;
 	struct workqueue_struct *sm_usb_wq;
@@ -1819,6 +1821,23 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 	flush_delayed_work(&mdwc->sm_work);
 }
 
+static int get_psy_type(struct dwc3_msm *mdwc);
+#define USB_PSY_VOTER "USB_PSY_VOTER"
+static void dwc3_rerun_apsd_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
+						rerun_apsd_work);
+	struct votable *usb_icl_votable;
+	union power_supply_propval pval = {0};
+
+	usb_icl_votable = find_votable("USB_ICL");
+	if (usb_icl_votable)
+		vote(usb_icl_votable, USB_PSY_VOTER, false, 0);
+	pval.intval = 1;
+	power_supply_set_property(mdwc->usb_psy,
+				POWER_SUPPLY_PROP_APSD_RERUN, &pval);
+}
+
 static int msm_dwc3_usbdev_notify(struct notifier_block *self,
 			unsigned long action, void *priv)
 {
@@ -2005,6 +2024,8 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc, unsigned int event,
 		 */
 		if (dwc->retries_on_error < MAX_ERROR_RECOVERY_TRIES)
 			schedule_work(&mdwc->restart_usb_work);
+		else if (get_psy_type(mdwc) == POWER_SUPPLY_TYPE_USB)
+			schedule_work(&mdwc->rerun_apsd_work);
 		break;
 	case DWC3_CONTROLLER_POST_RESET_EVENT:
 		dev_dbg(mdwc->dev,
@@ -3054,7 +3075,6 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 }
 
 static void dwc3_otg_sm_work(struct work_struct *w);
-static int get_psy_type(struct dwc3_msm *mdwc);
 
 static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 {
@@ -3600,6 +3620,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&mdwc->req_complete_list);
 	INIT_WORK(&mdwc->resume_work, dwc3_resume_work);
 	INIT_WORK(&mdwc->restart_usb_work, dwc3_restart_usb_work);
+	INIT_WORK(&mdwc->rerun_apsd_work, dwc3_rerun_apsd_work);
 	INIT_WORK(&mdwc->vbus_draw_work, dwc3_msm_vbus_draw_work);
 	INIT_DELAYED_WORK(&mdwc->sm_work, dwc3_otg_sm_work);
 	INIT_DELAYED_WORK(&mdwc->perf_vote_work, msm_dwc3_perf_vote_work);
