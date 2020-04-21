@@ -741,16 +741,18 @@ void qmi_rmnet_enable_all_flows(struct net_device *dev)
 	spin_lock_bh(&qos->qos_lock);
 
 	list_for_each_entry(bearer, &qos->bearer_head, list) {
-		if (bearer->tx_off)
-			continue;
-		do_wake = !bearer->grant_size;
-		bearer->grant_size = DEFAULT_GRANT;
-		bearer->grant_thresh = qmi_rmnet_grant_per(DEFAULT_GRANT);
 		bearer->seq = 0;
 		bearer->ack_req = 0;
 		bearer->bytes_in_flight = 0;
 		bearer->tcp_bidir = false;
 		bearer->rat_switch = false;
+
+		if (bearer->tx_off)
+			continue;
+
+		do_wake = !bearer->grant_size;
+		bearer->grant_size = DEFAULT_GRANT;
+		bearer->grant_thresh = qmi_rmnet_grant_per(DEFAULT_GRANT);
 
 		if (do_wake)
 			dfc_bearer_flow_ctl(dev, bearer, qos);
@@ -832,11 +834,11 @@ static int qmi_rmnet_get_queue_sa(struct qos_info *qos, struct sk_buff *skb)
 	int ip_type;
 	int txq = DEFAULT_MQ_NUM;
 
-	/* Put RS/NS in default mq */
+	/* Put NDP in default mq */
 	if (skb->protocol == htons(ETH_P_IPV6) &&
 	    ipv6_hdr(skb)->nexthdr == IPPROTO_ICMPV6 &&
-	    (icmp6_hdr(skb)->icmp6_type == 133 ||
-	     icmp6_hdr(skb)->icmp6_type == 135)) {
+	    icmp6_hdr(skb)->icmp6_type >= 133 &&
+	    icmp6_hdr(skb)->icmp6_type <= 137) {
 		return DEFAULT_MQ_NUM;
 	}
 

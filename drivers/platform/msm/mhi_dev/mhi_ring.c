@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,6 +25,13 @@
 #include <linux/platform_device.h>
 
 #include "mhi.h"
+
+static struct event_req dummy_ereq;
+
+static void mhi_dev_event_buf_completion_dummy_cb(void *req)
+{
+	mhi_log(MHI_MSG_VERBOSE, "%s invoked\n", __func__);
+}
 
 static size_t mhi_dev_ring_addr2ofst(struct mhi_dev_ring *ring, uint64_t p)
 {
@@ -355,8 +362,19 @@ int mhi_dev_add_element(struct mhi_dev_ring *ring,
 		host_addr.virt_addr = element;
 		host_addr.size = (ring->ring_size - old_offset) *
 			sizeof(union mhi_dev_ring_element_type);
-		mhi_ctx->write_to_host(ring->mhi_dev, &host_addr,
-			NULL, MHI_DEV_DMA_SYNC);
+
+		if (mhi_ctx->use_ipa) {
+			mhi_ctx->write_to_host(ring->mhi_dev, &host_addr,
+				NULL, MHI_DEV_DMA_SYNC);
+		} else {
+			dummy_ereq.event_type = SEND_EVENT_BUFFER;
+			host_addr.phy_addr = 0;
+			/* Nothing to do in the callback */
+			dummy_ereq.client_cb =
+				mhi_dev_event_buf_completion_dummy_cb;
+			mhi_ctx->write_to_host(ring->mhi_dev, &host_addr,
+					&dummy_ereq, MHI_DEV_DMA_ASYNC);
+		}
 
 		/* Copy remaining elements */
 		if (MHI_USE_DMA(mhi_ctx))
@@ -373,6 +391,24 @@ int mhi_dev_add_element(struct mhi_dev_ring *ring,
 	return 0;
 }
 EXPORT_SYMBOL(mhi_dev_add_element);
+
+static int mhi_dev_ring_alloc_msi_buf(struct mhi_dev_ring *ring)
+{
+	if (ring->msi_buf.buf) {
+		mhi_log(MHI_MSG_INFO, "MSI buf already allocated\n");
+		return 0;
+	}
+
+	ring->msi_buf.buf = dma_alloc_coherent(&ring->mhi_dev->pdev->dev,
+				sizeof(u32),
+				&ring->msi_buf.dma_addr,
+				GFP_KERNEL);
+
+	if (!ring->msi_buf.buf)
+		return -ENOMEM;
+
+	return 0;
+}
 
 int mhi_ring_start(struct mhi_dev_ring *ring, union mhi_dev_ring_ctx *ctx,
 							struct mhi_dev *mhi)
@@ -439,6 +475,12 @@ int mhi_ring_start(struct mhi_dev_ring *ring, union mhi_dev_ring_ctx *ctx,
 			(size_t)ring->ring_ctx->generic.wp);
 	ring->wr_offset = wr_offset;
 
+	if (mhi->use_edma) {
+		rc = mhi_dev_ring_alloc_msi_buf(ring);
+		if (rc)
+			return rc;
+	}
+
 	return rc;
 }
 EXPORT_SYMBOL(mhi_ring_start);
@@ -453,6 +495,7 @@ void mhi_ring_init(struct mhi_dev_ring *ring, enum mhi_dev_ring_type type,
 	ring->state = RING_STATE_UINT;
 	ring->ring_cb = NULL;
 	ring->type = type;
+	mutex_init(&ring->event_lock);
 }
 EXPORT_SYMBOL(mhi_ring_init);
 

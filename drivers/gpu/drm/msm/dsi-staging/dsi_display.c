@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4441,6 +4441,11 @@ static int dsi_display_set_mode_sub(struct dsi_display *display,
 		}
 	}
 
+	if ((mode->dsi_mode_flags & DSI_MODE_FLAG_DMS) &&
+			(display->panel->panel_mode == DSI_OP_CMD_MODE))
+		atomic_set(&display->clkrate_change_pending, 1);
+
+
 	if (priv_info->phy_timing_len) {
 		display_for_each_ctrl(i, display) {
 			ctrl = &display->ctrl[i];
@@ -5206,9 +5211,6 @@ static void dsi_display_firmware_display(const struct firmware *fw,
 		display->name = "dsi_firmware_display";
 	}
 
-	if (dsi_display_init(display))
-		return;
-
 	pr_debug("success\n");
 }
 
@@ -5294,12 +5296,9 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, display);
 
-	/* initialize display in firmware callback */
-	if (!firm_req) {
-		rc = dsi_display_init(display);
-		if (rc)
-			goto end;
-	}
+	rc = dsi_display_init(display);
+	if (rc)
+		goto end;
 
 	return 0;
 end:

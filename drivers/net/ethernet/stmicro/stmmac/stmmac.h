@@ -29,6 +29,10 @@
 #include "common.h"
 #include <linux/ptp_clock_kernel.h>
 #include <linux/reset.h>
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
+#include "dwmac-qcom-ipa-offload.h"
 
 struct stmmac_resources {
 	void __iomem *addr;
@@ -143,7 +147,7 @@ struct stmmac_priv {
 	void __iomem *mmcaddr;
 	void __iomem *ptpaddr;
 	u32 mss;
-
+	bool boot_kpi;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dbgfs_dir;
 	struct dentry *dbgfs_rings_status;
@@ -151,7 +155,7 @@ struct stmmac_priv {
 #endif
 };
 
-struct emac_emb_smmu_cb_ctx {
+struct stmmac_emb_smmu_cb_ctx {
 	bool valid;
 	struct platform_device *pdev_master;
 	struct platform_device *smmu_pdev;
@@ -163,10 +167,10 @@ struct emac_emb_smmu_cb_ctx {
 	int ret;
 };
 
-extern struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx;
+extern struct stmmac_emb_smmu_cb_ctx stmmac_emb_smmu_ctx;
 
-#define GET_MEM_PDEV_DEV (emac_emb_smmu_ctx.valid ? \
-			&emac_emb_smmu_ctx.smmu_pdev->dev : priv->device)
+#define GET_MEM_PDEV_DEV (stmmac_emb_smmu_ctx.valid ? \
+			&stmmac_emb_smmu_ctx.smmu_pdev->dev : priv->device)
 
 int ethqos_handle_prv_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 int ethqos_init_pps(struct stmmac_priv *priv);

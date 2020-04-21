@@ -21,6 +21,9 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+#include <asm/dma-iommu.h>
+#include <linux/iommu.h>
+#include <linux/dma-mapping.h>
 
 #include "ce.h"
 #include "debug.h"
@@ -30,6 +33,7 @@
 
 #define ATH10K_SNOC_RX_POST_RETRY_MS 50
 #define CE_POLL_PIPE 4
+#define ATH10K_SNOC_WAKE_IRQ 2
 
 static char *const ce_name[] = {
 	"WLAN_CE_0",
@@ -1038,6 +1042,46 @@ static int ath10k_snoc_hif_set_target_log_mode(struct ath10k *ar,
 	return ath10k_qmi_set_fw_log_mode(ar, fw_dbg_mode);
 }
 
+#ifdef CONFIG_PM
+static int ath10k_snoc_hif_suspend(struct ath10k *ar)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	int ret;
+
+	if (!device_may_wakeup(ar->dev))
+		return -EPERM;
+
+	ret = enable_irq_wake(ar_snoc->ce_irqs[ATH10K_SNOC_WAKE_IRQ].irq_line);
+	if (ret) {
+		ath10k_err(ar, "failed to enable wakeup irq :%d\n", ret);
+		return ret;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_SNOC, "snoc device suspended\n");
+
+	return ret;
+}
+
+static int ath10k_snoc_hif_resume(struct ath10k *ar)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	int ret;
+
+	if (!device_may_wakeup(ar->dev))
+		return -EPERM;
+
+	ret = disable_irq_wake(ar_snoc->ce_irqs[ATH10K_SNOC_WAKE_IRQ].irq_line);
+	if (ret) {
+		ath10k_err(ar, "failed to disable wakeup irq: %d\n", ret);
+		return ret;
+	}
+
+	ath10k_dbg(ar, ATH10K_DBG_SNOC, "snoc device resumed\n");
+
+	return ret;
+}
+#endif
+
 static const struct ath10k_hif_ops ath10k_snoc_hif_ops = {
 	.read32		= ath10k_snoc_read32,
 	.write32	= ath10k_snoc_write32,
@@ -1052,6 +1096,10 @@ static const struct ath10k_hif_ops ath10k_snoc_hif_ops = {
 	.get_free_queue_number	= ath10k_snoc_hif_get_free_queue_number,
 	.get_target_info	= ath10k_snoc_hif_get_target_info,
 	.set_target_log_mode    = ath10k_snoc_hif_set_target_log_mode,
+#ifdef CONFIG_PM
+	.suspend                = ath10k_snoc_hif_suspend,
+	.resume                 = ath10k_snoc_hif_resume,
+#endif
 };
 
 static const struct ath10k_bus_ops ath10k_snoc_bus_ops = {
@@ -1521,6 +1569,88 @@ static int ath10k_hw_power_off(struct ath10k *ar)
 	return ret;
 }
 
+static int ath10k_smmu_attach(struct ath10k *ar)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct dma_iommu_mapping *mapping;
+	struct platform_device *pdev;
+	int ret = 0;
+
+	ath10k_dbg(ar, ATH10K_DBG_SNOC, "Initializing SMMU\n");
+
+	pdev = ar_snoc->dev;
+	mapping = arm_iommu_create_mapping(&platform_bus_type,
+					   ar_snoc->smmu_iova_start,
+					   ar_snoc->smmu_iova_len);
+	if (IS_ERR(mapping)) {
+		ath10k_err(ar, "create mapping failed, err = %d\n", ret);
+		ret = PTR_ERR(mapping);
+		goto map_fail;
+	}
+
+	ret = arm_iommu_attach_device(&pdev->dev, mapping);
+	if (ret < 0 && ret != -EEXIST) {
+		ath10k_err(ar, "iommu attach device failed, err = %d\n", ret);
+		goto attach_fail;
+	} else if (ret == -EEXIST) {
+		ret = 0;
+	}
+
+	ar_snoc->smmu_mapping = mapping;
+
+	return ret;
+
+attach_fail:
+	arm_iommu_release_mapping(mapping);
+map_fail:
+	return ret;
+}
+
+static void ath10k_smmu_deinit(struct ath10k *ar)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct platform_device *pdev;
+
+	pdev = ar_snoc->dev;
+
+	if (!ar_snoc->smmu_mapping)
+		return;
+
+	arm_iommu_detach_device(&pdev->dev);
+	arm_iommu_release_mapping(ar_snoc->smmu_mapping);
+
+	ar_snoc->smmu_mapping = NULL;
+}
+
+static int ath10k_smmu_init(struct ath10k *ar)
+{
+	struct ath10k_snoc *ar_snoc = ath10k_snoc_priv(ar);
+	struct platform_device *pdev;
+	struct resource *res;
+	int ret = 0;
+
+	pdev = ar_snoc->dev;
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+					   "smmu_iova_base");
+	if (!res) {
+		ath10k_err(ar, "SMMU iova base not found\n");
+	} else {
+		ar_snoc->smmu_iova_start = res->start;
+		ar_snoc->smmu_iova_len = resource_size(res);
+		ath10k_dbg(ar, ATH10K_DBG_SNOC, "SMMU iova start: %pa, len: %zu\n",
+			   &ar_snoc->smmu_iova_start, ar_snoc->smmu_iova_len);
+
+		ret = ath10k_smmu_attach(ar);
+		if (ret < 0) {
+			ath10k_err(ar, "SMMU init failed, err = %d, start: %pad, len: %zx\n",
+				   ret, &ar_snoc->smmu_iova_start,
+				   ar_snoc->smmu_iova_len);
+		}
+	}
+
+	return ret;
+}
+
 static const struct of_device_id ath10k_snoc_dt_match[] = {
 	{ .compatible = "qcom,wcn3990-wifi",
 	 .data = &drv_priv,
@@ -1570,16 +1700,22 @@ static int ath10k_snoc_probe(struct platform_device *pdev)
 	ar->ce_priv = &ar_snoc->ce;
 	msa_size = drv_data->msa_size;
 
+	ret = ath10k_smmu_init(ar);
+	if (ret) {
+		ath10k_warn(ar, "failed to int SMMU: %d\n", ret);
+		goto err_core_destroy;
+	}
+
 	ret = ath10k_snoc_resource_init(ar);
 	if (ret) {
 		ath10k_warn(ar, "failed to initialize resource: %d\n", ret);
-		goto err_core_destroy;
+		goto err_smmu_deinit;
 	}
 
 	ret = ath10k_snoc_setup_resource(ar);
 	if (ret) {
 		ath10k_warn(ar, "failed to setup resource: %d\n", ret);
-		goto err_core_destroy;
+		goto err_smmu_deinit;
 	}
 	ret = ath10k_snoc_request_irq(ar);
 	if (ret) {
@@ -1624,6 +1760,9 @@ err_free_irq:
 err_release_resource:
 	ath10k_snoc_release_resource(ar);
 
+err_smmu_deinit:
+	ath10k_smmu_deinit(ar);
+
 err_core_destroy:
 	ath10k_core_destroy(ar);
 
@@ -1637,6 +1776,7 @@ static int ath10k_snoc_remove(struct platform_device *pdev)
 	ath10k_dbg(ar, ATH10K_DBG_SNOC, "snoc remove\n");
 	ath10k_core_unregister(ar);
 	ath10k_hw_power_off(ar);
+	ath10k_smmu_deinit(ar);
 	ath10k_snoc_free_irq(ar);
 	ath10k_snoc_release_resource(ar);
 	ath10k_qmi_deinit(ar);

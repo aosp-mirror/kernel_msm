@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,8 @@
 #include <linux/wait.h>
 #include <linux/mhi.h>
 #include "mhi_internal.h"
+
+static void mhi_special_events_pending(struct mhi_controller *mhi_cntrl);
 
 /*
  * Not all MHI states transitions are sync transitions. Linkdown, SSR, and
@@ -164,6 +166,7 @@ void mhi_set_mhi_state(struct mhi_controller *mhi_cntrl,
 	if (state == MHI_STATE_RESET) {
 		mhi_write_reg_field(mhi_cntrl, mhi_cntrl->regs, MHICTRL,
 				    MHICTRL_RESET_MASK, MHICTRL_RESET_SHIFT, 1);
+		mhi_cntrl->initiate_mhi_reset = true;
 	} else {
 		mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->regs, MHICTRL,
 			 (state << MHICTRL_MHISTATE_SHIFT));
@@ -507,20 +510,21 @@ static int mhi_pm_mission_mode_transition(struct mhi_controller *mhi_cntrl)
 
 	read_unlock_bh(&mhi_cntrl->pm_lock);
 
-	/* setup support for additional features (SFR, timesync, etc.) */
+	/* setup support for additional features */
 	mhi_init_sfr(mhi_cntrl);
-	mhi_init_timesync(mhi_cntrl);
 
 	if (MHI_REG_ACCESS_VALID(mhi_cntrl->pm_state))
 		mhi_timesync_log(mhi_cntrl);
+
+	mhi_special_events_pending(mhi_cntrl);
+
+	/* setup sysfs nodes for userspace votes */
+	mhi_create_sysfs(mhi_cntrl);
 
 	MHI_LOG("Adding new devices\n");
 
 	/* add supported devices */
 	mhi_create_devices(mhi_cntrl);
-
-	/* setup sysfs nodes for userspace votes */
-	mhi_create_sysfs(mhi_cntrl);
 
 	read_lock_bh(&mhi_cntrl->pm_lock);
 
@@ -557,20 +561,9 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 		mhi_reset_reg_write_q(mhi_cntrl);
 
 	/* We must notify MHI control driver so it can clean up first */
-	if (transition_state == MHI_PM_SYS_ERR_PROCESS) {
-		/*
-		 * if controller support rddm, we do not process
-		 * sys error state, instead we will jump directly
-		 * to rddm state
-		 */
-		if (mhi_cntrl->rddm_image) {
-			MHI_LOG(
-				"Controller Support RDDM, skipping SYS_ERR_PROCESS\n");
-			return;
-		}
+	if (transition_state == MHI_PM_SYS_ERR_PROCESS)
 		mhi_cntrl->status_cb(mhi_cntrl, mhi_cntrl->priv_data,
 				     MHI_CB_SYS_ERROR);
-	}
 
 	mutex_lock(&mhi_cntrl->pm_mutex);
 	write_lock_irq(&mhi_cntrl->pm_lock);
@@ -597,20 +590,18 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 
 	/* trigger MHI RESET so device will not access host ddr */
 	if (MHI_REG_ACCESS_VALID(prev_state)) {
-		u32 in_reset = -1;
 		unsigned long timeout = msecs_to_jiffies(mhi_cntrl->timeout_ms);
 
 		MHI_LOG("Trigger device into MHI_RESET\n");
+
+		write_lock_irq(&mhi_cntrl->pm_lock);
 		mhi_set_mhi_state(mhi_cntrl, MHI_STATE_RESET);
+		write_unlock_irq(&mhi_cntrl->pm_lock);
 
 		/* wait for reset to be cleared */
 		ret = wait_event_timeout(mhi_cntrl->state_event,
-					 mhi_read_reg_field(mhi_cntrl,
-						mhi_cntrl->regs, MHICTRL,
-						MHICTRL_RESET_MASK,
-						MHICTRL_RESET_SHIFT, &in_reset)
-					 || !in_reset, timeout);
-		if ((!ret || in_reset) && cur_state == MHI_PM_SYS_ERR_PROCESS) {
+				!mhi_cntrl->initiate_mhi_reset, timeout);
+		if (!ret && cur_state == MHI_PM_SYS_ERR_PROCESS) {
 			MHI_CRITICAL("Device failed to exit RESET state\n");
 			mutex_unlock(&mhi_cntrl->pm_mutex);
 			return;
@@ -620,7 +611,11 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 		 * device cleares INTVEC as part of RESET processing,
 		 * re-program it
 		 */
-		mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->bhi, BHI_INTVEC, 0);
+		if (!mhi_cntrl->initiate_mhi_reset)
+			mhi_cntrl->write_reg(mhi_cntrl, mhi_cntrl->bhi,
+				BHI_INTVEC, 0);
+
+		mhi_cntrl->initiate_mhi_reset = false;
 	}
 
 	MHI_LOG("Waiting for all pending event ring processing to complete\n");
@@ -643,8 +638,7 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 
 	MHI_LOG("Waiting for all pending threads to complete\n");
 	wake_up_all(&mhi_cntrl->state_event);
-	flush_work(&mhi_cntrl->fw_worker);
-	flush_work(&mhi_cntrl->low_priority_worker);
+	flush_work(&mhi_cntrl->special_work);
 
 	if (sfr_info && sfr_info->buf_addr) {
 		mhi_free_coherent(mhi_cntrl, sfr_info->len, sfr_info->buf_addr,
@@ -685,9 +679,6 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 		er_ctxt->rp = er_ctxt->rbase;
 		er_ctxt->wp = er_ctxt->rbase;
 	}
-
-	/* remove support for time sync */
-	mhi_destroy_timesync(mhi_cntrl);
 
 	if (cur_state == MHI_PM_SYS_ERR_PROCESS) {
 		mhi_ready_state_transition(mhi_cntrl);
@@ -738,7 +729,7 @@ int mhi_debugfs_trigger_reset(void *data, u64 val)
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 
 	if (cur_state == MHI_PM_SYS_ERR_DETECT)
-		schedule_work(&mhi_cntrl->syserr_worker);
+		mhi_process_sys_err(mhi_cntrl);
 
 	return 0;
 }
@@ -784,18 +775,19 @@ int mhi_queue_state_transition(struct mhi_controller *mhi_cntrl,
 	return 0;
 }
 
-static void mhi_low_priority_events_pending(struct mhi_controller *mhi_cntrl)
+static void mhi_special_events_pending(struct mhi_controller *mhi_cntrl)
 {
 	struct mhi_event *mhi_event;
 
-	list_for_each_entry(mhi_event, &mhi_cntrl->lp_ev_rings, node) {
+	list_for_each_entry(mhi_event, &mhi_cntrl->sp_ev_rings, node) {
 		struct mhi_event_ctxt *er_ctxt =
 			&mhi_cntrl->mhi_ctxt->er_ctxt[mhi_event->er_index];
 		struct mhi_ring *ev_ring = &mhi_event->ring;
 
 		spin_lock_bh(&mhi_event->lock);
 		if (ev_ring->rp != mhi_to_virtual(ev_ring, er_ctxt->rp)) {
-			schedule_work(&mhi_cntrl->low_priority_worker);
+			queue_work(mhi_cntrl->special_wq,
+				   &mhi_cntrl->special_work);
 			spin_unlock_bh(&mhi_event->lock);
 			break;
 		}
@@ -803,11 +795,11 @@ static void mhi_low_priority_events_pending(struct mhi_controller *mhi_cntrl)
 	}
 }
 
-void mhi_low_priority_worker(struct work_struct *work)
+void mhi_special_purpose_work(struct work_struct *work)
 {
 	struct mhi_controller *mhi_cntrl = container_of(work,
 							struct mhi_controller,
-							low_priority_worker);
+							special_work);
 	struct mhi_event *mhi_event;
 
 	MHI_VERB("Enter with pm_state:%s MHI_STATE:%s ee:%s\n",
@@ -815,20 +807,21 @@ void mhi_low_priority_worker(struct work_struct *work)
 		 TO_MHI_STATE_STR(mhi_cntrl->dev_state),
 		 TO_MHI_EXEC_STR(mhi_cntrl->ee));
 
-	/* check low priority event rings and process events */
-	list_for_each_entry(mhi_event, &mhi_cntrl->lp_ev_rings, node)
+	/* check special purpose event rings and process events */
+	list_for_each_entry(mhi_event, &mhi_cntrl->sp_ev_rings, node)
 		mhi_event->process_event(mhi_cntrl, mhi_event, U32_MAX);
 }
 
-void mhi_pm_sys_err_worker(struct work_struct *work)
+void mhi_process_sys_err(struct mhi_controller *mhi_cntrl)
 {
-	struct mhi_controller *mhi_cntrl = container_of(work,
-							struct mhi_controller,
-							syserr_worker);
-
-	MHI_LOG("Enter with pm_state:%s MHI_STATE:%s\n",
-		to_mhi_pm_state_str(mhi_cntrl->pm_state),
-		TO_MHI_STATE_STR(mhi_cntrl->dev_state));
+	/*
+	 * if controller supports rddm, we do not process sys error state,
+	 * instead we will jump directly to rddm state
+	 */
+	if (mhi_cntrl->rddm_image) {
+		MHI_LOG("Controller supports RDDM, skipping SYS_ERR_PROCESS\n");
+		return;
+	}
 
 	mhi_queue_disable_transition(mhi_cntrl, MHI_PM_SYS_ERR_PROCESS);
 }
@@ -856,7 +849,7 @@ void mhi_pm_st_worker(struct work_struct *work)
 				mhi_cntrl->ee = mhi_get_exec_env(mhi_cntrl);
 			write_unlock_irq(&mhi_cntrl->pm_lock);
 			if (MHI_IN_PBL(mhi_cntrl->ee))
-				wake_up_all(&mhi_cntrl->state_event);
+				mhi_fw_load_handler(mhi_cntrl);
 			break;
 		case MHI_ST_TRANSITION_SBL:
 			write_lock_irq(&mhi_cntrl->pm_lock);
@@ -964,9 +957,6 @@ int mhi_async_power_up(struct mhi_controller *mhi_cntrl)
 	/* transition to next state */
 	next_state = MHI_IN_PBL(current_ee) ?
 		MHI_ST_TRANSITION_PBL : MHI_ST_TRANSITION_READY;
-
-	if (next_state == MHI_ST_TRANSITION_PBL)
-		schedule_work(&mhi_cntrl->fw_worker);
 
 	mhi_queue_state_transition(mhi_cntrl, next_state);
 
@@ -1088,7 +1078,7 @@ int mhi_sync_power_up(struct mhi_controller *mhi_cntrl)
 			   MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state),
 			   msecs_to_jiffies(mhi_cntrl->timeout_ms));
 
-	return (MHI_IN_MISSION_MODE(mhi_cntrl->ee)) ? 0 : -EIO;
+	return (MHI_IN_MISSION_MODE(mhi_cntrl->ee)) ? 0 : -ETIMEDOUT;
 }
 EXPORT_SYMBOL(mhi_sync_power_up);
 
@@ -1167,6 +1157,9 @@ int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 	MHI_LOG("Wait for M3 completion\n");
 
+	/* finish reg writes before D3 cold */
+	mhi_force_reg_write(mhi_cntrl);
+
 	ret = wait_event_timeout(mhi_cntrl->state_event,
 				 mhi_cntrl->dev_state == MHI_STATE_M3 ||
 				 MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state),
@@ -1181,10 +1174,8 @@ int mhi_pm_suspend(struct mhi_controller *mhi_cntrl)
 
 	/* notify any clients we enter lpm */
 	list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans, node) {
-		mutex_lock(&itr->mutex);
 		if (itr->mhi_dev)
 			mhi_notify(itr->mhi_dev, MHI_CB_LPM_ENTER);
-		mutex_unlock(&itr->mutex);
 	}
 
 	return 0;
@@ -1220,6 +1211,11 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 		MHI_VERB("Busy, aborting M3\n");
 		return -EBUSY;
 	}
+
+	/* wait here if controller wants device to be in M2 before proceeding */
+	wait_event_timeout(mhi_cntrl->state_event,
+			   mhi_cntrl->dev_state == MHI_STATE_M2,
+			   msecs_to_jiffies(mhi_cntrl->m2_timeout_ms));
 
 	/* disable ctrl event processing */
 	tasklet_disable(&mhi_cntrl->mhi_event->task);
@@ -1278,6 +1274,9 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 	mhi_cntrl->M3_FAST++;
 	write_unlock_irq(&mhi_cntrl->pm_lock);
 
+	/* finish reg writes before DRV hand-off to avoid noc err */
+	mhi_force_reg_write(mhi_cntrl);
+
 	/* now safe to check ctrl event ring */
 	tasklet_enable(&mhi_cntrl->mhi_event->task);
 	mhi_msi_handlr(0, mhi_cntrl->mhi_event);
@@ -1287,10 +1286,8 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 
 	/* notify any clients we enter lpm */
 	list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans, node) {
-		mutex_lock(&itr->mutex);
 		if (itr->mhi_dev)
 			mhi_notify(itr->mhi_dev, MHI_CB_LPM_ENTER);
-		mutex_unlock(&itr->mutex);
 	}
 
 	return 0;
@@ -1326,10 +1323,8 @@ int mhi_pm_resume(struct mhi_controller *mhi_cntrl)
 
 	/* notify any clients we enter lpm */
 	list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans, node) {
-		mutex_lock(&itr->mutex);
 		if (itr->mhi_dev)
 			mhi_notify(itr->mhi_dev, MHI_CB_LPM_EXIT);
-		mutex_unlock(&itr->mutex);
 	}
 
 	write_lock_irq(&mhi_cntrl->pm_lock);
@@ -1371,11 +1366,11 @@ int mhi_pm_resume(struct mhi_controller *mhi_cntrl)
 
 	/*
 	 * If MHI on host is in suspending/suspended state, we do not process
-	 * any low priority requests, for example, bandwidth scaling events
-	 * from the device. Check for low priority event rings and handle the
-	 * pending events upon resume.
+	 * any special purpose requests, for example, bandwidth scaling events
+	 * from the device. Check for special purpose event rings and handle
+	 * the pending events upon resume.
 	 */
-	mhi_low_priority_events_pending(mhi_cntrl);
+	mhi_special_events_pending(mhi_cntrl);
 
 	return 0;
 }
@@ -1402,10 +1397,8 @@ int mhi_pm_fast_resume(struct mhi_controller *mhi_cntrl, bool notify_client)
 	if (notify_client) {
 		list_for_each_entry_safe(itr, tmp, &mhi_cntrl->lpm_chans,
 					 node) {
-			mutex_lock(&itr->mutex);
 			if (itr->mhi_dev)
 				mhi_notify(itr->mhi_dev, MHI_CB_LPM_EXIT);
-			mutex_unlock(&itr->mutex);
 		}
 	}
 
@@ -1447,8 +1440,8 @@ int mhi_pm_fast_resume(struct mhi_controller *mhi_cntrl, bool notify_client)
 		mhi_msi_handlr(0, mhi_event);
 	}
 
-	/* schedules worker if any low priority events need to be handled */
-	mhi_low_priority_events_pending(mhi_cntrl);
+	/* schedules worker if any special purpose events need to be handled */
+	mhi_special_events_pending(mhi_cntrl);
 
 	MHI_LOG("Exit with pm_state:%s dev_state:%s\n",
 		to_mhi_pm_state_str(mhi_cntrl->pm_state),

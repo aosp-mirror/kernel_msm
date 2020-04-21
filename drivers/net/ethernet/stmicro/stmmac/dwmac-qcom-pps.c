@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -54,12 +54,38 @@ static int strlcmp(const char *s, const char *t, size_t n)
 	return ret;
 }
 
+static void align_target_time_reg(u32 ch, void __iomem *ioaddr,
+				  struct pps_cfg *eth_pps_cfg,
+				  unsigned int align_ns)
+{
+	unsigned int system_s, system_ns, temp_system_s;
+
+	system_s = readl_relaxed(ioaddr + 0xb00 + PTP_STSR);
+	system_ns = readl_relaxed(ioaddr + 0xb00 + PTP_STNSR);
+	temp_system_s = readl_relaxed(ioaddr + 0xb00 + PTP_STSR);
+
+	if (temp_system_s != system_s) { // second roll over
+		system_s = readl_relaxed(ioaddr + 0xb00 + PTP_STSR);
+		system_ns = readl_relaxed(ioaddr + 0xb00 + PTP_STNSR);
+	}
+
+	system_ns += PPS_START_DELAY;
+	if (system_ns >= align_ns)
+		system_s += 1;
+
+	writel_relaxed(system_s, ioaddr +
+		       MAC_PPSX_TARGET_TIME_SEC(eth_pps_cfg->ppsout_ch));
+
+	writel_relaxed(align_ns, ioaddr +
+		       MAC_PPSX_TARGET_TIME_NSEC(eth_pps_cfg->ppsout_ch));
+}
+
 static u32 pps_config_sub_second_increment(void __iomem *ioaddr,
 					   u32 ptp_clock, int gmac4)
 {
 	u32 value = readl_relaxed(ioaddr + PTP_TCR);
-	unsigned long data;
-	unsigned int sns_inc = 0;
+	u64 data;
+	u64 sns_inc = 0;
 	u32 reg_value;
 	u32 reg_value2;
 	/* For GMAC3.x, 4.x versions, convert the ptp_clock to nano second
@@ -67,16 +93,16 @@ static u32 pps_config_sub_second_increment(void __iomem *ioaddr,
 	 * where ptp_clock is 50MHz if fine method is used to update system
 	 */
 	if (value & PTP_TCR_TSCFUPDT) {
-		data = (1000000000ULL / ptp_clock);
+		data = div_u64((1000000000ULL), ptp_clock);
 		sns_inc = 1000000000ull - (data * ptp_clock);
-		sns_inc = (sns_inc * 256) / ptp_clock;
+		sns_inc = div_u64((sns_inc * 256), ptp_clock);
 
 	} else {
-		data = (1000000000ULL / ptp_clock);
+		data = div_u64((1000000000ULL), ptp_clock);
 	}
 	/* 0.465ns accuracy */
 	if (!(value & PTP_TCR_TSCTRLSSR))
-		data = (data * 1000) / 465;
+		data = div_u64((data * 1000), 465);
 
 	data &= PTP_SSIR_SSINC_MASK;
 
@@ -90,36 +116,6 @@ static u32 pps_config_sub_second_increment(void __iomem *ioaddr,
 		reg_value2 <<= GMAC4_PTP_SSIR_SNSINC_SHIFT;
 	writel_relaxed(reg_value + reg_value2, ioaddr + PTP_SSIR);
 	return data;
-}
-
-static u32 pps_config_default_addend(void __iomem *ioaddr,
-				     struct stmmac_priv *priv, u32 ptp_clock)
-{
-	u64 temp;
-
-	/* formula is :
-	 * addend = 2^32/freq_div_ratio;
-	 *
-	 * where, freq_div_ratio = DWC_ETH_QOS_SYSCLOCK/50MHz
-	 *
-	 * hence, addend = ((2^32) * 50MHz)/DWC_ETH_QOS_SYSCLOCK;
-	 *
-	 * NOTE: DWC_ETH_QOS_SYSCLOCK should be >= 50MHz to
-	 *       achive 20ns accuracy.
-	 *
-	 * 2^x * y == (y << x), hence
-	 * 2^32 * 50000000 ==> (50000000 << 32)
-	 */
-	if (ptp_clock == 250000000) {
-		// If PTP_CLOCK == SYS_CLOCK, best we can do is 2^32 - 1
-		priv->default_addend = 0xFFFFFFFF;
-	} else {
-		temp = (u64)((u64)ptp_clock << 32);
-		priv->default_addend = div_u64(temp, 250000000);
-	}
-	priv->hw->ptp->config_addend(ioaddr, priv->default_addend);
-
-	return 1;
 }
 
 int ppsout_stop(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg)
@@ -198,13 +194,13 @@ static void ethqos_unregister_pps_isr(struct stmmac_priv *priv, int ch)
 	}
 }
 
-int ppsout_config(struct stmmac_priv *priv, struct ifr_data_struct *req)
+int ppsout_config(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg)
 {
-	struct pps_cfg *eth_pps_cfg = (struct pps_cfg *)req->ptr;
 	int interval, width;
-	u32 sub_second_inc, value;
+	u32 sub_second_inc;
 	void __iomem *ioaddr = priv->ioaddr;
-	u32 val;
+	u32 val, align_ns = 0;
+	u64 temp;
 
 	if (!eth_pps_cfg->ppsout_start) {
 		ppsout_stop(priv, eth_pps_cfg);
@@ -214,18 +210,15 @@ int ppsout_config(struct stmmac_priv *priv, struct ifr_data_struct *req)
 		return 0;
 	}
 
-	value = (PTP_TCR_TSENA | PTP_TCR_TSCFUPDT | PTP_TCR_TSUPDT);
-	priv->hw->ptp->config_hw_tstamping(priv->ptpaddr, value);
-	priv->hw->ptp->init_systime(priv->ptpaddr, 0, 0);
-	priv->hw->ptp->adjust_systime(priv->ptpaddr, 0, 0, 0, 1);
-
 	val = readl_relaxed(ioaddr + MAC_PPS_CONTROL);
 
 	sub_second_inc = pps_config_sub_second_increment
 			 (priv->ptpaddr, eth_pps_cfg->ptpclk_freq,
 			  priv->plat->has_gmac4);
-	pps_config_default_addend(priv->ptpaddr, priv,
-				  eth_pps_cfg->ptpclk_freq);
+
+	temp = (u64)((u64)eth_pps_cfg->ptpclk_freq << 32);
+	priv->default_addend = div_u64(temp, priv->plat->clk_ptp_rate);
+	priv->hw->ptp->config_addend(priv->ptpaddr, priv->default_addend);
 
 	val &= ~PPSX_MASK(eth_pps_cfg->ppsout_ch);
 
@@ -252,6 +245,16 @@ int ppsout_config(struct stmmac_priv *priv, struct ifr_data_struct *req)
 	if (width < 0)
 		width = 0;
 
+	if (eth_pps_cfg->ppsout_align == 1) {
+		align_ns = eth_pps_cfg->ppsout_align_ns;
+		if (align_ns < PPS_ADJUST_NS)
+			align_ns += (ONE_NS - PPS_ADJUST_NS);
+		else
+			align_ns -= PPS_ADJUST_NS;
+		align_target_time_reg(eth_pps_cfg->ppsout_ch,
+				      priv->ioaddr, eth_pps_cfg, align_ns);
+	}
+
 	writel_relaxed(interval, ioaddr +
 		       MAC_PPSX_INTERVAL(eth_pps_cfg->ppsout_ch));
 
@@ -265,7 +268,6 @@ int ppsout_config(struct stmmac_priv *priv, struct ifr_data_struct *req)
 int ethqos_init_pps(struct stmmac_priv *priv)
 {
 	u32 value;
-	struct ifr_data_struct req = {0};
 	struct pps_cfg eth_pps_cfg = {0};
 
 	priv->ptpaddr = priv->ioaddr + PTP_GMAC4_OFFSET;
@@ -276,35 +278,13 @@ int ethqos_init_pps(struct stmmac_priv *priv)
 
 	/*Configuaring PPS0 PPS output frequency to default 19.2 Mhz*/
 	eth_pps_cfg.ppsout_ch = 0;
-	eth_pps_cfg.ptpclk_freq = 62500000;
-	eth_pps_cfg.ppsout_freq = 19200000;
+	eth_pps_cfg.ptpclk_freq = priv->plat->clk_ptp_req_rate;
+	eth_pps_cfg.ppsout_freq = PPS_19_2_FREQ;
 	eth_pps_cfg.ppsout_start = 1;
 	eth_pps_cfg.ppsout_duty = 50;
-	req.ptr = (void *)&eth_pps_cfg;
 
-	ppsout_config(priv, &req);
+	ppsout_config(priv, &eth_pps_cfg);
 	return 0;
-}
-
-int ethqos_handle_prv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
-{
-	struct stmmac_priv *pdata = netdev_priv(dev);
-	struct ifr_data_struct req;
-	struct pps_cfg eth_pps_cfg;
-	int ret = 0;
-
-	if (copy_from_user(&req, ifr->ifr_ifru.ifru_data,
-			   sizeof(struct ifr_data_struct)))
-		return -EFAULT;
-	if (copy_from_user(&eth_pps_cfg, req.ptr,
-			   sizeof(struct pps_cfg)))
-		return -EFAULT;
-	req.ptr = &eth_pps_cfg;
-	switch (req.cmd) {
-	case ETHQOS_CONFIG_PPSOUT_CMD:
-		ret = ppsout_config(pdata, &req);
-	}
-	return ret;
 }
 
 static ssize_t pps_fops_read(struct file *filp, char __user *buf,

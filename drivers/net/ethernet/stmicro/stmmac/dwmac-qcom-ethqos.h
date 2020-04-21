@@ -18,7 +18,19 @@
 #include <linux/mailbox/qmp.h>
 #include <linux/mailbox_controller.h>
 
-extern void *ipc_emac_log_ctxt;
+#include <linux/inetdevice.h>
+#include <linux/inet.h>
+
+#include <net/addrconf.h>
+#include <net/ipv6.h>
+#include <net/inet_common.h>
+
+#include <linux/uaccess.h>
+
+extern void *ipc_stmmac_log_ctxt;
+
+#define QCOM_ETH_QOS_MAC_ADDR_LEN 6
+#define QCOM_ETH_QOS_MAC_ADDR_STR_LEN 18
 
 #define IPCLOG_STATE_PAGES 50
 #define MAX_QMP_MSG_SIZE 96
@@ -31,8 +43,8 @@ extern void *ipc_emac_log_ctxt;
 #define ETHQOSERR(fmt, args...) \
 do {\
 	pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
-	if (ipc_emac_log_ctxt) { \
-		ipc_log_string(ipc_emac_log_ctxt, \
+	if (ipc_stmmac_log_ctxt) { \
+		ipc_log_string(ipc_stmmac_log_ctxt, \
 		"%s: %s[%u]:[emac] ERROR:" fmt, __FILENAME__,\
 		__func__, __LINE__, ## args); \
 	} \
@@ -48,6 +60,8 @@ do {\
 #define RGMII_IO_MACRO_CONFIG2		0x1C
 
 #define ETHQOS_CONFIG_PPSOUT_CMD 44
+#define ETHQOS_AVB_ALGORITHM 27
+
 #define MAC_PPS_CONTROL			0x00000b70
 #define PPS_MAXIDX(x)			((((x) + 1) * 8) - 1)
 #define PPS_MINIDX(x)			((x) * 8)
@@ -60,6 +74,12 @@ do {\
 #define MAC_PPSX_INTERVAL(x)		(0x00000b88 + ((x) * 0x10))
 #define MAC_PPSX_WIDTH(x)		(0x00000b8c + ((x) * 0x10))
 
+#define PPS_START_DELAY 100000000
+#define ONE_NS 1000000000
+#define PPS_ADJUST_NS 32
+
+#define DWC_ETH_QOS_PPS_CH_0 0
+#define DWC_ETH_QOS_PPS_CH_1 1
 #define DWC_ETH_QOS_PPS_CH_2 2
 #define DWC_ETH_QOS_PPS_CH_3 3
 
@@ -129,8 +149,13 @@ do {\
 #define EMAC_HW_NONE 0
 #define EMAC_HW_v2_0_0 0x20000000
 #define EMAC_HW_v2_1_0 0x20010000
+#define EMAC_HW_v2_1_1 0x20010001
+#define EMAC_HW_v2_1_2 0x20010002
 #define EMAC_HW_v2_2_0 0x20020000
+#define EMAC_HW_v2_3_0 0x20030000
+#define EMAC_HW_v2_3_1 0x20030001
 #define EMAC_HW_v2_3_2 0x20030002
+#define EMAC_HW_vMAX 9
 
 #define MII_BUSY 0x00000001
 #define MII_WRITE 0x00000002
@@ -376,6 +401,7 @@ struct qcom_ethqos {
 	unsigned long avb_class_b_intr_cnt;
 	struct dentry *debugfs_dir;
 
+	/* saving state for Wake-on-LAN */
 	int wolopts;
 	/* state of enabled wol options in PHY*/
 	u32 phy_wol_wolopts;
@@ -386,17 +412,24 @@ struct qcom_ethqos {
 	/* Structure which holds done and wait members */
 	struct completion clk_enable_done;
 
-	int always_on_phy;
 	/* QMP message for disabling ctile power collapse while XO shutdown */
 	struct mbox_chan *qmp_mbox_chan;
 	struct mbox_client *qmp_mbox_client;
 	struct work_struct qmp_mailbox_work;
+	/* early ethernet parameters */
+	struct work_struct early_eth;
+	struct delayed_work ipv4_addr_assign_wq;
+	struct delayed_work ipv6_addr_assign_wq;
+	bool early_eth_enabled;
+
 	int disable_ctile_pc;
 
 	u32 emac_mem_base;
 	u32 emac_mem_size;
 
 	bool ipa_enabled;
+	/* Key Performance Indicators */
+	bool print_kpi;
 };
 
 struct pps_cfg {
@@ -405,6 +438,8 @@ struct pps_cfg {
 	unsigned int ppsout_ch;
 	unsigned int ppsout_duty;
 	unsigned int ppsout_start;
+	unsigned int ppsout_align;
+	unsigned int ppsout_align_ns;
 };
 
 struct ifr_data_struct {
@@ -424,6 +459,19 @@ struct pps_info {
 	int channel_no;
 };
 
+struct ip_params {
+	unsigned char mac_addr[QCOM_ETH_QOS_MAC_ADDR_LEN];
+	bool is_valid_mac_addr;
+	char link_speed[32];
+	bool is_valid_link_speed;
+	char ipv4_addr_str[32];
+	struct in_addr ipv4_addr;
+	bool is_valid_ipv4_addr;
+	char ipv6_addr_str[48];
+	struct in6_ifreq ipv6_addr;
+	bool is_valid_ipv6_addr;
+};
+
 int ethqos_init_reqgulators(struct qcom_ethqos *ethqos);
 void ethqos_disable_regulators(struct qcom_ethqos *ethqos);
 int ethqos_init_gpio(struct qcom_ethqos *ethqos);
@@ -433,5 +481,69 @@ int create_pps_interrupt_device_node(dev_t *pps_dev_t,
 				     struct class **pps_class,
 				     char *pps_dev_node_name);
 void qcom_ethqos_request_phy_wol(struct plat_stmmacenet_data *plat);
+bool qcom_ethqos_is_phy_link_up(struct qcom_ethqos *ethqos);
+void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos);
 
+int ppsout_config(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg);
+
+u16 dwmac_qcom_select_queue(
+	struct net_device *dev,
+	struct sk_buff *skb,
+	void *accel_priv,
+	select_queue_fallback_t fallback);
+
+#define QTAG_VLAN_ETH_TYPE_OFFSET 16
+#define QTAG_UCP_FIELD_OFFSET 14
+#define QTAG_ETH_TYPE_OFFSET 12
+#define PTP_UDP_EV_PORT 0x013F
+#define PTP_UDP_GEN_PORT 0x0140
+
+#define IPA_DMA_TX_CH 0
+#define IPA_DMA_RX_CH 0
+
+#define VLAN_TAG_UCP_SHIFT 13
+#define CLASS_A_TRAFFIC_UCP 3
+#define CLASS_A_TRAFFIC_TX_CHANNEL 3
+
+#define CLASS_B_TRAFFIC_UCP 2
+#define CLASS_B_TRAFFIC_TX_CHANNEL 2
+
+#define NON_TAGGED_IP_TRAFFIC_TX_CHANNEL 1
+#define ALL_OTHER_TRAFFIC_TX_CHANNEL 1
+#define ALL_OTHER_TX_TRAFFIC_IPA_DISABLED 0
+
+#define DEFAULT_INT_MOD 1
+#define AVB_INT_MOD 8
+#define IP_PKT_INT_MOD 32
+#define PTP_INT_MOD 1
+
+#define PPS_19_2_FREQ 19200000
+
+enum dwmac_qcom_queue_operating_mode {
+	DWMAC_QCOM_QDISABLED = 0X0,
+	DWMAC_QCOM_QAVB,
+	DWMAC_QCOM_QDCB,
+	DWMAC_QCOM_QGENERIC
+};
+
+struct dwmac_qcom_avb_algorithm_params {
+	unsigned int idle_slope;
+	unsigned int send_slope;
+	unsigned int hi_credit;
+	unsigned int low_credit;
+};
+
+struct dwmac_qcom_avb_algorithm {
+	unsigned int qinx;
+	unsigned int algorithm;
+	unsigned int cc;
+	struct dwmac_qcom_avb_algorithm_params speed100params;
+	struct dwmac_qcom_avb_algorithm_params speed1000params;
+	enum dwmac_qcom_queue_operating_mode op_mode;
+};
+
+void dwmac_qcom_program_avb_algorithm(
+	struct stmmac_priv *priv, struct ifr_data_struct *req);
+unsigned int dwmac_qcom_get_plat_tx_coal_frames(
+	struct sk_buff *skb);
 #endif

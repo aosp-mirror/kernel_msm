@@ -1,3 +1,79 @@
+Version 1.1.4
+==============
+[ATLDRV-1371] - Add supported eee with 2.5G and 5G
+[ATLDRV-1376] - Send notification when macsec offload turned on/off
+[ATLDRV-1378] - check FW capability instead of FW version for MSM Apply Settings
+
+Version 1.1.3
+==============
+[ATLDRV-1185] - Enable stripping of padding doesnt work on Felicity card
+[ATLDRV-1351] - Problem with setting mtu
+[ATLDRV-1352] - Implement stripping of padding
+[ATLDRV-1354] - Incorrect thermal thresholds
+[ATLDRV-1359] - Secure all packets when macsec service ON
+
+Version 1.1.2
+==============
+[ATLDRV-1348] - FWD: IPv6 and L4 ntuple filters not work 
+
+Version 1.1.1
+==============
+[ATLDRV-1315] - driver 1.1.0 crashes at start on A1
+[ATLDRV-1317] - A2: Incorrect ntuple L4 filter behavior
+[ATLDRV-1325] - A2: can not turn off flow control on Antigua
+[ATLDRV-1326] - A2: Cannot get EEE settings on Antigua
+[ATLDRV-1331] - A2: update reset sequence
+
+Version 1.1.0
+==============
+[ATLDRV-1210] - A2: FWD: Basic functionality and bringup
+[ATLDRV-1212] - A2: FWD: RX flow filters infrastructure
+
+
+Version 1.0.31
+==============
+[ATLDRV-1243] - Clean up MACsec implementation
+[ATLDRV-1135] - ethtool shows incorrect Flow Control information
+[ATLDRV-1229] - HW access on mdo_dev_stop(ctx->prepare)
+[ATLDRV-1256] - AQ072: Static analysis error in atl_setup_datapath()
+[ATLDRV-1303] - Make driver C90 compilable
+[ATLDRV-1064] - Fwd: Software flowcontrol workaround adaptations
+
+Version 1.0.30
+==============
+[ATLDRV-1217] - FWD driver refactoring for unit tests
+[ATLDRV-1102] - TCP/UDP checksum workaround for non-zero padded packets doesn't work
+[ATLDRV-1138] - vlan promiscuous mode is not enabled, when deleting the last vlan interface
+[ATLDRV-1139] - after ifconfig -multicast Unicast filters registers have valid values for multicast addresses
+[ATLDRV-1174] - FWD: deleting MacSec iface doesn't clear Ingress/Egress SA and SAKey records
+[ATLDRV-1193] - No link UP if driver was started in MSI mode before being started in legacy mode
+[ATLDRV-1208] - Driver crashes after link down up in D3 state
+[ATLDRV-1209] - FWD: Kernel panic after configuring macsec
+[ATLDRV-1218] - Kernel panic upon macsec0 deletion
+[ATLDRV-1220] - AQ069: atl_fwd_receive_skb() support NAPI
+[ATLDRV-1222] - atl_rotate_keys() produces unexpected results for 192-bit keys (24-bytes)
+[ATLDRV-1194] - Add trace of descriptors for normal traffic
+
+Version 1.0.29
+==============
+[ATLDRV-1139] - after ifconfig -multicast Unicast filters registers have valid values for multicast addresses
+[ATLDRV-1170] - macsec key cleaned on SA updates
+[ATLDRV-1171] - AQ066: MSI index leak for head pointer writeback event
+[ATLDRV-1172] - AQ068: shift-count-overflow error in DESCR_FIELD()
+[ATLDRV-1187] - atlfwdtool not compiled on Centos
+[ATLDRV-1186] - FWD: MACsec offload (cleanup)
+
+Version 1.0.28
+==============
+[ATLDRV-1128] - Traffic ingress on FWD ring
+[ATLDRV-1157] - Apply upstream patch for macsec offload to 4.14
+[ATLDRV-1158] - Implement Macsec EGRESS offload
+[ATLDRV-1159] - Implement Macsec INGRESS offload
+[ATLDRV-1160] - Provide macsec statistics to ethtool -s
+[ATLDRV-1161] - Add get_tx_queue_index command to atlfwdtool
+[ATLDRV-1153] - traffic dropped when lro enabled
+[ATLDRV-777] - FWD: BCM: Better support for systems with legacy interrupts
+
 Version 1.0.27
 ==============
 [ATLDRV-1132] - Media detect is disabled after sleep

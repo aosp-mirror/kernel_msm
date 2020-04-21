@@ -10,12 +10,18 @@
 #ifndef _ATL_FW_H_
 #define _ATL_FW_H_
 
+#include <linux/kernel.h>
+#include <linux/mutex.h>
+#include <linux/ethtool.h>
+
 struct atl_hw;
+struct atl_nic;
 
 struct atl_mcp {
 	uint32_t fw_rev;
 	struct atl_fw_ops *ops;
 	uint32_t fw_stat_addr;
+	uint32_t rpc_addr;
 	uint32_t fw_settings_addr;
 	uint32_t fw_settings_len;
 	uint32_t req_high;
@@ -31,9 +37,22 @@ struct atl_mcp {
 
 struct atl_link_type {
 	unsigned speed;
+	bool duplex;
 	unsigned ethtool_idx;
 	uint32_t fw_bits[2];
 	const char *name;
+};
+
+enum atl_link_type_index {
+	atl_link_type_idx_10m,
+	atl_link_type_idx_100m,
+	atl_link_type_idx_1g,
+	atl_link_type_idx_2p5g,
+	atl_link_type_idx_5g,
+	atl_link_type_idx_10g,
+	atl_link_type_idx_10m_half,
+	atl_link_type_idx_100m_half,
+	atl_link_type_idx_1g_half,
 };
 
 extern struct atl_link_type atl_link_types[];
@@ -59,6 +78,8 @@ enum atl_fw2_opts {
 	atl_define_bit(atl_fw2_pause, 3)
 	atl_define_bit(atl_fw2_asym_pause, 4)
 	atl_fw2_pause_mask = atl_fw2_pause | atl_fw2_asym_pause,
+	atl_define_bit(atl_fw2_fw_request, 12)
+	atl_define_bit(atl_fw2_macsec, 15)
 	atl_define_bit(atl_fw2_wake_on_link, 16)
 	atl_define_bit(atl_fw2_wake_on_link_force, 17)
 	atl_define_bit(atl_fw2_phy_temp, 18)
@@ -73,6 +94,7 @@ enum atl_fw2_opts {
 enum atl_fw2_ex_caps {
 	atl_define_bit(atl_fw2_ex_caps_wol_ex, 23)
 	atl_define_bit(atl_fw2_ex_caps_mac_heartbeat, 25)
+	atl_define_bit(atl_fw2_ex_caps_msm_settings_apply, 26)
 };
 
 enum atl_fw2_wol_ex {
@@ -97,6 +119,10 @@ enum atl_fw2_settings_offt {
 
 enum atl_fw2_msm_opts {
 	atl_define_bit(atl_fw2_settings_msm_opts_strip_pad, 0)
+};
+
+enum atl_fw2_fw_request {
+	atl_fw2_msm_settings_apply = 0x20,
 };
 
 enum atl_fc_mode {
@@ -147,6 +173,33 @@ struct atl_link_state{
 	struct atl_fc_state fc;
 };
 
+enum macsec_msg_type {
+	macsec_cfg_msg = 0,
+	macsec_add_rx_sc_msg,
+	macsec_add_tx_sc_msg,
+	macsec_add_rx_sa_msg,
+	macsec_add_tx_sa_msg,
+	macsec_get_stats_msg,
+};
+
+struct macsec_cfg_request {
+	u32 enabled;
+	u32 egress_threshold;
+	u32 ingress_threshold;
+	u32 interrupts_enabled;
+} __attribute__((__packed__));
+
+struct macsec_msg_fw_request {
+	u32 msg_id; /* not used */
+	u32 msg_type;
+
+	struct macsec_cfg_request cfg;
+} __attribute__((__packed__));
+
+struct macsec_msg_fw_response {
+	u32 result;
+} __attribute__((__packed__));
+
 struct atl_fw_ops {
 	void (*set_link)(struct atl_hw *hw, bool force);
 	struct atl_link_type *(*check_link)(struct atl_hw *hw);
@@ -160,7 +213,14 @@ struct atl_fw_ops {
 	int (*restore_cfg)(struct atl_hw *hw);
 	int (*set_phy_loopback)(struct atl_nic *nic, u32 mode);
 	int (*set_mediadetect)(struct atl_hw *hw, bool on);
-	unsigned efuse_shadow_addr_reg;
+	int (*set_pad_stripping)(struct atl_hw *hw, bool on);
+	int (*send_macsec_req)(struct atl_hw *hw,
+			       struct macsec_msg_fw_request *msg,
+			       struct macsec_msg_fw_response *resp);
+	int (*__get_hbeat)(struct atl_hw *hw, uint16_t *hbeat);
+	int (*get_mac_addr)(struct atl_hw *hw, uint8_t *buf);
+	int (*update_thermal)(struct atl_hw *hw);
+	int (*deinit)(struct atl_hw *hw);
 };
 
 int atl_read_mcp_word(struct atl_hw *hw, uint32_t offt, uint32_t *val);

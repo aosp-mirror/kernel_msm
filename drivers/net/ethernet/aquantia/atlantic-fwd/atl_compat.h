@@ -181,6 +181,9 @@ static inline void timer_setup(struct timer_list *timer,
 	setup_timer(timer, (void (*)(unsigned long))callback,
 			(unsigned long)timer);
 }
+
+#define from_timer(var, callback_timer, timer_fieldname) \
+	container_of(callback_timer, typeof(*var), timer_fieldname)
 #endif	/* 4.14.0 && RHEL < 7.6 */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,8,0) && RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(7,5)
@@ -238,7 +241,11 @@ static inline void page_ref_inc(struct page *page)
 #define napi_consume_skb(__skb, __budget) dev_consume_skb_any(__skb)
 
 /* from commit 3f1ac7a700d039c61d8d8b99f28d605d489a60cf */
+#define ETHTOOL_LINK_MODE_10baseT_Half_BIT 0
+#define ETHTOOL_LINK_MODE_10baseT_Full_BIT 1
+#define ETHTOOL_LINK_MODE_100baseT_Half_BIT 2
 #define ETHTOOL_LINK_MODE_100baseT_Full_BIT 3
+#define ETHTOOL_LINK_MODE_1000baseT_Half_BIT 4
 #define ETHTOOL_LINK_MODE_1000baseT_Full_BIT 5
 #define ETHTOOL_LINK_MODE_10000baseT_Full_BIT 12
 

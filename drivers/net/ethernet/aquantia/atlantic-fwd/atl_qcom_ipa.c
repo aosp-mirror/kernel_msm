@@ -1,4 +1,4 @@
-/* Copyright (c) 2019 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -118,6 +118,14 @@ static int atl_ipa_fwd_notification(struct notifier_block *nb,
 	case ATL_FWD_NOTIFY_RESET_COMPLETE:
 		ipa_eth_device_notify(ai_dev->eth_dev,
 				      IPA_ETH_DEV_RESET_COMPLETE, NULL);
+		break;
+	case ATL_FWD_NOTIFY_MACSEC_ON:
+		ipa_eth_device_notify(ai_dev->eth_dev,
+				      IPA_ETH_DEV_ADD_MACSEC_IF, data);
+		break;
+	case ATL_FWD_NOTIFY_MACSEC_OFF:
+		ipa_eth_device_notify(ai_dev->eth_dev,
+				      IPA_ETH_DEV_DEL_MACSEC_IF, data);
 		break;
 	default:
 		return NOTIFY_DONE;
@@ -417,6 +425,8 @@ static void atl_ipa_release_event(struct ipa_eth_channel *ch,
 	/* An atl ring can have only one associated event */
 	atl_fwd_release_event(event);
 
+	kfree(event);
+
 	dma_unmap_resource(eth_dev->dev,
 			   daddr, sizeof(u32), DMA_FROM_DEVICE, 0);
 }
@@ -442,11 +452,21 @@ int atl_ipa_moderate_event(struct ipa_eth_channel *ch, unsigned long event,
 	return atl_fwd_set_ring_intr_mod(CH_RING(ch), min_usecs, max_usecs);
 }
 
+#if IPA_ETH_API_VER >= 7
+static int atl_ipa_receive_skb(struct ipa_eth_device *eth_dev,
+			       struct sk_buff *skb, bool in_napi)
+{
+	return in_napi ?
+		atl_fwd_napi_receive_skb(eth_dev->net_dev, skb) :
+		atl_fwd_receive_skb(eth_dev->net_dev, skb);
+}
+#else
 static int atl_ipa_receive_skb(struct ipa_eth_device *eth_dev,
 			       struct sk_buff *skb)
 {
 	return atl_fwd_receive_skb(eth_dev->net_dev, skb);
 }
+#endif
 
 static int atl_ipa_transmit_skb(struct ipa_eth_device *eth_dev,
 				struct sk_buff *skb)

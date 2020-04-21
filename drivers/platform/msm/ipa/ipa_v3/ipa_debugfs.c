@@ -82,6 +82,10 @@ const char *ipa3_event_name[] = {
 	__stringify(IPA_GSB_DISCONNECT),
 	__stringify(IPA_COALESCE_ENABLE),
 	__stringify(IPA_COALESCE_DISABLE),
+	__stringify(WIGIG_CLIENT_CONNECT),
+	__stringify(WIGIG_FST_SWITCH),
+	__stringify(IPA_SOCKV5_ADD),
+	__stringify(IPA_SOCKV5_DEL),
 };
 
 const char *ipa3_hdr_l2_type_name[] = {
@@ -1153,6 +1157,7 @@ static ssize_t ipa3_read_stats(struct file *file, char __user *ubuf,
 		"lan_repl_rx_empty=%u\n"
 		"flow_enable=%u\n"
 		"flow_disable=%u\n",
+		"rx_page_drop_cnt=%u\n",
 		ipa3_ctx->stats.tx_sw_pkts,
 		ipa3_ctx->stats.tx_hw_pkts,
 		ipa3_ctx->stats.tx_non_linear,
@@ -1168,7 +1173,8 @@ static ssize_t ipa3_read_stats(struct file *file, char __user *ubuf,
 		ipa3_ctx->stats.lan_rx_empty,
 		ipa3_ctx->stats.lan_repl_rx_empty,
 		ipa3_ctx->stats.flow_enable,
-		ipa3_ctx->stats.flow_disable);
+		ipa3_ctx->stats.flow_disable,
+		ipa3_ctx->stats.rx_page_drop_cnt);
 	cnt += nbytes;
 
 	for (i = 0; i < IPAHAL_PKT_STATUS_EXCEPTION_MAX; i++) {

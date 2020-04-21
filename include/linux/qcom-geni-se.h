@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -181,8 +181,8 @@ struct se_geni_rsc {
 
 /* GENI_OUTPUT_CTRL fields */
 #define DEFAULT_IO_OUTPUT_CTRL_MSK	(GENMASK(6, 0))
-#define GENI_IO_MUX_0_EN			BIT(1)
-#define GENI_IO_MUX_1_EN			BIT(2)
+#define GENI_IO_MUX_0_EN			BIT(0)
+#define GENI_IO_MUX_1_EN			BIT(1)
 
 /* GENI_CFG_REG80 fields */
 #define IO1_SEL_TX			BIT(2)

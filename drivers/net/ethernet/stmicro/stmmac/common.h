@@ -336,6 +336,8 @@ struct dma_features {
 	/* TX and RX FIFO sizes */
 	unsigned int tx_fifo_size;
 	unsigned int rx_fifo_size;
+	/* Number of PPS outputs */
+	unsigned int pps_out_num;
 };
 
 /* RX Buffer size must be multiple of 4/8/16 bytes */

@@ -50,7 +50,7 @@
 #include <linux/reset.h>
 #include <linux/of_mdio.h>
 #include "dwmac1000.h"
-#include "dwmac-qcom-ipa-offload.h"
+
 
 #define	STMMAC_ALIGN(x)		ALIGN(ALIGN(x, SMP_CACHE_BYTES), 16)
 #define	TSO_MAX_BUFF_SIZE	(SZ_16K - 1)
@@ -524,6 +524,7 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 	u32 snap_type_sel = 0;
 	u32 ts_master_en = 0;
 	u32 ts_event_en = 0;
+	u32 av_8021asm_en = 0;
 	u32 value = 0;
 	u32 sec_inc;
 
@@ -632,6 +633,7 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
 			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
 			break;
 
 		case HWTSTAMP_FILTER_PTP_V2_SYNC:
@@ -644,6 +646,7 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
 			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
 			break;
 
 		case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
@@ -657,6 +660,7 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 			ptp_over_ipv4_udp = PTP_TCR_TSIPV4ENA;
 			ptp_over_ipv6_udp = PTP_TCR_TSIPV6ENA;
 			ptp_over_ethernet = PTP_TCR_TSIPENA;
+			av_8021asm_en = PTP_TCR_AV8021ASMEN;
 			break;
 
 		case HWTSTAMP_FILTER_NTP_ALL:
@@ -689,21 +693,20 @@ static int stmmac_hwtstamp_ioctl(struct net_device *dev, struct ifreq *ifr)
 		value = (PTP_TCR_TSENA | PTP_TCR_TSCFUPDT | PTP_TCR_TSCTRLSSR |
 			 tstamp_all | ptp_v2 | ptp_over_ethernet |
 			 ptp_over_ipv6_udp | ptp_over_ipv4_udp | ts_event_en |
-			 ts_master_en | snap_type_sel);
+			 ts_master_en | snap_type_sel | av_8021asm_en);
 		priv->hw->ptp->config_hw_tstamping(priv->ptpaddr, value);
 
 		/* program Sub Second Increment reg */
 		sec_inc = priv->hw->ptp->config_sub_second_increment(
-			priv->ptpaddr, priv->plat->clk_ptp_rate,
+			priv->ptpaddr, priv->plat->clk_ptp_req_rate,
 			priv->plat->has_gmac4);
-		temp = div_u64(1000000000ULL, sec_inc);
 
 		/* calculate default added value:
 		 * formula is :
 		 * addend = (2^32)/freq_div_ratio;
 		 * where, freq_div_ratio = 1e9ns/sec_inc
 		 */
-		temp = (u64)(temp << 32);
+		temp = (u64)((u64)priv->plat->clk_ptp_req_rate << 32);
 		priv->default_addend = div_u64(temp, priv->plat->clk_ptp_rate);
 		priv->hw->ptp->config_addend(priv->ptpaddr,
 					     priv->default_addend);
@@ -865,6 +868,12 @@ static void stmmac_adjust_link(struct net_device *dev)
 			ethqos_ipa_offload_event_handler(priv,
 							 EV_PHY_LINK_DOWN);
 	}
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+if (phydev->link == 1 && !priv->boot_kpi) {
+	place_marker("M - Ethernet is Ready.Link is UP");
+	priv->boot_kpi = true;
+}
+#endif
 
 	if (phydev->is_pseudo_fixed_link)
 		/* Stop PHY layer to call the hook to adjust the link in case
@@ -903,6 +912,30 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 	}
 }
 
+static void stmmac_set_speed100(struct phy_device *phydev)
+{
+	u16 bmcr_val, ctrl1000_val, adv_val;
+
+	/* Disable 1000M mode */
+	ctrl1000_val = phy_read(phydev, MII_CTRL1000);
+	ctrl1000_val &= ~(ADVERTISE_1000HALF | ADVERTISE_1000FULL);
+	phy_write(phydev, MII_CTRL1000, ctrl1000_val);
+
+	/* Disable 100M mode */
+	adv_val = phy_read(phydev, MII_ADVERTISE);
+	adv_val &= ~(ADVERTISE_100HALF);
+	phy_write(phydev, MII_ADVERTISE, adv_val);
+
+	/* Disable autoneg */
+	bmcr_val = phy_read(phydev, MII_BMCR);
+	bmcr_val &= ~(BMCR_ANENABLE);
+	phy_write(phydev, MII_BMCR, bmcr_val);
+
+	bmcr_val = phy_read(phydev, MII_BMCR);
+	bmcr_val |= BMCR_ANRESTART;
+	phy_write(phydev, MII_BMCR, bmcr_val);
+}
+
 /**
  * stmmac_init_phy - PHY initialization
  * @dev: net device structure
@@ -916,29 +949,16 @@ static int stmmac_init_phy(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 tx_cnt = priv->plat->tx_queues_to_use;
 	struct phy_device *phydev;
-	char phy_id_fmt[MII_BUS_ID_SIZE + 3];
-	char bus_id[MII_BUS_ID_SIZE];
 	int interface = priv->plat->interface;
 	int max_speed = priv->plat->max_speed;
+	int ret = 0;
 	priv->oldlink = false;
+	priv->boot_kpi = false;
 	priv->speed = SPEED_UNKNOWN;
 	priv->oldduplex = DUPLEX_UNKNOWN;
 
-	if (priv->plat->phy_node) {
-		phydev = of_phy_connect(dev, priv->plat->phy_node,
-					&stmmac_adjust_link, 0, interface);
-	} else {
-		snprintf(bus_id, MII_BUS_ID_SIZE, "stmmac-%x",
-			 priv->plat->bus_id);
+	phydev = mdiobus_get_phy(priv->mii, priv->plat->phy_addr);
 
-		snprintf(phy_id_fmt, MII_BUS_ID_SIZE + 3, PHY_ID_FMT, bus_id,
-			 priv->plat->phy_addr);
-		netdev_dbg(priv->dev, "%s: trying to attach to %s\n", __func__,
-			   phy_id_fmt);
-
-		phydev = phy_connect(dev, phy_id_fmt, &stmmac_adjust_link,
-				     interface);
-	}
 
 	if (IS_ERR_OR_NULL(phydev)) {
 		netdev_err(priv->dev, "Could not attach to PHY\n");
@@ -947,6 +967,27 @@ static int stmmac_init_phy(struct net_device *dev)
 
 		return PTR_ERR(phydev);
 	}
+
+	phydev->skip_sw_reset = true;
+
+	ret = phy_connect_direct(dev, phydev, &stmmac_adjust_link, interface);
+
+	if (ret) {
+		pr_info("phy_connect_direct failed\n");
+		return ret;
+	}
+	/* Broken HW is sometimes missing the pull-up resistor on the
+	 * MDIO line, which results in reads to non-existent devices returning
+	 * 0 rather than 0xffff. Catch this here and treat 0 as a non-existent
+	 * device as well.
+	 * Note: phydev->phy_id is the result of reading the UID PHY registers.
+	 */
+	if (!priv->plat->phy_node && phydev->phy_id == 0) {
+		phy_disconnect(phydev);
+		return -ENODEV;
+	}
+	pr_info(" qcom-ethqos: %s early eth setting stmmac init\n",
+				 __func__);
 
 	/* Stop Advertising 1000BASE Capability if interface is not GMII */
 	if ((interface == PHY_INTERFACE_MODE_MII) ||
@@ -963,6 +1004,32 @@ static int stmmac_init_phy(struct net_device *dev)
 		phydev->supported &= ~(SUPPORTED_1000baseT_Half |
 				       SUPPORTED_100baseT_Half |
 				       SUPPORTED_10baseT_Half);
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+place_marker("M - Init Phy device");
+#endif
+	/* Early ethernet settings to bring up link in 100M,
+	 * Auto neg Off with full duplex link.
+	 */
+	if (max_speed == SPEED_100 && priv->plat->early_eth) {
+		phydev->autoneg = AUTONEG_DISABLE;
+		phydev->speed = SPEED_100;
+		phydev->duplex = DUPLEX_FULL;
+
+		phydev->supported =
+			SUPPORTED_100baseT_Full | SUPPORTED_TP | SUPPORTED_MII |
+			SUPPORTED_10baseT_Full;
+		phydev->supported &= ~SUPPORTED_Autoneg;
+
+		phydev->advertising = phydev->supported;
+		phydev->advertising &= ~ADVERTISED_Autoneg;
+
+		phy_set_max_speed(phydev, SPEED_100);
+		pr_info(" qcom-ethqos: %s early eth setting successful\n",
+			__func__);
+
+		stmmac_set_speed100(phydev);
+	}
 
 	/*
 	 * Broken HW is sometimes missing the pull-up resistor on the
@@ -984,15 +1051,17 @@ static int stmmac_init_phy(struct net_device *dev)
 		phydev->irq = PHY_POLL;
 
 	if (phy_intr_en) {
-		phydev->irq = PHY_IGNORE_INTERRUPT;
-		phydev->interrupts =  PHY_INTERRUPT_ENABLED;
-
 		if (phydev->drv->config_intr &&
 		    !phydev->drv->config_intr(phydev)) {
 			pr_debug(" qcom-ethqos: %s config_phy_intr successful\n",
 				 __func__);
+			qcom_ethqos_request_phy_wol(priv->plat);
+			phydev->irq = PHY_IGNORE_INTERRUPT;
+			phydev->interrupts =  PHY_INTERRUPT_ENABLED;
+		} else {
+			pr_alert("Unable to register PHY IRQ\n");
+			phydev->irq = PHY_POLL;
 		}
-		qcom_ethqos_request_phy_wol(priv->plat);
 	}
 	phy_attached_info(phydev);
 	return 0;
@@ -1895,6 +1964,10 @@ static void stmmac_tx_clean(struct stmmac_priv *priv, u32 queue)
 			} else {
 				priv->dev->stats.tx_packets++;
 				priv->xstats.tx_pkt_n++;
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+if (priv->dev->stats.tx_packets == 1)
+	place_marker("M - Ethernet first packet transmitted");
+#endif
 			}
 			stmmac_get_tx_hwtstamp(priv, p, skb);
 		}
@@ -2573,7 +2646,10 @@ static int stmmac_hw_setup(struct net_device *dev, bool init_ptp)
 		else if (ret)
 			netdev_warn(priv->dev, "PTP init failed\n");
 		else
-			ret = clk_set_rate(priv->plat->clk_ptp_ref, 96000000);
+			clk_set_rate(
+				priv->plat->clk_ptp_ref,
+				priv->plat->clk_ptp_rate);
+
 		ret = ethqos_init_pps(priv);
 	}
 
@@ -2622,6 +2698,10 @@ static int stmmac_open(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int ret;
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	place_marker("M - Stmmac open called");
+#endif
 
 	if (priv->hw->pcs != STMMAC_PCS_RGMII &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
@@ -3192,12 +3272,13 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	dev->stats.tx_bytes += skb->len;
 
+	priv->tx_count_frames += nfrags + 1;
+
 	/* According to the coalesce parameter the IC bit for the latest
 	 * segment is reset and the timer re-started to clean the tx status.
 	 * This approach takes care about the fragments: desc is the first
 	 * element in case of no SG.
 	 */
-	priv->tx_count_frames += nfrags + 1;
 	if (likely(priv->tx_coal_frames > priv->tx_count_frames)) {
 		mod_timer(&priv->txtimer,
 			  STMMAC_COAL_TIMER(priv->tx_coal_timer));
@@ -3207,7 +3288,8 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		priv->xstats.tx_set_ic_bit++;
 	}
 
-	skb_tx_timestamp(skb);
+	if (!priv->hwts_tx_en)
+		skb_tx_timestamp(skb);
 
 	/* Ready to fill the first descriptor and set the OWN bit w/o any
 	 * problems because all the descriptors are actually ready to be
@@ -3563,6 +3645,11 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 			napi_gro_receive(&rx_q->napi, skb);
 
 			priv->dev->stats.rx_packets++;
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	if (priv->dev->stats.rx_packets == 1)
+		place_marker("M - Ethernet first packet received");
+#endif
 			priv->dev->stats.rx_bytes += frame_len;
 		}
 	}
@@ -3873,6 +3960,21 @@ static int stmmac_set_mac_address(struct net_device *ndev, void *addr)
 	return ret;
 }
 
+static u16 stmmac_tx_select_queue(
+		struct net_device *dev,
+		struct sk_buff *skb,
+		void *accel_priv,
+		select_queue_fallback_t fallback)
+{
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (likely(priv->plat->tx_select_queue))
+		return priv->plat->tx_select_queue(
+			dev, skb, accel_priv, fallback);
+
+	return fallback(dev, skb);
+}
+
 #ifdef CONFIG_DEBUG_FS
 static struct dentry *stmmac_fs_dir;
 
@@ -4089,33 +4191,6 @@ static void stmmac_exit_fs(struct net_device *dev)
 	debugfs_remove_recursive(priv->dbgfs_dir);
 }
 #endif /* CONFIG_DEBUG_FS */
-static u16 ethqos_select_queue(struct net_device *dev,
-			       struct sk_buff *skb, void *accel_priv,
-			       select_queue_fallback_t fallback)
-{
-	struct stmmac_priv *priv = netdev_priv(dev);
-	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
-	unsigned int eth_type;
-
-	/* Retrieve ETH type */
-	GET_ETH_TYPE(skb->data, eth_type);
-
-	if (eth_type == ETH_P_TSN) {
-		/* Read VLAN priority field from skb->data */
-		/* To do for vlan-tsn */
-	} else {
-		/* VLAN tagged IP packet or any other non vlan packets (PTP)*/
-		txqueue_select = ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
-		if (priv->tx_queue[txqueue_select].skip_sw)
-			txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
-	}
-
-	if (priv->tx_queue[txqueue_select].skip_sw)
-		netdev_err(priv->dev, "TX Chan %d is not valid for SW path\n",
-			   txqueue_select);
-
-	return txqueue_select;
-}
 
 static const struct net_device_ops stmmac_netdev_ops = {
 	.ndo_open = stmmac_open,
@@ -4127,11 +4202,11 @@ static const struct net_device_ops stmmac_netdev_ops = {
 	.ndo_set_rx_mode = stmmac_set_rx_mode,
 	.ndo_tx_timeout = stmmac_tx_timeout,
 	.ndo_do_ioctl = stmmac_ioctl,
-	.ndo_select_queue = ethqos_select_queue,
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller = stmmac_poll_controller,
 #endif
 	.ndo_set_mac_address = stmmac_set_mac_address,
+	.ndo_select_queue = stmmac_tx_select_queue,
 };
 
 /**

@@ -1096,7 +1096,7 @@ static void __dwc3_prepare_one_trb(struct dwc3_ep *dep, struct dwc3_trb *trb,
 			 */
 			if (speed == USB_SPEED_HIGH) {
 				struct usb_ep *ep = &dep->endpoint;
-				unsigned int mult = ep->mult - 1;
+				unsigned int mult = 2;
 				unsigned int maxp = usb_endpoint_maxp(ep->desc);
 
 				if (length <= (2 * maxp))
@@ -2114,6 +2114,8 @@ done:
 	return 0;
 }
 
+#define MIN_RUN_STOP_DELAY_MS 50
+
 static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 {
 	u32			reg, reg1;
@@ -2159,6 +2161,7 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on, int suspend)
 
 		dwc->err_evt_seen = false;
 		dwc->pullups_connected = false;
+		dwc->connected = false;
 
 		__dwc3_gadget_ep_disable(dwc->eps[0]);
 		__dwc3_gadget_ep_disable(dwc->eps[1]);
@@ -2226,6 +2229,7 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	struct dwc3		*dwc = gadget_to_dwc(g);
 	unsigned long		flags;
 	int			ret;
+	ktime_t			diff;
 
 	is_on = !!is_on;
 	dwc->softconnect = is_on;
@@ -2243,6 +2247,15 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 	pm_runtime_get_sync(dwc->dev);
 	dbg_event(0xFF, "Pullup gsync",
 		atomic_read(&dwc->dev->power.usage_count));
+
+	diff = ktime_sub(ktime_get(), dwc->last_run_stop);
+	if (ktime_to_ms(diff) < MIN_RUN_STOP_DELAY_MS) {
+		dbg_event(0xFF, "waitBefRun_Stop",
+			  MIN_RUN_STOP_DELAY_MS - ktime_to_ms(diff));
+		msleep(MIN_RUN_STOP_DELAY_MS - ktime_to_ms(diff));
+	}
+
+	dwc->last_run_stop = ktime_get();
 
 	/*
 	 * Per databook, when we want to stop the gadget, if a control transfer
@@ -3258,8 +3271,6 @@ static void dwc3_gadget_reset_interrupt(struct dwc3 *dwc)
 
 	usb_phy_start_link_training(dwc->usb3_phy);
 
-	dwc->connected = true;
-
 	/*
 	 * WORKAROUND: DWC3 revisions <1.88a have an issue which
 	 * would cause a missing Disconnect Event if there's a
@@ -3446,6 +3457,8 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 		reg &= ~DWC3_DCTL_HIRD_THRES_MASK;
 		dwc3_writel(dwc->regs, DWC3_DCTL, reg);
 	}
+
+	dwc->connected = true;
 
 	dep = dwc->eps[0];
 	ret = __dwc3_gadget_ep_enable(dep, true, false);

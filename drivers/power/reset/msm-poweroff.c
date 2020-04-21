@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +29,7 @@
 #include <linux/notifier.h>
 #include <linux/kallsyms.h>
 #include <linux/io.h>
+#include <linux/syscore_ops.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -93,7 +94,7 @@ static void *dload_type_addr;
 static bool dload_mode_enabled;
 static void *emergency_dload_mode_addr;
 #ifdef CONFIG_RANDOMIZE_BASE
-static void *kaslr_imem_addr;
+static void __iomem *kaslr_imem_addr;
 #endif
 static bool scm_dload_supported;
 
@@ -690,6 +691,25 @@ int restart_handler_init(void)
 	return 0;
 }
 
+#if defined(CONFIG_RANDOMIZE_BASE) && defined(CONFIG_HIBERNATION)
+static void msm_poweroff_syscore_resume(void)
+{
+#define KASLR_OFFSET_BIT_MASK	0x00000000FFFFFFFF
+	if (kaslr_imem_addr) {
+		__raw_writel(0xdead4ead, kaslr_imem_addr);
+		__raw_writel(KASLR_OFFSET_BIT_MASK &
+		(kimage_vaddr - KIMAGE_VADDR), kaslr_imem_addr + 4);
+		__raw_writel(KASLR_OFFSET_BIT_MASK &
+			((kimage_vaddr - KIMAGE_VADDR) >> 32),
+			kaslr_imem_addr + 8);
+	}
+}
+
+static struct syscore_ops msm_poweroff_syscore_ops = {
+	.resume = msm_poweroff_syscore_resume,
+};
+#endif
+
 static int msm_restart_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -742,8 +762,11 @@ static int msm_restart_probe(struct platform_device *pdev)
 		__raw_writel(KASLR_OFFSET_BIT_MASK &
 			((kimage_vaddr - KIMAGE_VADDR) >> 32),
 			kaslr_imem_addr + 8);
-		iounmap(kaslr_imem_addr);
 	}
+
+#ifdef CONFIG_HIBERNATION
+	register_syscore_ops(&msm_poweroff_syscore_ops);
+#endif
 #endif
 	np = of_find_compatible_node(NULL, NULL,
 				"qcom,msm-imem-dload-type");
@@ -821,6 +844,9 @@ err_restart_reason:
 #ifdef CONFIG_QCOM_DLOAD_MODE
 	iounmap(emergency_dload_mode_addr);
 	iounmap(dload_mode_addr);
+#ifdef CONFIG_RANDOMIZE_BASE
+	iounmap(kaslr_imem_addr);
+#endif
 #endif
 	return ret;
 }
