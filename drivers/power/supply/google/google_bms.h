@@ -23,7 +23,7 @@
 struct device_node;
 
 #define GBMS_CHG_TEMP_NB_LIMITS_MAX 10
-#define GBMS_CHG_VOLT_NB_LIMITS_MAX 5
+#define GBMS_CHG_VOLT_NB_LIMITS_MAX 6
 
 struct gbms_chg_profile {
 	const char *owner_name;
@@ -44,11 +44,9 @@ struct gbms_chg_profile {
 	u32 cv_update_interval;
 	u32 cv_tier_ov_cnt;
 	u32 cv_tier_switch_cnt;
-	u32 chg_last_tier;
-	u32 chg_last_tier_ramp_rate_mv;
-	u32 chg_last_tier_ramp_rate_dpct;
-	u32 chg_last_tier_vpack_tol;
-	u32 chg_last_tier_cc_ma;
+	u32 chg_last_tier_vpack_tolerance;
+	u32 chg_last_tier_dec_current;
+	u32 chg_last_tier_term_current;
 	/* taper step */
 	u32 fv_uv_resolution;
 	/* experimental */

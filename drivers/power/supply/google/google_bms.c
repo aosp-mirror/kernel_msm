@@ -39,9 +39,8 @@
 #define GBMS_DEFAULT_CV_TIER_OV_CNT     10
 #define GBMS_DEFAULT_CV_TIER_SWITCH_CNT 3
 #define GBMS_DEFAULT_CV_OTV_MARGIN      0
-#define GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_MV         20000
-#define GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_DPCT       750
-#define GBMS_DEFAULT_CHG_LAST_TIER_CC_MA                50000
+#define GBMS_DEFAULT_CHG_LAST_TIER_DEC_CURRENT  50000
+#define GBMS_DEFAULT_CHG_LAST_TIER_TERM_CURRENT 150000
 
 static const char *psy_chgt_str[] = {
 	"Unknown", "None", "Trickle", "Fast", "Taper"
@@ -249,39 +248,25 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 		profile->volt_limits[vi] = profile->volt_limits[vi] /
 		    profile->fv_uv_resolution * profile->fv_uv_resolution;
 
-	ret = of_property_read_u32(node, "google,chg-last-tier",
-				   &profile->chg_last_tier);
+	ret = of_property_read_u32(node,
+			    "google,chg-last-tier-vpack-tolerance",
+			    &profile->chg_last_tier_vpack_tolerance);
 	if (ret < 0)
-		profile->chg_last_tier = 0;
-	if (profile->chg_last_tier > 0) {
-		ret = of_property_read_u32(node,
-				    "google,chg-last-tier-ramp-rate-mv",
-				    &profile->chg_last_tier_ramp_rate_mv);
-		if (ret < 0)
-			profile->chg_last_tier_ramp_rate_mv =
-				    GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_MV;
+		profile->chg_last_tier_vpack_tolerance = 0;
 
+	if (profile->chg_last_tier_vpack_tolerance > 0) {
 		ret = of_property_read_u32(node,
-				    "google,chg-last-tier-ramp-rate-dpct",
-				    &profile->chg_last_tier_ramp_rate_dpct);
+			    "google,chg-last-tier-dec-current",
+			    &profile->chg_last_tier_dec_current);
 		if (ret < 0)
-			profile->chg_last_tier_ramp_rate_dpct =
-				    GBMS_DEFAULT_CHG_LAST_TIER_RAMP_RATE_DPCT;
-
+			profile->chg_last_tier_dec_current =
+				    GBMS_DEFAULT_CHG_LAST_TIER_DEC_CURRENT;
 		ret = of_property_read_u32(node,
-				    "google,chg-last-tier-vpack-tolerance",
-				    &profile->chg_last_tier_vpack_tol);
+			    "google,chg-last-tier-term-current",
+			    &profile->chg_last_tier_term_current);
 		if (ret < 0)
-			profile->chg_last_tier_vpack_tol = 0;
-
-		if (profile->chg_last_tier_vpack_tol > 0) {
-			ret = of_property_read_u32(node,
-				    "google,chg-last-tier-cc-adjust",
-				    &profile->chg_last_tier_cc_ma);
-			if (ret < 0)
-				profile->chg_last_tier_cc_ma =
-					    GBMS_DEFAULT_CHG_LAST_TIER_CC_MA;
-		}
+			profile->chg_last_tier_term_current =
+				    GBMS_DEFAULT_CHG_LAST_TIER_TERM_CURRENT;
 	}
 
 	return 0;
