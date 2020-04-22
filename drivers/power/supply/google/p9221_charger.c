@@ -1127,7 +1127,16 @@ static int p9221_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = 1;
 		break;
-	case POWER_SUPPLY_PROP_ONLINE: /* TODO: verify this */
+	case POWER_SUPPLY_PROP_ONLINE:
+		if (!charger->dc_suspend_votable)
+			charger->dc_suspend_votable =
+				find_votable("DC_SUSPEND");
+		if (charger->dc_suspend_votable) {
+			if (get_effective_result(charger->dc_suspend_votable)) {
+				val->intval = false;
+				break;
+			}
+		}
 		val->intval = charger->online && charger->enabled;
 		break;
 	case POWER_SUPPLY_PROP_SERIAL_NUMBER:
