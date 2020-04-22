@@ -48,8 +48,7 @@ struct gbms_chg_profile {
 	u32 chg_last_tier_ramp_rate_mv;
 	u32 chg_last_tier_ramp_rate_dpct;
 	u32 chg_last_tier_vpack_tol;
-	u32 chg_last_tier_dec_cur;
-	u32 chg_last_tier_term_cur;
+	u32 chg_last_tier_cc_ma;
 	/* taper step */
 	u32 fv_uv_resolution;
 	/* experimental */
