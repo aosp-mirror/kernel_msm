@@ -134,6 +134,7 @@ enum {
 
 #define POWER_PATH_STATUS_REG			(DCDC_BASE + 0x0B)
 #define USBIN_SUSPEND_STS_BIT			BIT(6)
+#define DCIN_SUSPEND_STS_BIT			BIT(5)
 #define USE_USBIN_BIT				BIT(4)
 #define USE_DCIN_BIT				BIT(3)
 #define POWER_PATH_MASK				GENMASK(2, 1)

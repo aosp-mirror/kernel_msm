@@ -3233,7 +3233,8 @@ int smblib_get_prop_dc_online(struct smb_charger *chg,
 		   stat);
 
 	val->intval = (stat & USE_DCIN_BIT) &&
-		      (stat & VALID_INPUT_POWER_SOURCE_STS_BIT);
+		      (stat & VALID_INPUT_POWER_SOURCE_STS_BIT) &&
+		      !(stat & DCIN_SUSPEND_STS_BIT);
 
 	return rc;
 }
