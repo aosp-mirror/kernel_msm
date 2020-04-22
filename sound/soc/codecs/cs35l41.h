@@ -787,7 +787,7 @@ extern const struct cs35l41_otp_map_element_t
 #define CS35L41_CSPL_MBOX_CMD_DRV_SHIFT		CS35L41_DSP_VIRT1_MBOX_SHIFT
 
 #define CS35L41_CTRL_CACHE_SIZE 14
-#define CS35L41_TRIM_CACHE_REGIONS 18
+#define CS35L41_TRIM_CACHE_REGIONS 17
 #define CS35L41_TRIM_CACHE_SIZE 38
 
 extern const unsigned int cs35l41_ctl_cache_regs[CS35L41_CTRL_CACHE_SIZE];

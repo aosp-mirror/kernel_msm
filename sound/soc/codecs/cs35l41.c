@@ -3204,7 +3204,8 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 	int timeout = 10, ret;
 	unsigned int status;
 	int retries = 5, i;
-	u32 *p_trim_data;
+	u8 total_trim_cache_reg_size = 0;
+	u32 *p_trim_data = NULL;
 
 	dev_dbg(cs35l41->dev, "%s: hibernate state %d\n",
 		__func__, cs35l41->amp_hibernate);
@@ -3283,6 +3284,12 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 	/* trim with cache values */
 	p_trim_data = cs35l41->trim_cache;
 	for (i = 0; i < CS35L41_TRIM_CACHE_REGIONS; i++) {
+		total_trim_cache_reg_size += cs35l41_trim_cache_regs[i].size;
+		if (total_trim_cache_reg_size > CS35L41_TRIM_CACHE_SIZE) {
+			dev_err(cs35l41->dev,
+				"trim size is over array bound");
+			break;
+		}
 		regmap_raw_write(cs35l41->regmap,
 				cs35l41_trim_cache_regs[i].reg,
 				p_trim_data, cs35l41_trim_cache_regs[i].size *
@@ -3528,7 +3535,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	u32 regid, reg_revid, i, mtl_revid, int_status, chipid_match;
 	int timeout = 100;
 	int irq_pol = 0;
-	u32 *p_trim_data;
+	u8 total_trim_cache_reg_size = 0;
+	u32 *p_trim_data = NULL;
 
 	cs35l41->fast_switch_en = false;
 	cs35l41->fast_switch_file_idx = 0;
@@ -3733,6 +3741,13 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	/* read all trim regs */
 	p_trim_data = cs35l41->trim_cache;
 	for (i = 0; i < CS35L41_TRIM_CACHE_REGIONS; i++) {
+		total_trim_cache_reg_size += cs35l41_trim_cache_regs[i].size;
+		if (total_trim_cache_reg_size > CS35L41_TRIM_CACHE_SIZE) {
+			dev_err(cs35l41->dev,
+				"trim size is over array bound");
+			ret = -EINVAL;
+			goto err;
+		}
 		regmap_raw_read(cs35l41->regmap,
 				cs35l41_trim_cache_regs[i].reg,
 				p_trim_data, cs35l41_trim_cache_regs[i].size *
