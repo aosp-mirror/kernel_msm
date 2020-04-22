@@ -7,6 +7,9 @@ if [[ "${ENABLE_THINLTO:-0}" -eq 1 ]]; then
 	EN_THINLTO="-e THINLTO"
 fi
 
+ABI_DEFINITION=abi_gki_aarch64_redbull.xml
+KMI_WHITELIST=abi_gki_aarch64_redbull_whitelist
+
 function update_perf_config() {
   # Disable debug options
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
