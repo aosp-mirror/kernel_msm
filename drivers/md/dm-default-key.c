@@ -143,7 +143,6 @@ static int default_key_ctr_optional(struct dm_target *ti,
  */
 static int default_key_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 {
-	char *_argv[16];
 	struct default_key_c *dkc;
 	const struct dm_default_key_cipher *cipher;
 	u8 raw_key[DM_DEFAULT_KEY_MAX_WRAPPED_KEY_SIZE];
@@ -151,22 +150,6 @@ static int default_key_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	unsigned long long tmpll;
 	char dummy;
 	int err;
-
-	/* Temporary hack: also support the old table syntax */
-	if (argc >= 4 && !strcmp(argv[0], "AES-256-XTS")) {
-		argc = 0;
-		_argv[argc++] = "aes-xts-plain64";	/* cipher */
-		_argv[argc++] = argv[1];		/* key */
-		_argv[argc++] = "0";			/* iv_offset */
-		_argv[argc++] = argv[2];		/* dev_path */
-		_argv[argc++] = argv[3];		/* start */
-		_argv[argc++] = "3";
-		_argv[argc++] = "allow_discards";
-		_argv[argc++] = "sector_size:4096";
-		_argv[argc++] = "iv_large_sectors";
-		_argv[argc] = NULL;
-		argv = _argv;
-	}
 
 	if (argc < 5) {
 		ti->error = "Not enough arguments";
