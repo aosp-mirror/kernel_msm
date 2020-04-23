@@ -6275,13 +6275,13 @@ disable:
 	chg->lpd_reason = LPD_NONE;
 	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n", __func__,
 		 chg->lpd_stage, chg->lpd_reason);
+	power_supply_changed(chg->usb_psy);
 
 exit:
 	mutex_unlock(&chg->moisture_detection_enable);
 	pm_relax(chg->dev);
 	return;
 }
-
 
 int enable_moisture_detection(struct smb_charger *chg, bool enable)
 {
@@ -6388,6 +6388,7 @@ static bool smblib_src_lpd(struct smb_charger *chg)
 		chg->lpd_reason = LPD_NONE;
 		chg->typec_mode = smblib_get_prop_typec_mode(chg);
 	}
+	power_supply_changed(chg->usb_psy);
 	dev_info(chg->dev, "%s lpd_stage=%d lpd_reason=%d\n",
 		 __func__, chg->lpd_stage, chg->lpd_reason);
 exit:
@@ -8399,6 +8400,7 @@ static void smblib_lpd_ra_open_work(struct work_struct *work)
 		chg->lpd_reason = LPD_FLOATING_CABLE;
 	}
 
+	power_supply_changed(chg->usb_psy);
 	/* recheck in 60 seconds */
 	alarm_start_relative(&chg->lpd_recheck_timer, ms_to_ktime(60000));
 out:
