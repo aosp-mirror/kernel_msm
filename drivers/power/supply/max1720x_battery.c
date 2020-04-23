@@ -2324,8 +2324,6 @@ static int max1720x_init_chip(struct max1720x_chip *chip)
 	(void) max1720x_handle_dt_nconvgcfg(chip);
 
 	chip->fake_capacity = -EINVAL;
-	chip->init_complete = true;
-	chip->resume_complete = true;
 
 	ret = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &data);
 	if (!ret && data & MAX1720X_STATUS_BR) {
@@ -2650,6 +2648,8 @@ static void max1720x_init_work(struct work_struct *work)
 	(void)max1720x_init_history(chip);
 	chip->cycle_count = -1;
 	chip->fake_temp = 0;
+	chip->init_complete = true;
+	chip->resume_complete = true;
 
 	if (chip->psy)
 		power_supply_changed(chip->psy);
