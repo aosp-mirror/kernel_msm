@@ -3542,7 +3542,7 @@ static int max17x0x_nvram_recall(struct max1720x_chip *chip)
 
 static int max17x0x_fixups(struct max1720x_chip *chip)
 {
-	int ret;
+	int ret = 0;
 
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
 		struct device_node *node = chip->dev->of_node;
