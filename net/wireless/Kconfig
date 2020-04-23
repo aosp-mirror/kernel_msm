@@ -38,6 +38,7 @@ if CFG80211
 
 config NL80211_TESTMODE
 	bool "nl80211 testmode command"
+        default y
 	help
 	  The nl80211 testmode command helps implementing things like
 	  factory calibration or validation tools for wireless chips.
