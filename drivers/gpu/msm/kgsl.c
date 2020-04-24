@@ -284,7 +284,8 @@ kgsl_mem_entry_create(void)
 	return entry;
 }
 
-static void add_dmabuf_list(struct kgsl_dma_buf_meta *meta)
+static void add_dmabuf_list(struct kgsl_device *device,
+				struct kgsl_dma_buf_meta *meta)
 {
 	struct dmabuf_list_entry *dle;
 	struct page *page;
@@ -317,11 +318,14 @@ static void add_dmabuf_list(struct kgsl_dma_buf_meta *meta)
 		list_add(&dle->node, &kgsl_dmabuf_list);
 		meta->dle = dle;
 		list_add(&meta->node, &dle->dmabuf_list);
+		kgsl_trace_gpu_mem_total(device,
+				 meta->entry->memdesc.size);
 	}
 	spin_unlock(&kgsl_dmabuf_lock);
 }
 
-static void remove_dmabuf_list(struct kgsl_dma_buf_meta *meta)
+static void remove_dmabuf_list(struct kgsl_device *device,
+				struct kgsl_dma_buf_meta *meta)
 {
 	struct dmabuf_list_entry *dle = meta->dle;
 
@@ -333,15 +337,18 @@ static void remove_dmabuf_list(struct kgsl_dma_buf_meta *meta)
 	if (list_empty(&dle->dmabuf_list)) {
 		list_del(&dle->node);
 		kfree(dle);
+		kgsl_trace_gpu_mem_total(device,
+				-(meta->entry->memdesc.size));
 	}
 	spin_unlock(&kgsl_dmabuf_lock);
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
-static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
+static void kgsl_destroy_ion(struct kgsl_device *device,
+				struct kgsl_dma_buf_meta *meta)
 {
 	if (meta != NULL) {
-		remove_dmabuf_list(meta);
+		remove_dmabuf_list(device, meta);
 		dma_buf_unmap_attachment(meta->attach, meta->table,
 			DMA_BIDIRECTIONAL);
 		dma_buf_detach(meta->dmabuf, meta->attach);
@@ -350,9 +357,9 @@ static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
 	}
 }
 #else
-static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
+static void kgsl_destroy_ion(struct kgsl_device *device,
+				struct kgsl_dma_buf_meta *meta)
 {
-
 }
 #endif
 
@@ -362,6 +369,8 @@ kgsl_mem_entry_destroy(struct kref *kref)
 	struct kgsl_mem_entry *entry = container_of(kref,
 						    struct kgsl_mem_entry,
 						    refcount);
+	struct kgsl_device *device =
+				KGSL_MMU_DEVICE(entry->memdesc.pagetable->mmu);
 	unsigned int memtype;
 
 	if (entry == NULL)
@@ -406,15 +415,15 @@ kgsl_mem_entry_destroy(struct kref *kref)
 		}
 	}
 
-	kgsl_sharedmem_free(&entry->memdesc);
-
 	switch (memtype) {
 	case KGSL_MEM_ENTRY_ION:
-		kgsl_destroy_ion(entry->priv_data);
+		kgsl_destroy_ion(device, entry->priv_data);
 		break;
 	default:
 		break;
 	}
+
+	kgsl_sharedmem_free(&entry->memdesc);
 
 	kfree(entry);
 }
@@ -2684,7 +2693,7 @@ long kgsl_ioctl_gpuobj_import(struct kgsl_device_private *dev_priv,
 
 unmap:
 	if (param->type == KGSL_USER_MEM_TYPE_DMABUF) {
-		kgsl_destroy_ion(entry->priv_data);
+		kgsl_destroy_ion(dev_priv->device, entry->priv_data);
 		entry->memdesc.sgt = NULL;
 	}
 
@@ -2829,7 +2838,7 @@ static int kgsl_setup_dma_buf(struct kgsl_device *device,
 		goto out;
 	}
 
-	add_dmabuf_list(meta);
+	add_dmabuf_list(device, meta);
 	entry->memdesc.size = PAGE_ALIGN(entry->memdesc.size);
 
 out:
@@ -2999,7 +3008,7 @@ long kgsl_ioctl_map_user_mem(struct kgsl_device_private *dev_priv,
 error_attach:
 	switch (memtype) {
 	case KGSL_MEM_ENTRY_ION:
-		kgsl_destroy_ion(entry->priv_data);
+		kgsl_destroy_ion(dev_priv->device, entry->priv_data);
 		entry->memdesc.sgt = NULL;
 		break;
 	default:
