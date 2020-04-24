@@ -3007,15 +3007,15 @@ static ssize_t batt_set_chg_deadline(struct device *dev,
 	return count;
 }
 
+static const DEVICE_ATTR(charge_deadline, 0664, batt_show_chg_deadline,
+						batt_set_chg_deadline);
+
 enum batt_ssoc_status {
 	BATT_SSOC_STATUS_UNKNOWN = 0,
 	BATT_SSOC_STATUS_CONNECTED = 1,
 	BATT_SSOC_STATUS_DISCONNECTED = 2,
 	BATT_SSOC_STATUS_FULL = 3,
 };
-
-static const DEVICE_ATTR(charge_deadline, 0664, batt_show_chg_deadline,
-						batt_set_chg_deadline);
 
 static ssize_t ssoc_show_details(struct device *dev,
 				 struct device_attribute *attr, char *buf)
@@ -3057,7 +3057,7 @@ static ssize_t ssoc_show_details(struct device *dev,
 	return len;
 }
 
-static const DEVICE_ATTR(ssoc_details, 0664, ssoc_show_details, NULL);
+static const DEVICE_ATTR(ssoc_details, 0444, ssoc_show_details, NULL);
 
 /* ------------------------------------------------------------------------- */
 
