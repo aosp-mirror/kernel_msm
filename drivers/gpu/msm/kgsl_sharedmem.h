@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -331,6 +331,18 @@ static inline void kgsl_free_global(struct kgsl_device *device,
 {
 	kgsl_mmu_remove_global(device, memdesc);
 	kgsl_sharedmem_free(memdesc);
+}
+
+/*
+ * kgsl_memdesc_is_dmabuf - Return true if the object is an
+ * imported dma-buf
+ * @memdesc: A handle to GPU memory descriptor
+ *
+ * Return: True if the memdesc is an imported dma-buf
+ */
+static inline bool kgsl_memdesc_is_dmabuf(const struct kgsl_memdesc *memdesc)
+{
+	return memdesc->flags & KGSL_MEMFLAGS_USERMEM_ION;
 }
 
 void kgsl_sharedmem_set_noretry(bool val);
