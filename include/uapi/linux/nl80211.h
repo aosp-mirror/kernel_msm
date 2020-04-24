@@ -2339,6 +2339,11 @@ enum nl80211_commands {
  *      the allowed channel bandwidth configurations. (u8 attribute)
  *      Defined by IEEE P802.11ay/D4.0 section 9.4.2.251, Table 13.
  *
+ * @NL80211_ATTR_VLAN_ID: VLAN ID (1..4094) for the station and VLAN group key
+ *	(u16).
+ *
+ * @NL80211_ATTR_HE_BSS_COLOR: nested attribute for BSS Color Settings.
+ *
  * @NL80211_ATTR_IFTYPE_AKM_SUITES: nested array attribute, with each entry
  *	using attributes from &enum nl80211_iftype_akm_attributes. This
  *	attribute is sent in a response to %NL80211_CMD_GET_WIPHY indicating
@@ -2807,6 +2812,10 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_WIPHY_EDMG_CHANNELS,
 	NL80211_ATTR_WIPHY_EDMG_BW_CONFIG,
+
+	NL80211_ATTR_VLAN_ID,
+
+	NL80211_ATTR_HE_BSS_COLOR,
 
 	NL80211_ATTR_IFTYPE_AKM_SUITES,
 
