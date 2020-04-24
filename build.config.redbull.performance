@@ -76,6 +76,7 @@ function update_perf_config() {
     -d LOCKUP_DETECTOR \
     -d SOFTLOCKUP_DETECTOR \
     -d MHI_DEBUG \
+    -d NL80211_TESTMODE \
 
 
   (cd ${OUT_DIR} && \
