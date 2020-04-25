@@ -3017,7 +3017,7 @@ enum batt_ssoc_status {
 	BATT_SSOC_STATUS_FULL = 3,
 };
 
-static ssize_t ssoc_show_details(struct device *dev,
+static ssize_t ssoc_details_show(struct device *dev,
 				 struct device_attribute *attr, char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
@@ -3057,7 +3057,7 @@ static ssize_t ssoc_show_details(struct device *dev,
 	return len;
 }
 
-static const DEVICE_ATTR(ssoc_details, 0444, ssoc_show_details, NULL);
+static const DEVICE_ATTR_RO(ssoc_details);
 
 /* ------------------------------------------------------------------------- */
 
