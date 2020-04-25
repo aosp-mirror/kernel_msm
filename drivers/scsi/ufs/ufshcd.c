@@ -11535,7 +11535,7 @@ static ssize_t health_attr_show(struct device *dev,
 				value = health_get_bytes(desc_buf,
 						UFSHCD_HEALTH_LIFEB_OFFSET, 1);
 		}
-		return scnprintf(buf, PAGE_SIZE, "%u\n",
+		return scnprintf(buf, PAGE_SIZE, "0x%02x\n",
 					value > 100 ? 100: value);
 	}
 	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", value);
