@@ -937,7 +937,6 @@ static void psy_changed_handler(struct work_struct *work)
 	}
 
 	pd->apsd_done = !!psy_type;
-	pd->psy_type = psy_type;
 	pd->is_cable_flipped = typec_cc_orientation == TYPEC_CC_ORIENTATION_CC2;
 	pd->extcon_usb_cc = pd->is_cable_flipped;
 
@@ -948,6 +947,12 @@ static void psy_changed_handler(struct work_struct *work)
 		pd->vbus_present = vbus_present;
 		tcpm_vbus_change(pd->tcpm_port);
 	}
+
+	if (vbus_present && (pd->psy_type == POWER_SUPPLY_TYPE_USB &&
+			     psy_type == POWER_SUPPLY_TYPE_USB_DCP))
+		pd->pending_update_usb_data = true;
+
+	pd->psy_type = psy_type;
 
 	if (cc1 != pd->cc1 || cc2 != pd->cc2) {
 		logbuffer_log(pd->log, "cc1: %s -> %s, cc2: %s -> %s",
