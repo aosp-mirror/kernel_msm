@@ -1,6 +1,5 @@
 KERNEL_DIR=private/msm-google
 ENABLE_THINLTO=1
-DISABLE_DEBUG_FS=1
 
 if [[ "${BUILD_PERF:-1}" -eq 1 ]]; then
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.performance

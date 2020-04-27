@@ -6,16 +6,12 @@ EN_THINLTO=
 if [[ "${ENABLE_THINLTO:-0}" -eq 1 ]]; then
 	EN_THINLTO="-e THINLTO"
 fi
-DIS_DEBUG_FS=
-if [[ "${DISABLE_DEBUG_FS:-0}" -eq 1 ]]; then
-	DIS_DEBUG_FS="-d DEBUG_FS"
-fi
 
 function update_perf_config() {
   # Disable debug options
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
     ${EN_THINLTO} \
-    ${DIS_DEBUG_FS} \
+    -d DEBUG_FS \
     -d CGROUP_DEBUG \
     -d CMA_DEBUGFS \
     -d PM_DEBUG \
