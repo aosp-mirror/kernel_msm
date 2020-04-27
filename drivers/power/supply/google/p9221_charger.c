@@ -829,6 +829,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	/* Reset PP buf so we can get a new serial number next time around */
 	charger->pp_buf_valid = false;
 	memset(charger->pp_buf, 0, sizeof(charger->pp_buf));
+	charger->rtx_csp = 0;
 
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
@@ -3512,28 +3513,46 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 	if (irq_src & P9221R5_STAT_PPRCVD) {
 		const size_t maxsz = sizeof(charger->pp_buf) * 3 + 1;
 		char s[maxsz];
-		u8 tmp;
+		u8 tmp, buff[sizeof(charger->pp_buf)], crc;
 
 		res = p9221_reg_read_n(charger,
 				       charger->addr_data_recv_buf_start,
-				       charger->pp_buf,
-				       sizeof(charger->pp_buf));
-		if (res)
+				       buff,
+				       sizeof(buff));
+		if (res) {
 			dev_err(&charger->client->dev,
 				"Failed to read PP len: %d\n", res);
+		} else if ((res == 0) &&
+			   (buff[0] == CHARGE_STATUS_PACKET_HEADER)) {
+			crc = crc8(p9221_crc8_table,
+				   &buff[1],
+				   CHARGE_STATUS_PACKET_SIZE - 1,
+				   CRC8_INIT_VALUE);
+			if ((buff[1] == PP_TYPE_POWER_CONTROL) &&
+			    (buff[2] == PP_SUBTYPE_SOC) &&
+			    (buff[4] == crc)) {
+				charger->rtx_csp = buff[3] / 2;
+				dev_info(&charger->client->dev,
+					 "Received Tx's soc=%d\n",
+					 charger->rtx_csp);
+				schedule_work(&charger->uevent_work);
+			}
+		} else {
+			memcpy(charger->pp_buf, buff, sizeof(charger->pp_buf));
 
-		/* We only care about PP which come with 0x4F header */
-		charger->pp_buf_valid = (charger->pp_buf[0] == 0x4F);
+			/* We only care about PP which come with 0x4F header */
+			charger->pp_buf_valid = (charger->pp_buf[0] == 0x4F);
 
-		p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
-			      s, maxsz, false);
-		dev_info(&charger->client->dev, "Received PP: %s\n", s);
+			p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
+				      s, maxsz, false);
+			dev_info(&charger->client->dev, "Received PP: %s\n", s);
 
-		/* Check if charging on a Tx phone */
-		tmp = charger->pp_buf[4] & ACCESSORY_TYPE_MASK;
-		charger->chg_on_rtx = (tmp == ACCESSORY_TYPE_PHONE);
-		dev_info(&charger->client->dev,
-			 "chg_on_rtx=%d\n", charger->chg_on_rtx);
+			/* Check if charging on a Tx phone */
+			tmp = charger->pp_buf[4] & ACCESSORY_TYPE_MASK;
+			charger->chg_on_rtx = (tmp == ACCESSORY_TYPE_PHONE);
+			dev_info(&charger->client->dev,
+				 "chg_on_rtx=%d\n", charger->chg_on_rtx);
+		}
 	}
 
 	/* CC Reset complete */
