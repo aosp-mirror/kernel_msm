@@ -140,7 +140,7 @@ void handle_lmk_event(struct task_struct *selected, int selected_tasksize,
 	events = (struct lmk_event *) event_buffer.buf;
 	event = &events[head];
 
-	strlcpy(event->taskname, selected->comm, MAX_TASKNAME);
+	strncpy(event->taskname, selected->comm, MAX_TASKNAME);
 
 	event->pid = selected->pid;
 	event->uid = from_kuid_munged(current_user_ns(), task_uid(selected));
@@ -182,10 +182,10 @@ static int lmk_event_show(struct seq_file *s, void *unused)
 	event = &events[tail];
 
 	seq_printf(s, "%lu %lu %lu %lu %lu %lu %hd %hd %llu\n%s\n",
-		   (unsigned long) event->pid, (unsigned long) event->uid,
-		   (unsigned long) event->group_leader_pid, event->min_flt,
-		   event->maj_flt, event->rss_in_pages, event->oom_score_adj,
-		   event->min_score_adj, event->start_time, event->taskname);
+		(unsigned long) event->pid, (unsigned long) event->uid,
+		(unsigned long) event->group_leader_pid, event->min_flt,
+		event->maj_flt, event->rss_in_pages, event->oom_score_adj,
+		event->min_score_adj, event->start_time, event->taskname);
 
 	event_buffer.tail = (tail + 1) & (MAX_BUFFERED_EVENTS - 1);
 
@@ -226,7 +226,7 @@ static void lmk_event_init(void)
 		sizeof(struct lmk_event) * MAX_BUFFERED_EVENTS, GFP_KERNEL);
 	if (!event_buffer.buf)
 		return;
-	entry = proc_create("lowmemorykiller", 0444, NULL, &event_file_ops);
+	entry = proc_create("lowmemorykiller", 0, NULL, &event_file_ops);
 	if (!entry)
 		pr_err("error creating kernel lmk event file\n");
 }
@@ -769,13 +769,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		rem += selected_tasksize;
 		get_task_struct(selected);
 		rcu_read_unlock();
-
-		if (selected) {
-			handle_lmk_event(selected, selected_tasksize,
-					 min_score_adj);
-			put_task_struct(selected);
-		}
-
+		get_task_struct(selected);
 		/* give the system time to free up the memory */
 		msleep_interruptible(20);
 		trace_almk_shrink(selected_tasksize, ret,
@@ -789,6 +783,10 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	lowmem_print(4, "lowmem_scan %lu, %x, return %lu\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
 	mutex_unlock(&scan_mutex);
+	if (selected) {
+		handle_lmk_event(selected, selected_tasksize, min_score_adj);
+		put_task_struct(selected);
+	}
 	return rem;
 }
 
