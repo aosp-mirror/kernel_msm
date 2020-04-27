@@ -133,7 +133,7 @@ static int dma_buf_release(struct inode *inode, struct file *file)
 		dmabuf->ops->release(dmabuf);
 	else
 		pr_warn_ratelimited("Leaking dmabuf %s because destructor failed error:%d\n",
-				    dmabuf->buf_name, dtor_ret);
+				    dmabuf->name, dtor_ret);
 
 	dma_buf_ref_destroy(dmabuf);
 
@@ -1442,7 +1442,7 @@ static void write_proc(struct seq_file *s, struct dma_proc *proc)
 
 		elapmstime = ktime_divns(elapmstime, MSEC_PER_SEC);
 		seq_printf(s, "%-8s\t%-8ld\t%-8lld\n",
-				dmabuf->buf_name,
+				dmabuf->name,
 				dmabuf->size / SZ_1K,
 				elapmstime);
 	}
