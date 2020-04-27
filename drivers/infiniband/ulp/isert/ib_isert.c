@@ -3278,17 +3278,6 @@ isert_wait4logout(struct isert_conn *isert_conn)
 }
 
 static void
-isert_wait4cmds(struct iscsi_conn *conn)
-{
-	isert_info("iscsi_conn %p\n", conn);
-
-	if (conn->sess) {
-		target_sess_cmd_list_set_waiting(conn->sess->se_sess);
-		target_wait_for_sess_cmds(conn->sess->se_sess);
-	}
-}
-
-static void
 isert_wait4flush(struct isert_conn *isert_conn)
 {
 	struct ib_recv_wr *bad_wr;
@@ -3304,6 +3293,17 @@ isert_wait4flush(struct isert_conn *isert_conn)
 	}
 
 	wait_for_completion(&isert_conn->wait_comp_err);
+}
+
+static void
+isert_wait4cmds(struct iscsi_conn *conn)
+{
+	isert_info("iscsi_conn %p\n", conn);
+
+	if (conn->sess) {
+		target_sess_cmd_list_set_waiting(conn->sess->se_sess);
+		target_wait_for_sess_cmds(conn->sess->se_sess);
+	}
 }
 
 /**
