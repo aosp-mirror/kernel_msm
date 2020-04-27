@@ -1676,6 +1676,12 @@ static int find_num_channels(struct mixer_build *state, int dir)
 		if (intf != ctrlif) {
 			struct usb_interface *iface =
 				usb_ifnum_to_if(state->mixer->chip->dev, intf);
+			if (!iface)
+				continue;
+
+			num = iface->num_altsetting;
+			if (num < 2)
+				continue;
 
 			alts = &iface->altsetting[1];
 			if (dir == USB_DIR_OUT &&
@@ -1686,7 +1692,6 @@ static int find_num_channels(struct mixer_build *state, int dir)
 				!(get_endpoint(alts, 0)->bEndpointAddress &
 				USB_DIR_IN))
 				continue;
-			num = iface->num_altsetting;
 			for (j = 1; j < num; j++) {
 				num_ch = NUM_CHANNELS_MONO;
 				alts = &iface->altsetting[j];
