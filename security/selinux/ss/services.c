@@ -79,6 +79,7 @@ const char *selinux_policycap_names[__POLICYDB_CAPABILITY_MAX] = {
 	"compat2",
 	"nnp_nosuid_transition"
 };
+int selinux_android_netlink_route;
 
 static struct selinux_ss selinux_ss;
 
@@ -2108,7 +2109,7 @@ static void security_load_policycaps(struct selinux_state *state)
 				i);
 	}
 
-	state->android_netlink_route = p->android_netlink_route;
+	selinux_android_netlink_route = p->android_netlink_route;
 	selinux_nlmsg_init();
 }
 
