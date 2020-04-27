@@ -6369,6 +6369,69 @@ static inline void ufshcd_get_lu_power_on_wp_status(struct ufs_hba *hba,
 	}
 }
 
+static u32 health_get_bytes(u8 *desc_buf, int bytes, int len)
+{
+	u32 value = 0;
+
+	switch (len) {
+	case 1:
+		value = desc_buf[bytes];
+		break;
+	case 2:
+		value = desc_buf[bytes] << 8;
+		value += desc_buf[bytes + 1];
+		break;
+	case 4:
+		value = desc_buf[bytes] << 24;
+		value += desc_buf[bytes + 1] << 16;
+		value += desc_buf[bytes + 2] << 8;
+		value += desc_buf[bytes + 3];
+		break;
+	}
+	return value;
+}
+
+static int ufshcd_update_health(struct ufs_hba *hba)
+{
+	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
+	u8 desc_buf[QUERY_DESC_HEALTH_DEF_SIZE];
+	int err = 0;
+
+	pm_runtime_get_sync(hba->dev);
+	err = ufshcd_read_desc_param(hba, QUERY_DESC_IDN_HEALTH,
+				0, 0, desc_buf, buff_len);
+	pm_runtime_mark_last_busy(hba->dev);
+	pm_runtime_put_noidle(hba->dev);
+
+	if (err) {
+		dev_err(hba->dev, "%s: Failed to get health descriptor, err = %d",
+			__func__, err);
+	} else {
+		hba->dev_info.pre_eol_info =
+			(u8)desc_buf[UFSHCD_HEALTH_EOL_OFFSET];
+		hba->dev_info.lifetime_a =
+			(u8)desc_buf[UFSHCD_HEALTH_LIFEA_OFFSET];
+		hba->dev_info.lifetime_b =
+			(u8)desc_buf[UFSHCD_HEALTH_LIFEB_OFFSET];
+		hba->dev_info.lifetime_c =
+			(u8)desc_buf[UFSHCD_HEALTH_LIFEC_OFFSET];
+		if (!hba->dev_info.lifetime_c) {
+			u32 erase = health_get_bytes(desc_buf,
+					UFSHCD_HEALTH_ERASE_OFFSET, 2);
+			if (erase)
+				hba->dev_info.lifetime_c =
+					erase * 100 / UFSHCD_DEFAULT_PE_CYCLE;
+			if (!erase && !strncmp(hba->sdev_ufs_device->model,
+					"KLUDG4U1FB-B0C1", 15))
+				hba->dev_info.lifetime_c =
+					health_get_bytes(desc_buf,
+					UFSHCD_HEALTH_LIFEB_OFFSET, 1);
+		}
+		hba->dev_info.health_cached_time = ktime_get();
+	}
+	return err;
+}
+
 /**
  * ufshcd_slave_alloc - handle initial SCSI device configurations
  * @sdev: pointer to SCSI device
@@ -6378,9 +6441,6 @@ static inline void ufshcd_get_lu_power_on_wp_status(struct ufs_hba *hba,
 static int ufshcd_slave_alloc(struct scsi_device *sdev)
 {
 	struct ufs_hba *hba;
-	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
-	u8 desc_buf[QUERY_DESC_HEALTH_DEF_SIZE];
-	int err;
 
 	hba = shost_priv(sdev->host);
 
@@ -6400,18 +6460,7 @@ static int ufshcd_slave_alloc(struct scsi_device *sdev)
 
 	ufshcd_get_lu_power_on_wp_status(hba, sdev);
 
-	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
-					desc_buf, buff_len);
-	if (!err) {
-		hba->dev_info.pre_eol_info =
-			(u8)desc_buf[UFSHCD_HEALTH_EOL_OFFSET];
-		hba->dev_info.lifetime_a =
-			(u8)desc_buf[UFSHCD_HEALTH_LIFEA_OFFSET];
-		hba->dev_info.lifetime_b =
-			(u8)desc_buf[UFSHCD_HEALTH_LIFEB_OFFSET];
-		hba->dev_info.lifetime_c =
-			(u8)desc_buf[UFSHCD_HEALTH_LIFEC_OFFSET];
-	}
+	ufshcd_update_health(hba);
 
 	return 0;
 }
@@ -11477,27 +11526,7 @@ struct health_attr {
 	int len;
 };
 
-static u32 health_get_bytes(u8 *desc_buf, int bytes, int len)
-{
-	u32 value = 0;
-
-	switch (len) {
-	case 1:
-		value = desc_buf[bytes];
-		break;
-	case 2:
-		value = desc_buf[bytes] << 8;
-		value += desc_buf[bytes + 1];
-		break;
-	case 4:
-		value = desc_buf[bytes] << 24;
-		value += desc_buf[bytes + 1] << 16;
-		value += desc_buf[bytes + 2] << 8;
-		value += desc_buf[bytes + 3];
-		break;
-	}
-	return value;
-}
+#define ONE_DAY_MS (24 * 60 * 60 * 1000)
 
 static ssize_t health_attr_show(struct device *dev,
 				struct device_attribute *_attr, char *buf)
@@ -11506,36 +11535,46 @@ static ssize_t health_attr_show(struct device *dev,
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	int buff_len = hba->desc_size.health_desc;
 	u8 desc_buf[hba->desc_size.health_desc];
+	ktime_t entry_time = ktime_get();
 	u32 value;
 	int err;
 
 	if (ufshcd_is_shutdown_ongoing(hba) || ufshcd_eh_in_progress(hba))
 		return -EBUSY;
 
-	pm_runtime_get_sync(hba->dev);
-	err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
-					desc_buf, buff_len);
-	pm_runtime_mark_last_busy(hba->dev);
-	pm_runtime_put_noidle(hba->dev);
-	if (err || (attr->bytes + attr->len) > desc_buf[0])
-		return 0;
+	if (attr->bytes != UFSHCD_HEALTH_LIFEA_OFFSET &&
+		attr->bytes != UFSHCD_HEALTH_LIFEB_OFFSET &&
+		attr->bytes != UFSHCD_HEALTH_LIFEC_OFFSET &&
+		attr->bytes != UFSHCD_HEALTH_EOL_OFFSET) {
+		pm_runtime_get_sync(hba->dev);
+		err = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0,
+						desc_buf, buff_len);
+		pm_runtime_mark_last_busy(hba->dev);
+		pm_runtime_put_noidle(hba->dev);
 
-	value = health_get_bytes(desc_buf, attr->bytes, attr->len);
+		value = health_get_bytes(desc_buf, attr->bytes, attr->len);
+	} else {
+		if (ktime_ms_delta(entry_time, hba->dev_info.health_cached_time)
+			> ONE_DAY_MS)
+			ufshcd_update_health(hba);
 
-	if (attr->bytes == UFSHCD_HEALTH_LIFEC_OFFSET) {
-		if (!value) {
-			u32 erase = health_get_bytes(desc_buf,
-					UFSHCD_HEALTH_ERASE_OFFSET, 2);
-			if (erase)
-				value = erase * 100 / UFSHCD_DEFAULT_PE_CYCLE;
-			if (!erase && !strncmp(hba->sdev_ufs_device->model,
-						"KLUDG4U1FB-B0C1", 15))
-				value = health_get_bytes(desc_buf,
-						UFSHCD_HEALTH_LIFEB_OFFSET, 1);
+		switch (attr->bytes) {
+		case UFSHCD_HEALTH_EOL_OFFSET:
+			value = hba->dev_info.pre_eol_info;
+			break;
+		case UFSHCD_HEALTH_LIFEA_OFFSET:
+			value = hba->dev_info.lifetime_a;
+			break;
+		case UFSHCD_HEALTH_LIFEB_OFFSET:
+			value = hba->dev_info.lifetime_b;
+			break;
+		case UFSHCD_HEALTH_LIFEC_OFFSET:
+			value = hba->dev_info.lifetime_c > 100 ?
+						100 : hba->dev_info.lifetime_c;
+			break;
 		}
-		return scnprintf(buf, PAGE_SIZE, "0x%02x\n",
-					value > 100 ? 100: value);
 	}
+
 	return scnprintf(buf, PAGE_SIZE, "0x%02x\n", value);
 }
 
