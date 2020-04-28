@@ -310,6 +310,8 @@ int ttf_soc_cstr(char *buff, int size,
 	    start > end)
 		return 0;
 
+	len += scnprintf(&buff[len], size - len, "\n");
+
 	/* only one way to print data @ 100 */
 	if (end == 100 && start != 100)
 		end = 99;
