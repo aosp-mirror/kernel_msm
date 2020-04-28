@@ -1477,7 +1477,6 @@ static int batt_chg_stats_cstr(char *buff, int size,
 						verbose);
 
 		if (soc_next) {
-			len += scnprintf(&buff[len], size - len, "\n");
 			len += ttf_soc_cstr(&buff[len], size - len,
 					    &ce_data->soc_stats,
 					    soc_in, soc_next);
