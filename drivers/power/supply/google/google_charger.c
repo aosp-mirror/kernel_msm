@@ -167,8 +167,8 @@ struct chg_termination {
 /* re-evaluate FCC when switching power supplies */
 static int chg_therm_update_fcc(struct chg_drv *chg_drv);
 static void chg_reset_termination_data(struct chg_drv *chg_drv);
-static int chg_vote_input_suspend(struct chg_drv *chg_drv,
-				  char *voter, bool suspend);
+static int chg_vote_input_suspend(struct chg_drv *chg_drv, char *voter,
+				  bool suspend, bool online);
 
 struct chg_drv {
 	struct device *device;
@@ -880,10 +880,12 @@ static void chg_termination_work(struct work_struct *work)
 	 */
 	full = chg_term->cc_full_ref;
 	if ((long)cc < DIV_ROUND_CLOSEST((long)full * 10050, 10000)) {
-		chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, false);
+		chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, false,
+				       false);
 		delay = CHG_TERM_LONG_DELAY_MS;
 	} else if ((long)cc > DIV_ROUND_CLOSEST((long)full * 10075, 10000)) {
-		chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, true);
+		chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, true,
+				       false);
 		delay = CHG_TERM_SHORT_DELAY_MS;
 	}
 
@@ -925,7 +927,7 @@ static void chg_reset_termination_data(struct chg_drv *chg_drv)
 	chg_drv->chg_term.alarm_start = false;
 	alarm_cancel(&chg_drv->chg_term.alarm);
 	cancel_work_sync(&chg_drv->chg_term.work);
-	chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, false);
+	chg_vote_input_suspend(chg_drv, MSC_CHG_TERM_VOTER, false, false);
 	chg_drv->chg_term.cc_full_ref = 0;
 	chg_drv->chg_term.retry_cnt = 0;
 	pm_relax(chg_drv->device);
@@ -1641,16 +1643,23 @@ static int chg_find_votables(struct chg_drv *chg_drv)
 		? -EINVAL : 0;
 }
 
-/* input suspend votes 0 ICL and call suspend on DC_ICL */
-static int chg_vote_input_suspend(struct chg_drv *chg_drv,
-				  char *voter, bool suspend)
+/* input suspend votes 0 ICL and call suspend on DC_ICL.
+ * If online is true, set ICL to a minimum threshold to leave the
+ * power supply online.
+ */
+static int chg_vote_input_suspend(struct chg_drv *chg_drv, char *voter,
+				  bool suspend, bool online)
 {
 	int rc;
+	int icl = 0;
 
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	rc = vote(chg_drv->usb_icl_votable, voter, suspend, 0);
+	if (online)
+		icl = GBMS_ICL_MIN;
+
+	rc = vote(chg_drv->usb_icl_votable, voter, suspend, icl);
 	if (rc < 0) {
 		dev_err(chg_drv->device, "Couldn't vote to %s USB rc=%d\n",
 			suspend ? "suspend" : "resume", rc);
@@ -1690,7 +1699,7 @@ static int chg_set_input_suspend(void *data, u64 val)
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	rc = chg_vote_input_suspend(chg_drv, USER_VOTER, val != 0);
+	rc = chg_vote_input_suspend(chg_drv, USER_VOTER, val != 0, false);
 
 	if (chg_drv->chg_psy)
 		power_supply_changed(chg_drv->chg_psy);
@@ -2277,7 +2286,8 @@ static int msc_pwr_disable_cb(struct votable *votable, void *data,
 	if (!chg_drv->chg_psy)
 		return 0;
 
-	return chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, pwr_disable);
+	return chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, pwr_disable,
+				      true);
 }
 
 static int chg_disable_std_votables(struct chg_drv *chg_drv)
