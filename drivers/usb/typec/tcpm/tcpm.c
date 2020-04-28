@@ -1024,14 +1024,14 @@ static int tcpm_pd_send_source_caps(struct tcpm_port *port)
 					  port->pwr_role,
 					  port->data_role,
 					  port->negotiated_rev,
-					  port->message_id, 0);
+					  port->message_id, 0, 0);
 	} else {
 		msg.header = PD_HEADER_LE(PD_DATA_SOURCE_CAP,
 					  port->pwr_role,
 					  port->data_role,
 					  port->negotiated_rev,
 					  port->message_id,
-					  nr_pdo);
+					  nr_pdo, 0);
 	}
 
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
@@ -1062,14 +1062,14 @@ static int tcpm_pd_send_sink_caps(struct tcpm_port *port)
 					  port->pwr_role,
 					  port->data_role,
 					  port->negotiated_rev,
-					  port->message_id, 0);
+					  port->message_id, 0, 0);
 	} else {
 		msg.header = PD_HEADER_LE(PD_DATA_SINK_CAP,
 					  port->pwr_role,
 					  port->data_role,
 					  port->negotiated_rev,
 					  port->message_id,
-					  nr_pdo);
+					  nr_pdo, 0);
 	}
 
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
@@ -1786,7 +1786,7 @@ static void vdm_run_state_machine(struct tcpm_port *port)
 					port->data_role,
 					port->negotiated_rev,
 					port->message_id,
-					port->vdo_count);
+					port->vdo_count, 0);
 		} else if (port->vdo_receiver == TCPC_TX_SOP_PRIME) {
 			msg.header = PD_HEADER_SOP_PRIME_LE(
 					PD_DATA_VENDOR_DEF,
@@ -2644,7 +2644,7 @@ static int tcpm_pd_send_control(struct tcpm_port *port,
 	msg.header = PD_HEADER_LE(type, port->pwr_role,
 				  port->data_role,
 				  port->negotiated_rev,
-				  port->message_id, 0);
+				  port->message_id, 0, 0);
 
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
 }
@@ -3065,7 +3065,7 @@ static int tcpm_pd_send_request(struct tcpm_port *port)
 				  port->pwr_role,
 				  port->data_role,
 				  port->negotiated_rev,
-				  port->message_id, 1);
+				  port->message_id, 1, 0);
 	msg.payload[0] = cpu_to_le32(rdo);
 
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
@@ -3162,7 +3162,7 @@ static int tcpm_pd_send_pps_request(struct tcpm_port *port)
 				  port->pwr_role,
 				  port->data_role,
 				  port->negotiated_rev,
-				  port->message_id, 1);
+				  port->message_id, 1, 0);
 	msg.payload[0] = cpu_to_le32(rdo);
 
 	return tcpm_pd_transmit(port, TCPC_TX_SOP, &msg);
