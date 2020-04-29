@@ -15,4 +15,3 @@
 #include "lito-redfin-camera-sensor-v3.dtsi"
 #include "lito-v2-redfin-evt-audio.dtsi"
 #include "lito-redfin-pac193x.dtsi"
-#include "lito-redfin-touch-v2.dtsi"

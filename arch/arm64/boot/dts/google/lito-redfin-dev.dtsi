@@ -13,7 +13,6 @@
 
 #include "lito-redfin.dtsi"
 #include "lito-redfin-camera-sensor.dtsi"
-#include "lito-redfin-touch.dtsi"
 
 &pm7250b_gpios {
 	/delete-node/ disp_pins;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,6 +25,20 @@
 	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 	regulator-always-on;
 };
+
+//TODO: check this later
+/*
+&pm8150_gpios {
+	sec_ts_power_default: sec_ts_power_default {
+		pins = "gpio9";
+		function = "normal";
+		qcom,drive-strength = <2>;
+		power-source = <0>;
+		output-high;
+		bias-disable;
+	};
+};
+*/
 
 &tlmm {
 	sec_ts_reset_default: sec_ts_reset_default {
@@ -87,6 +101,7 @@
 		interrupts = <9 IRQ_TYPE_LEVEL_LOW>;
 
 		pinctrl-names = "default", "on_state", "off_state";
+//		pinctrl-0 = <&sec_ts_power_default
 		pinctrl-0 = <&sec_ts_reset_default
 				&sec_ts_irq_default
 				&sec_ts_switch_default>;
@@ -100,9 +115,13 @@
 		sec,mis_cal_check = <1>;
 		sec,heatmap_mode = <1>;
 
+		// TODO: check resolution
 		sec,max_coords = <1080 2340>;
 
+		// TODO: check avdd and dvdd
+		//vdd-supply = <&pm8150_l14>;
 		avdd-supply = <&pm8150_l17>;
+		//sec,regulator_dvdd = "vdd";
 		sec,regulator_avdd = "avdd";
 		sec,panel_map = <&dsi_s6e3hc2_dsc_1080p_cmd 0>,
 				<&dsi_s6e3hc2_evt_dsc_1080p_cmd 0>;
