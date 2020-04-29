@@ -6214,10 +6214,6 @@ static void ufshcd_err_handler(struct work_struct *work)
 	if (hba->h8_err) {
 		dev_err(hba->dev, "%s: saved_err 0x%x saved_uic_err 0x%x",
 			__func__, hba->saved_err, hba->saved_uic_err);
-		ufshcd_print_host_regs(hba);
-		ufshcd_print_cmd_log(hba);
-		ufshcd_print_host_state(hba);
-		ufshcd_print_pwr_info(hba);
 		ufshcd_print_phy_state(hba);
 		hba->h8_err = false;
 		hba->silence_err_logs = true;
