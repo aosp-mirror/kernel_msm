@@ -486,7 +486,6 @@ UFS_DEVICE_DESC_PARAM(secure_removal_type, _SEC_RMV_TYPE, 1);
 UFS_DEVICE_DESC_PARAM(support_security_lun, _SEC_LU, 1);
 UFS_DEVICE_DESC_PARAM(bkops_termination_latency, _BKOP_TERM_LT, 1);
 UFS_DEVICE_DESC_PARAM(initial_active_icc_level, _ACTVE_ICC_LVL, 1);
-UFS_DEVICE_DESC_PARAM(specification_version, _SPEC_VER, 2);
 UFS_DEVICE_DESC_PARAM(manufacturing_date, _MANF_DATE, 2);
 UFS_DEVICE_DESC_PARAM(manufacturer_id, _MANF_ID, 2);
 UFS_DEVICE_DESC_PARAM(rtt_capability, _RTT_CAP, 1);
@@ -502,6 +501,16 @@ UFS_DEVICE_DESC_PARAM(ext_feature_sup, _EXT_UFS_FEATURE_SUP, 4);
 UFS_DEVICE_DESC_PARAM(wb_presv_us_en, _WB_US_RED_EN, 1);
 UFS_DEVICE_DESC_PARAM(wb_type, _WB_TYPE, 1);
 UFS_DEVICE_DESC_PARAM(wb_shared_alloc_units, _WB_SHARED_ALLOC_UNITS, 4);
+
+static ssize_t specification_version_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "0x%04X\n",
+					hba->dev_info.w_spec_version);
+}
+static DEVICE_ATTR_RO(specification_version);
 
 static struct attribute *ufs_sysfs_device_descriptor[] = {
 	&dev_attr_device_type.attr,
