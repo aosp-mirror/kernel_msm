@@ -393,6 +393,9 @@ struct tcpm_port {
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 #endif
+
+	bool unchunk_supp;
+	bool chunking;
 };
 
 struct pd_rx_event {
@@ -596,7 +599,9 @@ static void tcpm_log_source_caps(struct tcpm_port *port)
 				  (pdo & PDO_FIXED_DATA_SWAP) ?
 							"D" : "",
 				  (pdo & PDO_FIXED_EXTPOWER) ?
-							"E" : "");
+							"E" : "",
+				  (pdo & PDO_FIXED_UNCHUNK_EXT) ?
+							"N" : "");
 			break;
 		case PDO_TYPE_VAR:
 			scnprintf(msg, sizeof(msg),
@@ -2149,6 +2154,11 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 		if (rev < PD_MAX_REV)
 			port->negotiated_rev = rev;
 
+		if (port->negotiated_rev >= PD_REV30)
+			port->chunking = !(port->unchunk_supp &&
+					   (port->source_caps[0] &
+					    PDO_FIXED_UNCHUNK_EXT));
+
 		if (port->pwr_role == TYPEC_SOURCE) {
 			if (port->ams == GET_SOURCE_CAPABILITIES)
 				tcpm_pd_handle_state(port, SRC_READY, NONE_AMS,
@@ -2211,6 +2221,11 @@ static void tcpm_pd_data_request(struct tcpm_port *port,
 		}
 
 		port->sink_request = le32_to_cpu(msg->payload[0]);
+
+		if (port->negotiated_rev >= PD_REV30)
+			port->chunking = !(port->unchunk_supp &&
+					   (port->sink_request &
+					    PDO_FIXED_UNCHUNK_EXT));
 
 		if (port->vdm_sm_running && port->explicit_contract) {
 			tcpm_pd_handle_msg(port, PD_MSG_CTRL_WAIT, port->ams);
@@ -5340,6 +5355,9 @@ static int tcpm_fw_get_caps(struct tcpm_port *port,
 		return ret;
 	port->typec_caps.type = ret;
 	port->port_type = port->typec_caps.type;
+
+	/* For now unchunked msg is not supported. */
+	port->unchunk_supp = false;
 
 	if (port->port_type == TYPEC_PORT_SNK)
 		goto sink;
