@@ -188,7 +188,12 @@
 			compatible = "removed-dma-pool";
 			no-map;
 		};
-
+                pstore: ramoops@93100000 {
+                        compatible = "ramoops";
+                        reg = <0x0 0x93100000 0x0 0x100000>;
+                        record-size = <0x4000>;
+                        no-dump-oops;
+                };
 		venus_qseecom_mem: venus_qseecom_region@0 {
 			compatible = "shared-dma-pool";
 			reusable;
@@ -1268,6 +1273,7 @@
 		qcom,infinite-mode = <0>;
 		qcom,use-bam;
 		qcom,use-pinctrl;
+		qcom,rt-priority; /* Lidingyi@BSP.Kernel */
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <10>;
 		qcom,bam-producer-pipe-index = <11>;

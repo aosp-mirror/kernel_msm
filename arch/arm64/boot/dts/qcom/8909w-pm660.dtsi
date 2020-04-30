@@ -381,8 +381,6 @@
 		qcom,fg-esr-timer-charging = <0 96>;
 		qcom,cycle-counter-en;
 		qcom,hold-soc-while-full;
-		qcom,fg-auto-recharge-soc;
-		qcom,fg-recharge-soc-thr = <98>;
 		status = "okay";
 
 		qcom,fg-batt-soc@4000 {
