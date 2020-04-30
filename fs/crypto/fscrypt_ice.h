@@ -16,7 +16,7 @@
 #include <linux/blkdev.h>
 #include "fscrypt_private.h"
 
-#if IS_ENABLED(CONFIG_FS_ENCRYPTION)
+#if defined(CONFIG_FS_ENCRYPTION) && defined(CONFIG_PFK)
 static inline int fscrypt_should_be_processed_by_ice(const struct inode *inode)
 {
 	if (!inode->i_sb->s_cop)
@@ -80,6 +80,8 @@ static inline bool fscrypt_enc_bio_mergeable(const struct bio *bio,
 	return bio_end_dun(bio, sectors) == next_dun;
 }
 
+bool fscrypt_force_iv_ino_lblk_32(void);
+
 #else
 static inline int fscrypt_should_be_processed_by_ice(const struct inode *inode)
 {
@@ -128,6 +130,11 @@ static inline bool fscrypt_is_ice_encryption_info_equal(
 static inline int fscrypt_is_aes_xts_cipher(const struct inode *inode)
 {
 	return 0;
+}
+
+static inline bool fscrypt_force_iv_ino_lblk_32(void)
+{
+	return false;
 }
 
 #endif

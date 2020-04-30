@@ -11,6 +11,7 @@
  */
 
 #include "fscrypt_ice.h"
+#include "../../security/pfe/pfk_kc.h"
 
 int fscrypt_using_hardware_encryption(const struct inode *inode)
 {
@@ -113,6 +114,11 @@ bool fscrypt_is_ice_encryption_info_equal(const struct inode *inode1,
 			fscrypt_get_ice_encryption_salt_size(inode1)) == 0))
 		return true;
 	return false;
+}
+
+bool fscrypt_force_iv_ino_lblk_32(void)
+{
+	return strcmp("sdcc", pfk_kc_get_storage_type()) == 0;
 }
 
 static u64 fscrypt_generate_dun(const struct inode *inode, u64 lblk_num)
