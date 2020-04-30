@@ -32,6 +32,7 @@
 #include <linux/usb/pd.h>
 #include <linux/usb/tcpm.h>
 #include <linux/alarmtimer.h>
+#include <linux/delay.h>
 #include "google_bms.h"
 #include "google_psy.h"
 #include "logbuffer.h"
@@ -358,6 +359,7 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 static inline void chg_reset_state(struct chg_drv *chg_drv)
 {
 	union gbms_charger_state chg_state = { .v = 0 };
+	int rc = 0;
 
 	chg_init_state(chg_drv);
 
@@ -378,10 +380,15 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 	GPSY_SET_PROP(chg_drv->chg_psy,
 			POWER_SUPPLY_PROP_TAPER_CONTROL,
 			POWER_SUPPLY_TAPER_CONTROL_OFF);
+retry_notify:
 	/* make sure the battery knows that it's disconnected */
-	GPSY_SET_INT64_PROP(chg_drv->bat_psy,
+	rc = GPSY_SET_INT64_PROP(chg_drv->bat_psy,
 			POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
 			chg_state.v);
+	if (rc == -EAGAIN) {
+		msleep(100);
+		goto retry_notify;
+	}
 }
 
 static int info_usb_ad_type(int usb_type, int usbc_type)
