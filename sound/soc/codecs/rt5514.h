@@ -272,6 +272,7 @@
 #define DIVIDER_3_P072		3072000
 
 #define UNMUTE_TIMEOUT_MS	1000
+#define UNMUTE_SWITCH_MS	85
 
 /* System Clock Source */
 enum {

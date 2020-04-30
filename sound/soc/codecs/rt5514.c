@@ -1932,8 +1932,13 @@ static int rt5514_hw_params(struct snd_pcm_substream *substream,
 		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
 
 	/* schedule delay work to make sure unmute be sent */
-	schedule_delayed_work(&rt5514->unmute_work,
-		msecs_to_jiffies(UNMUTE_TIMEOUT_MS));
+	if (snd_soc_component_get_bias_level(component) ==
+		SND_SOC_BIAS_ON)
+		schedule_delayed_work(&rt5514->unmute_work,
+			msecs_to_jiffies(UNMUTE_SWITCH_MS));
+	else
+		schedule_delayed_work(&rt5514->unmute_work,
+			msecs_to_jiffies(UNMUTE_TIMEOUT_MS));
 
 	if (rt5514->dsp_enabled | rt5514->dsp_adc_enabled) {
 		if (rt5514->dsp_adc_enabled) {
