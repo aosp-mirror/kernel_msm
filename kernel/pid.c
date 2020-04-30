@@ -41,6 +41,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/task.h>
+#include <linux/file.h>
 
 #define pid_hashfn(nr, ns)	\
 	hash_long((unsigned long)nr + (unsigned long)ns, pidhash_shift)
@@ -566,6 +567,25 @@ struct pid *find_ge_pid(int nr, struct pid_namespace *ns)
 		nr = next_pidmap(ns, nr);
 	} while (nr > 0);
 
+	return pid;
+}
+
+struct pid *pidfd_get_pid(unsigned int fd, unsigned int *flags)
+{
+	struct fd f;
+	struct pid *pid;
+
+	f = fdget(fd);
+	if (!f.file)
+		return ERR_PTR(-EBADF);
+
+	pid = pidfd_pid(f.file);
+	if (!IS_ERR(pid)) {
+		get_pid(pid);
+		*flags = f.file->f_flags;
+	}
+
+	fdput(f);
 	return pid;
 }
 
