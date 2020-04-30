@@ -61,6 +61,9 @@
 
 #define UICURVE_MAX	3
 
+/* sync from google/logbuffer.c */
+#define LOG_BUFFER_ENTRY_SIZE   256
+
 /* Initial data of history cycle count */
 #define HCC_INIT_DATA	0xFFFF
 #define HCC_WRITE_AGAIN	0xF0F0
@@ -326,6 +329,10 @@ struct batt_drv {
 	const char batt_pack_info[GBMS_MINF_LEN];
 	bool pack_info_ready;
 };
+
+static int batt_chg_tier_stats_cstr(char *buff, int size,
+				    const struct gbms_ce_tier_stats *tier_stat,
+				    bool verbose);
 
 static inline void batt_update_cycle_count(struct batt_drv *batt_drv)
 {
@@ -1248,6 +1255,96 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 	return publish;
 }
 
+static int batt_chg_stats_soc_next(const struct gbms_charging_event *ce_data,
+				   int i)
+{
+	int soc_next;
+
+	if (i == GBMS_STATS_TIER_COUNT -1)
+		return ce_data->last_soc;
+
+	soc_next = ce_data->tier_stats[i + 1].soc_in >> 8;
+	if (soc_next <= 0)
+		return ce_data->last_soc;
+
+	return soc_next;
+}
+
+void bat_log_cstr_handler(struct logbuffer *log, char *buf, int len)
+{
+	int i, j = 0;
+	char tmp[LOG_BUFFER_ENTRY_SIZE];
+
+	buf[len] = '\n';
+	for (i = 0; i <= len; i++) {
+		if (buf[i] == '\n') {
+			tmp[j] = '\0';
+			/* skip first blank line */
+			if (i != 0)
+				logbuffer_log(log, "%s", tmp);
+			j = 0;
+		} else if (j >= LOG_BUFFER_ENTRY_SIZE - 1) {
+			tmp[j] = '\0';
+			logbuffer_log(log, "%s", tmp);
+			i--;
+			j = 0;
+		} else {
+			tmp[j] = buf[i];
+			j++;
+		}
+	}
+}
+
+void bat_log_chg_stats(struct logbuffer *log,
+			const struct gbms_charging_event *ce_data)
+{
+	const char *adapter_name =
+		gbms_chg_ev_adapter_s(ce_data->adapter_details.ad_type);
+	int i;
+
+	logbuffer_log(log, "A: %s,%d,%d,%d",
+			adapter_name,
+			ce_data->adapter_details.ad_type,
+			ce_data->adapter_details.ad_voltage * 100,
+			ce_data->adapter_details.ad_amperage * 100);
+
+	logbuffer_log(log, "S: %hu,%hu, %hu,%hu %hu,%hu %ld,%ld",
+			ce_data->charging_stats.ssoc_in,
+			ce_data->charging_stats.voltage_in,
+			ce_data->charging_stats.ssoc_out,
+			ce_data->charging_stats.voltage_out,
+			ce_data->charging_stats.cc_in,
+			ce_data->charging_stats.cc_out,
+			ce_data->first_update,
+			ce_data->last_update);
+
+	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
+		const int soc_next = batt_chg_stats_soc_next(ce_data, i);
+		const int soc_in = ce_data->tier_stats[i].soc_in >> 8;
+		const long elap = ce_data->tier_stats[i].time_fast +
+				  ce_data->tier_stats[i].time_taper +
+				  ce_data->tier_stats[i].time_other;
+		/* retrun len in below functions sometimes more than 256 */
+		char buff[LOG_BUFFER_ENTRY_SIZE * 2] = {0};
+		int len = 0;
+
+		/* Do not output tiers without time */
+		if (!elap)
+			continue;
+
+		len = batt_chg_tier_stats_cstr(buff, sizeof(buff),
+						&ce_data->tier_stats[i], true);
+		bat_log_cstr_handler(log, buff, len);
+
+		if (soc_next) {
+			len = ttf_soc_cstr(buff, sizeof(buff),
+					   &ce_data->soc_stats,
+					   soc_in, soc_next);
+			bat_log_cstr_handler(log, buff, len);
+		}
+	}
+}
+
 static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 			       char *reason,
 			       bool force)
@@ -1262,23 +1359,9 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 
 		kobject_uevent(&batt_drv->device->kobj, KOBJ_CHANGE);
 	}
+
+	bat_log_chg_stats(batt_drv->ttf_stats.ttf_log, &batt_drv->ce_data);
 	mutex_unlock(&batt_drv->stats_lock);
-}
-
-
-static int batt_chg_stats_soc_next(const struct gbms_charging_event *ce_data,
-				   int i)
-{
-	int soc_next;
-
-	if (i == GBMS_STATS_TIER_COUNT -1)
-		return ce_data->last_soc;
-
-	soc_next = ce_data->tier_stats[i + 1].soc_in >> 8;
-	if (soc_next <= 0)
-		return ce_data->last_soc;
-
-	return soc_next;
 }
 
 static int batt_chg_tier_stats_cstr(char *buff, int size,
