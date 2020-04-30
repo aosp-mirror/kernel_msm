@@ -121,6 +121,19 @@ static u64 fscrypt_generate_dun(const struct inode *inode, u64 lblk_num)
 	BUG_ON(inode->i_ino == 0);
 	BUG_ON(lblk_num > U32_MAX);
 
+	/*
+	 * Standard DUN generation (like upstream IV_INO_LBLK_64): high 32 bits
+	 * are inode number, low 32 bits are file logical block number.
+	 *
+	 * IV_INO_LBLK_32 DUN generation: low 32 bits are hashed inode number +
+	 * file logical block number.  We still leave the inode number in the
+	 * high 32 bits since it doesn't hurt anything, and it maintains
+	 * compatibility with the quirks of this kernel's inline crypto
+	 * implementation such as DUN 0 being treated specially.
+	 */
+	if (inode->i_crypt_info->ci_flags & FS_POLICY_FLAG_IV_INO_LBLK_32)
+		lblk_num = (u32)(inode->i_crypt_info->ci_hashed_ino + lblk_num);
+
 	return ((u64)inode->i_ino << 32) | lblk_num;
 }
 
@@ -189,6 +202,6 @@ bool fscrypt_mergeable_bio(struct bio *bio, const struct inode *inode,
 		return true;
 
 	next_dun = fscrypt_generate_dun(inode, next_lblk);
-	return bio_end_dun(bio, bio_sectors(bio)) == next_dun;
+	return fscrypt_enc_bio_mergeable(bio, bio_sectors(bio), next_dun);
 }
 EXPORT_SYMBOL_GPL(fscrypt_mergeable_bio);

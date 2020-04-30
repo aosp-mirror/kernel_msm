@@ -45,6 +45,10 @@ static int create_encryption_context_from_policy(struct inode *inode,
 	if (policy->flags & ~FS_POLICY_FLAGS_VALID)
 		return -EINVAL;
 
+	if ((policy->flags & FS_POLICY_FLAG_IV_INO_LBLK_32) &&
+	    policy->contents_encryption_mode != FS_ENCRYPTION_MODE_PRIVATE)
+		return -EINVAL;
+
 	ctx.contents_encryption_mode = policy->contents_encryption_mode;
 	ctx.filenames_encryption_mode = policy->filenames_encryption_mode;
 	ctx.flags = policy->flags;

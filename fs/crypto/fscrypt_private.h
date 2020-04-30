@@ -90,6 +90,9 @@ struct fscrypt_info {
 
 	/* Raw key, only for inline encryption w/ FS_ENCRYPTION_MODE_PRIVATE */
 	u8 ci_raw_key[FS_MAX_KEY_SIZE];
+
+	/* Hashed inode number for FS_POLICY_FLAG_IV_INO_LBLK_32 */
+	u32 ci_hashed_ino;
 };
 
 typedef enum {

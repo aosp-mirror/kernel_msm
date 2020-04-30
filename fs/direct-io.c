@@ -776,9 +776,20 @@ static inline int dio_send_cur_page(struct dio *dio, struct dio_submit *sdio,
 		 * current logical offset in the file does not equal what would
 		 * be the next logical offset in the bio, submit the bio we
 		 * have.
+		 *
+		 * When fscrypt inline encryption is used, DUN (data unit
+		 * number) contiguity is also required.  Normally that's implied
+		 * by logical contiguity.  But with the IV_INO_LBLK_32 IV
+		 * generation method, the DUN may wrap from 0xffffffff to 0 in
+		 * logically contiguous blocks.  So we must explicitly check
+		 * fscrypt_mergeable_bio() too.
 		 */
 		if (sdio->final_block_in_bio != sdio->cur_page_block ||
-		    cur_offset != bio_next_offset)
+		    cur_offset != bio_next_offset ||
+		    (dio_fstype_sets_dun(dio) &&
+		     !fscrypt_mergeable_bio(sdio->bio, dio->inode,
+					    cur_offset >>
+					    dio->inode->i_blkbits)))
 			dio_bio_submit(dio, sdio);
 	}
 
