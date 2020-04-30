@@ -62,8 +62,12 @@
 #define bio_sectors(bio)	((bio)->bi_iter.bi_size >> 9)
 #define bio_end_sector(bio)	((bio)->bi_iter.bi_sector + bio_sectors((bio)))
 
+#ifdef CONFIG_PFK
 #define bio_dun(bio)			((bio)->bi_iter.bi_dun)
 #define bio_end_dun(bio, sectors)	(bio_dun(bio) + ((sectors) >> 3))
+#else
+#define bio_dun(bio)			0
+#endif
 
 /*
  * Check whether this bio carries any data or not. A NULL bio is allowed.

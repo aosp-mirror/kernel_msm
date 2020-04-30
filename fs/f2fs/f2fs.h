@@ -1088,10 +1088,6 @@ struct f2fs_bio_info {
 	struct list_head io_list;	/* track fios */
 };
 
-/* iv sector for security/pfe/pfk_fscrypt.c and f2fs */
-#define PG_DUN(i,p)                                            \
-	((((i)->i_ino & 0xffffffff) << 32) | (page_index(p) & 0xffffffff))
-
 #define FDEV(i)				(sbi->devs[i])
 #define RDEV(i)				(raw_super->devs[i])
 struct f2fs_dev_info {
@@ -3726,16 +3722,6 @@ static inline bool f2fs_may_encrypt(struct inode *inode)
 #else
 	return false;
 #endif
-}
-
-static inline bool f2fs_may_encrypt_bio(struct inode *inode,
-		struct f2fs_io_info *fio)
-{
-	if (fio && (fio->type != DATA || fio->encrypted_page))
-		return false;
-
-	return (f2fs_encrypted_file(inode) &&
-			fscrypt_using_hardware_encryption(inode));
 }
 
 static inline int block_unaligned_IO(struct inode *inode,

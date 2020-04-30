@@ -366,6 +366,12 @@ void dio_end_io(struct bio *bio, int error)
 }
 EXPORT_SYMBOL_GPL(dio_end_io);
 
+static inline bool dio_fstype_sets_dun(struct dio *dio)
+{
+	return IS_ENABLED(CONFIG_PFK) &&
+	       strcmp(dio->inode->i_sb->s_type->name, "f2fs") == 0;
+}
+
 static inline void
 dio_bio_alloc(struct dio *dio, struct dio_submit *sdio,
 	      struct block_device *bdev,
@@ -379,6 +385,14 @@ dio_bio_alloc(struct dio *dio, struct dio_submit *sdio,
 	 */
 	bio = bio_alloc(GFP_KERNEL, nr_vecs);
 
+#ifdef CONFIG_PFK
+	bio->bi_dio_inode = dio->inode;
+	if (dio_fstype_sets_dun(dio))
+		fscrypt_set_bio_crypt_ctx(bio, dio->inode,
+			sdio->cur_page_fs_offset >> dio->inode->i_blkbits,
+			GFP_KERNEL);
+#endif
+
 	bio->bi_bdev = bdev;
 	bio->bi_iter.bi_sector = first_sector;
 	bio_set_op_attrs(bio, dio->op, dio->op_flags);
@@ -390,23 +404,6 @@ dio_bio_alloc(struct dio *dio, struct dio_submit *sdio,
 	sdio->bio = bio;
 	sdio->logical_offset_in_bio = sdio->cur_page_fs_offset;
 }
-
-#ifdef CONFIG_PFK
-static bool is_inode_filesystem_type(const struct inode *inode,
-					const char *fs_type)
-{
-	if (!inode || !fs_type)
-		return false;
-
-	if (!inode->i_sb)
-		return false;
-
-	if (!inode->i_sb->s_type)
-		return false;
-
-	return (strcmp(inode->i_sb->s_type->name, fs_type) == 0);
-}
-#endif
 
 /*
  * In the AIO read case we speculatively dirty the pages before starting IO.
@@ -429,17 +426,6 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 	if (dio->is_async && dio->op == REQ_OP_READ && dio->should_dirty)
 		bio_set_pages_dirty(bio);
 
-#ifdef CONFIG_PFK
-	bio->bi_dio_inode = dio->inode;
-
-/* iv sector for security/pfe/pfk_fscrypt.c and f2fs in fs/f2fs/f2fs.h */
-#define PG_DUN(i,p)                                            \
-	((((i)->i_ino & 0xffffffff) << 32) | ((p) & 0xffffffff))
-
-	if (is_inode_filesystem_type(dio->inode, "f2fs"))
-		fscrypt_set_ice_dun(dio->inode, bio, PG_DUN(dio->inode,
-			(sdio->logical_offset_in_bio >> PAGE_SHIFT)));
-#endif
 	dio->bio_bdev = bio->bi_bdev;
 
 	if (sdio->submit_io) {

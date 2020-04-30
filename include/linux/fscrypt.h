@@ -469,6 +469,67 @@ static inline const char *fscrypt_get_symlink(struct inode *inode,
 }
 #endif	/* !CONFIG_FS_ENCRYPTION */
 
+/* fscrypt_ice.c */
+#ifdef CONFIG_PFK
+extern int fscrypt_using_hardware_encryption(const struct inode *inode);
+
+extern void fscrypt_set_bio_crypt_ctx(struct bio *bio,
+				      const struct inode *inode,
+				      u64 first_lblk, gfp_t gfp_mask);
+
+extern bool fscrypt_mergeable_bio(struct bio *bio, const struct inode *inode,
+				  u64 next_lblk);
+#else
+static inline int fscrypt_using_hardware_encryption(const struct inode *inode)
+{
+	return 0;
+}
+
+static inline void fscrypt_set_bio_crypt_ctx(struct bio *bio,
+					     const struct inode *inode,
+					     u64 first_lblk, gfp_t gfp_mask) { }
+
+static inline bool fscrypt_mergeable_bio(struct bio *bio,
+					 const struct inode *inode,
+					 u64 next_lblk)
+{
+	return true;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_DM_DEFAULT_KEY)
+static inline void bio_set_skip_dm_default_key(struct bio *bio)
+{
+	bio->bi_crypt_skip = true;
+}
+
+static inline bool bio_should_skip_dm_default_key(const struct bio *bio)
+{
+	return bio->bi_crypt_skip;
+}
+
+static inline bool
+fscrypt_inode_should_skip_dm_default_key(const struct inode *inode)
+{
+	return IS_ENCRYPTED(inode) && S_ISREG(inode->i_mode);
+}
+#else /* CONFIG_DM_DEFAULT_KEY */
+static inline void bio_set_skip_dm_default_key(struct bio *bio)
+{
+}
+
+static inline bool bio_should_skip_dm_default_key(const struct bio *bio)
+{
+	return false;
+}
+
+static inline bool
+fscrypt_inode_should_skip_dm_default_key(const struct inode *inode)
+{
+	return false;
+}
+#endif /* !CONFIG_DM_DEFAULT_KEY */
+
 /**
  * fscrypt_require_key - require an inode's encryption key
  * @inode: the inode we need the key for
@@ -676,37 +737,5 @@ static inline int fscrypt_encrypt_symlink(struct inode *inode,
 		return __fscrypt_encrypt_symlink(inode, target, len, disk_link);
 	return 0;
 }
-
-/* fscrypt_ice.c */
-#ifdef CONFIG_PFK
-extern int fscrypt_using_hardware_encryption(const struct inode *inode);
-extern void fscrypt_set_ice_dun(const struct inode *inode,
-		struct bio *bio, u64 dun);
-extern void fscrypt_set_ice_skip(struct bio *bio, int bi_crypt_skip);
-extern bool fscrypt_mergeable_bio(struct bio *bio, u64 dun, bool bio_encrypted,
-		int bi_crypt_skip);
-#else
-static inline int fscrypt_using_hardware_encryption(const struct inode *inode)
-{
-	return 0;
-}
-
-static inline void fscrypt_set_ice_dun(const struct inode *inode,
-		struct bio *bio, u64 dun)
-{
-	return;
-}
-
-static inline void fscrypt_set_ice_skip(struct bio *bio, int bi_crypt_skip)
-{
-	return;
-}
-
-static inline bool fscrypt_mergeable_bio(struct bio *bio,
-		u64 dun, bool bio_encrypted, int bi_crypt_skip)
-{
-	return true;
-}
-#endif
 
 #endif	/* _LINUX_FSCRYPT_H */
