@@ -414,3 +414,4 @@
 397	common	statx			sys_statx
 424	common	pidfd_send_signal	sys_pidfd_send_signal
 434	common	pidfd_open		sys_pidfd_open
+440	common	process_madvise		sys_process_madvise
