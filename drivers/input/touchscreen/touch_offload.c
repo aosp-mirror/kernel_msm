@@ -4,6 +4,7 @@
 #include <linux/input/touch_offload.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/poll.h>
 
 static int touch_offload_open(struct inode *inode, struct file *file)
 {
@@ -116,6 +117,9 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 	/* If the end of the data is reached, free the packed_frame and
 	 * return 0
 	 */
+
+	mutex_lock(&context->buffer_lock);
+
 	if (context->packed_frame != NULL &&
 	    *offset == context->packed_frame_size) {
 		pr_err("%s: [Unexpected!] The buffer should have been recycled after the previous read.\n",
@@ -123,31 +127,31 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 		kfree(context->packed_frame);
 		context->packed_frame = NULL;
 		*offset = 0;
+		mutex_unlock(&context->buffer_lock);
 		return 0;
 	} else if (context->packed_frame == NULL) {
 		/* Process the next queued buffer */
-		mutex_lock(&context->buffer_lock);
 
-		if (list_empty(&context->frame_queue)) {
+		while (list_empty(&context->frame_queue)) {
 			/* Presumably more buffers on the way, so block */
 			mutex_unlock(&context->buffer_lock);
 
-			wait_for_completion(&context->frame_queued);
+			/* Non-blocking read? */
+			if (file->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+
+			/* Block until data is available */
+			if (wait_event_interruptible(context->read_queue,
+					!list_empty(&context->frame_queue)))
+				return -ERESTARTSYS;
 
 			/* Check that the pipeline is still running */
 			mutex_lock(&context->buffer_lock);
-			if (list_empty(&context->frame_queue)) {
-				mutex_unlock(&context->buffer_lock);
-				pr_err("%s: No buffers available.\n", __func__);
-				return -EINVAL;
-			}
 		}
 
 		frame = list_entry(context->frame_queue.next,
 				   struct touch_offload_frame, entry);
 		list_del(&frame->entry);
-		if (list_empty(&context->frame_queue))
-			reinit_completion(&context->frame_queued);
 
 		result = pack_frame(context, frame, &context->packed_frame);
 		list_add_tail(&frame->entry, &context->free_pool);
@@ -162,7 +166,6 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 			       __func__, result, context->packed_frame_size);
 		}
 
-		mutex_unlock(&context->buffer_lock);
 	}
 
 	/* Transfer the maximum amount of data */
@@ -170,7 +173,7 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 	remaining = copy_to_user(user_buffer, context->packed_frame + *offset,
 			      copy_size);
 	if (remaining != 0)
-		pr_err("%s: copy_to_user unexpectedly failed to copy %d bytes.\n",
+		pr_err("%s: copy_to_user unexpectedly failed to copy %lu bytes.\n",
 		       __func__, remaining);
 	*offset += copy_size - remaining;
 
@@ -181,7 +184,28 @@ static ssize_t touch_offload_read(struct file *file, char __user *user_buffer,
 		*offset = 0;
 	}
 
+	mutex_unlock(&context->buffer_lock);
+
 	return copy_size - remaining;
+}
+
+static unsigned int touch_offload_poll(struct file *file,
+				       struct poll_table_struct *wait)
+{
+	struct touch_offload_context *context = file->private_data;
+	unsigned int flags = 0;
+
+	pr_debug("%s\n", __func__);
+
+	poll_wait(file, &context->read_queue, wait);
+
+	mutex_lock(&context->buffer_lock);
+
+	if (context->packed_frame || !list_empty(&context->frame_queue))
+		flags |= POLLIN | POLLRDNORM;
+
+	mutex_unlock(&context->buffer_lock);
+	return flags;
 }
 
 static int touch_offload_allocate_buffers(struct touch_offload_context *context,
@@ -321,8 +345,12 @@ static int touch_offload_free_buffers(struct touch_offload_context *context)
 
 	mutex_lock(&context->buffer_lock);
 
-	/* Buffers will no longer be available (queued) */
-	reinit_completion(&context->frame_queued);
+	/* Ensure there is no outstanding reserved_frame before continuing */
+	while (context->reserved_frame != NULL) {
+		mutex_unlock(&context->buffer_lock);
+		wait_for_completion(&context->reserve_returned);
+		mutex_lock(&context->buffer_lock);
+	}
 
 	if (context->num_buffers > 0) {
 		while (!list_empty(&context->free_pool)) {
@@ -346,17 +374,6 @@ static int touch_offload_free_buffers(struct touch_offload_context *context)
 			for (chan = 0; chan < frame->num_channels; chan++)
 				kfree(frame->channel_data[chan]);
 			kfree(frame);
-			freed++;
-		}
-
-		if (context->reserved_frame != NULL) {
-			for (chan = 0;
-			     chan < context->reserved_frame->num_channels;
-			     chan++) {
-				kfree(
-				  context->reserved_frame->channel_data[chan]);
-			}
-			kfree(context->reserved_frame);
 			freed++;
 		}
 	}
@@ -509,6 +526,7 @@ const struct file_operations touch_offload_fops = {
 	.open	  = touch_offload_open,
 	.release  = touch_offload_release,
 	.read	  = touch_offload_read,
+	.poll	  = touch_offload_poll,
 	.unlocked_ioctl	  = touch_offload_ioctl
 };
 
@@ -530,6 +548,7 @@ int touch_offload_reserve_frame(struct touch_offload_context *context,
 		pr_debug("%s: buffer not available.\n", __func__);
 		ret = -EINVAL;
 	} else {
+		reinit_completion(&context->reserve_returned);
 		context->reserved_frame =
 			list_entry(context->free_pool.next,
 				   struct touch_offload_frame, entry);
@@ -563,8 +582,9 @@ int touch_offload_queue_frame(struct touch_offload_context *context,
 
 		list_add_tail(&frame->entry, &context->frame_queue);
 		context->reserved_frame = NULL;
+		complete_all(&context->reserve_returned);
 
-		complete_all(&context->frame_queued);
+		wake_up(&context->read_queue);
 	}
 
 	mutex_unlock(&context->buffer_lock);
@@ -579,13 +599,6 @@ int touch_offload_init(struct touch_offload_context *context)
 
 	pr_debug("%s\n", __func__);
 
-	/* Initialize char device */
-	ret = register_chrdev_region(MKDEV(TOUCH_OFFLOAD_MAJOR,
-					   TOUCH_OFFLOAD_MINOR), 1,
-				     "touch_offload");
-	if (ret != 0)
-		return ret;
-
 	/* Initialize ioctl interface */
 	context->file_in_use = false;
 	mutex_init(&context->file_lock);
@@ -597,11 +610,41 @@ int touch_offload_init(struct touch_offload_context *context)
 	INIT_LIST_HEAD(&context->frame_queue);
 	mutex_init(&context->buffer_lock);
 
-	init_completion(&context->frame_queued);
+	init_waitqueue_head(&context->read_queue);
+
+	init_completion(&context->reserve_returned);
+	complete_all(&context->reserve_returned);
+
+	/* Initialize char device */
+	context->major_num = register_chrdev(0, DEVICE_NAME,
+					     &touch_offload_fops);
+	if (context->major_num < 0) {
+		pr_err("%s: register_chrdev failed with error = %u\n",
+		       __func__, context->major_num);
+		return context->major_num;
+	}
+
+	context->cls = class_create(THIS_MODULE, CLASS_NAME);
+	if (IS_ERR(context->cls)) {
+		pr_err("%s: class_create failed with error = %ld.\n",
+		       __func__, PTR_ERR(context->cls));
+		unregister_chrdev(context->major_num, DEVICE_NAME);
+		return PTR_ERR(context->cls);
+	}
+
+	context->device = device_create(context->cls, NULL,
+					MKDEV(context->major_num, 0), NULL,
+					DEVICE_NAME);
+	if (IS_ERR(context->device)) {
+		pr_err("%s: device_create failed with error = %ld.\n",
+		       __func__, PTR_ERR(context->device));
+		class_destroy(context->cls);
+		unregister_chrdev(context->major_num, DEVICE_NAME);
+		return PTR_ERR(context->device);
+	}
 
 	cdev_init(&context->dev, &touch_offload_fops);
-	cdev_add(&context->dev, MKDEV(TOUCH_OFFLOAD_MAJOR, TOUCH_OFFLOAD_MINOR),
-		 1);
+	cdev_add(&context->dev, MKDEV(context->major_num, 0), 1);
 
 	return ret;
 }
@@ -612,8 +655,12 @@ int touch_offload_cleanup(struct touch_offload_context *context)
 	pr_debug("%s\n", __func__);
 
 	cdev_del(&context->dev);
-	unregister_chrdev_region(MKDEV(TOUCH_OFFLOAD_MAJOR,
-				       TOUCH_OFFLOAD_MINOR), 1);
+
+	device_destroy(context->cls, MKDEV(context->major_num, 0));
+
+	class_destroy(context->cls);
+
+	unregister_chrdev(context->major_num, DEVICE_NAME);
 
 	touch_offload_free_buffers(context);
 

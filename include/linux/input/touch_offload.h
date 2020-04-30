@@ -11,6 +11,9 @@
 /* Maximum number of channels of touch data */
 #define MAX_CHANNELS 5
 
+#define DEVICE_NAME "touch_offload"
+#define CLASS_NAME "touch_offload"
+
 /* Frame of touch data
  *
  * entry - list entry in either the free pool or the event queue
@@ -32,6 +35,9 @@ struct touch_offload_frame {
 /* Touch Offload Context
  *
  * dev - char device
+ * major_num - device major number
+ * cls - pointer to class associated class
+ * device - pointer to associated device
  * file - char device file for ioctl interface
  * file_lock - mutex for the ioctl interface
  * file_in_use - flag indicating the ioctl interface in use by one client
@@ -42,10 +48,11 @@ struct touch_offload_frame {
  * free_pool - list of buffers available for use
  * frame_queue - list of captured frames queued for the service
  * reserved_frame - buffer ready to be filled with the next touch frame
- * frame_queued - completion used to indicate the new frame is in the queue
+ * read_queue - waitqueue for blocked readers
  * packed_frame - serialized frame being read by the char device client
  * packed_frame_size - size of the array pointed to by packed_frame
  * buffer_lock - mutex protecting buffer management
+ * reserve_returned - indicates that the reserved buffer was released
  * hcallback - handle/pointer to driver's private callback context
  * report_cb - driver callback used to report touch events
  * offload_running - indicates whether the offload path is in use
@@ -53,6 +60,9 @@ struct touch_offload_frame {
 struct touch_offload_context {
 	/* ioctl interface */
 	struct cdev dev;
+	int major_num;
+	struct class *cls;
+	struct device *device;
 	struct file file;
 	struct mutex file_lock;
 	bool file_in_use;
@@ -71,10 +81,11 @@ struct touch_offload_context {
 	struct list_head free_pool;
 	struct list_head frame_queue;
 	struct touch_offload_frame *reserved_frame;
-	struct completion frame_queued;
+	wait_queue_head_t read_queue;
 	char *packed_frame;
 	__u32 packed_frame_size;
 	struct mutex buffer_lock;
+	struct completion reserve_returned;
 
 	/* callbacks */
 	void *hcallback;

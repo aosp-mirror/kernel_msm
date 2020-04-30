@@ -231,11 +231,12 @@ int abc_pcie_issue_sessionless_dma_xfer_sync(
  * @session[in] session to which this transfer belongs to.
  * @desc[in] Describes the transfer.
  * @new_xfer[out] Transfer structure that is re-used for the rest of the calls.
+ * @id[out] Newly assign ID for the created transfer.
  * @return 0 on success
  */
 int abc_pcie_create_dma_xfer(struct abc_pcie_dma_session *session,
 				struct abc_pcie_kernel_dma_desc *desc,
-				struct abc_dma_xfer **new_xfer);
+				struct abc_dma_xfer **new_xfer, uint64_t *id);
 
 /**
  * Create and prepare a transfer.

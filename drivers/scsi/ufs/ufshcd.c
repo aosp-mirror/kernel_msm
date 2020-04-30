@@ -47,6 +47,7 @@
 #include <linux/blkdev.h>
 #include <asm/unaligned.h>
 
+#include "ufs.h"
 #include "ufshcd.h"
 #include "ufs_quirks.h"
 #include "unipro.h"
@@ -9421,14 +9422,16 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 	 * Don't allow clock gating and hibern8 enter for faster device
 	 * detection.
 	 */
+	pm_runtime_get_sync(hba->dev);
 	ufshcd_hold_all(hba);
 	ret = ufshcd_probe_hba(hba);
 	while (ret && retry) {
 		pr_err("%s failed. Err = %d. Retry %d\n", __func__, ret, retry);
-		ret = ufshcd_host_reset_and_restore(hba);
+		ret = ufshcd_reset_and_restore(hba);
 		retry--;
 	}
 	ufshcd_release_all(hba);
+	pm_runtime_put_sync(hba->dev);
 
 	ufshcd_extcon_register(hba);
 }
@@ -11619,57 +11622,56 @@ static const struct attribute_group ufs_sysfs_controller_capabilities_group = {
 };
 
 static ssize_t ufs_sysfs_read_desc_param(struct ufs_hba *hba,
-				  enum desc_idn desc_id,
-				  u8 desc_index,
-				  u8 param_offset,
-				  u8 *sysfs_buf,
-				  u8 param_size)
+					 enum desc_idn desc_id, u8 desc_index,
+					 u8 param_offset, u8 *sysfs_buf,
+					 u8 param_size)
 {
-	u8 desc_buf[8] = {0};
+	u8 desc_buf[8] = { 0 };
 	int ret;
 
 	if (param_size > 8)
 		return -EINVAL;
 
 	pm_runtime_get_sync(hba->dev);
-	ret = ufshcd_read_desc_param(hba, desc_id, desc_index,
-				param_offset, desc_buf, param_size);
+	ret = ufshcd_read_desc_param(hba, desc_id, desc_index, param_offset,
+				     desc_buf, param_size);
 	pm_runtime_mark_last_busy(hba->dev);
 	pm_runtime_put_noidle(hba->dev);
 	if (ret)
 		return -EINVAL;
 	switch (param_size) {
 	case 1:
-		ret = sprintf(sysfs_buf, "0x%02X\n", *desc_buf);
+		ret = snprintf(sysfs_buf, PAGE_SIZE, "0x%02X\n", *desc_buf);
 		break;
 	case 2:
-		ret = sprintf(sysfs_buf, "0x%04X\n",
-			get_unaligned_be16(desc_buf));
+		ret = snprintf(sysfs_buf, PAGE_SIZE, "0x%04X\n",
+			       get_unaligned_be16(desc_buf));
 		break;
 	case 4:
-		ret = sprintf(sysfs_buf, "0x%08X\n",
-			get_unaligned_be32(desc_buf));
+		ret = snprintf(sysfs_buf, PAGE_SIZE, "0x%08X\n",
+			       get_unaligned_be32(desc_buf));
 		break;
 	case 8:
-		ret = sprintf(sysfs_buf, "0x%016llX\n",
-			get_unaligned_be64(desc_buf));
+		ret = snprintf(sysfs_buf, PAGE_SIZE, "0x%016llX\n",
+			       get_unaligned_be64(desc_buf));
 		break;
 	}
 
 	return ret;
 }
 
-#define UFS_DESC_PARAM(_name, _puname, _duname, _size)			\
-static ssize_t _name##_show(struct device *dev,				\
-	struct device_attribute *attr, char *buf)			\
-{									\
-	struct ufs_hba *hba = dev_get_drvdata(dev);			\
-	return ufs_sysfs_read_desc_param(hba, QUERY_DESC_IDN_##_duname,	\
-		0, _duname##_DESC_PARAM##_puname, buf, _size);		\
-}									\
-static DEVICE_ATTR_RO(_name)
+#define UFS_DESC_PARAM(_name, _puname, _duname, _size)                         \
+	static ssize_t _name##_show(struct device *dev,                        \
+				    struct device_attribute *attr, char *buf)  \
+	{                                                                      \
+		struct ufs_hba *hba = dev_get_drvdata(dev);                    \
+		return ufs_sysfs_read_desc_param(                              \
+			hba, QUERY_DESC_IDN_##_duname, 0,                      \
+			_duname##_DESC_PARAM##_puname, buf, _size);            \
+	}                                                                      \
+	static DEVICE_ATTR_RO(_name)
 
-#define UFS_DEVICE_DESC_PARAM(_name, _uname, _size)			\
+#define UFS_DEVICE_DESC_PARAM(_name, _uname, _size)                            \
 	UFS_DESC_PARAM(_name, _uname, DEVICE, _size)
 
 UFS_DEVICE_DESC_PARAM(device_type, _DEVICE_TYPE, 1);
@@ -12008,7 +12010,8 @@ static inline void ufshcd_add_sysfs_nodes(struct ufs_hba *hba)
 	if (sysfs_create_group(&hba->dev->kobj,
 		&ufs_sysfs_controller_capabilities_group))
 		dev_err(hba->dev, "Failed to create ufs_sysfs_controller_capabilities_group\n");
-	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_device_descriptor_group))
+	if (sysfs_create_group(&hba->dev->kobj,
+			       &ufs_sysfs_device_descriptor_group))
 		dev_err(hba->dev, "Failed to create device descriptor group\n");
 	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_req_stats_group))
 		dev_err(hba->dev, "Failed to create req_stats group\n");

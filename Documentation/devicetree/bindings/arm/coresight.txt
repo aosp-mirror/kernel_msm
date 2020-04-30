@@ -121,7 +121,9 @@ its hardware characteristcs.
 * Optional property for TMC:
 
 	* arm,buffer-size: size of contiguous buffer space for TMC ETR
-	 (embedded trace router)
+	  (embedded trace router). This property is obsolete. The buffer size
+	  can be configured dynamically via buffer_size property in sysfs.
+
 	* arm,default-sink: represents the default compile time CoreSight sink
 
 	* coresight-ctis: represents flush and reset CTIs for TMC buffer
@@ -130,6 +132,9 @@ its hardware characteristcs.
 
 	* arm,sg-enable : indicates whether scatter gather feature is enabled
 	  by default for TMC ETR configuration.
+
+	* arm,scatter-gather: boolean. Indicates that the TMC-ETR can safely
+	  use the SG mode on this system.
 
 * Required property for TPDAs:
 
@@ -188,20 +193,6 @@ its hardware characteristcs.
 
 	* reg-names: funnel-base-real: actual register space for the
 	  duplicate funnel.
-
-* Optional properties for CSRs:
-
-	* qcom,usb-bam-support: boolean, indicates CSR has the ability to operate on
-	  usb bam, include enable,disable and flush.
-
-	* qcom,hwctrl-set-support: boolean, indicates CSR has the ability to operate on
-	  to "HWCTRL" register.
-
-	* qcom,set-byte-cntr-support:boolean, indicates CSR has the ability to operate on
-	  to "BYTECNT" register.
-
-	* qcom,timestamp-support:boolean, indicates CSR support sys interface to read
-	  timestamp value.
 
 Example:
 

@@ -713,6 +713,47 @@ static int _sde_debugfs_fps_status(struct inode *inode, struct file *file)
 			inode->i_private);
 }
 
+static ssize_t early_wakeup_store(struct device *device,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct drm_crtc *crtc;
+	struct sde_crtc *sde_crtc;
+	struct msm_drm_private *priv;
+	u32 crtc_id;
+	bool trigger;
+
+	if (!device || !buf || !count) {
+		SDE_ERROR("invalid input param(s)\n");
+		return -EINVAL;
+	}
+
+	if (kstrtobool(buf, &trigger) < 0)
+		return -EINVAL;
+
+	if (!trigger)
+		return count;
+
+	crtc = dev_get_drvdata(device);
+	if (!crtc || !crtc->dev || !crtc->dev->dev_private) {
+		SDE_ERROR("invalid crtc\n");
+		return -EINVAL;
+	}
+
+	sde_crtc = to_sde_crtc(crtc);
+	priv = crtc->dev->dev_private;
+
+	crtc_id = drm_crtc_index(crtc);
+	if (crtc_id >= ARRAY_SIZE(priv->disp_thread)) {
+		SDE_ERROR("invalid crtc index[%d]\n", crtc_id);
+		return -EINVAL;
+	}
+
+	kthread_queue_work(&priv->disp_thread[crtc_id].worker,
+			&sde_crtc->early_wakeup_work);
+
+	return count;
+}
+
 static ssize_t set_fps_periodicity(struct device *device,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -882,10 +923,12 @@ static DEVICE_ATTR_RO(vsync_event);
 static DEVICE_ATTR(measured_fps, 0444, measured_fps_show, NULL);
 static DEVICE_ATTR(fps_periodicity_ms, 0644, fps_periodicity_show,
 							set_fps_periodicity);
+static DEVICE_ATTR_WO(early_wakeup);
 static struct attribute *sde_crtc_dev_attrs[] = {
 	&dev_attr_vsync_event.attr,
 	&dev_attr_measured_fps.attr,
 	&dev_attr_fps_periodicity_ms.attr,
+	&dev_attr_early_wakeup.attr,
 	NULL
 };
 
@@ -2751,6 +2794,53 @@ static void _sde_crtc_dest_scaler_setup(struct drm_crtc *crtc)
 	}
 }
 
+
+int sde_crtc_collect_misr(struct sde_crtc *sde_crtc,
+		u32 *out_misr_data, u32 misr_count)
+{
+	int i;
+	u32 misr;
+	const u32 total_misrs = min(misr_count, sde_crtc->num_mixers);
+
+	for (i = 0; i < total_misrs; ++i) {
+		struct sde_crtc_mixer *mixer = &sde_crtc->mixers[i];
+
+		if (!mixer->hw_lm || !mixer->hw_lm->ops.collect_misr ||
+			!sde_crtc->misr_enable) {
+			SDE_DEBUG("MISR is disabled");
+			return -EPERM;
+		}
+
+		misr = mixer->hw_lm->ops.collect_misr(mixer->hw_lm);
+		if (misr != 0) {
+			sde_crtc->misr_data[i] = misr;
+			SDE_DEBUG("MISR Found: %x. Mixer: %ud\n",
+				misr, i);
+		} else {
+			/* System likely went into power collapse */
+			SDE_DEBUG("MISR Not Found. Reuse LKG: %x. Mixer: %ud\n",
+				sde_crtc->misr_data[i], i);
+		}
+		out_misr_data[i] = sde_crtc->misr_data[i];
+	}
+
+	return 0;
+}
+
+bool is_sde_misr_same(u32 *misr1, u32 *misr2, u32 misr_count)
+{
+	int i;
+
+	if (misr1 == NULL || misr2 == NULL)
+		return false;
+
+	for (i = 0; i < misr_count ; ++i) {
+		if (misr1[i] != misr2[i])
+			return false;
+	}
+	return true;
+}
+
 static void sde_crtc_frame_event_cb(void *data, u32 event)
 {
 	struct drm_crtc *crtc = (struct drm_crtc *)data;
@@ -2780,6 +2870,8 @@ static void sde_crtc_frame_event_cb(void *data, u32 event)
 
 	SDE_DEBUG("crtc%d\n", crtc->base.id);
 	SDE_EVT32_VERBOSE(DRMID(crtc), event);
+
+	sde_crtc = to_sde_crtc(crtc);
 
 	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
 	fevent = list_first_entry_or_null(&sde_crtc->frame_event_list,
@@ -4300,6 +4392,8 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 	bool is_error, reset_req, recovery_events;
 	unsigned long flags;
 	enum sde_crtc_idle_pc_state idle_pc_state;
+	u32 new_misr_data[CRTC_DUAL_MIXERS] = {0};
+	u32 i;
 
 	if (!crtc) {
 		SDE_ERROR("invalid argument\n");
@@ -4366,6 +4460,33 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 	}
 
 	sde_crtc_calc_fps(sde_crtc);
+
+	sde_crtc_collect_misr(sde_crtc, new_misr_data, CRTC_DUAL_MIXERS);
+
+	if (new_misr_data[0] != 0) {
+		/*
+		 * Comparing the MISR for new frame vs previous frame.
+		 * the MISR data is split by half-screen, which is why
+		 * we compare both 0,1 elements. If they match, it is
+		 * the same frame, otherwise, the frame is different.
+		 * Note: If collection fails it will skip checking.
+		 */
+		if (is_sde_misr_same(sde_crtc->prev_misr_data,
+					new_misr_data, sde_crtc->num_mixers)) {
+			SDE_ATRACE_INT("SAME_FRAME", 1);
+			SDE_DEBUG("Same Frame\n");
+		} else {
+			SDE_ATRACE_INT("SAME_FRAME", 0);
+			SDE_DEBUG("Different Frame\n");
+		}
+
+		for (i = 0; i < sde_crtc->num_mixers; ++i) {
+			SDE_DEBUG("Old MISR: %x. New MISR %x.\n",
+				sde_crtc->prev_misr_data[i], new_misr_data[i]);
+			sde_crtc->prev_misr_data[i] = new_misr_data[i];
+		}
+	}
+
 	SDE_ATRACE_BEGIN("flush_event_thread");
 	_sde_crtc_flush_event_thread(crtc);
 	SDE_ATRACE_END("flush_event_thread");
@@ -4640,7 +4761,7 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 	struct drm_plane *plane;
 	struct drm_encoder *encoder;
 	struct sde_crtc_mixer *m;
-	u32 i, misr_status, power_on;
+	u32 i, power_on;
 	unsigned long flags;
 	struct sde_crtc_irq_info *node = NULL;
 	int ret = 0;
@@ -4720,16 +4841,8 @@ static void sde_crtc_handle_power_event(u32 event_type, void *arg)
 			sde_encoder_control_te(encoder, false);
 		}
 
-		for (i = 0; i < sde_crtc->num_mixers; ++i) {
-			m = &sde_crtc->mixers[i];
-			if (!m->hw_lm || !m->hw_lm->ops.collect_misr ||
-					!sde_crtc->misr_enable)
-				continue;
-
-			misr_status = m->hw_lm->ops.collect_misr(m->hw_lm);
-			sde_crtc->misr_data[i] = misr_status ? misr_status :
-							sde_crtc->misr_data[i];
-		}
+		sde_crtc_collect_misr(sde_crtc, sde_crtc->misr_data,
+			sde_crtc->num_mixers);
 
 		spin_lock_irqsave(&sde_crtc->spin_lock, flags);
 		node = NULL;
@@ -6424,7 +6537,6 @@ static ssize_t _sde_crtc_misr_read(struct file *file,
 	struct sde_kms *sde_kms;
 	struct sde_crtc_mixer *m;
 	int i = 0, rc;
-	u32 misr_status;
 	ssize_t len = 0;
 	char buf[MISR_BUFF_SIZE + 1] = {'\0'};
 
@@ -6456,18 +6568,18 @@ static ssize_t _sde_crtc_misr_read(struct file *file,
 		goto buff_check;
 	}
 
+	sde_crtc_collect_misr(sde_crtc,
+			sde_crtc->misr_data, CRTC_DUAL_MIXERS);
+	/*
+	 * Log any newly collected MISR
+	 * or last known MISR for mixers not collected.
+	 */
 	for (i = 0; i < sde_crtc->num_mixers; ++i) {
 		m = &sde_crtc->mixers[i];
-		if (!m->hw_lm || !m->hw_lm->ops.collect_misr)
-			continue;
-
-		misr_status = m->hw_lm->ops.collect_misr(m->hw_lm);
-		sde_crtc->misr_data[i] = misr_status ? misr_status :
-							sde_crtc->misr_data[i];
 		len += snprintf(buf + len, MISR_BUFF_SIZE - len, "lm idx:%d\n",
-					m->hw_lm->idx - LM_0);
+				m->hw_lm->idx - LM_0);
 		len += snprintf(buf + len, MISR_BUFF_SIZE - len, "0x%x\n",
-							sde_crtc->misr_data[i]);
+						sde_crtc->misr_data[i]);
 	}
 
 buff_check:
@@ -6840,6 +6952,40 @@ static void __sde_crtc_idle_notify_work(struct kthread_work *work)
 	}
 }
 
+/*
+ * __sde_crtc_early_wakeup_work - trigger early wakeup from user space
+ */
+static void __sde_crtc_early_wakeup_work(struct kthread_work *work)
+{
+	struct sde_crtc *sde_crtc = container_of(work, struct sde_crtc,
+				early_wakeup_work);
+	struct drm_crtc *crtc;
+	struct drm_device *dev;
+	struct msm_drm_private *priv;
+	struct sde_kms *sde_kms;
+
+	if (!sde_crtc) {
+		SDE_ERROR("invalid sde crtc\n");
+		return;
+	}
+
+	if (!sde_crtc->enabled) {
+		SDE_INFO("sde crtc is not enabled\n");
+		return;
+	}
+
+	crtc = &sde_crtc->base;
+	dev = crtc->dev;
+	if (!dev) {
+		SDE_ERROR("invalid drm device\n");
+		return;
+	}
+
+	priv = dev->dev_private;
+	sde_kms = to_sde_kms(priv->kms);
+	sde_kms_trigger_early_wakeup(sde_kms, crtc);
+}
+
 /* initialize crtc */
 struct drm_crtc *sde_crtc_init(struct drm_device *dev, struct drm_plane *plane)
 {
@@ -6931,6 +7077,8 @@ struct drm_crtc *sde_crtc_init(struct drm_device *dev, struct drm_plane *plane)
 
 	kthread_init_delayed_work(&sde_crtc->idle_notify_work,
 					__sde_crtc_idle_notify_work);
+	kthread_init_work(&sde_crtc->early_wakeup_work,
+					__sde_crtc_early_wakeup_work);
 
 	SDE_DEBUG("%s: successfully initialized crtc\n", sde_crtc->name);
 	return crtc;

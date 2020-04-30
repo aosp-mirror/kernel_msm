@@ -3329,7 +3329,6 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 		debugfs_create_file("fake_temp", 0600, de,
 				    batt_drv, &debug_fake_temp_fops);
 
-
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
 				    batt_drv, &debug_chg_health_thr_soc_fops);

@@ -216,12 +216,14 @@ struct sde_crtc_fps_info {
  * @event_lock    : Spinlock around event handling code
  * @misr_enable   : boolean entry indicates misr enable/disable status.
  * @misr_frame_count  : misr frame count provided by client
+ * @prev_misr_data    : store misr data of previous frame
  * @misr_data     : store misr data before turning off the clocks.
  * @sbuf_op_mode_old : inline rotator op mode for previous commit cycle
  * @sbuf_rot_id   : inline rotator block id for attached planes
  * @sbuf_rot_id_old: inline rotator id for previous commit
  * @sbuf_rot_id_delta: inline rotator id for current delta state
  * @idle_notify_work: delayed worker to notify idle timeout to user space
+ * @early_wakeup_work: work to trigger early wakeup
  * @power_event   : registered power event handle
  * @cur_perf      : current performance committed to clock/bandwidth driver
  * @rp_lock       : serialization lock for resource pool
@@ -285,6 +287,8 @@ struct sde_crtc {
 	spinlock_t event_lock;
 	bool misr_enable;
 	u32 misr_frame_count;
+
+	u32 prev_misr_data[CRTC_DUAL_MIXERS];
 	u32 misr_data[CRTC_DUAL_MIXERS];
 
 	u32 sbuf_op_mode_old;
@@ -292,6 +296,7 @@ struct sde_crtc {
 	u32 sbuf_rot_id_old;
 	u32 sbuf_rot_id_delta;
 	struct kthread_delayed_work idle_notify_work;
+	struct kthread_work early_wakeup_work;
 
 	struct sde_power_event *power_event;
 
@@ -564,6 +569,27 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
  */
 void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 		struct drm_crtc_state *old_state);
+
+/**
+ * sde_crtc_collect_misr - Collects MISR. Returns
+ * SDE_CRTC_MSRI_COLLECT_SUCCESS on success or
+ * if MSRI is disabled it returns SDE_CRTC_MSRI_DISABLED.
+ * @sde_crtc: Pointer to SDE CRTC
+ * @out_mist_data: Pointer to array to store collected MISR.
+ * when a collection for a mixer fails, it won't modify that mixer MISR content
+ * @misr_count: Amount of MISR mixers to collect.
+ */
+int sde_crtc_collect_misr(struct sde_crtc *sde_crtc,
+		u32 *out_misr_data, u32 misr_count);
+
+/**
+ * is_sde_misr_same - Compares whether two MISR arrays
+ * match on a per element basis.
+ * @misr1: Pointer to array to compare
+ * @misr2: Pointer to array to compare
+ * @misr_count: Amount of MISR mixers to compare.
+ */
+bool is_sde_misr_same(u32 *misr1, u32 *misr2, u32 misr_count);
 
 /**
  * sde_crtc_complete_commit - callback signalling completion of current commit

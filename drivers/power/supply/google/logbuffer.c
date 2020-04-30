@@ -104,8 +104,7 @@ void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
 	 * The RTC is printed if thats the first message
 	 * printed after resume.
 	 */
-	if (fmt)
-		vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt, args);
+	vsnprintf(tmpbuffer, sizeof(tmpbuffer), fmt ? : "", args);
 
 	spin_lock_irqsave(&instance->logbuffer_lock, flags);
 	if (instance->logbuffer_head < 0 ||
@@ -122,7 +121,7 @@ void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
 	} else if (suspend_since_last_logged) {
 		__logbuffer_log(instance, tmpbuffer, true);
 		suspend_since_last_logged = false;
-	} else if (!fmt) {
+	} else if (!fmt || !strcmp(fmt, "")) {
 		goto abort;
 	}
 
