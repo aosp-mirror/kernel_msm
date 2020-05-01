@@ -1495,6 +1495,34 @@ static ssize_t lp_trigger_effect_store(struct device *dev,
 	return count;
 }
 
+static ssize_t lp_trigger_scale_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", drv2624->lp_trigger_scale);
+}
+
+static ssize_t lp_trigger_scale_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct drv2624_data *drv2624 = dev_get_drvdata(dev);
+	u8 scale;
+	int ret;
+
+	ret = kstrtou8(buf, 10, &scale);
+	if (ret) {
+		dev_err(dev, "Invalid input for lp_trigger_scale: ret = %d\n",
+			ret);
+		return ret;
+	}
+
+	drv2624->lp_trigger_scale = max(min(+scale, 3), 0);
+
+	return count;
+}
+
 static ssize_t dump_reg_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
@@ -1549,6 +1577,7 @@ static DEVICE_ATTR(lra_wave_shape, 0660, lra_wave_shape_show,
 		   lra_wave_shape_store);
 static DEVICE_ATTR(lp_trigger_effect, 0660, lp_trigger_effect_show,
 		   lp_trigger_effect_store);
+static DEVICE_ATTR_RW(lp_trigger_scale);
 static DEVICE_ATTR(dump_reg, 0660, dump_reg_show, dump_reg_store);
 
 static struct attribute *drv2624_fs_attrs[] = {
@@ -1567,6 +1596,7 @@ static struct attribute *drv2624_fs_attrs[] = {
 	&dev_attr_ol_lra_period.attr,
 	&dev_attr_lra_wave_shape.attr,
 	&dev_attr_lp_trigger_effect.attr,
+	&dev_attr_lp_trigger_scale.attr,
 	&dev_attr_dump_reg.attr,
 	NULL,
 };
@@ -1770,6 +1800,9 @@ static int drv2624_suspend(struct device *dev)
 		drv2624_change_mode(drv2624, MODE_WAVEFORM_SEQUENCER);
 		drv2624_set_bits(drv2624, DRV2624_REG_CONTROL1, LOOP_MASK,
 				 0 << LOOP_SHIFT);
+
+		drv2624_set_bits(drv2624, DRV2624_REG_CONTROL2, SCALE_MASK,
+				 drv2624->lp_trigger_scale);
 
 		drv2624_trigger_mode(drv2624, PINFUNC_TRIG_PULSE);
 	}
