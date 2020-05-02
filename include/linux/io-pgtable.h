@@ -16,7 +16,9 @@ enum io_pgtable_fmt {
 	ARM_64_LPAE_S2,
 	ARM_V7S,
 	ARM_V8L_FAST,
+#ifdef CONFIG_MSM_TZ_SMMU
 	ARM_MSM_SECURE,
+#endif
 	IO_PGTABLE_NUM_FMTS,
 };
 
@@ -144,10 +146,12 @@ struct io_pgtable_cfg {
 			void	*pmds;
 		} av8l_fast_cfg;
 
+#ifdef CONFIG_MSM_TZ_SMMU
 		struct {
 			enum tz_smmu_device_id sec_id;
 			int cbndx;
 		} arm_msm_secure_cfg;
+#endif
 	};
 };
 

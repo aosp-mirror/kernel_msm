@@ -2256,6 +2256,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 	}
 
 	if (arm_smmu_is_slave_side_secure(smmu_domain)) {
+#ifdef CONFIG_MSM_TZ_SMMU
 		smmu_domain->pgtbl_cfg = (struct io_pgtable_cfg) {
 			.quirks         = quirks,
 			.pgsize_bitmap  = smmu->pgsize_bitmap,
@@ -2269,6 +2270,9 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 			.iova_end	= domain->geometry.aperture_end,
 		};
 		fmt = ARM_MSM_SECURE;
+#else
+		WARN(1, "CONFIG_MSM_TZ_SMMU is disabled. Will not work!\n");
+#endif
 	} else  {
 		smmu_domain->pgtbl_cfg = (struct io_pgtable_cfg) {
 			.quirks		= quirks,
