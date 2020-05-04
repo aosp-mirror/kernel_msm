@@ -1569,7 +1569,7 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_dsp_func_get, rt5514_dsp_func_put),
 	SND_SOC_BYTES_TLV("Hotword Model", 0xffff, NULL,
 		rt5514_hotword_model_put),
-	SND_SOC_BYTES_TLV("Musdet Model", 0x5c00, NULL,
+	SND_SOC_BYTES_TLV("Musdet Model", 0xffff, NULL,
 		rt5514_musdet_model_put),
 	SOC_SINGLE_EXT("DSP Stream Flag", SND_SOC_NOPM, 0, 2, 0,
 		rt5514_dsp_stream_flag_get, rt5514_dsp_stream_flag_put),
