@@ -214,3 +214,13 @@
 		USB3_DP_PCS_USB3_RXEQTRAINING_DFE_TIME_S2 0x07 0
 		0xffffffff 0xffffffff 0x00>;
 };
+
+&usb0 {
+	google,switch-vbus = <250>;
+};
+
+&pm7250b_pdphy {
+	google,ext_vbus-supported;
+	google,maxpower-switch;
+	ext-vbus-supply = <&ext_boost>;
+};
