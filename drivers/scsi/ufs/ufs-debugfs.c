@@ -855,12 +855,16 @@ static const struct file_operations ufsdbg_host_regs_fops = {
 	.release        = single_release,
 };
 
+#define ONE_DAY_MS (24 * 60 * 60 * 1000)
+
 static int ufsdbg_health_desc_show(struct seq_file *file, void *data)
 {
 	struct ufs_hba *hba = file->private;
 	int err = 0;
 	int buff_len = QUERY_DESC_HEALTH_MAX_SIZE;
 	u8 desc_buf[QUERY_DESC_HEALTH_MAX_SIZE];
+	static u8 desc_buf_cached[5];
+	ktime_t entry_time = ktime_get();
 
 	struct desc_field_offset health_desc_field_name[] = {
 		{"bLength",		0x00, BYTE},
@@ -870,9 +874,19 @@ static int ufsdbg_health_desc_show(struct seq_file *file, void *data)
 		{"bDeviceLifeTimeEstB",	0x04, BYTE}
 	};
 
-	pm_runtime_get_sync(hba->dev);
-	err = ufshcd_read_health_desc(hba, desc_buf, buff_len);
-	pm_runtime_put_sync(hba->dev);
+	if (ktime_ms_delta(entry_time, hba->dev_info.health_cached_time)
+			> ONE_DAY_MS) {
+		pm_runtime_get_sync(hba->dev);
+		err = ufshcd_read_health_desc(hba, desc_buf, buff_len);
+		pm_runtime_put_sync(hba->dev);
+		if (!err) {
+			hba->dev_info.health_cached_time = ktime_get();
+			memcpy(desc_buf_cached, desc_buf,
+				ARRAY_SIZE(health_desc_field_name));
+		}
+	} else {
+		memcpy(desc_buf, desc_buf_cached, ARRAY_SIZE(desc_buf_cached));
+	}
 
 	if (!err) {
 		int i;

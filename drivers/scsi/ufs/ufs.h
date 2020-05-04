@@ -492,6 +492,7 @@ struct ufs_dev_info {
 	unsigned int pre_eol_info;
 	unsigned int lifetime_a;
 	unsigned int lifetime_b;
+	ktime_t health_cached_time;
 };
 
 #endif /* End of Header */
