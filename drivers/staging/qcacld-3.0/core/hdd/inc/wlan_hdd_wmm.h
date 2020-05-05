@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2012,2016-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2012,2016-2017, 2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -202,8 +202,6 @@ struct hdd_wmm_status {
 extern const uint8_t hdd_qdisc_ac_to_tl_ac[];
 extern const uint8_t hdd_wmm_up_to_ac_map[];
 extern const uint8_t hdd_linux_up_to_ac_map[];
-
-#define WLAN_HDD_MAX_DSCP 0x3f
 
 /**
  * hdd_wmmps_helper() - Function to set uapsd psb dynamically
