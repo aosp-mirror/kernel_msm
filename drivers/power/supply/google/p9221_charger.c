@@ -3337,11 +3337,13 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			      attached ? "connected" : "disconnect",
 			      status_reg);
 		schedule_work(&charger->uevent_work);
-		if (attached)
+		if (attached) {
+			cancel_delayed_work_sync(&charger->txid_work);
 			schedule_delayed_work(&charger->txid_work,
 					msecs_to_jiffies(TXID_SEND_DELAY_MS));
-		else
+		} else {
 			charger->rtx_csp = 0;
+		}
 	}
 
 	if (irq_src & P9382_STAT_CSP) {
