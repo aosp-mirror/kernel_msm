@@ -737,9 +737,11 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->online = false;
 	charger->force_bpp = false;
 	charger->re_nego = false;
+	charger->is_low_power_tx = false;
 
 	/* Reset PP buf so we can get a new serial number next time around */
 	charger->pp_buf_valid = false;
+	memset(charger->pp_buf, 0, sizeof(charger->pp_buf));
 
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
@@ -1334,6 +1336,10 @@ static enum alarmtimer_restart p9221_icl_ramp_alarm_cb(struct alarm *alarm,
 	struct p9221_charger_data *charger =
 			container_of(alarm, struct p9221_charger_data,
 				     icl_ramp_alarm);
+
+	/* should not schedule icl_ramp_work if charge on low power tx */
+	if (charger->is_low_power_tx)
+		return ALARMTIMER_NORESTART;
 
 	dev_info(&charger->client->dev, "ICL ramp alarm, ramp=%d\n",
 		 charger->icl_ramp);
@@ -2936,6 +2942,17 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 		p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
 			      s, maxsz, false);
 		dev_info(&charger->client->dev, "Received PP: %s\n", s);
+
+		if (charger->pp_buf_valid) {
+			u8 tmp;
+			/* Check if charging on a Tx phone */
+			tmp = charger->pp_buf[4] & ACCESSORY_TYPE_MASK;
+			charger->is_low_power_tx =
+				(tmp == ACCESSORY_TYPE_LOW_POWER_TX);
+			dev_info(&charger->client->dev,
+				 "is_low_power_tx=%d\n",
+				 charger->is_low_power_tx);
+		}
 	}
 
 	/* CC Reset complete */

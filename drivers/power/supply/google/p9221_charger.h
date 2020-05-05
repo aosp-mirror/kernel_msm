@@ -236,6 +236,8 @@
 #define P9382A_MODE_TXMODE			BIT(2)
 
 
+#define ACCESSORY_TYPE_MASK			0x7
+#define ACCESSORY_TYPE_LOW_POWER_TX		BIT(2)
 
 enum p9221_align_mfg_chk_state {
 	ALIGN_MFG_FAILED = -1,
@@ -332,6 +334,7 @@ struct p9221_charger_data {
 	u32				current_sample_cnt;
 	struct delayed_work		dcin_pon_work;
 	bool				is_mfg_google;
+	bool				is_low_power_tx;
 };
 
 struct p9221_prop_reg_map_entry {
