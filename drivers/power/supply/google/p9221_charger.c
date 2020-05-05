@@ -761,9 +761,11 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 
 	charger->online = false;
 	charger->force_bpp = false;
+	charger->chg_on_rtx = false;
 
 	/* Reset PP buf so we can get a new serial number next time around */
 	charger->pp_buf_valid = false;
+	memset(charger->pp_buf, 0, sizeof(charger->pp_buf));
 
 	p9221_abort_transfers(charger);
 	cancel_delayed_work(&charger->dcin_work);
@@ -1472,6 +1474,10 @@ static enum alarmtimer_restart p9221_icl_ramp_alarm_cb(struct alarm *alarm,
 	struct p9221_charger_data *charger =
 			container_of(alarm, struct p9221_charger_data,
 				     icl_ramp_alarm);
+
+	/* should not schedule icl_ramp_work if charge on rtx phone */
+	if (charger->chg_on_rtx)
+		return ALARMTIMER_NORESTART;
 
 	dev_info(&charger->client->dev, "ICL ramp alarm, ramp=%d\n",
 		 charger->icl_ramp);
@@ -3420,6 +3426,7 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 	if (irq_src & P9221R5_STAT_PPRCVD) {
 		const size_t maxsz = sizeof(charger->pp_buf) * 3 + 1;
 		char s[maxsz];
+		u8 tmp;
 
 		res = p9221_reg_read_n(charger,
 				       charger->addr_data_recv_buf_start,
@@ -3435,6 +3442,12 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 		p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
 			      s, maxsz, false);
 		dev_info(&charger->client->dev, "Received PP: %s\n", s);
+
+		/* Check if charging on a Tx phone */
+		tmp = charger->pp_buf[4] & ACCESSORY_TYPE_MASK;
+		charger->chg_on_rtx = (tmp == ACCESSORY_TYPE_PHONE);
+		dev_info(&charger->client->dev,
+			 "chg_on_rtx=%d\n", charger->chg_on_rtx);
 	}
 
 	/* CC Reset complete */
