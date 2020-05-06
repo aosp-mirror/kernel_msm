@@ -30,7 +30,7 @@ function update_debug_config() {
          -e CONFIG_DEBUG_MUTEXES \
          -e CONFIG_DEBUG_ATOMIC_SLEEP \
          -e CONFIG_DEBUG_LIST \
-         -e CONFIG_QCOM_RTB \
+         -m CONFIG_QCOM_RTB \
          -e CONFIG_QCOM_RTB_SEPARATE_CPUS \
          -e CONFIG_PANIC_ON_DATA_CORRUPTION \
          -e CONFIG_REGMAP_ALLOW_WRITE_DEBUGFS \
