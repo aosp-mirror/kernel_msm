@@ -6545,6 +6545,30 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+#define LOWER_POWER_TX		'4'
+static bool is_low_power_tx(struct smb_charger *chg)
+{
+	union power_supply_propval val;
+	char s;
+	int rc;
+
+	if (!chg->wls_psy) {
+		chg->wls_psy = power_supply_get_by_name("wireless");
+		if (!chg->wls_psy)
+			return -ENODEV;
+	}
+
+	rc = power_supply_get_property(chg->wls_psy,
+				       POWER_SUPPLY_PROP_SERIAL_NUMBER,
+				       &val);
+	if (rc == 0) {
+		s = val.strval[1];
+		if (s == LOWER_POWER_TX)
+			return true;
+	}
+	return false;
+}
+
 static void dcin_aicl(struct smb_charger *chg)
 {
 	int rc, icl, icl_save;
@@ -6570,7 +6594,7 @@ increment:
 	}
 
 	icl = min(chg->wls_icl_ua, icl + DCIN_ICL_STEP_UA);
-	if (icl < DCIN_SW_AICL_MIN_UA)
+	if ((icl < DCIN_SW_AICL_MIN_UA) && !is_low_power_tx(chg))
 		icl = DCIN_SW_AICL_MIN_UA;
 	icl_save = icl;
 
