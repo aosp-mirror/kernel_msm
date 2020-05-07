@@ -1,0 +1,13 @@
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common.clang
+POST_DEFCONFIG_CMDS="check_defconfig && update_config"
+
+function update_config() {
+  # Disable debugfs
+  ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+    -d DEBUG_FS \
+
+  (cd ${OUT_DIR} && \
+    make O=${OUT_DIR} CLANG_TRIPLE=${CLANG_TRIPLE} CROSS_COMPILE=${CROSS_COMPILE} "${TOOL_ARGS[@]}" ${MAKE_ARGS} olddefconfig)
+}
+
