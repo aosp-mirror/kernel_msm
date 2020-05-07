@@ -166,39 +166,9 @@ static const struct vm_operations_struct f2fs_file_vm_ops = {
 	.page_mkwrite	= f2fs_vm_page_mkwrite,
 };
 
-static int f2fs_recover_dent_inode(const struct qstr *name, struct inode *dir,
-				   struct inode *inode)
-{
-	struct f2fs_inode *ri;
-	struct page *ipage;
-	int fix = 0;
-
-	if (!(IS_ENCRYPTED(dir) && IS_CASEFOLDED(dir)))
-		return 1;
-
-	ipage = f2fs_get_node_page(F2FS_I_SB(dir), inode->i_ino);
-	if (IS_ERR(ipage))
-		return 0;
-
-	f2fs_wait_on_page_writeback(ipage, NODE, true, true);
-
-	ri = F2FS_INODE(ipage);
-	if (name->len < F2FS_NAME_LEN - sizeof(f2fs_hash_t)) {
-		f2fs_hash_t *hash = (f2fs_hash_t *)&ri->i_name[name->len];
-
-		*hash = f2fs_dentry_hash(dir, name, NULL);
-		set_page_dirty(ipage);
-		fix = 1;
-	}
-	f2fs_put_page(ipage, 1);
-	return fix;
-}
-
 static int get_parent_ino(struct inode *inode, nid_t *pino)
 {
 	struct dentry *dentry;
-	struct inode *parent;
-	int fix;
 
 	inode = igrab(inode);
 	dentry = d_find_any_alias(inode);
@@ -206,14 +176,9 @@ static int get_parent_ino(struct inode *inode, nid_t *pino)
 	if (!dentry)
 		return 0;
 
-	spin_lock(&dentry->d_lock);
-	parent = dentry->d_parent->d_inode;
-	*pino = parent->i_ino;
-	spin_unlock(&dentry->d_lock);
-
-	fix = f2fs_recover_dent_inode(&dentry->d_name, parent, inode);
+	*pino = parent_ino(dentry);
 	dput(dentry);
-	return fix;
+	return 1;
 }
 
 static inline enum cp_reason_type need_do_checkpoint(struct inode *inode)
