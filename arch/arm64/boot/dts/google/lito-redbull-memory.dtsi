@@ -77,4 +77,10 @@
 		no-map;
 		reg = <0 0xB8641000 0 0x1000>;
 	};
+
+	kregistry_mem: kregistry_mem@C8000000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xC8000000 0 0x10000>;
+	};
 };
