@@ -109,52 +109,47 @@ static struct f2fs_dir_entry *find_in_block(struct inode *dir,
  * being searched for.
  *
  * Only called for encrypted names if the key is available.
- *
- * Returns: 0 if the directory entry matches, more than 0 if it
- * doesn't match or less than zero on error.
  */
-static int f2fs_ci_compare(const struct inode *parent, const struct qstr *name,
-			   u8 *de_name, size_t de_name_len, bool quick)
+static bool f2fs_match_ci_name(const struct inode *dir, const struct qstr *name,
+			       const u8 *de_name, u32 de_name_len, bool quick)
 {
-	const struct super_block *sb = parent->i_sb;
+	const struct super_block *sb = dir->i_sb;
 	const struct unicode_map *um = sb->s_encoding;
 	struct fscrypt_str decrypted_name = FSTR_INIT(NULL, de_name_len);
 	struct qstr entry = QSTR_INIT(de_name, de_name_len);
-	int ret;
+	int res;
 
-	if (IS_ENCRYPTED(parent)) {
+	if (IS_ENCRYPTED(dir)) {
 		const struct fscrypt_str encrypted_name =
-				FSTR_INIT(de_name, de_name_len);
+			FSTR_INIT((u8 *)de_name, de_name_len);
 
 		decrypted_name.name = kmalloc(de_name_len, GFP_KERNEL);
 		if (!decrypted_name.name)
-			return -ENOMEM;
-		ret = fscrypt_fname_disk_to_usr(parent, 0, 0, &encrypted_name,
+			return false;
+		res = fscrypt_fname_disk_to_usr(dir, 0, 0, &encrypted_name,
 						&decrypted_name);
-		if (ret < 0)
+		if (res < 0)
 			goto out;
 		entry.name = decrypted_name.name;
 		entry.len = decrypted_name.len;
 	}
 
 	if (quick)
-		ret = utf8_strncasecmp_folded(um, name, &entry);
+		res = utf8_strncasecmp_folded(um, name, &entry);
 	else
-		ret = utf8_strncasecmp(um, name, &entry);
-	if (ret < 0) {
-		/* Handle invalid character sequence as either an error
-		 * or as an opaque byte sequence.
+		res = utf8_strncasecmp(um, name, &entry);
+	if (res < 0) {
+		/*
+		 * In strict mode, ignore invalid names.  In non-strict mode,
+		 * fall back to treating them as opaque byte sequences.
 		 */
-		if (sb_has_enc_strict_mode(sb))
-			ret = -EINVAL;
-		else if (name->len != entry.len)
-			ret = 1;
-		else
-			ret = !!memcmp(name->name, entry.name, entry.len);
+		if (sb_has_enc_strict_mode(sb) || name->len != entry.len)
+			goto out;
+		res = memcmp(name->name, entry.name, name->len);
 	}
 out:
 	kfree(decrypted_name.name);
-	return ret;
+	return res == 0;
 }
 
 static void f2fs_fname_setup_ci_filename(struct inode *dir,
@@ -206,9 +201,9 @@ static inline bool f2fs_match_name(struct f2fs_dentry_ptr *d,
 		if (cf_str->name) {
 			struct qstr cf = {.name = cf_str->name,
 					  .len = cf_str->len};
-			return !f2fs_ci_compare(parent, &cf, name, len, true);
+			return f2fs_match_ci_name(parent, &cf, name, len, true);
 		}
-		return !f2fs_ci_compare(parent, fname->usr_fname, name, len,
+		return f2fs_match_ci_name(parent, fname->usr_fname, name, len,
 					false);
 	}
 #endif
