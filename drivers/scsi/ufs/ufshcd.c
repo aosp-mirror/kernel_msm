@@ -5739,7 +5739,8 @@ static int ufshcd_update_health(struct ufs_hba *hba)
 			if (erase)
 				hba->dev_info.lifetime_c =
 					erase * 100 / UFSHCD_DEFAULT_PE_CYCLE;
-			if (!erase && !strncmp(hba->sdev_ufs_device->model,
+			if (!erase && hba->sdev_ufs_device &&
+					!strncmp(hba->sdev_ufs_device->model,
 					"KLUDG4U1FB-B0C1", 15))
 				hba->dev_info.lifetime_c =
 					health_get_bytes(desc_buf,
