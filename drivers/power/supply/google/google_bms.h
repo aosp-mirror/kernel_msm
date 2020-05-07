@@ -133,7 +133,7 @@ struct ttf_tier_stat {
 
 struct gbms_ce_tier_stats {
 	int8_t		temp_idx;
-	uint8_t		vtier_idx;
+	int8_t		vtier_idx;
 
 	int16_t		soc_in;		/* 8.8 */
 	uint16_t	cc_in;
@@ -199,6 +199,49 @@ struct batt_ttf_stats {
 	struct logbuffer *ttf_log;
 };
 
+/*
+ * adaptive charging can be enabled from userspace with a deadline
+ *
+ * initial state:
+ * 	deadline = 0, rest_state = CHG_HEALTH_INACTIVE
+ *
+ * deadline = -1 from userspace
+ * 	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
+ * on deadline = 0 from userspace
+ *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
+ * on deadline > 0 from userspace
+ * 	CHG_HEALTH_* -> CHG_HEALTH_ENABLED
+ *
+ *  from CHG_HEALTH_ENABLED, msc_logic_health() can change the state to
+ * 	CHG_HEALTH_ENABLED  <-> CHG_HEALTH_ACTIVE
+ * 	CHG_HEALTH_ENABLED  -> CHG_HEALTH_DISABLED
+ *
+ * from CHG_HEALTH_ACTIVE, msc_logic_health() can change the state to
+ * 	CHG_HEALTH_ACTIVE   <-> CHG_HEALTH_ENABLED
+ * 	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DISABLED
+ * 	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DONE
+ */
+enum chg_health_state {
+	CHG_HEALTH_USER_DISABLED = -3,
+	CHG_HEALTH_DISABLED = -2,
+	CHG_HEALTH_DONE = -1,
+	CHG_HEALTH_INACTIVE = 0,
+	CHG_HEALTH_ENABLED,
+	CHG_HEALTH_ACTIVE,
+};
+
+/* tier index used to log the session */
+enum gbms_stats_ac_tier_idx_t {
+	GBMS_STATS_AC_TI_DISABLE = -4,
+	GBMS_STATS_AC_TI_PLUG = -3,
+	GBMS_STATS_AC_TI_SETTING = -2,
+	GBMS_STATS_AC_TI_INVALID = -1,
+	GBMS_STATS_AC_TI_VALID = 10,
+	GBMS_STATS_AC_TI_DISABLED,
+	GBMS_STATS_AC_TI_ENABLED,
+	GBMS_STATS_AC_TI_ACTIVE,
+};
+
 struct gbms_charging_event {
 	union gbms_ce_adapter_details	adapter_details;
 
@@ -207,7 +250,6 @@ struct gbms_charging_event {
 	/* charge event and tier tracking */
 	struct gbms_ce_stats		charging_stats;
 	struct gbms_ce_tier_stats	tier_stats[GBMS_STATS_TIER_COUNT];
-	struct gbms_ce_tier_stats	health_stats;
 
 	/* soc tracking for time to full */
 	struct ttf_soc_stats soc_stats;
@@ -217,6 +259,11 @@ struct gbms_charging_event {
 	time_t last_update;
 	uint32_t chg_sts_qual_time;
 	uint32_t chg_sts_delta_soc;
+
+	/* health based charging */
+	struct gbms_ce_tier_stats	health_stats;
+	enum chg_health_state		rest_state;
+	time_t rest_deadline;
 };
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \
