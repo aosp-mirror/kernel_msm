@@ -2810,14 +2810,17 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 
 	if (enable == 0) {
 		logbuffer_log(charger->rtx_log, "disable rtx\n");
-		/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0000 */
-		ret = p9221_set_cmd_reg(charger, P9221R5_COM_RENEGOTIATE);
-		if (ret == 0) {
-			ret = p9382_wait_for_mode(charger, 0);
-			if (ret < 0)
-				pr_err("cannot exit rTX mode (%d)\n", ret);
+		if (charger->rtx_err != RTX_TX_CONFLICT) {
+			/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0 */
+			ret = p9221_set_cmd_reg(charger,
+						P9221R5_COM_RENEGOTIATE);
+			if (ret == 0) {
+				ret = p9382_wait_for_mode(charger, 0);
+				if (ret < 0)
+					pr_err("cannot exit rTX mode (%d)\n",
+					       ret);
+			}
 		}
-
 		ret = p9382_ben_cfg(charger, RTX_BEN_DISABLED);
 		if (ret < 0)
 			goto exit;
