@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -457,9 +457,9 @@ static int cphy_pclk_mux_read_sel(void *context, unsigned int reg,
 	if (rc) {
 		pr_err("Failed to enable dsi pll resources, rc=%d\n", rc);
 		return rc;
-	} else {
-		*val = (MDSS_PLL_REG_R(rsc->phy_base, reg) & 0x3);
 	}
+
+	*val = (MDSS_PLL_REG_R(rsc->phy_base, reg) & 0x3);
 
 	(void)mdss_pll_resource_enable(rsc, false);
 	return rc;
