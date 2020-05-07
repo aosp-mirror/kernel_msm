@@ -165,15 +165,7 @@ struct batt_res {
 	int res_temp_high;
 };
 
-/* health/rest alternate charging policy */
-enum chg_health_state {
-	CHG_HEALTH_DISABLED = -1,
-	CHG_HEALTH_INACTIVE = 0,
-	CHG_HEALTH_ENABLED,
-	CHG_HEALTH_ACTIVE,
-	CHG_HEALTH_DONE,
-};
-
+/* health state */
 struct batt_chg_health {
 	int rest_soc;		/* entry criteria */
 	int rest_voltage;	/* entry criteria */
@@ -884,6 +876,7 @@ done:
 
 /* ------------------------------------------------------------------------- */
 
+/* CEV = Charging EVent */
 static void cev_stats_init(struct gbms_charging_event *ce_data,
 			   const struct gbms_chg_profile *profile)
 {
@@ -901,13 +894,14 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 	ce_data->last_soc = -1;
 
 	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++) {
-		ce_data->tier_stats[i].temp_idx = -1;
 		ce_data->tier_stats[i].vtier_idx = i;
+		ce_data->tier_stats[i].temp_idx = -1;
 		ce_data->tier_stats[i].soc_in = -1;
 	}
 
+	/* batt_chg_health_stats_close() will fix this */
+	ce_data->health_stats.vtier_idx = GBMS_STATS_AC_TI_INVALID;
 	ce_data->health_stats.temp_idx = -1;
-	ce_data->health_stats.vtier_idx = i;
 	ce_data->health_stats.soc_in = -1;
 }
 
@@ -1100,8 +1094,46 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 	tier->sample_count += 1;
 }
 
-/* Only the qualified copy gets the timestamp and the exit voltage.
- */
+
+static int batt_chg_health_vti(enum chg_health_state rest_state,
+			       time_t rest_deadline)
+{
+	int tier_idx = GBMS_STATS_AC_TI_INVALID;
+
+	switch (rest_state) {
+	/* user disabled with deadline */
+	case CHG_HEALTH_USER_DISABLED:
+		if (rest_deadline == -1)
+			tier_idx = GBMS_STATS_AC_TI_SETTING;
+		else if (rest_deadline == 0)
+			tier_idx = GBMS_STATS_AC_TI_PLUG;
+		else
+			tier_idx = GBMS_STATS_AC_TI_DISABLE;
+		break;
+	/* missed the deadline, TODO: log the deadline */
+	case CHG_HEALTH_DISABLED:
+		tier_idx = GBMS_STATS_AC_TI_DISABLED;
+		break;
+	/* disconnected in active mode, TODO: log the deadline */
+	case CHG_HEALTH_ACTIVE:
+		tier_idx = GBMS_STATS_AC_TI_ACTIVE;
+		break;
+	/* never became active */
+	case CHG_HEALTH_ENABLED:
+		tier_idx = GBMS_STATS_AC_TI_ENABLED;
+		break;
+	/* active, worked */
+	case CHG_HEALTH_DONE:
+		tier_idx = GBMS_STATS_AC_TI_VALID;
+		break;
+	default:
+		break;
+	}
+
+	return tier_idx;
+}
+
+/* Only the qualified copy gets the timestamp and the exit voltage. */
 static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 				 char *reason,
 				 bool force)
@@ -1133,14 +1165,22 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 	batt_drv->ce_data.charging_stats.cc_out =
 				(cc_out < 0) ? -1 : cc_out / 1000;
 
+	/* close/fix heath charge data (if enabled) */
+	batt_drv->ce_data.rest_deadline = batt_drv->chg_health.rest_deadline;
+	batt_drv->ce_data.rest_state = batt_drv->chg_health.rest_state;
+	batt_drv->ce_data.health_stats.vtier_idx =
+			batt_chg_health_vti(batt_drv->chg_health.rest_state,
+					    batt_drv->chg_health.rest_deadline);
+
 	/* TODO: add a field to ce_data to qual weird charge sessions */
 	publish = force || batt_chg_stats_qual(&batt_drv->ce_data);
 	if (publish) {
 		struct gbms_charging_event *ce_qual = &batt_drv->ce_qual;
 
+		/* all charge tiers including health */
 		memcpy(ce_qual, &batt_drv->ce_data, sizeof(*ce_qual));
 
-		pr_info("MSC_STAT %s: elap=%ld ssoc=%d->%d v=%d->%d c=%d->%d\n",
+		pr_info("MSC_STAT %s: elap=%ld ssoc=%d->%d v=%d->%d c=%d->%d hdl=%ld hrs=%d hti=%d\n",
 			reason,
 			ce_qual->last_update - ce_qual->first_update,
 			ce_qual->charging_stats.ssoc_in,
@@ -1148,7 +1188,10 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 			ce_qual->charging_stats.voltage_in,
 			ce_qual->charging_stats.voltage_out,
 			ce_qual->charging_stats.cc_in,
-			ce_qual->charging_stats.cc_out);
+			ce_qual->charging_stats.cc_out,
+			ce_qual->rest_deadline,
+			ce_qual->rest_state,
+			ce_qual->health_stats.vtier_idx);
 	}
 
 	return publish;
@@ -1169,7 +1212,7 @@ static int batt_chg_stats_soc_next(const struct gbms_charging_event *ce_data,
 	return soc_next;
 }
 
-void bat_log_cstr_handler(struct logbuffer *log, char *buf, int len)
+static void bat_log_cstr_handler(struct logbuffer *log, char *buf, int len)
 {
 	int i, j = 0;
 	char tmp[LOG_BUFFER_ENTRY_SIZE];
@@ -1244,6 +1287,7 @@ void bat_log_chg_stats(struct logbuffer *log,
 	}
 }
 
+/* End of charging: close stats, qualify event publish data */
 static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 			       char *reason,
 			       bool force)
@@ -1263,6 +1307,7 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 	mutex_unlock(&batt_drv->stats_lock);
 }
 
+/* Log only when elap != 0 add a special meaning for health status */
 static int batt_chg_tier_stats_cstr(char *buff, int size,
 				    const struct gbms_ce_tier_stats *tier_stat,
 				    bool verbose)
@@ -1273,10 +1318,18 @@ static int batt_chg_tier_stats_cstr(char *buff, int size,
 	const static char *codes[] = {"n", "s", "d", "l", "v", "vo", "p", "f",
 					"t", "dl", "st", "tc", "r", "w", "rs",
 					"n", "ny", "h"};
+	long temp_avg, ibatt_avg, icl_avg;
 	int j, len = 0;
 
-	if (!elap)
-		return 0;
+	if (elap) {
+		temp_avg = tier_stat->temp_sum / elap;
+		ibatt_avg = tier_stat->ibatt_sum / elap;
+		icl_avg = tier_stat->icl_sum / elap;
+	} else {
+		temp_avg = 0;
+		ibatt_avg = 0;
+		icl_avg = 0;
+	}
 
 	len += scnprintf(&buff[len], size - len, "\n%d%c ",
 		tier_stat->vtier_idx,
@@ -1284,24 +1337,24 @@ static int batt_chg_tier_stats_cstr(char *buff, int size,
 
 	len += scnprintf(&buff[len], size - len,
 		"%d.%d,%d,%d, %d,%d,%d, %d,%ld,%d, %d,%ld,%d, %d,%ld,%d",
-			soc_in,
-			tier_stat->soc_in & 0xff,
-			tier_stat->cc_in,
-			tier_stat->temp_in,
-			tier_stat->time_fast,
-			tier_stat->time_taper,
-			tier_stat->time_other,
-			tier_stat->temp_min,
-			tier_stat->temp_sum / elap,
-			tier_stat->temp_max,
-			tier_stat->ibatt_min,
-			tier_stat->ibatt_sum / elap,
-			tier_stat->ibatt_max,
-			tier_stat->icl_min,
-			tier_stat->icl_sum / elap,
-			tier_stat->icl_max);
+		soc_in,
+		tier_stat->soc_in & 0xff,
+		tier_stat->cc_in,
+		tier_stat->temp_in,
+		tier_stat->time_fast,
+		tier_stat->time_taper,
+		tier_stat->time_other,
+		tier_stat->temp_min,
+		temp_avg,
+		tier_stat->temp_max,
+		tier_stat->ibatt_min,
+		ibatt_avg,
+		tier_stat->ibatt_max,
+		tier_stat->icl_min,
+		icl_avg,
+		tier_stat->icl_max);
 
-	if (!verbose)
+	if (!verbose || !elap)
 		return len;
 
 	/* time spent in every multi step charging state */
@@ -1319,6 +1372,28 @@ static int batt_chg_tier_stats_cstr(char *buff, int size,
 	for (j = 0; j < MSC_STATES_COUNT; j++)
 		len += scnprintf(&buff[len], size - len, " %s=%d",
 			codes[j], tier_stat->msc_cnt[j]);
+
+	return len;
+}
+
+static int batt_health_stats_cstr(char *buff, int size,
+				  const struct gbms_charging_event *ce_data,
+				  bool verbose)
+{
+	const struct gbms_ce_tier_stats *health_stats = &ce_data->health_stats;
+	int len = 0;
+
+	len += scnprintf(&buff[len], size - len,
+			"\nH: %d %d %ld\n",
+			ce_data->rest_state,
+			batt_chg_health_vti(ce_data->rest_state,
+					    ce_data->rest_deadline),
+			ce_data->rest_deadline);
+
+	if (verbose && health_stats->soc_in != -1)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						health_stats,
+						verbose);
 
 	return len;
 }
@@ -1363,24 +1438,23 @@ static int batt_chg_stats_cstr(char *buff, int size,
 	for (i = 0; i < GBMS_STATS_TIER_COUNT; i++) {
 		const int soc_next = batt_chg_stats_soc_next(ce_data, i);
 		const int soc_in = ce_data->tier_stats[i].soc_in >> 8;
+		const long elap = ce_data->tier_stats[i].time_fast +
+				  ce_data->tier_stats[i].time_taper +
+				  ce_data->tier_stats[i].time_other;
+
+		/* Do not output tiers without time */
+		if (!elap)
+			continue;
 
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->tier_stats[i],
 						verbose);
-
 		if (soc_next) {
 			len += ttf_soc_cstr(&buff[len], size - len,
 					    &ce_data->soc_stats,
 					    soc_in, soc_next);
 		}
 	}
-
-	/* halth based charging stats (when elap in health > 0) */
-	len += batt_chg_tier_stats_cstr(&buff[len], size - len,
-					&ce_data->health_stats,
-					verbose);
-
-	len += scnprintf(&buff[len], size - len, "\n");
 
 	return len;
 }
@@ -1763,25 +1837,31 @@ static enum chg_health_state msc_health_active(struct batt_chg_health *rest,
 	return (srest || vrest) ? CHG_HEALTH_ACTIVE : CHG_HEALTH_ENABLED;
 }
 
-/* provide absolute deadline */
+/*
+ * for logging, userspace should use
+ *   deadline == 0 on fast replug
+ *   deadline == -1 when the feature is disabled
+ */
 static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
-					 time_t deadline)
+					 long long deadline_s)
 {
-	const bool new_deadline = chg_health->rest_deadline != deadline;
 	enum chg_health_state rest_state = chg_health->rest_state;
+	bool new_deadline;
 
-	if (chg_health->rest_deadline == deadline)
-		return false;
-
-	if (deadline < 0) {
-		chg_health->rest_state = CHG_HEALTH_DISABLED;
+	if (deadline_s < 0) {
+		new_deadline = chg_health->rest_deadline != deadline_s;
+		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 		chg_health->rest_deadline = -1;
-	} else if (deadline == 0) {
-		chg_health->rest_state = CHG_HEALTH_INACTIVE;
-		chg_health->rest_deadline = 0;
+	} else if (deadline_s == 0) {
+		new_deadline = chg_health->rest_deadline != deadline_s;
+		/* ->rest_deadline is reset to 0 on disconnect */
+		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 	} else {
+		const time_t rest_deadline = get_boot_sec() + deadline_s;
+
+		new_deadline = chg_health->rest_deadline != rest_deadline;
 		chg_health->rest_state = CHG_HEALTH_ENABLED;
-		chg_health->rest_deadline = deadline;
+		chg_health->rest_deadline = rest_deadline;
 	}
 
 	return new_deadline || rest_state != chg_health->rest_state;
@@ -1799,22 +1879,23 @@ static bool msc_logic_health(struct batt_chg_health *rest,
 	time_t ttf = -1;
 
 	/* Disabled is a one way trip until state is reset */
-	if (rest_state == CHG_HEALTH_DISABLED || !deadline)
+	if (rest_state < CHG_HEALTH_INACTIVE || deadline == 0)
 		goto done_exit;
 
 	/*
 	 * ttf_ret < 0 when the device is discharging. This can happen with
 	 * a large sysload on a underpowered adapter. Current strategy leave
 	 * everything as is (hoping) that the load is temporary.
-	 * TODO: send out power supply events?
 	 */
 	ttf_ret = batt_ttf_estimate(&ttf, batt_drv);
 	if (ttf_ret < 0)
 		return false;
 
+	/* estimate is 0 at full, we are done! */
 	if (ttf == 0)  {
 		rest_state = CHG_HEALTH_DONE;
-		rest->rest_deadline = 0;
+
+	/* deadline > 0, single trip to disabled from any state */
 	} else if ((now + ttf) > deadline) {
 		/*
 		 * Disable health based charging for this session if the
@@ -1823,29 +1904,29 @@ static bool msc_logic_health(struct batt_chg_health *rest,
 		 * TODO: consider adding a margin or debounce it.
 		 */
 		rest_state = CHG_HEALTH_DISABLED;
-		rest->rest_deadline = -1;
+
+	/* state here is _INACTIVE, _ENABLED, _ACTIVE */
 	} else {
 		const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 
 		/*
 		 * only needs to be done if rest_state != CHG_HEALTH_ACTIVE
-		 * NOTE: could also DISABLE when transitioning from
-		 * ACTIVE to ENABLED
+		 * NOTE: state will change from _ACTIVE to _ENABLED after
+		 * a period where the device discharge it is ok because it
+		 * will be adjusted on next round.
 		 */
 		rest_state = msc_health_active(rest, batt_drv);
 		if (rest_state != CHG_HEALTH_ACTIVE)
 			goto done_exit;
 
-		/* battery_capacity in mAh, rest_rate in deciC, cc_max in */
-		if (rest->rest_rate == 0) {
-			cc_max = 0;
-		} else {
-			cc_max = batt_drv->battery_capacity * rest->rest_rate;
-			cc_max *= 10;
-		}
+		/* battery_capacity in mAh, rest_rate in deciPct */
+		cc_max = batt_drv->battery_capacity * rest->rest_rate;
+		/* cc_max in ua */
+		cc_max *= 10;
 
 		/*
-		 * default FV_UV to the last charge tier.
+		 * default FV_UV to the last charge tier since fv_uv will be
+		 * set to that on _DONE.
 		 * NOTE this might need to be adjusted for the actual charge
 		 * tiers that have nonzero charging current
 		 */
@@ -2852,21 +2933,31 @@ static ssize_t batt_ctl_chg_stats(struct device *dev,
 	return count;
 }
 
+static ssize_t batt_chg_qual_stats_cstr(char *buff, int size,
+					struct gbms_charging_event *ce_qual,
+					bool verbose)
+{
+	ssize_t len = 0;
+
+	len += batt_chg_stats_cstr(&buff[len], size - len, ce_qual, verbose);
+	if (ce_qual->rest_state != CHG_HEALTH_INACTIVE)
+		len += batt_health_stats_cstr(&buff[len], size - len,
+					      ce_qual, verbose);
+	return len;
+}
+
 static ssize_t batt_show_chg_stats(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *)
 					power_supply_get_drvdata(psy);
+	struct gbms_charging_event *ce_qual = &batt_drv->ce_qual;
 	int len = -ENODATA;
 
 	mutex_lock(&batt_drv->stats_lock);
-
-	if (batt_drv->ce_qual.last_update - batt_drv->ce_qual.first_update)
-		len = batt_chg_stats_cstr(buf,
-					  PAGE_SIZE,
-					  &batt_drv->ce_qual, false);
-
+	if (ce_qual->last_update - ce_qual->first_update)
+		len = batt_chg_qual_stats_cstr(buf, PAGE_SIZE, ce_qual, false);
 	mutex_unlock(&batt_drv->stats_lock);
 
 	return len;
@@ -2881,17 +2972,35 @@ static ssize_t batt_show_chg_details(struct device *dev,
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *)
 					power_supply_get_drvdata(psy);
+	struct gbms_charging_event *ce_data = &batt_drv->ce_data;
 	const bool qual_valid = (batt_drv->ce_qual.last_update -
 				batt_drv->ce_qual.first_update) != 0;
 	int len = 0;
 
 	mutex_lock(&batt_drv->stats_lock);
 
-	len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
-				   &batt_drv->ce_data, true);
+	len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len, ce_data, true);
+	if (batt_drv->chg_health.rest_state != CHG_HEALTH_INACTIVE) {
+		int vti;
+
+		/* health charge parameters */
+		len += batt_health_stats_cstr(&buf[len], PAGE_SIZE - len,
+					      ce_data, false);
+
+		vti = batt_chg_health_vti(batt_drv->chg_health.rest_state,
+					  batt_drv->chg_health.rest_deadline);
+		len += scnprintf(&buf[len], PAGE_SIZE - len,
+				"\nH: %d %ld %ld\n",
+				batt_drv->chg_health.rest_state,
+				vti,
+				get_boot_sec(),
+				batt_drv->chg_health.rest_deadline);
+
+	}
+
 	if (qual_valid)
-		len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len,
-					   &batt_drv->ce_qual, true);
+		len += batt_chg_qual_stats_cstr(&buf[len], PAGE_SIZE - len,
+						&batt_drv->ce_qual, true);
 
 	mutex_unlock(&batt_drv->stats_lock);
 
@@ -3020,7 +3129,7 @@ static ssize_t chg_health_show_stage(struct device *dev,
 		s = "Active";
 		break;
 	case CHG_HEALTH_DONE:
-		s = "Active";
+		s = "Done";
 		break;
 	default:
 		break;
@@ -3062,13 +3171,12 @@ static ssize_t batt_set_chg_deadline(struct device *dev,
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *)
 					power_supply_get_drvdata(psy);
-	const time_t now = get_boot_sec();
-	int deadline_min;
+	long long deadline_s;
 	bool changed;
 
-	deadline_min = simple_strtoull(buf, NULL, 10);
-
 	/* API works in seconds */
+	deadline_s = simple_strtoull(buf, NULL, 10);
+
 	mutex_lock(&batt_drv->chg_lock);
 	if (!batt_drv->ssoc_state.buck_enabled) {
 		mutex_unlock(&batt_drv->chg_lock);
@@ -3076,15 +3184,14 @@ static ssize_t batt_set_chg_deadline(struct device *dev,
 	}
 
 	changed = batt_health_set_chg_deadline(&batt_drv->chg_health,
-					       now + deadline_min);
+					       deadline_s);
 	mutex_unlock(&batt_drv->chg_lock);
 
 	if (changed)
 		power_supply_changed(batt_drv->psy);
 
-	pr_info("MSC_HEALTH deadline at %ld, now=%ld\n",
-		batt_drv->chg_health.rest_deadline,
-		now);
+	pr_info("MSC_HEALTH deadline_s=%ld deadline at %ld\n",
+		deadline_s, batt_drv->chg_health.rest_deadline);
 
 	return count;
 }

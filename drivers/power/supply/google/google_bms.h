@@ -200,7 +200,7 @@ struct batt_ttf_stats {
 };
 
 /*
- * adaptive charging can be enabled from userspace with a deadline
+ * health based changing can be enabled from userspace with a deadline
  *
  * initial state:
  * 	deadline = 0, rest_state = CHG_HEALTH_INACTIVE
