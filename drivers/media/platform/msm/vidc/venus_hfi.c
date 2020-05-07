@@ -84,7 +84,7 @@ const struct msm_vidc_gov_data DEFAULT_BUS_VOTE = {
 	.data_count = 0,
 };
 
-const int max_packets = 1000;
+const int max_packets = 480; /* 16 sessions x 30 packets */
 
 static void venus_hfi_pm_handler(struct work_struct *work);
 static DECLARE_DELAYED_WORK(venus_hfi_pm_work, venus_hfi_pm_handler);
