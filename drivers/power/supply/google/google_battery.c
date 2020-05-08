@@ -615,7 +615,7 @@ static qnum_t ssoc_get_capacity_raw(const struct batt_ssoc_state *ssoc)
 static int ssoc_get_capacity(const struct batt_ssoc_state *ssoc)
 {
 	const qnum_t raw = ssoc_get_capacity_raw(ssoc);
-	return qnum_roundint(raw, 0.005);
+	return qnum_roundint(raw, 0.5);
 }
 
 /* ------------------------------------------------------------------------- */
