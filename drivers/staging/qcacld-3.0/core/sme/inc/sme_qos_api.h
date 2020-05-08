@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, 2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -51,6 +51,8 @@
 #define SME_QOS_UAPSD_VI      0x02
 #define SME_QOS_UAPSD_BE      0x08
 #define SME_QOS_UAPSD_BK      0x04
+#define WLAN_MAX_DSCP 0x3f
+
 
 /*---------------------------------------------------------------------------
   Enumeration of the various QoS status types that would be reported to HDD
