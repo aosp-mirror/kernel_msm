@@ -22,8 +22,23 @@ static int tsens_get_temp(void *data, int *temp)
 {
 	struct tsens_sensor *s = data;
 	struct tsens_device *tmdev = s->tmdev;
+	int emul_temp;
+
+	emul_temp = s->emul_temperature;
+	if (emul_temp) {
+		*temp = emul_temp;
+		return 0;
+	}
 
 	return tmdev->ops->get_temp(s, temp);
+}
+
+static int tsens_set_emul_temp(void *data, int emul_temp)
+{
+	struct tsens_sensor *s = data;
+	s->emul_temperature = emul_temp;
+
+	return 0;
 }
 
 static int tsens_get_min_temp(void *data, int *temp)
@@ -37,6 +52,13 @@ static int tsens_set_trip_temp(void *data, int low_temp, int high_temp)
 {
 	struct tsens_sensor *s = data;
 	struct tsens_device *tmdev = s->tmdev;
+	int emul_temp;
+
+	emul_temp = s->emul_temperature;
+	if (emul_temp) {
+		high_temp = INT_MAX;
+		low_temp = INT_MIN;
+	}
 
 	if (tmdev->ops->set_trips)
 		return tmdev->ops->set_trips(s, low_temp, high_temp);
@@ -106,6 +128,7 @@ MODULE_DEVICE_TABLE(of, tsens_table);
 static struct thermal_zone_of_device_ops tsens_tm_thermal_zone_ops = {
 	.get_temp = tsens_get_temp,
 	.set_trips = tsens_set_trip_temp,
+	.set_emul_temp = tsens_set_emul_temp,
 };
 
 static struct thermal_zone_of_device_ops tsens_tm_min_thermal_zone_ops = {
