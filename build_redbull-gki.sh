@@ -5,5 +5,6 @@ if [[ "${BUILD_ABI:-0}" -eq 1 ]]; then
 fi
 
 BUILD_BOOT_IMG=true \
+	ENABLE_THINLTO=1 \
 	BUILD_CONFIG=private/msm-google/build.config.gki.redbull \
 	${BUILD_SCRIPT} "$@"
