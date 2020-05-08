@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -62,8 +62,6 @@
 #include <wlan_hdd_softap_tx_rx.h>
 #include <cds_sched.h>
 #include "sme_api.h"
-
-#define WLAN_HDD_MAX_DSCP 0x3f
 
 #define HDD_WMM_UP_TO_AC_MAP_SIZE 8
 
@@ -1265,7 +1263,7 @@ QDF_STATUS hdd_wmm_init(hdd_adapter_t *pAdapter)
 	/* DSCP to User Priority Lookup Table
 	 * By default use the 3 Precedence bits of DSCP as the User Priority
 	 */
-	for (dscp = 0; dscp <= WLAN_HDD_MAX_DSCP; dscp++)
+	for (dscp = 0; dscp <= WLAN_MAX_DSCP; dscp++)
 		hddWmmDscpToUpMap[dscp] = dscp >> 3;
 
 	/* Special case for Expedited Forwarding (DSCP 46) */
