@@ -48,3 +48,7 @@
 &dsi_sim_vid {
 	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
 };
+
+&dsi_sim_cmd {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};
