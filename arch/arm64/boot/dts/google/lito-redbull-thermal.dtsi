@@ -229,6 +229,14 @@
 		status = "disabled";
 	};
 
+	pm7250b-tz {
+		status = "disabled";
+	};
+
+	pm8150l_tz {
+		status = "disabled";
+	};
+
 	/* Disable QCT default BCL throttling */
 	soc {
 		disable-thermal-zone;
