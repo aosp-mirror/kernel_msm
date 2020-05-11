@@ -2100,7 +2100,7 @@ static void ipa3_wwan_setup(struct net_device *dev)
 	dev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
 	dev->needed_headroom = HEADROOM_FOR_QMAP;
 	dev->needed_tailroom = TAILROOM;
-	dev->watchdog_timeo = 1000;
+	dev->watchdog_timeo = msecs_to_jiffies(10000);
 }
 
 /**
@@ -2697,8 +2697,8 @@ static const struct of_device_id rmnet_ipa_dt_match[] = {
 MODULE_DEVICE_TABLE(of, rmnet_ipa_dt_match);
 
 static const struct dev_pm_ops rmnet_ipa_pm_ops = {
-	.suspend = rmnet_ipa_ap_suspend,
-	.resume_noirq = rmnet_ipa_ap_resume,
+	.suspend_late = rmnet_ipa_ap_suspend,
+	.resume_early = rmnet_ipa_ap_resume,
 };
 
 static struct platform_driver rmnet_ipa_driver = {

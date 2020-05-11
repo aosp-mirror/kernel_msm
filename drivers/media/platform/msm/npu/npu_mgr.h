@@ -126,18 +126,24 @@ struct npu_host_ctx {
 	uint32_t fw_dbg_mode;
 	uint32_t exec_flags_override;
 	atomic_t ipc_trans_id;
-	atomic_t network_exeute_cnt;
+	atomic_t network_execute_cnt;
 
 	uint32_t err_irq_sts;
 	uint32_t wdg_irq_sts;
 	bool fw_error;
 	bool cancel_work;
+	bool app_crashed;
 	struct notifier_block nb;
+	struct notifier_block panic_nb;
 	void *notif_hdle;
 	spinlock_t bridge_mbox_lock;
 	bool bridge_mbox_pwr_on;
 	void *ipc_msg_buf;
 	struct list_head misc_cmd_list;
+
+	struct msm_npu_property fw_caps;
+	bool fw_caps_valid;
+	uint32_t fw_caps_err_code;
 };
 
 struct npu_device;
