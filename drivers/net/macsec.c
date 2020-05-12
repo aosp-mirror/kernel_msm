@@ -20,11 +20,8 @@
 #include <net/genetlink.h>
 #include <net/sock.h>
 #include <net/gro_cells.h>
-<<<<<<< HEAD
 #include <linux/if_arp.h>
-=======
 #include <linux/phy.h>
->>>>>>> 3f527a9860777f9347591b3cfcd6c36ec056756c
 
 #include <uapi/linux/if_macsec.h>
 
@@ -3195,9 +3192,6 @@ static int macsec_set_mac_address(struct net_device *dev, void *p)
 
 out:
 	ether_addr_copy(dev->dev_addr, addr->sa_data);
-<<<<<<< HEAD
-	macsec->secy.sci = dev_to_sci(dev, MACSEC_PORT_ES);
-=======
 
 	macsec->secy.sci = dev_to_sci(dev, MACSEC_PORT_ES);
 
@@ -3208,7 +3202,6 @@ out:
 		return macsec_offload(ops->mdo_upd_secy, &ctx);
 	}
 
->>>>>>> 3f527a9860777f9347591b3cfcd6c36ec056756c
 	return 0;
 }
 
