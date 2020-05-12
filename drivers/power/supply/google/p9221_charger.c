@@ -783,15 +783,9 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	del_timer(&charger->vrect_timer);
 
 	p9221_vote_defaults(charger);
-	if (charger->enabled &&
-	    charger->pdata->qien_gpio >= 0) {
-		if (charger->is_mfg_google == false)
-			gpio_set_value(charger->pdata->qien_gpio, 1);
-
+	if (charger->enabled)
 		mod_delayed_work(system_wq, &charger->dcin_pon_work,
 				 msecs_to_jiffies(P9221_DCIN_PON_DELAY_MS));
-	}
-	charger->is_mfg_google = false;
 }
 
 static void p9221_tx_work(struct work_struct *work)
@@ -857,9 +851,7 @@ static void p9221_dcin_pon_work(struct work_struct *work)
 		return;
 	}
 
-	if (prop.intval == 0) {
-		gpio_set_value(charger->pdata->qien_gpio, 0);
-	} else {
+	if (prop.intval != 0) {
 		/* Signal DC_RESET when vout keeps on 1. */
 		ret = power_supply_set_property(charger->dc_psy,
 						POWER_SUPPLY_PROP_DC_RESET,
