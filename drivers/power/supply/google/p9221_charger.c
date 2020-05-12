@@ -2900,6 +2900,8 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 			logbuffer_log(charger->rtx_log,
 				      "cannot enter rTX mode (%d)\n", ret);
 			p9382_ben_cfg(charger, RTX_BEN_DISABLED);
+			vote(charger->disable_dcin_en_votable, P9221_WLC_VOTER,
+			     false, 0);
 			goto exit;
 		}
 
