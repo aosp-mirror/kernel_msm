@@ -280,7 +280,7 @@ const char *gbms_chg_ev_adapter_s(int adapter);
 /* Binned cycle count */
 #define GBMS_CCBIN_BUCKET_COUNT	10
 
-#ifdef CONFIG_QPNP_QG
+#if IS_ENABLED(CONFIG_QPNP_QG)
 #undef GBMS_CCBIN_BUCKET_COUNT
 #define GBMS_CCBIN_BUCKET_COUNT	8
 #endif
