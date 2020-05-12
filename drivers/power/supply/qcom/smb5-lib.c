@@ -6332,6 +6332,8 @@ int enable_moisture_detection(struct smb_charger *chg, bool enable)
 		power_supply_changed(chg->usb_psy);
 	}
 
+	chg->moisture_detection_enabled = enable;
+
 exit:
 	mutex_unlock(&chg->moisture_detection_enable);
 	return rc;
