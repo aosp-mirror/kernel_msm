@@ -32,3 +32,7 @@ private/msm-google-modules/touch/fts/sunfish
 IN_KERNEL_MODULES=1
 STOP_SHIP_TRACEPRINTK=1
 BUILD_INITRAMFS=1
+
+UNSTRIPPED_MODULES="
+wlan.ko
+"
