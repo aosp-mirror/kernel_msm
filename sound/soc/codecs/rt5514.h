@@ -329,6 +329,7 @@ struct rt5514_priv {
 	int divider_param;
 	struct _payload_st payload;
 	bool v_p;
+	int i2c_patch_size;
 	char *fw_name[4];
 	unsigned int fw_addr[4];
 	bool is_streaming;
