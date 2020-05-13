@@ -147,6 +147,8 @@ struct msm_geni_serial_port {
 	struct dentry *dbg;
 	bool port_setup;
 	unsigned int *rx_fifo;
+	unsigned char *rx_poll_next;
+	unsigned int rx_poll_unread;
 	int (*handle_rx)(struct uart_port *uport,
 			unsigned int rx_fifo_wc,
 			unsigned int rx_last_byte_valid,
@@ -642,13 +644,18 @@ static void msm_geni_serial_complete_rx_eot(struct uart_port *uport)
 #ifdef CONFIG_CONSOLE_POLL
 static int msm_geni_serial_get_char(struct uart_port *uport)
 {
-	unsigned int rx_fifo;
 	unsigned int m_irq_status;
 	unsigned int s_irq_status;
+	unsigned int rx_fifo_status;
+	unsigned int rx_fifo_wc;
+	unsigned int rx_last;
+	unsigned int rx_last_byte_valid;
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
-	if (!(msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
-			M_SEC_IRQ_EN, true)))
-		return NO_POLL_CHAR;
+	if (msm_port->rx_poll_unread > 0) {
+		msm_port->rx_poll_unread--;
+		return *msm_port->rx_poll_next++;
+	}
 
 	m_irq_status = geni_read_reg_nolog(uport->membase,
 						SE_GENI_M_IRQ_STATUS);
@@ -659,18 +666,24 @@ static int msm_geni_serial_get_char(struct uart_port *uport)
 	geni_write_reg_nolog(s_irq_status, uport->membase,
 						SE_GENI_S_IRQ_CLEAR);
 
-	if (!(msm_geni_serial_poll_bit(uport, SE_GENI_RX_FIFO_STATUS,
-			RX_FIFO_WC_MSK, true)))
+	rx_fifo_status = geni_read_reg_nolog(uport->membase, SE_GENI_RX_FIFO_STATUS);
+	rx_fifo_wc = rx_fifo_status & RX_FIFO_WC_MSK;
+	if (rx_fifo_wc == 0)
 		return NO_POLL_CHAR;
 
-	/*
-	 * Read the Rx FIFO only after clearing the interrupt registers and
-	 * getting valid RX fifo status.
-	 */
-	mb();
-	rx_fifo = geni_read_reg_nolog(uport->membase, SE_GENI_RX_FIFOn);
-	rx_fifo &= 0xFF;
-	return rx_fifo;
+	*msm_port->rx_fifo = geni_read_reg_nolog(uport->membase, SE_GENI_RX_FIFOn);
+	msm_port->rx_poll_next = (unsigned char *)msm_port->rx_fifo;
+
+	rx_last = rx_fifo_status & RX_LAST;
+	rx_last_byte_valid = ((rx_fifo_status & RX_LAST_BYTE_VALID_MSK) >>
+						RX_LAST_BYTE_VALID_SHFT);
+	if (rx_fifo_wc == 1 && rx_last && rx_last_byte_valid)
+		msm_port->rx_poll_unread = rx_last_byte_valid;
+	else
+		msm_port->rx_poll_unread = 4;
+
+	msm_port->rx_poll_unread--;
+	return *msm_port->rx_poll_next++;
 }
 
 static void msm_geni_serial_poll_put_char(struct uart_port *uport,
