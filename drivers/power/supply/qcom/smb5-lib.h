@@ -516,6 +516,7 @@ struct smb_charger {
 	bool			typec_legacy;
 	bool			dam_detected;
 	bool			typec_irq_en;
+	bool			typec_role_swap_failed;
 
 	/* cached status */
 	bool			system_suspend_supported;
