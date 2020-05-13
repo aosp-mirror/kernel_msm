@@ -42,8 +42,9 @@
 struct regmap *rt5514_g_i2c_regmap;
 EXPORT_SYMBOL_GPL(rt5514_g_i2c_regmap);
 struct rt5514_priv *g_rt5514;
+const struct reg_sequence *rt5514_i2c_patch;
 
-static const struct reg_sequence rt5514_i2c_patch[] = {
+static const struct reg_sequence const_rt5514p_i2c_patch[] = {
 	{0xfafafafa, 0x00000001},
 	{0x18002000, 0x000010ec},
 	{0x18002004, 0x00808f81},
@@ -57,6 +58,29 @@ static const struct reg_sequence rt5514_i2c_patch[] = {
 	{0x1800110c, 0x00000000},
 	{0x18001100, 0x0000031f},
 	{0x18002000, 0x000010ec},
+};
+
+static const struct reg_sequence const_rt5514_i2c_patch[] = {
+	{0x1800101c, 0x00000000},
+	{0x18001100, 0x0000031f},
+	{0x18001104, 0x00000007},
+	{0x18001108, 0x00000000},
+	{0x1800110c, 0x00000000},
+	{0x18001110, 0x00000000},
+	{0x18001114, 0x00000001},
+	{0x18001118, 0x00000000},
+	{0x18002f08, 0x00000006},
+	{0x18002f00, 0x00055149},
+	{0x18002f00, 0x0005514b},
+	{0x18002f00, 0x00055149},
+	{0xfafafafa, 0x00000001},
+	{0x18002f10, 0x00000001},
+	{0x18002f10, 0x00000000},
+	{0x18002f10, 0x00000001},
+	{0xfafafafa, 0x00000001},
+	{0x18002000, 0x000010ec},
+	{0xfafafafa, 0x00000000},
+	{0x18001044, 0x00000000},
 };
 
 static const struct reg_sequence rt5514_patch[] = {
@@ -159,25 +183,62 @@ static void rt5514_filter_power_reset(struct rt5514_priv *rt5514)
 
 static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 {
-	regmap_write(rt5514->i2c_regmap, 0x18002004, 0x00808f81);
-	regmap_write(rt5514->i2c_regmap, 0x18002008, 0x00770000);
-	/* LDO_I_limit */
-	regmap_write(rt5514->i2c_regmap, 0x18002200, 0x00028704);
-	/* PIN config */
-	regmap_write(rt5514->i2c_regmap, 0x18002070, 0x00000040);
-	/* PLL3(QN)=RCOSC*(22+2) */
-	regmap_write(rt5514->i2c_regmap, 0x18002240, 0x00000016);
-	/* PLL3 source=RCOSC, fsi=rt_clk */
-	regmap_write(rt5514->i2c_regmap, 0x18002100, 0x0000000b);
-	/* DSP clk source = pll3, ENABLE DSP clk */
-	regmap_write(rt5514->i2c_regmap, 0x18002f08, 0x00000005);
-	/* Enable DSP clk auto switch */
-	regmap_write(rt5514->i2c_regmap, 0x18001114, 0x00000001);
-	/* Reduce DSP power */
-	regmap_write(rt5514->i2c_regmap, 0x18001118, 0x00000001);
-	/* Buffer data mono/stereo */
-	regmap_write(rt5514->i2c_regmap, 0x18002fcc,
-		rt5514->dsp_buffer_channel);
+	if (rt5514->v_p) {
+		regmap_write(rt5514->i2c_regmap, 0x18002004, 0x00808f81);
+		regmap_write(rt5514->i2c_regmap, 0x18002008, 0x00770000);
+		/* LDO_I_limit */
+		regmap_write(rt5514->i2c_regmap, 0x18002200, 0x00028704);
+		/* PIN config */
+		regmap_write(rt5514->i2c_regmap, 0x18002070, 0x00000040);
+		/* pll3=1.3M*31=40M */
+		regmap_write(rt5514->i2c_regmap, 0x18002240, 0x0000001e);
+		/* PLL3 source=RCOSC, fsi=rt_clk */
+		regmap_write(rt5514->i2c_regmap, 0x18002100, 0x0000000b);
+		/* DSP clk source = pll3, ENABLE DSP clk */
+		regmap_write(rt5514->i2c_regmap, 0x18002f08, 0x00000005);
+		/* Reduce DSP power */
+		regmap_write(rt5514->i2c_regmap, 0x18001118, 0x00000001);
+		/* Buffer data mono/stereo */
+		regmap_write(rt5514->i2c_regmap, 0x18002fcc,
+			rt5514->dsp_buffer_channel);
+		/* DFLL reset */
+		regmap_write(rt5514->i2c_regmap, 0x18002124, 0x00220012);
+		/* DFLL, set m/n(1220) */
+		regmap_write(rt5514->i2c_regmap, 0x18002110, 0x000104c4);
+		/* DFLL,reset DFLL */
+		regmap_write(rt5514->i2c_regmap, 0x18002124, 0x80220012);
+		/* DFLL */
+		regmap_write(rt5514->i2c_regmap, 0x18002124, 0xc0220012);
+	} else {
+		/* Reset */
+		regmap_write(rt5514->i2c_regmap, 0x18002000, 0x000010ec);
+		/* LDO_I_limit */
+		regmap_write(rt5514->i2c_regmap, 0x18002200, 0x00028704);
+		/* I2C bypass enable */
+		regmap_write(rt5514->i2c_regmap, 0xfafafafa, 0x00000001);
+		/* mini-core reset */
+		regmap_write(rt5514->i2c_regmap, 0x18002f00, 0x0005514b);
+		regmap_write(rt5514->i2c_regmap, 0x18002f00, 0x00055149);
+		/* I2C bypass disable */
+		regmap_write(rt5514->i2c_regmap, 0xfafafafa, 0x00000000);
+		/* PIN config */
+		regmap_write(rt5514->i2c_regmap, 0x18002070, 0x00000040);
+		/* PLL3(QN)=RCOSC*(22+2) */
+		regmap_write(rt5514->i2c_regmap, 0x18002240, 0x00000016);
+		/* PLL3 source=RCOSC, fsi=rt_clk */
+		regmap_write(rt5514->i2c_regmap, 0x18002100, 0x0000000b);
+		/* Power on RCOSC, pll3 */
+		regmap_write(rt5514->i2c_regmap, 0x18002004, 0x00808b81);
+		/* DSP clk source = pll3, ENABLE DSP clk */
+		regmap_write(rt5514->i2c_regmap, 0x18002f08, 0x00000005);
+		/* Enable DSP clk auto switch */
+		regmap_write(rt5514->i2c_regmap, 0x18001114, 0x00000001);
+		/* Reduce DSP power */
+		regmap_write(rt5514->i2c_regmap, 0x18001118, 0x00000001);
+		/* Buffer data mono/stereo */
+		regmap_write(rt5514->i2c_regmap, 0x18002fcc,
+			rt5514->dsp_buffer_channel);
+	}
 }
 
 static bool rt5514_volatile_register(struct device *dev, unsigned int reg)
@@ -635,7 +696,7 @@ static int rt5514_dsp_status_check(struct rt5514_priv *rt5514)
 			gpiod_set_value(rt5514->gpiod_reset, 1);
 		} else {
 			regmap_multi_reg_write(rt5514->i2c_regmap,
-				rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+				rt5514_i2c_patch, rt5514->i2c_patch_size);
 		}
 		regcache_mark_dirty(rt5514->regmap);
 		regcache_sync(rt5514->regmap);
@@ -842,7 +903,7 @@ watchdog:
 					regmap_multi_reg_write(
 						rt5514->i2c_regmap,
 						rt5514_i2c_patch,
-						ARRAY_SIZE(rt5514_i2c_patch));
+						rt5514->i2c_patch_size);
 					regcache_mark_dirty(rt5514->regmap);
 					regcache_sync(rt5514->regmap);
 					return 0;
@@ -921,7 +982,7 @@ watchdog:
 			gpiod_set_value(rt5514->gpiod_reset, 1);
 		} else {
 			regmap_multi_reg_write(rt5514->i2c_regmap,
-				rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+				rt5514_i2c_patch, rt5514->i2c_patch_size);
 		}
 		regcache_mark_dirty(rt5514->regmap);
 		regcache_sync(rt5514->regmap);
@@ -953,7 +1014,7 @@ void rt5514_watchdog_handler(void)
 		gpiod_set_value(g_rt5514->gpiod_reset, 1);
 	} else {
 		regmap_multi_reg_write(rt5514_g_i2c_regmap,
-			rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+			rt5514_i2c_patch, g_rt5514->i2c_patch_size);
 	}
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
 	rt5514_dsp_enable(g_rt5514, false, true);
@@ -1389,7 +1450,7 @@ static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
 	}
 
 	regmap_multi_reg_write(rt5514->i2c_regmap,
-		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+		rt5514_i2c_patch, rt5514->i2c_patch_size);
 	rt5514_enable_dsp_prepare(rt5514);
 
 	buf1 = kmalloc(0xb8000, GFP_KERNEL);
@@ -1440,7 +1501,7 @@ static int rt5514_mem_test_get(struct snd_kcontrol *kcontrol,
 
 failed:
 	regmap_multi_reg_write(rt5514->i2c_regmap,
-		rt5514_i2c_patch, ARRAY_SIZE(rt5514_i2c_patch));
+		rt5514_i2c_patch, rt5514->i2c_patch_size);
 	rt5514_dsp_enable(rt5514, false, true);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
 	ucontrol->value.integer.value[0] = !!ret;
@@ -2556,6 +2617,8 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 		rt5514->fw_addr[1] = 0x4ff00000;
 		rt5514->fw_addr[2] = 0x4fe98000;
 		rt5514->fw_addr[3] = 0x4fea8000;
+		rt5514_i2c_patch = const_rt5514p_i2c_patch;
+		rt5514->i2c_patch_size = ARRAY_SIZE(const_rt5514p_i2c_patch);
 	} else {
 		rt5514->fw_name[0] = RT5514_FIRMWARE1;
 		rt5514->fw_name[1] = RT5514_FIRMWARE2;
@@ -2565,10 +2628,12 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 		rt5514->fw_addr[1] = 0x4ffc0000;
 		rt5514->fw_addr[2] = 0x4ffaa800;
 		rt5514->fw_addr[3] = 0x4ffb4800;
+		rt5514_i2c_patch = const_rt5514_i2c_patch;
+		rt5514->i2c_patch_size = ARRAY_SIZE(const_rt5514_i2c_patch);
 	}
 
 	ret = regmap_multi_reg_write(rt5514->i2c_regmap, rt5514_i2c_patch,
-				    ARRAY_SIZE(rt5514_i2c_patch));
+				    rt5514->i2c_patch_size);
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply i2c_regmap patch: %d\n",
 			ret);
