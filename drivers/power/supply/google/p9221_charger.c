@@ -52,7 +52,6 @@
 #define P9221_NEG_POWER_10W		(10 / 0.5)
 #define P9221_PTMC_EPP_TX_1912		0x32
 
-#define P9382A_DC_ICL_EPP_1200		1200000
 #define P9382A_DC_ICL_EPP_1000		1000000
 #define P9382A_NEG_POWER_10W		(10 / 0.5)
 #define P9382A_NEG_POWER_11W		(11 / 0.5)
@@ -740,12 +739,8 @@ static void p9221_vote_defaults(struct p9221_charger_data *charger)
 		dev_err(&charger->client->dev,
 			"Could not vote DC_ICL %d\n", ret);
 
-	if (charger->chip_id == P9382A_CHIP_ID)
-		ocp_icl = (charger->dc_icl_epp > P9382A_DC_ICL_EPP_1200) ?
-			   charger->dc_icl_epp : P9382A_DC_ICL_EPP_1200;
-	else
-		ocp_icl = (charger->dc_icl_epp > 0) ?
-			   charger->dc_icl_epp : P9221_DC_ICL_EPP_UA;
+	ocp_icl = (charger->dc_icl_epp > 0) ?
+		   charger->dc_icl_epp : P9221_DC_ICL_EPP_UA;
 
 	ret = vote(charger->dc_icl_votable, P9221_OCP_VOTER, true,
 			ocp_icl);
@@ -1397,12 +1392,8 @@ static void p9382_check_neg_power(struct p9221_charger_data *charger)
 		dev_info(&charger->client->dev,
 			 "EPP less than 10W,use dc_icl=%dmA,np=%02x\n",
 			 P9221_DC_ICL_BPP_UA/1000, np8);
-	} else {
-		if (np8 > P9382A_NEG_POWER_11W)
-			charger->dc_icl_epp_neg = P9382A_DC_ICL_EPP_1200;
-		else if (np8 < P9382A_NEG_POWER_11W)
-			charger->dc_icl_epp_neg = P9382A_DC_ICL_EPP_1000;
-
+	} else if (np8 < P9382A_NEG_POWER_11W) {
+		charger->dc_icl_epp_neg = P9382A_DC_ICL_EPP_1000;
 		dev_info(&charger->client->dev,
 			 "Use dc_icl=%dmA,np=%02x\n",
 			 charger->dc_icl_epp_neg/1000, np8);
