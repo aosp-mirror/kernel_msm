@@ -1163,6 +1163,9 @@ static int p9221_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_AICL_ICL:
 		val->intval = charger->aicl_icl_ua;
 		break;
+	case POWER_SUPPLY_PROP_RTX:
+		val->intval = charger->ben_state;
+		break;
 	default:
 		ret = p9221_get_property_reg(charger, prop, val);
 		break;
@@ -2910,7 +2913,7 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 		}
 	}
 exit:
-	schedule_work(&charger->uevent_work);
+	power_supply_changed(charger->wc_psy);
 	return ret;
 }
 
@@ -3818,6 +3821,7 @@ static enum power_supply_property p9221_props[] = {
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_AICL_DELAY,
 	POWER_SUPPLY_PROP_AICL_ICL,
+	POWER_SUPPLY_PROP_RTX,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
 	POWER_SUPPLY_PROP_PTMC_ID,
 	POWER_SUPPLY_PROP_CAPACITY,
