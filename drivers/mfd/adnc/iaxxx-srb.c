@@ -299,7 +299,7 @@ static int iaxxx_update_block_request(struct iaxxx_priv *priv,
 			dev_err(priv->dev,
 				"%s failed to get pm_sync rc= 0x%x\n",
 				__func__, rc);
-			return rc;
+			goto get_sync_err;
 		}
 	}
 
@@ -387,9 +387,10 @@ out:
 		if (ret)
 			dev_err(dev, "Read error register failed %d\n", ret);
 	}
-	if (regmap == priv->regmap) {
+get_sync_err:
+	if (regmap == priv->regmap)
 		iaxxx_pm_put_autosuspend(priv->dev);
-	}
+
 	return rc;
 }
 
@@ -736,8 +737,9 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
 			dev_err(priv->dev,
 				"%s failed to get pm_sync rc= 0x%x\n",
 				__func__, rc);
-			return rc;
+			goto get_sync_err;
 		}
+
 		mutex_lock(&priv->update_block_lock);
 	}
 
@@ -760,11 +762,13 @@ int iaxxx_poll_update_block_req_bit_clr(struct iaxxx_priv *priv,
 		pr_err("Update Block bit not cleared, rc = %d\n", rc);
 		rc = -EBUSY;
 	}
+
 update_block_clr_check_err:
-	if (regmap == priv->regmap) {
-		iaxxx_pm_put_autosuspend(priv->dev);
+	if (regmap == priv->regmap)
 		mutex_unlock(&priv->update_block_lock);
-	}
+get_sync_err:
+	if (regmap == priv->regmap)
+		iaxxx_pm_put_autosuspend(priv->dev);
 	return rc;
 }
 EXPORT_SYMBOL(iaxxx_poll_update_block_req_bit_clr);

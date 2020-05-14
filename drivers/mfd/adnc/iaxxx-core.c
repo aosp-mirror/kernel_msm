@@ -1606,11 +1606,8 @@ static void iaxxx_fw_crash_work(struct kthread_work *work)
 
 #ifndef CONFIG_MFD_IAXXX_DISABLE_RUNTIME_PM
 	/* Disable runtime pm*/
-	if (pm_runtime_enabled(priv->dev)) {
-		/* Make sure PM usage counter is 0 */
-		pm_runtime_put_noidle(priv->dev);
+	if (pm_runtime_enabled(priv->dev))
 		pm_runtime_disable(priv->dev);
-	}
 #endif
 
 	/* Clear event queue */
