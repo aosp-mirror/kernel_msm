@@ -1962,9 +1962,9 @@ static void run_cx_data_read(void *device_data)
 				Max_cxdiffData_tx = cxdiffData_tx[(j*rx_num)+i];
 			if (cxdiffData_tx[(j*rx_num)+i] < Low_cxdiffData_tx)
 				Low_cxdiffData_tx = cxdiffData_tx[(j*rx_num)+i];
-				snprintf(pTmp, sizeof(pTmp), "%4d",
-						cxdiffData_tx[(j*rx_num)+i]);
-				strcat(pStr, pTmp);
+			snprintf(pTmp, sizeof(pTmp), "%4d",
+					cxdiffData_tx[(j*rx_num)+i]);
+			strcat(pStr, pTmp);
 		}
 		tsp_debug_info(&info->client->dev, "FTS %s\n", pStr);
 	}

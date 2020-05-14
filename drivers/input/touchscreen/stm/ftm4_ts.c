@@ -1021,10 +1021,10 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			info->fts_power_state );
 #endif
 
-	if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER)
-		EventID = data[EventNum * FTS_EVENT_SIZE] & 0xFF;
-	else
-		EventID = data[EventNum * FTS_EVENT_SIZE] & 0x0F;
+		if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER)
+			EventID = data[EventNum * FTS_EVENT_SIZE] & 0xFF;
+		else
+			EventID = data[EventNum * FTS_EVENT_SIZE] & 0x0F;
 
 		if ((EventID >= 3) && (EventID <= 5)) {
 			LastLeftEvent = 0;
