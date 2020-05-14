@@ -225,11 +225,6 @@
 				cooling-device =
 					<&google_charger 4 4>;
 			};
-			wireless-charge-iusb-250mA {
-				trip = <&skin_moderate>;
-				cooling-device =
-					<&google_wlc_charger 2 2>;
-			};
 			cpu0-nominal {
 				trip = <&skin_moderate>;
 				cooling-device =
@@ -254,7 +249,7 @@
 			wireless-charge-iusb-110mA {
 				trip = <&skin_severe>;
 				cooling-device =
-					<&google_wlc_charger 3 3>;
+					<&google_wlc_charger 2 2>;
 			};
 			cpu0-svs-l1 {
 				trip = <&skin_severe>;
