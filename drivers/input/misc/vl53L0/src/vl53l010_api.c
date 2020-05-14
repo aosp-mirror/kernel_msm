@@ -612,8 +612,8 @@ VL53L0_Error VL53L010_StaticInit(VL53L0_DEV Dev)
 	LOG_FUNCTION_START("");
 
     /* Set I2C standard mode */
-    if (Status == VL53L0_ERROR_NONE)
-        Status = VL53L0_WrByte(Dev, 0x88, 0x00);
+	if (Status == VL53L0_ERROR_NONE)
+		Status = VL53L0_WrByte(Dev, 0x88, 0x00);
 
 	/* this function do nothing if it has been called before */
 	Status = VL53L010_get_info_from_device(Dev);
