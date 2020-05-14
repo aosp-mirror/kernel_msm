@@ -1903,7 +1903,7 @@ static int msc_logic_ramp_cc_max(struct batt_drv *batt_drv, int vbatt)
 	if (!profile->chg_last_tier_vpack_tolerance)
 		return 0;
 
-	if ((vbatt - last_tier) > profile->chg_last_tier_vpack_tolerance &&
+	if (vbatt > (last_tier + profile->chg_last_tier_vpack_tolerance) &&
 	    cc_max > profile->chg_last_tier_term_current) {
 		cc_max -= profile->chg_last_tier_dec_current;
 		if (cc_max <= profile->chg_last_tier_term_current)
