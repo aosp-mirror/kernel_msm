@@ -1736,8 +1736,6 @@ static void p9221_notifier_check_dc(struct p9221_charger_data *charger)
 		p9382_check_neg_power(charger);
 		p9221_set_dc_icl(charger);
 		p9221_write_fod(charger);
-		if (charger->last_capacity > 0)
-			p9221_send_csp(charger, charger->last_capacity);
 		if (!charger->dc_icl_bpp)
 			p9221_icl_ramp_start(charger);
 	}
