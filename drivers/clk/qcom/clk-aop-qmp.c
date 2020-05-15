@@ -214,7 +214,7 @@ static const struct clk_ops aop_qmp_clk_ops = {
 };
 
 DEFINE_CLK_AOP_QMP(qdss_qmp_clk, clock, qdss, QDSS_CLK_LEVEL_DYNAMIC,
-			QDSS_CLK_LEVEL_OFF, CLK_ENABLE_HAND_OFF);
+			QDSS_CLK_LEVEL_OFF, 0);
 DEFINE_CLK_AOP_QMP(qdss_ao_qmp_clk, clock, qdss_ao, QDSS_CLK_LEVEL_DYNAMIC,
 			QDSS_CLK_LEVEL_OFF, 0);
 
@@ -327,6 +327,11 @@ fail:
 	return ret;
 }
 
+static void aop_qmp_clk_sync_state(struct device *dev)
+{
+	clk_sync_state(dev);
+}
+
 static const struct of_device_id aop_qmp_clk_of_match[] = {
 	{ .compatible = "qcom,aop-qmp-clk", },
 	{}
@@ -336,6 +341,7 @@ static struct platform_driver aop_qmp_clk_driver = {
 	.driver = {
 		.name = "qmp-aop-clk",
 		.of_match_table = aop_qmp_clk_of_match,
+		.sync_state = aop_qmp_clk_sync_state,
 	},
 	.probe = aop_qmp_clk_probe,
 };
