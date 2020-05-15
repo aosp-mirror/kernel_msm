@@ -3913,9 +3913,9 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	case POWER_SUPPLY_PROP_CAPACITY:
 		if (batt_drv->fake_capacity >= 0 &&
-				batt_drv->fake_capacity <= 100)
+				batt_drv->fake_capacity <= 100) {
 			val->intval = batt_drv->fake_capacity;
-		else {
+		} else {
 			mutex_lock(&batt_drv->batt_lock);
 			val->intval = ssoc_get_capacity(ssoc_state);
 			mutex_unlock(&batt_drv->batt_lock);
@@ -3927,7 +3927,11 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
-		val->intval = batt_drv->capacity_level;
+		if (batt_drv->fake_capacity >= 0 &&
+				batt_drv->fake_capacity <= 100)
+			val->intval = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
+		else
+			val->intval = batt_drv->capacity_level;
 		break;
 
 	/* ng charging:
