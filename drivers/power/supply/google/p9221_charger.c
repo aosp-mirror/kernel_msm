@@ -56,6 +56,7 @@
 #define P9382A_DC_ICL_EPP_1000		1000000
 #define P9382A_NEG_POWER_10W		(10 / 0.5)
 #define P9382A_NEG_POWER_11W		(11 / 0.5)
+#define P9382_RTX_TIMEOUT_MS		(10 * 1000)
 
 #define WLC_ALIGNMENT_MAX		100
 #define WLC_MFG_GOOGLE			0x72
@@ -3450,6 +3451,34 @@ error:
 	charger->com_busy = false;
 }
 
+static void p9382_rtx_work(struct work_struct *work)
+{
+	u8 mode_reg;
+	int ret = 0;
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, rtx_work.work);
+
+	if (!charger->ben_state)
+		return;
+
+	/* Check if RTx mode is auto turn off */
+	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG,
+			       &mode_reg);
+	if (ret == 0) {
+		if (charger->is_rtx_mode && !mode_reg) {
+			logbuffer_log(charger->rtx_log,
+				      "is_rtx_on: ben=%d, mode=%02x",
+				      charger->ben_state, mode_reg);
+			charger->rtx_err = RTX_VOUT_DROP;
+			charger->is_rtx_mode = false;
+			p9382_set_rtx(charger, false);
+		}
+	}
+
+	schedule_delayed_work(&charger->rtx_work,
+			      msecs_to_jiffies(P9382_RTX_TIMEOUT_MS));
+}
+
 /* Handler for rtx mode */
 static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 {
@@ -3470,6 +3499,9 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 		if (mode_reg & P9382A_MODE_TXMODE) {
 			charger->is_rtx_mode = true;
 			pm_stay_awake(charger->dev);
+			cancel_delayed_work_sync(&charger->rtx_work);
+			schedule_delayed_work(&charger->rtx_work,
+				    msecs_to_jiffies(P9382_RTX_TIMEOUT_MS));
 		}
 		dev_info(&charger->client->dev,
 			 "P9221_SYSTEM_MODE_REG reg: %02x\n",
@@ -4213,6 +4245,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->icl_ramp_work, p9221_icl_ramp_work);
 	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
 	INIT_DELAYED_WORK(&charger->dcin_pon_work, p9221_dcin_pon_work);
+	INIT_DELAYED_WORK(&charger->rtx_work, p9382_rtx_work);
 	INIT_WORK(&charger->uevent_work, p9221_uevent_work);
 	INIT_WORK(&charger->rtx_disable_work, p9382_rtx_disable_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
@@ -4415,6 +4448,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->icl_ramp_work);
 	cancel_delayed_work_sync(&charger->dcin_pon_work);
 	cancel_delayed_work_sync(&charger->align_work);
+	cancel_delayed_work_sync(&charger->rtx_work);
 	cancel_work_sync(&charger->uevent_work);
 	cancel_work_sync(&charger->rtx_disable_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);

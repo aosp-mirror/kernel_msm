@@ -338,6 +338,7 @@ struct p9221_charger_data {
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
 	struct delayed_work		txid_work;
+	struct delayed_work		rtx_work;
 	struct work_struct		uevent_work;
 	struct work_struct		rtx_disable_work;
 	struct alarm			icl_ramp_alarm;
@@ -423,6 +424,7 @@ enum p9382_rtx_err {
       RTX_OVER_TEMP,
       RTX_TX_CONFLICT,
       RTX_HARD_OCP,
+      RTX_VOUT_DROP,
 };
 
 
