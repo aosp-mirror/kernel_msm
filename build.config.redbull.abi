@@ -9,6 +9,8 @@ fi
 
 ABI_DEFINITION=abi_gki_aarch64_redbull.xml
 KMI_WHITELIST=abi_gki_aarch64_redbull_whitelist
+TRIM_NONLISTED_KMI=1
+KMI_WHITELIST_STRICT_MODE=1
 
 function update_abi_config() {
   # Disable debug options
