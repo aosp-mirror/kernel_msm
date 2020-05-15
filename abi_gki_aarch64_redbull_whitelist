@@ -312,7 +312,6 @@
   handle_edge_irq
   handle_level_irq
   handle_nested_irq
-  hex2bin
   hex_dump_to_buffer
   hrtimer_active
   hrtimer_cancel
@@ -1230,19 +1229,6 @@
   mempool_kmalloc
   send_sig_info
   time64_to_tm
-
-# required by dm-default-key.ko
-  bio_crypt_alloc_ctx
-  blk_crypto_evict_key
-  blk_crypto_init_key
-  blk_crypto_start_using_mode
-  dm_get_device
-  dm_put_device
-  dm_read_arg_group
-  dm_register_target
-  dm_shift_arg
-  dm_table_get_mode
-  dm_unregister_target
 
 # required by dwc3-haps.ko
   pcim_enable_device
@@ -2431,6 +2417,7 @@
   keyslot_manager_destroy
   keyslot_manager_private
   keyslot_manager_reprogram_all_keys
+  keyslot_manager_set_max_dun_bytes
   __ll_sc_atomic64_fetch_andnot_release
   __ll_sc_atomic64_fetch_or_acquire
   __scsi_add_device
@@ -2503,6 +2490,7 @@
   crypto_shash_update
   dev_alloc_name
   dump_stack
+  hex2bin
   hex_to_bin
   ieee80211_channel_to_frequency
   ieee80211_frequency_to_channel
