@@ -1157,8 +1157,9 @@ static const char *p9382_get_ptmc_id_str(struct p9221_charger_data *charger)
 {
 	int ret;
 	uint16_t ptmc_id;
+	u16 tx_mfg_code_reg;
 
-	if (!charger->ben_state || (charger->chip_id != P9382A_CHIP_ID))
+	if (!p9221_is_online(charger))
 		return NULL;
 
 	pm_runtime_get_sync(charger->dev);
@@ -1168,7 +1169,10 @@ static const char *p9382_get_ptmc_id_str(struct p9221_charger_data *charger)
 	}
 	pm_runtime_put_sync(charger->dev);
 
-	ret = p9221_reg_read_16(charger, P9382_EPP_TX_MFG_CODE_REG, &ptmc_id);
+	tx_mfg_code_reg = (charger->chip_id == P9382A_CHIP_ID) ?
+		P9382_EPP_TX_MFG_CODE_REG : P9221R5_EPP_TX_MFG_CODE_REG;
+
+	ret = p9221_reg_read_16(charger, tx_mfg_code_reg, &ptmc_id);
 	if (ret) {
 		dev_err(&charger->client->dev,
 			"Failed to read device prmc %d\n", ret);
