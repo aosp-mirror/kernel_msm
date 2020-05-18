@@ -1069,6 +1069,19 @@ config TOUCHSCREEN_RM_INCELL
     To compile this driver as a module, choose M here: the
     module will be called raydium_incell.
 
+config TOUCHSCREEN_RM_TS_U120BLX01
+	depends on I2C
+	depends on GPIOLIB || COMPILE_TEST
+	tristate "Raydium I2C Touchscreen U120BLX01"
+	help
+	  Say Y here if you have Raydium series I2C touchscreen,
+	  such as U120BLX01, connected to your system.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called raydium_u120blx01.
+
 config TOUCHSCREEN_RM_TS
 	tristate "Raydium I2C Touchscreen"
 	depends on I2C
