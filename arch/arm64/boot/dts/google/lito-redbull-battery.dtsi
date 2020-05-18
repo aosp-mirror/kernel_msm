@@ -55,6 +55,10 @@
 			   "batt-id";
 	qcom,cl-feedback-on;
 	qcom,qg-ext-sns;
+	qcom,cl-max-increment = <5>;
+	qcom,cl-max-decrement = <10>;
+	qcom,cl-min-limit = <500>;
+	qcom,cl-max-limit = <0>;
 	qcom,cl-min-delta-batt-soc = <10>;
 	qcom,cl-wt-enable;
 	qcom,vbatt-cutoff-mv = <3300>;
