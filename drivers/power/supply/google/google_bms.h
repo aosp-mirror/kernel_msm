@@ -258,6 +258,12 @@ struct batt_chg_health {
 	int rest_fv_uv;
 };
 
+#define CHG_HEALTH_REST_IS_ACTIVE(rest) \
+	((rest)->rest_state == CHG_HEALTH_ACTIVE)
+
+#define CHG_HEALTH_REST_SOC(rest) (((rest)->always_on_soc != -1) ? \
+			(rest)->always_on_soc : (rest)->rest_soc)
+
 struct gbms_charging_event {
 	union gbms_ce_adapter_details	adapter_details;
 
@@ -277,8 +283,8 @@ struct gbms_charging_event {
 	uint32_t chg_sts_delta_soc;
 
 	/* health based charging */
-	struct batt_chg_health		chg_health;
-	struct gbms_ce_tier_stats	health_stats;
+	struct batt_chg_health		ce_health;	/* updated on close */
+	struct gbms_ce_tier_stats	health_stats;	/* updated in HC */
 };
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \
