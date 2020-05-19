@@ -45,15 +45,14 @@ void ttf_log(const struct batt_ttf_stats *stats, const char *fmt, ...)
 /* actual adapter current capability for this charging event
  * NOTE: peformance for a tier are known only after entering the tier
  */
-static int ttf_pwr_icl(const struct gbms_charging_event *ce_data,
-		       int temp_idx, int vbatt_idx)
+static int ttf_pwr_icl(const struct gbms_ce_tier_stats *ts,
+		       const union gbms_ce_adapter_details *ad)
 {
-	const struct gbms_ce_tier_stats *ts = &ce_data->tier_stats[vbatt_idx];
 	int elap, amperage;
 
 	elap = ts->time_fast + ts->time_taper;
 	if (elap <= ELAP_LIMIT_S)
-		amperage = ce_data->adapter_details.ad_amperage * 100;
+		amperage = ad->ad_amperage * 100;
 	else
 		amperage = ts->icl_sum / (elap + ts->time_other);
 
@@ -61,36 +60,33 @@ static int ttf_pwr_icl(const struct gbms_charging_event *ce_data,
 }
 
 /* NOTE: the current in taper might need to be accounted in a different way */
-static int ttf_pwr_ibatt(const struct gbms_charging_event *ce_data,
-		         int temp_idx, int vbatt_idx)
+static int ttf_pwr_ibatt(const struct gbms_ce_tier_stats *ts)
 {
-	const struct gbms_ce_tier_stats *ts = &ce_data->tier_stats[vbatt_idx];
 	int avg_ibatt, elap, sign = 1;
 
 	elap = ts->time_fast + ts->time_taper;
+	/* averages are not reliable until after some time in tier */
 	if (elap <= ELAP_LIMIT_S) {
-		pr_debug("%d,%d: fast=%d taper=%d other=%d limit=%d\n",
-			vbatt_idx, temp_idx,
-			ts->time_fast, ts->time_taper, ts->time_other,
-			ELAP_LIMIT_S);
+		pr_debug("%s: limit=%d elap=%d (%d+%d) o=%d\n", __func__,
+			 elap, ELAP_LIMIT_S, ts->time_fast, ts->time_taper,
+			 ts->time_other);
 		return 0;
 	}
 
-	/* actual */
+	/* actual, called only when avg_ibatt in tier indicates charging */
 	avg_ibatt = ts->ibatt_sum / (elap + ts->time_other);
 	if (avg_ibatt < 0)
 		sign = -1;
 
-	pr_debug("%d,%d: fast=%d taper=%d other=%d avg_ibatt=%d\n",
-		vbatt_idx, temp_idx,
-		ts->time_fast, ts->time_taper, ts->time_other,
-		avg_ibatt * sign);
+	pr_debug("%s: elap=%d (%d+%d+%d) sum=%ld avg_ibatt=%d\n", __func__,
+		 elap, ts->time_fast, ts->time_taper, ts->time_other,
+		 ts->ibatt_sum, avg_ibatt * sign);
 
 	return avg_ibatt * sign;
 }
 
 /* nominal voltage tier index for this soc */
-static int ttf_pwr_tier(const struct batt_ttf_stats *stats, int soc)
+static int ttf_pwr_vtier_idx(const struct batt_ttf_stats *stats, int soc)
 {
 	int i;
 
@@ -101,10 +97,11 @@ static int ttf_pwr_tier(const struct batt_ttf_stats *stats, int soc)
 	return i - 1;
 }
 
-/* nominal average current demand for this tier at max rate
- * NOTE: tier and soc stats keep track of aging (might not need)
+/*
+ * reference or current average current demand for a soc at max rate.
+ * NOTE: always <= cc_max for reference temperature
  */
-static int ttf_pwr_avg_cc(const struct batt_ttf_stats *stats, int soc)
+static int ttf_ref_cc(const struct batt_ttf_stats *stats, int soc)
 {
 	const struct ttf_soc_stats *sstat = NULL;
 	int delta_cc;
@@ -122,7 +119,75 @@ static int ttf_pwr_avg_cc(const struct batt_ttf_stats *stats, int soc)
 	return (delta_cc * 3600) / sstat->elap[soc];
 }
 
-/* time scaling factor for available power and SOC demand.
+/* assumes that health is active for any soc greater than CHG_HEALTH_REST_SOC */
+static int ttf_pwr_health(const struct gbms_charging_event *ce_data,
+			  int soc)
+{
+	return CHG_HEALTH_REST_IS_ACTIVE(&ce_data->ce_health) &&
+	       soc >= CHG_HEALTH_REST_SOC(&ce_data->ce_health);
+}
+
+/*
+ * equivalent icl: minimum between actual input current limit and battery
+ * everage current _while_in_tier. actual_icl will be lower in high current
+ * tiers for bad cables, ibatt is affected by temperature tier and sysload.
+ */
+static int ttf_pwr_equiv_icl(const struct gbms_charging_event *ce_data,
+			     int vbatt_idx, int soc)
+{
+	int act_icl, act_ibatt, health_icl = -1;
+	const struct gbms_ce_tier_stats *tier_stats;
+
+	/* Health bases charging uses ce_data->health_stats vtier */
+	if (ttf_pwr_health(ce_data, soc)) {
+		health_icl = ce_data->ce_health.rest_cc_max / 1000;
+		tier_stats = &ce_data->health_stats;
+	} else {
+		tier_stats = &ce_data->tier_stats[vbatt_idx];
+	}
+
+	/* actual adapter capabilities for vtier (changes with demand) */
+	act_icl = ttf_pwr_icl(tier_stats, &ce_data->adapter_details);
+	if (act_icl <= 0) {
+		pr_debug("%s: negative,null act_icl=%d health_icl=%d\n",
+			 __func__, act_icl, health_icl);
+		if (health_icl < 0)
+			return -EINVAL;
+	}
+
+	/* artificially lower aicl for health based charging */
+	if (health_icl > 0 && health_icl < act_icl) {
+		pr_debug("%s: health rest_state=%d reduce act_icl=%d->%d\n",
+			 __func__, ce_data->ce_health.rest_state,
+			 act_icl, health_icl);
+		act_icl = health_icl;
+	}
+
+	/* TODO: reduce act_icl for efficiency? */
+
+	/* actual ibatt in this tier: act_ibatt==0 when too early to tell */
+	act_ibatt = ttf_pwr_ibatt(tier_stats);
+	if (act_ibatt < 0) {
+		pr_debug("%s: discharging ibatt=%d\n", __func__, act_ibatt);
+		return -EINVAL;
+	}
+
+	/* assume that can deliver act_icl when act_ibatt == 0 */
+	if (act_ibatt > 0 && act_ibatt < act_icl) {
+		pr_debug("%s: sysload ibatt=%d, reduce icl %d->%d\n",
+			 __func__, act_ibatt, act_icl, act_ibatt);
+		act_icl = act_ibatt;
+	}
+
+	/* TODO: if act_ibatt == 0 try to reduce act_icl for sysload */
+
+	pr_debug("%s: act_icl=%d\n", __func__, act_icl);
+
+	return act_icl;
+}
+
+/*
+ * time scaling factor for available power and SOC demand.
  * NOTE: usually called when soc < ssoc_in && soc > ce_data->last_soc
  * TODO: this is very inefficient
  */
@@ -130,14 +195,14 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 			 const struct gbms_charging_event *ce_data,
 			 int soc)
 {
-	int ratio;
+	const struct gbms_chg_profile *profile = ce_data->chg_profile;
+	int cc_max, vbatt_idx, temp_idx;
 	int avg_cc, pwr_demand;
 	int act_icl, pwr_avail;
-	int act_ibatt, cc_max;
-	int vbatt_idx, temp_idx;
-	const struct gbms_chg_profile *profile = ce_data->chg_profile;
+	int ratio;
 
-	vbatt_idx = ttf_pwr_tier(stats, soc);
+	/* regular charging tier */
+	vbatt_idx = ttf_pwr_vtier_idx(stats, soc);
 	if (vbatt_idx < 0)
 		return -EINVAL;
 
@@ -154,9 +219,10 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 		if (t_avg == 0)
 			t_avg = 250;
 
+		/* average temperature in tier for charge tier index */
 		temp_idx = gbms_msc_temp_idx(profile, t_avg);
-		pr_debug("%d: temp_idx=%d t_avg=%ld sum=%ld elap=%d\n",
-			soc, temp_idx, t_avg,
+		pr_debug("%s %d: temp_idx=%d t_avg=%ld sum=%ld elap=%d\n",
+			__func__, soc, temp_idx, t_avg,
 			ce_data->tier_stats[vbatt_idx].temp_sum,
 			elap);
 
@@ -164,110 +230,123 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 			return -EINVAL;
 	}
 
-	/* max tier demand at this temperature index */
+	/* max tier demand for voltage tier at this temperature index */
 	cc_max = GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx) / 1000;
-	/* statistical demand for soc, account for taper */
-	avg_cc = ttf_pwr_avg_cc(stats, soc);
+	/* statistical current demand for soc (<= cc_max) */
+	avg_cc = ttf_ref_cc(stats, soc);
 	if (avg_cc <= 0 || avg_cc > cc_max) {
-		pr_debug("%d: demand use default avg_cc=%d->%d\n",
-			soc, avg_cc, cc_max);
+		/* no more than max rate, default to it if 0 */
+		pr_debug("%s %d: demand use default avg_cc=%d->%d\n",
+			__func__, soc, avg_cc, cc_max);
 		avg_cc = cc_max;
 	}
 
-	/* actual battery power demand */
+	/* statistical or reference max power demand for the tier at */
 	pwr_demand = (profile->volt_limits[vbatt_idx] / 10000) * avg_cc;
-	pr_debug("%d:%d,%d: pwr_demand=%d avg_cc=%d cc_max=%d\n",
-		soc, temp_idx, vbatt_idx, pwr_demand,
-		avg_cc, cc_max);
+	pr_debug("%s %d:%d,%d: pwr_demand=%d avg_cc=%d cc_max=%d\n",
+		 __func__, soc, temp_idx, vbatt_idx, pwr_demand,
+		 avg_cc, cc_max);
 
-	/* actual adapter current capabilities for this tier */
-	act_icl = ttf_pwr_icl(ce_data, temp_idx, vbatt_idx);
+	/* equivalent input current: min(act_ibatt, act_icl) for tier */
+	act_icl = ttf_pwr_equiv_icl(ce_data, vbatt_idx, soc);
 	if (act_icl <= 0) {
-		pr_debug("%d: negative, null act_icl=%d\n", soc, act_icl);
+		pr_debug("%s %d: negative, null act_icl=%d\n",
+			 __func__, soc, act_icl);
 		return -EINVAL;
 	}
 
-	/* compensate for temperature (might not need) */
-	if (temp_idx != stats->ref_temp_idx && cc_max < act_icl) {
-		pr_debug("%d: temp_idx=%d, reduce icl %d->%d\n",
-			soc, temp_idx, act_icl, cc_max);
+	/* cc_max depends from temperature, we need this for ref ibatt */
+	if (cc_max < act_icl) {
+		pr_debug("%s %d: reduce act_icl=%d to cc_max=%d\n",
+			 __func__, soc, act_icl, cc_max);
 		act_icl = cc_max;
 	}
 
-	/* compensate for system load
-	 * NOTE: act_ibatt = 0 means no system load, need to fix later
+	/*
+	 * This is the trick that makes everything work.
+	 *   act_icl = min(act_ibatt, act_icl)
+	 *
+	 * act_icl = is adapter max or adapter actual icl (due to bad cable)
+	 * act_ibatt = is from reference adapter (close to cc_max, I hope)
+	 *   at reference temperature or actual < cc_max due to sysload or
+	 *   to temperature difference.
+	 *
+	 * act_icl = 0 -> (act_icl || act_ibatt) == 0
 	 */
-	act_ibatt = ttf_pwr_ibatt(ce_data, temp_idx, vbatt_idx);
-	if (act_ibatt < 0) {
-		pr_debug("%d: ibatt=%d, discharging\n", soc, act_ibatt);
-		return -EINVAL;
-	} else if (act_ibatt > 0 && act_ibatt < act_icl) {
-		pr_debug("%d: sysload ibatt=%d, avg_cc=%d, reduce icl %d->%d\n",
-			soc, act_ibatt, avg_cc, act_icl, act_ibatt);
-		act_icl = act_ibatt;
-	}
-
 	pwr_avail = (ce_data->adapter_details.ad_voltage * 10) * act_icl;
 	if (!pwr_avail)
 		return -EINVAL;
 
-	/* TODO: scale for efficiency? */
-
+	/* ratio for elap time: it doesn't work if reference is not maximal */
 	if (pwr_avail < pwr_demand)
-		ratio = (stats->ref_watts * 100000) / pwr_avail;
+		ratio = (pwr_demand * 100) / pwr_avail;
 	else
 		ratio = 100;
 
-	pr_debug("%d: pwr_avail=%d, pwr_demand=%d ratio=%d\n",
-		soc, pwr_avail, pwr_demand, ratio);
+	pr_debug("%s %d: pwr_avail=%d, pwr_demand=%d ratio=%d\n",
+		 __func__, soc, pwr_avail, pwr_demand, ratio);
 
 	return ratio;
 }
 
 /* SOC estimates ---------------------------------------------------------  */
 
-int ttf_elap(time_t *estimate, int i,
-	     const struct batt_ttf_stats *stats,
-	     const struct gbms_charging_event *ce_data)
+/* reference of current elap for a soc at max rate */
+static int ttf_ref_elap(const struct batt_ttf_stats *stats, int soc)
 {
-	int ratio;
 	time_t elap;
 
-	if (i < 0 || i >= 100) {
-		*estimate = 0;
+	if (soc < 0 || soc >= 100)
 		return 0;
-	}
 
-	elap = stats->soc_stats.elap[i];
+	elap = stats->soc_stats.elap[soc];
 	if (elap == 0)
-		elap = stats->soc_ref.elap[i];
+		elap = stats->soc_ref.elap[soc];
 
-	ratio = ttf_pwr_ratio(stats, ce_data, i);
-	if (ratio < 0) {
-		pr_debug("%d: negative ratio=%d\n", i, ratio);
+	return elap;
+}
+
+/* elap time for a single soc% */
+static int ttf_elap(time_t *estimate, const struct batt_ttf_stats *stats,
+		    const struct gbms_charging_event *ce_data,
+		    int soc)
+{
+	time_t elap;
+	int ratio;
+
+	/* cannot really return 0 elap unless the data is corrupted */
+	elap = ttf_ref_elap(stats, soc);
+	if (elap == 0) {
+		pr_debug("%s %d: zero elap\n", __func__, soc);
 		return -EINVAL;
 	}
 
-	pr_debug("i=%d elap=%ld ratio=%d\n", i, elap, ratio);
+	ratio = ttf_pwr_ratio(stats, ce_data, soc);
+	if (ratio < 0) {
+		pr_debug("%s %d: negative ratio=%d\n", __func__, soc, ratio);
+		return -EINVAL;
+	}
+
 	*estimate = elap * ratio;
+
+	pr_debug("%s: soc=%d estimate=%ld elap=%ld ratio=%d\n",
+		 __func__, soc, *estimate, elap, ratio);
 
 	return 0;
 }
 
-/* time to full from SOC%
+/*
+ * time to full from SOC% using the actual stats
  * NOTE: prediction is based stats and corrected with the ce_data
  * NOTE: usually called with soc > ce_data->last_soc
  */
-int ttf_soc_estimate(time_t *res,
-		     const struct batt_ttf_stats *stats,
+int ttf_soc_estimate(time_t *res, const struct batt_ttf_stats *stats,
 		     const struct gbms_charging_event *ce_data,
 		     qnum_t soc, qnum_t last)
 {
 	const int ssoc_in = ce_data->charging_stats.ssoc_in;
-	const int end = qnum_toint(last);
-	int i = qnum_toint(soc);
 	time_t elap, estimate = 0;
-	int ret, frac;
+	int i = 0, ret, frac;
 
 	if (last > qnum_rconst(100) || last < soc)
 		return -EINVAL;
@@ -277,24 +356,26 @@ int ttf_soc_estimate(time_t *res,
 		return 0;
 	}
 
-	/* 100 - first 2 digits of the fractional part of starting soc if any */
+	/* FIRST: 100 - first 2 digits of the fractional part of soc if any */
 	frac = (int)qnum_nfracdgt(soc, 2);
 	if (frac) {
 
-		ret = ttf_elap(&elap, i, stats, ce_data);
+		ret = ttf_elap(&elap, stats, ce_data, qnum_toint(soc));
 		if (ret == 0)
 			estimate += (elap * (100 - frac)) / 100;
+
+		i += 1;
 	}
 
-	/* ttf_elap starting from i + 1 until end */
-	for (i += 1; i < end; i++) {
+	/* accumulate ttf_elap starting from i + 1 until end */
+	for (i += qnum_toint(soc); i < qnum_toint(last); i++) {
 
 		if (i >= ssoc_in && i < ce_data->last_soc) {
 			/* use real data if within charging event */
 			elap = ce_data->soc_stats.elap[i] * 100;
 		} else {
 			/* future (and soc before ssoc_in) */
-			ret = ttf_elap(&elap, i, stats, ce_data);
+			ret = ttf_elap(&elap, stats, ce_data, i);
 			if (ret < 0)
 				return ret;
 		}
@@ -302,10 +383,10 @@ int ttf_soc_estimate(time_t *res,
 		estimate += elap;
 	}
 
-	/* fist 2 digits of the fractional part of the last soc if any */
+	/* LAST: first 2 digits of the fractional part of soc if any */
 	frac = (int)qnum_nfracdgt(last, 2);
 	if (frac) {
-		ret = ttf_elap(&elap, end, stats, ce_data);
+		ret = ttf_elap(&elap, stats, ce_data, qnum_toint(last));
 		if (ret == 0)
 			estimate += (elap * frac) / 100;
 	}
@@ -314,8 +395,7 @@ int ttf_soc_estimate(time_t *res,
 	return 0;
 }
 
-int ttf_soc_cstr(char *buff, int size,
-		 const struct ttf_soc_stats *soc_stats,
+int ttf_soc_cstr(char *buff, int size, const struct ttf_soc_stats *soc_stats,
 		 int start, int end)
 {
 	int i, len = 0, split = 100;
@@ -742,7 +822,7 @@ void ttf_stats_update(struct batt_ttf_stats *stats,
 		return;
 	}
 
-	/* ignore fist nozero and last entry because they are partial */
+	/* ignore first nozero and last entry because they are partial */
 	for ( ; first_soc <= last_soc; first_soc++)
 		if (ce_data->soc_stats.elap[first_soc] != 0)
 			break;
