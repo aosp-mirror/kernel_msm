@@ -474,6 +474,14 @@ fault:
 	return 0;
 }
 
+static const struct mm_walk_ops hmm_walk_ops = {
+	.pud_entry	= NULL,
+	.pmd_entry	= hmm_vma_walk_pmd,
+	.pte_hole	= hmm_vma_walk_hole,
+	.hugetlb_entry	= NULL,
+	.test_walk	= NULL,
+};
+
 /*
  * hmm_vma_get_pfns() - snapshot CPU page table for a range of virtual addresses
  * @vma: virtual memory area containing the virtual address range
@@ -501,7 +509,6 @@ int hmm_vma_get_pfns(struct vm_area_struct *vma,
 		     hmm_pfn_t *pfns)
 {
 	struct hmm_vma_walk hmm_vma_walk;
-	struct mm_walk mm_walk;
 	struct hmm *hmm;
 
 	/* FIXME support hugetlb fs */
@@ -534,17 +541,8 @@ int hmm_vma_get_pfns(struct vm_area_struct *vma,
 
 	hmm_vma_walk.fault = false;
 	hmm_vma_walk.range = range;
-	mm_walk.private = &hmm_vma_walk;
 
-	mm_walk.vma = vma;
-	mm_walk.mm = vma->vm_mm;
-	mm_walk.pte_entry = NULL;
-	mm_walk.test_walk = NULL;
-	mm_walk.hugetlb_entry = NULL;
-	mm_walk.pmd_entry = hmm_vma_walk_pmd;
-	mm_walk.pte_hole = hmm_vma_walk_hole;
-
-	walk_page_range(start, end, &mm_walk);
+	walk_page_range(vma->vm_mm, start, end, &mm_walk, &hmm_vma_walk);
 	return 0;
 }
 EXPORT_SYMBOL(hmm_vma_get_pfns);
@@ -708,19 +706,10 @@ int hmm_vma_fault(struct vm_area_struct *vma,
 	hmm_vma_walk.write = write;
 	hmm_vma_walk.block = block;
 	hmm_vma_walk.range = range;
-	mm_walk.private = &hmm_vma_walk;
 	hmm_vma_walk.last = range->start;
 
-	mm_walk.vma = vma;
-	mm_walk.mm = vma->vm_mm;
-	mm_walk.pte_entry = NULL;
-	mm_walk.test_walk = NULL;
-	mm_walk.hugetlb_entry = NULL;
-	mm_walk.pmd_entry = hmm_vma_walk_pmd;
-	mm_walk.pte_hole = hmm_vma_walk_hole;
-
 	do {
-		ret = walk_page_range(start, end, &mm_walk);
+		ret = walk_page_range(vma->vm_mm, start, end, &mm_walk, &hmm_vma_walk);
 		start = hmm_vma_walk.last;
 	} while (ret == -EAGAIN);
 
