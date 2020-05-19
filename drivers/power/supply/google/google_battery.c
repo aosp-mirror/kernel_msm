@@ -2349,8 +2349,11 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 	 * based charging is active
 	 */
 	changed |= msc_logic_health(&batt_drv->chg_health, batt_drv);
-	if (batt_drv->chg_health.rest_state == CHG_HEALTH_ACTIVE)
+	if (batt_drv->chg_health.rest_state == CHG_HEALTH_ACTIVE) {
 		batt_drv->msc_state = MSC_HEALTH;
+		/* make sure using rest_fv_uv when HEALTH_ACTIVE */
+		batt_drv->fv_uv = 0;
+	}
 
 msc_logic_done:
 	/* set ->cc_max = 0 on RL and SW_JEITA, no vote on interval in RL_DSG */
@@ -2387,11 +2390,11 @@ msc_logic_done:
 		const int rest_fv_uv = batt_drv->chg_health.rest_fv_uv;
 
 		vote(batt_drv->fv_votable, MSC_LOGIC_VOTER,
-			!disable_votes && (batt_drv->fv_uv != -1),
+			!disable_votes && (batt_drv->fv_uv > 0),
 			batt_drv->fv_uv);
 
 		vote(batt_drv->fv_votable, MSC_HEALTH_VOTER,
-			!disable_votes && (rest_fv_uv != -1),
+			!disable_votes && (rest_fv_uv > 0),
 			rest_fv_uv);
 	}
 
