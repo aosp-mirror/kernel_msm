@@ -396,7 +396,7 @@ void heatmap_remove(struct v4l2_heatmap *v4l2)
 	if (v4l2->frame) {
 		video_unregister_device(&v4l2->vdev);
 		v4l2_device_unregister(&v4l2->device);
-		kfree(v4l2->frame);
+		devm_kfree(v4l2->parent_dev, v4l2->frame);
 		v4l2->frame = NULL;
 	}
 }
