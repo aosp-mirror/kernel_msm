@@ -880,7 +880,7 @@ static int sm7250_psy_get_property(struct power_supply *psy,
 
 	if (!bms->psy) {
 		pr_err("failed to register power supply\n");
-		return -ENODATA;
+		return -EAGAIN;
 	}
 
 	switch (psp) {
