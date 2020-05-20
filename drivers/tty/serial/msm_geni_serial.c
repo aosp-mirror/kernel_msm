@@ -862,11 +862,6 @@ static void msm_geni_serial_console_write(struct console *co, const char *s,
 		return;
 
 	uport = &port->uport;
-#ifdef SUPPORT_SYSRQ
-	if (uport->sysrq) {
-		locked = spin_trylock_irqsave(&uport->lock, flags);
-	} else
-#endif
 	if (oops_in_progress)
 		locked = spin_trylock_irqsave(&uport->lock, flags);
 	else
@@ -949,7 +944,7 @@ static int handle_rx_console(struct uart_port *uport,
 					continue;
 			}
 
-			sysrq = uart_handle_sysrq_char(uport, rx_char[c]);
+			sysrq = uart_prepare_sysrq_char(uport, rx_char[c]);
 			if (!sysrq)
 				tty_insert_flip_char(tport, rx_char[c], flag);
 		}
@@ -1881,7 +1876,10 @@ static irqreturn_t msm_geni_serial_isr(int isr, void *dev)
 	}
 
 exit_geni_serial_isr:
-	spin_unlock_irqrestore(&uport->lock, flags);
+	if (uart_console(uport))
+		uart_unlock_and_check_sysrq(uport, flags);
+	else
+		spin_unlock_irqrestore(&uport->lock, flags);
 	return IRQ_HANDLED;
 }
 
