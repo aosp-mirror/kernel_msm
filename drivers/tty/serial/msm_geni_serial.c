@@ -10,6 +10,7 @@
 #include <linux/console.h>
 #include <linux/io.h>
 #include <linux/ipc_logging.h>
+#include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -800,8 +801,8 @@ static void msm_geni_serial_poll_tx_done(struct uart_port *uport)
 		 * Failure IPC logs are not added as this API is
 		 * used by early console and it doesn't have log handle.
 		 */
-		geni_write_reg(S_GENI_CMD_CANCEL, uport->membase,
-						SE_GENI_S_CMD_CTRL_REG);
+		geni_write_reg(M_GENI_CMD_CANCEL, uport->membase,
+						SE_GENI_M_CMD_CTRL_REG);
 		done = msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 						M_CMD_CANCEL_EN, true);
 		if (!done) {
@@ -1686,7 +1687,7 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 	unsigned int rx_bytes = 0;
 	struct tty_port *tport;
-	int ret;
+	int ret = 0;
 	unsigned int geni_status;
 
 	geni_status = geni_read_reg_nolog(uport->membase, SE_GENI_STATUS);
@@ -1888,7 +1889,8 @@ static void msm_geni_serial_handle_isr(struct uart_port *uport)
 					uport->icount.brk);
 			}
 
-			if (dma_rx_status & RX_EOT) {
+			if (dma_rx_status & RX_EOT ||
+					dma_rx_status & RX_DMA_DONE) {
 				msm_geni_serial_handle_dma_rx(uport,
 							drop_rx);
 				if (!(dma_rx_status & RX_GENI_CANCEL_IRQ)) {
@@ -2019,6 +2021,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 	/* Stop the console before stopping the current tx */
 	if (uart_console(uport)) {
 		console_stop(uport->cons);
+		disable_irq(uport->irq);
 	} else {
 		msm_geni_serial_power_on(uport);
 		wait_for_transfers_inflight(uport);
@@ -2083,9 +2086,9 @@ static int msm_geni_serial_port_setup(struct uart_port *uport)
 			goto exit_portsetup;
 		}
 
-		msm_port->rx_buf = dma_alloc_coherent(msm_port->wrapper_dev,
-				DMA_RX_BUF_SIZE, &dma_address, GFP_KERNEL);
-
+		msm_port->rx_buf =
+			geni_se_iommu_alloc_buf(msm_port->wrapper_dev,
+				&dma_address, DMA_RX_BUF_SIZE);
 		if (!msm_port->rx_buf) {
 			devm_kfree(uport->dev, msm_port->rx_fifo);
 			msm_port->rx_fifo = NULL;
@@ -2134,8 +2137,8 @@ static int msm_geni_serial_port_setup(struct uart_port *uport)
 	return 0;
 free_dma:
 	if (msm_port->rx_dma) {
-		dma_free_coherent(msm_port->wrapper_dev, DMA_RX_BUF_SIZE,
-					msm_port->rx_buf, msm_port->rx_dma);
+		geni_se_iommu_free_buf(msm_port->wrapper_dev,
+			&msm_port->rx_dma, msm_port->rx_buf, DMA_RX_BUF_SIZE);
 		msm_port->rx_dma = (dma_addr_t)NULL;
 	}
 exit_portsetup:
@@ -2176,6 +2179,16 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 	 * before returning to the framework.
 	 */
 	mb();
+
+	/* Console usecase requires irq to be in enable state after early
+	 * console switch from probe to handle RX data. Hence enable IRQ
+	 * from starup and disable it form shutdown APIs for cosnole case.
+	 * BT HSUART usecase, IRQ will be enabled from runtime_resume()
+	 * and disabled in runtime_suspend to avoid spurious interrupts
+	 * after suspend.
+	 */
+	if (uart_console(uport))
+		enable_irq(uport->irq);
 
 	if (msm_port->wakeup_irq > 0) {
 		ret = request_irq(msm_port->wakeup_irq, msm_geni_wakeup_isr,
@@ -3151,6 +3164,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 
 	dev_port->name = devm_kasprintf(uport->dev, GFP_KERNEL,
 					"msm_serial_geni%d", uport->line);
+	irq_set_status_flags(uport->irq, IRQ_NOAUTOEN);
 	ret = devm_request_irq(uport->dev, uport->irq, msm_geni_serial_isr,
 				IRQF_TRIGGER_HIGH, dev_port->name, uport);
 	if (ret) {
@@ -3181,11 +3195,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "Serial port%d added.FifoSize %d is_console%d\n",
 				line, uport->fifosize, is_console);
-	/*
-	 * We are using this spinlock before the serial layer initialises it.
-	 * Hence, we are initializing it.
-	 */
-	spin_lock_init(&uport->lock);
 
 	device_create_file(uport->dev, &dev_attr_loopback);
 	device_create_file(uport->dev, &dev_attr_xfer_mode);
@@ -3196,13 +3205,10 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto exit_geni_serial_probe;
 
-	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: port:%s irq:%d\n", __func__,
-		    uport->name, uport->irq);
-	return uart_add_one_port(drv, uport);
+	ret = uart_add_one_port(drv, uport);
 
 exit_geni_serial_probe:
-	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: fail port:%s ret:%d\n",
-		    __func__, uport->name, ret);
+	IPC_LOG_MSG(dev_port->ipc_log_misc, "%s: ret:%d\n", __func__, ret);
 	return ret;
 }
 
@@ -3215,8 +3221,8 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	wakeup_source_trash(&port->geni_wake);
 	uart_remove_one_port(drv, &port->uport);
 	if (port->rx_dma) {
-		dma_free_coherent(port->wrapper_dev, DMA_RX_BUF_SIZE,
-					port->rx_buf, port->rx_dma);
+		geni_se_iommu_free_buf(port->wrapper_dev, &port->rx_dma,
+					port->rx_buf, DMA_RX_BUF_SIZE);
 		port->rx_dma = (dma_addr_t)NULL;
 	}
 	return 0;
@@ -3234,9 +3240,9 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 
 	wait_for_transfers_inflight(&port->uport);
 	/*
-	 * Disable Interrupt
 	 * Manual RFR On.
 	 * Stop Rx.
+	 * Disable Interrupt
 	 * Resources off
 	 */
 	stop_rx_sequencer(&port->uport);
@@ -3245,6 +3251,7 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	if ((geni_status & M_GENI_CMD_ACTIVE))
 		stop_tx_sequencer(&port->uport);
 
+	disable_irq(port->uport.irq);
 	ret = se_geni_resources_off(&port->serial_rsc);
 	if (ret) {
 		dev_err(dev, "%s: Error ret %d\n", __func__, ret);
@@ -3290,10 +3297,9 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	start_rx_sequencer(&port->uport);
 	/* Ensure that the Rx is running before enabling interrupts */
 	mb();
-	/*
-	 * Do not enable irq before interrupt registration which happens
-	 * at port open time.
-	 */
+	/* Enable interrupt */
+	enable_irq(port->uport.irq);
+
 	IPC_LOG_MSG(port->ipc_log_pwr, "%s:\n", __func__);
 exit_runtime_resume:
 	return ret;

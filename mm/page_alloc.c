@@ -7493,7 +7493,7 @@ unsigned long free_reserved_area(void *start, void *end, int poison, char *s)
 
 #ifdef CONFIG_HAVE_MEMBLOCK
 		memblock_dbg("memblock_free: [%#016llx-%#016llx] %pS\n",
-			__pa(start), __pa(end), (void *)_RET_IP_);
+			(u64)__pa(start), (u64)__pa(end), (void *)_RET_IP_);
 #endif
 
 	return pages;
@@ -7868,6 +7868,21 @@ int watermark_boost_factor_sysctl_handler(struct ctl_table *table, int write,
 	rc = proc_dointvec_minmax(table, write, buffer, length, ppos);
 	if (rc)
 		return rc;
+
+	return 0;
+}
+
+int kswapd_threads_sysctl_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *length, loff_t *ppos)
+{
+	int rc;
+
+	rc = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (rc)
+		return rc;
+
+	if (write)
+		update_kswapd_threads();
 
 	return 0;
 }

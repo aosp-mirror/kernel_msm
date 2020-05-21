@@ -2687,6 +2687,11 @@ extern void add_new_task_to_grp(struct task_struct *new);
 #define RESTRAINED_BOOST_DISABLE -3
 #define MAX_NUM_BOOST_TYPE (RESTRAINED_BOOST+1)
 
+static inline bool is_asym_cap_cpu(int cpu)
+{
+	return cpumask_test_cpu(cpu, &asym_cap_sibling_cpus);
+}
+
 static inline int asym_cap_siblings(int cpu1, int cpu2)
 {
 	return (cpumask_test_cpu(cpu1, &asym_cap_sibling_cpus) &&
@@ -2800,7 +2805,6 @@ static inline int same_freq_domain(int src_cpu, int dst_cpu)
 #define	CPU_RESERVED	1
 
 extern enum sched_boost_policy boost_policy;
-extern unsigned int sched_task_filter_util;
 static inline enum sched_boost_policy sched_boost_policy(void)
 {
 	return boost_policy;
@@ -2926,7 +2930,7 @@ static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 		 * under conservative boost.
 		 */
 		if (sched_boost() == CONSERVATIVE_BOOST &&
-				task_util(p) <= sched_task_filter_util)
+			task_util(p) <= sysctl_sched_min_task_util_for_boost)
 			policy = SCHED_BOOST_NONE;
 	}
 
@@ -2996,6 +3000,8 @@ static inline struct sched_cluster *rq_cluster(struct rq *rq)
 {
 	return NULL;
 }
+
+static inline bool is_asym_cap_cpu(int cpu) { return false; }
 
 static inline int asym_cap_siblings(int cpu1, int cpu2) { return 0; }
 
