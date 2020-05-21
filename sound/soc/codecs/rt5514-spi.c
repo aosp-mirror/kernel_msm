@@ -474,6 +474,13 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	size_t period_bytes, truncated_bytes = 0;
 	unsigned int cur_wp, remain_data;
 	u8 buf[8];
+	struct snd_soc_component *component = rt5514_dsp->component;
+
+	pm_wakeup_event(rt5514_dsp->dev, 1000);
+	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		dev_err(rt5514_dsp->dev, "%s: Request in suspend\n", __func__);
+		return;
+	}
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 
@@ -580,6 +587,13 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	size_t period_bytes, truncated_bytes = 0;
 	unsigned int cur_wp, remain_data;
 	u8 buf[8];
+	struct snd_soc_component *component = rt5514_dsp->component;
+
+	pm_wakeup_event(rt5514_dsp->dev, 1000);
+	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		dev_err(rt5514_dsp->dev, "%s: Request in suspend\n", __func__);
+		return;
+	}
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 
@@ -686,6 +700,13 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	size_t period_bytes, truncated_bytes = 0;
 	unsigned int cur_wp, remain_data;
 	u8 buf[8];
+	struct snd_soc_component *component = rt5514_dsp->component;
+
+	pm_wakeup_event(rt5514_dsp->dev, 1000);
+	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		dev_err(rt5514_dsp->dev, "%s: Request in suspend\n", __func__);
+		return;
+	}
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 
