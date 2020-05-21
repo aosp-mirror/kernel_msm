@@ -6437,6 +6437,13 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 					adj_mode->timing.refresh_rate,
 					cur_mode->timing.h_front_porch,
 					adj_mode->timing.h_front_porch);
+			} else {
+				pr_debug(
+					"switching to %u FPS with mode switch\n",
+					adj_mode->timing.refresh_rate);
+				adj_mode->dsi_mode_flags |=
+					DSI_MODE_FLAG_DMS_FPS;
+				goto error;
 			}
 		}
 
