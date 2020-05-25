@@ -167,6 +167,92 @@
 		};
 	};
 
+	skin-therm-cpu {
+		polling-delay-passive = <5000>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		thermal-sensors = <&pm8150_adc_tm ADC_AMUX_THM2_PU2>;
+		wake-capable-sensor;
+		trips {
+			skin_cpu_light: skin-cpu-light {
+				temperature = <37000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_cpu_moderate_pre_lv2: skin-cpu-moderate-pre-lv2 {
+				temperature = <39000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_cpu_moderate: skin-cpu-moderate {
+				temperature = <41000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_cpu_severe: skin-cpu-severe {
+				temperature = <43000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			/* light throttling */
+			cpu6-turbo {
+				trip = <&skin_cpu_light>;
+				cooling-device =
+					<&CPU6 1 2>;
+			};
+			cpu7-turbo {
+				trip = <&skin_cpu_light>;
+				cooling-device =
+					<&CPU7 1 1>;
+			};
+			/* moderate pre level 2 throttling */
+			cpu6-nominal-l1 {
+				trip = <&skin_cpu_moderate_pre_lv2>;
+				cooling-device =
+					<&CPU6 3 3>;
+			};
+			cpu7-nominal-l1 {
+				trip = <&skin_cpu_moderate_pre_lv2>;
+				cooling-device =
+					<&CPU7 2 3>;
+			};
+			/* moderate throttling */
+			cpu0-nominal {
+				trip = <&skin_cpu_moderate>;
+				cooling-device =
+					<&CPU0 1 3>;
+			};
+			cpu6-nominal {
+				trip = <&skin_cpu_moderate>;
+				cooling-device =
+					<&CPU6 4 4>;
+			};
+			cpu7-nominal {
+				trip = <&skin_cpu_moderate>;
+				cooling-device =
+					<&CPU7 4 4>;
+			};
+			/* severe throttling */
+			cpu0-svs-l1 {
+				trip = <&skin_cpu_severe>;
+				cooling-device =
+					<&CPU0 4 4>;
+			};
+			cpu6-svs-l1 {
+				trip = <&skin_cpu_severe>;
+				cooling-device =
+					<&CPU6 5 5>;
+			};
+			cpu7-svs-l1 {
+				trip = <&skin_cpu_severe>;
+				cooling-device =
+					<&CPU7 5 5>;
+			};
+		};
+	};
+
 	skin-therm {
 		polling-delay-passive = <5000>;
 		polling-delay = <0>;
@@ -233,16 +319,6 @@
 				cooling-device =
 					<&google_charger 2 2>;
 			};
-			cpu6-turbo {
-				trip = <&skin_light>;
-				cooling-device =
-					<&CPU6 1 2>;
-			};
-			cpu7-turbo {
-				trip = <&skin_light>;
-				cooling-device =
-					<&CPU7 1 1>;
-			};
 			/* moderate pre level 1 throttling */
 			wired-charge-ibat-2500mA {
 				trip = <&skin_moderate_pre_lv1>;
@@ -254,16 +330,6 @@
 				trip = <&skin_moderate_pre_lv2>;
 				cooling-device =
 					<&google_charger 4 4>;
-			};
-			cpu6-nominal-l1 {
-				trip = <&skin_moderate_pre_lv2>;
-				cooling-device =
-					<&CPU6 3 3>;
-			};
-			cpu7-nominal-l1 {
-				trip = <&skin_moderate_pre_lv2>;
-				cooling-device =
-					<&CPU7 2 3>;
 			};
 			/* moderate pre level 3 throttling */
 			wired-charge-ibat-1500mA {
@@ -277,42 +343,11 @@
 				cooling-device =
 					<&google_charger 6 6>;
 			};
-			cpu0-nominal {
-				trip = <&skin_moderate>;
-				cooling-device =
-					<&CPU0 1 3>;
-			};
-			cpu6-nominal {
-				trip = <&skin_moderate>;
-				cooling-device =
-					<&CPU6 4 4>;
-			};
-			cpu7-nominal {
-				trip = <&skin_moderate>;
-				cooling-device =
-					<&CPU7 4 4>;
-			};
 			/* severe pre level 1 throttling */
 			wired-charge-ibat-500mA {
 				trip = <&skin_severe_pre_lv1>;
 				cooling-device =
 					<&google_charger 7 7>;
-			};
-			/* severe throttling */
-			cpu0-svs-l1 {
-				trip = <&skin_severe>;
-				cooling-device =
-					<&CPU0 4 4>;
-			};
-			cpu6-svs-l1 {
-				trip = <&skin_severe>;
-				cooling-device =
-					<&CPU6 5 5>;
-			};
-			cpu7-svs-l1 {
-				trip = <&skin_severe>;
-				cooling-device =
-					<&CPU7 5 5>;
 			};
 			/* critical throttling */
 			wired-charge-disabled {
@@ -372,6 +407,7 @@
 			};
 		};
 	};
+
 	charger-therm {
 		polling-delay-passive = <2000>;
 		polling-delay = <0>;
