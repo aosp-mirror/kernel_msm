@@ -13,6 +13,7 @@
 
 #include "dsi-panel-s6e3hc2-dsc-1080p-cmd.dtsi"
 #include "dsi-panel-s6e3hc2-evt-dsc-1080p-cmd.dtsi"
+#include "dsi-panel-s6e3hc2-dvt-dsc-1080p-cmd.dtsi"
 
 &pm8150l_gpios {
 	/delete-node/ disp_pins;
@@ -43,6 +44,13 @@
 };
 
 &dsi_s6e3hc2_evt_dsc_1080p_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_redbull>;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&pm7250b_gpios 5 0>;
+};
+
+&dsi_s6e3hc2_dvt_dsc_1080p_cmd {
 	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_redbull>;
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
 	qcom,platform-te-gpio = <&tlmm 10 0>;
