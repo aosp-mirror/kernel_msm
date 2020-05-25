@@ -2983,6 +2983,7 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 		}
 	}
 exit:
+	schedule_work(&charger->uevent_work);
 	power_supply_changed(charger->wc_psy);
 	return ret;
 }
