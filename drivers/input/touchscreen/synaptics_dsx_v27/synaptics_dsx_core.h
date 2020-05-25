@@ -55,11 +55,12 @@
 #include <linux/earlysuspend.h>
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 #undef CONFIG_TOUCHSCREEN_TBN
+#undef CONFIG_TOUCHSCREEN_TBN_MODULE
 #endif
 
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 #include "../touch_bus_negotiator.h"
 #endif
 #include <linux/pm_qos.h>
@@ -441,7 +442,7 @@ struct synaptics_rmi4_data {
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend early_suspend;
 #endif
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 	struct tbn_context *tbn;
 #endif
 	unsigned char current_page;

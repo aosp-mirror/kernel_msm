@@ -4817,7 +4817,7 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 	vir_button_map = bdata->vir_button_map;
 
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 	rmi4_data->tbn = tbn_init(rmi4_data->pdev->dev.parent);
 	if (!rmi4_data->tbn) {
 		dev_err(&pdev->dev,
@@ -5030,7 +5030,7 @@ err_enable_reg:
 	synaptics_rmi4_get_reg(rmi4_data, false);
 
 err_get_reg:
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 	tbn_cleanup(rmi4_data->tbn);
 
 err_init_tbn:
@@ -5109,7 +5109,7 @@ static int synaptics_rmi4_remove(struct platform_device *pdev)
 	synaptics_rmi4_enable_reg(rmi4_data, false);
 	synaptics_rmi4_get_reg(rmi4_data, false);
 
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 	tbn_cleanup(rmi4_data->tbn);
 #endif
 
@@ -5359,7 +5359,7 @@ static int synaptics_rmi4_suspend(struct device *dev)
 					gpio_get_value(bdata->switch_gpio));
 		}
 
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 		if (rmi4_data->tbn)
 			tbn_release_bus(rmi4_data->tbn);
 #endif
@@ -5397,7 +5397,7 @@ static int synaptics_rmi4_resume(struct device *dev)
 		goto exit;
 	}
 
-#ifdef CONFIG_TOUCHSCREEN_TBN
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_TBN)
 	if (rmi4_data->tbn)
 		tbn_request_bus(rmi4_data->tbn);
 #endif
