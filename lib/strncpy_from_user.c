@@ -108,8 +108,6 @@ long strncpy_from_user(char *dst, const char __user *src, long count)
 	if (unlikely(count <= 0))
 		return 0;
 
-	src = untagged_addr(src);
-
 	max_addr = user_addr_max();
 	src_addr = (unsigned long)untagged_addr(src);
 	if (likely(src_addr < max_addr)) {
