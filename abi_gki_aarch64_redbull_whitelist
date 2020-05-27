@@ -313,6 +313,7 @@
   handle_edge_irq
   handle_level_irq
   handle_nested_irq
+  hex2bin
   hex_dump_to_buffer
   hrtimer_active
   hrtimer_cancel
@@ -661,6 +662,8 @@
   __pm_runtime_disable
   pm_runtime_enable
   pm_runtime_forbid
+  pm_runtime_force_resume
+  pm_runtime_force_suspend
   __pm_runtime_idle
   pm_runtime_no_callbacks
   __pm_runtime_resume
@@ -932,6 +935,8 @@
   thermal_cdev_update
   thermal_cooling_device_unregister
   thermal_of_cooling_device_register
+  thermal_zone_device_register
+  thermal_zone_device_unregister
   thermal_zone_device_update
   thermal_zone_get_temp
   thermal_zone_get_zone_by_name
@@ -1633,7 +1638,6 @@
   drm_dp_link_configure
   drm_dp_link_power_down
   drm_dp_link_power_up
-  drm_dp_link_probe
   drm_dp_link_rate_to_bw_code
   drm_dp_link_train_channel_eq_delay
   drm_dp_link_train_clock_recovery_delay
@@ -1725,6 +1729,7 @@
   drm_modeset_lock_all
   drm_modeset_lock_all_ctx
   drm_mode_set_name
+  drm_modeset_unlock
   drm_modeset_unlock_all
   drm_mode_vrefresh
   drm_object_attach_property
@@ -2494,7 +2499,6 @@
   crypto_shash_update
   dev_alloc_name
   dump_stack
-  hex2bin
   hex_to_bin
   ieee80211_channel_to_frequency
   ieee80211_frequency_to_channel
@@ -2613,9 +2617,9 @@
   irq_create_mapping
   regmap_irq_get_virq
 
-# required by wsa881x_dlkm.ko
-  thermal_zone_device_register
-  thermal_zone_device_unregister
+# required by wsa883x_dlkm.ko
+  snd_info_create_module_entry
+  snd_soc_component_exit_regmap
 
 # required by xhci-plat-hcd.ko
   device_wakeup_enable
