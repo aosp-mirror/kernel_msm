@@ -72,7 +72,6 @@ enum {
 	RT5514_DSP_CHRE,
 };
 
-#define RT5514_DBG_BUF_ADDR 0x4ff60000
 #define RT5514_DBG_BUF_SIZE 0x100
 #define RT5514_DBG_BUF_CNT  0x1f // (DBG_BUF_SIZE-2*4)/8
 

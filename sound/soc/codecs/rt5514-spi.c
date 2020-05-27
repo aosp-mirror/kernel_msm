@@ -334,9 +334,15 @@ static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 	if (!(val[0] & 0x2))
 		return false;
 
+	/* check chip version: value 0x80 = ACL5514p, others = ALC5514 */
+	regmap_read(rt5514_g_i2c_regmap, 0x18002ff0, &val[0]);
+	if (val[0] == 0x80)
+		val[1] = 0x4fe00000;
+	else
+		val[1] = 0x4ff60000;
+
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_WATCHDOG, 1);
-	rt5514_spi_burst_read(RT5514_DBG_BUF_ADDR, (u8 *)&dbgbuf,
-		RT5514_DBG_BUF_SIZE);
+	rt5514_spi_burst_read(val[1], (u8 *)&dbgbuf, RT5514_DBG_BUF_SIZE);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_WATCHDOG, 0);
 
 	dev_err(rt5514_dsp->dev, "[DSP Dump]");
