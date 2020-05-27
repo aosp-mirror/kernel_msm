@@ -710,6 +710,7 @@ static int rt5514_dsp_enable(struct rt5514_priv *rt5514,
 	struct snd_soc_codec *codec = rt5514->codec;
 	const struct firmware *fw = NULL;
 	unsigned int val, i = 0;
+	struct _dsp_fw_ver_st dsp_fw_ver;
 
 	if (is_watchdog)
 		goto watchdog;
@@ -790,6 +791,14 @@ watchdog:
 				rt5514->fw_addr[2] =
 					rt5514->sound_model_addr[0];
 
+			if (rt5514->v_p) {
+				memcpy(&dsp_fw_ver, fw->data + 0x100,
+					sizeof(struct _dsp_fw_ver_st));
+				dev_info(codec->dev,
+				"DSP Firmware Version: %d.%d.%d.%d\n",
+				dsp_fw_ver.chip_id, dsp_fw_ver.feature_id,
+				dsp_fw_ver.version, dsp_fw_ver.sub_version);
+			}
 #if IS_ENABLED(CONFIG_SND_SOC_RT5514_SPI)
 			rt5514_spi_burst_write(rt5514->fw_addr[0], fw->data,
 				fw->size);
@@ -909,9 +918,12 @@ watchdog:
 			}
 		}
 
-		/* dsp clk=mux_out (40M) */
-		regmap_write(rt5514->i2c_regmap, 0x18002f08,
-			0x0000000b);
+		if (rt5514->v_p) {
+			/* dsp clk=mux_out (40M) */
+			regmap_write(rt5514->i2c_regmap, 0x18002f08,
+				0x0000000b);
+		}
+
 		/* DSP run */
 		regmap_write(rt5514->i2c_regmap, 0x18002f00,
 			0x00055148);
@@ -1515,6 +1527,43 @@ static int rt5514_ambient_hotword_version_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rt5514_firmware_version_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+	const struct firmware *fw = NULL;
+	struct _dsp_fw_ver_st dsp_fw_ver;
+	struct _dsp_mem_st dsp_mem;
+
+	if (!rt5514->v_p)
+		return 0;
+
+	fw = rt5514_request_firmware(rt5514, 0);
+	if (fw) {
+		memcpy(&dsp_fw_ver, fw->data + 0x100,
+			sizeof(struct _dsp_fw_ver_st));
+		dev_info(component->dev, "DSP Firmware Version: %d.%d.%d.%d\n",
+			dsp_fw_ver.chip_id, dsp_fw_ver.feature_id,
+			dsp_fw_ver.version, dsp_fw_ver.sub_version);
+	}
+
+	if (rt5514->dsp_enabled | rt5514->dsp_adc_enabled) {
+		rt5514_spi_burst_read(rt5514->fw_addr[0] + 0x128,
+			(u8 *)&dsp_mem, sizeof(struct _dsp_mem_st));
+		dev_info(component->dev, "IRAM: %d DRAM: %d\n",
+			dsp_mem.iram, dsp_mem.dram);
+	}
+
+	return 0;
+}
+
+static const char * const dmic_divider_rate_txt[] = {
+	"1.024K", "1.536K", "2.048K", "3.072K",
+};
+
+static SOC_ENUM_SINGLE_EXT_DECL(dmic_divider_rate, dmic_divider_rate_txt);
+
 static const char * const rt5514_mem_test_txt[] = {
 	"PASS", "FAIL", "NOT_SUPPORT", "OUT_OF_MEMORY",
 };
@@ -1580,6 +1629,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 		rt5514_spi_switch_get, rt5514_spi_switch_put),
 	SOC_SINGLE_EXT("Mic Delay ms", SND_SOC_NOPM, 0, 1000, 0,
 		rt5514_mic_delay_get, rt5514_mic_delay_put),
+	SOC_SINGLE_EXT("DSP Firmware Version", SND_SOC_NOPM, 0, 0x7fffffff,
+		0, rt5514_firmware_version_get, NULL),
 };
 
 /* ADC Mixer*/
