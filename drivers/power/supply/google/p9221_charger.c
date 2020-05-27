@@ -604,14 +604,13 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 		}
 	}
 
-	dev_info(&charger->client->dev, "Send CSP status=%d\n", stat);
-
 	mutex_lock(&charger->cmd_lock);
 
 	if (charger->ben_state) {
-		charger->com_busy = true;
 		ret = p9221_reg_read_16(charger, P9221_STATUS_REG, &status_reg);
 		if ((ret == 0) && (status_reg & P9382_STAT_RXCONNECTED)) {
+			dev_info(&charger->client->dev, "Send Tx soc=%d\n",
+				 stat);
 			/* write packet type to 0x100 */
 			ret = p9221_reg_write_8(charger,
 						PROPRIETARY_PACKET_TYPE_ADDR,
@@ -637,9 +636,12 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 			ret |= p9221_reg_write_n(charger,
 					charger->addr_data_send_buf_start,
 					charger->tx_buf, charger->tx_len + 1);
-			if (ret == 0)
+			if (ret == 0) {
 				ret = p9221_set_cmd_reg(charger,
 						P9221R5_COM_CCACTIVATE);
+				if (ret == 0)
+					charger->com_busy = true;
+			}
 
 			memset(charger->tx_buf, 0, P9221R5_DATA_SEND_BUF_SIZE);
 			charger->tx_len = 0;
@@ -647,6 +649,8 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 	}
 
 	if (charger->online) {
+		dev_info(&charger->client->dev, "Send CSP status=%d\n", stat);
+
 		ret = p9221_reg_write_8(charger, P9221R5_CHARGE_STAT_REG,
 					stat);
 		if (ret == 0)
@@ -3316,7 +3320,6 @@ static void p9382_txid_work(struct work_struct *work)
 		return;
 	}
 
-	charger->com_busy = true;
 	mutex_lock(&charger->cmd_lock);
 
 	// write packet type to 0x100
@@ -3348,6 +3351,8 @@ static void p9382_txid_work(struct work_struct *work)
 	if (ret) {
 		dev_err(&charger->client->dev, "Failed to send txid %d\n", ret);
 		goto error;
+	} else {
+		charger->com_busy = true;
 	}
 
 	p9221_hex_str(&charger->tx_buf[1], FAST_SERIAL_ID_SIZE,
