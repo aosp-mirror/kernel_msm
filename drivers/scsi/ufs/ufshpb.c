@@ -1237,7 +1237,7 @@ static int ufshpb_execute_req(struct ufshpb_lu *hpb, unsigned char *cmd,
 	struct scsi_sense_hdr sshdr;
 	struct scsi_device *sdp;
 	struct ufs_hba *hba = hpb->hba;
-	struct request req;
+	struct request *req;
 	struct bio bio;
 	int ret = 0;
 
@@ -1261,22 +1261,25 @@ static int ufshpb_execute_req(struct ufshpb_lu *hpb, unsigned char *cmd,
 	if (ret)
 		goto put_out;
 
-	blk_rq_init(q, &req);
-	blk_rq_append_bio(&req, &bio);
+	req = blk_get_request(q, READ, GFP_KERNEL);
+	if (IS_ERR(req))
+		goto put_out;
+	blk_rq_init(q, req);
+	blk_rq_append_bio(req, &bio);
 
-	req.cmd_len = COMMAND_SIZE(cmd[0]);
-	memcpy(req.cmd, cmd, req.cmd_len);
-	req.sense = sense;
-	req.sense_len = 0;
-	req.retries = 3;
-	req.timeout = msecs_to_jiffies(10000);
-	req.cmd_type = REQ_TYPE_BLOCK_PC;
-	req.cmd_flags = REQ_QUIET | REQ_PREEMPT;
+	req->cmd_len = COMMAND_SIZE(cmd[0]);
+	memcpy(req->cmd, cmd, req->cmd_len);
+	req->sense = sense;
+	req->sense_len = 0;
+	req->retries = 3;
+	req->timeout = msecs_to_jiffies(10000);
+	req->cmd_type = REQ_TYPE_BLOCK_PC;
+	req->cmd_flags = REQ_QUIET | REQ_PREEMPT;
 
-	blk_execute_rq(q, NULL, &req, 1);
-	if (req.errors) {
+	blk_execute_rq(q, NULL, req, 1);
+	if (req->errors) {
 		ret = -EIO;
-		scsi_normalize_sense(req.sense, SCSI_SENSE_BUFFERSIZE, &sshdr);
+		scsi_normalize_sense(req->sense, SCSI_SENSE_BUFFERSIZE, &sshdr);
 		dev_err(HPB_DEV(hpb),
 				"code %x sense_key %x asc %x ascq %x",
 				sshdr.response_code, sshdr.sense_key, sshdr.asc,
@@ -1294,6 +1297,7 @@ static int ufshpb_execute_req(struct ufshpb_lu *hpb, unsigned char *cmd,
 		ufshpb_clean_dirty_bitmap(hpb, cp);
 		spin_unlock_bh(&hpb->hpb_lock);
 	}
+	blk_put_request(req);
 put_out:
 	scsi_device_put(sdp);
 	return ret;
