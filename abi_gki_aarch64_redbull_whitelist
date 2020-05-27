@@ -1236,6 +1236,19 @@
   send_sig_info
   time64_to_tm
 
+# required by dm-default-key.ko
+  bio_crypt_alloc_ctx
+  blk_crypto_evict_key
+  blk_crypto_init_key
+  blk_crypto_start_using_mode
+  dm_get_device
+  dm_put_device
+  dm_read_arg_group
+  dm_register_target
+  dm_shift_arg
+  dm_table_get_mode
+  dm_unregister_target
+
 # required by dwc3-haps.ko
   pcim_enable_device
   __pci_register_driver
@@ -2504,6 +2517,7 @@
   ieee80211_frequency_to_channel
   ieee80211_get_channel
   ieee80211_hdrlen
+  iommu_iova_to_phys
   irq_set_affinity_hint
   mac_pton
   msleep_interruptible
