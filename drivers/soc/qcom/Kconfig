@@ -566,7 +566,7 @@ config QCOM_WATCHDOG_V2
 
 config QCOM_FORCE_WDOG_BITE_ON_PANIC
 	bool "QCOM force watchdog bite"
-	depends on QCOM_WATCHDOG_V2
+	depends on QCOM_WATCHDOG_V2=y || QCOM_WATCHDOG_V2=m
 	help
 	  This forces a watchdog bite when the device restarts due to a
 	  kernel panic. On certain MSM SoCs, this provides us
@@ -575,7 +575,7 @@ config QCOM_FORCE_WDOG_BITE_ON_PANIC
 
 config QCOM_WDOG_IPI_ENABLE
 	bool "Qcom WDT pet optimization"
-	depends on QCOM_WATCHDOG_V2
+	depends on QCOM_WATCHDOG_V2=y || QCOM_WATCDHOG_V2=m
 	default n
 	help
 	  When this option is enabled, watchdog sends IPI to cores in low power

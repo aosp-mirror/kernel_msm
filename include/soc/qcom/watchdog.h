@@ -13,23 +13,7 @@
 #endif
 
 #if IS_ENABLED(CONFIG_QCOM_WATCHDOG_V2)
-#include <linux/module.h>
-
-extern void _msm_trigger_wdog_bite(void) __cold;
-
-static inline void msm_trigger_wdog_bite(void) __cold;
-static inline void msm_trigger_wdog_bite(void)
-{
-	void (*thunk)(void);
-
-	thunk = symbol_get(_msm_trigger_wdog_bite);
-	if (!thunk) {
-		pr_err("Failed to find _msm_trigger_wdog_bite\n");
-		return;
-	}
-	(*thunk)();
-	symbol_put(thunk);
-}
+void msm_trigger_wdog_bite(void);
 #else
 static inline void msm_trigger_wdog_bite(void) { }
 #endif
