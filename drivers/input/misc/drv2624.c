@@ -705,6 +705,10 @@ static void dev_init_platform_data(struct drv2624_data *drv2624)
 		drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
 				 BEMFGAIN_MASK, actuator.bemf_gain);
 
+	if (actuator.loop_gain > -1)
+		drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
+				 LOOPGAIN_MASK, actuator.loop_gain);
+
 	if (actuator.fb_brake_factor > -1)
 		drv2624_set_bits(drv2624, DRV2624_REG_LOOP_CONTROL,
 				 FB_BRAKE_FACTOR_MASK,
@@ -888,6 +892,13 @@ static int drv2624_parse_dt(struct device *dev, struct drv2624_data *drv2624)
 
 	dev_dbg(drv2624->dev, "ti,bemf-gain=%d\n",
 		pdata->actuator.bemf_gain);
+
+	if (!of_property_read_u32(np, "ti,loop-gain", &value))
+		pdata->actuator.loop_gain = value;
+	else
+		pdata->actuator.loop_gain = -1;
+
+	dev_dbg(drv2624->dev, "ti,loop-gain=%d\n", pdata->actuator.loop_gain);
 
 	if (!of_property_read_u32(np, "ti,blanking-time", &value))
 		pdata->actuator.blanking_time = value;

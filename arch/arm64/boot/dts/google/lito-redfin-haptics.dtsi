@@ -39,6 +39,7 @@
 		ti,ol-lra-frequency = <155>; /* off-f0 in OL */
 		ti,bemf-factor = <150>;
 		ti,bemf-gain = <0>;
+		ti,loop-gain = <0>;
 		ti,voltage-comp = <18>;
 		ti,blanking-time = <2>; /* 50 us */
 		ti,idiss-time = <2>; /* 50 us */

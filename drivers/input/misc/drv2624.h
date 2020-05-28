@@ -110,6 +110,7 @@
 
 #define	DRV2624_REG_LOOP_CONTROL		0x23
 #define	BEMFGAIN_MASK				0x03
+#define	LOOPGAIN_MASK				0x0c
 #define	FB_BRAKE_FACTOR_MASK			0x70
 
 #define	DRV2624_REG_DRIVE_TIME			0x27
@@ -200,6 +201,7 @@ struct actuator_data {
 	int voltage_comp;
 	int bemf_factor;
 	int bemf_gain;
+	int loop_gain;
 	int blanking_time;
 	int idiss_time;
 	int zc_det_time;
