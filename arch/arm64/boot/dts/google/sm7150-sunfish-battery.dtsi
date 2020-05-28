@@ -70,9 +70,12 @@
 };
 
 &pm6150_qg {
-	qcom,cl-feedback-on;
-
 	qcom,battery-data = <&sunfish_batterydata>;
+	qcom,cl-feedback-on;
+	qcom,cl-max-increment = <5>;
+	qcom,cl-max-decrement = <10>;
+	qcom,cl-min-limit = <500>;
+	qcom,cl-max-limit = <0>;
 	qcom,cl-min-delta-batt-soc = <10>;
 	qcom,cl-wt-enable;
 	qcom,qg-iterm-ma = <460>;
