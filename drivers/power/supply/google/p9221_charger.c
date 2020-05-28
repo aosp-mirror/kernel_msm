@@ -2309,12 +2309,11 @@ static ssize_t p9221_store_data(struct device *dev,
 	if (!p9221_is_online(charger))
 		return -ENODEV;
 
-	tmp_buf = kmalloc(strlen(buf) + 1, GFP_KERNEL);
+	tmp_buf = kstrdup(buf, GFP_KERNEL);
 	data = tmp_buf;
 	if (!data)
 		return -ENOMEM;
 
-	strlcpy(data, buf, sizeof(data));
 	while (data && i < charger->count) {
 		char *d = strsep(&data, " ");
 
