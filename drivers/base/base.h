@@ -135,6 +135,7 @@ extern int devres_release_all(struct device *dev);
 extern void device_block_probing(void);
 extern void device_unblock_probing(void);
 extern void driver_deferred_probe_force_trigger(void);
+extern void driver_deferred_probe_flush(void);
 
 /* /sys/devices directory */
 extern struct kset *devices_kset;
