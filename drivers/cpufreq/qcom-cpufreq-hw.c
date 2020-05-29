@@ -547,6 +547,8 @@ static int qcom_cpu_resources_init(struct platform_device *pdev,
 	return 0;
 }
 
+#define DEFAULT_XO_RATE 19200000
+#define DEFAULT_ALT_RATE 600000000
 static int qcom_resources_init(struct platform_device *pdev)
 {
 	struct device_node *cpu_np;
@@ -557,20 +559,26 @@ static int qcom_resources_init(struct platform_device *pdev)
 	int ret;
 
 	clk = devm_clk_get(&pdev->dev, "xo");
-	if (IS_ERR(clk))
-		return PTR_ERR(clk);
-
-	xo_rate = clk_get_rate(clk);
-
-	devm_clk_put(&pdev->dev, clk);
+	if (IS_ERR(clk)) {
+		xo_rate = DEFAULT_XO_RATE;
+		dev_dbg(&pdev->dev, "XO clock get failed: %d, using default " \
+			"rate %lu\n", PTR_ERR(clk), xo_rate);
+	} else {
+		xo_rate = clk_get_rate(clk);
+		devm_clk_put(&pdev->dev, clk);
+	}
 
 	clk = devm_clk_get(&pdev->dev, "alternate");
-	if (IS_ERR(clk))
-		return PTR_ERR(clk);
+	if (IS_ERR(clk)) {
+		cpu_hw_rate = DEFAULT_ALT_RATE;
+		dev_dbg(&pdev->dev, "Alternate clock get failed: %d, using " \
+			"default rate %lu\n", PTR_ERR(clk), cpu_hw_rate);
+	} else {
+		cpu_hw_rate = clk_get_rate(clk);
+		devm_clk_put(&pdev->dev, clk);
+	}
 
-	cpu_hw_rate = clk_get_rate(clk) / CLK_HW_DIV;
-
-	devm_clk_put(&pdev->dev, clk);
+	cpu_hw_rate /= CLK_HW_DIV;
 
 	of_property_read_u32(pdev->dev.of_node, "qcom,lut-row-size",
 			      &lut_row_size);
