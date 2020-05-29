@@ -17,3 +17,4 @@
 #include "lito-bramble_m-pac193x.dtsi"
 #include "lito-bramble_m-usb.dtsi"
 #include "lito-bramble_m-thermal.dtsi"
+#include "lito-bramble_m-audio.dtsi"

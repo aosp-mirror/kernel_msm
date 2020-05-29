@@ -11,10 +11,12 @@
  * GNU General Public License for more details.
  */
 
-#include "lito-bramble.dtsi"
-#include "lito-bramble-touch-proto-v2.dtsi"
-#include "lito-bramble-camera-sensor-v4.dtsi"
-#include "lito-bramble_m-pac193x.dtsi"
-#include "lito-bramble_m-usb.dtsi"
-#include "lito-bramble_m-thermal.dtsi"
-#include "lito-bramble_m-audio.dtsi"
+&qupv3_se9_i2c {
+	cs35l41@40 {
+		cirrus,fw-bin-name-override = "cs35l41-mmW";
+	};
+
+	cs35l41@41 {
+		cirrus,fw-bin-name-override = "cs35l41-mmW";
+	};
+};
