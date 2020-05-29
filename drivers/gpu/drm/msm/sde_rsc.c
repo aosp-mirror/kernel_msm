@@ -584,7 +584,7 @@ static int sde_rsc_switch_to_cmd_v2(struct sde_rsc_priv *rsc,
 
 	/* update timers - might not be available at next switch */
 	if (config)
-		sde_rsc_timer_calculate(rsc, config, SDE_RSC_CMD_STATE);
+		sde_rsc_timer_calculate(rsc, config);
 
 	/**
 	 * rsc clients can still send config at any time. If a config is
@@ -837,7 +837,7 @@ static int sde_rsc_switch_to_vid_v2(struct sde_rsc_priv *rsc,
 
 	/* update timers - might not be available at next switch */
 	if (config && (caller_client == rsc->primary_client))
-		sde_rsc_timer_calculate(rsc, config, SDE_RSC_VID_STATE);
+		sde_rsc_timer_calculate(rsc, config);
 
 	/* early exit without vsync wait for vid state */
 	if (rsc->current_state == SDE_RSC_VID_STATE)
