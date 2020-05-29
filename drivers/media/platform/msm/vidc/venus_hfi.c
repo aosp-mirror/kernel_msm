@@ -3378,6 +3378,8 @@ static void print_sfr_message(struct venus_hfi_device *device)
 	struct hfi_sfr_struct *vsfr = NULL;
 	u32 vsfr_size = 0;
 	void *p = NULL;
+	char *fatal_reason = NULL;
+	char crash_reason[MAX_SSR_REASON_LEN];
 
 	vsfr = (struct hfi_sfr_struct *)device->sfr.align_virtual_addr;
 	if (vsfr) {
@@ -3391,6 +3393,22 @@ static void print_sfr_message(struct venus_hfi_device *device)
 		/* SFR isn't guaranteed to be NULL terminated */
 		if (p == NULL)
 			vsfr->rg_data[vsfr_size - 1] = '\0';
+
+		fatal_reason =
+			strnstr(vsfr->rg_data, "Err_Fatal", MAX_SSR_REASON_LEN);
+
+		if (fatal_reason) {
+			subsystem_set_crash_reason("venus", fatal_reason);
+		} else if (device->intr_status &
+			   VIDC_WRAPPER_INTR_CLEAR_A2HWD_BMSK) {
+			snprintf(crash_reason, MAX_SSR_REASON_LEN,
+				 "Watchdog_Timeout - %s", vsfr->rg_data);
+			subsystem_set_crash_reason("venus", crash_reason);
+		} else {
+			snprintf(crash_reason, MAX_SSR_REASON_LEN,
+				 "Unknown - %s", vsfr->rg_data);
+			subsystem_set_crash_reason("venus", crash_reason);
+		}
 
 		dprintk(VIDC_ERR, "SFR Message from FW: %s\n",
 				vsfr->rg_data);
