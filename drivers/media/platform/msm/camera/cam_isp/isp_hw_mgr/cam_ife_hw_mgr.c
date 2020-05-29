@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1190,7 +1190,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_csid_rdi(
 				goto err;
 			}
 
-			csid_res->res_type = CAM_ISP_RESOURCE_PIX_PATH;
+			csid_res->res_type = (enum cam_ife_hw_mgr_res_type)
+				CAM_ISP_RESOURCE_PIX_PATH;
 			csid_res->res_id = csid_acquire.res_id;
 			csid_res->is_dual_vfe = 0;
 			csid_res->hw_res[0] = csid_acquire.node_res;
@@ -2211,7 +2212,7 @@ static int cam_ife_mgr_start_hw(void *hw_mgr_priv, void *start_hw_args)
 	CAM_DBG(CAM_ISP, "Exit...(success)");
 	return 0;
 err:
-	stop_hw_method.hw_stop_cmd = CAM_CSID_HALT_IMMEDIATELY;
+	stop_hw_method.hw_stop_cmd = CAM_ISP_HW_STOP_IMMEDIATELY;
 	stop_args.ctxt_to_hw_map = start_args->ctxt_to_hw_map;
 	stop_args.args = (void *)(&stop_hw_method);
 	cam_ife_mgr_stop_hw(hw_mgr_priv, &stop_args);
