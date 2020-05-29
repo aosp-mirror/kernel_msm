@@ -3158,6 +3158,33 @@ static const struct reg_sequence cs35l41_revb2_errata_patch[] = {
 	{0x00000040,			0x00003333},
 };
 
+static void cs35l41_of_fw_bin_name_override(struct cs35l41_private *cs35l41)
+{
+	struct device_node *np = cs35l41->dev->of_node;
+	int ret = 0;
+	const char *replaced_fw_bin_name = NULL;
+
+	if (!np) {
+		dev_err(cs35l41->dev, "Failed to get cs35l41 of_node\n");
+		return;
+	}
+	ret = of_property_read_string(np, "cirrus,fw-bin-name-override",
+					&replaced_fw_bin_name);
+	if (ret != 0) {
+		dev_info(cs35l41->dev,
+			"No override bin and fw name used, ret: %d\n", ret);
+		return;
+	}
+	if (replaced_fw_bin_name == NULL) {
+		dev_info(cs35l41->dev, "replaced_fw_bin_name is NULL\n");
+		return;
+	}
+
+	dev_info(cs35l41->dev, "replaced_fw_bin_name: %s\n",
+		replaced_fw_bin_name);
+	cs35l41->dsp.part = replaced_fw_bin_name;
+}
+
 static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 {
 	struct wm_adsp *dsp;
@@ -3174,6 +3201,7 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 
 	if (!cs35l41->pdata.fwname_use_revid)
 		dsp->part = "cs35l41";
+	cs35l41_of_fw_bin_name_override(cs35l41);
 
 	dsp->base = CS35L41_DSP1_CTRL_BASE;
 	dsp->base_sysinfo = CS35L41_DSP1_SYS_ID;
