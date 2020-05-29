@@ -1007,6 +1007,27 @@ int subsystem_set_fwname(const char *name, const char *fw_name)
 }
 EXPORT_SYMBOL(subsystem_set_fwname);
 
+int subsystem_set_crash_reason(const char *name, const char *crash_reason)
+{
+	struct subsys_device *subsys;
+
+	if (!name)
+		return -EINVAL;
+	if (!crash_reason)
+		return -EINVAL;
+
+	subsys = find_subsys_device(name);
+	if (!subsys)
+		return -EINVAL;
+
+	pr_warn("update subsystem(%s) crash reason:%s\n", name, crash_reason);
+	strlcpy(subsys->desc->last_crash_reason, crash_reason,
+		sizeof(subsys->desc->last_crash_reason));
+
+	return 0;
+}
+EXPORT_SYMBOL(subsystem_set_crash_reason);
+
 int wait_for_shutdown_ack(struct subsys_desc *desc)
 {
 	int ret;
