@@ -380,7 +380,7 @@ end:
 }
 
 static u32 sde_rsc_timer_calculate(struct sde_rsc_priv *rsc,
-	struct sde_rsc_cmd_config *cmd_config, enum sde_rsc_state state)
+	struct sde_rsc_cmd_config *cmd_config)
 {
 	const u32 cxo_period_ns = 52;
 	u64 rsc_backoff_time_ns = rsc->backoff_time_ns;
@@ -431,12 +431,7 @@ static u32 sde_rsc_timer_calculate(struct sde_rsc_priv *rsc,
 	line_time_ns = div_u64(line_time_ns, rsc->cmd_config.vtotal);
 	prefill_time_ns = line_time_ns * rsc->cmd_config.prefill_lines;
 
-	/* only take jitter into account for CMD mode */
-	if (state == SDE_RSC_CMD_STATE)
-		total = frame_time_ns - frame_jitter - prefill_time_ns;
-	else
-		total = frame_time_ns - prefill_time_ns;
-
+	total = frame_time_ns - frame_jitter - prefill_time_ns;
 	if (total < 0) {
 		pr_err("invalid total time period time:%llu jiter_time:%llu blanking time:%llu\n",
 			frame_time_ns, frame_jitter, prefill_time_ns);
@@ -517,7 +512,7 @@ static int sde_rsc_switch_to_cmd_v3(struct sde_rsc_priv *rsc,
 
 	/* update timers - might not be available at next switch */
 	if (config)
-		sde_rsc_timer_calculate(rsc, config, SDE_RSC_CMD_STATE);
+		sde_rsc_timer_calculate(rsc, config);
 
 	/**
 	 * rsc clients can still send config at any time. If a config is
@@ -589,7 +584,7 @@ static int sde_rsc_switch_to_cmd_v2(struct sde_rsc_priv *rsc,
 
 	/* update timers - might not be available at next switch */
 	if (config)
-		sde_rsc_timer_calculate(rsc, config, SDE_RSC_CMD_STATE);
+		sde_rsc_timer_calculate(rsc, config);
 
 	/**
 	 * rsc clients can still send config at any time. If a config is
@@ -783,7 +778,7 @@ static int sde_rsc_switch_to_vid_v3(struct sde_rsc_priv *rsc,
 
 	/* update timers - might not be available at next switch */
 	if (config)
-		sde_rsc_timer_calculate(rsc, config, SDE_RSC_VID_STATE);
+		sde_rsc_timer_calculate(rsc, config);
 
 	/**
 	 * rsc clients can still send config at any time. If a config is
@@ -842,7 +837,7 @@ static int sde_rsc_switch_to_vid_v2(struct sde_rsc_priv *rsc,
 
 	/* update timers - might not be available at next switch */
 	if (config && (caller_client == rsc->primary_client))
-		sde_rsc_timer_calculate(rsc, config, SDE_RSC_VID_STATE);
+		sde_rsc_timer_calculate(rsc, config);
 
 	/* early exit without vsync wait for vid state */
 	if (rsc->current_state == SDE_RSC_VID_STATE)
@@ -1115,7 +1110,7 @@ static int sde_rsc_hw_init(struct sde_rsc_priv *rsc)
 		goto sde_rsc_fail;
 	}
 
-	ret = sde_rsc_timer_calculate(rsc, NULL, SDE_RSC_IDLE_STATE);
+	ret = sde_rsc_timer_calculate(rsc, NULL);
 	if (ret)
 		goto sde_rsc_fail;
 
