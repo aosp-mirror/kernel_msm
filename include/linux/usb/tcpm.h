@@ -179,6 +179,7 @@ struct tcpc_dev {
 	void (*log_rtc)(struct tcpc_dev *dev);
 	int (*set_suspend_supported)(struct tcpc_dev *dev,
 				     bool suspend_supported);
+	bool fixed_5V3A;
 };
 
 struct tcpm_port;

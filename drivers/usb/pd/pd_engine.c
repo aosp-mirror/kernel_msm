@@ -129,6 +129,8 @@ struct usbpd {
 	bool low_power_udev;
 	bool switch_based_on_maxpower;
 
+	bool fixed_pdo_5V3A;
+
 	bool in_explicit_contract;
 
 	/* alternate source capabilities */
@@ -2023,6 +2025,7 @@ static int init_tcpc_dev(struct usbpd *pd,
 	pd_tcpc_dev->set_in_hard_reset = set_in_hard_reset;
 	pd_tcpc_dev->log_rtc = log_rtc;
 	pd_tcpc_dev->set_suspend_supported = tcpm_set_suspend_supported;
+	pd_tcpc_dev->fixed_5V3A = false;
 
 	return 0;
 }
@@ -2108,6 +2111,35 @@ static void usbpd_release(struct device *dev)
 }
 
 static int num_pd_instances;
+
+static ssize_t pdo_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+	struct tcpc_dev *pd_tcpc_dev = &pd->tcpc_dev;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			pd_tcpc_dev->fixed_5V3A);
+}
+
+static ssize_t pdo_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+	struct tcpc_dev *pd_tcpc_dev = &pd->tcpc_dev;
+
+	if (sysfs_streq(buf, "5V3A") && pd->fixed_pdo_5V3A) {
+		pd_tcpc_dev->fixed_5V3A = true;
+		tcpm_port_reset(pd->tcpm_port);
+	} else {
+		pd_tcpc_dev->fixed_5V3A = false;
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(pdo);
+
 /**
  * usbpd_create - Create a new instance of USB PD protocol/policy engine
  * @parent - parent device to associate with
@@ -2201,6 +2233,9 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->switch_based_on_maxpower = device_property_read_bool(parent,
 				       "google,maxpower-switch");
+
+	pd->fixed_pdo_5V3A = device_property_read_bool(parent,
+			     "google,fixed_pdo_5V3A");
 
 	pd->extcon = devm_extcon_dev_allocate(parent, usbpd_extcon_cable);
 	if (IS_ERR(pd->extcon)) {
@@ -2327,6 +2362,8 @@ struct usbpd *usbpd_create(struct device *parent)
 	psy_changed(&pd->psy_nb, PSY_EVENT_PROP_CHANGED, pd->usb_psy);
 
 	pd->suspend_supported = true;
+
+	device_create_file(&pd->dev, &dev_attr_pdo);
 
 	return pd;
 

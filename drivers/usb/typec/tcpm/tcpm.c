@@ -3488,13 +3488,18 @@ static int tcpm_pd_check_request(struct tcpm_port *port)
 static int tcpm_pd_select_pdo(struct tcpm_port *port, int *sink_pdo,
 			      int *src_pdo)
 {
+	struct tcpc_dev *tcpc = port->tcpc;
 	unsigned int i, j, max_src_mv = 0, min_src_mv = 0, max_mw = 0,
 		     max_mv = 0, src_mw = 0, src_ma = 0, max_snk_mv = 0,
 		     min_snk_mv = 0;
 	int ret = -EINVAL;
+	int fixed_5V3A = 1;
 
 	port->pps_data.supported = false;
 	port->usb_type = POWER_SUPPLY_USB_TYPE_PD;
+
+	if (tcpc->fixed_5V3A)
+		port->nr_snk_pdo = fixed_5V3A;
 
 	/*
 	 * Select the source PDO providing the most power which has a
