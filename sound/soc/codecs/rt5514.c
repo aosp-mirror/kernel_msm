@@ -1072,7 +1072,6 @@ static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
-	struct snd_soc_codec *codec = rt5514->codec;
 
 	rt5514->dsp_req = ucontrol->value.integer.value[0];
 
@@ -1087,42 +1086,12 @@ static int rt5514_dsp_voice_wake_up_put(struct snd_kcontrol *kcontrol,
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
 		rt5514_dsp_enable(rt5514, false, false);
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
-
 	} else {
-		if ((!rt5514->dsp_enabled || !ucontrol->value.integer.value[0])
-			&& !rt5514->dsp_adc_enabled) {
-			dev_warn(codec->dev, "Unsupport : %d %d\n",
-				rt5514->dsp_enabled,
-				rt5514->dsp_adc_enabled);
-
-			mutex_unlock(&rt5514->stream_lock);
-			return 0;
-		}
-
-		if (ucontrol->value.integer.value[0] == 5) {
-			dev_warn(codec->dev,
-				"dsp_mode need update to %d\n",
-				rt5514->dsp_req);
-			mutex_unlock(&rt5514->stream_lock);
-			return 0;
-		}
-
-		rt5514->dsp_enabled_last = rt5514->dsp_enabled;
 		rt5514->dsp_enabled = ucontrol->value.integer.value[0];
 
-		rt5514_dsp_func_select(rt5514);
-		if (rt5514->dsp_enabled_last == 5) {
-			if (rt5514->dsp_adc_enabled)
-				regmap_write(rt5514->i2c_regmap,
-					RT5514_DSP_FUNC,
-					RT5514_DSP_FUNC_WOV_I2S_SENSOR);
-			else
-				regmap_write(rt5514->i2c_regmap,
-					RT5514_DSP_FUNC,
-					RT5514_DSP_FUNC_WOV_I2S);
-
-			rt5514_filter_power_reset(rt5514);
-		}
+		dev_warn(component->dev, "%s: Unsupport : %d %d\n",
+			__func__, rt5514->dsp_enabled,
+			rt5514->dsp_adc_enabled);
 	}
 	mutex_unlock(&rt5514->stream_lock);
 
@@ -1134,7 +1103,6 @@ static int rt5514_dsp_adc_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
-	struct snd_soc_codec *codec = rt5514->codec;
 
 	rt5514->adc_req = ucontrol->value.integer.value[0];
 
@@ -1148,19 +1116,11 @@ static int rt5514_dsp_adc_put(struct snd_kcontrol *kcontrol,
 		rt5514_dsp_enable(rt5514, true, false);
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
 	} else {
-		if (rt5514->dsp_enabled) {
-			if (!ucontrol->value.integer.value[0]) {
-				dev_warn(codec->dev,
-					"adc_enabled need update to %d\n",
-					rt5514->adc_req);
-			} else {
-				rt5514->dsp_adc_enabled = rt5514->adc_req;
-				regmap_write(rt5514->i2c_regmap,
-					RT5514_DSP_FUNC,
-					RT5514_DSP_FUNC_WOV_I2S_SENSOR);
-				rt5514_filter_power_reset(rt5514);
-			}
-		}
+		rt5514->dsp_adc_enabled = ucontrol->value.integer.value[0];
+
+		dev_warn(component->dev, "%s: Unsupport : %d %d\n",
+			__func__, rt5514->dsp_enabled,
+			rt5514->dsp_adc_enabled);
 	}
 	mutex_unlock(&rt5514->stream_lock);
 
@@ -2014,6 +1974,15 @@ static int rt5514_hw_params(struct snd_pcm_substream *substream,
 	unsigned int val_len = 0;
 
 	mutex_lock(&rt5514->stream_lock);
+
+	rt5514->dsp_enabled_last = rt5514->dsp_enabled;
+	/* force enable hotword and music detect during recording */
+	rt5514->dsp_enabled = 3;
+	rt5514->dsp_adc_enabled = 1;
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 1);
+	rt5514_dsp_enable(rt5514, false, false);
+	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
+
 	rt5514->is_streaming = true;
 
 	/* mute all dmic path to prevent pop */
