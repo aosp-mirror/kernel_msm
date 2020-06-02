@@ -42,6 +42,7 @@
 
 #define DRV_NAME "rt5514-spi"
 #define COPY_WORK_DELAY_TIME_MS 100
+#define WAKEUP_TIMEOUT	5000
 
 void (*rt5514_watchdog_handler_cb)(void) = NULL;
 EXPORT_SYMBOL_GPL(rt5514_watchdog_handler_cb);
@@ -55,6 +56,7 @@ static struct wakeup_source *rt5514_spi_ws;
 static u32 spi_switch_mask;
 static int handshake_gpio, handshake_ack_irq;
 struct completion switch_ack;
+static struct rt5514_dsp *rt5514_g_dsp;
 
 struct rt5514_dsp {
 	struct device *dev;
@@ -455,7 +457,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	u8 buf[8];
 	struct snd_soc_component *component = rt5514_dsp->component;
 
-	pm_wakeup_event(rt5514_dsp->dev, 1000);
+	pm_wakeup_event(rt5514_dsp->dev, WAKEUP_TIMEOUT);
 	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		dev_err(rt5514_dsp->dev, "%s: Request in suspend\n", __func__);
 		return;
@@ -569,7 +571,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	u8 buf[8];
 	struct snd_soc_component *component = rt5514_dsp->component;
 
-	pm_wakeup_event(rt5514_dsp->dev, 1000);
+	pm_wakeup_event(rt5514_dsp->dev, WAKEUP_TIMEOUT);
 	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		dev_err(rt5514_dsp->dev, "%s: Request in suspend\n", __func__);
 		return;
@@ -683,7 +685,7 @@ static void rt5514_spi_copy_work_2(struct work_struct *work)
 	u8 buf[8];
 	struct snd_soc_component *component = rt5514_dsp->component;
 
-	pm_wakeup_event(rt5514_dsp->dev, 1000);
+	pm_wakeup_event(rt5514_dsp->dev, WAKEUP_TIMEOUT);
 	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		dev_err(rt5514_dsp->dev, "%s: Request in suspend\n", __func__);
 		return;
@@ -988,7 +990,7 @@ static irqreturn_t rt5514_spi_irq(int irq, void *data)
 {
 	struct rt5514_dsp *rt5514_dsp = data;
 
-	pm_wakeup_event(rt5514_dsp->dev, 5000);
+	pm_wakeup_event(rt5514_dsp->dev, WAKEUP_TIMEOUT);
 	cancel_delayed_work_sync(&rt5514_dsp->start_work);
 	schedule_delayed_work(&rt5514_dsp->start_work, msecs_to_jiffies(0));
 
@@ -1141,6 +1143,8 @@ static int rt5514_spi_pcm_probe(struct snd_soc_component *component)
 	rt5514_dsp = devm_kzalloc(component->dev, sizeof(*rt5514_dsp),
 			GFP_KERNEL);
 
+	rt5514_g_dsp = rt5514_dsp;
+
 	rt5514_pcm_parse_dp(rt5514_dsp, &rt5514_spi->dev);
 
 	rt5514_dsp->dev = &rt5514_spi->dev;
@@ -1210,9 +1214,18 @@ int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len)
 	unsigned int i, end, offset = 0;
 	struct spi_message message;
 	struct spi_transfer x[3];
+	struct snd_soc_component *component = rt5514_g_dsp->component;
 
 	mutex_lock(&spi_lock);
 	__pm_stay_awake(rt5514_spi_ws);
+
+	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		dev_err(rt5514_g_dsp->dev, "%s: Request in suspend\n",
+			__func__);
+		__pm_relax(rt5514_spi_ws);
+		mutex_unlock(&spi_lock);
+		return false;
+	}
 
 	write_buf = kzalloc(8, GFP_DMA | GFP_KERNEL);
 	read_buf = kzalloc(RT5514_SPI_BUF_LEN, GFP_DMA | GFP_KERNEL);
@@ -1303,6 +1316,7 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 	u8 spi_cmd = RT5514_SPI_CMD_BURST_WRITE;
 	u8 *write_buf;
 	unsigned int i, j, end, offset = 0;
+	struct snd_soc_component *component = rt5514_g_dsp->component;
 
 	write_buf = kzalloc(RT5514_SPI_BUF_LEN + 6, GFP_DMA | GFP_KERNEL);
 
@@ -1311,6 +1325,15 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len)
 
 	mutex_lock(&spi_lock);
 	__pm_stay_awake(rt5514_spi_ws);
+
+	if (snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
+		dev_err(rt5514_g_dsp->dev, "%s: Request in suspend\n",
+			__func__);
+		kfree(write_buf);
+		__pm_relax(rt5514_spi_ws);
+		mutex_unlock(&spi_lock);
+		return -ETIMEDOUT;
+	}
 
 	while (offset < len) {
 		if (offset + RT5514_SPI_BUF_LEN <= len)
