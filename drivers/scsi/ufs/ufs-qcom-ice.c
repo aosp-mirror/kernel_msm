@@ -127,6 +127,7 @@ static int qcom_scm_ice_set_key(u32 index, const u8 *key, int key_size,
 	if (err)
 		pr_err("SCM call to set ICE key failed with error %d\n", err);
 
+	memzero_explicit(shm.vaddr, key_size);
 	qtee_shmbridge_free_shm(&shm);
 	return err;
 }
