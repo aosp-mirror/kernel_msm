@@ -191,7 +191,7 @@ int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 	struct resource *res;
 	int err;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "ufs_ice");
 	if (!res)
 		return -ENODEV;
 
