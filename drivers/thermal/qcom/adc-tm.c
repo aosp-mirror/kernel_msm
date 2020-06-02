@@ -15,6 +15,14 @@
 #include "adc-tm.h"
 
 LIST_HEAD(adc_tm_device_list);
+LIST_HEAD(virtual_tz_list);
+
+struct adc_virtual_sensor {
+	struct thermal_zone_device      *tzd;
+	struct list_head                list;
+};
+
+static DEFINE_MUTEX(virtual_tz_lock);
 
 static int adc_tm_get_temp(void *data, int *temp)
 {
@@ -390,6 +398,142 @@ static int adc_tm_get_dt_data(struct platform_device *pdev,
 	return 0;
 }
 
+static int adc_tm_virtual_sensor_register(struct adc_tm_chip *adc_tm)
+{
+	struct device_node *adc_virtual_parent, *child;
+	const char *dt_sensor_names[THERMAL_MAX_VIRT_SENSORS];
+	const char *logic_name;
+	struct virtual_sensor_data virtual_sensor = {0};
+	int rc = 0, i;
+	struct thermal_zone_device *tzd = NULL;
+	struct adc_virtual_sensor *virt_sensor = NULL;
+
+	if(!adc_tm)
+		return -EINVAL;
+
+	mutex_lock(&virtual_tz_lock);
+	if (!list_empty(&virtual_tz_list)) {
+		mutex_unlock(&virtual_tz_lock);
+		return rc;
+	}
+	adc_virtual_parent = of_find_node_by_name(NULL, "adc-virtual-sensor");
+	if (!adc_virtual_parent) {
+		dev_info(adc_tm->dev, "No ADC Virtual sensor defined\n");
+		mutex_unlock(&virtual_tz_lock);
+		return rc;
+	}
+
+	for_each_available_child_of_node(adc_virtual_parent, child) {
+		strlcpy(virtual_sensor.virt_zone_name, child->name,
+				THERMAL_NAME_LENGTH);
+
+		// Parse virtual sensor logic
+		rc = of_property_read_string(child, "logic",
+						&logic_name);
+		if (rc < 0) {
+			dev_err(adc_tm->dev,
+					"Cannot read virtual sensor logic\n");
+			goto free_child;
+		}
+
+		if (!strncasecmp(logic_name, "weight", THERMAL_NAME_LENGTH)) {
+			virtual_sensor.logic = VIRT_WEIGHTED_AVG;
+		} else if (!strncasecmp(logic_name, "maximum",
+					THERMAL_NAME_LENGTH)) {
+			virtual_sensor.logic = VIRT_MAXIMUM;
+		} else if (!strncasecmp(logic_name, "minimum",
+					THERMAL_NAME_LENGTH)) {
+			virtual_sensor.logic = VIRT_MINIMUM;
+		} else if (!strncasecmp(logic_name, "count_threshold",
+					THERMAL_NAME_LENGTH)) {
+			virtual_sensor.logic = VIRT_COUNT_THRESHOLD;
+		}
+
+		// Parse the number of sub sensors
+		rc = of_property_read_u32(child, "num_sensors",
+					&(virtual_sensor.num_sensors));
+		if (rc < 0) {
+			dev_err(adc_tm->dev,
+				"Cannot parse the number of sub sensors\n");
+			goto free_child;
+		}
+		virtual_sensor.coefficient_ct = virtual_sensor.num_sensors;
+
+		//Parse sub sensor name
+		rc = of_property_read_string_array(child, "sensor-names",
+					dt_sensor_names,
+					virtual_sensor.num_sensors);
+		if (rc < 0) {
+			dev_err(adc_tm->dev,
+					"Cannot read virtual sensor names\n");
+			goto free_child;
+		}
+
+		// Parse virtual sensor coefficients
+		rc = of_property_read_u32_array(child, "coefficients",
+						virtual_sensor.coefficients,
+						virtual_sensor.num_sensors);
+		if (rc < 0)
+			dev_info(adc_tm->dev,
+					"Cannot read coefficients\n");
+
+		// Parse virtual sensor avg offset
+		rc = of_property_read_u32(child, "avg-offset",
+					&(virtual_sensor.avg_offset));
+		if (rc < 0)
+			dev_info(adc_tm->dev, "Cannot read avg offset\n");
+
+		rc = of_property_read_u32(child, "avg-denominator",
+					&(virtual_sensor.avg_denominator));
+
+		if (rc < 0)
+			dev_info(adc_tm->dev, "Cannot read avg denominator\n");
+
+		for (i = 0; i < virtual_sensor.num_sensors; i++) {
+			virtual_sensor.sensor_names[i] =
+					devm_kzalloc(adc_tm->dev,
+						THERMAL_NAME_LENGTH,
+						GFP_KERNEL);
+			if (!virtual_sensor.sensor_names[i]) {
+				dev_err(adc_tm->dev, "Cannot alloc "
+						"sensor names:%d\n", i);
+					rc = -ENOMEM;
+					goto free_devm;
+			}
+			strlcpy(virtual_sensor.sensor_names[i],
+				dt_sensor_names[i], THERMAL_NAME_LENGTH);
+		}
+
+		tzd = devm_thermal_of_virtual_sensor_register(adc_tm->dev,
+						&virtual_sensor);
+		if (IS_ERR(tzd)) {
+			dev_err(adc_tm->dev,
+				"Couldn't register virtual sensor\n");
+			rc = -EINVAL;
+			goto free_devm;
+		}
+
+		virt_sensor = devm_kzalloc(adc_tm->dev,
+				sizeof(*virt_sensor), GFP_KERNEL);
+		virt_sensor->tzd = tzd;
+		list_add_tail(&virt_sensor->list, &virtual_tz_list);
+	}
+	mutex_unlock(&virtual_tz_lock);
+	return 0;
+
+free_devm:
+	for (i = 0; i < virtual_sensor.num_sensors; i++) {
+		if (virtual_sensor.sensor_names[i])
+			devm_kfree(adc_tm->dev,
+					virtual_sensor.sensor_names[i]);
+	}
+free_child:
+	of_node_put(child);
+	of_node_put(adc_virtual_parent);
+	mutex_unlock(&virtual_tz_lock);
+	return rc;
+}
+
 static int adc_tm_probe(struct platform_device *pdev)
 {
 	struct device_node *child, *revid_dev_node, *node = pdev->dev.of_node;
@@ -480,6 +624,12 @@ static int adc_tm_probe(struct platform_device *pdev)
 		goto fail;
 	}
 
+	// Register virtual sensor
+	ret = adc_tm_virtual_sensor_register(adc_tm);
+	if (ret) {
+		dev_err(dev, "virtual sensor register failed:%d\n", ret);
+	}
+
 	ret = adc_tm_register_interrupts(adc_tm);
 	if (ret) {
 		pr_err("adc-tm register interrupts failed:%d\n", ret);
@@ -501,9 +651,17 @@ fail:
 static int adc_tm_remove(struct platform_device *pdev)
 {
 	struct adc_tm_chip *adc_tm = platform_get_drvdata(pdev);
+	struct list_head *head = &virtual_tz_list;
+	struct adc_virtual_sensor *pos = NULL;
 
 	if (adc_tm->ops->shutdown)
 		adc_tm->ops->shutdown(adc_tm);
+	mutex_lock(&virtual_tz_lock);
+	list_for_each_entry(pos, head, list) {
+		thermal_zone_of_sensor_unregister(&pdev->dev,
+					pos->tzd);
+	}
+	mutex_unlock(&virtual_tz_lock);
 
 	return 0;
 }
