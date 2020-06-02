@@ -3542,7 +3542,7 @@ static int max17x0x_nvram_recall(struct max1720x_chip *chip)
 
 static int max17x0x_fixups(struct max1720x_chip *chip)
 {
-	int ret;
+	int ret = 0;
 
 	if (max17xxx_gauge_type == MAX1730X_GAUGE_TYPE) {
 		struct device_node *node = chip->dev->of_node;
@@ -4385,8 +4385,6 @@ static void max1720x_init_work(struct work_struct *work)
 
 	chip->prev_charge_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	chip->fake_capacity = -EINVAL;
-	chip->resume_complete = true;
-	chip->init_complete = true;
 	init_debugfs(chip);
 
 	/* Handle any IRQ that might have been set before init */
@@ -4404,6 +4402,9 @@ static void max1720x_init_work(struct work_struct *work)
 	ret = batt_ce_load_data(chip->regmap_nvram, &chip->cap_estimate);
 	if (ret == 0)
 		batt_ce_dump_data(&chip->cap_estimate, chip->ce_log);
+
+	chip->resume_complete = true;
+	chip->init_complete = true;
 }
 
 static int max1720x_probe(struct i2c_client *client,

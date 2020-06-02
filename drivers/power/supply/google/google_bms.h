@@ -232,6 +232,9 @@ struct gbms_charging_event {
 #define GBMS_CS_FLAG_CV       	(1 << 3)
 #define GBMS_CS_FLAG_ILIM       (1 << 4)
 
+// This value must be greater than the threshold set in individual chargers
+#define GBMS_ICL_MIN 100000 // 100 mA
+
 union gbms_charger_state {
 	uint64_t v;
 	struct {

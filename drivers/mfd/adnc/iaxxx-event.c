@@ -733,7 +733,10 @@ retry_reading_count_reg:
 	if (priv->cm4_crashed) {
 		dev_dbg(priv->dev, "CM4 crash event handler called:%d\n",
 							priv->cm4_crashed);
-		iaxxx_fw_crash(dev, IAXXX_FW_CRASH_EVENT, IAXXX_CM4_ID);
+		rc = iaxxx_fw_crash(dev, IAXXX_FW_CRASH_EVENT, IAXXX_CM4_ID);
+		if (rc == -EBUSY) {
+			priv->cm4_crashed = false;
+		}
 		goto out;
 	}
 

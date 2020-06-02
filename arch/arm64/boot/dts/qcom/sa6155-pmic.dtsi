@@ -152,15 +152,9 @@
 	/delete-node/ pm6150-vbat-lvl0;
 	/delete-node/ pm6150-vbat-lvl1;
 	/delete-node/ pm6150-vbat-lvl2;
-	/delete-node/ pm6150-bcl-lvl0;
-	/delete-node/ pm6150-bcl-lvl1;
-	/delete-node/ pm6150-bcl-lvl2;
 	/delete-node/ pm6150l-vph-lvl0;
 	/delete-node/ pm6150l-vph-lvl1;
 	/delete-node/ pm6150l-vph-lvl2;
-	/delete-node/ pm6150l-bcl-lvl0;
-	/delete-node/ pm6150l-bcl-lvl1;
-	/delete-node/ pm6150l-bcl-lvl2;
 	/delete-node/ xo-therm;
 	/delete-node/ sdm-therm;
 	/delete-node/ conn-therm;

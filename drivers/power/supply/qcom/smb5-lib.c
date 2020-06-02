@@ -1435,7 +1435,7 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 	int rc = 0;
 	enum icl_override_mode icl_override = HW_AUTO_MODE;
 	/* suspend if 25mA or less is requested */
-	bool suspend = (icl_ua <= USBIN_25MA);
+	bool suspend = (icl_ua <= SUSPEND_ICL_MAX);
 
 	/* Do not configure ICL from SW for DAM cables */
 	if (smblib_get_prop_typec_mode(chg) ==
@@ -1727,7 +1727,7 @@ static int smblib_dc_icl_vote_callback(struct votable *votable, void *data,
 		icl_ua = 0;
 	}
 
-	suspend = (icl_ua <= USBIN_25MA);
+	suspend = (icl_ua <= SUSPEND_ICL_MAX);
 	if (suspend)
 		goto suspend;
 
@@ -4444,7 +4444,7 @@ int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
 		if (pval.intval)
 			rc = smblib_handle_usb_current(chg, val->intval);
 	} else if (chg->system_suspend_supported) {
-		if (val->intval <= USBIN_25MA)
+		if (val->intval <= SUSPEND_ICL_MAX)
 			rc = vote(chg->usb_icl_votable,
 				PD_SUSPEND_SUPPORTED_VOTER, true, val->intval);
 		else
@@ -5216,7 +5216,7 @@ irqreturn_t chg_state_change_irq_handler(int irq, void *data)
 
 	if (chg->wa_flags & CHG_TERMINATION_WA)
 		smblib_eval_chg_termination(chg, stat);
-	
+
 	if (chg->batt_psy)
 		power_supply_changed(chg->batt_psy);
 
@@ -6849,7 +6849,8 @@ irqreturn_t switcher_power_ok_irq_handler(int irq, void *data)
 
 	/* skip suspending input if its already suspended by some other voter */
 	usb_icl = get_effective_result(chg->usb_icl_votable);
-	if ((stat & USE_USBIN_BIT) && usb_icl >= 0 && usb_icl <= USBIN_25MA)
+	if ((stat & USE_USBIN_BIT) && usb_icl >= 0 &&
+	    usb_icl <= SUSPEND_ICL_MAX)
 		return IRQ_HANDLED;
 
 	if (stat & USE_DCIN_BIT)

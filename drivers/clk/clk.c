@@ -3469,13 +3469,12 @@ static int clk_debug_create_one(struct clk_core *core, struct dentry *pdentry)
 				0444, core->dentry, core, &rate_max_fops))
 		goto err_out;
 
-	d = debugfs_create_u32("clk_accuracy", 0444, core->dentry,
-			(u32 *)&core->accuracy);
+	d = debugfs_create_ulong("clk_accuracy", 0444, core->dentry,
+			&core->accuracy);
 	if (!d)
 		goto err_out;
 
-	d = debugfs_create_u32("clk_phase", 0444, core->dentry,
-			(u32 *)&core->phase);
+	d = debugfs_create_u32("clk_phase", 0444, core->dentry,	&core->phase);
 	if (!d)
 		goto err_out;
 
@@ -3495,7 +3494,7 @@ static int clk_debug_create_one(struct clk_core *core, struct dentry *pdentry)
 		goto err_out;
 
 	d = debugfs_create_u32("clk_notifier_count", 0444, core->dentry,
-			(u32 *)&core->notifier_count);
+			       &core->notifier_count);
 	if (!d)
 		goto err_out;
 

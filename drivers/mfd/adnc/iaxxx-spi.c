@@ -163,7 +163,7 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 
 	ret = iaxxx_pm_get_sync(&spi->dev);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	cmd = cpu_to_be32(cmd);
 	dev_dbg(&spi->dev, "iaxxx: cmd = 0x%08x\n", cmd);
@@ -171,7 +171,7 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 	ret = iaxxx_spi_write(spi, &cmd, sizeof(cmd));
 	if (ret) {
 		dev_err(&spi->dev, "Failed to send command 0x%.08X\n", cmd);
-		return ret;
+		goto out;
 	}
 
 	if (resp) {
@@ -179,13 +179,14 @@ static int iaxxx_spi_cmd(struct spi_device *spi, u32 cmd, u32 *resp)
 		ret = iaxxx_spi_read(spi, resp, sizeof(*resp));
 		if (ret) {
 			dev_err(&spi->dev, "Failed to read command response\n");
-			return ret;
+			goto out;
 		}
 		*resp = be32_to_cpu(*resp);
 	}
 
+out:
 	iaxxx_pm_put_autosuspend(&spi->dev);
-	return 0;
+	return ret;
 }
 
 static int iaxxx_copy_cpu_to_be32(struct device *dev,
@@ -278,12 +279,12 @@ static int iaxxx_spi_write_common(void *context,
 	spi_message_add_tail(&t[0], &m);
 
 	rc = spi_sync(spi, &m);
-	if (pm_needed)
-		iaxxx_pm_put_autosuspend(&spi->dev);
 
 err:
 	mutex_unlock(&spi_priv->spi_mutex);
 get_sync_err:
+	if (pm_needed)
+		iaxxx_pm_put_autosuspend(&spi->dev);
 	return rc;
 }
 
@@ -432,16 +433,15 @@ static int iaxxx_spi_read_common(void *context,
 
 	rc = spi_sync(spi, &m);
 	if (rc)
-		goto spi_sync_err;
+		goto err;
 
 	memcpy(val, rx_buf + IAXXX_REG_LEN_WITH_PADDING, val_len);
 
-spi_sync_err:
-	if (pm_needed)
-		iaxxx_pm_put_autosuspend(&spi->dev);
 err:
 	mutex_unlock(&spi_priv->spi_mutex);
 get_sync_err:
+	if (pm_needed)
+		iaxxx_pm_put_autosuspend(&spi->dev);
 	return rc;
 }
 
@@ -527,15 +527,15 @@ static int iaxxx_spi_bus_raw_read(struct iaxxx_priv *priv, void *buf, int len)
 	/* Transfer the message */
 	rc = spi_sync(spi, &m);
 	if (rc)
-		goto spi_fail;
+		goto err;
 	/* Copy the read data into buffer after reagister address */
 	memcpy((uint8_t *)(buf + IAXXX_REG_LEN_WITH_PADDING),
 			val + IAXXX_REG_LEN_WITH_PADDING, val_len);
-spi_fail:
-	iaxxx_pm_put_autosuspend(&spi->dev);
+
 err:
 	mutex_unlock(&spi_priv->spi_mutex);
 get_sync_err:
+	iaxxx_pm_put_autosuspend(&spi->dev);
 	return rc;
 }
 
@@ -557,11 +557,12 @@ static int iaxxx_spi_bus_raw_write(struct iaxxx_priv *priv, const void *buf,
 
 	rc = iaxxx_pm_get_sync(dev);
 	if (rc < 0)
-		goto pm_sync_err;
+		goto get_sync_err;
 
 	rc =  spi_write(spi, buf, len);
+
+get_sync_err:
 	iaxxx_pm_put_autosuspend(dev);
-pm_sync_err:
 	return rc;
 }
 

@@ -32,6 +32,7 @@
 	google,batt_psy_disable;
 	qcom,hvdcp-disable;
 	google,usb-port-tz-name = "usbc-therm-adc";
+	google,wdog_snarl_disable;
 	qcom,dc-icl-ua = <1100000>;
 
 	qcom,chgr@1000 {

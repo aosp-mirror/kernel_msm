@@ -180,6 +180,11 @@ static int rmnet_newlink(struct net *src_net, struct net_device *dev,
 	int err = 0;
 	u16 mux_id;
 
+	if (!tb[IFLA_LINK]) {
+		NL_SET_ERR_MSG_MOD(extack, "link not specified");
+		return -EINVAL;
+	}
+
 	data_format = RMNET_INGRESS_FORMAT_IP_ROUTE |
 		      RMNET_EGRESS_FORMAT_IP_ROUTE;
 
