@@ -2988,6 +2988,8 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 exit:
 	schedule_work(&charger->uevent_work);
 	power_supply_changed(charger->wc_psy);
+	if (enable == 0)
+		pm_relax(charger->dev);
 	return ret;
 }
 
@@ -3383,8 +3385,10 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 				ret);
 			return;
 		}
-		if (mode_reg & P9382A_MODE_TXMODE)
+		if (mode_reg & P9382A_MODE_TXMODE) {
 			charger->is_rtx_mode = true;
+			pm_stay_awake(charger->dev);
+		}
 		dev_info(&charger->client->dev,
 			 "P9221_SYSTEM_MODE_REG reg: %02x\n",
 			 mode_reg);
@@ -4178,7 +4182,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 
 	ret = devm_request_threaded_irq(
 		&client->dev, charger->pdata->irq_int, NULL,
-		p9221_irq_thread, IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+		p9221_irq_thread, IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 		"p9221-irq", charger);
 	if (ret) {
 		dev_err(&client->dev, "Failed to request IRQ\n");
