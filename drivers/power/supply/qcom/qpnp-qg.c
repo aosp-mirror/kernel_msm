@@ -3864,6 +3864,20 @@ done_fifo:
 	if (rc < 0)
 		pr_err("Failed to reconfigure S7-delay rc=%d\n", rc);
 
+	if (chip->dt.qg_zero_ibat_offset_ctl != -EINVAL) {
+		reg = ~((chip->dt.qg_zero_ibat_offset_ctl / 610) - 1);
+		rc = qg_masked_write(chip, chip->qg_base +
+					QG_ZERO_IBAT_OFFSET_CTL_REG,
+					OFFSET_MASK, reg);
+		if (rc < 0)
+			pr_err("Failed to write zero ibat offset rc=%d\n", rc);
+
+		rc = qg_masked_write(chip, chip->qg_base +
+					QG_ZERO_IBAT_OFFSET_CTL_REG,
+					EN_BIT, EN_BIT);
+		if (rc < 0)
+			pr_err("Failed to write zero ibat enable rc=%d\n", rc);
+	}
 
 	return 0;
 }
@@ -4612,6 +4626,12 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 
 	chip->dt.multi_profile_load = of_property_read_bool(node,
 					"qcom,multi-profile-load");
+
+	rc = of_property_read_u32(node, "google,qg-zero-ibat-offset-ctl", &temp);
+	if (rc < 0)
+		chip->dt.qg_zero_ibat_offset_ctl = -EINVAL;
+	else
+		chip->dt.qg_zero_ibat_offset_ctl = temp;
 
 	(void)of_property_read_string(node, "google,batt_type_name",
 				&chip->dt.batt_type_name);

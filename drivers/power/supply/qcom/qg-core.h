@@ -61,6 +61,7 @@ struct qg_dt {
 	int			fvss_fifo_count;
 	int			fvss_interval_ms;
 	int			tcss_entry_soc;
+	int			qg_zero_ibat_offset_ctl;
 	bool			hold_soc_while_full;
 	bool			linearize_soc;
 	bool			cl_disable;
