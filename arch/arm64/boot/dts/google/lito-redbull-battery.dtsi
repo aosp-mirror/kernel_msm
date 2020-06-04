@@ -81,6 +81,7 @@
 	qcom,ignore-shutdown-soc-secs = <1209600>;
 
 	google,qg-cycle-disable;
+	google,qg-zero-ibat-offset-ctl = <15860>;
 };
 
 &spmi_bus {
