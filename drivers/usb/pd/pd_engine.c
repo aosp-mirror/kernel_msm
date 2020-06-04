@@ -46,13 +46,15 @@
 #define EXT_VBUS_WORK_DELAY_MS 5000
 #define EXT_VBUS_OVERLAP_MS       7
 
-#define CHARING_TEST_BOOT_MODE "chargingtest"
+#define CMDLINE_BOOT_MODE_KEY "androidboot.mode"
+#define CHARGINGTEST_BOOT_MODE "chargingtest"
+#define CMDLINE_SUZYQ_KEY "usbcfg.suzyq"
+#define SUZYQ_ENABLED "enabled"
+#define CMDLINE_PARAM(k, v) ( k"="v )
 
 #define OTG_ICL_VOTER "OTG_ICL_VOTER"
 #define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
 #define TCPM_DISABLE_CC_VOTER "TCPM_DISABLE_CC_VOTER"
-
-#define SUZYQ_ENABLED "enabled"
 
 static char boot_mode_string[64];
 static char suzyq_enabled[15];
@@ -2096,6 +2098,39 @@ static int ext_boost_changed(struct notifier_block *nb, unsigned long evt,
 	return NOTIFY_OK;
 }
 
+static bool search_param(char *cmdline, const char *search_str)
+{
+	char *found_str;
+	char *temp_str = cmdline;
+
+	found_str = strnstr(temp_str, search_str, strlen(temp_str));
+	return found_str ? true : false;
+}
+
+static void parse_cmdline()
+{
+	char *cmdline;
+	const char *chargingtest = CMDLINE_PARAM(CMDLINE_BOOT_MODE_KEY,
+						 CHARGINGTEST_BOOT_MODE);
+	const char *suzyq = CMDLINE_PARAM(CMDLINE_SUZYQ_KEY, SUZYQ_ENABLED);
+
+	cmdline = kstrdup(saved_command_line, GFP_KERNEL);
+
+	if (!cmdline)
+		return;
+
+	if (search_param(cmdline, chargingtest)) {
+		always_enable_data = 1;
+		strlcpy(boot_mode_string, CHARGINGTEST_BOOT_MODE,
+			strlen(boot_mode_string));
+	}
+
+	if (search_param(cmdline, suzyq))
+		strlcpy(suzyq_enabled, SUZYQ_ENABLED, strlen(suzyq_enabled));
+
+	kfree(cmdline);
+}
+
 static const unsigned int usbpd_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
@@ -2193,6 +2228,8 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (ret < 0)
 		goto del_pd;
 #endif
+
+	parse_cmdline();
 
 	device_init_wakeup(&pd->dev, true);
 
@@ -2422,9 +2459,6 @@ EXPORT_SYMBOL(usbpd_destroy);
 
 static int __init pd_engine_init(void)
 {
-	if (!strncmp(boot_mode_string, CHARING_TEST_BOOT_MODE,
-		     strlen(CHARING_TEST_BOOT_MODE)))
-		always_enable_data = 1;
 #if defined(CONFIG_QPNP_USB_PDPHY_MODULE)
 	return pdphy_driver_init();
 #else
@@ -2443,11 +2477,3 @@ module_exit(pd_engine_exit);
 
 MODULE_DESCRIPTION("USB PD Engine based on Type-C Port Manager");
 MODULE_LICENSE("GPL v2");
-
-#undef MODULE_PARAM_PREFIX
-#define MODULE_PARAM_PREFIX "androidboot."
-module_param_string(mode, boot_mode_string, sizeof(boot_mode_string), 0);
-
-#undef MODULE_PARAM_PREFIX
-#define MODULE_PARAM_PREFIX "usbcfg."
-module_param_string(suzyq, suzyq_enabled, sizeof(suzyq_enabled), 0);
