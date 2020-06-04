@@ -48,6 +48,7 @@
 
 #define CMDLINE_BOOT_MODE_KEY "androidboot.mode"
 #define CHARGINGTEST_BOOT_MODE "chargingtest"
+#define CHARGER_BOOT_MODE "charger"
 #define CMDLINE_SUZYQ_KEY "usbcfg.suzyq"
 #define SUZYQ_ENABLED "enabled"
 #define CMDLINE_PARAM(k, v) ( k"="v )
@@ -1985,6 +1986,12 @@ static const struct tcpc_config pd_tcpc_config = {
 	.try_role_hw = true,
 };
 
+static const struct tcpc_config pd_tcpc_config_charger = {
+	.alt_modes = NULL,
+	.try_role_hw = true,
+	.type = TYPEC_PORT_SNK,
+};
+
 static int init_tcpc_dev(struct usbpd *pd,
 			 struct device *parent)
 {
@@ -2028,6 +2035,14 @@ static int init_tcpc_dev(struct usbpd *pd,
 	pd_tcpc_dev->log_rtc = log_rtc;
 	pd_tcpc_dev->set_suspend_supported = tcpm_set_suspend_supported;
 	pd_tcpc_dev->fixed_5V3A = false;
+
+	if (!strncmp(boot_mode_string, CHARGER_BOOT_MODE,
+		     strlen(CHARGER_BOOT_MODE))) {
+		pd_tcpc_dev->port_type_override = true;
+		pd_tcpc_dev->config = &pd_tcpc_config_charger;
+	} else {
+		pd_tcpc_dev->port_type_override = false;
+	}
 
 	return 0;
 }
@@ -2112,6 +2127,8 @@ static void parse_cmdline()
 	char *cmdline;
 	const char *chargingtest = CMDLINE_PARAM(CMDLINE_BOOT_MODE_KEY,
 						 CHARGINGTEST_BOOT_MODE);
+	const char *charger = CMDLINE_PARAM(CMDLINE_BOOT_MODE_KEY,
+					    CHARGER_BOOT_MODE);
 	const char *suzyq = CMDLINE_PARAM(CMDLINE_SUZYQ_KEY, SUZYQ_ENABLED);
 
 	cmdline = kstrdup(saved_command_line, GFP_KERNEL);
@@ -2122,6 +2139,9 @@ static void parse_cmdline()
 	if (search_param(cmdline, chargingtest)) {
 		always_enable_data = 1;
 		strlcpy(boot_mode_string, CHARGINGTEST_BOOT_MODE,
+			strlen(boot_mode_string));
+	} else if (search_param(cmdline, charger)) {
+		strlcpy(boot_mode_string, CHARGER_BOOT_MODE,
 			strlen(boot_mode_string));
 	}
 
