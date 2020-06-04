@@ -117,6 +117,8 @@ struct tcpc_config {
  * struct tcpc_dev - Port configuration and callback functions
  * @config:	Pointer to port configuration
  * @fwnode:	Pointer to port fwnode
+ * @port_type_override:
+ *              Indicating whether port_type is overridden by tcpc_config
  * @get_vbus:	Called to read current VBUS state
  * @get_current_limit:
  *		Optional; called by the tcpm core when configured as a snk
@@ -151,6 +153,7 @@ struct tcpc_config {
 struct tcpc_dev {
 	const struct tcpc_config *config;
 	struct fwnode_handle *fwnode;
+	bool port_type_override;
 
 	int (*init)(struct tcpc_dev *dev);
 	int (*get_vbus)(struct tcpc_dev *dev);
