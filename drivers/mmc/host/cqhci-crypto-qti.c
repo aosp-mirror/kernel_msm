@@ -222,13 +222,16 @@ int cqhci_host_init_crypto_qti_spec(struct cqhci_host *host,
 
 	host->ksm = keyslot_manager_create(host->mmc->parent,
 					   cqhci_num_keyslots(host),
-					   ksm_ops, crypto_modes_supported,
-					   host);
+					   ksm_ops,
+					   BLK_CRYPTO_FEATURE_STANDARD_KEYS,
+					   crypto_modes_supported, host);
 
 	if (!host->ksm) {
 		err = -ENOMEM;
 		goto out;
 	}
+	keyslot_manager_set_max_dun_bytes(host->ksm, 4);
+
 	/*
 	 * In case host controller supports cryptographic operations
 	 * then, it uses 128bit task descriptor. Upper 64 bits of task
