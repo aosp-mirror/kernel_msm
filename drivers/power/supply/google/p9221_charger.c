@@ -819,6 +819,8 @@ static void p9221_vote_defaults(struct p9221_charger_data *charger)
 	if (ret)
 		dev_err(&charger->client->dev,
 			"Could not reset OCP DC_ICL voter %d\n", ret);
+
+	vote(charger->dc_icl_votable, P9382A_RTX_VOTER, false, 0);
 }
 
 static void p9221_set_offline(struct p9221_charger_data *charger)
@@ -1492,6 +1494,9 @@ static int p9221_set_dc_icl(struct p9221_charger_data *charger)
 
 	/* Default to BPP ICL */
 	icl = P9221_DC_ICL_BPP_UA;
+
+	if (charger->chg_on_rtx)
+		icl = P9221_DC_ICL_RTX_UA;
 
 	if (charger->icl_ramp)
 		icl = charger->icl_ramp_ua;
@@ -3560,6 +3565,13 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			charger->chg_on_rtx = (tmp == ACCESSORY_TYPE_PHONE);
 			dev_info(&charger->client->dev,
 				 "chg_on_rtx=%d\n", charger->chg_on_rtx);
+			if (charger->chg_on_rtx) {
+				vote(charger->dc_icl_votable, P9382A_RTX_VOTER,
+				     true, P9221_DC_ICL_RTX_UA);
+				dev_info(&charger->client->dev,
+					 "set ICL to %dmA",
+					 P9221_DC_ICL_RTX_UA/1000);
+			}
 		}
 	}
 
