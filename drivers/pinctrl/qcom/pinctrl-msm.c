@@ -41,6 +41,11 @@
 #include "pinctrl-msm.h"
 #include "../pinctrl-utils.h"
 
+#ifdef OPPO_NO_PREBUILD
+#include <linux/gpio/driver.h>
+#include <../../gpio/gpiolib.h>
+#include <../../oppo/dap_swd/dap_swd.h>
+#endif
 #define MAX_NR_GPIO 300
 #define PS_HOLD_OFFSET 0x820
 
@@ -385,6 +390,19 @@ static struct pinctrl_desc msm_pinctrl_desc = {
 	.owner = THIS_MODULE,
 };
 
+#ifdef OPPO_NO_PREBUILD
+int msm_gpio_get_reg(struct gpio_desc *desc, struct msm_gpio_reg *reg)
+{
+	struct gpio_chip *chip = gpiod_to_chip(desc);
+	struct msm_pinctrl *pctrl = container_of(chip, struct msm_pinctrl, chip);
+	const struct msm_pingroup *g = &pctrl->soc->groups[gpio_chip_hwgpio(desc)];
+
+	reg->io_reg = pctrl->regs + g->io_reg;
+	reg->ctl_reg = pctrl->regs + g->ctl_reg;
+
+	return 0;
+}
+#endif
 static int msm_gpio_direction_input(struct gpio_chip *chip, unsigned offset)
 {
 	const struct msm_pingroup *g;

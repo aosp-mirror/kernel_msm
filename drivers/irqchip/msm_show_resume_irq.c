@@ -15,7 +15,12 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
+// wsw.bsp.pm, 2020-03-13, enable the resume-irq
+#ifdef CONFIG_OPPO
+int msm_show_resume_irq_mask = 1;
+#else
 int msm_show_resume_irq_mask;
+#endif
 
 module_param_named(
 	debug_mask, msm_show_resume_irq_mask, int, S_IRUGO | S_IWUSR | S_IWGRP

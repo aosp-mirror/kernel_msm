@@ -20,8 +20,6 @@
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <linux/leds.h>
-
-#define CONFIG_OPPO
 /*********************************************************
 *
 * marco

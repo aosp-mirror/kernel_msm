@@ -36,8 +36,8 @@
 #define VSYNC_DELAY msecs_to_jiffies(17)
 #define EVERDISPLAY_320X360_CMD_SIGNATURE 0x018001
 #define VISIONOX_402X476_CMD_SIGNATURE 0x098001
-unsigned int oppo_panel_id;
-EXPORT_SYMBOL(oppo_panel_id);
+extern unsigned int oppo_panel_id;
+extern unsigned int panel_present;
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
@@ -1104,7 +1104,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
-
+#ifdef CONFIG_OPPO
+	msleep(80);
+#endif
 	mdss_dsi_panel_off_hdmi(ctrl, pinfo);
 
 end:
@@ -2070,8 +2072,11 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 	const char *string;
 	struct mdss_panel_info *pinfo = &ctrl->panel_data.panel_info;
 
-	pinfo->esd_check_enabled = of_property_read_bool(np,
-		"qcom,esd-check-enabled");
+	/*  WSW.BSP.Kernel, 2020/02/04,  Add for panel ESD */
+	if(panel_present) {
+		pinfo->esd_check_enabled = of_property_read_bool(np,
+			"qcom,esd-check-enabled");
+	}
 
 	if (!pinfo->esd_check_enabled)
 		return;

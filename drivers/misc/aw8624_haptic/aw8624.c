@@ -3295,6 +3295,7 @@ static int aw8624_vibrator_init(struct aw8624 *aw8624)
 	aw8624->to_dev.name = "vibrator";
 	//aw8624->to_dev.get_time = aw8624_vibrator_get_time;
 	aw8624->to_dev.brightness_set = aw8624_vibrator_enable;
+	aw8624->to_dev.max_brightness = 500;
 
 	ret = devm_led_classdev_register(&aw8624->i2c->dev, &(aw8624->to_dev));
 	if (ret < 0) {

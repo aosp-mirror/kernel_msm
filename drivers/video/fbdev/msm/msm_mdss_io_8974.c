@@ -2428,18 +2428,29 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 				(i != DSI_CORE_PM))
 				continue;
 			if ((i == DSI_CTRL_PM) &&
-				sdata->power_data[i].is_vreg_enabled)
-				continue;
-			rc = msm_mdss_enable_vreg(
-				sdata->power_data[i].vreg_config,
-				sdata->power_data[i].num_vreg, 1);
-			if (rc) {
-				pr_err("%s: failed to enable vregs for %s\n",
-					__func__,
-					__mdss_dsi_pm_name(i));
+				sdata->power_data[i].is_vreg_enabled) {
+				rc = msm_mdss_config_vreg_opt_mode(
+					sdata->power_data[i].vreg_config,
+					sdata->power_data[i].num_vreg,
+					DSS_REG_MODE_ENABLE);
+				if (rc) {
+					pr_err("%s: failed to set opt mode for %s\n",
+						__func__,
+						__mdss_dsi_pm_name(i));
+					rc = 0;
+				}
 			} else {
-				ctrl->core_power = true;
-				sdata->power_data[i].is_vreg_enabled = true;
+				rc = msm_mdss_enable_vreg(
+					sdata->power_data[i].vreg_config,
+					sdata->power_data[i].num_vreg, 1);
+				if (rc) {
+					pr_err("%s: failed to enable vregs for %s\n",
+						__func__,
+						__mdss_dsi_pm_name(i));
+				} else {
+					ctrl->core_power = true;
+					sdata->power_data[i].is_vreg_enabled = true;
+				}
 			}
 
 		}

@@ -22,6 +22,29 @@
 #include <linux/module.h>
 
 #define FB_SYSFS_FLAG_ATTR 1
+/* WSW.BSP.Kernel, 2019-11-30 add "panel_serial_number" to support ftm*/
+#ifdef CONFIG_OPPO
+static ssize_t oppo_panel_serial_number_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	extern int oppo_get_dsi_connect_status(void);
+	uint64_t serial_number =
+		((uint64_t)8 << 56) + ((uint64_t)11 << 48) + ((uint64_t)16 << 40)
+		+ ((uint64_t)15 << 32) + ((uint64_t)9 << 24) + ((uint64_t)20 << 16)
+		+ ((uint64_t)3 << 8) + ((uint64_t)24 << 0);
+
+	if (!oppo_get_dsi_connect_status())
+		return sprintf(buf, "Get panel serial number:%llx\n", serial_number);
+	else
+		return -ENODEV;
+}
+static ssize_t oppo_panel_serial_number_store(struct device *device,
+			     struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	return count;
+}
+#endif
 
 /**
  * framebuffer_alloc - creates a new frame buffer info structure
@@ -511,6 +534,10 @@ static struct device_attribute device_attrs[] = {
 	__ATTR(state, S_IRUGO|S_IWUSR, show_fbstate, store_fbstate),
 #ifdef CONFIG_FB_BACKLIGHT
 	__ATTR(bl_curve, S_IRUGO|S_IWUSR, show_bl_curve, store_bl_curve),
+#endif
+
+#ifdef CONFIG_OPPO
+	__ATTR(panel_serial_number, S_IRUGO|S_IWUSR, oppo_panel_serial_number_show, oppo_panel_serial_number_store),
 #endif
 };
 

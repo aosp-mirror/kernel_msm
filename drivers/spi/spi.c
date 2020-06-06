@@ -3290,3 +3290,9 @@ err0:
  */
 postcore_initcall(spi_init);
 
+struct spi_device *
+oppo_of_register_spi_device(struct spi_master *master, struct device_node *nc)
+{
+	return of_register_spi_device(master, nc);
+}
+EXPORT_SYMBOL(oppo_of_register_spi_device);

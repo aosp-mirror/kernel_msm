@@ -325,7 +325,8 @@ static int cyttsp5_xy_worker(struct cyttsp5_mt_data *md)
 			num_cur_tch = 0;
 
 #if defined(CONFIG_FB)
-		if ((cd->fb_blank == FB_BLANK_UNBLANK) && (cd->large_tp_enable)) {
+	   /* WSW.BSP.Kernel, 2020-05-20 adapter ambient mode*/
+		if ((cd->fb_blank !=  FB_BLANK_POWERDOWN/*== FB_BLANK_UNBLANK*/) && (cd->large_tp_enable)) {
 			input_report_key(md->input, KEY_SLEEP, 1);
 			input_report_key(md->input, KEY_SLEEP, 0);
 			input_sync(md->input);

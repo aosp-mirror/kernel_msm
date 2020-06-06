@@ -122,6 +122,7 @@ static int mdss_fb_send_panel_event(struct msm_fb_data_type *mfd,
 					int event, void *arg);
 static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd,
 		int type);
+static int mdss_fb_blank(int blank_mode, struct fb_info *info);
 void mdss_fb_no_update_notify_timer_cb(unsigned long data)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)data;
@@ -936,6 +937,18 @@ static ssize_t mdss_fb_set_disp_en_gpio(struct device *dev,
     ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
                 panel_data);
 
+#ifdef CONFIG_OPPO
+    if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
+        gpio_direction_output(ctrl_pdata->disp_en_gpio, !!val);
+
+	if(val == 0) {
+		pr_info("power off panel\n");
+		mdss_fb_blank(FB_BLANK_POWERDOWN, fbi);
+	} else {
+		pr_info("power on panel\n");
+		mdss_fb_blank(FB_BLANK_UNBLANK, fbi);
+	}
+#else
     ctrl_pdata->disp_disabled = !val;
     if (gpio_is_valid(ctrl_pdata->disp_en_gpio))
         gpio_direction_output(ctrl_pdata->disp_en_gpio, !!val);
@@ -949,6 +962,7 @@ static ssize_t mdss_fb_set_disp_en_gpio(struct device *dev,
     }
 
     mdss_dsi_panel_te_ctrl(ctrl_pdata, 2);   /*TE = high*/
+#endif
 
     return count;
 }

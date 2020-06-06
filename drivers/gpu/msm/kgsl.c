@@ -4447,6 +4447,118 @@ static unsigned long _get_svm_area(struct kgsl_process_private *private,
 	return result;
 }
 
+//#ifdef WEAROS_EDIT
+//#Wei.Lv@Wear.Android.Framework.Memory, 2020/05/15, dump process's map and ksgl mem when gpu oom
+static int last_oom_dump_pid;
+static bool kgsl_oom_dump_done;
+static int kgsl_dump_oom_info(int pid)
+{
+	int ret;
+	struct file *fp;
+	char path[64];
+	char *buff, *s_start;
+	int count = 0;
+    int i = 0;
+	mm_segment_t old_fs;
+	loff_t pos;
+
+	buff = (char*)kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if(!buff) {
+		pr_err("[Qcom_debug] kmalloc(PAGE_SIZE, GFP_KERNEL) is failed, exit!\n");
+		ret = -1;
+		goto err_out;
+	}
+
+	// Part 1- dump /proc/$pid/maps
+	sprintf(path, "/proc/%d/maps", pid);
+	fp = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(fp)) {
+		pr_err("[Qcom_debug] Open %s failed, error %ld\n", path,(unsigned long)fp);
+		ret = -1;
+		goto err_out;
+	}
+	pr_err("[Qcom_debug] Dumping %s\n", path);
+	pr_err("[Qcom_debug] startaddr-endaddr flags offset major:minor size node\n");
+	do {
+		struct mm_struct *mm = current->mm;
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		pos = fp->f_pos;
+		up_write(&mm->mmap_sem);
+		count = vfs_read(fp, buff, PAGE_SIZE-1, &pos);
+		ret = down_write_killable(&mm->mmap_sem);
+		set_fs(old_fs);
+
+		if(count < 0) {
+			ret = -1;
+			pr_err("[Qcom_debug] read file %s failed!\n", path);
+			goto err_out;
+		}
+		fp->f_pos = pos;
+
+		s_start = buff;
+		for(i = 0; i < count; i++) {
+			if(buff[i] == '\n'){
+				buff[i] = '\0';
+				pr_err("[Qcom_debug] %s\n",s_start);
+				s_start = buff + i + 1;
+			}
+		}
+	} while (count > 0);
+	filp_close(fp, NULL);
+	// Part 1- end
+
+	// Part 2- dump /d/kgsl/proc/$pid/mem
+	sprintf(path,"/d/kgsl/proc/%d/mem", pid);
+	fp = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(fp)) {
+		pr_err("[Qcom_debug] Open %s failed, error %ld, try again\n", path, (unsigned long)fp);
+
+		sprintf(path,"/sys/kernel/debug/kgsl/proc/%d/mem", pid);
+		fp = filp_open(path, O_RDONLY, 0);
+		if (IS_ERR(fp)) {
+			pr_err("[Qcom_debug] Open %s failed, error %ld\n", path, (unsigned long)fp);
+			ret = -1;
+			goto err_out;
+		}
+	}
+	pr_err("[Qcom_debug] Dumping %s\n", path);
+	do {
+		//struct mm_struct *mm = current->mm;
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		pos = fp->f_pos;
+		//up_write(&mm->mmap_sem);
+		count = vfs_read(fp, buff, PAGE_SIZE-1, &pos);
+		//ret = down_write_killable(&mm->mmap_sem);
+		set_fs(old_fs);
+
+		if(count < 0) {
+			ret = -1;
+			pr_err("[Qcom_debug] read file %s failed!\n", path);
+			goto err_out;
+		}
+		fp->f_pos = pos;
+
+		s_start = buff;
+		for(i = 0; i < count; i++) {
+			if(buff[i] == '\n'){
+				buff[i] = '\0';
+				pr_err("[Qcom_debug] %s\n",s_start);
+				s_start = buff + i + 1;
+			}
+		}
+	} while (count > 0);
+	filp_close(fp, NULL);
+	// Part 2 - end
+
+	ret = 0;
+err_out:
+	kfree(buff);
+	return ret;
+}
+//#endif /* WEAROS_EDIT */
+
 static unsigned long
 kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 			unsigned long len, unsigned long pgoff,
@@ -4486,7 +4598,14 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 				private->pid, current->mm->mmap_base, addr,
 				pgoff, len, (int) val);
 	}
-
+    //#ifdef WEAROS_EDIT
+    //#Wei.Lv@Wear.Android.Framework.Memory, 2020/05/15, dump process's map and ksgl mem when gpu oom
+	if (IS_ERR_VALUE(val) && (!kgsl_oom_dump_done || (private->pid != last_oom_dump_pid))) {
+		int ret = kgsl_dump_oom_info(private->pid);
+		kgsl_oom_dump_done = !ret;
+		last_oom_dump_pid = private->pid;
+	}
+    //#endif /* WEAROS_EDIT */
 put:
 	kgsl_mem_entry_put(entry);
 	return val;

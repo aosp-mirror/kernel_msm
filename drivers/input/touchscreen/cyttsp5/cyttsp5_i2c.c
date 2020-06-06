@@ -31,6 +31,10 @@
 #include <linux/i2c.h>
 #include <linux/version.h>
 
+#ifdef CONFIG_OPPO
+/* WSW.BSP.Kernel, 2019-08-28 Not retry startup tp driver at ftm mode*/
+#include <../../../oppo/include/oppo.h>
+#endif
 
 #define CY_I2C_DATA_SIZE  (2 * 256)
 
@@ -199,9 +203,19 @@ static struct i2c_driver cyttsp5_i2c_driver = {
 	.id_table = cyttsp5_i2c_id,
 };
 
+#ifdef CONFIG_OPPO /* WSW.BSP.Kernel, 2019-07-31 Not registered tp driver at ftm mode*/
+extern unsigned int oppo_ftm_mode;
+#endif
+
 static int __init cyttsp5_i2c_init(void)
 {
-	int rc = i2c_add_driver(&cyttsp5_i2c_driver);
+	int rc = 0;
+#ifdef CONFIG_OPPO /* WSW.BSP.Kernel, 2019-07-31 Not registered tp driver at ftm mode*/
+	if ((FTM_MODE_RF == oppo_ftm_mode)||(FTM_MODE_WLAN == oppo_ftm_mode)) {
+		return 0;
+	}
+#endif
+	rc = i2c_add_driver(&cyttsp5_i2c_driver);
 
 	pr_info("%s: Parade TTSP I2C Driver (Built %s) rc=%d\n",
 			__func__, CY_DRIVER_VERSION, rc);
@@ -212,6 +226,12 @@ module_init(cyttsp5_i2c_init);
 
 static void __exit cyttsp5_i2c_exit(void)
 {
+#ifdef CONFIG_OPPO /* WSW.BSP.Kernel, 2019-07-31 Not registered tp driver at ftm mode*/
+	if ((FTM_MODE_RF == oppo_ftm_mode)||(FTM_MODE_WLAN == oppo_ftm_mode)) {
+		return;
+	}
+#endif
+
 	i2c_del_driver(&cyttsp5_i2c_driver);
 }
 module_exit(cyttsp5_i2c_exit);

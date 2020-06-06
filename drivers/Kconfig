@@ -210,4 +210,5 @@ source "drivers/sensors/Kconfig"
 
 source "drivers/tee/Kconfig"
 
+source "drivers/oppo/Kconfig"
 endmenu

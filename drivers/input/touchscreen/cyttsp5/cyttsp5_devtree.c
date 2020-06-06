@@ -31,6 +31,9 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #include <linux/slab.h>
+#ifdef CONFIG_OPPO
+#include <../../../oppo/include/oppo.h>
+#endif
 
 /* cyttsp */
 #include "cyttsp5_regs.h"
@@ -43,7 +46,6 @@
 #define EVERDISPLAY_320X360_CMD_SIGNATURE 0x018001
 #define VISIONOX_402X476_CMD_SIGNATURE 0x098001
 
-extern unsigned int oppo_panel_id;
 
 enum cyttsp5_device_type {
 	DEVICE_MT,

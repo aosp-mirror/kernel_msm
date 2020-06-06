@@ -165,22 +165,22 @@
 			cpu0_cdev {
 				trip = <&cpu_freq_trip>;
 				cooling-device =
-					<&CPU0 THERMAL_NO_LIMIT 2>;
+					<&CPU0 THERMAL_NO_LIMIT 1>;
 			};
 			cpu1_cdev {
 				trip = <&cpu_freq_trip>;
 				cooling-device =
-					<&CPU1 THERMAL_NO_LIMIT 2>;
+					<&CPU1 THERMAL_NO_LIMIT 1>;
 			};
 			cpu2_cdev {
 				trip = <&cpu_freq_trip>;
 				cooling-device =
-					<&CPU2 THERMAL_NO_LIMIT 2>;
+					<&CPU2 THERMAL_NO_LIMIT 1>;
 			};
 			cpu3_cdev {
 				trip = <&cpu_freq_trip>;
 				cooling-device =
-					<&CPU3 THERMAL_NO_LIMIT 2>;
+					<&CPU3 THERMAL_NO_LIMIT 1>;
 			};
 			modem_lvl1 {
 				trip = <&modem_mon_trip0>;

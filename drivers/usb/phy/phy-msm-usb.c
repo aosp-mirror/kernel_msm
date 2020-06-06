@@ -260,7 +260,12 @@ module_param(lpm_disconnect_thresh, uint, 0644);
 MODULE_PARM_DESC(lpm_disconnect_thresh,
 	"Delay before entering LPM on USB disconnect");
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2020-1-13, float charging
+static bool floated_charger_enable = true;
+#else
 static bool floated_charger_enable;
+#endif
 module_param(floated_charger_enable, bool, 0644);
 MODULE_PARM_DESC(floated_charger_enable,
 	"Whether to enable floated charger");

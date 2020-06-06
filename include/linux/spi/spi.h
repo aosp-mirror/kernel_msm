@@ -1314,4 +1314,7 @@ spi_transfer_is_last(struct spi_master *master, struct spi_transfer *xfer)
 	return list_is_last(&xfer->transfer_list, &master->cur_msg->transfers);
 }
 
+
+extern struct spi_device *
+oppo_of_register_spi_device(struct spi_master *master, struct device_node *nc);
 #endif /* __LINUX_SPI_H */

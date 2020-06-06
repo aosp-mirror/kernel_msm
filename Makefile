@@ -403,6 +403,18 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -std=gnu89
+
+#Wear.Android.Framework.Root, 2020/04/21, Add for build root disable dm verity
+ifeq ($(OPPO_BUILD_ROOT_DISABLE_DM_VERITY),true)
+    KBUILD_CFLAGS += -DOPPO_BUILD_ROOT_DISABLE_DM_VERITY
+endif
+
+
+#WSW.BSP.kernel, 2020/06/03, Add for oppo no prebuild
+ifeq ($(OPPO_NO_PREBUILD),true)
+    KBUILD_CFLAGS += -DOPPO_NO_PREBUILD
+endif
+
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=

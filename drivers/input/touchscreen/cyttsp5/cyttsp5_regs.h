@@ -65,7 +65,6 @@
 #include <linux/timex.h>
 #include <linux/rtc.h>
 
-#define CONFIG_OPPO
 /* #define VERBOSE_DEBUG */
 /* #define EASYWAKE_TSG6 */
 #define TTHE_TUNER_SUPPORT 1
@@ -776,13 +775,13 @@ enum cyttsp5_module_id {
 };
 
 #ifdef CONFIG_OPPO
-/*Xun.Ouyang@WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
+/* WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
     enum cyttsp5_sleep_mode {
         CY_SLEEP_PWD,
         CY_SLEEP_EASYWAKEUP,
     };
 
-/*Hailong.Ma@WSW.BSP.Kernel, 2019-12-27 add always active mode*/
+/* WSW.BSP.Kernel, 2019-12-27 add always active mode*/
 enum cyttsp5_always_active_mode {
 	SS_ALWAYS_ACTIVE_DIS = 0,
 	SS_ALWAYS_ACTIVE_EN = 1,
@@ -941,9 +940,14 @@ struct cyttsp5_features {
 	uint8_t sensor_data;
 };
 
+/* WSW.BSP.Kernel, 2020-04-17 enable pm notify */
+#ifdef CONFIG_OPPO
+#define NEED_SUSPEND_NOTIFIER 1//enable by ouyangxun
+#else
 #define NEED_SUSPEND_NOTIFIER \
 	((LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0)) \
 	&& defined(CONFIG_PM_SLEEP) && defined(CONFIG_PM_RUNTIME))
+#endif
 
 struct cyttsp5_module {
 	struct list_head node;
@@ -1044,9 +1048,9 @@ struct cyttsp5_core_data {
 	u8 easy_wakeup_enable;
 	u8 large_tp_enable;
 #ifdef CONFIG_OPPO
-/*Xun.Ouyang@WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
+/* WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
 	u8 last_sleep_mode;
-/*Hailong.Ma@WSW.BSP.Kernel, 2019-12-27 add always active mode*/
+/* WSW.BSP.Kernel, 2019-12-27 add always active mode*/
 	u8 always_active_mode;
 #endif
 };

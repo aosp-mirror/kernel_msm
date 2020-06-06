@@ -226,8 +226,14 @@ static struct srcu_struct bam_dmux_srcu;
 /* A2 power collaspe */
 #define UL_TIMEOUT_DELAY 1000	/* in ms */
 #define UL_FAST_TIMEOUT_DELAY 100 /* in ms */
-#define SHUTDOWN_TIMEOUT_MS	500
-#define UL_WAKEUP_TIMEOUT_MS	2000
+//#ifndef VENDOT_EDIT
+// WSW.NW.STABLE.WATCH-3572, 2019/11/18, modify for avoid AP busy cause dump
+//#define SHUTDOWN_TIMEOUT_MS	500
+//#define UL_WAKEUP_TIMEOUT_MS	2000
+//#else
+#define SHUTDOWN_TIMEOUT_MS     4000
+#define UL_WAKEUP_TIMEOUT_MS    4000
+//#end
 static uint32_t ul_timeout_delay = UL_TIMEOUT_DELAY;
 static void toggle_apps_ack(void);
 static void reconnect_to_bam(void);

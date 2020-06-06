@@ -32,6 +32,10 @@
 #include <linux/crc-itu-t.h>
 #include <linux/console.h>
 
+#ifdef CONFIG_OPPO
+/* WSW.BSP.Kernel, 2019-08-28 Not retry startup tp driver at ftm mode*/
+#include <../../../oppo/include/oppo.h>
+#endif
 
 #define CY_CORE_STARTUP_RETRY_COUNT		3
 
@@ -131,9 +135,6 @@ struct cyttsp5_hid_output {
 #define HID_OUTPUT_BL_COMMAND(command) \
 	.cmd_type = HID_OUTPUT_CMD_BL, \
 	.command_code = command
-
-	
-static int cyttsp5_core_poweron_device_(struct cyttsp5_core_data *cd);
 
 #ifdef VERBOSE_DEBUG
 void cyttsp5_pr_buf(struct device *dev, u8 *dptr, int size,
@@ -1538,7 +1539,7 @@ static int cyttsp5_hid_output_exit_easywake_state_(
 }
 
 #ifdef CONFIG_OPPO
-/*Hailong.Ma@WSW.BSP.Kernel, 2019-12-27 add always active mode*/
+/* WSW.BSP.Kernel, 2019-12-27 add always active mode*/
 static int cyttsp5_hid_output_set_always_active_mode_(
 		struct cyttsp5_core_data *cd, u8 data, u8 *return_data)
 {
@@ -3566,11 +3567,14 @@ static int cyttsp5_put_device_into_easy_wakeup_(struct cyttsp5_core_data *cd)
 {
 	int rc;
 	u8 status = 0;
+        dev_info(cd->dev, "%s: Enter!\n", __func__);
 
+/* WSW.BSP.Kernel, 2020-04-17 set when pm notify*/
+#ifndef CONFIG_OPPO
 	mutex_lock(&cd->system_lock);
 	cd->wait_until_wake = 0;
 	mutex_unlock(&cd->system_lock);
-
+#endif
 	rc = cyttsp5_hid_output_enter_easywake_state_(cd,
 			cd->easy_wakeup_gesture, &status);
 	return rc ? rc : (status ? 0 : -EBUSY);
@@ -3621,6 +3625,7 @@ static int cyttsp5_core_poweroff_device_(struct cyttsp5_core_data *cd)
 		disable_irq_nosync(cd->irq);
 	}
 
+        dev_info(cd->dev, "%s: Enter!\n", __func__);
 	rc = cd->cpdata->power(cd->cpdata, 0, cd->dev, 0);
 	if (rc < 0)
 		dev_err(cd->dev, "%s: HW Power down fails r=%d\n",
@@ -3641,7 +3646,7 @@ static int cyttsp5_core_sleep_(struct cyttsp5_core_data *cd)
 	}
 	mutex_unlock(&cd->system_lock);
 
-/*Hailong.Ma@WSW.BSP.Kernel, 2019-12-27 add always active mode*/
+/* WSW.BSP.Kernel, 2019-12-27 add always active mode*/
 #ifdef CONFIG_OPPO
 	if (SS_ALWAYS_ACTIVE_DIS != cd->always_active_mode) {
 		u8 return_data;
@@ -3670,14 +3675,18 @@ static int cyttsp5_core_sleep_(struct cyttsp5_core_data *cd)
 	if ((cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP) && (!cd->easy_wakeup_enable)){
 		rc = cyttsp5_core_poweroff_device_(cd);
 #ifdef CONFIG_OPPO
-        /*Xun.Ouyang@WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
+        /* WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
         cd->last_sleep_mode = CY_SLEEP_PWD;
 #endif
     }
 	else {
 		rc = cyttsp5_put_device_into_sleep_(cd);
 #ifdef CONFIG_OPPO
-        /*Xun.Ouyang@WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
+        /* WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
+        if (!cd->irq_wake){
+            cd->irq_wake = 1;
+            enable_irq_wake(cd->irq);
+        }
         cd->last_sleep_mode = CY_SLEEP_EASYWAKEUP;
 #endif
     }
@@ -3995,13 +4004,23 @@ static int cyttsp5_read_input(struct cyttsp5_core_data *cd)
 
 	/* added as workaround to CDT170960: easywake failure */
 	/* Interrupt for easywake, wait for bus controller to wake */
-#ifndef CONFIG_OPPO
 	mutex_lock(&cd->system_lock);
 	if (!IS_DEEP_SLEEP_CONFIGURED(cd->easy_wakeup_gesture)) {
 		if (cd->sleep_state == SS_SLEEP_ON) {
 			int t;
 
 			mutex_unlock(&cd->system_lock);
+/* WSW.BSP.Kernel, 2020-04-17 wait i2c control resume*/
+#ifdef CONFIG_OPPO
+			t = wait_event_timeout(cd->wait_q,
+					(cd->wait_until_wake == 1),
+					msecs_to_jiffies(2000));
+			if (IS_TMO(t)){
+				dev_err(dev, "%s: Error wait i2c control timeout, ignore the irq.\n",
+						__func__);
+				return -1;
+			}
+#else
 			if (!dev->power.is_suspended)
 				goto read;
 			t = wait_event_timeout(cd->wait_q,
@@ -4009,13 +4028,13 @@ static int cyttsp5_read_input(struct cyttsp5_core_data *cd)
 					msecs_to_jiffies(2000));
 			if (IS_TMO(t))
 				cyttsp5_queue_startup(cd);
+#endif
 			goto read;
 		}
 	}
 	mutex_unlock(&cd->system_lock);
 
 read:
-#endif
 	rc = cyttsp5_adap_read_default_nosize(cd, cd->input_buf, CY_MAX_INPUT);
 	if (rc) {
 		dev_err(dev, "%s: Error getting report, r=%d\n",
@@ -4029,10 +4048,6 @@ read:
 			cd->input_buf[5] = 0x00;
 			cd->input_buf[6] = 0x00;
 			dev_err(dev, "Self recover for I2C Bus err\n");
-#ifdef CONFIG_OPPO
-            /*Xun.Ouyang@WSW.BSP.Kernel, 2020-01-16 reset the TP*/
-            cyttsp5_core_poweron_device_(cd);
-#endif
 			rc = 0;
 		}
 		return rc;
@@ -4074,7 +4089,11 @@ static irqreturn_t cyttsp5_irq(int irq, void *handle)
 
 	if (!cyttsp5_check_irq_asserted(cd))
 		return IRQ_HANDLED;
-
+/* WSW.BSP.Kernel, 2020-04-15 just pwroff ignore the irq*/
+#ifdef CONFIG_OPPO
+    if (cd->irq_enabled == false)
+        return IRQ_HANDLED;
+#endif
 	rc = cyttsp5_read_input(cd);
 	if (!rc)
 		cyttsp5_parse_input(cd);
@@ -4175,6 +4194,8 @@ static int cyttsp5_check_and_deassert_int(struct cyttsp5_core_data *cd)
 		size = get_unaligned_le16(&buf[0]);
 		if (size == 2 || size == 0 || size >= CY_PIP_1P7_EMPTY_BUF)
 			return 0;
+		else
+			return -EINVAL;//modify by ouyangxun bigger value cause the below TP read exception
 
 		p = kzalloc(size, GFP_KERNEL);
 		if (!p)
@@ -4352,10 +4373,13 @@ static int cyttsp5_core_wake_device_(struct cyttsp5_core_data *cd)
 			return rc ? rc : (status ? 0 : -EBUSY);
 
 		/* the early firmware doesn't support exit_easywake */
+/* WSW.BSP.Kernel, 2020-04-17 set when pm notify*/
+#ifndef CONFIG_OPPO
 		mutex_lock(&cd->system_lock);
 		cd->wait_until_wake = 1;
 		mutex_unlock(&cd->system_lock);
 		wake_up(&cd->wait_q);
+#endif
 		msleep(20);
 
 		if (cd->wake_initiated_by_device) {
@@ -4398,6 +4422,14 @@ static int _fast_startup(struct cyttsp5_core_data *cd)
 	int rc;
 
 reset:
+#ifdef CONFIG_OPPO /* WSW.BSP.Kernel, 2019-08-28 Not retry startup tp driver at ftm mode*/
+	if (retry != CY_CORE_STARTUP_RETRY_COUNT) {
+		if (oppo_ftm_mode) {
+			goto exit;
+		}
+	}
+#endif
+
 	if (retry != CY_CORE_STARTUP_RETRY_COUNT)
 		parade_debug(cd->dev, DEBUG_LEVEL_1, "%s: Retry %d\n",
 			__func__, CY_CORE_STARTUP_RETRY_COUNT - retry);
@@ -4499,12 +4531,16 @@ static int cyttsp5_core_wake_(struct cyttsp5_core_data *cd)
 	}
 	mutex_unlock(&cd->system_lock);
 
-    /*Xun.Ouyang@WSW.BSP.Kernel, 2019-12-23 decide the sleep mode depend on the last sleep mode*/
+    /* WSW.BSP.Kernel, 2019-12-23 decide the sleep mode depend on the last sleep mode*/
 	if ((cd->cpdata->flags & CY_CORE_FLAG_POWEROFF_ON_SLEEP)  && (cd->last_sleep_mode == CY_SLEEP_PWD))
 		rc = cyttsp5_core_poweron_device_(cd);
-	else
-		rc = cyttsp5_core_wake_device_(cd);
-
+	else {
+        if (cd->irq_wake){
+            cd->irq_wake = 0;
+            disable_irq_wake(cd->irq);
+        }
+        rc = cyttsp5_core_wake_device_(cd);
+    }
 
 	mutex_lock(&cd->system_lock);
 	cd->sleep_state = SS_SLEEP_OFF;
@@ -4583,13 +4619,26 @@ static int cyttsp5_startup_(struct cyttsp5_core_data *cd, bool reset)
 #ifdef CONFIG_TOUCHSCREEN_CYPRESS_CYTTSP5_WATCHDOG_TIMER
 	cyttsp5_stop_wd_timer(cd);
 #endif
-
+/* WSW.BSP.Kernel, 2020-04-15 just pwroff ignore the irq*/
+#ifdef CONFIG_OPPO
+    cd->irq_enabled = true;
+#endif
 reset:
+#ifdef CONFIG_OPPO /* WSW.BSP.Kernel, 2019-08-28 Not retry startup tp driver at ftm mode*/
+	if (retry != CY_CORE_STARTUP_RETRY_COUNT) {
+		if (oppo_ftm_mode) {
+			goto exit;
+		}
+	}
+#endif
+
 	if (retry != CY_CORE_STARTUP_RETRY_COUNT)
 		parade_debug(cd->dev, DEBUG_LEVEL_1, "%s: Retry %d\n",
 			__func__, CY_CORE_STARTUP_RETRY_COUNT - retry);
-
+#ifndef CONFIG_OPPO
+	//because need reset, then needn't check , delete it by   @2020/04/15
 	rc = cyttsp5_check_and_deassert_int(cd);
+#endif
 
 	if (reset || retry != CY_CORE_STARTUP_RETRY_COUNT) {
 		/* reset hardware */
@@ -4907,7 +4956,9 @@ static int cyttsp5_pm_notifier(struct notifier_block *nb,
 {
 	struct cyttsp5_core_data *cd = container_of(nb,
 			struct cyttsp5_core_data, pm_notifier);
-
+    dev_err(cd->dev, "cyttsp5_pm_notifier action=%ld\n", action);
+/* WSW.BSP.Kernel, 2020-04-17 update wait_until_wake in pm notify*/
+#ifndef CONFIG_OPPO
 	if (action == PM_SUSPEND_PREPARE) {
 		parade_debug(cd->dev, DEBUG_LEVEL_1, "%s: Suspend prepare\n",
 			__func__);
@@ -4921,6 +4972,27 @@ static int cyttsp5_pm_notifier(struct notifier_block *nb,
 
 		(void) cyttsp5_core_suspend(cd->dev);
 	}
+#else
+	switch (action) {
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		mutex_lock(&cd->system_lock);
+		cd->wait_until_wake = 1;
+		mutex_unlock(&cd->system_lock);
+		wake_up(&cd->wait_q);
+		dev_err(cd->dev, "cyttsp5_pm_notifier cd->wait_until_wake=%d\n", cd->wait_until_wake);
+		return NOTIFY_DONE;
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		mutex_lock(&cd->system_lock);
+		cd->wait_until_wake = 0;
+		mutex_unlock(&cd->system_lock);
+		wake_up(&cd->wait_q);
+		dev_err(cd->dev, "cyttsp5_pm_notifier cd->wait_until_wake=%d\n", cd->wait_until_wake);
+	default:
+		return NOTIFY_DONE;
+	}
+#endif
 
 	return NOTIFY_DONE;
 }
@@ -5606,7 +5678,7 @@ static ssize_t cyttsp5_large_tp_show(struct device *dev,
 }
 
 #ifdef CONFIG_OPPO
-/*Hailong.Ma@WSW.BSP.Kernel, 2019-12-27 add always active mode*/
+/* WSW.BSP.Kernel, 2019-12-27 add always active mode*/
 static ssize_t cyttsp5_always_active_mode_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -6123,15 +6195,18 @@ static int fb_notifier_callback(struct notifier_block *self,
 #ifdef CONFIG_OPPO
             rc = cyttsp5_core_wake(cd);
             if (rc < 0){
-                dev_err(cd->dev, "%s: Error on wake\n", __func__);
-                /*Xun.Ouyang@WSW.BSP.Kernel, 2020-01-16 reset the TP*/
-                cyttsp5_core_poweron_device_(cd);
+				dev_err(cd->dev, "%s: Error on wake\n", __func__);
+				/* WSW.BSP.Kernel.tp, 2020-05-25 poweroff to poweron when wake error*/
+				cyttsp5_core_poweroff_device_(cd);
+				mdelay(20);
+				cyttsp5_core_poweron_device_(cd);
             }
 #endif
 			call_atten_cb(cd, CY_ATTEN_RESUME, 0);
 			cd->fb_state = FB_ON;
 		}
-	} else if (*blank == FB_BLANK_POWERDOWN) {
+	} else if (*blank != FB_BLANK_UNBLANK /*== FB_BLANK_POWERDOWN*/) {
+	   /* WSW.BSP.Kernel, 2020-05-20 adapter ambient mode*/
 		dev_info(cd->dev, "%s: POWERDOWN!\n", __func__);
 		if (cd->fb_state != FB_OFF) {
 			call_atten_cb(cd, CY_ATTEN_SUSPEND, 0);
@@ -6172,8 +6247,8 @@ static int cyttsp5_setup_irq_gpio(struct cyttsp5_core_data *cd)
 	cd->irq = gpio_to_irq(cd->cpdata->irq_gpio);
 	if (cd->irq < 0)
 		return -EINVAL;
-
-	cd->irq_enabled = true;
+    /*set true when startup completely*/
+	//cd->irq_enabled = true;
 
 	parade_debug(dev, DEBUG_LEVEL_1, "%s: initialize threaded irq=%d\n",
 		__func__, cd->irq);
@@ -6189,8 +6264,8 @@ static int cyttsp5_setup_irq_gpio(struct cyttsp5_core_data *cd)
 	if (rc < 0)
 		dev_err(dev, "%s: Error, could not request irq\n", __func__);
 
-    /*Xun.Ouyang@WSW.BSP.Kernel, 2020-01-09 set tp irq to trigger AP*/
-    enable_irq_wake(cd->irq);
+    /* WSW.BSP.Kernel, 2020-01-09 set tp irq to trigger AP*/
+    //enable_irq_wake(cd->irq);
 	return rc;
 }
 
@@ -6287,10 +6362,13 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	cd->easy_wakeup_enable = 0;
 	cd->large_tp_enable = 1;
 #ifdef CONFIG_OPPO
-	/*Xun.Ouyang@WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
+	/* WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
 	cd->last_sleep_mode = CY_SLEEP_PWD;
-	/*Hailong.Ma@WSW.BSP.Kernel, 2019-12-27 add always active mode*/
+	cd->irq_wake = 0;
+	/* WSW.BSP.Kernel, 2019-12-27 add always active mode*/
 	cd->always_active_mode = SS_ALWAYS_ACTIVE_DIS;
+    cd->irq_enabled = false;
+    cd->wait_until_wake = 1;
 #endif
 
 
@@ -6369,7 +6447,7 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	 * is tested before leaving the probe
 	 */
 	parade_debug(dev, DEBUG_LEVEL_1, "%s: call startup\n", __func__);
-	rc = cyttsp5_startup(cd, false);
+	rc = cyttsp5_startup(cd, true);//ouyangxun reset TP when startup
 
 	pm_runtime_put_sync(dev);
 

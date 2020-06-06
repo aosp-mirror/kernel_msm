@@ -1,0 +1,129 @@
+#
+# oppo's custom devices
+#
+
+menu "OPPO's custom device support"
+	depends on !UML
+
+config OPPO
+        tristate "OPPO's custom devices"
+	help
+	  OPPO's custom devices
+
+if OPPO
+
+config OPPO_LCD_MODIFY
+	tristate "config lcd"
+	help
+	  define this config for lcd.
+
+config OPPO_TP_MODIFY
+	tristate "config tp"
+	help
+	  define this config for tp.
+	  
+config OPPO_CHARGING_MODIFY
+	tristate "config charging"
+	help
+	  define this config for charging, battery or usb.
+
+config OPPO_POWER_MODIFY
+	tristate "config power"
+	help
+	  define this config for system power supply.
+
+config OPPO_DUAL_SYS_COMM_MODIFY
+	tristate "config dual sys comm"
+	help
+	  define this config for add the commuction between 8909 and mcu.
+
+config OPPO_AUDIO_MODIFY
+	tristate "config audio"
+	help
+	  define this config for modifying the audio driver.
+
+config OPPO_WIFI_MODIFY
+	tristate "config wifi"
+	help
+	  define this config for modifying the wifi function.
+
+config OPPO_BT_MODIFY
+	tristate "config bt"
+	help
+	  define this config for modifying the bt function.
+
+config OPPO_NFC_MODIFY
+	tristate "config nfc"
+	help
+	  define this config for modifying the nfc function.
+
+config OPPO_SENSOR_MODIFY
+	tristate "config sensor"
+	help
+	  define this config for modifying the sensor function.
+
+config OPPO_MOTOR_MODIFY
+	tristate "config motor"
+	help
+	  define this config for modifying the motor function.
+	  
+config OPPO_PRODUCTION_TEST_MODIFY
+	tristate "config PRODUCTION_TEST"
+	help
+	  define this config for production line test function.
+
+config OPPO_GPS_MODIFY
+	tristate "config gps"
+	help
+	  define this config for modifying the gps function.
+	  
+config RECORD_MDMRST
+	tristate "config record mdmrst"
+	help
+	  define this config to count the modem restart times.	  
+
+config OPPO_HW_VER
+	tristate "hw ver driver"
+	depends on SENSORS_QPNP_ADC_VOLTAGE
+	default n
+	help
+	  hardwear ver driver
+	  gpio and adc
+
+	  Say Y here to compile support for hwver devices into the
+	  kernel or say M to compile it as module.
+
+config OPPO_FTM_MODE
+	tristate "ftm mode driver"
+	default n
+	help
+	  ftm mode config driver
+
+	  Say Y here to compile support for hwver devices into the
+	  kernel or say M to compile it as module.
+
+config OPPO_COMMON_SOFT
+	tristate "config oppo common software"
+	help
+	  define this config to get project verion from sharemem.
+	  Maybe this value is from CDT or dynamic identify by hardware
+	  id.
+
+config OPPO_SHUTDOWN_DETECT
+	tristate "OPPO shutdown hang detect"
+	help
+	  define this config to init oppo oppo_shutdown_detect.
+
+config REGULATOR_FAN49103
+	tristate "Fairchild FAN49103 Regulator"
+	depends on I2C
+	help
+	  This driver supports Fairchild FAN49103 Digitally Programmable
+	  TinyBuck Regulator. The FAN49103 is a step-down switching voltage
+	  regulator that delivers a digitally programmable output from an
+	  input voltage supply of 2.8V to 4V. The output voltage is
+	  programmed through an I2C interface.
+	  
+endif
+
+endmenu

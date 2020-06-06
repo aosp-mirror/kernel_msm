@@ -1491,7 +1491,7 @@ static ssize_t cyttsp5_cmcp_test_show(struct device *dev,
 	struct result *result = dad->result;
 	struct configuration *configuration = dad->configs;
 #ifdef CONFIG_OPPO
-    /*Xun.Ouyang@WSW.BSP.Kernel, 2020-03-10 disable large-object during tp auto-test*/
+    /* WSW.BSP.Kernel, 2020-03-10 disable large-object during tp auto-test*/
     struct cyttsp5_core_data *cd = dev_get_drvdata(dev);
 #endif    
     
@@ -1518,7 +1518,7 @@ static ssize_t cyttsp5_cmcp_test_show(struct device *dev,
 	}
 	dad->cmcp_test_in_progress = 1;
 #ifdef CONFIG_OPPO
-    /*Xun.Ouyang@WSW.BSP.Kernel, 2020-03-10 disable large-object during tp auto-test*/
+    /* WSW.BSP.Kernel, 2020-03-10 disable large-object during tp auto-test*/
     cd->large_tp_enable = 0;
 #endif      
 
@@ -1748,7 +1748,7 @@ cmcp_ready:
 	mutex_lock(&dad->sysfs_lock);
 	dad->cmcp_test_in_progress = 0;
 #ifdef CONFIG_OPPO
-    /*Xun.Ouyang@WSW.BSP.Kernel, 2020-03-10 disable large-object during tp auto-test*/
+    /* WSW.BSP.Kernel, 2020-03-10 disable large-object during tp auto-test*/
     cd->large_tp_enable = 1;
 #endif      
 	mutex_unlock(&dad->sysfs_lock);

@@ -165,8 +165,7 @@
 			no-map;
 		};
 
-    //#ifdef VENDOR_EDIT
-    //Zhengpeng.Tan@NW.AP.NV.892767, 2016/11/30
+    // NW.AP.NV.892767, 2016/11/30
     //#ifdef FEATURE_OPPO_NV_BACKUP
     //add for creating a shared memory with uio for nv backup and restore
 		oem_backup_mem: oem_backup_region@0 {
@@ -175,7 +174,6 @@
 			no-map;
 		};
     //#endif /* FEATURE_OPPO_NV_BACKUP */
-    //#endif /* VENDOR_EDIT */
 
 		modem_adsp_mem: modem_adsp_region@0 {
 			reg = <0x0 0x88000000 0x0 0x05500000>;
@@ -959,8 +957,7 @@
 		qcom,client-id = <0x00000001>;
 	};
 
-    //#ifdef VENDOR_EDIT
-    //Zhengpeng.Tan@NW.AP.NV.892767, 2016/11/30
+    // NW.AP.NV.892767, 2016/11/30
     //#ifdef FEATURE_OPPO_NV_BACKUP
     //add for creating a shared memory with uio for nv backup and restore
     qcom,oembackup_sharedmem@0 {
@@ -971,7 +968,6 @@
 		qcom,guard-memory;
     };
     //#endif /* FEATURE_OPPO_NV_BACKUP */
-    //#endif /* VENDOR_EDIT */
 
 	qcom,dsp_sharedmem@87ce0000 {
 		compatible = "qcom,sharedmem-uio";
@@ -1746,10 +1742,9 @@
 			compatible = "qcom,memshare-peripheral";
 			qcom,peripheral-size = <0x200000>;
 			qcom,client-id = <0>;
-/*ifndef VENDOR_EDIT*/
-/*Yun.Chen@PSW.NW.RF, 2018/05/18, Remove for following QC advice in 03486301.*/
+
+/*PSW.NW.RF, 2018/05/18, Remove for following QC advice in 03486301.*/
 //			qcom,allocate-boot-time;
-/*endif /* VENDOR_EDIT */
 			label = "modem";
 		};
 

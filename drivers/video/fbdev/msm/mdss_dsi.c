@@ -47,6 +47,28 @@ static struct mdss_dsi_data *mdss_dsi_res;
 
 static struct pm_qos_request mdss_dsi_pm_qos_request;
 
+/* WSW.BSP.Kernel, 2020-03-30 add "get panel_serial_number" to support ftm*/
+#ifdef CONFIG_OPPO
+static struct mdss_dsi_ctrl_pdata *g_ctrl_pdata = NULL;
+
+int oppo_get_dsi_connect_status(void)
+{
+	uint8_t value = 0;
+	int ret = 0;
+
+	if (!g_ctrl_pdata)
+		return -1;
+
+	mdss_dsi_panel_cmd_read(g_ctrl_pdata, 0x0A, 0x00, NULL, &value, 1);
+
+	if (!value && !ret)
+		return -1;
+	else
+		return 0;
+}
+EXPORT_SYMBOL(oppo_get_dsi_connect_status);
+#endif
+
 void mdss_dump_dsi_debug_bus(u32 bus_dump_flag,
 	u32 **dump_mem)
 {
@@ -3337,6 +3359,10 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 		pr_err("%s: Unable to get the ctrl_pdata\n", __func__);
 		return -EINVAL;
 	}
+
+#ifdef CONFIG_OPPO
+	g_ctrl_pdata = ctrl_pdata;
+#endif
 
 	platform_set_drvdata(pdev, ctrl_pdata);
 

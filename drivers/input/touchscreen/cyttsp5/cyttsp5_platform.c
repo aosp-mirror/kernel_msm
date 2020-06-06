@@ -199,9 +199,9 @@ int cyttsp5_xres(struct cyttsp5_core_platform_data *pdata,
 //		gpio_set_value(rst_gpio, 1);
 //		msleep(20);
 		gpio_set_value(rst_gpio, 0);
-		msleep(40);
-		gpio_set_value(rst_gpio, 1);
 		msleep(20);
+		gpio_set_value(rst_gpio, 1);
+		msleep(4);
 	}
 	dev_info(dev, "%s: RESET CYTTSP gpio=%d r=%d\n",
 		__func__, rst_gpio, rc);
@@ -274,6 +274,11 @@ static int cyttsp5_wakeup(struct cyttsp5_core_platform_data *pdata,
 			return rc;
 		}
 	}
+
+#ifdef CONFIG_OPPO
+    /* WSW.BSP.Kernel, 2020-3-15 repower and reset the TP*/
+    cyttsp5_xres(pdata,dev);
+#endif
 
 	return 0;
 }

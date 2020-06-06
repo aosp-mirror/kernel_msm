@@ -30,6 +30,11 @@ extern unsigned int __sw_hweight32(unsigned int w);
 extern unsigned long __sw_hweight64(__u64 w);
 
 /*
+ * a miniature 16-bit parity-table of 4-bits number
+ */
+#define PARITY_MAGIC 0x6996
+
+/*
  * Include this here because some architectures need generic_ffs/fls in
  * scope
  */
