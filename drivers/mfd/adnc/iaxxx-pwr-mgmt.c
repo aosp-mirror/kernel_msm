@@ -113,6 +113,14 @@ int iaxxx_pm_get_sync(struct device *dev)
 		if (ret == -EACCES) {
 			dev_dbg(dev, "%s() runtime PM disabled\n", __func__);
 			ret = 0;
+		} else if (ret == -EIO || ret == -EINVAL) {
+			/* When the chip crashes and we just triggered recovery
+			 * in pm_runtime_get_sync() context, it is expected to
+			 * get -EIO or -EINVAL here. Use pm_runtime_set_active
+			 * to clear the state of runtime_error.
+			 */
+			if (test_bit(IAXXX_FLG_FW_CRASH, &priv->flags))
+				pm_runtime_set_active(priv->dev);
 		} else
 			dev_err(dev, "%s() failed %d\n", __func__, ret);
 	}
