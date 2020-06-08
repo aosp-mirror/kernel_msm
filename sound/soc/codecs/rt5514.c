@@ -580,7 +580,7 @@ static int rt5514_fw_validate(struct rt5514_priv *rt5514, int index, int addr)
 	u8 *buf;
 
 	switch (index) {
-	case 3:
+	case 2:
 		if (rt5514->hotword_model_buf && rt5514->hotword_model_len) {
 			buf = kmalloc(((rt5514->hotword_model_len/8)+1)*8,
 					GFP_KERNEL);
@@ -607,7 +607,7 @@ static int rt5514_fw_validate(struct rt5514_priv *rt5514, int index, int addr)
 
 		break;
 
-	case 4:
+	case 3:
 		if (rt5514->musdet_model_buf && rt5514->musdet_model_len) {
 			buf = kmalloc(((rt5514->musdet_model_len/8)+1)*8,
 					GFP_KERNEL);
@@ -1033,7 +1033,7 @@ void rt5514_watchdog_handler(void)
 	rt5514_dsp_enable(g_rt5514, false, true);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
 
-	usleep_range(85000, 85100);
+	usleep_range(125000, 125100);
 	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
 		RT5514_AD_AD_MUTE, 0x0);
 	regmap_update_bits(g_rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
@@ -1224,7 +1224,7 @@ static int rt5514_hw_reset_set(struct snd_kcontrol *kcontrol,
 		rt5514_dsp_enable(rt5514, false, true);
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_LOAD, 0);
 
-		usleep_range(85000, 85100);
+		usleep_range(125000, 125100);
 		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
 			RT5514_AD_AD_MUTE, 0x0);
 		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
