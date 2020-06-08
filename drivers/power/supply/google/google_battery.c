@@ -33,6 +33,7 @@
 #include "google_psy.h"
 #include "qmath.h"
 #include "logbuffer.h"
+#include <crypto/hash.h>
 
 #include <linux/debugfs.h>
 
@@ -321,6 +322,9 @@ struct batt_drv {
 	bool eeprom_inside;
 	int hist_data_max_cnt;
 	int hist_delta_cycle_cnt;
+
+	/* Battery device info */
+	u8 dev_info[GBMS_DINF_LEN];
 
 	/* Battery pack info for Suez*/
 	const char batt_pack_info[GBMS_MINF_LEN];
@@ -3523,39 +3527,100 @@ void bat_log_ttf_estimate(const char *label, int ssoc,
 		      res);
 }
 
+static int batt_do_sha256(const u8 *data, unsigned int len, u8 *result)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *shash;
+	int size, ret = 0;
+
+	tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("Error SHA-256 transform: ld\n", PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+
+	size = sizeof(struct shash_desc) + crypto_shash_descsize(tfm);
+	shash = kmalloc(size, GFP_KERNEL);
+	if (!shash) {
+		crypto_free_shash(tfm);
+		return -ENOMEM;
+	}
+
+	shash->tfm = tfm;
+	ret = crypto_shash_digest(shash, data, len, result);
+	kfree(shash);
+	crypto_free_shash(tfm);
+
+	return ret;
+}
+
 static void batt_check_device_sn(struct batt_drv *batt_drv)
 {
-	char dev_info[GBMS_DINF_LEN];
-	int ret = 0;
+	const char *batt_pack_info = batt_drv->batt_pack_info;
+	u8 data[DEV_SN_LENGTH + GBMS_MINF_LEN];
+	u8 *dev_info = batt_drv->dev_info;
+	int ret = 0, len = 0;
+	char dev_sn[DEV_SN_LENGTH];
+	char *cmdline;
 
-	ret = gbms_storage_read(GBMS_TAG_DINF, (void *)dev_info, GBMS_DINF_LEN);
+	/* get the device SN */
+	cmdline = kstrdup(saved_command_line, GFP_KERNEL);
+	cmdline = strnstr(cmdline, PREFIX_SERIALNO, strlen(cmdline));
+	len = strlen(PREFIX_SERIALNO);
+	ret = sscanf(&cmdline[len], "%s", dev_sn);
+	if (ret == 0) {
+		pr_err("get device SN fail\n");
+		kfree(cmdline);
+		return;
+	}
+	kfree(cmdline);
+
+	/* Get EEPROM battery SN */
+	if (!batt_drv->pack_info_ready)  {
+		ret = gbms_storage_read(GBMS_TAG_MINF, (void *)batt_pack_info,
+					GBMS_MINF_LEN);
+		if (ret < 0) {
+			pr_err("read batt_pack_info fail, ret=%d\n", ret);
+			return;
+		}
+		batt_drv->pack_info_ready = true;
+	}
+
+	/* device SN + battery SN */
+	len = strlen(dev_sn);
+	memcpy(data, dev_sn, len);
+	memcpy(&data[len], batt_pack_info, GBMS_MINF_LEN);
+
+	/* hash data */
+	ret = batt_do_sha256(data, len + GBMS_MINF_LEN, data);
 	if (ret < 0) {
-		pr_err("read device SN fail, ret=%d\n", ret);
+		pr_err("execute batt_do_sha256 fail, ret=%d\n", ret);
 		return;
 	}
 
-	// new battery, store the device SN
+	/* Get EEPROM device info. */
+	ret = gbms_storage_read(GBMS_TAG_DINF, (void *)dev_info,
+				GBMS_DINF_LEN);
+	if (ret < 0) {
+		pr_err("read device info. fail, ret=%d\n", ret);
+		return;
+	}
+
+	/* Compare EEPROM device info. with hash data */
 	if (dev_info[0] == 0xFF) {
-		char dev_sn[DEV_SN_LENGTH];
-		char *cmdline;
-		int len = 0;
-
-		// get the device SN
-		cmdline = kstrdup(saved_command_line, GFP_KERNEL);
-		cmdline = strnstr(cmdline, PREFIX_SERIALNO, strlen(cmdline));
-		len = strlen(PREFIX_SERIALNO);
-		ret = sscanf(&cmdline[len], "%s", dev_sn);
-		if (ret == 0) {
-			pr_err("get device SN fail\n");
-			kfree(cmdline);
-			return;
-		}
-		kfree(cmdline);
-
-		// store the device SN
-		ret = gbms_storage_write(GBMS_TAG_DINF, dev_sn, strlen(dev_sn));
+		/* New battery, store the device inforamtion */
+		ret = gbms_storage_write(GBMS_TAG_DINF, data, GBMS_DINF_LEN);
 		if (ret < 0)
-			pr_err("write device SN fail, ret=%d\n", ret);
+			pr_err("write device info. fail, ret=%d\n", ret);
+	} else if (strncmp(dev_info, dev_sn, len) == 0) {
+		/* Replace it */
+		ret = gbms_storage_write(GBMS_TAG_DINF, data, GBMS_DINF_LEN);
+		if (ret < 0)
+			pr_err("replace dev_info fail, ret=%d\n", ret);
+	} else if (strncmp(dev_info, data, GBMS_DINF_LEN) == 0) {
+		/* Check pass */
+	} else {
+		/* Check fail */
 	}
 }
 
