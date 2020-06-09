@@ -111,12 +111,6 @@
 		reg = <0 0xA4BFF000 0 0x1000>;
 	};
 
-	kregistry_mem: kregistry_mem@c8000000 {
-		compatible = "removed-dma-pool";
-		no-map;
-		reg = <0x0 0xc8000000 0x0 0x10000>;
-	};
-
 	pil_faceauth_fw_mem: pil_faceauth_fw_mem@a8800000 {
 		compatible = "removed-dma-pool";
 		no-map;
