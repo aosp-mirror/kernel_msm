@@ -96,6 +96,14 @@ config IPA_DEBUG
 	  info enabled, then this flag can be enabled.
 	  It is not suggested to enable this flag for perf build.
 
+config ENABLE_IPC_LOGGING
+       bool "IPA IPC logging"
+       depends on IPA3
+       help
+	This enables all of the IPA IPC logging for ipa3. Enabling this when
+	compiled as a module is expected to have a negative impact on load
+	times.
+
 config IPA_WDI_UNIFIED_API
 	bool "IPA WDI unified API support"
 	depends on IPA3
