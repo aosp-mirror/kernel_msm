@@ -76,5 +76,6 @@ obj-$(CONFIG_OKL4_LINK_SHBUF)    += okl4-link-shbuf.o
 
 obj-$(CONFIG_CITADEL)          += citadel-spi.o
 obj-$(CONFIG_WIGIG_SENSING_SPI)	+= wigig_sensing.o
+obj-$(CONFIG_QTI_MAXIM_FAN_CONTROLLER) += max31760.o
 obj-$(CONFIG_QTI_XR_SMRTVWR_MISC) += qxr-stdalonevwr.o
 obj-$(CONFIG_FPR_FPC)		+= fpr_FingerprintCard/

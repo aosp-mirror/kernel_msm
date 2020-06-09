@@ -6944,12 +6944,13 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 		goto fail_device_create;
 	}
 
-	/* Create a wakeup source. */
-	ipa3_ctx->w_lock = wakeup_source_register(NULL, "IPA_WS");
+	/* Register a wakeup source. */
+	ipa3_ctx->w_lock =
+		wakeup_source_register(&ipa_pdev->dev, "IPA_WS");
 	if (!ipa3_ctx->w_lock) {
-		IPAERR("IPA wakeup source registration failed\n");
-		result = -ENODEV;
-		goto fail_ipa_ws_register;
+		IPAERR("IPA wakeup source register failed\n");
+		result = -ENOMEM;
+		goto fail_w_source_register;
 	}
 	spin_lock_init(&ipa3_ctx->wakelock_ref_cnt.spinlock);
 
@@ -7044,7 +7045,8 @@ fail_ipa_dma_setup:
 	ipa_pm_destroy();
 fail_ipa_pm_init:
 	wakeup_source_unregister(ipa3_ctx->w_lock);
-fail_ipa_ws_register:
+	ipa3_ctx->w_lock = NULL;
+fail_w_source_register:
 	device_destroy(ipa3_ctx->cdev.class, ipa3_ctx->cdev.dev_num);
 fail_device_create:
 	unregister_chrdev_region(ipa3_ctx->cdev.dev_num, 1);

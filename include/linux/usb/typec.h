@@ -74,7 +74,7 @@ enum typec_orientation {
  * @id_header: ID Header VDO
  * @cert_stat: Cert Stat VDO
  * @product: Product VDO
- * @prouct_type: Product type VDO
+ * @product_type: Product type VDO
  *
  * USB power delivery Discover Identity command response data.
  *

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/suspend.h>
@@ -72,11 +72,11 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 		dev_err(dev, "%s: power state notif error %d\n", __func__, ret);
 		return ret;
 	}
-	g_notify_ws = wakeup_source_register(NULL, "smp2p-sleepstate");
+
+	g_notify_ws = wakeup_source_register(&pdev->dev, "smp2p-sleepstate");
 	if (!g_notify_ws) {
-		dev_err(dev, "%s: failed to get wakeup source\n", __func__);
-		ret = -ENODEV;
-		goto err_wakeup_source;
+		return -ENOMEM;
+		goto err_ws;
 	}
 
 	irq = of_irq_get_byname(node, "smp2p-sleepstate-in");
@@ -97,7 +97,7 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 	return 0;
 err:
 	wakeup_source_unregister(g_notify_ws);
-err_wakeup_source:
+err_ws:
 	unregister_pm_notifier(&sleepstate_pm_nb);
 	return ret;
 }

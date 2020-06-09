@@ -213,11 +213,19 @@ static int keycombo_probe(struct platform_device *pdev)
 		state->key_up_fn = pdata->key_up_fn;
 	INIT_WORK(&state->key_up_work, do_key_up);
 
-	state->combo_held_wake_source = wakeup_source_register(NULL, "key combo");
-	state->combo_up_wake_source = wakeup_source_register(NULL, "key combo up");
-	if (!state->combo_up_wake_source || !state->combo_held_wake_source) {
-		pr_err("%s: failed to register wakeup source\n", __func__);
-		goto err_ws_register;
+	state->combo_held_wake_source =
+		wakeup_source_register(&pdev->dev, "key combo");
+	if (!state->combo_held_wake_source) {
+		kfree(state);
+		return -ENOMEM;
+	}
+
+	state->combo_up_wake_source =
+		wakeup_source_register(&pdev->dev, "key combo up");
+	if (!state->combo_up_wake_source) {
+		kfree(state);
+		wakeup_source_unregister(state->combo_held_wake_source);
+		return -ENOMEM;
 	}
 
 	state->delay = msecs_to_jiffies(pdata->key_down_delay);
@@ -228,24 +236,22 @@ static int keycombo_probe(struct platform_device *pdev)
 	state->input_handler.name = KEYCOMBO_NAME;
 	state->input_handler.id_table = keycombo_ids;
 	ret = input_register_handler(&state->input_handler);
-	if (ret)
-		goto err_input_register;
-
+	if (ret) {
+		kfree(state);
+		wakeup_source_unregister(state->combo_up_wake_source);
+		wakeup_source_unregister(state->combo_held_wake_source);
+		return ret;
+	}
 	platform_set_drvdata(pdev, state);
 	return 0;
-
-err_input_register:
-	wakeup_source_unregister(state->combo_held_wake_source);
-	wakeup_source_unregister(state->combo_up_wake_source);
-err_ws_register:
-	kfree(state);
-	return ret;
 }
 
 int keycombo_remove(struct platform_device *pdev)
 {
 	struct keycombo_state *state = platform_get_drvdata(pdev);
 	input_unregister_handler(&state->input_handler);
+	wakeup_source_unregister(state->combo_up_wake_source);
+	wakeup_source_unregister(state->combo_held_wake_source);
 	destroy_workqueue(state->wq);
 	wakeup_source_unregister(state->combo_held_wake_source);
 	wakeup_source_unregister(state->combo_up_wake_source);

@@ -865,16 +865,18 @@ static int input_default_setkeycode(struct input_dev *dev,
 		}
 	}
 
-	__clear_bit(*old_keycode, dev->keybit);
-	__set_bit(ke->keycode, dev->keybit);
-
-	for (i = 0; i < dev->keycodemax; i++) {
-		if (input_fetch_keycode(dev, i) == *old_keycode) {
-			__set_bit(*old_keycode, dev->keybit);
-			break; /* Setting the bit twice is useless, so break */
+	if (*old_keycode <= KEY_MAX) {
+		__clear_bit(*old_keycode, dev->keybit);
+		for (i = 0; i < dev->keycodemax; i++) {
+			if (input_fetch_keycode(dev, i) == *old_keycode) {
+				__set_bit(*old_keycode, dev->keybit);
+				/* Setting the bit twice is useless, so break */
+				break;
+			}
 		}
 	}
 
+	__set_bit(ke->keycode, dev->keybit);
 	return 0;
 }
 
@@ -930,9 +932,13 @@ int input_set_keycode(struct input_dev *dev,
 	 * Simulate keyup event if keycode is not present
 	 * in the keymap anymore
 	 */
-	if (test_bit(EV_KEY, dev->evbit) &&
-	    !is_event_supported(old_keycode, dev->keybit, KEY_MAX) &&
-	    __test_and_clear_bit(old_keycode, dev->key)) {
+	if (old_keycode > KEY_MAX) {
+		dev_warn(dev->dev.parent ?: &dev->dev,
+			 "%s: got too big old keycode %#x\n",
+			 __func__, old_keycode);
+	} else if (test_bit(EV_KEY, dev->evbit) &&
+		   !is_event_supported(old_keycode, dev->keybit, KEY_MAX) &&
+		   __test_and_clear_bit(old_keycode, dev->key)) {
 		struct input_value vals[] =  {
 			{ EV_KEY, old_keycode, 0 },
 			input_value_sync
@@ -1916,16 +1922,15 @@ EXPORT_SYMBOL(input_free_device);
  * call this function as soon as a timestamp is acquired ensuring
  * clock conversions in input_set_timestamp are done correctly.
  *
- * The system entering a suspend between timestamp acquisition and
+ * The system entering suspend state between timestamp acquisition and
  * calling input_set_timestamp can result in inaccurate conversions.
- *
  */
 void input_set_timestamp(struct input_dev *dev, ktime_t timestamp)
 {
 	dev->timestamp[INPUT_CLK_MONO] = timestamp;
 	dev->timestamp[INPUT_CLK_REAL] = ktime_mono_to_real(timestamp);
-	dev->timestamp[INPUT_CLK_BOOT] = ktime_mono_to_any(
-		timestamp, TK_OFFS_BOOT);
+	dev->timestamp[INPUT_CLK_BOOT] = ktime_mono_to_any(timestamp,
+							   TK_OFFS_BOOT);
 }
 EXPORT_SYMBOL(input_set_timestamp);
 

@@ -2752,12 +2752,8 @@ redo:
 		prefetch_freepointer(s, next_object);
 		stat(s, ALLOC_FASTPATH);
 	}
-	/*
-	 * If the object has been wiped upon free, make sure it's fully
-	 * initialized by zeroing out freelist pointer.
-	 */
-	if (unlikely(slab_want_init_on_free(s)) && object)
-		memset(object + s->offset, 0, sizeof(void *));
+
+	maybe_wipe_obj_freeptr(s, object);
 
 	maybe_wipe_obj_freeptr(s, object);
 
