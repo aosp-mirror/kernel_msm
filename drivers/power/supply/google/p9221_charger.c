@@ -3035,7 +3035,6 @@ static struct attribute *rtx_attributes[] = {
 	&dev_attr_rtx_sw.attr,
 	&dev_attr_rtx_boost.attr,
 	&dev_attr_rtx.attr,
-	&dev_attr_fwupdate.attr,
 	&dev_attr_rtx_status.attr,
 	&dev_attr_is_rtx_connected.attr,
 	&dev_attr_rx_lvl.attr,
