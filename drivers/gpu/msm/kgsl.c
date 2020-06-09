@@ -557,6 +557,21 @@ static int _kgsl_get_context_id(struct kgsl_device *device)
 	return id;
 }
 
+void kgsl_dump_active_contexts(struct kgsl_device *device)
+{
+	struct kgsl_context *tmp_context;
+	int tmp_id;
+
+	read_lock(&device->context_lock);
+	idr_for_each_entry (&device->context_idr, tmp_context, tmp_id) {
+		dev_warn(device->dev, "process %s pid %d created %d contexts",
+				tmp_context->proc_priv->comm,
+				tmp_context->proc_priv->pid,
+				tmp_context->proc_priv->ctxt_count);
+	}
+	read_unlock(&device->context_lock);
+}
+
 /**
  * kgsl_context_init() - helper to initialize kgsl_context members
  * @dev_priv: the owner of the context
@@ -584,8 +599,8 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 	spin_lock(&proc_priv->ctxt_count_lock);
 	if (atomic_read(&proc_priv->ctxt_count) > KGSL_MAX_CONTEXTS_PER_PROC) {
 		dev_err(device->dev,
-			     "Per process context limit reached for pid %u\n",
-			     dev_priv->process_priv->pid);
+				"Per process context limit reached for pid %u\n",
+				dev_priv->process_priv->pid);
 		spin_unlock(&proc_priv->ctxt_count_lock);
 		return -ENOSPC;
 	}
@@ -606,10 +621,12 @@ int kgsl_context_init(struct kgsl_device_private *dev_priv,
 	}
 
 	if (id < 0) {
-		if (id == -ENOSPC)
+		if (id == -ENOSPC) {
 			dev_warn(device->dev,
-				      "cannot have more than %zu contexts due to memstore limitation\n",
-				      KGSL_MEMSTORE_MAX);
+					"cannot have more than %zu contexts due to memstore limitation\n",
+					KGSL_MEMSTORE_MAX);
+			kgsl_dump_active_contexts(device);
+		}
 		atomic_dec(&proc_priv->ctxt_count);
 		return id;
 	}
