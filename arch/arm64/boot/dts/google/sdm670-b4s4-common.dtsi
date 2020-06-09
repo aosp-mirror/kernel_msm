@@ -250,12 +250,6 @@
 		label = "ramoops";
 		memory-region = <&alt_ramoops_mem>;
 	};
-
-	access_kregistry@2 {
-		compatible = "access_ramoops";
-		label = "kregistry";
-		memory-region = <&kregistry_mem>;
-	};
 };
 
 &pm660l_wled {
