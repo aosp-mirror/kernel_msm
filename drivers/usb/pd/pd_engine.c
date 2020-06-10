@@ -2139,14 +2139,14 @@ static void parse_cmdline()
 	if (search_param(cmdline, chargingtest)) {
 		always_enable_data = 1;
 		strlcpy(boot_mode_string, CHARGINGTEST_BOOT_MODE,
-			strlen(boot_mode_string));
+			sizeof(boot_mode_string));
 	} else if (search_param(cmdline, charger)) {
 		strlcpy(boot_mode_string, CHARGER_BOOT_MODE,
-			strlen(boot_mode_string));
+			sizeof(boot_mode_string));
 	}
 
 	if (search_param(cmdline, suzyq))
-		strlcpy(suzyq_enabled, SUZYQ_ENABLED, strlen(suzyq_enabled));
+		strlcpy(suzyq_enabled, SUZYQ_ENABLED, sizeof(suzyq_enabled));
 
 	kfree(cmdline);
 }
