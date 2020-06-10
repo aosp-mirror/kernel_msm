@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include <dt-bindings/usb/pd.h>
+
+&soc {
+	vdda_usb_ss_dp_core: vdda_usb_ss_dp_core {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_supply";
+		regulator-min-microvolt = <880000>;
+		regulator-max-microvolt = <880000>;
+		enable-active-high;
+		gpio = <&pm8150l_gpios 12 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_eldo13>;
+	};
+};
+
+&usb_qmp_dp_phy {
+	vdd-supply = <&vdda_usb_ss_dp_core>;
+};
+
+&pm7250b_charger {
+	qcom,typec-legacy-rp-icl;
+	qcom,otg-cl-ua = <1500000>;
+	google,otg-out-uv = <5100000>;
+	ext-vbus-supply = <&ext_boost>;
+};
+
+&pm7250b_pdphy {
+	usb_con: connector {
+		compatible = "usb-c-connector";
+		label = "USB-C";
+		data-role = "dual";
+		power-role = "dual";
+		try-power-role = "sink";
+		self-powered;
+		source-pdos = <PDO_FIXED(5000, 900,
+					 PDO_FIXED_SUSPEND
+					 | PDO_FIXED_USB_COMM
+					 | PDO_FIXED_DATA_SWAP
+					 | PDO_FIXED_DUAL_ROLE)>;
+		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM
+						   | PDO_FIXED_DATA_SWAP
+						   | PDO_FIXED_DUAL_ROLE)
+			     PDO_FIXED(9000, 2200, 0)>;
+		op-sink-microwatt = <7600000>;
+		sink-vdos = <VDO_IDH(IDH_USB_HOST | IDH_USB_DEVICE,
+				     IDH_PTYPE_PERIPH,
+				     IDH_PTYPE_HOST,
+				     0x18D1)
+			     VDO_CERT(0x0)
+			     VDO_PRODUCT(0x4EE1, 0x0)>;
+	};
+};

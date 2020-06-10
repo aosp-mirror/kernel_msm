@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&qupv3_se11_i2c {
+	/* VD6281 */
+	status = "ok";
+	qcom,clk-freq-out = <1000000>;
+	vd6281: vd6281@20 {
+		compatible = "st,vd6281";
+		reg = <0x20>;
+		vdd-supply = <&slg51000_ldo7>;
+		vio-supply = <&slg51000_ldo7>;
+		regulator-names = "vdd", "vio";
+		status = "ok";
+	};
+};

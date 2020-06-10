@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "lito-redfin.dtsi"
+#include "lito-redfin-camera-sensor.dtsi"
+
+&pm7250b_gpios {
+	/delete-node/ disp_pins;
+};
+
+&pm8150l_gpios {
+	disp_pins {
+		disp_pins_default: disp_pins_default {
+			pins = "gpio8";
+			function = "normal";
+			qcom,drive-strength = <2>;
+			power-source = <1>;
+			bias-disable;
+			output-low;
+		};
+	};
+};
+
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_sofef00_sdc_1080p_cmd>;
+};
+
+&dsi_s6e3hc2_dsc_1080p_cmd {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};
+
+&dsi_s6e3hc2_evt_dsc_1080p_cmd {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};
+
+&dsi_sim_vid {
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};

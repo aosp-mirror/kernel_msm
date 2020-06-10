@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# CVP CORE
+#
+
+menuconfig MSM_CVP_V4L2
+	tristate "Qualcomm Technologies, Inc. MSM V4L2 based CVP driver"
+		depends on ARCH_QCOM && VIDEO_V4L2
+		depends on QCOM_LLCC
+		select VIDEOBUF2_CORE
+        help
+          Enable support of MSM V4L2 CVP driver for
+          Qualcomm Technologies, Inc.

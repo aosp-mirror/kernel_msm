@@ -1,0 +1,433 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_s6e3hc2_evt_dsc_1080p_cmd: qcom,mdss_dsi_s6e3hc2_evt_dsc_1080p_cmd {
+		compatible = "google,dsi_s6e3hc2_gamma",
+			     "google,dsi_binned_lp";
+
+		qcom,mdss-dsi-panel-name = "s6e3hc2 amoled 5.96 cmd mode panel";
+		google,mdss-dsi-panel-vendor = "SAMSUNG";
+		google,mdss-dsi-panel-sn-location = <0xA1 6 7>;
+		google,mdss-dsi-panel-vendor-extinfo-loc = <0xDA 0 1>,
+							   <0xDB 0 1>,
+							   <0xDC 0 1>;
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-physical-type = "oled";
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
+
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <0x4>;
+		qcom,mdss-dsi-bl-max-level = <0x3ff>;
+		qcom,mdss-brightness-max-level = <1023>;
+		qcom,bl-update-flag = "delay_until_first_frame";
+		/* param1 = DBV[9:8], param2 = DBV[7:0] */
+		google,dsi-bl-cmd-high-byte-offset = <8>;
+		google,dsi-panel-dimming-enable;
+
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 1>, <1 5>;
+		qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-init-delay-us = <1000>;
+
+		qcom,mdss-pan-physical-width-dimension  = <63>;
+		qcom,mdss-pan-physical-height-dimension = <137>;
+
+		qcom,mdss-dsi-t-clk-post = <0x15>;
+		qcom,mdss-dsi-t-clk-pre = <0x12>;
+
+		qcom,mdss-dsi-bl-notifier-ranges = <115 140 167 1023>;
+
+		/* TE2 signal: 90 HZ, 60 HZ, LP_HIGH, LP_LOW */
+		google,mdss-dsi-te2-info = <1978 1980>,
+					   <1978 1980>,
+					   <1978 1980>,
+					   <1978 1980>;
+		google,mdss-dsi-te2-lp-threshold = <40>;
+
+		qcom,mdss-dsi-display-timings {
+			timing@0 {
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-clockrate = <552000000>;
+				qcom,mdss-mdp-transfer-time-us = <14000>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2340>;
+				qcom,mdss-dsi-h-pulse-width = <12>;
+				qcom,mdss-dsi-h-back-porch = <16>;
+				qcom,mdss-dsi-h-front-porch = <32>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-v-back-porch = <16>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-on-command = [
+					07 01 00 00 00 00 01 01    /* Compression Enable */
+					05 01 00 00 78 00 01 11    /* sleep out, Wait 120 ms */
+
+					/* write ctl 60hz */
+					15 01 00 00 00 00 02 53 28
+					15 01 00 00 00 00 02 35 00 /* TE on */
+
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 F1 5A 5A
+					39 01 00 00 00 00 03 FC 5A 5A
+
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
+
+					/* Dither IP On */
+					39 01 00 00 00 00 03 B0 86 EB
+					15 01 00 00 00 00 02 EB 01
+
+					/* TSP HSYNC Enable*/
+					39 01 00 00 00 00 03 B0 07 B9
+					39 01 00 00 00 00 03 B9 11 03
+
+					39 01 00 00 00 00 03 F0 A5 A5
+					39 01 00 00 00 00 03 F1 A5 A5
+					39 01 00 00 00 00 03 FC A5 A5
+
+					05 01 00 00 00 00 01 29    /* display on */
+				];
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 0A 00 01 28    /* display off */
+					05 01 00 00 78 00 01 10    /* sleep in */
+				];
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+
+				qcom,mdss-dsi-timing-switch-command = [
+					/* write ctl 60hz */
+					15 01 00 00 00 00 02 53 28];
+				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
+
+				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 11 00 01 28
+
+					/* swire refresh off */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 00 00 02 B5 05
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+
+				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 01
+
+					/* write ctl 60 hz */
+					15 01 00 00 00 00 02 53 28
+
+					/* swire refresh on */
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 22 00 02 B5 85
+				];
+
+				qcom,mdss-dsi-post-nolp-command = [
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-slice-height = <65>;
+				qcom,mdss-dsc-slice-width = <540>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <8>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+
+				qcom,mdss-dsi-panel-phy-timings = [
+					00 14 05 05 1F 1F 05
+					05 03 02 04 00 12 15
+				];
+
+				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+				qcom,display-topology = <2 2 1>;
+				qcom,default-topology-index = <0>;
+
+				qcom,panel-roi-alignment = <540 65 540 65 540 65>;
+				qcom,partial-update-enabled = "single_roi";
+			};
+
+			timing@1 {
+				qcom,mdss-dsi-panel-framerate = <90>;
+				qcom,mdss-dsi-panel-clockrate = <552000000>;
+				qcom,mdss-mdp-transfer-time-us = <9000>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2340>;
+				qcom,mdss-dsi-h-pulse-width = <12>;
+				qcom,mdss-dsi-h-back-porch = <16>;
+				qcom,mdss-dsi-h-front-porch = <32>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-v-back-porch = <16>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-on-command = [
+					07 01 00 00 00 00 01 01    /* Compression Enable */
+					05 01 00 00 78 00 01 11    /* sleep out, Wait 120 ms */
+
+					/* write ctl 90hz */
+					15 01 00 00 00 00 02 53 38
+					15 01 00 00 00 00 02 35 00 /* TE on */
+
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 F1 5A 5A
+					39 01 00 00 00 00 03 FC 5A 5A
+
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
+
+					/* Dither IP On */
+					39 01 00 00 00 00 03 B0 86 EB
+					15 01 00 00 00 00 02 EB 01
+
+					/* TSP HSYNC Enable*/
+					39 01 00 00 00 00 03 B0 07 B9
+					39 01 00 00 00 00 03 B9 11 03
+
+					39 01 00 00 00 00 03 F0 A5 A5
+					39 01 00 00 00 00 03 F1 A5 A5
+					39 01 00 00 00 00 03 FC A5 A5
+
+					05 01 00 00 00 00 01 29    /* display on */
+				];
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 0A 00 01 28    /* display off */
+					05 01 00 00 78 00 01 10    /* sleep in */
+				];
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+
+				qcom,mdss-dsi-timing-switch-command = [
+					/* write ctl 90hz */
+					15 01 00 00 00 00 02 53 38];
+				qcom,mdss-dsi-timing-switch-command-state = "dsi_lp_mode";
+
+				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 11 00 01 28
+
+					/* swire refresh off */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 00 00 02 B5 05
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+
+				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 01
+
+					/* write ctl 90 hz */
+					15 01 00 00 00 00 02 53 38
+
+					/* swire refresh on */
+					39 01 00 00 00 00 03 B0 3F B5
+					15 01 00 00 22 00 02 B5 85
+				];
+
+				qcom,mdss-dsi-post-nolp-command = [
+					39 01 00 00 11 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-slice-height = <65>;
+				qcom,mdss-dsc-slice-width = <540>;
+				qcom,mdss-dsc-slice-per-pkt = <1>;
+				qcom,mdss-dsc-bit-per-component = <8>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+
+				qcom,mdss-dsi-panel-phy-timings = [
+					00 14 05 05 1F 1F 05
+					05 03 02 04 00 12 15
+				];
+
+				/* 2xLM, 2xDSC Enc, 1xDSI Intf */
+				qcom,display-topology = <2 2 1>;
+				qcom,default-topology-index = <0>;
+
+				qcom,panel-roi-alignment = <540 65 540 65 540 65>;
+				qcom,partial-update-enabled = "single_roi";
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					05 01 00 00 00 00 01 28
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "low";
+				google,dsi-lp-brightness-threshold = <40>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					15 01 00 00 24 00 02 53 03
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 00
+					39 01 00 00 00 00 03 B0 05 BB
+					15 01 00 00 00 00 02 BB 80
+					15 01 00 00 00 00 02 F7 02
+					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@2 {
+				label = "high";
+				google,dsi-lp-brightness-threshold = <1023>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A /* Unlock */
+					15 01 00 00 24 00 02 53 02
+					39 01 00 00 00 00 03 B0 A8 B1
+					15 01 00 00 00 00 02 B1 00
+					39 01 00 00 00 00 03 B0 05 BB
+					15 01 00 00 00 00 02 BB 00
+					15 01 00 00 00 00 02 F7 02
+					39 01 00 00 00 00 03 F0 A5 A5 /* Lock */
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,hbm-ranges {
+			google,dsi-hbm-exit-command = [
+				/* Set Dimming frames to 32 */
+				39 01 00 00 00 00 03 F0 5A 5A
+				39 01 00 00 00 00 03 B0 05 B1
+				15 01 00 00 00 00 02 B1 20
+				39 01 00 00 00 00 03 F0 A5 A5
+
+				/* Disable high brightness */
+				15 01 00 00 00 00 02 53 28
+			];
+			google,dsi-hbm-exit-num-dimming-frames = <32>;
+			google,dsi-hbm-exit-dimming-stop-command = [
+				/* Set Dimming frames to 8 */
+				39 01 00 00 00 00 03 F0 5A 5A
+				39 01 00 00 00 00 03 B0 05 B1
+				15 01 00 00 00 00 02 B1 08
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-hbm-commands-state = "dsi_lp_mode";
+			google,dsi-irc-addr = <0x95>;
+			google,dsi-irc-bit-offset = <13>;
+			google,dsi-irc-unlock-command = [
+				39 01 00 00 00 00 03 F0 5A 5A
+			];
+			google,dsi-irc-unlock-commands-state = "dsi_lp_mode";
+			google,dsi-irc-lock-command = [
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-irc-lock-commands-state = "dsi_lp_mode";
+
+			hbm-range@0 {
+				google,dsi-hbm-range-brightness-threshold = <1>;
+
+				google,dsi-hbm-range-bl-min-level = <0x4>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+				google,dsi-hbm-range-entry-command = [
+					/* Set Dimming frames to 32 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 20
+					39 01 00 00 00 00 03 F0 A5 A5
+
+					/* Disable high brightness */
+					15 01 00 00 00 00 02 53 28
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			hbm-range@1 {
+				/* Normal brightness mode covers ~2 to 500
+				 * nits, using panel brightness values up to
+				 * 0x3ff. HBM extends the range to 700 nits,
+				 * and remaps user brightness 1-1023 to cover
+				 * this extended range. In this extended range,
+				 * 500 nits / 0x3ff corresponds to user
+				 * brightness 731. Panel brightness is not
+				 * adjustable in the 500-700 nit segment.
+				 */
+				google,dsi-hbm-range-brightness-threshold =
+					<731>;
+
+				google,dsi-hbm-range-bl-min-level = <0x3ff>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+
+				google,dsi-hbm-range-entry-command = [
+					/* Set Dimming frames to 32 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 20
+					39 01 00 00 00 00 03 F0 A5 A5
+
+					/* Enable high brightness */
+					15 01 00 00 00 00 02 53 E8
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					39 01 00 00 00 00 03 B0 05 B1
+					15 01 00 00 00 00 02 B1 08
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+		};
+	};
+};

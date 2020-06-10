@@ -1,0 +1,3 @@
+CC=clang
+LD=ld.lld
+CLANG_TRIPLE=aarch64-linux-gnu-

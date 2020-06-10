@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/phy/qcom,lito-qmp-usb3.h>
+#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
+#include <dt-bindings/usb/pd.h>
+
+&pm8150_gpios {
+	/delete-property/ qcom,gpios-disallowed;
+	interrupts = <0x0 0xc0 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc1 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc2 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc3 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc4 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc5 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc6 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc7 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc8 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xc9 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xca 0x0 IRQ_TYPE_NONE>,
+			<0x0 0xcb 0x0 IRQ_TYPE_NONE>;
+	interrupt-names = "pm8150_gpio1", "pm8150_gpio2",
+			"pm8150_gpio3", "pm8150_gpio4",
+			"pm8150_gpio5", "pm8150_gpio6",
+			"pm8150_gpio7", "pm8150_gpio8",
+			"pm8150_gpio9", "pm8150_gpio10",
+			"pm8150_gpio11", "pm8150_gpio12";
+
+	usb_ext_5v_boost{
+		usb_ext_5v_boost_default: usb_ext_5v_boost_default {
+			pins = "gpio8";
+			function = "normal";
+			output-low;
+		};
+	};
+};
+
+&tlmm {
+	usbc_extsw_en: usbc_extsw_en {
+		mux {
+			pins = "gpio93";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio93";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+
+	rtx_extsw_en: rtx_extsw_en {
+		mux {
+			pins = "gpio90";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio90";
+			output-low;
+			bias-pull-down;
+			drive-strength = <4>;
+		};
+	};
+
+};
+
+&soc {
+	ext_boost: ext_boost {
+		compatible = "regulator-tps";
+
+		regulator-name = "ext_boost";
+		voltage-count = <2>;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <7000000>;
+		en-gpios = <&pm8150_gpios 8 GPIO_ACTIVE_HIGH>;
+		en-delay = <1000>;
+		dis-delay = <0>;
+		status = "okay";
+
+		usb_5v {
+			voltage-level-uv = <5000000>;
+			control-gpio-count = <1>;
+			control-gpios = <&tlmm 93 GPIO_ACTIVE_HIGH>;
+			gpio-enable-sequence = <1>;
+			gpio-enable-delay = <0>;
+			gpio-disable-sequence = <1>;
+			gpio-disable-delay = <0>;
+		};
+
+		rtx_7v {
+			voltage-level-uv = <7000000>;
+			control-gpio-count = <1>;
+			control-gpios = <&tlmm 90 GPIO_ACTIVE_HIGH>;
+			gpio-enable-sequence = <1>;
+			gpio-enable-delay = <0>;
+			gpio-disable-sequence = <1>;
+			gpio-disable-delay = <0>;
+		};
+	};
+};
+
+&usb2_phy0 {
+	qcom,param-override-seq =
+		<0xC7 0x6C
+		 0xCC 0x70>;
+};
+
+&pm7250b_pdphy {
+	google,ext_vbus-supported;
+	ext-vbus-supply = <&ext_boost>;
+	goog,wlc-supported;
+
+	usb_con: connector {
+		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_USB_COMM
+						   | PDO_FIXED_DATA_SWAP
+						   | PDO_FIXED_DUAL_ROLE)
+			     PDO_FIXED(9000, 2200, 0)
+			     PDO_PPS_APDO(5000, 9000, 3000)>;
+	};
+
+};
+
+&usb0 {
+	google,switch-vbus = <500>;
+};

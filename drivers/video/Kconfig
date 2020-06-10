@@ -1,0 +1,61 @@
+#
+# Video configuration
+#
+
+menu "Graphics support"
+
+if HAS_IOMEM
+
+config HAVE_FB_ATMEL
+	bool
+
+source "drivers/char/agp/Kconfig"
+
+source "drivers/gpu/vga/Kconfig"
+
+source "drivers/gpu/host1x/Kconfig"
+source "drivers/gpu/ipu-v3/Kconfig"
+
+source "drivers/gpu/drm/Kconfig"
+
+menu "Frame buffer Devices"
+source "drivers/video/fbdev/Kconfig"
+endmenu
+
+source "drivers/video/backlight/Kconfig"
+
+config VGASTATE
+       tristate
+       default n
+
+config VIDEOMODE_HELPERS
+	bool
+
+config HDMI
+	bool
+
+endif # HAS_IOMEM
+
+if VT
+	source "drivers/video/console/Kconfig"
+endif
+
+if FB || SGI_NEWPORT_CONSOLE
+	source "drivers/video/logo/Kconfig"
+
+endif
+
+
+endmenu
+
+config MSM_VIDC_V4L2
+	tristate "Support MSM techpack/video device"
+	depends on QCOM_LLCC
+	---help---
+	  The device is represented by an out-of-tree video driver
+	  in techpack/video.  This config represents the truth regarding
+	  the state of the video driver.
+
+	  Default is technically n, but the out of tree driver overrides
+	  that to y.  But if this configuration is m, then the out of tree
+	  driver will respect that configuration.

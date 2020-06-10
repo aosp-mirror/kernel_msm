@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&qupv3_se9_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+	pac193x@10 {
+		compatible = "microchip,pac1934";
+		reg = <0x10>;
+		samp-rate = <64>;
+		status = "okay";
+		ch1: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_OLED";
+		     subsys-name = "Display";
+		     channel_enabled;
+		};
+		ch2: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_WLAN";
+		     subsys-name = "WLAN";
+		     channel_enabled;
+		};
+		ch3: channel@2 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "WCN3998_VDD13 [from PP1304_L2C]";
+		     subsys-name = "WLAN";
+		     channel_enabled;
+		};
+		ch4: channel@3 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_S1C";
+		     subsys-name = "CPU(SILVER)";
+		     channel_enabled;
+		};
+	};
+
+	pac193x@18 {
+		compatible = "microchip,pac1934";
+		reg = <0x18>;
+		samp-rate = <64>;
+		status = "okay";
+		ch5: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_S2A_S3A";
+		     subsys-name = "CPU(GOLD)";
+		     channel_enabled;
+		};
+		ch6: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_S1A_S9A_S10A";
+		     subsys-name = "VDD_CX(SM7250)";
+		     channel_enabled;
+		};
+		ch7: channel@2 {
+		     rail-name = "NC";
+		};
+		ch8: channel@3 {
+		     rail-name = "NC";
+		};
+	};
+
+	pac193x@1f {
+		compatible = "microchip,pac1934";
+		reg = <0x1f>;
+		samp-rate = <64>;
+		status = "okay";
+		ch9: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_RF";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+		ch10: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PPVAR_VPH_PWR_QTM525";
+		     subsys-name = "Cellular(mmWave)";
+		     channel_enabled;
+		};
+		ch11: channel@2 {
+		     rail-name = "NC";
+		};
+		ch12: channel@3 {
+		     rail-name = "NC";
+		};
+	};
+};

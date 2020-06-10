@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/* lito-redbull memory includes go here */
+
+
+/*
+ * Reverved memory carveout is defined in TZ project:
+ * ssg/securemsm/trustzone/qsee/mink/oem/config/saipan/oem_config.xml
+ */
+
+/*
+ * the following carveout items are still defined in lito.dtsi:
+ * region              address    size
+ * ==========          ========== =========
+ * hyp_mem:            0x80000000 0x600000
+ * xbl_aop_mem:        0x80700000 0x160000
+ * cmd_db:             0x80860000 0x20000
+ * sec_apps_mem:       0x808ff000 0x1000
+ * smem_mem:           0x80900000 0x200000
+ * removed_mem:        0x80b00000 0x1300000
+ * qtee_apps_mem:      0x81e00000 0x2600000
+ * pil_camera_mem:     0x86000000 0x500000
+ * pil_npu_mem:        0x86500000 0x500000
+ * pil_video_mem:      0x86a00000 0x500000
+ * pil_cvp_mem:        0x86f00000 0x500000
+ * pil_cdsp_mem:       0x87400000 0x1e00000
+ * pil_adsp_mem:       0x89200000 0x2800000
+ * pil_wlan_fw_mem:    0x8ba00000 0x200000
+ * pil_ipa_fw_mem:     0x8bc00000 0x10000
+ * pil_ipa_gsi_mem:    0x8bc10000 0x5400
+ * pil_gpu_mem:        0x8bc15400 0x2000
+ * reserved_pil:       0x8bc17400 0x3e8c00
+ * modem_wlan_mem:     0x8c000000 0x11800000
+ * cdsp_sec_mem:       0x9f400000 0xc00000
+ * cont_splash_memory: 0xA0000000 0x02300000
+ * dfps_data_memory:   0xa2300000 0x0100000
+ * debug_info:         0xB09A1000 0x20000    (Google)
+ * ramoops@B09C1000:   0xB09C1000 0x400000   (Google)
+ */
+
+&modem_wlan_mem {
+	reg = <0x0 0x8c000000 0x0 0x11800000>;
+	};
+
+&reserved_memory {
+	debug_info: debug_info@B7E01000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB7E01000 0 0x40000>;
+	};
+
+	ramoops_mem: ramoops_region@B7E41000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB7E41000 0 0x400000>;
+	};
+
+	alt_ramoops_mem: alt_ramoops_region@B8241000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB8241000 0 0x400000>;
+	};
+
+	ramoops_meta_mem: ramoops_meta_region@0xB8641000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xB8641000 0 0x1000>;
+	};
+
+	kregistry_mem: kregistry_mem@C8000000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xC8000000 0 0x10000>;
+	};
+};

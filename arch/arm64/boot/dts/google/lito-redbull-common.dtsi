@@ -1,0 +1,245 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include "qcom-base/lito-pmic-overlay.dtsi"
+#include "qcom-base/lito-thermal-overlay.dtsi"
+
+#include "lito-redbull-audio.dtsi"
+#include "lito-redbull-camera-pmic.dtsi"
+#include "lito-redbull-camera-sensor.dtsi"
+#include "lito-redbull-display.dtsi"
+#include "lito-redbull-fingerprint.dtsi"
+#include "lito-redbull-memory.dtsi"
+#include "lito-redbull-nfc.dtsi"
+#include "lito-redbull-ese.dtsi"
+#include "lito-redbull-pcie.dtsi"
+#include "lito-redbull-pinctrl.dtsi"
+#include "lito-redbull-qup.dtsi"
+#include "lito-redbull-regulator.dtsi"
+#include "lito-redbull-thermal.dtsi"
+#include "lito-redbull-touch.dtsi"
+#include "lito-redbull-usb.dtsi"
+#include "lito-redbull-citadel.dtsi"
+
+&soc {
+	gpio_keys {
+		compatible = "gpio-keys";
+		label = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&key_vol_up_default>;
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm8150l_gpios 5 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_VOLUMEUP>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+			linux,can-disable;
+		};
+	};
+
+	qcom,msm-imem@146ab000 {
+		kernel_rtb@c70 {
+			compatible = "msm-imem-rtb_info";
+			reg = <0xc70 64>;
+		};
+
+		pmic_info@cb0 {
+			compatible = "msm-imem-pmic_info";
+			reg = <0xcb0 64>;
+		};
+
+		uuid_info@cf0 {
+			compatible = "msm-imem-uuid_info";
+			reg = <0xcf0 64>;
+		};
+
+		rst_info@d30 {
+			compatible = "msm-imem-rst_info";
+			reg = <0xd30 100>;
+		};
+
+		bldr_info@d94 {
+			compatible = "msm-imem-bldr_info";
+			reg = <0xd94 256>;
+		};
+
+		kernel_info@e94 {
+			compatible = "msm-imem-kernel_info";
+			reg = <0xe94 256>;
+		};
+
+		gplatform_data@f94 {
+			compatible = "msm-imem-gplatform_data";
+			reg = <0xf94 8>;
+		};
+	};
+
+	bootloader_log {
+		compatible = "qcom,bldr_log";
+		reg = <0xB7E01000 0x16800>, <0xB7E17800 0x16800>;
+		reg-names = "bl_log", "bl_old_log";
+		memory-region = <&debug_info>;
+	};
+
+	ramoops {
+		compatible = "ramoops";
+		memory-region = <&ramoops_mem>;
+		alt-memory-region = <&alt_ramoops_mem>;
+		record-size = <0x20000>;
+		console-size = <0x100000>;
+		pmsg-size = <0x80000>;
+	};
+
+	access_ramoops@0 {
+		compatible = "access_ramoops";
+		label = "metadata";
+		memory-region = <&ramoops_meta_mem>;
+	};
+
+	access_ramoops@1 {
+		compatible = "access_ramoops";
+		label = "ramoops";
+		memory-region = <&alt_ramoops_mem>;
+	};
+
+	access_kregistry@2 {
+		compatible = "access_ramoops";
+		label = "kregistry";
+		memory-region = <&kregistry_mem>;
+	};
+
+	keydebug {
+		compatible = "keydebug";
+		key_down_delay = <7000>;
+		keys_down = <116>;
+		dbg_fn_delay = <2500>;
+	};
+
+	modemsmem {
+		compatible = "modemsmem";
+	};
+};
+
+&ufsphy_mem {
+	compatible = "qcom,ufs-phy-qmp-v4-lito";
+
+	vdda-phy-supply = <&pm8150_l5>;
+	vdda-pll-supply = <&pm8150_l9>;
+	vdda-phy-max-microamp = <90200>;
+	vdda-pll-max-microamp = <19000>;
+
+	status = "ok";
+};
+
+&ufshc_mem {
+	vdd-hba-supply = <&ufs_phy_gdsc>;
+	vdd-hba-fixed-regulator;
+	vcc-supply = <&pm8150a_l7>;
+	vcc-voltage-level = <2950000 2960000>;
+	vccq2-supply = <&pm8150_s4>;
+	vcc-max-microamp = <800000>;
+	vccq2-max-microamp = <800000>;
+	spm-level = <3>;
+
+	qcom,vddp-ref-clk-supply = <&pm8150_l9>;
+	qcom,vddp-ref-clk-max-microamp = <100>;
+
+	status = "ok";
+};
+
+&sdhc_1 {
+	vdd-supply = <&pm8150a_l7>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
+	qcom,vdd-current-level = <0 570000>;
+
+	vdd-io-supply = <&pm8150_s4>;
+	qcom,vdd-io-always-on;
+	qcom,vdd-io-lpm-sup;
+	qcom,vdd-io-voltage-level = <1800000 1800000>;
+	qcom,vdd-io-current-level = <0 325000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc1_clk_on &sdc1_cmd_on &sdc1_data_on
+					&sdc1_rclk_on>;
+	pinctrl-1 = <&sdc1_clk_off &sdc1_cmd_off &sdc1_data_off
+					&sdc1_rclk_off>;
+
+	status = "disabled";
+};
+
+&sdhc_2 {
+	vdd-supply = <&pm8150a_l9>;
+	qcom,vdd-voltage-level = <2950000 2950000>;
+	qcom,vdd-current-level = <0 800000>;
+
+	vdd-io-supply = <&pm8150a_l6>;
+	qcom,vdd-io-voltage-level = <1800000 2950000>;
+	qcom,vdd-io-current-level = <0 22000>;
+
+	pinctrl-names = "active", "sleep";
+	pinctrl-0 = <&sdc2_clk_on  &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	cd-gpios = <&tlmm 69 GPIO_ACTIVE_LOW>;
+
+	status = "disabled";
+};
+
+&pm8150a_amoled {
+	status = "ok";
+};
+
+&dsi_sw43404_amoled_video {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
+	qcom,mdss-brightness-max-level = <255>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&pm8150l_gpios 3 0>;
+};
+
+&dsi_sw43404_amoled_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
+	qcom,mdss-brightness-max-level = <255>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&pm8150l_gpios 3 0>;
+};
+
+&dsi_sw43404_amoled_fhd_plus_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <1023>;
+	qcom,mdss-brightness-max-level = <255>;
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&pm8150l_gpios 3 0>;
+};
+
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_sw43404_amoled_video>;
+};
+
+// Force warm reboot on 'shutdown,thermal' & 'reboot-ab-update'.
+&msm_poweroff {
+	qcom,force-warm-reboot-on-thermal-shutdown;
+	qcom,force-warm-reboot-on-reboot-ab-update;
+};

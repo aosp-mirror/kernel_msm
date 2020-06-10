@@ -1,0 +1,129 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+/* AP Touch SPI MISO is gpio42, MOSI is gpio43, CLK is gpio44, CS is gpio45.
+ * Reset - gpio8
+ * Interrupt - gpio9
+ * Bus master switch - gpio35
+ */
+
+&pm8150_l17 {
+	regulator-min-microvolt = <3304000>;
+	regulator-max-microvolt = <3304000>;
+	qcom,init-voltage = <3304000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+	regulator-always-on;
+};
+
+//TODO: check this later
+/*
+&pm8150_gpios {
+	sec_ts_power_default: sec_ts_power_default {
+		pins = "gpio9";
+		function = "normal";
+		qcom,drive-strength = <2>;
+		power-source = <0>;
+		output-high;
+		bias-disable;
+	};
+};
+*/
+
+&tlmm {
+	sec_ts_reset_default: sec_ts_reset_default {
+		mux {
+			pins = "gpio8";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio8";
+			drive-strength = <2>;
+			output-high;
+			bias-disable;
+		};
+	};
+
+	sec_ts_irq_default: sec_ts_irq_default {
+		mux {
+			pins = "gpio9";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio9";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+
+	sec_ts_switch_default: sec_ts_switch_default {
+		mux {
+			pins = "gpio35";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio35";
+			drive-strength = <2>;
+			output-low;
+			bias-disable;
+		};
+	};
+};
+
+&qupv3_se0_i2c {
+	status = "disabled";
+};
+
+&qupv3_se0_spi {
+	status = "ok";
+	redfin_spitouch: touchscreen@0 {
+		status = "ok";
+		compatible = "sec,sec_ts";
+		spi-max-frequency = <10000000>;
+		spi-cpol;
+		spi-cpha;
+
+		reg = <0>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <9 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-names = "default", "on_state", "off_state";
+//		pinctrl-0 = <&sec_ts_power_default
+		pinctrl-0 = <&sec_ts_reset_default
+				&sec_ts_irq_default
+				&sec_ts_switch_default>;
+		pinctrl-1 = <&sec_ts_irq_default>;
+		pinctrl-2 = <&sec_ts_irq_default>;
+
+		sec,irq_gpio = <&tlmm 9 0>;
+		sec,switch_gpio = <&tlmm 35 0>;	// Low: AP, High: SLPI
+		sec,reset_gpio = <&tlmm 8 0>;
+		sec,firmware_name = "s6sy79x.bin";
+		sec,mis_cal_check = <1>;
+		sec,heatmap_mode = <1>;
+
+		// TODO: check resolution
+		sec,max_coords = <1080 2340>;
+
+		// TODO: check avdd and dvdd
+		//vdd-supply = <&pm8150_l14>;
+		avdd-supply = <&pm8150_l17>;
+		//sec,regulator_dvdd = "vdd";
+		sec,regulator_avdd = "avdd";
+		sec,panel_map = <&dsi_s6e3hc2_dsc_1080p_cmd 0>,
+				<&dsi_s6e3hc2_evt_dsc_1080p_cmd 0>;
+	};
+};

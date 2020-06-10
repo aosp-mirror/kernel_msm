@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&reset_pin_bottom_default {
+	status = "disabled";
+};
+
+&irq_pin_top_default {
+	status = "disabled";
+};
+
+&pm7250b_gpios {
+	reset_pin_bottom_default1_1: reset_pin_bottom_default {
+		pins = "gpio11";
+		function = "normal";
+		output-high;
+		qcom,drive-strength = <2>;
+	};
+};
+
+&pm8150l_gpios {
+	irq_pin_top_default1_1: irq_pin_top_default {
+		pins = "gpio3";
+		function = "normal";
+		bias-pull-down;
+		qcom,drive-strength = <2>;
+
+	};
+};
+
+&cs35l41_l {
+	pinctrl-0 = <&reset_pin_top_default &irq_pin_top_default1_1>;
+};
+
+&cs35l41_r {
+	pinctrl-0 = <&reset_pin_bottom_default1_1 &irq_pin_bottom_default>;
+};
+
+/* Software workaround (b/141315426) */
+&qupv3_se9_i2c {
+	cs35l41@40 {
+		cirrus,invert-pcm;
+	};
+};

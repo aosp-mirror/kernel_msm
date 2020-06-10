@@ -1,0 +1,116 @@
+
+/* p9382
+ * -----------------------
+ * QI_INT_ODL -> GPIO100
+ * QI_EN_L    -> GPIO 99
+ * QI_1V8_PG  -> GPIO 98
+ *
+ * rTx
+ * -----------------------
+ * QI_5V_LD_SW_ON -> GPIO90
+ * EN_OTG_5000    -> GPIO 8 PM7250
+ */
+
+
+#include <dt-bindings/wc/p9221-wc.h>
+
+&qupv3_se9_i2c {
+	status = "ok";
+	p9382: p9382@3b {};
+};
+
+&pm8150_gpios {
+	gpio_ben_default: gpio_ben_default {
+		pins = "gpio8";
+		function = "normal";
+		output-low;
+		bias-pull-down;
+		drive-strength = <4>;
+	};
+};
+
+&tlmm {
+	p9382_det_int: p9382_det_int {
+		mux {
+			pins = "gpio98";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio98";
+			bias-disable;
+			input-enable;
+		};
+	};
+
+	p9382_int_default: p9382_int_default {
+		mux {
+			pins = "gpio100";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio100";
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	gpio_qien_default: gpio_qien_default {
+		mux {
+			pins = "gpio99";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio99";
+			power-source = <0>;
+			output-low;
+			bias-pull-up;
+			drive-strength = <4>;
+		};
+	};
+
+	gpio_sw_default: gpio_sw_default {
+		mux {
+			pins = "gpio90";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio90";
+			output-low;
+			bias-pull-down;
+			drive-strength = <4>;
+		};
+	};
+};
+
+&p9382 {
+	status = "ok";
+	compatible = "idt,p9382";
+	reg = <0x3b>;
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&gpio_qien_default &p9382_int_default &p9382_det_int &gpio_ben_default &gpio_sw_default>;
+	interrupt-parent = <&tlmm>;
+	interrupts = <100 0>,
+		     <98 0>;
+	interrupt-names = "p9382_int";
+	idt,irq_gpio =<&tlmm 100 0x00>;
+	idt,irq_det_gpio = <&tlmm 98 0x00>;
+	idt,gpio_qien = <&tlmm 99 GPIO_ACTIVE_LOW>;
+
+	idt,gpio_ben = <&pm8150_gpios 8 GPIO_ACTIVE_HIGH>;
+	idt,gpio_switch = <&tlmm 90 GPIO_ACTIVE_HIGH>;
+
+	google,epp_rp_value = <0x18>;
+	google,needs_dcin_reset = <P9221_WC_DC_RESET_MODECHANGED>;
+	google,alignment_frequencies = /bits/ 32 <87000 120000 130000
+						  140000 205000>;
+	google,alignment_scalar = <4>;
+	google,alignment_hysteresis = <5000>;
+
+/*
+ * b/144000003 for tracking Q factor and BPP/EPP FOD parameters
+	google,q_value = <50>;
+	fod = [B2 23 8D 2D 90 29 BF CD A6 E9 A6 2C 0D 12 9A 12];
+	fod_epp = [B0 24 90 40 88 50 88 53 90 4A 9A 00 12 12 01 40];
+*/
+};

@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&bolero {
+	status = "disabled";
+};
+
+&lito_snd {
+	qcom,model = "sm7250-noextcodec-snd-card";
+
+	qcom,audio-routing =
+		"Stereo1 DMIC Mux", "Audio LDO Mic1",
+		"Stereo2 DMIC Mux", "Audio LDO Mic2",
+		"DSP_IN1", "Audio LDO Mic1",
+		"DSP_IN2", "Audio LDO Mic1";
+	qcom,bolero_audio_intf = <0>;
+
+	qcom,wsa-max-devs = <0>;
+	/delete-property/ qcom,wsa-devs;
+
+	qcom,codec-max-aux-devs = <0>;
+	/delete-property/ qcom,codec-aux-devs;
+
+	audio_hac-amp-gpios = <&tlmm 5 0>;
+};
+
+&cdc_dmic01_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic23_gpios {
+	status = "disabled";
+};
+
+&cdc_dmic45_gpios {
+	status = "disabled";
+};
+
+&rx_swr_gpios {
+	status = "disabled";
+};
+
+&tx_swr_gpios {
+	status = "disabled";
+};
+
+&wcd938x_rst_lpi_gpio {
+	status = "disabled";
+};
+
+&wcd938x_rst_gpio {
+	status = "disabled";
+};
+
+&clock_audio_rx_1 {
+	status = "disabled";
+};
+
+&clock_audio_rx_2 {
+	status = "disabled";
+};
+
+&clock_audio_tx_1 {
+	status = "disabled";
+};
+
+&clock_audio_tx_2 {
+	status = "disabled";
+};
+
+&clock_audio_va_1 {
+	status = "disabled";
+};
+
+&clock_audio_va_2 {
+	status = "disabled";
+};
+
+/* Software workaround (b/143266999) */
+&qupv3_se9_i2c {
+	cs35l41@40 {
+		cirrus,fwname-use-revid;
+	};
+
+	cs35l41@41 {
+		cirrus,fwname-use-revid;
+	};
+};

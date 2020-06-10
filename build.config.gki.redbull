@@ -1,0 +1,14 @@
+KERNEL_DIR=private/msm-google
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.abi
+
+if [ -n "${BUILD_BOOT_IMG}" ]; then
+BUILD_INITRAMFS=1
+MKBOOTIMG_PATH=tools/mkbootimg/mkbootimg.py
+VENDOR_RAMDISK_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-bramble.img
+KERNEL_BINARY=Image.lz4
+BOOT_IMAGE_HEADER_VERSION=3
+BASE_ADDRESS=0x00000000
+PAGE_SIZE=4096
+KERNEL_VENDOR_CMDLINE="console=ttyMSM0,115200n8 androidboot.console=ttyMSM0 printk.devkmsg=on msm_rtb.filter=0x237 ehci-hcd.park=3 service_locator.enable=1 androidboot.memcg=1 cgroup.memory=nokmem lpm_levels.sleep_disabled=1 usbcore.autosuspend=7 androidboot.usbcontroller=a600000.dwc3 swiotlb=2048 androidboot.boot_devices=soc/1d84000.ufshc loop.max_part=7 buildvariant=userdebug"
+VENDOR_FSTAB=${ROOT_DIR}/prebuilts/boot-artifacts/fstabs/fstab.sm7250
+fi

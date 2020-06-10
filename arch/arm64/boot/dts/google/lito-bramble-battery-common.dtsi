@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "lito-redbull-battery.dtsi"
+
+&soc {
+	bramble_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
+		#include "batterydata-qcom-b5-Desay-ATL-3800.dtsi"
+		#include "batterydata-qcom-b5-Desay-COS-3800.dtsi"
+		#include "batterydata-qcom-b5-Desay-ATL-3750.dtsi"
+		#include "batterydata-qcom-b5m-Desay-ATL-3800.dtsi"
+		#include "batterydata-qcom-b5m-Desay-COS-3800.dtsi"
+		#include "batterydata-qcom-b5-unknown.dtsi"
+	};
+};
+
+&pm7250b_charger {
+	qcom,battery-data = <&bramble_batterydata>;
+	qcom,chg-term-current-ma = <(-190)>;
+};
+
+&pm7250b_qg {
+	qcom,battery-data = <&bramble_batterydata>;
+	qcom,qg-iterm-ma = <456>;
+};
+
+&google_battery {
+	google,chg-battery-capacity = <3800>;
+
+	/* charge table for bramble */
+	google,chg-temp-limits = <0 100 200 420 460 480 550>;
+	google,chg-cv-limits = <4200000 4300000 4390000 4420000 4450000>;
+	google,chg-cc-limits = <
+		 30  10   0   0   0
+		 50  30  30  27  13
+		100  70  55  27  13
+		 80  50  50  27  13
+		 50  50   0   0   0
+		 30   0   0   0   0
+	>;
+	/* micro-adjust cc_max to avoid vpack exceeding spec criteria */
+	/* vpack tolerance: 6675uV = 4450mV * 15 / (10 * 1000) */
+	google,chg-last-tier-vpack-tolerance = <6675>;
+	/* decrease and terminal current unit : uA */
+	google,chg-last-tier-dec-current = <50000>;
+	google,chg-last-tier-term-current = <190000>;
+
+	google,ttf-adapter = <1800>;
+	google,ttf-soc-table =  <37 77 82 89 92  96  98  100>;
+	google,ttf-elap-table = <38 42 61 78 103 155 201 336>;
+	google,ttf-tier-table = <0 67 81>;
+};

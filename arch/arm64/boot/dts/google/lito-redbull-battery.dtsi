@@ -1,0 +1,218 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pm7250b_charger {
+	status = "ok";
+	io-channels = <&pm7250b_vadc ADC_USB_IN_V_16>,
+		      <&pm7250b_vadc ADC_USB_IN_I>,
+		      <&pm7250b_vadc ADC_CHG_TEMP>,
+		      <&pm7250b_vadc ADC_DIE_TEMP>,
+		      <&pm7250b_vadc ADC_AMUX_THM3_PU2>,
+		      <&pm7250b_vadc ADC_SBUx>,
+		      <&pm7250b_vadc ADC_VPH_PWR>;
+	io-channel-names = "usb_in_voltage",
+			   "usb_in_current",
+			   "chg_temp",
+			   "die_temp",
+			   "conn_temp",
+			   "sbux_res",
+			   "vph_voltage";
+	qcom,auto-recharge-soc = <97>;
+	qcom,charger-temp-max = <800>;
+	qcom,smb-temp-max = <800>;
+	google,batt_psy_disable;
+	google,wdog_snarl_disable;
+	google,usb-port-tz-name = "usbc-therm-adc";
+	qcom,hvdcp-disable;
+	qcom,chg-term-src = <1>;
+
+	qcom,chgr@1000 {
+		/delete-property/ interrupts;
+		/delete-property/ interrupt-names;
+	};
+
+	qcom,batif@1200 {
+		/delete-property/ interrupts;
+		/delete-property/ interrupt-names;
+	};
+};
+
+&pm7250b_qg {
+	status = "ok";
+	io-channels = <&pm7250b_vadc ADC_BAT_THERM_PU2>,
+		      <&pm7250b_vadc ADC_BAT_ID_PU2>;
+	io-channel-names = "batt-therm",
+			   "batt-id";
+	qcom,cl-feedback-on;
+	qcom,qg-ext-sns;
+	qcom,cl-max-increment = <5>;
+	qcom,cl-max-decrement = <10>;
+	qcom,cl-min-limit = <500>;
+	qcom,cl-max-limit = <0>;
+	qcom,cl-min-delta-batt-soc = <10>;
+	qcom,cl-wt-enable;
+	qcom,vbatt-cutoff-mv = <3300>;
+	qcom,vbatt-low-mv = <3500>;
+	qcom,vbatt-low-cold-mv = <3800>;
+	qcom,vbatt-empty-mv = <2800>;
+	qcom,s2-fifo-length = <1>;
+	qcom,s2-vbat-low-fifo-length = <1>;
+	qcom,fvss-enable;
+	qcom,fvss-vbatt-mv = <3420>;
+	qcom,fvss-fifo-count = <10>;
+	google,fvss-interval-ms = <5000>;
+	qcom,s3-entry-ibat-ua = <14640>;
+	qcom,qg-sleep-config;
+
+	/* pon soc parameters */
+	/* 30% / 30 degree / 2 weeks */
+	qcom,shutdown_soc_threshold = <30>;
+	qcom,shutdown-temp-diff = <300>;
+	qcom,ignore-shutdown-soc-secs = <1209600>;
+
+	google,qg-cycle-disable;
+	google,qg-zero-ibat-offset-ctl = <15860>;
+};
+
+&spmi_bus {
+	qcom,pm7250b@2 {
+		google_bms: google,bms {
+			compatible = "google,sm7250_bms";
+			google,psy-name = "sm7250_bms";
+			vbob-supply = <&BOB>;
+
+			io-channels = <&pm7250b_vadc ADC_BAT_THERM_PU2>,
+				      <&pm7250b_vadc ADC_BAT_ID_PU2>;
+			io-channel-names = "batt-therm",
+					   "batt-id";
+
+			sm7250_bms,chgr@1000 {
+				reg = <0x1000 0x100>;
+				interrupts =
+					<0x2 0x10 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x10 0x1 IRQ_TYPE_EDGE_RISING>;
+				interrupt-names =
+					"chgr-error",
+					"chg-state-change";
+			};
+
+			sm7250_bms,batif@1200 {
+				reg = <0x1200 0x100>;
+				interrupts =
+					<0x2 0x12 0x0 IRQ_TYPE_EDGE_RISING>,
+					<0x2 0x12 0x2 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x3 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x4 IRQ_TYPE_EDGE_BOTH>,
+					<0x2 0x12 0x5 IRQ_TYPE_EDGE_BOTH>;
+				interrupt-names =
+						"bat-temp",
+						"bat-ov",
+						"bat-low",
+						"bat-therm-or-id-missing",
+						"bat-terminal-missing";
+			};
+		};
+	};
+};
+
+&soc {
+	google_battery: google,battery {
+		compatible = "google,battery";
+		google,fg-psy-name = "bms";
+
+		/* battery poll rate */
+		google,update-interval = <30000>;
+		/* IRDrop Compensation */
+		google,fv-uv-resolution = <10000>;
+		google,fv-uv-margin-dpct = <1020>;
+		/* tier switch */
+		google,cv-range-accuracy = <100000>;
+		google,cv-otv-margin = <110000>;
+		google,cv-debounce-cnt = <3>;
+		google,cv-tier-ov-cnt = <1>;
+		google,cv-tier-switch-cnt = <3>;
+		/* charging stats */
+		google,chg-stats-qual-time = <900>;
+		google,chg-stats-delta-soc = <15>;
+		/* resistance estimation */
+		google,res-temp-hi = <390>;
+		google,res-temp-lo = <350>;
+		google,res-soc-thresh = <75>;
+		google,res-filt-length = <10>;
+		/* enable cycle counts */
+		google,cycle-counts;
+
+		#thermal-sensor-cells = <0>;
+		/* soc smoothing */
+		google,rl_delta-max-soc = <1>;
+		google,rl_delta-max-time = <15>;
+		google,rl_ft-low-limit = <7>;
+		google,rl_ft-delta-limit = <15>;
+		google,rl_st-delta-limit = <7>;
+		google,rl_st-max-count = <3>;
+		google,rl_no-zero;
+		google,rl_soc-limits = <20 30 40 50 60 70 90 100>;
+		google,rl_soc-rates =  <25 26 27 28 29 28 27 22>;
+		/* rest charging */
+		google,chg-rest-rate = <5>;
+		google,chg-rest-soc = <80>;
+
+		/* battery history */
+		google,eeprom-inside;
+		google,history-delta-cycle-count = <25>;
+
+		google,ssoc-delta = <2>;
+	};
+
+	google_charger: google,charger {
+		compatible = "google,charger";
+		#cooling-cells = <2>;
+		google,chg-power-supply = "sm7250_bms";
+		google,bat-power-supply = "battery";
+		google,tcpm-power-supply = "tcpm-source-psy-usbpd0";
+		google,thermal-mitigation = <4000000 3500000 3000000
+						2500000 2000000 1500000
+						1000000 500000>;
+		google,fv-max-uv = <4450000>;
+		google,chg-termination-5v;
+
+		/* TODO: remove when using proper "charger" */
+		google,chg-cc-tolerance = <25>;
+
+		google,pps-cc-tolerance-pct = <5>;
+		google,pps-awake;
+		google,usbc-connector = <&usb_con>;
+	};
+
+	google_overheat_mitigation: google,overheat_mitigation {
+		compatible = "google,overheat_mitigation";
+		google,port-overheat-work-interval = <2000>;
+		/* Must maintain < 1/15 duty cycle */
+		google,polling-freq = <3>;
+		#cooling-cells = <2>;
+		google,begin-mitigation-temp = <600>;
+		google,end-mitigation-temp = <500>;
+	};
+
+	google_bms {
+		google,gbms-providers = "batt_eeprom";
+	};
+};
+
+&qupv3_se9_i2c {
+	status = "ok";
+	google_eeprom: m24c08@50 {
+		compatible = "stchip,m24c08";
+		reg = <0x50>;
+	};
+};

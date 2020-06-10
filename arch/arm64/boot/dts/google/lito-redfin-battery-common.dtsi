@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "lito-redbull-battery.dtsi"
+
+&soc {
+	redfin_batterydata: qcom,battery-data {
+		qcom,batt-id-range-pct = <10>;
+		#include "batterydata-qcom-r3-LSN-4000.dtsi"
+		#include "batterydata-qcom-r3-COS-4000.dtsi"
+		#include "batterydata-qcom-r3-unknown.dtsi"
+	};
+};
+
+&pm7250b_charger {
+	qcom,battery-data = <&redfin_batterydata>;
+	qcom,chg-term-current-ma = <(-80)>;
+};
+
+&pm7250b_qg {
+	qcom,battery-data = <&redfin_batterydata>;
+	qcom,qg-iterm-ma = <600>;
+};
+
+&google_charger {
+	google,wlc-power-supply = "wireless";
+	google,wlc-thermal-mitigation = <1100000 500000 110000>;
+	google,therm-wlc-overrides-fcc;
+};
+
+&google_battery {
+	google,chg-battery-capacity = <4000>;
+
+	/* charge table for redfin */
+	google,chg-temp-limits = <0 100 200 420 460 480 550>;
+	google,chg-cv-limits = <4200000 4300000 4390000 4410000 4430000
+				4450000>;
+	google,chg-cc-limits = <
+		 30  10   0   0   0   0
+		 50  30  30  30  15   3
+		100  70  51  30  15   3
+		 80  50  50  30  15   3
+		 50  50   0   0   0   0
+		 30   0   0   0   0   0
+	>;
+
+	google,ttf-adapter = <1800>;
+	google,ttf-soc-table =  <72 80 86 91  93  96  98 100>;
+	google,ttf-elap-table = <40 50 74 85 132 141 213 302>;
+	google,ttf-tier-table = <0 67 80>;
+};

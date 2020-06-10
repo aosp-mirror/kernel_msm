@@ -1,0 +1,104 @@
+What:		/sys/devices/platform/soc/<....>ufshc/manual_gc
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Control UFS to give a time for internal Garbage Collections,
+		given manual_gc_hold seconds.
+
+What:		/sys/devices/platform/soc/<....>ufshc/manual_gc_hold
+Date:		April, 2018
+Contact:	"Jaegeuk Kim" <jaegeuk@google.com>
+Description:
+		Give the seconds to UFS for internal GCs.
+
+What:		/sys/devices/platform/soc/<....>ufshc/health_descriptor
+Date:		September 2017
+contact:	Jaegeuk Kim <jaegeuk@google.com>
+Description:
+		This directory contains health information reported by UFS.
+		- length must be 25h
+		- type must be 09h
+		- eol represent
+		  00h: Not defined
+		  01h: Normal
+		  02h: Warning
+		  03h: Critical
+		- lifetimeA/B
+		  00h: Not defined
+		  01h:  0% ~ 10% device life time used
+		  02h: 10% ~ 20% device life time used
+		  03h: 20% ~ 30% device life time used
+		  04h: 30% ~ 40% device life time used
+		  05h: 40% ~ 50% device life time used
+		  06h: 50% ~ 60% device life time used
+		  07h: 60% ~ 70% device life time used
+		  08h: 70% ~ 80% device life time used
+		  09h: 80% ~ 90% device life time used
+		  0Ah: 90% ~ 100% device life time used
+		  0Bh: Exceeded its maximum estimated device life time
+		- lifetimeC
+		  1% granularity device life time used
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_read_us
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		UFS read I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_read_cnt
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains the number of UFS read I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_write_us
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		UFS write I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_write_cnt
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains the number of UFS write I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_unmap_us
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		UFS unmap I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_unmap_cnt
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains the number of UFS unmap I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_sync_us
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains watermark value in micro seconds unit for slow
+		UFS sync I/O logging and counting. Can be updated by writing
+		value to.
+
+What:		/sys/devices/platform/soc/<....>ufshc/slowio_sync_cnt
+Date:		May, 2018
+Contact:	"Hyojun Kim" <hyojun@google.com>
+Description:
+		Contains the number of UFS sync I/O requests which took more
+		or equal to the defined slow I/O water mark time.
+		Can be reset by writing any value.
