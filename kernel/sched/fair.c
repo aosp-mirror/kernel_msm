@@ -6101,7 +6101,7 @@ schedtune_margin(unsigned long signal, long boost)
 	return margin;
 }
 
-static inline int
+inline int
 schedtune_cpu_margin(unsigned long util, int cpu)
 {
 	int boost = schedtune_cpu_boost(cpu);
@@ -6143,7 +6143,7 @@ boosted_cpu_util(int cpu, unsigned long other_util,
 
 #else /* CONFIG_SCHED_TUNE */
 
-static inline int
+inline int
 schedtune_cpu_margin(unsigned long util, int cpu)
 {
 	return 0;
@@ -7549,10 +7549,14 @@ cpu_util_next_walt(int cpu, struct task_struct *p, int dst_cpu)
 static long
 compute_energy(struct task_struct *p, int dst_cpu, struct perf_domain *pd)
 {
-	long util, max_util, sum_util, energy = 0;
+	unsigned int max_util, util, cpu_util, cpu_cap;
+	unsigned long sum_util, energy = 0;
 	int cpu;
 
 	for (; pd; pd = pd->next) {
+		struct cpumask *pd_mask = perf_domain_span(pd);
+
+		cpu_cap = arch_scale_cpu_capacity(NULL, cpumask_first(pd_mask));
 		max_util = sum_util = 0;
 		/*
 		 * The capacity state of CPUs of the current rd can be driven by
@@ -7569,11 +7573,12 @@ compute_energy(struct task_struct *p, int dst_cpu, struct perf_domain *pd)
 			util = cpu_util_next_walt(cpu, p, dst_cpu);
 #else
 			util = cpu_util_next(cpu, p, dst_cpu);
-			util += cpu_util_rt(cpu_rq(cpu));
-			util = schedutil_energy_util(cpu, util);
 #endif
-			max_util = max(util, max_util);
-			sum_util += util;
+			sum_util += schedutil_freq_util(cpu, util, cpu_cap,
+							ENERGY_UTIL);
+			cpu_util = schedutil_freq_util(cpu, util, cpu_cap,
+							FREQUENCY_UTIL);
+			max_util = max(max_util, cpu_util);
 		}
 
 		energy += em_pd_energy(pd->em_pd, max_util, sum_util);

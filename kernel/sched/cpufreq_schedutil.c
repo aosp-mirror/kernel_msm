@@ -309,6 +309,8 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	return cpufreq_driver_resolve_freq(policy, freq);
 }
 
+extern schedtune_cpu_margin(unsigned long util, int cpu);
+
 /*
  * This function computes an effective utilization for the given CPU, to be
  * used for frequency selection given the linear relation: f = u * f_max.
@@ -350,6 +352,10 @@ unsigned long schedutil_freq_util(int cpu, unsigned long util,
 	irq = cpu_util_irq(rq);
 	if (unlikely(irq >= max))
 		return max;
+
+	util += cpu_util_rt(rq);
+	if (type == FREQUENCY_UTIL)
+		util += schedtune_cpu_margin(util, cpu);
 
 	/*
 	 * The function is called with @util defined as the aggregation (the
@@ -421,8 +427,7 @@ static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {
 	struct rq *rq = cpu_rq(sg_cpu->cpu);
-	unsigned long util = boosted_cpu_util(sg_cpu->cpu, cpu_util_rt(rq),
-									NULL);
+	unsigned long util = cpu_util(sg_cpu->cpu);
 	unsigned long max = arch_scale_cpu_capacity(NULL, sg_cpu->cpu);
 
 	sg_cpu->max = max;
