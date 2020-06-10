@@ -93,8 +93,8 @@
 	qcom,qg-sleep-config;
 
 	/* pon soc parameters */
-	/* 20% / 30 degree / 2 weeks */
-	qcom,shutdown_soc_threshold = <20>;
+	/* 30% / 30 degree / 2 weeks */
+	qcom,shutdown_soc_threshold = <30>;
 	qcom,shutdown-temp-diff = <300>;
 	qcom,ignore-shutdown-soc-secs = <1209600>;
 
