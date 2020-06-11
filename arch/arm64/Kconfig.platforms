@@ -352,6 +352,11 @@ config BOARD_BRAMBLE
 	depends on ARCH_QCOM
 	select ARCH_LITO
 
+config BOARD_BARBET
+	bool "Google Barbet Family"
+	depends on ARCH_QCOM
+	select ARCH_LITO
+
 config BOARD_REDFIN
         bool "Google Redfin Family"
         depends on ARCH_QCOM
