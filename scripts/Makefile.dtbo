@@ -2,6 +2,7 @@
 __dtbo := $(sort $(dtbo-y))
 __dtbo += $(sort $(dtbo-bramble))
 __dtbo += $(sort $(dtbo-redfin))
+__dtbo += $(sort $(dtbo-barbet))
 
 dtbo-base	:= $(sort $(foreach m,$(__dtbo),$($(m)-base)))
 dtbo := $(foreach m,$(__dtbo),$(if $($(m)-base),$(m)))

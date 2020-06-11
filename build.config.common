@@ -23,6 +23,7 @@ FILES="
 arch/arm64/boot/dtbo.img
 arch/arm64/boot/dtbo_bramble.img
 arch/arm64/boot/dtbo_redfin.img
+arch/arm64/boot/dtbo_barbet.img
 arch/arm64/boot/Image.lz4-dtb
 arch/arm64/boot/Image.lz4
 arch/arm64/boot/dts/google/qcom-base/lito.dtb

@@ -18,7 +18,7 @@ include $(srctree)/arch/arm64/boot/dts/Makefile
 
 OBJCOPYFLAGS_Image :=-O binary -R .note -R .note.gnu.build-id -R .comment -S
 
-targets := Image Image.gz Image.lz4 dtbo.img bramble.dtbo.img redfin.dtbo.img
+targets := Image Image.gz Image.lz4 dtbo.img bramble.dtbo.img redfin.dtbo.img barbet.dtbo.img
 
 DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES))
 ifneq ($(DTB_NAMES),)
@@ -31,6 +31,7 @@ DTB_OBJS := $(shell find $(obj)/dts/ -name \*.dtb)
 DTBO_OBJS := $(shell find $(obj)/dts/ -name \*.dtbo)
 DTBO_OBJS_BRAMBLE = $(shell find $(obj)/dts/google -name \*bramble*.dtbo)
 DTBO_OBJS_REDFIN = $(shell find $(obj)/dts/google -name \*redfin*.dtbo)
+DTBO_OBJS_BARBET = $(shell find $(obj)/dts/google -name \*barbet*.dtbo)
 
 # Add RTIC DTB to the DTB list if RTIC MPGen is enabled
 # Note, we keep this for compatibility with
@@ -82,6 +83,9 @@ $(obj)/dtbo_bramble.img: $(DTBO_OBJS_BRAMBLE) FORCE
 	$(call if_changed,mkdtimg)
 
 $(obj)/dtbo_redfin.img: $(DTBO_OBJS_REDFIN) FORCE
+	$(call if_changed,mkdtimg)
+
+$(obj)/dtbo_barbet.img: $(DTBO_OBJS_BARBET) FORCE
 	$(call if_changed,mkdtimg)
 
 install:
