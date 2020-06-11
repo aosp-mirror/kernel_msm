@@ -58,6 +58,13 @@ lito-v2-redfin-proto1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-redfin-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-redfin-dvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
+
+dtbo-barbet += \
+	lito-v2-barbet-dev-overlay.dtbo
+
+
+lito-v2-barbet-dev-overlay.dtbo-base := qcom-base/lito.dtb
+
 endif
 
 always          := $(dtb-y)
