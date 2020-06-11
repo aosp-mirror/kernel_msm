@@ -67,7 +67,6 @@ static const struct reg_sequence const_rt5514_i2c_patch[] = {
 	{0x18001108, 0x00000000},
 	{0x1800110c, 0x00000000},
 	{0x18001110, 0x00000000},
-	{0x18001114, 0x00000001},
 	{0x18001118, 0x00000000},
 	{0x18002f08, 0x00000006},
 	{0x18002f00, 0x00055149},
@@ -911,6 +910,9 @@ watchdog:
 			}
 		}
 
+		/* dsp clk=mux_out (40M) */
+		regmap_write(rt5514->i2c_regmap, 0x18002f08,
+			0x0000000b);
 		/* DSP run */
 		regmap_write(rt5514->i2c_regmap, 0x18002f00,
 			0x00055148);
