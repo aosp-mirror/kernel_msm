@@ -2015,7 +2015,8 @@ static void geni_serial_write_term_regs(struct uart_port *uport, u32 loopback,
 	geni_read_reg_nolog(uport->membase, GENI_SER_M_CLK_CFG);
 }
 
-#if defined(CONFIG_SERIAL_CORE_CONSOLE) || defined(CONFIG_CONSOLE_POLL)
+#if (defined(CONFIG_SERIAL_CORE_CONSOLE) || defined(CONFIG_CONSOLE_POLL)) \
+	&& !defined(CONFIG_SERIAL_MSM_GENI_EARLY_CONSOLE)
 static int get_clk_cfg(unsigned long clk_freq, unsigned long *ser_clk)
 {
 	unsigned long root_freq[] = {7372800, 14745600, 19200000, 29491200,
@@ -2375,6 +2376,7 @@ static int msm_geni_console_setup(struct console *co, char *options)
 	return uart_set_options(uport, co, baud, parity, bits, flow);
 }
 
+#if !defined(CONFIG_SERIAL_MSM_GENI_EARLY_CONSOLE)
 static void
 msm_geni_serial_early_console_write(struct console *con, const char *s,
 			unsigned int n)
@@ -2483,6 +2485,7 @@ exit_geni_serial_earlyconsetup:
 }
 OF_EARLYCON_DECLARE(msm_geni_serial, "qcom,msm-geni-console",
 		msm_geni_serial_earlycon_setup);
+#endif /* CONFIG_SERIAL_MSM_GENI_EARLY_CONSOLE */
 
 static int console_register(struct uart_driver *drv)
 {
