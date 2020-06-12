@@ -92,10 +92,6 @@
 	google,fg-psy-name = "bms";
 };
 
-&soc_trip {
-	temperature = <0>;
-};
-
 &ibat_lvl1 {
 	temperature = <6000>;
 	hysteresis = <200>;
