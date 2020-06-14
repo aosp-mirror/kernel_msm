@@ -433,6 +433,9 @@ int gbms_read_charger_state(union gbms_charger_state *chg_state,
 			return ret;
 
 		ichg = GPSY_GET_PROP(chg_psy, POWER_SUPPLY_PROP_CURRENT_NOW);
+		if (ichg > 0)
+			chg_state->f.icl = ichg / 1000;
+
 		pr_info("MSC_CHG chg_state=%lx [0x%x:%d:%d:%d] ichg=%d\n",
 				(unsigned long)chg_state->v,
 				chg_state->f.flags,
