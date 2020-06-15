@@ -1,3 +1,4 @@
 KERNEL_DIR=private/msm-google
+BUILD_BOOT_IMG=true
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common.clang
 POST_DEFCONFIG_CMDS="check_defconfig"
