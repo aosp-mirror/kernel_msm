@@ -262,12 +262,27 @@
 				type = "passive";
 			};
 			skin_moderate_pre_lv1: skin-moderate-pre-lv1 {
+				temperature = <38000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_moderate_pre_lv2: skin-moderate-pre-lv2 {
 				temperature = <39000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_moderate_pre_lv3: skin-moderate-pre-lv3 {
+				temperature = <40000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
 			skin_moderate: skin-moderate {
 				temperature = <41000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_severe_pre_lv1: skin-severe-pre-lv1 {
+				temperature = <42000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
@@ -306,23 +321,36 @@
 				cooling-device =
 					<&google_charger 3 3>;
 			};
+			/* moderate pre level 2 throttling */
+			wired-charge-ibat-2000mA {
+				trip = <&skin_moderate_pre_lv2>;
+				cooling-device =
+					<&google_charger 4 4>;
+			};
 			wireless-charge-iusb-500mA {
-				trip = <&skin_moderate_pre_lv1>;
+				trip = <&skin_moderate_pre_lv2>;
 				cooling-device =
 					<&google_wlc_charger 1 1>;
 			};
-			/* moderate throttling */
+			/* moderate pre level 3 throttling */
 			wired-charge-ibat-1500mA {
-				trip = <&skin_moderate>;
+				trip = <&skin_moderate_pre_lv3>;
 				cooling-device =
 					<&google_charger 5 5>;
 			};
-			/* severe throttling */
+			/* moderate throttling */
+			wired-charge-ibat-1000mA {
+				trip = <&skin_moderate>;
+				cooling-device =
+					<&google_charger 6 6>;
+			};
+			/* severe pre level 1 throttling */
 			wired-charge-ibat-500mA {
-				trip = <&skin_severe>;
+				trip = <&skin_severe_pre_lv1>;
 				cooling-device =
 					<&google_charger 7 7>;
 			};
+			/* severe throttling */
 			wireless-charge-iusb-110mA {
 				trip = <&skin_severe>;
 				cooling-device =
