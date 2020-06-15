@@ -300,8 +300,6 @@ static void kgsl_destroy_ion(struct kgsl_dma_buf_meta *meta)
 			DMA_BIDIRECTIONAL);
 		dma_buf_detach(meta->dmabuf, meta->attach);
 		dma_buf_put(meta->dmabuf);
-		kfree(meta->attach->dev->dma_parms);
-		meta->attach->dev->dma_parms = NULL;
 		kfree(meta);
 	}
 }
@@ -2942,18 +2940,6 @@ static int kgsl_setup_dma_buf(struct kgsl_device *device,
 	entry->memdesc.flags &= ~((uint64_t) KGSL_MEMFLAGS_USE_CPU_MAP);
 	entry->memdesc.flags |= (uint64_t)KGSL_MEMFLAGS_USERMEM_ION;
 
-	/* Allocate memory for dma_parms so that max_seg_size can be set
-	 * properly
-	 */
-	if (!device->dev->dma_parms) {
-		device->dev->dma_parms =
-			kzalloc(sizeof(*device->dev->dma_parms), GFP_KERNEL);
-		if (!device->dev->dma_parms) {
-			ret = -ENOMEM;
-			goto out;
-		}
-	}
-	dma_set_max_seg_size(device->dev, KGSL_DMA_BIT_MASK);
 	sg_table = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 
 	if (IS_ERR_OR_NULL(sg_table)) {
@@ -2994,8 +2980,7 @@ out:
 	if (ret) {
 		if (!IS_ERR_OR_NULL(attach))
 			dma_buf_detach(dmabuf, attach);
-		kfree(device->dev->dma_parms);
-		device->dev->dma_parms = NULL;
+
 		kfree(meta);
 	}
 
