@@ -162,7 +162,7 @@
 	};
 
 	soc {
-		polling-delay-passive = <100>;
+		polling-delay-passive = <60000>;
 		polling-delay = <0>;
 		thermal-governor = "low_limits_cap";
 		thermal-sensors = <&bcl_soc>;
@@ -179,7 +179,7 @@
 			soc_cpu6 {
 				trip = <&soc_trip>;
 				cooling-device =
-					<&CPU6 1 2>;
+					<&CPU6 2 2>;
 			};
 			soc_cpu7 {
 				trip = <&soc_trip>;
