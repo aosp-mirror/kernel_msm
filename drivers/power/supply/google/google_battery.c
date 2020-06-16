@@ -69,11 +69,8 @@
 #define HCC_WRITE_AGAIN	0xF0F0
 #define HCC_DEFAULT_DELTA_CYCLE_CNT	25
 
-#undef MODULE_PARAM_PREFIX
-#define MODULE_PARAM_PREFIX     "androidboot."
+#define PREFIX_SERIALNO   "androidboot.serialno="
 #define DEV_SN_LENGTH         20
-static char dev_sn[DEV_SN_LENGTH];
-module_param_string(serialno, dev_sn, DEV_SN_LENGTH, 0000);
 
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
 #error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
@@ -3536,6 +3533,23 @@ static void batt_check_device_sn(struct batt_drv *batt_drv)
 
 	// new battery, store the device SN
 	if (dev_info[0] == 0xFF) {
+		char dev_sn[DEV_SN_LENGTH];
+		char *cmdline;
+		int len = 0;
+
+		// get the device SN
+		cmdline = kstrdup(saved_command_line, GFP_KERNEL);
+		cmdline = strnstr(cmdline, PREFIX_SERIALNO, strlen(cmdline));
+		len = strlen(PREFIX_SERIALNO);
+		ret = sscanf(&cmdline[len], "%s", dev_sn);
+		if (ret == 0) {
+			pr_err("get device SN fail\n");
+			kfree(cmdline);
+			return;
+		}
+		kfree(cmdline);
+
+		// store the device SN
 		ret = gbms_storage_write(GBMS_TAG_DINF, dev_sn, strlen(dev_sn));
 		if (ret < 0)
 			pr_err("write device SN fail, ret=%d\n", ret);
