@@ -1161,6 +1161,14 @@ static void fg_notify_charger(struct fg_chip *chip)
 	union power_supply_propval prop = {0, };
 	int rc;
 
+#if IS_ENABLED(CONFIG_GOOGLE_CHARGER)
+	/*
+	 * Don't set charger in fg, it should be set by
+	 * google_charger
+	 */
+	return;
+#endif
+
 	if (!chip->batt_psy)
 		return;
 
