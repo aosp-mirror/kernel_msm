@@ -10,7 +10,7 @@ private/msm-google-modules/touch/sec
 if [ -n "${BUILD_BOOT_IMG}" ]; then
 BUILD_INITRAMFS=1
 MKBOOTIMG_PATH=tools/mkbootimg/mkbootimg.py
-VENDOR_RAMDISK_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-bramble.img
+GKI_RAMDISK_PREBUILT_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-bramble.img
 KERNEL_BINARY=Image.lz4
 BOOT_IMAGE_HEADER_VERSION=3
 BASE_ADDRESS=0x00000000
