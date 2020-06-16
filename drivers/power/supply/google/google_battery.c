@@ -2082,7 +2082,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 		/* Debounce tier switch only when not already switching */
 		if (batt_drv->checked_tier_switch_cnt == 0)
 			batt_drv->checked_cv_cnt = profile->cv_debounce_cnt;
-	} else if (ibatt > 0) {
+	} else if (ibatt > profile->zero_ibat_offset) {
 		/* Track battery voltage if discharging is due to system load,
 		 * low ILIM or lack of headroom; stop charging work and reset
 		 * batt_drv state() when discharging is due to disconnect.
