@@ -248,7 +248,7 @@
 				google,dsi-hbm-range-brightness-threshold =
 					<658>;
 
-				google,dsi-hbm-range-bl-min-level = <0x0>;
+				google,dsi-hbm-range-bl-min-level = <0x194>;
 				google,dsi-hbm-range-bl-max-level = <0x194>;
 
 				google,dsi-hbm-range-entry-command = [
