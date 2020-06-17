@@ -716,6 +716,17 @@ static void mhi_pm_disable_transition(struct mhi_controller *mhi_cntrl,
 	mutex_unlock(&mhi_cntrl->pm_mutex);
 }
 
+int mhi_debugfs_trigger_soc_reset(void *data, u64 val)
+{
+	struct mhi_controller *mhi_cntrl = data;
+
+	MHI_LOG("Trigger MHI SOC Reset\n");
+
+	mhi_perform_soc_reset(mhi_cntrl);
+
+	return 0;
+}
+
 int mhi_debugfs_trigger_reset(void *data, u64 val)
 {
 	struct mhi_controller *mhi_cntrl = data;
@@ -1099,10 +1110,9 @@ void mhi_power_down(struct mhi_controller *mhi_cntrl, bool graceful)
 
 	if (!mhi_cntrl->pre_init) {
 		/* free all allocated resources */
-		if (mhi_cntrl->fbc_image) {
-			mhi_free_bhie_table(mhi_cntrl, mhi_cntrl->fbc_image);
-			mhi_cntrl->fbc_image = NULL;
-		}
+		if (mhi_cntrl->fbc_image)
+			mhi_free_bhie_table(mhi_cntrl, &mhi_cntrl->fbc_image);
+
 		mhi_deinit_dev_ctxt(mhi_cntrl);
 	}
 }
@@ -1241,6 +1251,7 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 	int ret;
 	enum MHI_PM_STATE new_state;
 	struct mhi_chan *itr, *tmp;
+	struct mhi_device *mhi_dev = mhi_cntrl->mhi_dev;
 
 	read_lock_bh(&mhi_cntrl->pm_lock);
 	if (mhi_cntrl->pm_state == MHI_PM_DISABLE) {
@@ -1255,7 +1266,8 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 	read_unlock_bh(&mhi_cntrl->pm_lock);
 
 	/* do a quick check to see if any pending votes to keep us busy */
-	if (atomic_read(&mhi_cntrl->pending_pkts)) {
+	if (atomic_read(&mhi_cntrl->pending_pkts) ||
+	    atomic_read(&mhi_dev->bus_vote)) {
 		MHI_VERB("Busy, aborting M3\n");
 		return -EBUSY;
 	}
@@ -1274,7 +1286,8 @@ int mhi_pm_fast_suspend(struct mhi_controller *mhi_cntrl, bool notify_client)
 	 * Check the votes once more to see if we should abort
 	 * suspend.
 	 */
-	if (atomic_read(&mhi_cntrl->pending_pkts)) {
+	if (atomic_read(&mhi_cntrl->pending_pkts) ||
+	    atomic_read(&mhi_dev->bus_vote)) {
 		MHI_VERB("Busy, aborting M3\n");
 		ret = -EBUSY;
 		goto error_suspend;
