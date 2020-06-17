@@ -5,19 +5,19 @@ CROSS_COMPILE_ARM32=arm-linux-androideabi-
 CROSS_COMPILE_COMPAT=$CROSS_COMPILE_ARM32
 NM=llvm-nm
 OBJCOPY=llvm-objcopy
+CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r383902/bin
+BUILDTOOLS_PREBUILT_BIN=build/build-tools/path/linux-x86
+
 EXTRA_CMDS=''
-CLANG_PREBUILT_BIN=prebuilts-master/clang/host/linux-x86/clang-r383902/bin/
 LD_LIBRARY_PATH=${ROOT_DIR}/prebuilts-master/clang/host/linux-x86/clang-r383902/lib64:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH
 LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin
 LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin
 LINUX_GCC_CROSS_COMPILE_COMPAT_PREBUILTS_BIN=$LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN
-LZ4_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/lz4
-DTC_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/dtc
 LIBUFDT_PREBUILTS_BIN=prebuilts-master/misc/linux-x86/libufdt
-DTC_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/dtc/dtc
+DTC_EXT=${ROOT_DIR}/prebuilts/kernel-build-tools/linux-x86/bin/dtc
 export DTC_EXT
-DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts-master/misc/linux-x86/libufdt/ufdt_apply_overlay
+DTC_OVERLAY_TEST_EXT=${ROOT_DIR}/prebuilts/kernel-build-tools/linux-x86/bin/ufdt_apply_overlay
 export DTC_OVERLAY_TEST_EXT
 FILES="
 arch/arm64/boot/dtbo.img
