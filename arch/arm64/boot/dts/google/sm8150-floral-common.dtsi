@@ -126,12 +126,6 @@
 		memory-region = <&alt_ramoops_mem>;
 	};
 
-	access_kregistry@2 {
-		compatible = "access_ramoops";
-		label = "kregistry";
-		memory-region = <&kregistry_mem>;
-	};
-
 	keydebug {
 		compatible = "keydebug";
 		key_down_delay = <7000>;

@@ -6428,18 +6428,21 @@ int dsi_display_validate_mode_change(struct dsi_display *display,
 		if (cur_mode->timing.refresh_rate !=
 		    adj_mode->timing.refresh_rate) {
 			dsi_panel_get_dfps_caps(display->panel, &dfps_caps);
-			if (!dfps_caps.dfps_support) {
-				pr_debug("switching to %d FPS with mode switch\n",
+			if (dfps_caps.dfps_support) {
+				pr_debug("Mode switch is seamless variable refresh\n");
+				adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_VRR;
+				SDE_EVT32(cur_mode->timing.refresh_rate,
+					adj_mode->timing.refresh_rate,
+					cur_mode->timing.h_front_porch,
+					adj_mode->timing.h_front_porch);
+			} else {
+				pr_debug(
+					"switching to %u FPS with mode switch\n",
 					adj_mode->timing.refresh_rate);
-				adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_DMS_FPS;
+				adj_mode->dsi_mode_flags |=
+					DSI_MODE_FLAG_DMS_FPS;
 				goto error;
 			}
-			pr_debug("Mode switch is seamless variable refresh\n");
-			adj_mode->dsi_mode_flags |= DSI_MODE_FLAG_VRR;
-			SDE_EVT32(cur_mode->timing.refresh_rate,
-				  adj_mode->timing.refresh_rate,
-				  cur_mode->timing.h_front_porch,
-				  adj_mode->timing.h_front_porch);
 		}
 
 		/* dynamic clk change use case */
