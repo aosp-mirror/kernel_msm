@@ -21,7 +21,6 @@ function update_abi_config() {
     -d REGMAP_ALLOW_WRITE_DEBUGFS \
     -d QCOM_RTB \
     -d SCHED_STACK_END_CHECK \
-    -d NL80211_TESTMODE \
 
 
   (cd ${OUT_DIR} && \
