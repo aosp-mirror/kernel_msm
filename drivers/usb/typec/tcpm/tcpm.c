@@ -2619,6 +2619,11 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 	case PD_EXT_SECURITY_REQUEST:
 	case PD_EXT_FW_UPDATE_RESPONSE:
 	case PD_EXT_FW_UPDATE_REQUEST:
+		/*
+		 * It must have been in CHUNK_RX state, thus it is safe to send
+		 * NOT_SUPPORTED directly here.
+		 */
+		tcpm_queue_message(port, PD_MSG_CTRL_NOT_SUPP);
 		tcpm_set_state(port, CHUNK_RX_FINISH, 0);
 		break;
 	case PD_EXT_SOURCE_CAP_EXT:
