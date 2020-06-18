@@ -29,7 +29,8 @@
 
 enum {
 	USB_NO_LIMIT = 0,
-	USB_OVERHEAT_THROTTLE = 1,
+	USB_OVERHEAT_POLLING = 1,
+	USB_OVERHEAT_THROTTLE = 2,
 	USB_MAX_THROTTLE_STATE = USB_OVERHEAT_THROTTLE,
 };
 
@@ -56,12 +57,14 @@ struct overheat_info {
 	struct wakeup_source	   *overheat_ws;
 	struct overheat_event_stats stats;
 	struct thermal_cooling_device *cooling_dev;
+	struct thermal_zone_device *usbc_virt_tzd;
 
 	bool usb_connected;
 	bool accessory_connected;
 	bool usb_replug;
 	bool overheat_mitigation;
 	bool overheat_work_running;
+	bool usbc_virt_enabled;
 
 	int temp;
 	int plug_temp;
@@ -117,6 +120,7 @@ static inline int get_dts_vars(struct overheat_info *ovh_info)
 {
 	struct device *dev = ovh_info->dev;
 	struct device_node *node = dev->of_node;
+	const char *usbc_virtual_sensor_name;
 	int ret;
 
 	ret = of_property_read_u32(node, "google,begin-mitigation-temp",
@@ -150,6 +154,22 @@ static inline int get_dts_vars(struct overheat_info *ovh_info)
 		dev_err(ovh_info->dev,
 			"cannot read polling-freq, ret=%d\n", ret);
 		return ret;
+	}
+
+	ret = of_property_read_string(node, "google,usbc-virt-sensor",
+				&usbc_virtual_sensor_name);
+	if (!ret) {
+		ovh_info->usbc_virt_tzd =
+			thermal_zone_get_zone_by_name(
+					usbc_virtual_sensor_name);
+		if (IS_ERR(ovh_info->usbc_virt_tzd)) {
+			dev_err(ovh_info->dev, "cannot find usbc-virt"
+							" thermal zone");
+			ovh_info->usbc_virt_tzd = NULL;
+		} else {
+			dev_info(ovh_info->dev, "found usbc-virt sensor"
+							" and thermal zone");
+		}
 	}
 
 	return 0;
@@ -245,7 +265,8 @@ static int update_usb_status(struct overheat_info *ovh_info)
 
 	/* Port is too hot to safely check the connected status. */
 	if (ovh_info->overheat_mitigation &&
-	    ovh_info->temp > ovh_info->clear_temp)
+	    ovh_info->temp > ovh_info->clear_temp &&
+	    ovh_info->throttle_state == USB_MAX_THROTTLE_STATE)
 		return -EBUSY;
 
 	if (ovh_info->overheat_mitigation) {
@@ -351,6 +372,26 @@ static int psy_changed(struct notifier_block *nb, unsigned long action,
 	return NOTIFY_OK;
 }
 
+static bool usb_throttling_should_clear(struct overheat_info *ovh_info) {
+
+	if (ovh_info->overheat_mitigation && (!mitigation_enabled ||
+	   (ovh_info->throttle_state < USB_MAX_THROTTLE_STATE &&
+	    ovh_info->usb_replug)))
+		return true;
+	else
+		return false;
+}
+
+static bool usb_throttling_should_trigger(struct overheat_info *ovh_info) {
+
+	if (!ovh_info->overheat_mitigation && mitigation_enabled &&
+	    ovh_info->temp > ovh_info->begin_temp &&
+	    ovh_info->throttle_state == USB_MAX_THROTTLE_STATE)
+		return true;
+	else
+		return false;
+}
+
 static void port_overheat_work(struct work_struct *work)
 {
 	struct overheat_info *ovh_info =
@@ -370,21 +411,58 @@ static void port_overheat_work(struct work_struct *work)
 	if (ret < 0)
 		goto rerun;
 
-	if (ovh_info->overheat_mitigation && (!mitigation_enabled ||
-	    (ovh_info->temp < ovh_info->clear_temp && ovh_info->usb_replug))) {
-		dev_err(ovh_info->dev, "Port overheat mitigated\n");
+	if (usb_throttling_should_clear(ovh_info)) {
+		dev_info(ovh_info->dev, "Port overheat mitigated\n");
 		resume_usb(ovh_info);
-	} else if (!ovh_info->overheat_mitigation &&
-		 mitigation_enabled && ovh_info->temp > ovh_info->begin_temp) {
-		dev_err(ovh_info->dev, "Port overheat triggered\n");
+	} else if (usb_throttling_should_trigger(ovh_info)) {
+		dev_info(ovh_info->dev, "Port overheat triggered\n");
 		suspend_usb(ovh_info);
 		goto rerun;
 	}
 
-	if (ovh_info->overheat_mitigation || ovh_info->throttle_state)
+	// Check if need to enable usbc virtual sensor or not
+	if (ovh_info->usbc_virt_tzd) {
+		if (ovh_info->usbc_virt_enabled &&
+				ovh_info->temp < ovh_info->clear_temp) {
+			ret = ovh_info->usbc_virt_tzd->ops->set_mode(
+						ovh_info->usbc_virt_tzd,
+						THERMAL_DEVICE_DISABLED);
+			if (!ret) {
+				dev_info(ovh_info->dev,
+					"usbc virtual sensor disabled\n");
+				ovh_info->usbc_virt_enabled = false;
+			}
+		} else if (ovh_info->throttle_state &&
+				!ovh_info->overheat_mitigation &&
+				!ovh_info->usbc_virt_enabled &&
+				ovh_info->usb_connected) {
+			ret = ovh_info->usbc_virt_tzd->ops->set_mode(
+					ovh_info->usbc_virt_tzd,
+					THERMAL_DEVICE_ENABLED);
+			if (!ret) {
+				dev_info(ovh_info->dev,
+					"usbc virtual sensor enabled\n");
+				ovh_info->usbc_virt_enabled = true;
+			}
+		}
+	}
+
+	if (ovh_info->overheat_mitigation || (ovh_info->throttle_state))
 		goto rerun;
-	// Do not run again, USB port isn't overheated
+
+	// Disable usbc virtual sensor because USB port isn't overheated
+	if (ovh_info->usbc_virt_tzd && ovh_info->usbc_virt_enabled) {
+		ret = ovh_info->usbc_virt_tzd->ops->set_mode(
+					ovh_info->usbc_virt_tzd,
+					THERMAL_DEVICE_DISABLED);
+		if (!ret) {
+			dev_info(ovh_info->dev,
+				"usbc virtual sensor disabled\n");
+			ovh_info->usbc_virt_enabled = false;
+		}
+	}
 	ovh_info->overheat_work_running = false;
+	// Do not run again, so release wakeup source
 	__pm_relax(ovh_info->overheat_ws);
 	return;
 
