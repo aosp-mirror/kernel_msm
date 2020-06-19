@@ -63,6 +63,11 @@
 #define WLC_ALIGN_DEFAULT_SCALAR	4
 #define WLC_ALIGN_IRQ_THRESHOLD		10
 #define WLC_ALIGN_DEFAULT_HYSTERESIS	5000
+#define WLC_ALIGN_CURRENT_THRESHOLD	450
+#define WLC_ALIGN_DEFAULT_SCALAR_LOW_CURRENT	    200
+#define WLC_ALIGN_DEFAULT_SCALAR_HIGH_CURRENT	    118
+#define WLC_ALIGN_DEFAULT_OFFSET_LOW_CURRENT	    125000
+#define WLC_ALIGN_DEFAULT_OFFSET_HIGH_CURRENT	    139000
 
 #define RTX_BEN_DISABLED	0
 #define RTX_BEN_ON		1
@@ -976,11 +981,111 @@ static void p9221_init_align(struct p9221_charger_data *charger)
 			      msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 }
 
-static void p9221_align_work(struct work_struct *work)
+static void p9382_align_check(struct p9221_charger_data *charger)
+{
+	int res, wlc_freq_threshold;
+	u32 wlc_freq, current_scaling = 0;
+
+	if (charger->current_filtered <= WLC_ALIGN_CURRENT_THRESHOLD) {
+		current_scaling =
+			charger->pdata->alignment_scalar_low_current *
+			charger->current_filtered / 10;
+		wlc_freq_threshold =
+			charger->pdata->alignment_offset_low_current +
+			current_scaling;
+	} else {
+		current_scaling =
+			charger->pdata->alignment_scalar_high_current *
+			charger->current_filtered / 10;
+		wlc_freq_threshold =
+			charger->pdata->alignment_offset_high_current -
+			current_scaling;
+	}
+
+	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
+	if (res != 0) {
+		logbuffer_log(charger->log, "align: failed to read op_freq");
+		return;
+	}
+
+	if (wlc_freq < wlc_freq_threshold)
+		charger->alignment = 0;
+	else
+		charger->alignment = 100;
+
+	if (charger->alignment != charger->alignment_last) {
+		schedule_work(&charger->uevent_work);
+		logbuffer_log(charger->log,
+			      "align: alignment=%i. op_freq=%u. current_avg=%u",
+			      charger->alignment, wlc_freq,
+			      charger->current_filtered);
+		charger->alignment_last = charger->alignment;
+	}
+}
+
+static void p9221_align_check(struct p9221_charger_data *charger,
+			      u32 current_scaling)
 {
 	int res, align_buckets, i, wlc_freq_threshold, wlc_adj_freq;
+	u32 wlc_freq;
+
+	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
+
+	if (res != 0) {
+		logbuffer_log(charger->log, "align: failed to read op_freq");
+		return;
+	}
+
+	align_buckets = charger->pdata->nb_alignment_freq - 1;
+
+	charger->alignment = -1;
+	wlc_adj_freq = wlc_freq + current_scaling;
+
+	if (wlc_adj_freq < charger->pdata->alignment_freq[0]) {
+		logbuffer_log(charger->log, "align: freq below range");
+		return;
+	}
+
+	for (i = 0; i < align_buckets; i += 1) {
+		if ((wlc_adj_freq > charger->pdata->alignment_freq[i]) &&
+		    (wlc_adj_freq <= charger->pdata->alignment_freq[i + 1])) {
+			charger->alignment = (WLC_ALIGNMENT_MAX * i) /
+					     (align_buckets - 1);
+			break;
+		}
+	}
+
+	if (i >= align_buckets) {
+		logbuffer_log(charger->log, "align: freq above range");
+		return;
+	}
+
+	if (charger->alignment == charger->alignment_last)
+		return;
+
+	/*
+	 *  Frequency needs to be higher than frequency + hysteresis before
+	 *  increasing alignment score.
+	 */
+	wlc_freq_threshold = charger->pdata->alignment_freq[i] +
+			     charger->pdata->alignment_hysteresis;
+
+	if ((charger->alignment < charger->alignment_last) ||
+	    (wlc_adj_freq >= wlc_freq_threshold)) {
+		schedule_work(&charger->uevent_work);
+		logbuffer_log(charger->log,
+			      "align: alignment=%i. op_freq=%u. current_avg=%u",
+			      charger->alignment, wlc_freq,
+			      charger->current_filtered);
+		charger->alignment_last = charger->alignment;
+	}
+}
+
+static void p9221_align_work(struct work_struct *work)
+{
+	int res;
 	u16 current_now, current_filter_sample, tx_mfg_code_reg;
-	u32 wlc_freq, current_scaling = 0;
+	u32 current_scaling = 0;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, align_work.work);
 
@@ -1060,56 +1165,11 @@ static void p9221_align_work(struct work_struct *work)
 			  charger->current_filtered;
 
 no_scaling:
-	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
 
-	if (res != 0) {
-		logbuffer_log(charger->log, "align: failed to read op_freq");
-		return;
-	}
-
-	align_buckets = charger->pdata->nb_alignment_freq - 1;
-
-	charger->alignment = -1;
-	wlc_adj_freq = wlc_freq + current_scaling;
-
-	if (wlc_adj_freq < charger->pdata->alignment_freq[0]) {
-		logbuffer_log(charger->log, "align: freq below range");
-		return;
-	}
-
-	for (i = 0; i < align_buckets; i += 1) {
-		if ((wlc_adj_freq > charger->pdata->alignment_freq[i]) &&
-		    (wlc_adj_freq <= charger->pdata->alignment_freq[i + 1])) {
-			charger->alignment = (WLC_ALIGNMENT_MAX * i) /
-					     (align_buckets - 1);
-			break;
-		}
-	}
-
-	if (i >= align_buckets) {
-		logbuffer_log(charger->log, "align: freq above range");
-		return;
-	}
-
-	if (charger->alignment == charger->alignment_last)
-		return;
-
-	/*
-	 *  Frequency needs to be higher than frequency + hysteresis before
-	 *  increasing alignment score.
-	 */
-	wlc_freq_threshold = charger->pdata->alignment_freq[i] +
-			     charger->pdata->alignment_hysteresis;
-
-	if ((charger->alignment < charger->alignment_last) ||
-	    (wlc_adj_freq >= wlc_freq_threshold)) {
-		schedule_work(&charger->uevent_work);
-		logbuffer_log(charger->log,
-			      "align: alignment=%i. op_freq=%u. current_avg=%u",
-			     charger->alignment, wlc_freq,
-			     charger->current_filtered);
-		charger->alignment_last = charger->alignment;
-	}
+	if (charger->chip_id == P9221_CHIP_ID)
+		p9221_align_check(charger, current_scaling);
+	else
+		p9382_align_check(charger);
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -3942,6 +4002,50 @@ static int p9221_parse_dt(struct device *dev,
 	ret = of_property_read_bool(node, "idt,ramp-disable");
 	if (ret)
 		pdata->icl_ramp_delay_ms = -1 ;
+
+	ret = of_property_read_u32(node, "google,alignment_scalar_low_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_scalar_low_current =
+			WLC_ALIGN_DEFAULT_SCALAR_LOW_CURRENT;
+	else
+		pdata->alignment_scalar_low_current = data;
+
+	dev_info(dev, "google,alignment_scalar_low_current set to: %d\n",
+		 pdata->alignment_scalar_low_current);
+
+	ret = of_property_read_u32(node, "google,alignment_scalar_high_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_scalar_high_current =
+			  WLC_ALIGN_DEFAULT_SCALAR_HIGH_CURRENT;
+	else
+		pdata->alignment_scalar_high_current = data;
+
+	dev_info(dev, "google,alignment_scalar_high_current set to: %d\n",
+		 pdata->alignment_scalar_high_current);
+
+	ret = of_property_read_u32(node, "google,alignment_offset_low_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_offset_low_current =
+			WLC_ALIGN_DEFAULT_OFFSET_LOW_CURRENT;
+	else
+		pdata->alignment_offset_low_current = data;
+
+	dev_info(dev, "google,alignment_offset_low_current set to: %d\n",
+		 pdata->alignment_offset_low_current);
+
+	ret = of_property_read_u32(node, "google,alignment_offset_high_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_offset_high_current =
+			WLC_ALIGN_DEFAULT_OFFSET_HIGH_CURRENT;
+	else
+		pdata->alignment_offset_high_current = data;
+
+	dev_info(dev, "google,alignment_offset_high_current set to: %d\n",
+		 pdata->alignment_offset_high_current);
 
 	return 0;
 }
