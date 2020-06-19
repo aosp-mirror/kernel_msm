@@ -1596,7 +1596,7 @@ static ssize_t fts_gesture_mask_show(struct device *dev,
 	if (mask[0] == 0) {
 		res = ERROR_OP_NOT_ALLOW;
 		logError(1, "%s %s:Call before echo enable/disable xx xx >",
-			tag), __func__;
+			tag, __func__);
 		logError(1, "%s %s: gesture_mask with a correct number of ",
 			tag, __func__);
 		logError(1, "parameters! ERROR %08X\n", res);
@@ -4710,7 +4710,8 @@ static int fts_probe_internal(struct i2c_client *client,
 	INIT_DELAYED_WORK(&info->fwu_work, fts_fw_update_auto);
 
 	logError(0, "%s SET Event Handler:\n", tag);
-	info->wakeup_source = wakeup_source_register(NULL, "fts_tp");
+	info->wakeup_source = wakeup_source_register(&client->dev,
+						     dev_name(&client->dev));
 	if (!info->wakeup_source) {
 		logError(1, "%s ERROR: Failed to register wakeup source\n",
 				tag);

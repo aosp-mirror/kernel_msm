@@ -76,6 +76,8 @@ struct wakeup_source {
 	bool			autosleep_enabled:1;
 };
 
+#define WAKEUP_SOURCE_DEV
+
 #ifdef CONFIG_PM_SLEEP
 
 /*

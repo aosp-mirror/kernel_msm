@@ -540,7 +540,7 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 
 	/* Read event[R0], status[R1] and mask[R2] register */
 	for (i = 0; i < SLG51000_MAX_EVT_REGISTER; i++) {
-		ret = slg51000_regmap_bulk_read(regmap, es_reg[i].ereg,
+		ret = regmap_bulk_read(regmap, es_reg[i].ereg,
 						evt[i], REG_MAX);
 		if (ret < 0) {
 			dev_err(chip->dev,
@@ -549,14 +549,14 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 		}
 	}
 
-	ret = slg51000_regmap_read(regmap, SLG51000_OTP_EVENT, &evt_otp);
+	ret = regmap_read(regmap, SLG51000_OTP_EVENT, &evt_otp);
 	if (ret < 0) {
 		dev_err(chip->dev,
 			"Failed to read otp event registers(%d)\n", ret);
 		return IRQ_NONE;
 	}
 
-	ret = slg51000_regmap_read(regmap, SLG51000_OTP_IRQ_MASK, &mask_otp);
+	ret = regmap_read(regmap, SLG51000_OTP_IRQ_MASK, &mask_otp);
 	if (ret < 0) {
 		dev_err(chip->dev,
 			"Failed to read otp mask register(%d)\n", ret);
@@ -573,11 +573,9 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 	for (i = 0; i < SLG51000_MAX_REGULATORS; i++) {
 		if (!(evt[i][R2] & SLG51000_IRQ_ILIM_FLAG_MASK) &&
 		    (evt[i][R0] & SLG51000_EVT_ILIM_FLAG_MASK)) {
-			mutex_lock(&chip->rdev[i]->mutex);
 			regulator_notifier_call_chain(chip->rdev[i],
 						REGULATOR_EVENT_OVER_CURRENT,
 						NULL);
-			mutex_unlock(&chip->rdev[i]->mutex);
 
 			if (evt[i][R1] & SLG51000_STA_ILIM_FLAG_MASK)
 				dev_warn(chip->dev,
@@ -591,11 +589,9 @@ static irqreturn_t slg51000_irq_handler(int irq, void *data)
 		for (i = 0; i < SLG51000_MAX_REGULATORS; i++) {
 			if (!(evt[i][R1] & SLG51000_STA_ILIM_FLAG_MASK) &&
 			    (evt[i][R1] & SLG51000_STA_VOUT_OK_FLAG_MASK)) {
-				mutex_lock(&chip->rdev[i]->mutex);
 				regulator_notifier_call_chain(chip->rdev[i],
 						REGULATOR_EVENT_OVER_TEMP,
 						NULL);
-				mutex_unlock(&chip->rdev[i]->mutex);
 			}
 		}
 		handled = IRQ_HANDLED;

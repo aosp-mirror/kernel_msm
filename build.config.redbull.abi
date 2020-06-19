@@ -53,8 +53,6 @@ function update_abi_config() {
     -d RD_LZMA \
     -d SYSFS_SYSCALL \
     -d CMA_DEBUGFS \
-    -e UNMAP_KERNEL_AT_EL0 \
-    -e HARDEN_BRANCH_PREDICTOR \
     -d EFI \
     -d L2TP_DEBUGFS \
     -d REGMAP_ALLOW_WRITE_DEBUGFS \

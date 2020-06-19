@@ -15,3 +15,5 @@
 #include "lito-bramble-touch-proto.dtsi"
 #include "lito-bramble-camera-sensor-v3.dtsi"
 #include "lito-bramble_m-pac193x.dtsi"
+#include "lito-bramble_m-thermal.dtsi"
+#include "lito-bramble_m-audio.dtsi"

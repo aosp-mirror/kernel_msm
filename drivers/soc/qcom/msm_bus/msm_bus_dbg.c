@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2012, 2014-2019, The Linux Foundation. All rights
+ * Copyright (c) 2010-2012, 2014-2020, The Linux Foundation. All rights
  */
 
 #define pr_fmt(fmt) "AXI: %s(): " fmt, __func__

@@ -162,7 +162,8 @@ __cvdso_gettimeofday(struct __kernel_old_timeval *tv, struct timezone *tz)
 static __maybe_unused time_t __cvdso_time(time_t *time)
 {
 	const struct vdso_data *vd = __arch_get_vdso_data();
-	time_t t = READ_ONCE(vd[CS_HRES_COARSE].basetime[CLOCK_REALTIME].sec);
+	time_t t = READ_ONCE(
+		vd[CS_HRES_COARSE].basetime[CLOCK_REALTIME_COARSE].sec);
 
 	if (time)
 		*time = t;
@@ -232,8 +233,11 @@ __cvdso_clock_getres_time32(clockid_t clock, struct old_timespec32 *res)
 	if (unlikely(ret))
 		return clock_getres32_fallback(clock, res);
 #else
-	if (unlikely(ret))
+	if (unlikely(ret)) {
 		ret = clock_getres_fallback(clock, &ts);
+		if (unlikely(ret))
+			return ret;
+	}
 #endif
 
 	if (likely(res)) {

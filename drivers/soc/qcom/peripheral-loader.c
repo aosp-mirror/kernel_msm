@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1553,11 +1553,13 @@ int pil_desc_init(struct pil_desc *desc)
 	}
 
 	snprintf(priv->wname, sizeof(priv->wname), "pil-%s", desc->name);
-	priv->ws = wakeup_source_register(NULL, priv->wname);
+
+	priv->ws = wakeup_source_register(desc->dev, priv->wname);
 	if (!priv->ws) {
-		pr_err("%s: failed to register wakeup source\n", __func__);
-		goto err_parse_dt;
+		ret = -ENOMEM;
+		goto err;
 	}
+
 	INIT_DELAYED_WORK(&priv->proxy, pil_proxy_unvote_work);
 	INIT_LIST_HEAD(&priv->segs);
 

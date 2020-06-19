@@ -37,6 +37,7 @@
 #include <linux/bpf.h>
 #include <linux/blk-crypto.h>
 #include <linux/psi.h>
+#include <linux/blk-crypto.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>

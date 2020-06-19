@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018, 2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/jiffies.h>
@@ -130,11 +130,14 @@ int ipa_rm_inactivity_timer_init(enum ipa_rm_resource_name resource_name,
 	ipa_rm_it_handles[resource_name].work_in_progress = false;
 	name = ipa_rm_it_handles[resource_name].w_lock_name;
 	snprintf(name, MAX_WS_NAME, "IPA_RM%d\n", resource_name);
-	ipa_rm_it_handles[resource_name].w_lock = wakeup_source_register(NULL, name);
+	ipa_rm_it_handles[resource_name].w_lock =
+		wakeup_source_register(NULL, name);
 	if (!ipa_rm_it_handles[resource_name].w_lock) {
-		IPA_RM_ERR("failed to register wakeup source\n");
-		return -ENODEV;
+		IPA_RM_ERR("IPA wakeup source register failed %s\n",
+			   name);
+		return -ENOMEM;
 	}
+
 	INIT_DELAYED_WORK(&ipa_rm_it_handles[resource_name].work,
 			  ipa_rm_inactivity_timer_func);
 	ipa_rm_it_handles[resource_name].initied = true;

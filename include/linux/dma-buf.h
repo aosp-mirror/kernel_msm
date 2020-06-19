@@ -465,6 +465,7 @@ struct dma_buf {
 #endif
 	dma_buf_destructor dtor;
 	void *dtor_data;
+	atomic_t dent_count;
 };
 
 /**

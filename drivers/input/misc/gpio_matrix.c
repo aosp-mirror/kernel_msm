@@ -395,12 +395,14 @@ int gpio_event_matrix_func(struct gpio_event_input_devs *input_devs,
 
 		hrtimer_init(&kp->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		kp->timer.function = gpio_keypad_timer_func;
-		kp->wake_src = wakeup_source_register(NULL, "gpio_kp");
+
+		kp->wake_src =
+			wakeup_source_register(&input_devs->dev[0]->dev, "gpio_kp");
 		if (!kp->wake_src) {
-			pr_err("gpiomatrix: failed to register wakeup source\n");
-			err = -ENODEV;
+			err = -ENOMEM;
 			goto err_wakeup_source_register_failed;
 		}
+
 		err = gpio_keypad_request_irqs(kp);
 		kp->use_irq = err == 0;
 
@@ -426,7 +428,7 @@ int gpio_event_matrix_func(struct gpio_event_input_devs *input_devs,
 	hrtimer_cancel(&kp->timer);
 	wakeup_source_unregister(kp->wake_src);
 err_wakeup_source_register_failed:
-	for (i = mi->noutputs - 1; i >= 0; i--) {
+	for (i = mi->ninputs - 1; i >= 0; i--) {
 err_gpio_direction_input_failed:
 		gpio_free(mi->input_gpios[i]);
 err_request_input_gpio_failed:

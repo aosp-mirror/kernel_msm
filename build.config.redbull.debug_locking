@@ -4,6 +4,7 @@ POST_DEFCONFIG_CMDS="check_defconfig && update_debug_config"
 
 function update_debug_config() {
     ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+         -e CONFIG_PREEMPTIRQ_EVENTS \
          -e CONFIG_DEBUG_RT_MUTEXES \
          -e CONFIG_DEBUG_SPINLOCK \
          -e CONFIG_DEBUG_SPINLOCK_PANIC_ON_BUG \

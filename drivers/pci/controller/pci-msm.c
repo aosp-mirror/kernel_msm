@@ -5129,12 +5129,12 @@ static int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
 
-	dev->ws = wakeup_source_register(dev->rc_idx ?
-			"RC1 pcie_wakeup_source" : "RC0 pcie_wakeup_source");
+	dev->ws = wakeup_source_register(pdev, dev_name(pdev));
 	if (!dev->ws) {
-		PCIE_ERR(dev, "PCIe: RC%d: Unable to register wakeup source\n",
-				dev->rc_idx);
-		return -ENODEV;
+		PCIE_ERR(dev,
+			 "PCIe: RC%d: failed to register wakeup source\n",
+			 dev->rc_idx);
+		return -ENOMEM;
 	}
 
 	if (dev->irq[MSM_PCIE_INT_GLOBAL_INT].num) {

@@ -14,9 +14,9 @@ struct target_nrg {
 
 int schedtune_cpu_boost(int cpu);
 int schedtune_task_boost(struct task_struct *tsk);
-int schedtune_task_boost_rcu_locked(struct task_struct *tsk);
 
 int schedtune_prefer_idle(struct task_struct *tsk);
+bool schedtune_prefer_high_cap(struct task_struct *tsk);
 
 void schedtune_enqueue_task(struct task_struct *p, int cpu);
 void schedtune_dequeue_task(struct task_struct *p, int cpu);
@@ -27,10 +27,10 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu);
 #define schedtune_task_boost(tsk) 0
 
 #define schedtune_prefer_idle(tsk) 0
+#define schedtune_prefer_high_cap(tsk) 0
 
 #define schedtune_enqueue_task(task, cpu) do { } while (0)
 #define schedtune_dequeue_task(task, cpu) do { } while (0)
 
-#define boosted_cpu_util(cpu, other_util, walt_load) cpu_util_cfs(cpu_rq(cpu))
-
+#define stune_util(cpu, other_util, walt_load) cpu_util_cfs(cpu_rq(cpu))
 #endif /* CONFIG_SCHED_TUNE */
