@@ -2780,6 +2780,7 @@ static int tcpm_tx_chunk_handler(struct tcpm_port *port, struct pd_message *msg,
 static void tcpm_rx_chunk_handler(struct tcpm_port *port)
 {
 	const struct pd_message *msg = &port->chunk_event->msg;
+	unsigned int cnt = pd_header_cnt_le(msg->header);
 	bool is_ext_msg = msg->header & PD_HEADER_EXT_HDR;
 	enum pd_ext_msg_type ext_msg_type = 0;
 	unsigned int data_size = 0;
@@ -2802,7 +2803,20 @@ static void tcpm_rx_chunk_handler(struct tcpm_port *port)
 	switch (port->chunk_rx_state) {
 	case RCH_WAIT_FOR_MESSAGE:
 		if (!is_ext_msg || (!port->chunking && !chunked)) {
-			tcpm_set_chunk_state(port, RCH_PASS_UP_MESSAGE, 0);
+			if (is_ext_msg)
+				tcpm_pd_ext_msg_request(port, msg);
+			else if (cnt)
+				tcpm_pd_data_request(port, msg);
+			else
+				tcpm_pd_ctrl_request(port, msg);
+
+			memset(&port->chunk_event->msg, 0,
+			       sizeof(port->chunk_event->msg));
+
+			kfree(port->ext_rx_buf);
+			port->ext_rx_buf = NULL;
+			port->ext_rx_buf_size = 0;
+			port->chunk_abort = false;
 		} else if (is_ext_msg && port->chunking && chunked) {
 			switch (ext_msg_type) {
 			case PD_EXT_SECURITY_RESPONSE:
