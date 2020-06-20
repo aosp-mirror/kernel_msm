@@ -16,7 +16,7 @@
 	pac193x@10 {
 		compatible = "microchip,pac1934";
 		reg = <0x10>;
-		samp-rate = <64>;
+		samp-rate = <8>;
 		status = "okay";
 		ch1: channel@0 {
 		     uohms-shunt-res = <10000>;
@@ -47,7 +47,7 @@
 	pac193x@18 {
 		compatible = "microchip,pac1934";
 		reg = <0x18>;
-		samp-rate = <64>;
+		samp-rate = <8>;
 		status = "okay";
 		ch5: channel@0 {
 		     uohms-shunt-res = <10000>;
@@ -72,7 +72,7 @@
 	pac193x@1f {
 		compatible = "microchip,pac1934";
 		reg = <0x1f>;
-		samp-rate = <64>;
+		samp-rate = <8>;
 		status = "okay";
 		ch9: channel@0 {
 		     uohms-shunt-res = <10000>;

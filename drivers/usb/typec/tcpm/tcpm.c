@@ -256,6 +256,8 @@ enum pd_msg_request {
 #define SVID_DISCOVERY_MAX	16
 #define ALTMODE_DISCOVERY_MAX	(SVID_DISCOVERY_MAX * MODE_DISCOVERY_MAX)
 
+#define DISC_ID_RETRY_MS	3000
+
 struct pd_mode_data {
 	int svid_index;		/* current SVID index		*/
 	int nsvids;
@@ -342,6 +344,7 @@ struct tcpm_port {
 	struct delayed_work vdm_state_machine;
 	bool state_machine_running;
 	bool vdm_sm_running;
+	struct delayed_work disc_id_work;
 
 	struct completion tx_complete;
 	enum tcpm_transmit_status tx_status;
@@ -2616,6 +2619,11 @@ static void tcpm_pd_ext_msg_request(struct tcpm_port *port,
 	case PD_EXT_SECURITY_REQUEST:
 	case PD_EXT_FW_UPDATE_RESPONSE:
 	case PD_EXT_FW_UPDATE_REQUEST:
+		/*
+		 * It must have been in CHUNK_RX state, thus it is safe to send
+		 * NOT_SUPPORTED directly here.
+		 */
+		tcpm_queue_message(port, PD_MSG_CTRL_NOT_SUPP);
 		tcpm_set_state(port, CHUNK_RX_FINISH, 0);
 		break;
 	case PD_EXT_SOURCE_CAP_EXT:
@@ -4191,8 +4199,8 @@ static inline enum tcpm_state unattached_state(struct tcpm_port *port)
 
 static void tcpm_check_send_discover(struct tcpm_port *port)
 {
-	if (port->data_role == TYPEC_HOST && port->send_discover &&
-	    port->pd_capable) {
+	if ((port->data_role == TYPEC_HOST || port->negotiated_rev > PD_REV20)
+	     && port->send_discover && port->pd_capable) {
 		tcpm_send_vdm(port, USB_SID_PD, CMD_DISCOVER_IDENT, NULL, 0,
 			      TCPC_TX_SOP);
 	/*
@@ -4211,6 +4219,19 @@ static void tcpm_check_send_discover(struct tcpm_port *port)
 		/* PD 3.0 discover identity */
 		tcpm_send_vdm(port, USB_SID_PD, CMD_DISCOVER_IDENT,
 			      NULL, 0, TCPC_TX_SOP_PRIME);
+	}
+}
+
+static void disc_id_work(struct work_struct *work)
+{
+	struct tcpm_port *port = container_of(work, struct tcpm_port,
+					      disc_id_work.work);
+
+	if ((port->data_role == TYPEC_HOST || port->negotiated_rev > PD_REV20)
+	    && port->send_discover && port->pd_capable) {
+		tcpm_check_send_discover(port);
+		mod_delayed_work(port->wq, &port->disc_id_work,
+				 msecs_to_jiffies(DISC_ID_RETRY_MS));
 	}
 }
 
@@ -4729,6 +4750,8 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 
 		tcpm_check_send_discover(port);
+		mod_delayed_work(port->wq, &port->disc_id_work,
+				 msecs_to_jiffies(DISC_ID_RETRY_MS));
 		power_supply_changed(port->psy);
 
 		break;
@@ -5263,8 +5286,9 @@ static void _tcpm_cc_change(struct tcpm_port *port, enum typec_cc_status cc1,
 			tcpm_set_current_limit(port,
 					       tcpm_get_current_limit(port),
 					       5000);
+		if (tcpm_sink_tx_ok(port))
+			mod_delayed_work(port->wq, &port->disc_id_work, 0);
 		break;
-
 	case AUDIO_ACC_ATTACHED:
 		if (cc1 == TYPEC_CC_OPEN || cc2 == TYPEC_CC_OPEN)
 			tcpm_set_state(port, AUDIO_ACC_DEBOUNCE, 0);
@@ -6532,6 +6556,7 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	INIT_DELAYED_WORK(&port->state_machine, tcpm_state_machine_work);
 	INIT_DELAYED_WORK(&port->vdm_state_machine, vdm_state_machine_work);
 	INIT_WORK(&port->event_work, tcpm_pd_event_handler);
+	INIT_DELAYED_WORK(&port->disc_id_work, disc_id_work);
 
 	spin_lock_init(&port->pd_event_lock);
 

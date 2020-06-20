@@ -143,6 +143,7 @@ static void typec_report_identity(struct device *dev)
 	sysfs_notify(&dev->kobj, "identity", "id_header");
 	sysfs_notify(&dev->kobj, "identity", "cert_stat");
 	sysfs_notify(&dev->kobj, "identity", "product");
+	kobject_uevent(&dev->kobj, KOBJ_CHANGE);
 }
 
 /* ------------------------------------------------------------------------- */
