@@ -201,8 +201,6 @@
 		/* Must maintain < 1/15 duty cycle */
 		google,polling-freq = <3>;
 		#cooling-cells = <2>;
-		google,begin-mitigation-temp = <600>;
-		google,end-mitigation-temp = <500>;
 	};
 
 	google_bms {

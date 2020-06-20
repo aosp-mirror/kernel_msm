@@ -600,4 +600,70 @@
 			};
 		};
 	};
+
+	usbc-therm-adc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		thermal-sensors = <&pm7250b_adc_tm ADC_AMUX_THM3_PU2>;
+		wake-capable-sensor;
+		trips {
+			usb_throttling_lv1: usb-throttling_lv1 {
+				temperature = <40000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			usb_throttling_lv1 {
+				trip = <&usb_throttling_lv1>;
+				cooling-device =
+					<&google_overheat_mitigation 1 1>;
+			};
+		};
+	};
+
+	usbc-virt {
+		polling-delay-passive = <2000>;
+		polling-delay = <2000>;
+		thermal-governor = "step_wise";
+		disable-thermal-zone;
+		trips {
+			usb_throttling_lv2: usb-throttling_lv2 {
+				temperature = <5000>;
+				hysteresis = <0>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			usb_throttling_lv2 {
+				trip = <&usb_throttling_lv2>;
+				cooling-device =
+					<&google_overheat_mitigation
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
+			};
+		};
+	};
+};
+
+&soc {
+	google,overheat_mitigation {
+		google,begin-mitigation-temp = <400>;
+		google,end-mitigation-temp = <390>;
+		google,usbc-virt-sensor = "usbc-virt";
+	};
+
+	adc_virtual_sensor: adc-virtual-sensor {
+	};
+};
+
+&adc_virtual_sensor {
+	usbc-virt {
+		logic = "weight";
+		num_sensors = <2>;
+		sensor-names = "usbc-therm-adc", "charger-therm";
+		coefficients = <1 (-1)>;
+		avg-offset = <0>;
+		avg-denominator = <1>;
+	};
 };
