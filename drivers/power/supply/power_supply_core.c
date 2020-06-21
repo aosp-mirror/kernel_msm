@@ -71,6 +71,10 @@ static int __power_supply_changed_work(struct device *dev, void *data)
 	return 0;
 }
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+extern bool cap_update;
+#endif
 static void power_supply_changed_work(struct work_struct *work)
 {
 	unsigned long flags;
@@ -95,6 +99,14 @@ static void power_supply_changed_work(struct work_struct *work)
 		power_supply_update_leds(psy);
 		atomic_notifier_call_chain(&power_supply_notifier,
 				PSY_EVENT_PROP_CHANGED, psy);
+		#ifdef CONFIG_OPPO_CHARGING_MODIFY
+		// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+		if (!strcmp(psy->desc->name,"battery"))
+		{
+			cap_update = true;
+			//pr_info("battery send KOBJ_CHANGE\n");
+		}
+		#endif
 		kobject_uevent(&psy->dev.kobj, KOBJ_CHANGE);
 		spin_lock_irqsave(&psy->changed_lock, flags);
 	}

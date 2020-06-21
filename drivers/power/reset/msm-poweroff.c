@@ -60,10 +60,8 @@ static void scm_disable_sdi(void);
 
 #ifdef CONFIG_OPPO_CHARGING_MODIFY
 // wsw.bsp.charger.factory,2019/12/19, enable ship mode
-#ifdef OPPO_NO_PREBUILD
 extern int oppo_enable_ship_mode_flag;
 extern void oppo_set_ship_mode(void);
-#endif
 #endif
 #ifdef CONFIG_QCOM_DLOAD_MODE
 /* Runtime could be only changed value once.
@@ -497,13 +495,10 @@ static void do_msm_poweroff(void)
 
 #ifdef CONFIG_OPPO_CHARGING_MODIFY
 // wsw.bsp.charger.factory,2019/12/19, enable ship mode
-#ifdef OPPO_NO_PREBUILD
     if (oppo_enable_ship_mode_flag) {
         pr_notice("call oppo_set_ship_mode()\n");
         oppo_set_ship_mode();
-    } else
-#endif
-    {
+    } else {
         pr_notice("call orgin do_msm_poweroff()\n");
         set_dload_mode(0);
         scm_disable_sdi();

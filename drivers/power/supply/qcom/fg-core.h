@@ -90,6 +90,14 @@
 
 #define MAX_CC_STEPS			20
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-8-27, charge temp control
+#define OPPO_BATT_TEMP_NUM              8
+#define OPPO_BATT_CURRENT_NUM           8
+#define OPPO_BATT_RECHG_MV_NUM          3
+#define OPPO_BATT_MAX_MV_NUM            2
+#endif
+
 enum prof_load_status {
 	PROFILE_MISSING,
 	PROFILE_LOADED,
@@ -333,6 +341,14 @@ struct fg_dt_props {
 	int	ki_coeff_hi_dischg[KI_COEFF_SOC_LEVELS];
 	int	slope_limit_coeffs[SLOPE_LIMIT_NUM_COEFFS];
 	u8	batt_therm_coeffs[BATT_THERM_NUM_COEFFS];
+        #ifdef CONFIG_OPPO_CHARGING_MODIFY
+        // wsw.bsp.charger, 2019-8-27, charge temp control
+        int batt_temp_coeffs[OPPO_BATT_TEMP_NUM];
+        int batt_current_coeffs[OPPO_BATT_CURRENT_NUM];
+        int batt_rechg_mv_coeffs[OPPO_BATT_RECHG_MV_NUM];
+        int batt_max_mv_coeffs[OPPO_BATT_MAX_MV_NUM];
+        int oppo_current_ctl;
+        #endif
 };
 
 /* parameters from battery profile */
@@ -439,6 +455,10 @@ struct fg_chip {
 	struct power_supply	*pc_port_psy;
 	struct iio_channel	*batt_id_chan;
 	struct iio_channel	*die_temp_chan;
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-9-30, add usb input vol detection
+	struct iio_channel	*usbin_vol_chan;
+	#endif
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;
 	struct votable		*delta_bsoc_irq_en_votable;
@@ -486,6 +506,16 @@ struct fg_chip {
 	int			last_recharge_volt_mv;
 	int			delta_temp_irq_count;
 	int			esr_timer_charging_default[NUM_ESR_TIMERS];
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-10-1, oppo app current control
+	int                     oppo_app;
+	int                     oppo_chg_ctl;
+	// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+	int         msoc_delta;
+	int         msoc_soomth;
+	int         msoc_flag;
+	int         msoc_first;
+	#endif
 	enum slope_limit_status	slope_limit_sts;
 	enum esr_filter_status	esr_flt_sts;
 	bool			profile_available;

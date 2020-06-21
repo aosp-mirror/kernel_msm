@@ -224,6 +224,14 @@ enum {
 #define JEITA_EN_COLD_SL_FCV_BIT	BIT(2)
 #define JEITA_EN_HOT_SL_CCC_BIT		BIT(1)
 #define JEITA_EN_COLD_SL_CCC_BIT	BIT(0)
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-8-27, charge temp control
+#define JEITA_EN_MASK               GENMASK(5, 0)
+
+// wsw.bsp.charger, 2019-12-17, charge time setting
+#define FAST_CHARGE_SAFETY_TIMER_CFG    (CHGR_BASE + 0xA2)
+#define FAST_CHARGE_SAFETY_TIMER_MASK   GENMASK(1, 0)
+#endif
 
 #define JEITA_FVCOMP_CFG_REG		(CHGR_BASE + 0x91)
 #define JEITA_FVCOMP_MASK		GENMASK(7, 0)

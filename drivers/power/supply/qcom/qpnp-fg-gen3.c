@@ -156,6 +156,22 @@
 #define FLOAT_VOLT_v2_WORD		16
 #define FLOAT_VOLT_v2_OFFSET		2
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+#define OPPO_SELL_MAX_VOL        4050000
+#define OPPO_SELL_RECHG_VOL      4000
+#define OPPO_APP_CURRENT         200000
+// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+bool cap_update = false;
+bool oppo_usb_plugin = false;
+// wsw.bsp.battery, 2020-05-19, when battery low&big consumption,it's late to report 0%
+bool battery_empty = false;
+// wsw.bsp.charger.factory,2019/12/19, enable ship mode
+int oppo_enable_ship_mode_flag = 0;
+EXPORT_SYMBOL(oppo_enable_ship_mode_flag);
+// wsw.bsp.charger, 2019-12-20, charge log switch
+static bool charger_log_enable = false;
+module_param(charger_log_enable , bool, S_IRUGO | S_IWUSR);
+#endif
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
 static int fg_decode_value_16b(struct fg_sram_param *sp,
@@ -671,10 +687,15 @@ static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 
 	temp = ((buf[1] & BATT_TEMP_MSB_MASK) << 8) |
 		(buf[0] & BATT_TEMP_LSB_MASK);
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-9-3, temp precision 0.1 C and control
+	temp = (temp * 250 - 273150)/100 ;
+#else
 	temp = DIV_ROUND_CLOSEST(temp, 4);
 
 	/* Value is in Kelvin; Convert it to deciDegC */
 	temp = (temp - 273) * 10;
+#endif
 	*val = temp;
 	return 0;
 }
@@ -783,6 +804,10 @@ static int fg_get_msoc_raw(struct fg_chip *chip, int *val)
 
 #define FULL_CAPACITY	100
 #define FULL_SOC_RAW	255
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.battery, 2020-01-21, when unplug, battery cap hold 100
+#define OPPO_FULL_SOC_RAW_V2	248
+#endif
 static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 {
 	int rc;
@@ -791,6 +816,28 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 	if (rc < 0)
 		return rc;
 
+// wsw.bsp.battery, 2020-01-21, when unplug, battery cap jumps
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	if (*msoc == OPPO_FULL_SOC_RAW_V2)
+		*msoc = 100;
+	else if (*msoc == 0)
+		*msoc = 0;
+	else
+		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
+				OPPO_FULL_SOC_RAW_V2 - 2) + 1;
+    // wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+    if (charger_log_enable)
+        printk("%s, batt cap 111: %d\n", __func__, *msoc);
+    if (*msoc > FULL_CAPACITY)
+		*msoc = FULL_CAPACITY;
+    if (chip->msoc_first == 0)
+	{
+	    chip->msoc_soomth = *msoc;
+		chip->msoc_first = 1;
+	}
+	if (charger_log_enable)
+        printk("%s, batt cap 222: %d\n", __func__, *msoc);
+#else
 	/*
 	 * To have better endpoints for 0 and 100, it is good to tune the
 	 * calculation discarding values 0 and 255 while rounding off. Rest
@@ -804,8 +851,74 @@ static int fg_get_msoc(struct fg_chip *chip, int *msoc)
 	else
 		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
 				FULL_SOC_RAW - 2) + 1;
+#endif
 	return 0;
 }
+
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+// wsw.bsp.charger, 2019-11-25, bug4079
+// wsw.bsp.battery, 2019-12-18, when unplug, battery cap hold 100
+static int fg_get_msoc_smooth(struct fg_chip *chip, int *msoc)
+{
+	int rc;
+
+	rc = fg_get_msoc_raw(chip, msoc);
+	if (rc < 0)
+		return rc;
+
+	if (*msoc == OPPO_FULL_SOC_RAW_V2)
+		*msoc = 100;
+	else if (*msoc == 0)
+		*msoc = 0;
+	else
+		*msoc = DIV_ROUND_CLOSEST((*msoc - 1) * (FULL_CAPACITY - 2),
+				OPPO_FULL_SOC_RAW_V2 - 2) + 1;
+
+	if (chip->msoc_first == 0)
+	{
+	    chip->msoc_soomth = *msoc;
+		chip->msoc_first = 1;
+		return 0;
+	}
+
+    if (charger_log_enable)
+		printk("%s, batt cap 111: %d\n", __func__, *msoc);
+	if (*msoc > FULL_CAPACITY)
+		*msoc = FULL_CAPACITY;
+	if (charger_log_enable)
+		printk("%s, batt cap 222: %d\n", __func__, *msoc);
+
+	chip->msoc_delta = chip->msoc_soomth - *msoc;
+	if (chip->msoc_delta > 0)
+	{
+	    chip->msoc_flag = 0;
+	}
+	else if (chip->msoc_delta < 0)
+	{
+	    chip->msoc_flag = 1;
+		chip->msoc_delta = *msoc - chip->msoc_soomth;
+	}
+
+	if (chip->msoc_delta != 0)
+	{
+	    if (chip->msoc_flag == 0 && (oppo_usb_plugin == false || !chip->online_status))
+	    {
+		    *msoc = chip->msoc_soomth - 1;
+		    chip->msoc_soomth = *msoc;
+	    }
+	    else if (chip->msoc_flag == 1 && oppo_usb_plugin == true)
+	    {
+	        *msoc = chip->msoc_soomth + 1;
+		    chip->msoc_soomth = *msoc;
+	    }
+		else
+			*msoc = chip->msoc_soomth;
+	}
+
+	return 0;
+}
+#endif
 
 static bool is_batt_empty(struct fg_chip *chip)
 {
@@ -935,6 +1048,60 @@ static int fg_get_prop_capacity(struct fg_chip *chip, int *val)
 		*val = msoc;
 	return 0;
 }
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+// wsw.bsp.battery, 2019-11-28,when low battery,cap jump due to big current
+// wsw.bsp.battery, 2019-12-18, when unplug, battery cap hold 100
+static int fg_get_prop_capacity_smooth(struct fg_chip *chip, int *val)
+{
+	int rc, msoc;
+
+	if (is_debug_batt_id(chip)) {
+		*val = DEBUG_BATT_SOC;
+		return 0;
+	}
+
+	if (chip->fg_restarting) {
+		*val = chip->last_soc;
+		return 0;
+	}
+
+	if (chip->battery_missing || !chip->soc_reporting_ready) {
+		*val = BATT_MISS_SOC;
+		return 0;
+	}
+
+	if (is_batt_empty(chip)) {
+		battery_empty = true;
+		if (oppo_usb_plugin == false)
+		{
+		    if (chip->msoc_soomth > 0)
+		    {
+				chip->msoc_soomth = chip->msoc_soomth - 1;
+			    *val = chip->msoc_soomth;
+		    }
+			else
+				*val = EMPTY_SOC;
+		}
+		else
+		    *val = EMPTY_SOC;
+		return 0;
+	}
+	battery_empty = false;
+
+	if (chip->charge_full) {
+		*val = FULL_CAPACITY;
+		return 0;
+	}
+
+	rc = fg_get_msoc_smooth(chip, &msoc);
+	if (rc < 0)
+		return rc;
+
+	*val = msoc;
+	return 0;
+}
+#endif
 
 #define DEFAULT_BATT_TYPE	"Unknown Battery"
 #define MISSING_BATT_TYPE	"Missing Battery"
@@ -1005,6 +1172,26 @@ out:
 	vote(chip->batt_miss_irq_en_votable, BATT_MISS_IRQ_VOTER, true, 0);
 	return rc;
 }
+
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-9-30, add usb input vol detection
+static int fg_get_usbin_vol(struct fg_chip *chip)
+{
+	int rc, usbin_vol = 0;
+
+	if (!chip->usbin_vol_chan)
+		return -EINVAL;
+
+	rc = iio_read_channel_processed(chip->usbin_vol_chan, &usbin_vol);
+	if (rc < 0) {
+		pr_err("Error in reading usbin_vol channel, rc:%d\n", rc);
+	}
+
+	pr_debug("%s, usbin_vol=%d\n", __func__, usbin_vol);
+
+	return usbin_vol;
+}
+#endif
 
 static int fg_get_batt_profile(struct fg_chip *chip)
 {
@@ -1885,8 +2072,14 @@ static int fg_charge_full_update(struct fg_chip *chip)
 			 * Lower the recharge voltage so that VBAT_LT_RECHG
 			 * signal will not be asserted soon.
 			 */
+			// wsw.bsp.charger, 2019-9-23, after full, recharge volt config
+			#ifdef CONFIG_OPPO_CHARGING_MODIFY
+			rc = fg_set_recharge_voltage(chip,
+					chip->dt.recharge_volt_thr_mv);
+			#else
 			rc = fg_set_recharge_voltage(chip,
 					AUTO_RECHG_VOLT_LOW_LIMIT_MV);
+			#endif
 			if (rc < 0) {
 				pr_err("Error in reducing recharge voltage, rc=%d\n",
 					rc);
@@ -2990,6 +3183,229 @@ static void status_change_work(struct work_struct *work)
 				rc);
 	}
 
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    if (charger_log_enable)
+	    pr_info("%s, chip->charge_type:%d, chip->charge_status:%d, batt_temp:%d, chip->oppo_chg_ctl:%d\n",
+	         __func__, chip->charge_type, chip->charge_status, batt_temp, chip->oppo_chg_ctl);
+	if (chip->charge_status != POWER_SUPPLY_STATUS_DISCHARGING && chip->oppo_chg_ctl == 0)
+	{
+	    rc = power_supply_get_property(chip->batt_psy,
+		         POWER_SUPPLY_PROP_INPUT_CURRENT_NOW, &prop);
+		if (charger_log_enable)
+		    pr_info("%s, usb input current:%d\n", __func__, prop.intval);
+	    if (batt_temp <= chip->dt.batt_temp_coeffs[0] || batt_temp > chip->dt.batt_temp_coeffs[7])
+	    {
+	        rc = power_supply_get_property(chip->batt_psy,
+			          POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
+			if (prop.intval == 1)
+			{
+	            prop.intval = 0;
+		        rc = power_supply_set_property(chip->batt_psy,
+			              POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
+			}
+
+		    prop.intval= chip->dt.batt_current_coeffs[0];
+		    power_supply_set_property(chip->batt_psy,
+			    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+			if (chip->oppo_app == 2)
+			{
+			    prop.intval = OPPO_SELL_MAX_VOL;
+				chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			}
+			else
+			{
+			    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+			    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[2];
+			}
+	        rc = power_supply_set_property(chip->batt_psy,
+			          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+			
+			fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+	    }
+	    else
+	    {
+	        rc = power_supply_get_property(chip->batt_psy,
+			          POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
+			if (prop.intval == 0)
+			{
+			    prop.intval = 1;
+		        rc = power_supply_set_property(chip->batt_psy,
+			          POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
+			}
+
+            if (batt_temp > chip->dt.batt_temp_coeffs[0] && batt_temp <= chip->dt.batt_temp_coeffs[1])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[1];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+				{
+				    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[1];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+            }
+            else if (batt_temp > chip->dt.batt_temp_coeffs[1] && batt_temp <= chip->dt.batt_temp_coeffs[2])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[2];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+			    {
+				    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[1];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+            }
+            else if (batt_temp > chip->dt.batt_temp_coeffs[2] && batt_temp <= chip->dt.batt_temp_coeffs[3])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[3];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+				{
+				    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[1];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+            }
+            else if (batt_temp > chip->dt.batt_temp_coeffs[3] && batt_temp <= chip->dt.batt_temp_coeffs[4])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[4];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+				{
+				    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[2];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+	
+            }
+            else if (batt_temp > chip->dt.batt_temp_coeffs[4] && batt_temp <= chip->dt.batt_temp_coeffs[5])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[5];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+				{
+				    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[2];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+            }
+            else if (batt_temp > chip->dt.batt_temp_coeffs[5] && batt_temp <= chip->dt.batt_temp_coeffs[6])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[6];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+				{
+				    prop.intval = chip->dt.batt_max_mv_coeffs[1];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[2];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+            }
+            else if (batt_temp > chip->dt.batt_temp_coeffs[6] && batt_temp <= chip->dt.batt_temp_coeffs[7])
+            {
+                if (chip->oppo_app == 1)
+					prop.intval= chip->dt.oppo_current_ctl;
+				else
+                    prop.intval= chip->dt.batt_current_coeffs[7];
+                power_supply_set_property(chip->batt_psy,
+                    POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, &prop);
+
+                if (chip->oppo_app == 2)
+			    {
+			        prop.intval = OPPO_SELL_MAX_VOL;
+			        chip->dt.recharge_volt_thr_mv = OPPO_SELL_RECHG_VOL;
+			    }
+				else
+				{
+				    prop.intval = chip->dt.batt_max_mv_coeffs[0];
+				    chip->dt.recharge_volt_thr_mv = chip->dt.batt_rechg_mv_coeffs[0];
+				}
+                rc = power_supply_set_property(chip->batt_psy,
+                          POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+
+                fg_set_recharge_voltage(chip, chip->dt.recharge_volt_thr_mv);
+            }
+	    }
+	}
+    #endif
 	fg_ttf_update(chip);
 	chip->prev_charge_status = chip->charge_status;
 out:
@@ -3974,7 +4390,28 @@ static int fg_psy_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
+		#ifdef CONFIG_OPPO_CHARGING_MODIFY
+		if(battery_empty)
+			power_supply_changed(chip->batt_psy);
+		if (cap_update)
+		{
+			cap_update = false;
+			rc = fg_get_prop_capacity_smooth(chip, &pval->intval);
+		}
+		else
+		{
+			if (chip->msoc_first == 0)
+				rc = fg_get_prop_capacity(chip, &pval->intval);
+			else
+				pval->intval = chip->msoc_soomth;
+		}
+		if (pval->intval > FULL_CAPACITY)
+			pval->intval = FULL_CAPACITY;
+		if (charger_log_enable)
+			pr_info("smooth batt cap: %d, chip->msoc_delta: %d\n", pval->intval, chip->msoc_delta);
+		#else
 		rc = fg_get_prop_capacity(chip, &pval->intval);
+		#endif
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_RAW:
 		rc = fg_get_msoc_raw(chip, &pval->intval);
@@ -3985,6 +4422,26 @@ static int fg_psy_get_property(struct power_supply *psy,
 		else
 			rc = fg_get_battery_voltage(chip, &pval->intval);
 		break;
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger, 2019-10-1, oppo app current control
+    case POWER_SUPPLY_PROP_OPPO_APP:
+        pval->intval = chip->oppo_app;
+        pr_info("%s, POWER_SUPPLY_PROP_OPPO_APP:%d\n", __func__, pval->intval);
+        break;
+    case POWER_SUPPLY_PROP_OPPO_CHG:
+		pval->intval = chip->oppo_chg_ctl;
+		pr_info("%s, POWER_SUPPLY_PROP_OPPO_CHG:%d\n", __func__, pval->intval);
+		break;
+	// wsw.bsp.charger, 2019-9-30, add usb input vol detection
+	case POWER_SUPPLY_PROP_USBIN_VOLTAGE:
+        pval->intval = fg_get_usbin_vol(chip);
+		break;
+    // wsw.bsp.charger.factory,2019/12/19, enable ship mode
+    case POWER_SUPPLY_PROP_ENABLE_SHIP_MODE:
+        pval->intval = oppo_enable_ship_mode_flag;
+        pr_info("%s, POWER_SUPPLY_PROP_ENABLE_SHIP_MODE:%d\n", __func__, pval->intval);
+        break;
+    #endif
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		rc = fg_get_battery_current(chip, &pval->intval);
 		break;
@@ -4175,6 +4632,24 @@ static int fg_psy_set_property(struct power_supply *psy,
 			return rc;
 		}
 		break;
+        #ifdef CONFIG_OPPO_CHARGING_MODIFY
+        // wsw.bsp.charger, 2019-10-1, oppo app current control
+        case POWER_SUPPLY_PROP_OPPO_APP:
+                chip->oppo_app = pval->intval;
+                pr_info("%s, POWER_SUPPLY_PROP_OPPO_APP:%d\n", __func__, chip->oppo_app);
+                power_supply_changed(chip->batt_psy);
+                break;
+        case POWER_SUPPLY_PROP_OPPO_CHG:
+		chip->oppo_chg_ctl = pval->intval;
+		pr_info("%s, POWER_SUPPLY_PROP_OPPO_CHG:%d\n", __func__, chip->oppo_chg_ctl);
+		power_supply_changed(chip->batt_psy);
+		break;
+    // wsw.bsp.charger.factory,2019/12/19, enable ship mode
+    case POWER_SUPPLY_PROP_ENABLE_SHIP_MODE:
+        oppo_enable_ship_mode_flag = pval->intval;
+        pr_info("%s, POWER_SUPPLY_PROP_ENABLE_SHIP_MODE:%d\n", __func__, oppo_enable_ship_mode_flag);
+        break;
+        #endif
 	default:
 		break;
 	}
@@ -4266,6 +4741,14 @@ static enum power_supply_property fg_psy_props[] = {
 	POWER_SUPPLY_PROP_WARM_TEMP,
 	POWER_SUPPLY_PROP_HOT_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    POWER_SUPPLY_PROP_OPPO_APP,
+    POWER_SUPPLY_PROP_OPPO_CHG,
+    // wsw.bsp.charger, 2019-9-30, add usb input vol detection
+	POWER_SUPPLY_PROP_USBIN_VOLTAGE,
+    // wsw.bsp.charger.factory,2019/12/17, enable ship mode
+    POWER_SUPPLY_PROP_ENABLE_SHIP_MODE,
+    #endif
 	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_RESISTANCE_ID,
@@ -5377,7 +5860,38 @@ static int fg_parse_dt(struct fg_chip *chip)
 			pr_warn("Error reading battery thermal coefficients, rc:%d\n",
 				rc);
 	}
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-8-27, charge temp control
+	rc =  fg_parse_dt_property_u32_array(node,"oppo,battery-temp-coeffs",
+				chip->dt.batt_temp_coeffs, OPPO_BATT_TEMP_NUM);
+	if (rc < 0)
+		pr_warn("Error reading battery temp coefficients, rc:%d\n",
+				rc);
 
+	rc = fg_parse_dt_property_u32_array(node,"oppo,battery-current-coeffs",
+				chip->dt.batt_current_coeffs, OPPO_BATT_CURRENT_NUM);
+	if (rc < 0)
+		pr_warn("Error reading battery current coefficients, rc:%d\n",
+				rc);
+		
+	rc =  fg_parse_dt_property_u32_array(node,"oppo,battery-rechg-mv-coeffs",
+				chip->dt.batt_rechg_mv_coeffs, OPPO_BATT_RECHG_MV_NUM);
+	if (rc < 0)
+		pr_warn("Error reading battery temp coefficients, rc:%d\n",
+				rc);
+		
+	rc =  fg_parse_dt_property_u32_array(node,"oppo,battery-max-mv-coeffs",
+				chip->dt.batt_max_mv_coeffs, OPPO_BATT_MAX_MV_NUM);
+	if (rc < 0)
+		pr_warn("Error reading battery temp coefficients, rc:%d\n",
+				rc);
+        // wsw.bsp.charger, 2019-11-19, oppo current dtsi control
+        rc = of_property_read_u32(node, "oppo,oppo-current-ctl", &temp);
+        if (rc < 0)
+                chip->dt.oppo_current_ctl = OPPO_APP_CURRENT;
+        else
+                chip->dt.oppo_current_ctl = temp;
+    #endif
 	rc = fg_parse_dt_property_u32_array(node, "qcom,fg-esr-timer-charging",
 		chip->dt.esr_timer_charging, NUM_ESR_TIMERS);
 	if (rc < 0) {
@@ -5621,6 +6135,12 @@ static void fg_cleanup(struct fg_chip *chip)
 	if (chip->batt_id_chan)
 		iio_channel_release(chip->batt_id_chan);
 
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger, 2019-9-30, add usb input vol detection
+	if (chip->usbin_vol_chan)
+		iio_channel_release(chip->usbin_vol_chan);
+	#endif
+
 	dev_set_drvdata(chip->dev, NULL);
 }
 
@@ -5670,6 +6190,10 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		dev_err(chip->dev, "Parent regmap is unavailable\n");
 		return -ENXIO;
 	}
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.battery, 2019-11-20, cap smooth modify due to irq jump
+	chip->msoc_first = 0;
+	#endif
 
 	chip->batt_id_chan = iio_channel_get(chip->dev, "rradc_batt_id");
 	if (IS_ERR(chip->batt_id_chan)) {
@@ -5681,6 +6205,18 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger, 2019-9-30, add usb input vol detection
+    chip->usbin_vol_chan = iio_channel_get(chip->dev, "rradc_usbin_vol");
+	if (IS_ERR(chip->usbin_vol_chan)) {
+		if (PTR_ERR(chip->usbin_vol_chan) != -EPROBE_DEFER)
+			pr_err("usbin_vol_chan unavailable %ld\n",
+				PTR_ERR(chip->usbin_vol_chan));
+		rc = PTR_ERR(chip->usbin_vol_chan);
+		chip->usbin_vol_chan = NULL;
+	}
+	#endif
+	
 	rc = of_property_match_string(chip->dev->of_node,
 				"io-channel-names", "rradc_die_temp");
 	if (rc >= 0) {
@@ -5728,6 +6264,11 @@ static int fg_gen3_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger, 2019-10-1, oppo app current control
+    chip->oppo_app = 0;
+    chip->oppo_chg_ctl = 0;
+    #endif
 	rc = fg_parse_dt(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Error in reading DT parameters, rc:%d\n",

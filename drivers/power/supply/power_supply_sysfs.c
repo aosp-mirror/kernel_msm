@@ -189,6 +189,15 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(voltage_max_design),
 	POWER_SUPPLY_ATTR(voltage_min_design),
 	POWER_SUPPLY_ATTR(voltage_now),
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger, 2019-10-1, oppo app current control
+    POWER_SUPPLY_ATTR(oppo_app),
+    POWER_SUPPLY_ATTR(oppo_chg),
+    // wsw.bsp.charger, 2019-9-30, add usb input vol detection
+	POWER_SUPPLY_ATTR(usbin_voltage),
+    // wsw.bsp.charger.factory,2019/12/19, enable ship mode
+    POWER_SUPPLY_ATTR(oppo_enable_ship_mode),
+    #endif
 	POWER_SUPPLY_ATTR(voltage_avg),
 	POWER_SUPPLY_ATTR(voltage_ocv),
 	POWER_SUPPLY_ATTR(voltage_boot),
@@ -246,6 +255,7 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(usb_otg),
 	POWER_SUPPLY_ATTR(battery_charging_enabled),
 	POWER_SUPPLY_ATTR(charging_enabled),
+	POWER_SUPPLY_ATTR(usb_current_ability),
 	POWER_SUPPLY_ATTR(step_charging_enabled),
 	POWER_SUPPLY_ATTR(step_charging_step),
 	POWER_SUPPLY_ATTR(pin_enabled),

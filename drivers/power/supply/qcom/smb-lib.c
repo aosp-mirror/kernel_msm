@@ -25,6 +25,10 @@
 #include "step-chg-jeita.h"
 #include "storm-watch.h"
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+extern bool oppo_usb_plugin;
+#endif
+
 #define smblib_err(chg, fmt, ...)		\
 	pr_err("%s: %s: " fmt, chg->name,	\
 		__func__, ##__VA_ARGS__)	\
@@ -586,8 +590,12 @@ static const struct apsd_result *smblib_update_usb_type(struct smb_charger *chg)
 		chg->real_charger_type = apsd_result->pst;
 	}
 
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	pr_info("APSD=%s chg->real_charger_type=%d\n", apsd_result->name, chg->real_charger_type);
+	#else
 	smblib_dbg(chg, PR_MISC, "APSD=%s PD=%d\n",
 					apsd_result->name, chg->pd_active);
+	#endif
 	return apsd_result;
 }
 
@@ -932,6 +940,14 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 		}
 	} else {
 		set_sdp_current(chg, 100000);
+		#ifdef CONFIG_OPPO_CHARGING_MODIFY
+		if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB)
+		{
+		    pr_info("icl_ua=%u\n", icl_ua);
+		    if (icl_ua < 500000)
+				icl_ua = 500000;
+		}
+		#endif
 		rc = smblib_set_charge_param(chg, &chg->param.usb_icl, icl_ua);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
@@ -1262,8 +1278,13 @@ static int smblib_hvdcp_enable_vote_callback(struct votable *votable,
 	 * This ensures only qc 2.0 detection runs but no vbus
 	 * negotiation happens.
 	 */
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-8-2, disable HVDCP charging
+	val = 0;
+#else
 	if (!hvdcp_enable)
 		val = HVDCP_EN_BIT;
+#endif
 
 	rc = smblib_masked_write(chg, USBIN_OPTIONS_1_CFG_REG,
 				 HVDCP_EN_BIT | HVDCP_AUTH_ALG_EN_CFG_BIT,
@@ -1793,6 +1814,13 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 	}
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
 
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+	if ((!usb_online && !dc_online) || !oppo_usb_plugin) {
+		val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		pr_info("batt_status %d\n", val->intval);
+		return rc;
+	}
+	#else
 	if (!usb_online && !dc_online) {
 		switch (stat) {
 		case TERMINATE_CHARGE:
@@ -1805,6 +1833,7 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 		}
 		return rc;
 	}
+	#endif
 
 	switch (stat) {
 	case TRICKLE_CHARGE:
@@ -1828,6 +1857,12 @@ int smblib_get_prop_batt_status(struct smb_charger *chg,
 
 	if (val->intval != POWER_SUPPLY_STATUS_CHARGING)
 		return 0;
+	// wsw.bsp.charger, 2019-8-2, reprot full, when soc=100
+	if (val->intval != POWER_SUPPLY_STATUS_FULL){
+		rc = smblib_get_prop_batt_capacity(chg, &pval);
+		if (pval.intval >= 100)
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+	}
 
 	if (!usb_online && dc_online
 		&& chg->fake_batt_status == POWER_SUPPLY_STATUS_FULL) {
@@ -2012,6 +2047,61 @@ int smblib_get_prop_charge_qnovo_enable(struct smb_charger *chg,
 	return 0;
 }
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+int smblib_get_prop_charge_enable(struct smb_charger *chg,
+				  union power_supply_propval *val)
+{
+	int rc;
+	u8 stat;
+
+	rc = smblib_read(chg, CHARGING_ENABLE_CMD_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read charge enable rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	val->intval = (bool)(stat & CHARGING_ENABLE_CMD_BIT);
+	return 0;
+}
+
+// wsw.bsp.charger, 2019-10-10, add usb input current
+int smblib_get_prop_input_current(struct smb_charger *chg,
+				union power_supply_propval *val)
+{
+	u8 stat;
+	int rc;
+
+    rc = smblib_read(chg, TEMP_RANGE_STATUS_REG, &stat);
+	rc = smblib_read(chg, ICL_STATUS_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read ICL_STATUS rc=%d\n", rc);
+		return rc;
+	}
+	val->intval = stat;
+	pr_info("usb input current TEMP_RANGE_STATUS=%x,icl=%d\n", stat,(val->intval)*25);
+	return 0;
+}
+
+int smblib_get_prop_usb_current_ability(struct smb_charger *chg,
+				union power_supply_propval *val)
+{
+	u8 stat;
+	int rc;
+
+    rc = smblib_read(chg, USBIN_CURRENT_LIMIT_CFG_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read usb_currrent_ability rc=%d\n", rc);
+		return rc;
+	}
+	val->intval = (stat & USBIN_CURRENT_LIMIT_MASK) * 25;
+	pr_info("usb current ability %d\n", (val->intval)*25);
+	return 0;
+}
+#endif
+
+
 int smblib_get_prop_from_bms(struct smb_charger *chg,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
@@ -2120,6 +2210,39 @@ int smblib_set_prop_charge_qnovo_enable(struct smb_charger *chg,
 
 	return rc;
 }
+
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+int smblib_set_prop_charge_enable(struct smb_charger *chg,
+				  const union power_supply_propval *val)
+{
+	int rc = 0;
+
+	rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
+			CHARGING_ENABLE_CMD_BIT,
+			val->intval ? CHARGING_ENABLE_CMD_BIT : 0);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't enable charge rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+
+int smblib_set_prop_usb_current_ability(struct smb_charger *chg,
+				  const union power_supply_propval *val)
+{
+	int rc = 0;
+
+	rc = smblib_write(chg, USBIN_CURRENT_LIMIT_CFG_REG, (val->intval / 25));
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't write usb current ability rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+#endif
 
 int smblib_set_prop_input_current_limited(struct smb_charger *chg,
 				const union power_supply_propval *val)
@@ -3571,6 +3694,9 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 	vbus_rising = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
 	smblib_set_opt_freq_buck(chg, vbus_rising ? chg->chg_freq.freq_5V :
 						chg->chg_freq.freq_removal);
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+    oppo_usb_plugin = vbus_rising;
+	#endif
 
 	if (vbus_rising) {
 		if (smblib_get_prop_dfp_mode(chg) != POWER_SUPPLY_TYPEC_NONE) {
@@ -3627,8 +3753,12 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 		smblib_micro_usb_plugin(chg, vbus_rising);
 
 	power_supply_changed(chg->usb_psy);
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	pr_info("IRQ: usbin-plugin %s\n", vbus_rising ? "attached" : "detached");
+	#else
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
+	#endif
 }
 
 irqreturn_t smblib_handle_usb_plugin(int irq, void *data)
@@ -3902,7 +4032,12 @@ static void smblib_force_legacy_icl(struct smb_charger *chg, int pst)
 		 * limit ICL to 100mA, the USB driver will enumerate to check
 		 * if this is a SDP and appropriately set the current
 		 */
+		#ifdef CONFIG_OPPO_CHARGING_MODIFY
+        // wsw.bsp.charger, 2020-1-13, float charging
+        vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 1000000);
+        #else
 		vote(chg->usb_icl_votable, LEGACY_UNKNOWN_VOTER, true, 100000);
+		#endif
 		break;
 	case POWER_SUPPLY_TYPE_USB_HVDCP:
 	case POWER_SUPPLY_TYPE_USB_HVDCP_3:

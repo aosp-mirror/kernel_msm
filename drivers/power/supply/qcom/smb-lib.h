@@ -507,6 +507,16 @@ int smblib_get_prop_die_health(struct smb_charger *chg,
 			       union power_supply_propval *val);
 int smblib_get_prop_charge_qnovo_enable(struct smb_charger *chg,
 			       union power_supply_propval *val);
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+int smblib_get_prop_charge_enable(struct smb_charger *chg,
+			       union power_supply_propval *val);
+int smblib_get_prop_usb_current_ability(struct smb_charger *chg,
+				union power_supply_propval *val);
+// wsw.bsp.charger, 2019-10-10, add usb input current
+int smblib_get_prop_input_current(struct smb_charger *chg,
+				union power_supply_propval *val);
+#endif
 int smblib_set_prop_pd_current_max(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_sdp_current_max(struct smb_charger *chg,
@@ -529,6 +539,13 @@ int smblib_set_prop_ship_mode(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_charge_qnovo_enable(struct smb_charger *chg,
 				const union power_supply_propval *val);
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+int smblib_set_prop_charge_enable(struct smb_charger *chg,
+				const union power_supply_propval *val);
+int smblib_set_prop_usb_current_ability(struct smb_charger *chg,
+				  const union power_supply_propval *val);
+#endif
 void smblib_suspend_on_debug_battery(struct smb_charger *chg);
 int smblib_rerun_apsd_if_required(struct smb_charger *chg);
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,

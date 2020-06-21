@@ -179,6 +179,12 @@ struct smb2 {
 	bool			bad_part;
 };
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger.factory,2019/12/19, enable ship mode
+struct smb_charger *g_smb_charger = NULL;
+void oppo_set_ship_mode(void);
+EXPORT_SYMBOL(oppo_set_ship_mode);
+#endif
 static int __debug_mask;
 module_param_named(
 	debug_mask, __debug_mask, int, 0600
@@ -620,7 +626,12 @@ static int smb2_init_usb_psy(struct smb2 *chip)
  * USB PC_PORT PSY REGISTRATION *
  ********************************/
 static enum power_supply_property smb2_usb_port_props[] = {
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2020-4-16, charger type for showing
+	POWER_SUPPLY_PROP_REAL_TYPE,
+	#else
 	POWER_SUPPLY_PROP_TYPE,
+	#endif
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
@@ -635,7 +646,12 @@ static int smb2_usb_port_get_prop(struct power_supply *psy,
 	int rc = 0;
 
 	switch (psp) {
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger, 2020-4-16, charger type for showing
+    case POWER_SUPPLY_PROP_REAL_TYPE:
+    #else
 	case POWER_SUPPLY_PROP_TYPE:
+	#endif
 		val->intval = POWER_SUPPLY_TYPE_USB;
 		break;
 	case POWER_SUPPLY_PROP_ONLINE:
@@ -1005,6 +1021,13 @@ static enum power_supply_property smb2_batt_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+	POWER_SUPPLY_PROP_CHARGING_ENABLED,
+	POWER_SUPPLY_PROP_USB_CURRENT_ABILITY,
+	// wsw.bsp.charger, 2019-10-10, add usb input current
+	POWER_SUPPLY_PROP_INPUT_CURRENT_NOW,
+	#endif
 };
 
 static int smb2_batt_get_prop(struct power_supply *psy,
@@ -1069,6 +1092,21 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE:
 		rc = smblib_get_prop_charge_qnovo_enable(chg, val);
 		break;
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		rc = smblib_get_prop_charge_enable(chg, val);
+		break;
+	// wsw.bsp.charger, 2019-10-10, add usb input current
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_NOW:
+		rc = smblib_get_prop_input_current(chg, val);
+		if (rc == 0)
+		    val->intval = val->intval * 25;
+		break;
+	case POWER_SUPPLY_PROP_USB_CURRENT_ABILITY:
+		rc = smblib_get_prop_usb_current_ability(chg, val);
+		break;
+	#endif
 	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
 		val->intval = get_client_vote_locked(chg->fv_votable,
 				QNOVO_VOTER);
@@ -1165,6 +1203,15 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_QNOVO_ENABLE:
 		rc = smblib_set_prop_charge_qnovo_enable(chg, val);
 		break;
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-9-20, when hot temp,close charge and update charge status
+	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
+		rc = smblib_set_prop_charge_enable(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_USB_CURRENT_ABILITY:
+		rc = smblib_set_prop_usb_current_ability(chg, val);
+		break;
+	#endif
 	case POWER_SUPPLY_PROP_VOLTAGE_QNOVO:
 		vote(chg->fv_votable, QNOVO_VOTER,
 			(val->intval >= 0), val->intval);
@@ -1274,6 +1321,10 @@ static int smb2_init_batt_psy(struct smb2 *chip)
 	chg->batt_psy = power_supply_register(chg->dev,
 						   &batt_psy_desc,
 						   &batt_cfg);
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger.factory,2019/12/19, enable ship mode
+    g_smb_charger = &chip->chg;
+#endif
 	if (IS_ERR(chg->batt_psy)) {
 		pr_err("Couldn't register battery power supply\n");
 		return PTR_ERR(chg->batt_psy);
@@ -1579,6 +1630,24 @@ static int smb2_init_hw(struct smb2 *chip)
 		chg->param.freq_boost.max_u = chip->dt.max_freq_khz;
 	}
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	// wsw.bsp.charger, 2019-8-27, charge temp control
+	/* disable jeita for temperature */
+	rc = smblib_masked_write(chg, JEITA_EN_CFG_REG,
+				JEITA_EN_MASK, 0x0);
+	if (rc < 0) {
+		pr_err("Couldn't disable jeita rc=%d\n", rc);
+		return rc;
+	}
+
+    // wsw.bsp.charger, 2019-12-17, charge time setting
+	rc = smblib_masked_write(chg, FAST_CHARGE_SAFETY_TIMER_CFG,
+				FAST_CHARGE_SAFETY_TIMER_MASK, 0x2);
+	if (rc < 0) {
+		pr_err("Couldn't set fast charge safety time rc=%d\n", rc);
+		return rc;
+	}
+#endif
 	/* set a slower soft start setting for OTG */
 	rc = smblib_masked_write(chg, DC_ENG_SSUPPLY_CFG2_REG,
 				ENG_SSUPPLY_IVREF_OTG_SS_MASK, OTG_SS_SLOW);
@@ -1635,6 +1704,22 @@ static int smb2_init_hw(struct smb2 *chip)
 	 * AICL configuration:
 	 * start from min and AICL ADC disable
 	 */
+	#ifdef CONFIG_OPPO_CHARGING_MODIFY
+	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
+			SUSPEND_ON_COLLAPSE_USBIN_BIT | USBIN_AICL_START_AT_MAX_BIT
+				| USBIN_AICL_ADC_EN_BIT, 0);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure AICL COLLAPSE rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
+			USBIN_AICL_HDC_EN_BIT | USBIN_AICL_RERUN_EN_BIT, 0x54);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure AICL RERUN_EN rc=%d\n", rc);
+		return rc;
+	}
+	#else
 	rc = smblib_masked_write(chg, USBIN_AICL_OPTIONS_CFG_REG,
 			USBIN_AICL_START_AT_MAX_BIT
 				| USBIN_AICL_ADC_EN_BIT, 0);
@@ -1642,6 +1727,7 @@ static int smb2_init_hw(struct smb2 *chip)
 		dev_err(chg->dev, "Couldn't configure AICL rc=%d\n", rc);
 		return rc;
 	}
+	#endif
 
 	/* Configure charge enable for software control; active high */
 	rc = smblib_masked_write(chg, CHGR_CFG2_REG,
@@ -2529,9 +2615,32 @@ cleanup:
 	smblib_deinit(chg);
 
 	platform_set_drvdata(pdev, NULL);
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger.factory,2019/12/19, enable ship mode
+    g_smb_charger = NULL;
+#endif
 	return rc;
 }
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+// wsw.bsp.charger.factory,2019/12/19, enable ship mode
+void oppo_set_ship_mode(void) {
+    union power_supply_propval psp;
+    int rc = 0;
+    pr_err("oppo_set_ship_mode start\n");
+    if (g_smb_charger != NULL) {
+        psp.intval = 1;
+        pr_err("call smblib_set_prop_ship_mode(g_smb_charger, &psp);\n");
+        rc = smblib_set_prop_ship_mode(g_smb_charger, &psp);
+        if (rc < 0) {
+            pr_err("smblib_set_prop_ship_mode, rc = %d\n", rc);
+        }
+    } else {
+        pr_err("g_smb_charger == null\n");
+    }
+    pr_err("oppo_set_ship_mode end\n");
+}
+#endif
 static int smb2_remove(struct platform_device *pdev)
 {
 	struct smb2 *chip = platform_get_drvdata(pdev);
@@ -2544,6 +2653,10 @@ static int smb2_remove(struct platform_device *pdev)
 	regulator_unregister(chg->vbus_vreg->rdev);
 
 	platform_set_drvdata(pdev, NULL);
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    // wsw.bsp.charger.factory,2019/12/19, enable ship mode
+    g_smb_charger = NULL;
+    #endif
 	return 0;
 }
 
