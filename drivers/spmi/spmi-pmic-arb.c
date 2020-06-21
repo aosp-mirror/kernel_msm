@@ -569,7 +569,7 @@ static void periph_interrupt(struct spmi_pmic_arb *pa, u16 apid)
 	}
 }
 
-static void pmic_arb_chained_irq(struct irq_desc *desc)
+static bool pmic_arb_chained_irq(struct irq_desc *desc)
 {
 	struct spmi_pmic_arb *pa = irq_desc_get_handler_data(desc);
 	struct irq_chip *chip = irq_desc_get_chip(desc);
@@ -626,8 +626,8 @@ static void pmic_arb_chained_irq(struct irq_desc *desc)
 			}
 		}
 	}
-
 	chained_irq_exit(chip, desc);
+	return true;
 }
 
 static void qpnpint_irq_ack(struct irq_data *d)
