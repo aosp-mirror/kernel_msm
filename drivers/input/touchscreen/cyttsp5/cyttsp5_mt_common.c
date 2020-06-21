@@ -438,9 +438,10 @@ static int cyttsp5_mt_wake_attention(struct device *dev)
 
 	mutex_lock(&md->mt_lock);
 #ifdef CONFIG_OPPO
-	input_report_key(md->input, KEY_F12, 1);
-	input_report_key(md->input, KEY_F12, 0);
+	input_report_key(md->input, KEY_WAKEUP, 1);
+	input_report_key(md->input, KEY_WAKEUP, 0);
 	input_sync(md->input);
+	dev_err(dev, "==touch to wakeup==\n");
 #else
 	cyttsp5_mt_send_dummy_event(cd, md);
 #endif
@@ -648,7 +649,7 @@ static int cyttsp5_setup_input_device(struct device *dev)
 #endif
 #else
 	input_set_capability(md->input, EV_KEY, KEY_SLEEP);
-	input_set_capability(md->input, EV_KEY, KEY_F12);
+	input_set_capability(md->input, EV_KEY, KEY_WAKEUP);
 #endif
 	return rc;
 }

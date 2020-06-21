@@ -6359,7 +6359,7 @@ int cyttsp5_probe(const struct cyttsp5_bus_ops *ops, struct device *dev,
 	cd->panel_id = PANEL_ID_NOT_ENABLED;
 
 	/* Set default vaule easy_wakeup */
-	cd->easy_wakeup_enable = 0;
+	cd->easy_wakeup_enable = 1;
 	cd->large_tp_enable = 1;
 #ifdef CONFIG_OPPO
 	/* WSW.BSP.Kernel, 2019-12-23 save last sleep mode*/
