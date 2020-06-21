@@ -41,7 +41,7 @@
 #include "pinctrl-msm.h"
 #include "../pinctrl-utils.h"
 
-#ifdef OPPO_NO_PREBUILD
+#ifdef CONFIG_OPPO
 #include <linux/gpio/driver.h>
 #include <../../gpio/gpiolib.h>
 #include <../../oppo/dap_swd/dap_swd.h>
@@ -390,7 +390,7 @@ static struct pinctrl_desc msm_pinctrl_desc = {
 	.owner = THIS_MODULE,
 };
 
-#ifdef OPPO_NO_PREBUILD
+#ifdef CONFIG_OPPO
 int msm_gpio_get_reg(struct gpio_desc *desc, struct msm_gpio_reg *reg)
 {
 	struct gpio_chip *chip = gpiod_to_chip(desc);

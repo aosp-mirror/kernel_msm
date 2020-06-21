@@ -410,11 +410,6 @@ ifeq ($(OPPO_BUILD_ROOT_DISABLE_DM_VERITY),true)
 endif
 
 
-#WSW.BSP.kernel, 2020/06/03, Add for oppo no prebuild
-ifeq ($(OPPO_NO_PREBUILD),true)
-    KBUILD_CFLAGS += -DOPPO_NO_PREBUILD
-endif
-
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=

@@ -8,6 +8,4 @@ obj-$(CONFIG_OPPO_SHUTDOWN_DETECT) += oppo_shutdown_detect.o
 obj-$(CONFIG_REGULATOR_FAN49103) += fan49103.o
 obj-y += spi-kernel/
 obj-y += oppo_sensorhub/
-ifeq ($(OPPO_NO_PREBUILD),true)
 obj-y += dap_swd/
-endif
