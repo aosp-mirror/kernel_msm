@@ -1009,7 +1009,7 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 {
 	struct buf_data *pcmds = file->private_data;
 	ssize_t ret = 0;
-	int blen = 0;
+	unsigned int blen = 0;
 	char *string_buf;
 
 	mutex_lock(&pcmds->dbg_mutex);

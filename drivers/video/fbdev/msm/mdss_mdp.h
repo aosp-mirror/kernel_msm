@@ -600,6 +600,7 @@ struct mdss_mdp_ctl {
 	struct mutex flush_lock;
 	struct mutex *shared_lock;
 	struct mutex rsrc_lock;
+	struct mutex vsync_handler_lock;
 	spinlock_t spin_lock;
 
 	struct mdss_panel_data *panel_data;
