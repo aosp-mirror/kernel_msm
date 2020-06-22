@@ -1480,6 +1480,7 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 	if (icl_ua == INT_MAX)
 		goto set_mode;
 
+#if 0
 	/* configure current */
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB
 		&& (chg->typec_legacy
@@ -1512,6 +1513,38 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 		}
 		icl_override = SW_OVERRIDE_HC_MODE;
 	}
+#else
+	/* b/155860936 Always use HC_MODE except for 100mA and 150mA */
+
+	switch (icl_ua) {
+	case USBIN_100MA:
+	case USBIN_150MA:
+		rc = set_sdp_current(chg, icl_ua);
+		if (rc < 0) {
+			smblib_err(chg, "Couldn't set SDP ICL rc=%d\n", rc);
+			goto out;
+		}
+
+		icl_override = SW_OVERRIDE_USB51_MODE;
+		goto set_mode;
+	case USBIN_500MA:
+	case USBIN_900MA:
+		icl_ua -= USBIN_OFFSET;
+		if (icl_ua < 0)
+			icl_ua = 0;
+		smblib_dbg(chg, PR_MISC, "override USB_ICL with %d uA", icl_ua);
+		break;
+	default:
+		break;
+	}
+
+	rc = smblib_set_charge_param(chg, &chg->param.usb_icl, icl_ua);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
+		goto out;
+	}
+	icl_override = SW_OVERRIDE_HC_MODE;
+#endif
 
 set_mode:
 	rc = smblib_icl_override(chg, icl_override);
@@ -1520,7 +1553,9 @@ set_mode:
 		goto out;
 	}
 
+#if 0 /* b/155860936 */
 unsuspend:
+#endif
 	/* unsuspend after configuring current and override */
 	rc = smblib_set_usb_suspend(chg, false);
 	if (rc < 0) {
@@ -1528,9 +1563,14 @@ unsuspend:
 		goto out;
 	}
 
+#if 0
 	/* Re-run AICL */
 	if (icl_override != SW_OVERRIDE_HC_MODE)
 		rc = smblib_run_aicl(chg, RERUN_AICL);
+#else
+	/* b/155860936 Always rerun AICL */
+	rc = smblib_run_aicl(chg, RERUN_AICL);
+#endif
 out:
 	return rc;
 }
