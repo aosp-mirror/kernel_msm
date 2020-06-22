@@ -791,6 +791,8 @@ watchdog:
 		rt5514->dsp_enabled, rt5514->dsp_adc_enabled);
 
 	if (rt5514->dsp_enabled || rt5514->dsp_adc_enabled) {
+		regmap_multi_reg_write(rt5514->i2c_regmap,
+			rt5514_i2c_patch, rt5514->i2c_patch_size);
 		rt5514_enable_dsp_prepare(rt5514);
 		rt5514_dsp_func_select(rt5514);
 
@@ -1173,8 +1175,10 @@ static int rt5514_dsp_func_put(struct snd_kcontrol *kcontrol,
 static int rt5514_dsp_mod_enable_put(struct snd_kcontrol *kcontrol,
 					 struct snd_ctl_elem_value *ucontrol)
 {
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	switch (ucontrol->value.integer.value[0]) {
 	case RT5514_DSP_CHRE:
+		dev_info(component->dev, "chre enable\n");
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_CHRE, 0);
 		break;
 	default:
@@ -1187,8 +1191,10 @@ static int rt5514_dsp_mod_enable_put(struct snd_kcontrol *kcontrol,
 static int rt5514_dsp_mod_disable_put(struct snd_kcontrol *kcontrol,
 					  struct snd_ctl_elem_value *ucontrol)
 {
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	switch (ucontrol->value.integer.value[0]) {
 	case RT5514_DSP_CHRE:
+		dev_info(component->dev, "chre disable\n");
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_CHRE, 1);
 		break;
 	default:
@@ -2124,6 +2130,15 @@ static int rt5514_hw_free(struct snd_pcm_substream  *substream,
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 
 	mutex_lock(&rt5514->stream_lock);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+		RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+
 	rt5514->dsp_enabled = rt5514->dsp_req;
 	rt5514->dsp_adc_enabled = rt5514->adc_req;
 	if (rt5514->dsp_enabled | rt5514->dsp_adc_enabled) {
@@ -2148,6 +2163,16 @@ static int rt5514_hw_free(struct snd_pcm_substream  *substream,
 	rt5514->is_streaming = false;
 	if (rt5514->need_reload)
 		rt5514_reload_firmware(rt5514);
+
+	usleep_range(125000, 125100);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+		RT5514_AD_AD_MUTE, 0x0);
+	regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+		RT5514_AD_AD_MUTE, 0x0);
 	mutex_unlock(&rt5514->stream_lock);
 
 	return 0;
