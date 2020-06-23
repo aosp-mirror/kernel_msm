@@ -626,7 +626,6 @@
   param_ops_charp
   param_ops_int
   param_ops_long
-  param_ops_string
   param_ops_uint
   param_set_bool
   param_set_int
@@ -1818,6 +1817,7 @@
   of_graph_get_next_endpoint
   of_graph_get_remote_port_parent
   of_graph_parse_endpoint
+  param_ops_string
   pm_genpd_remove
   regulator_get_mode
   regulator_get_optional
