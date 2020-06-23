@@ -194,14 +194,14 @@
 	external-playback-dai-link@0 {
 		cpu-dai-name = "msm-dai-q6-tdm.36928";
 		codec {
-			sound-dai = <&cs35l41_l 0>, <&cs35l41_r 0>;
+			sound-dai = <&tas256x 0>;
 		};
 	};
 
 	external-playback-ref-dai-link@0 {
 		cpu-dai-name = "msm-dai-q6-tdm.36929";
 		codec {
-			sound-dai = <&cs35l41_l 0>, <&cs35l41_r 0>;
+			sound-dai = <&tas256x 0>;
 		};
 	};
 };
@@ -524,7 +524,7 @@
 	irq_pin_top_default: irq_pin_top_default {
 		pins = "gpio5";
 		function = "normal";
-		bias-pull-down;
+		bias-disable;
 		qcom,drive-strength = <2>;
 		power-source = <1>;
 	};
@@ -532,7 +532,7 @@
 	irq_pin_bottom_default: irq_pin_bottom_default {
 		pins = "gpio8";
 		function = "normal";
-		bias-pull-down;
+		bias-disable;
 		qcom,drive-strength = <2>;
 		power-source = <1>;
 	};
@@ -565,7 +565,29 @@
 	status= "ok";
 	qcom,clk-freq-out = <400000>;
 
+	tas256x:tas256x@4c {
+		#sound-dai-cells = <1>;
+		compatible = "ti, tas2562";/*or "ti,tas2564" or "ti,tas256x" */
+		reg = <0x4c>;
+		ti,left-channel = <0x4c>;
+		ti,right-channel = <0x4d>;
+		ti,channels = <2>; /* channel number */
+		ti,reset-gpio = <&pm8150l_gpios 11 0>;
+		ti,reset-gpio2 = <&pm8150l_gpios 10 0>;
+		ti,irq-gpio = <&pm7250b_gpios 5 0>;
+		ti,irq-gpio2 = <&pm7250b_gpios 8 0>;
+		status = "ok";
+		ti,iv-width = <16>;
+		ti,vbat-mon = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&reset_pin_top_default
+					&reset_pin_bottom_default
+					&irq_pin_top_default
+					&irq_pin_bottom_default>;
+	};
+
 	cs35l41_l: cs35l41@40 {
+		status = "disabled";
 		#sound-dai-cells = <1>;
 		compatible = "cirrus,cs35l41";
 		reg = <0x40>;
@@ -595,6 +617,7 @@
 	};
 
 	cs35l41_r: cs35l41@41 {
+		status = "disabled";
 		#sound-dai-cells = <1>;
 		compatible = "cirrus,cs35l41";
 		reg = <0x41>;
