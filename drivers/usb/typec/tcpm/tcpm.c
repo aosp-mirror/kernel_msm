@@ -4903,7 +4903,7 @@ static void run_state_machine(struct tcpm_port *port)
 	/* PR_Swap states */
 	case PR_SWAP_ACCEPT:
 		if (port->pwr_role == TYPEC_SOURCE)
-			tcpm_set_cc(port, tcpm_rp_cc(port));
+			tcpm_set_cc(port, port->cc_req);
 		else
 			tcpm_set_cc(port, TYPEC_CC_RD);
 		tcpm_log(port, "in PR_SWAP := true");
@@ -4913,7 +4913,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case PR_SWAP_SEND:
 		if (port->pwr_role == TYPEC_SOURCE)
-			tcpm_set_cc(port, tcpm_rp_cc(port));
+			tcpm_set_cc(port, port->cc_req);
 		else
 			tcpm_set_cc(port, TYPEC_CC_RD);
 		tcpm_log(port, "in PR_SWAP := true");
