@@ -386,7 +386,8 @@ static bool usb_throttling_should_trigger(struct overheat_info *ovh_info) {
 
 	if (!ovh_info->overheat_mitigation && mitigation_enabled &&
 	    ovh_info->temp > ovh_info->begin_temp &&
-	    ovh_info->throttle_state == USB_MAX_THROTTLE_STATE)
+	    ovh_info->throttle_state == USB_MAX_THROTTLE_STATE &&
+	    (ovh_info->usb_connected || ovh_info->accessory_connected))
 		return true;
 	else
 		return false;
@@ -447,7 +448,8 @@ static void port_overheat_work(struct work_struct *work)
 		}
 	}
 
-	if (ovh_info->overheat_mitigation || (ovh_info->throttle_state))
+	if (ovh_info->overheat_mitigation || (ovh_info->throttle_state &&
+		(ovh_info->usb_connected || ovh_info->accessory_connected)))
 		goto rerun;
 
 	// Disable usbc virtual sensor because USB port isn't overheated
