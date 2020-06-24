@@ -47,6 +47,7 @@ struct gbms_chg_profile {
 	u32 chg_last_tier_vpack_tolerance;
 	u32 chg_last_tier_dec_current;
 	u32 chg_last_tier_term_current;
+	s32 zero_ibat_offset;
 	/* taper step */
 	u32 fv_uv_resolution;
 	/* experimental */

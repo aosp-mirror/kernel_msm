@@ -269,6 +269,12 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 				    GBMS_DEFAULT_CHG_LAST_TIER_TERM_CURRENT;
 	}
 
+	ret = of_property_read_s32(node,
+			    "google,zero-ibat-offset",
+			    &profile->zero_ibat_offset);
+	if (ret < 0)
+		profile->zero_ibat_offset = 0;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(gbms_init_chg_profile_internal);

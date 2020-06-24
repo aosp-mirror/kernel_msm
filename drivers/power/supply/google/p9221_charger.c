@@ -3592,8 +3592,12 @@ static irqreturn_t p9221_irq_thread(int irq, void *irq_data)
 
 	pm_runtime_get_sync(charger->dev);
 	if (!charger->resume_complete) {
+		if (!charger->disable_irq) {
+			charger->disable_irq = true;
+			disable_irq_nosync(charger->pdata->irq_int);
+		}
 		pm_runtime_put_sync(charger->dev);
-		return -EAGAIN;
+		return IRQ_HANDLED;
 	}
 	pm_runtime_put_sync(charger->dev);
 
@@ -4346,6 +4350,10 @@ static int p9221_pm_resume(struct device *dev)
 
 	pm_runtime_get_sync(charger->dev);
 	charger->resume_complete = true;
+	if (charger->disable_irq) {
+		enable_irq(charger->pdata->irq_int);
+		charger->disable_irq = false;
+	}
 	pm_runtime_put_sync(charger->dev);
 
 	return 0;

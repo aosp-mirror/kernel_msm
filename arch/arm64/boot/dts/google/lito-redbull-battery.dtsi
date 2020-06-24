@@ -151,6 +151,7 @@
 		google,res-filt-length = <10>;
 		/* enable cycle counts */
 		google,cycle-counts;
+		google,zero-ibat-offset = <(-15860)>;
 
 		#thermal-sensor-cells = <0>;
 		/* soc smoothing */

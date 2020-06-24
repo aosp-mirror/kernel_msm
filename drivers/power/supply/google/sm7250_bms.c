@@ -1355,12 +1355,6 @@ static int bms_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	rc = sm7250_request_interrupts(bms);
-	if (rc < 0) {
-		pr_err("Couldn't register the interrupts rc = %d\n", rc);
-		goto exit;
-	}
-
 	bms->bob_vreg = devm_regulator_get(&pdev->dev, "vbob");
 	if (IS_ERR_OR_NULL(bms->bob_vreg)) {
 		pr_err("Can't find vbob-supply\n");
@@ -1372,6 +1366,12 @@ static int bms_probe(struct platform_device *pdev)
 	if (rc < 0) {
 		pr_err("Can't enable vbob-supply(%d)\n", rc);
 		rc = PTR_ERR(bms->bob_vreg);
+		goto exit;
+	}
+
+	rc = sm7250_request_interrupts(bms);
+	if (rc < 0) {
+		pr_err("Couldn't register the interrupts rc = %d\n", rc);
 		goto exit;
 	}
 
