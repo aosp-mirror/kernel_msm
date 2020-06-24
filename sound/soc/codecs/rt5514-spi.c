@@ -64,7 +64,7 @@ struct rt5514_dsp {
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
 	unsigned int stream_flag[MAX_STREAM_FLAG];
 	unsigned int hotword_ignore_ms, musdet_ignore_ms;
-	size_t buf_size[3], get_size[2], dma_offset[3];
+	size_t buf_size[3], get_size[3], dma_offset[3];
 };
 
 static const struct snd_pcm_hardware rt5514_spi_pcm_hardware = {
@@ -523,8 +523,7 @@ static void rt5514_spi_copy_work_0(struct work_struct *work)
 	if (rt5514_dsp->get_size[0] >= rt5514_dsp->buf_size[0]) {
 		rt5514_spi_burst_read(rt5514_dsp->buf_rp_addr[0], (u8 *)&buf,
 			sizeof(buf));
-		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 |
-					buf[3] << 24;
+		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_0, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_0,
@@ -636,8 +635,7 @@ static void rt5514_spi_copy_work_1(struct work_struct *work)
 	if (rt5514_dsp->get_size[1] >= rt5514_dsp->buf_size[1]) {
 		rt5514_spi_burst_read(rt5514_dsp->buf_rp_addr[1], (u8 *)&buf,
 			sizeof(buf));
-		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 |
-					buf[3] << 24;
+		cur_wp = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
 		if ((cur_wp & 0xffe00000) != 0x4fe00000) {
 			rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_1, 0);
 			schedule_delayed_work(&rt5514_dsp->copy_work_1,
