@@ -242,6 +242,20 @@ enum gbms_stats_ac_tier_idx_t {
 	GBMS_STATS_AC_TI_ACTIVE,
 };
 
+/* health state */
+struct batt_chg_health {
+	int rest_soc;		/* entry criteria */
+	int rest_voltage;	/* entry criteria */
+	int always_on_soc;	/* entry criteria */
+
+	time_t rest_deadline;	/* full by this in seconds */
+	int rest_rate;		/* centirate once enter */
+
+	enum chg_health_state rest_state;
+	int rest_cc_max;
+	int rest_fv_uv;
+};
+
 struct gbms_charging_event {
 	union gbms_ce_adapter_details	adapter_details;
 
@@ -261,9 +275,8 @@ struct gbms_charging_event {
 	uint32_t chg_sts_delta_soc;
 
 	/* health based charging */
+	struct batt_chg_health		chg_health;
 	struct gbms_ce_tier_stats	health_stats;
-	enum chg_health_state		rest_state;
-	time_t rest_deadline;
 };
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \

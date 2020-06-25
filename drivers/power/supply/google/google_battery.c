@@ -165,18 +165,6 @@ struct batt_res {
 	int res_temp_high;
 };
 
-/* health state */
-struct batt_chg_health {
-	int rest_soc;		/* entry criteria */
-	int rest_voltage;	/* entry criteria */
-	time_t rest_deadline;	/* full by this in seconds */
-	int rest_rate;		/* centirate once enter */
-
-	enum chg_health_state rest_state;
-	int rest_cc_max;
-	int rest_fv_uv;
-};
-
 /* battery driver state */
 struct batt_drv {
 	struct device *device;
@@ -1095,9 +1083,10 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 }
 
 
-static int batt_chg_health_vti(enum chg_health_state rest_state,
-			       time_t rest_deadline)
+static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 {
+	enum chg_health_state rest_state = chg_health->rest_state;
+	time_t rest_deadline = chg_health->rest_deadline;
 	int tier_idx = GBMS_STATS_AC_TI_INVALID;
 
 	switch (rest_state) {
@@ -1166,11 +1155,10 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 				(cc_out < 0) ? -1 : cc_out / 1000;
 
 	/* close/fix heath charge data (if enabled) */
-	batt_drv->ce_data.rest_deadline = batt_drv->chg_health.rest_deadline;
-	batt_drv->ce_data.rest_state = batt_drv->chg_health.rest_state;
+	memcpy(&batt_drv->ce_data.chg_health, &batt_drv->chg_health,
+	       sizeof(batt_drv->ce_data.chg_health));
 	batt_drv->ce_data.health_stats.vtier_idx =
-			batt_chg_health_vti(batt_drv->chg_health.rest_state,
-					    batt_drv->chg_health.rest_deadline);
+				batt_chg_health_vti(&batt_drv->chg_health);
 
 	/* TODO: add a field to ce_data to qual weird charge sessions */
 	publish = force || batt_chg_stats_qual(&batt_drv->ce_data);
@@ -1189,8 +1177,8 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 			ce_qual->charging_stats.voltage_out,
 			ce_qual->charging_stats.cc_in,
 			ce_qual->charging_stats.cc_out,
-			ce_qual->rest_deadline,
-			ce_qual->rest_state,
+			ce_qual->chg_health.rest_deadline,
+			ce_qual->chg_health.rest_state,
 			ce_qual->health_stats.vtier_idx);
 	}
 
@@ -1376,20 +1364,20 @@ static int batt_chg_tier_stats_cstr(char *buff, int size,
 	return len;
 }
 
+/* health_stats->tier_index is set on stats_close() */
 static int batt_health_stats_cstr(char *buff, int size,
 				  const struct gbms_charging_event *ce_data,
 				  bool verbose)
 {
 	const struct gbms_ce_tier_stats *health_stats = &ce_data->health_stats;
+	const int vti = batt_chg_health_vti(&ce_data->chg_health);
 	int len = 0;
 
-	len += scnprintf(&buff[len], size - len,
-			"\nH: %d %d %ld\n",
-			ce_data->rest_state,
-			batt_chg_health_vti(ce_data->rest_state,
-					    ce_data->rest_deadline),
-			ce_data->rest_deadline);
+	len += scnprintf(&buff[len], size - len, "\nH: %d %d %ld\n",
+			 ce_data->chg_health.rest_state, vti,
+			 ce_data->chg_health.rest_deadline);
 
+	/* tier stats only when we have data or in verbose */
 	if (verbose && health_stats->soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						health_stats,
@@ -1398,6 +1386,7 @@ static int batt_health_stats_cstr(char *buff, int size,
 	return len;
 }
 
+/* doesn't output hc stats */
 static int batt_chg_stats_cstr(char *buff, int size,
 			       const struct gbms_charging_event *ce_data,
 			       bool verbose)
@@ -1614,6 +1603,7 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 	/* stats */
 	batt_drv->msc_state = -1;
 	/* health */
+	/* NOTE: should not reset always_on_soc */
 	batt_drv->chg_health.rest_state = CHG_HEALTH_INACTIVE;
 	batt_drv->chg_health.rest_deadline = 0;
 	batt_drv->chg_health.rest_cc_max = -1;
@@ -1818,11 +1808,15 @@ static enum chg_health_state msc_health_active(struct batt_chg_health *rest,
 					       const struct batt_drv *batt_drv)
 {
 	bool vrest = false, srest = false;
+	int ssoc_threshold = -1;
 
-	if (rest->rest_soc != -1) {
+	ssoc_threshold = rest->always_on_soc;
+	if (ssoc_threshold == -1)
+		ssoc_threshold = rest->rest_soc;
+	if (ssoc_threshold != -1) {
 		const int ssoc = ssoc_get_capacity(&batt_drv->ssoc_state);
 
-		srest = (ssoc >= batt_drv->chg_health.rest_soc);
+		srest = ssoc >= ssoc_threshold;
 	}
 
 	if (rest->rest_voltage != -1) {
@@ -1839,8 +1833,10 @@ static enum chg_health_state msc_health_active(struct batt_chg_health *rest,
 
 /*
  * for logging, userspace should use
- *   deadline == 0 on fast replug
+ *   deadline == 0 on fast replug (leave initial deadline ok)
  *   deadline == -1 when the feature is disabled
+ *   deadline == absolute requested deadline (if always_on is set)
+ * return true if there was a change
  */
 static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 					 long long deadline_s)
@@ -1848,17 +1844,20 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 	enum chg_health_state rest_state = chg_health->rest_state;
 	bool new_deadline;
 
+	/* disabled in settings */
 	if (deadline_s < 0) {
 		new_deadline = chg_health->rest_deadline != deadline_s;
 		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 		chg_health->rest_deadline = -1;
+	/* disabled with replug */
 	} else if (deadline_s == 0) {
 		new_deadline = chg_health->rest_deadline != deadline_s;
-		/* ->rest_deadline is reset to 0 on disconnect */
+		/* ->rest_deadline will be reset to 0 on disconnect */
 		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 	} else {
 		const time_t rest_deadline = get_boot_sec() + deadline_s;
 
+		/* ->always_on SOC overrides the deadline */
 		new_deadline = chg_health->rest_deadline != rest_deadline;
 		chg_health->rest_state = CHG_HEALTH_ENABLED;
 		chg_health->rest_deadline = rest_deadline;
@@ -1871,53 +1870,68 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 static bool msc_logic_health(struct batt_chg_health *rest,
 			     const struct batt_drv *batt_drv)
 {
+	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	const time_t deadline = rest->rest_deadline;
 	const time_t now = get_boot_sec();
 	enum chg_health_state rest_state = rest->rest_state;
-	int ttf_ret = 0, fv_uv = -1, cc_max = -1;
+	int fv_uv = -1, cc_max = -1;
 	bool changed = false;
-	time_t ttf = -1;
+	time_t ttf = 0;
 
-	/* Disabled is a one way trip until state is reset */
-	if (rest_state < CHG_HEALTH_INACTIVE || deadline == 0)
+	/* DONE, USER_DISABLED reset on disconnect, _DISABLED didn't meet DL */
+	if (rest_state == CHG_HEALTH_USER_DISABLED ||
+	    rest_state == CHG_HEALTH_DONE ||
+	    (rest->always_on_soc == -1 && (rest_state == CHG_HEALTH_DISABLED ||
+	    rest_state == CHG_HEALTH_INACTIVE)))
 		goto done_exit;
 
-	/*
-	 * ttf_ret < 0 when the device is discharging. This can happen with
-	 * a large sysload on a underpowered adapter. Current strategy leave
-	 * everything as is (hoping) that the load is temporary.
-	 */
-	ttf_ret = batt_ttf_estimate(&ttf, batt_drv);
-	if (ttf_ret < 0)
-		return false;
+	/* enable if not USER_DISABLED and INACTIVE */
+	if (rest->always_on_soc != -1 && rest_state == CHG_HEALTH_INACTIVE)
+		rest_state = CHG_HEALTH_ENABLED;
 
-	/* estimate is 0 at full, we are done! */
-	if (ttf == 0)  {
-		rest_state = CHG_HEALTH_DONE;
+	/* rest->always_on_soc set ttf = 0 and honor a valid deadline */
+	if (rest->always_on_soc == -1) {
+		int ret;
 
-	/* deadline > 0, single trip to disabled from any state */
-	} else if ((now + ttf) > deadline) {
 		/*
-		 * Disable health based charging for this session if the
-		 * deadline cannot be met with the current rate. Set a new
-		 * deadline to re-enable for this session.
+		 * ttf_ret < 0 when the device is discharging.
+		 * This can happen with a large sysload on a underpowered
+		 * adapter. Current strategy leaves everything as is (hoping)
+		 * that the load is temporary.
+		 * NOTE: if in ACTIVE mode we could retest msc_health_active()
+		 * and reset to DISABLED if the value returned is not ACTIVE.
+		 */
+		ret = batt_ttf_estimate(&ttf, batt_drv);
+		if (ret < 0)
+			return false;
+
+		/* estimate is 0 at full, no need for it recharge logic */
+		if (ttf == 0) {
+			rest_state = CHG_HEALTH_DONE;
+			goto done_exit;
+		}
+
+	}
+
+	/* disabled from any state when now + ttf is over a valid deadline */
+	if (deadline > 0 && (now + ttf) > deadline) {
+		/*
+		 * Disable if the deadline cannot be met with the current rate.
+		 * Set a new deadline or reset always_on_soc to re-enable for
+		 * this session.
 		 * TODO: consider adding a margin or debounce it.
 		 */
 		rest_state = CHG_HEALTH_DISABLED;
+		goto done_exit;
+	}
 
-	/* state here is _INACTIVE, _ENABLED, _ACTIVE */
-	} else {
-		const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
-
-		/*
-		 * only needs to be done if rest_state != CHG_HEALTH_ACTIVE
-		 * NOTE: state will change from _ACTIVE to _ENABLED after
-		 * a period where the device discharge it is ok because it
-		 * will be adjusted on next round.
-		 */
-		rest_state = msc_health_active(rest, batt_drv);
-		if (rest_state != CHG_HEALTH_ACTIVE)
-			goto done_exit;
+	/*
+	 * State will change from _ACTIVE to _ENABLED after a discharge.
+	 * State will transition back to _ENABLED after some time unless
+	 * the deadline is met.
+	 */
+	rest_state = msc_health_active(rest, batt_drv);
+	if (rest_state == CHG_HEALTH_ACTIVE) {
 
 		/* battery_capacity in mAh, rest_rate in deciPct */
 		cc_max = batt_drv->battery_capacity * rest->rest_rate;
@@ -1939,9 +1953,9 @@ done_exit:
 	/* send a power supply event when rest_state changes */
 	changed = rest->rest_state != rest_state;
 	if (changed)
-		pr_info("MSC_HEALTH: now=%d deadline=%d ttf=%ld state=%d->%d fv_uv=%d, cc_max=%d\n",
-			now, rest->rest_deadline, (ttf_ret < 0) ? ttf_ret : ttf,
-			rest->rest_state, rest_state, fv_uv, cc_max);
+		pr_info("MSC_HEALTH: now=%d deadline=%d aon_soc=%d ttf=%ld state=%d->%d fv_uv=%d, cc_max=%d\n",
+			now, rest->rest_deadline, rest->always_on_soc,
+			ttf, rest->rest_state, rest_state, fv_uv, cc_max);
 
 	/* msc_logic_* will vote on cc_max and fv_uv. */
 	rest->rest_state = rest_state;
@@ -2933,6 +2947,7 @@ static ssize_t batt_ctl_chg_stats(struct device *dev,
 	return count;
 }
 
+/* regular and health stats */
 static ssize_t batt_chg_qual_stats_cstr(char *buff, int size,
 					struct gbms_charging_event *ce_qual,
 					bool verbose)
@@ -2940,7 +2955,7 @@ static ssize_t batt_chg_qual_stats_cstr(char *buff, int size,
 	ssize_t len = 0;
 
 	len += batt_chg_stats_cstr(&buff[len], size - len, ce_qual, verbose);
-	if (ce_qual->rest_state != CHG_HEALTH_INACTIVE)
+	if (ce_qual->chg_health.rest_state != CHG_HEALTH_INACTIVE)
 		len += batt_health_stats_cstr(&buff[len], size - len,
 					      ce_qual, verbose);
 	return len;
@@ -2966,6 +2981,7 @@ static ssize_t batt_show_chg_stats(struct device *dev,
 static const DEVICE_ATTR(charge_stats, 0664, batt_show_chg_stats,
 					     batt_ctl_chg_stats);
 
+/* show current/active and qual data */
 static ssize_t batt_show_chg_details(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
@@ -2979,28 +2995,48 @@ static ssize_t batt_show_chg_details(struct device *dev,
 
 	mutex_lock(&batt_drv->stats_lock);
 
+	/* this is the current one */
 	len += batt_chg_stats_cstr(&buf[len], PAGE_SIZE - len, ce_data, true);
+
+	/*
+	 * stats are accumulated in ce_data->health_stats, rest_* fields
+	 * are set on stats_close()
+	 */
 	if (batt_drv->chg_health.rest_state != CHG_HEALTH_INACTIVE) {
+		struct gbms_ce_tier_stats *health_stats =
+					&batt_drv->ce_data.health_stats;
+		const long elap = health_stats->time_fast +
+				  health_stats->time_taper +
+				  health_stats->time_other;
+		const time_t now = get_boot_sec();
 		int vti;
 
-		/* health charge parameters */
-		len += batt_health_stats_cstr(&buf[len], PAGE_SIZE - len,
-					      ce_data, false);
-
-		vti = batt_chg_health_vti(batt_drv->chg_health.rest_state,
-					  batt_drv->chg_health.rest_deadline);
+		vti = batt_chg_health_vti(&batt_drv->chg_health);
 		len += scnprintf(&buf[len], PAGE_SIZE - len,
-				"\nH: %d %ld %ld\n",
+				"\nH: %d %d %ld %ld %ld %d",
 				batt_drv->chg_health.rest_state,
 				vti,
-				get_boot_sec(),
-				batt_drv->chg_health.rest_deadline);
+				elap,
+				now,
+				batt_drv->chg_health.rest_deadline,
+				batt_drv->chg_health.always_on_soc);
 
+		/* NOTE: vtier_idx is -1, can also check elap  */
+		if (health_stats->soc_in != -1)
+			len += batt_chg_tier_stats_cstr(&buf[len],
+							PAGE_SIZE - len,
+							health_stats,
+							!!elap);
 	}
 
-	if (qual_valid)
+	len += scnprintf(&buf[len], PAGE_SIZE - len, "\n");
+
+	/* this was the last one (if present) */
+	if (qual_valid) {
 		len += batt_chg_qual_stats_cstr(&buf[len], PAGE_SIZE - len,
 						&batt_drv->ce_qual, true);
+		len += scnprintf(&buf[len], PAGE_SIZE - len, "\n");
+	}
 
 	mutex_unlock(&batt_drv->stats_lock);
 
@@ -3141,6 +3177,71 @@ static ssize_t chg_health_show_stage(struct device *dev,
 
 static const DEVICE_ATTR(charge_stage, 0444, chg_health_show_stage, NULL);
 
+static ssize_t chg_health_charge_limit_get(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =(struct batt_drv *)
+					power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->chg_health.always_on_soc);
+}
+/* setting disable (deadline = -1) or replug (deadline == 0) will disable */
+static ssize_t chg_health_charge_limit_set(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =(struct batt_drv *)
+					power_supply_get_drvdata(psy);
+	const int always_on_soc = simple_strtol(buf, NULL, 10);
+	enum chg_health_state rest_state;
+
+	if (always_on_soc < -1 || always_on_soc > 99)
+		return -EINVAL;
+
+	mutex_lock(&batt_drv->chg_lock);
+
+	rest_state = batt_drv->chg_health.rest_state;
+
+	if (always_on_soc != -1) {
+		switch (rest_state) {
+		case CHG_HEALTH_DISABLED: /* didn't meet deadline */
+		case CHG_HEALTH_INACTIVE: /* deadline was not provided */
+			rest_state = CHG_HEALTH_ENABLED;
+			break;
+		default:
+			/* _DONE, _ENABLED, _ACTIVE, _USER_DISABLED */
+			break;
+		}
+	} else if (batt_drv->chg_health.always_on_soc != -1) {
+
+		switch (rest_state) {
+		case CHG_HEALTH_ENABLED: /* waiting for always_on_soc */
+		case CHG_HEALTH_ACTIVE: /* activated at always_on_soc */
+			if (batt_drv->chg_health.rest_deadline > 0)
+				rest_state = CHG_HEALTH_ENABLED;
+			else
+				rest_state = CHG_HEALTH_INACTIVE;
+			break;
+		default:
+			/* _DONE, _DISABLED, _USER_DISABLED */
+			break;
+		}
+	}
+
+	batt_drv->chg_health.always_on_soc = always_on_soc;
+	batt_drv->chg_health.rest_state = rest_state;
+
+	mutex_unlock(&batt_drv->chg_lock);
+	power_supply_changed(batt_drv->psy);
+	return count;
+}
+
+static DEVICE_ATTR(charge_limit, 0660, chg_health_charge_limit_get,
+		   chg_health_charge_limit_set);
 
 static ssize_t batt_show_chg_deadline(struct device *dev,
 				      struct device_attribute *attr, char *buf)
@@ -3281,13 +3382,15 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 	ret = device_create_file(&batt_drv->psy->dev,
 				 &dev_attr_charge_deadline);
 	if (ret)
-		dev_err(&batt_drv->psy->dev,
-				"Failed to create chg_deadline\n");
+		dev_err(&batt_drv->psy->dev, "Failed to create chg_deadline\n");
 
 	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_charge_stage);
 	if (ret)
-		dev_err(&batt_drv->psy->dev,
-				"Failed to create charge_stage\n");
+		dev_err(&batt_drv->psy->dev, "Failed to create charge_stage\n");
+
+	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_charge_limit);
+	if (ret != 0)
+		dev_err(&batt_drv->psy->dev, "Failed to create charge_limit\n");
 
 	/* time to full */
 	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_ttf_stats);
@@ -4122,7 +4225,9 @@ static void google_battery_init_work(struct work_struct *work)
 	/* google_resistance  */
 	batt_res_load_data(&batt_drv->res_state, batt_drv->fg_psy);
 
-	/* health based charging */
+	/* health based charging, triggers */
+	batt_drv->chg_health.always_on_soc = -1;
+
 	ret = of_property_read_u32(batt_drv->device->of_node,
 				   "google,chg-rest-soc",
 				   &batt_drv->chg_health.rest_soc);
@@ -4141,6 +4246,7 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->chg_health.rest_rate = 0;
 
+	/* health based charging, state */
 	batt_drv->chg_health.rest_state = CHG_HEALTH_INACTIVE;
 	batt_drv->chg_health.rest_deadline = 0;
 	batt_drv->chg_health.rest_cc_max = -1;
