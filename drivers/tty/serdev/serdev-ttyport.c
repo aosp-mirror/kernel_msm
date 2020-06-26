@@ -303,7 +303,7 @@ struct device *serdev_tty_port_register(struct tty_port *port,
 	if (parent->bus == &platform_bus_type) {
 		char tty_port_name[7];
 
-		sprintf(tty_port_name, "%s%d", drv->name, idx);
+		snprintf(tty_port_name, sizeof(tty_port_name), "%s%d", drv->name, idx);
 		if (pdev_tty_port &&
 		    !strcmp(pdev_tty_port, tty_port_name)) {
 			platform = true;
