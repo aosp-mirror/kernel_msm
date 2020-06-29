@@ -3547,8 +3547,10 @@ static int batt_do_sha256(const u8 *data, unsigned int len, u8 *result)
 
 	size = sizeof(struct shash_desc) + crypto_shash_descsize(tfm);
 	shash = kmalloc(size, GFP_KERNEL);
-	if (!shash)
+	if (!shash) {
+		crypto_free_shash(tfm);
 		return -ENOMEM;
+	}
 
 	shash->tfm = tfm;
 	ret = crypto_shash_digest(shash, data, len, result);
