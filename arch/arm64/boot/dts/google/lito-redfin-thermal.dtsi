@@ -301,6 +301,11 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
+			skin_backup_shutdown: skin-backup-shutdown {
+				temperature = <57000>;
+				hysteresis = <1000>;
+				type = "critical";
+			};
 		};
 		cooling-maps {
 			/* light pre level 1 throttling */
