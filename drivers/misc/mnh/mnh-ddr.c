@@ -401,17 +401,17 @@ int mnh_ddr_write_mode_reg(u8 modereg, u8 modevalue)
 static void mnh_ddr_enable_lp(void)
 {
 	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0xFF);
-	if (MNH_DDR_CTL_INf(122, LP_AUTO_EXIT_EN) == 0)
-		MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0xF);
-	if (MNH_DDR_CTL_INf(122, LP_AUTO_MEM_GATE_EN) == 0)
-		MNH_DDR_CTL_OUTf(122, LP_AUTO_MEM_GATE_EN, 0x4);
-	if (MNH_DDR_CTL_INf(122, LP_AUTO_ENTRY_EN) == 0)
-		MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x4);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_MEM_GATE_EN, 0x4);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x4);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0xF);
 }
 
 static void mnh_ddr_disable_lp(void)
 {
+	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0x00);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_MEM_GATE_EN, 0x0);
 	MNH_DDR_CTL_OUTf(122, LP_AUTO_ENTRY_EN, 0x0);
+	MNH_DDR_CTL_OUTf(122, LP_AUTO_EXIT_EN, 0x0);
 	mnh_ddr_send_lp_cmd(LP_CMD_EXIT_LP);
 }
 
