@@ -218,7 +218,7 @@ struct msm_otg_platform_data {
 };
 
 #define SDP_CHECK_DELAY_MS 10000 /* in ms */
-#define SDP_CHECK_BOOT_DELAY_MS 30000 /* in ms */
+#define SDP_CHECK_BOOT_DELAY_MS 100000 /* in ms */
 
 #define MSM_USB_BASE	(motg->regs)
 #define MSM_USB_PHY_CSR_BASE (motg->phy_csr_regs)
