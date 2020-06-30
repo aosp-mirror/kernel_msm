@@ -11,8 +11,8 @@
  * GNU General Public License for more details.
  */
 
-#include "lito-redfin.dtsi"
-#include "lito-redfin-camera-sensor-v3.dtsi"
-#include "lito-v2-redfin-evt-audio.dtsi"
-#include "lito-redfin-pac193x.dtsi"
-#include "lito-redfin-display-dvt.dtsi"
+&sde_dsi {
+	google,gamma_fixup_panel_id = /bits/ 8 <0x3A 0x64 0x43>;
+	/* For comamnd 0xC8, copy 6 bytes starting at P64 to P109 */
+	google,gamma_fixup_location = <0xC8 63 108 6>;
+};
