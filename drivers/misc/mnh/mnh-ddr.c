@@ -101,8 +101,7 @@ do { \
 	MNH_SCU_OUTx(LPDDR4_FSP_SETTING, fsp, _state->fsps[fsp]); \
 } while (0)
 
-#define WRITE_CLK_FROM_FSP(fsp) mnh_ddr_write_clk_from_fsp(fsp, 1)
-#define WRITE_CLK_FROM_FSP_NO_LOCK(fsp) mnh_ddr_write_clk_from_fsp(fsp, 0)
+#define WRITE_CLK_FROM_FSP(fsp) mnh_ddr_write_clk_from_fsp(fsp)
 
 #define SAVE_DDR_REG_CONFIG(ddrblock, regindex) \
 do { \
@@ -161,25 +160,15 @@ static struct mnh_ddr_internal_state *_state;
 static void mnh_ddr_disable_lp(void);
 static void mnh_ddr_enable_lp(void);
 
-/*
- * Write the clk dividers from given FSP index.
- *  fsp: the fsp index [0-3]
- *  pll_freeze: define whether the function uses HW PLL freeze funtionality
- *  inside the function to set all the dividers in one operation (with unfreeze)
- *  0 to set it off
- *  1 to set it on
- */
-void mnh_ddr_write_clk_from_fsp(unsigned int fsp, int pll_freeze)
+void mnh_ddr_write_clk_from_fsp(unsigned int fsp)
 {
 	if (fsp >= MNH_DDR_NUM_FSPS) {
 		pr_err("%s invalid fsp 0x%x", __func__, fsp);
 		return;
 	}
 
-	if (pll_freeze) {
-		MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
-		MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 1);
-	}
+	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 1);
 	MNH_SCU_OUTf(CCU_CLK_DIV, LPDDR4_REFCLK_DIV,
 		MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, FSP_LPDDR4_REFCLK_DIV));
 	MNH_SCU_OUTf(CCU_CLK_DIV, AXI_FABRIC_CLK_DIV,
@@ -188,10 +177,8 @@ void mnh_ddr_write_clk_from_fsp(unsigned int fsp, int pll_freeze)
 		MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, FSP_PCIE_AXI_CLK_DIV));
 	MNH_SCU_OUTf(CCU_CLK_CTL, LP4_AXI_SYS200_MODE,
 		MNH_SCU_INxf(LPDDR4_FSP_SETTING, fsp, FSP_SYS200_MODE));
-	if (pll_freeze) {
-		MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
-		MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0);
-	}
+	MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
+	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0);
 }
 
 static u32 mnh_ddr_sanity_check(void)
@@ -914,7 +901,7 @@ EXPORT_SYMBOL(mnh_ddr_resume);
 
 int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 {
-	int index, setindex, pi_step;
+	int index, setindex;
 	unsigned long timeout;
 	const struct mnh_ddr_reg_config *cfg = &mnh_ddr_33_100_400_600;
 
@@ -966,116 +953,11 @@ int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n)
 		setindex++;
 	}
 
-	/* set the index back to 1 to enable PI WA training */
-	MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 1);
-	/* Add SCU register change to enable SW switching for all 4 FSPs. */
-	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
-	MNH_SCU_OUTxf(LPDDR4_FSP_SETTING, 0, FSP_SW_CTRL, 1);
-	MNH_SCU_OUTxf(LPDDR4_FSP_SETTING, 1, FSP_SW_CTRL, 1);
-	MNH_SCU_OUTxf(LPDDR4_FSP_SETTING, 2, FSP_SW_CTRL, 1);
-	MNH_SCU_OUTxf(LPDDR4_FSP_SETTING, 3, FSP_SW_CTRL, 1);
-	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
-
 	dev_dbg(dev, "%s begin training,", __func__);
 	MNH_DDR_PI_OUTf(00, PI_START, 1);
 	MNH_DDR_CTL_OUTf(00, START, 1);
 
-	/*
-	 * The 11 DFS events during PI training are to be tracked,
-	 * and apply WA at correct points.
-	 * 1.	FSP0 to FSP1
-	 * 2.	FSP1 to FSP2
-	 * 3.	FSP2 to FSP1
-	 * 4.	FSP1 to FSP2
-	 * 5.	FSP2 to FSP1 - Program POSTDIV of FSP2 to 1 at
-	 * pi_freq_change_req event
-	 * 6.	FSP1 to FSP2 - Program POSTDIV of FSP2 to 0 at
-	 * pi_freq_change_req event, provide 400 MHz, set pi_freq_change_ack = 1
-	 * 7.	FSP2 to FSP3
-	 * 8.	FSP3 to FSP2
-	 * 9.	FSP2 to FSP3
-	 * 10.	FSP3 to FSP2 - Program POSTDIV of FSP2&FSP3 to 1 at
-	 * pi_freq_change_req event, Provide 300 MHz clock instead of usual
-	 * 400 MHz clock, set pi_freq_change_ack = 1
-	 * 11.	FSP2 to FSP3 - Program POSTDIV of FSP2&FSP3 to 0 at
-	 * pi_freq_change_req event, provide 600 MHz, set pi_freq_change_ack = 1
-	 *
-	 */
-	dev_info(dev, "%s PI WA training,", __func__);
-	for (pi_step = 1; pi_step <= 11; pi_step++) {
-		timeout = 10000;
-		while (!MNH_SCU_INf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ) &&
-			  (timeout-- > 0))
-			udelay(1);
-		if (!MNH_SCU_INf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ)) {
-			dev_err(dev, "%s: Missed SCU_IRQ_STATUS.LP4_FREQ_CHG_REQ! pi_step=%d, LPDDR4_REQ_FSP=0x%x\n",
-			__func__,
-			pi_step,
-			MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPDDR4_REQ_FSP));
-			return -ETIME;
-		}
-		dev_dbg(dev, "%s: pi_step=%d, LPDDR4_REQ_FSP=0x%x, INDEX=%d\n",
-			__func__,
-			pi_step,
-			MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPDDR4_REQ_FSP),
-			MNH_DDR_PHY_INf(1025, PHY_FREQ_SEL_INDEX));
-		/* clear it */
-		MNH_SCU_OUTf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ, 1);
-
-		/* Change PHY PLL POSTDIV at Step 5,6,10,11 */
-		switch (pi_step) {
-		case 5:
-			/* change postdiv of CA PLL */
-			MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x322);
-			break;
-		case  6:
-			/* change postdiv of CA PLL for f2 register set */
-			MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x122);
-			break;
-		case 10:
-			/* change postdiv of CA PLL for f2/f3 register set */
-			MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 1);
-			MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x322);
-			MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 2);
-			MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x322);
-			break;
-		case 11:
-			/* change postdiv of CA PLL for f2 register set */
-			MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 1);
-			MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x122);
-			MNH_DDR_PHY_OUTf(1025, PHY_FREQ_SEL_INDEX, 2);
-			MNH_DDR_PHY_OUTf(1046, PHY_PLL_CTRL_CA, 0x122);
-			break;
-		}
-
-		/* Freeze the divider settings till all registers are updated */
-		MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
-		MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 1);
-		MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
-		/* load clock settings from the fsp of interest based on PI's
-		 * fsp request
-		 */
-		WRITE_CLK_FROM_FSP_NO_LOCK((MNH_SCU_INf(LPDDR4_LOW_POWER_STS,
-						LPDDR4_REQ_FSP)));
-		/* Provide 300 MHz clock */
-		if (pi_step == 10)
-			/* 1200 MHz div by 4 */
-			MNH_SCU_OUTf(CCU_CLK_DIV, LPDDR4_REFCLK_DIV, 3);
-		/* UnFreeze the divider settings till all regs are updated */
-		MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
-		MNH_SCU_OUTf(LPDDR4_REFCLK_PLL_CTRL, FRZ_PLL_IN, 0);
-		MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
-		/* effect the clock change */
-		MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG,
-				 LP4_FSP_SW_OVERRIDE, 1);
-		/* inform memory controller freq change is done */
-		MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG,
-				 LP4_FREQ_CHG_ACK, 1);
-		MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG,
-				 LP4_FSP_SW_OVERRIDE, 0);
-	}
-
-	timeout = jiffies + msecs_to_jiffies(50);
+	timeout = jiffies + TRAINING_TIMEOUT;
 	while (!(mnh_ddr_int_status_bit(INIT_DONE_SBIT) &&
 			mnh_ddr_pi_int_status_bit(PI_INIT_DONE_BIT)) &&
 			time_before(jiffies, timeout))
