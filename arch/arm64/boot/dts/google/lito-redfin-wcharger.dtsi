@@ -102,15 +102,10 @@
 
 	google,epp_rp_value = <0x18>;
 	google,needs_dcin_reset = <P9221_WC_DC_RESET_MODECHANGED>;
-	google,alignment_frequencies = /bits/ 32 <87000 120000 130000
-						  140000 205000>;
-	google,alignment_scalar = <4>;
-	google,alignment_hysteresis = <5000>;
 
-/*
- * b/144000003 for tracking Q factor and BPP/EPP FOD parameters
-	google,q_value = <50>;
-	fod = [B2 23 8D 2D 90 29 BF CD A6 E9 A6 2C 0D 12 9A 12];
-	fod_epp = [B0 24 90 40 88 50 88 53 90 4A 9A 00 12 12 01 40];
-*/
+	google,alignment_scalar_low_current = <200>;
+	google,alignment_scalar_high_current = <118>;
+	google,alignment_offset_low_current = <125000>;
+	google,alignment_offset_high_current = <139000>;
+
 };
