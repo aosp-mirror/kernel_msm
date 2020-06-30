@@ -26,7 +26,6 @@
 #define MNH_DDR_NUM_PI_REG	(191 + 1)
 
 #define MNH_DDR_NUM_FSPS (4)
-#define MNH_DDR_NUM_BANKED_FSPS (3)
 #define MNH_DDR_NUM_BASES (3)
 
 /* arbitrary but sufficient size for phy deltas */
@@ -48,10 +47,10 @@ struct mnh_ddr_internal_state {
 	u32 pi_base;
 	u32 pi[MNH_DDR_NUM_PI_REG];
 	u32 phy_base;
-	u32 phy[MNH_DDR_NUM_BANKED_FSPS][MNH_DDR_NUM_PHY_REG];
+	u32 phy[MNH_DDR_NUM_FSPS][MNH_DDR_NUM_PHY_REG];
 	u32 fsps[MNH_DDR_NUM_FSPS];
+	u32 suspend_fsp;
 	u32 tref[MNH_DDR_NUM_FSPS];
-	struct gpio_desc *iso_n;
 };
 
 enum mnh_ddr_bist_type {
@@ -63,8 +62,8 @@ enum mnh_ddr_bist_type {
 int mnh_ddr_platform_init(struct device *dev);
 
 int mnh_ddr_po_init(struct device *dev, struct gpio_desc *iso_n);
-int mnh_ddr_resume(struct device *dev);
-int mnh_ddr_suspend(struct device *dev);
+int mnh_ddr_resume(struct device *dev, struct gpio_desc *iso_n);
+int mnh_ddr_suspend(struct device *dev, struct gpio_desc *iso_n);
 int mnh_ddr_clr_int_status(void);
 u64 mnh_ddr_int_status(void);
 u32 mnh_ddr_mbist(struct device *dev, enum mnh_ddr_bist_type bist_type);

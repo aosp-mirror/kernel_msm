@@ -1507,7 +1507,7 @@ static int mnh_sm_resume_ddr(void)
 	int ret;
 
 	/* deassert pad isolation, take ddr out of self-refresh mode */
-	ret = mnh_ddr_resume(mnh_sm_dev->dev);
+	ret = mnh_ddr_resume(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
 	if (ret) {
 		dev_err(mnh_sm_dev->dev, "%s: error resuming dram (%d)\n",
 			__func__, ret);
@@ -1521,7 +1521,7 @@ static int mnh_sm_resume_ddr(void)
 static int mnh_sm_suspend_ddr(void)
 {
 	/* put ddr into self-refresh mode, assert pad isolation */
-	mnh_ddr_suspend(mnh_sm_dev->dev);
+	mnh_ddr_suspend(mnh_sm_dev->dev, mnh_sm_dev->ddr_pad_iso_n_pin);
 	mnh_sm_dev->ddr_status = MNH_DDR_SELF_REFRESH;
 	return 0;
 }
