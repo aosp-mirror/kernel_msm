@@ -68,6 +68,5 @@ int mnh_ddr_suspend(struct device *dev);
 int mnh_ddr_clr_int_status(void);
 u64 mnh_ddr_int_status(void);
 u32 mnh_ddr_mbist(struct device *dev, enum mnh_ddr_bist_type bist_type);
-int mnh_ddr_sw_switch(int index);
 
 #endif /* __MNH_DDR_H__ */

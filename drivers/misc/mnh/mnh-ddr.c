@@ -1,7 +1,7 @@
 /*
 *
 * MNH DDR Driver
-* Copyright (c) 2016-2018, Intel Corporation.
+* Copyright (c) 2016-2017, Intel Corporation.
 *
 * This program is free software; you can redistribute it and/or modify it
 * under the terms and conditions of the GNU General Public License,
@@ -134,19 +134,12 @@ do { \
 		udelay(20); \
 	} while (0)
 
-#define LP_CMD_FREQ_SWITCH 0x8A
 #define LP_CMD_EXIT_LP 0x81
 #define LP_CMD_DSRPD 0xFE
-#define LP_CMD_SRPD 0x3A
-#define LP_CMD_EXIT_SRPD 0x01
 
 /* INT status bits */
-#define DFS_COMPLETE_SBIT 31
-#define DFI_STATE_CHANGE_SBIT 28
-#define INHIBIT_DRAM_CMD_SBIT 27
 #define MR_WRITE_SBIT 26
 #define MR_READ_SBIT 23
-#define DFI_UPDATE_ERROR_SBIT 13
 #define BIST_SBIT 6
 #define LP_CMD_SBIT 5
 #define INIT_DONE_SBIT 4
@@ -203,40 +196,6 @@ u64 mnh_ddr_int_status(void)
 	return int_stat;
 }
 EXPORT_SYMBOL(mnh_ddr_int_status);
-
-int mnh_ddr_print_phy_status(void)
-{
-	int ret = 0;
-	/* call from a context where lp has already been disabled
-	 * so ctl and phy reg can be accessed. don't do it here
-	 */
-	if ((MNH_DDR_PHY_IN(00) != 0x76543210) ||
-		(MNH_DDR_PHY_IN(256) != 0x76543210) ||
-		(MNH_DDR_PHY_IN(384) != 0x76543210)) {
-		pr_err("%s ERROR PHY 00: 0x%08x 256: 0x%08x 384: 0x%08x\n",
-			__func__,
-			MNH_DDR_PHY_IN(00),
-			MNH_DDR_PHY_IN(256),
-			MNH_DDR_PHY_IN(384));
-		ret = -1;
-	}
-
-	if (MNH_DDR_PHY_INf(1099, PHY_AC_INIT_COMPLETE_OBS) != 0x000003f1) {
-		pr_info("%s PHY_AC_INIT_COMPLETE_OBS: 0x%08x\n",
-			__func__, MNH_DDR_PHY_INf(1099,
-					PHY_AC_INIT_COMPLETE_OBS));
-		ret = -1;
-	}
-	if (MNH_DDR_PHY_INf(1100, PHY_DS_INIT_COMPLETE_OBS) != 0x0000000f) {
-		pr_info("%s PHY_DS_INIT_COMPLETE_OBS: 0x%08x\n",
-			__func__, MNH_DDR_PHY_INf(1100,
-					PHY_DS_INIT_COMPLETE_OBS));
-		ret = -1;
-	}
-	return ret;
-}
-EXPORT_SYMBOL(mnh_ddr_print_phy_status);
-
 
 /* clear entire int_status */
 int mnh_ddr_clr_int_status(void)
@@ -331,60 +290,6 @@ static int mnh_ddr_send_lp_cmd(u8 cmd)
 	return mnh_ddr_clr_int_status_bit(LP_CMD_SBIT);
 }
 
-/*
- * Both chip 0 and chip 1 are written.
- */
-int mnh_ddr_write_mode_reg(u8 modereg, u8 modevalue)
-{
-	const u64 writeable = 0x0000010101D3FE1E;
-	u32 val = 0;
-	unsigned long timeout = 0;
-	int ret = 0;
-
-	if ((modereg >= 64) ||
-		((writeable & (1ULL << modereg)) == 0)) {
-		pr_err("%s %d is not writeable.\n",
-			__func__, modereg);
-		return -EIO;
-	}
-
-	pr_debug("%s LP_STATE is 0x%x\n",
-		__func__, MNH_DDR_CTL_INf(121, LP_STATE));
-	val = 0xFF & modereg;
-
-	/*
-	 * bit 24 indicates all chip selects
-	 * bit 23 indicates indicates a single mode reg
-	 */
-	val |= (1 << 23) | (1 << 24);
-	MNH_DDR_CTL_OUTf(140, WRITE_MODEREG, val);
-	MNH_DDR_CTL_OUTf(160, MRSINGLE_DATA_0, modevalue);
-	/* trigger write */
-	val |= (1 << 25);
-	MNH_DDR_CTL_OUTf(140, WRITE_MODEREG, val);
-
-	timeout = jiffies + msecs_to_jiffies(500);
-	while (!mnh_ddr_int_status_bit(MR_WRITE_SBIT) &&
-	       time_before(jiffies, timeout)) {
-		udelay(100);
-	}
-
-	if (mnh_ddr_int_status_bit(MR_WRITE_SBIT)) {
-		mnh_ddr_clr_int_status_bit(MR_WRITE_SBIT);
-	} else {
-		pr_err("%s timeout on MR write done. %llx.",
-			__func__, mnh_ddr_int_status());
-		ret = -EIO;
-	}
-	val = MNH_DDR_CTL_INf(141, MRW_STATUS);
-	if (val) {
-		pr_err("%s ERROR status: 0x%x", __func__, val);
-		ret = -EIO;
-	}
-
-	return ret;
-}
-
 static void mnh_ddr_enable_lp(void)
 {
 	MNH_DDR_CTL_OUTf(124, LP_AUTO_SR_MC_GATE_IDLE, 0xFF);
@@ -473,281 +378,6 @@ static void mnh_ddr_init_clocks(struct device *dev, int fsp)
 	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
 	/* MNH_PLL_PASSCODE_CLR */
 	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x0);
-}
-
-static void mnh_ddr_clear_lpc_status(void)
-{
-	/* Paranoia */
-	if (MNH_SCU_INf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ)) {
-		pr_info("%s LP4_FREQ_CHG_REQ already set, clearing", __func__);
-		MNH_SCU_OUTf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ, 1);
-	}
-	if (MNH_SCU_INf(SCU_IRQ_STATUS, LP4_LPC_CMD_DONE)) {
-		pr_info("%s LP4_LPC_CMD_DONE already set, clearing", __func__);
-		MNH_SCU_OUTf(SCU_IRQ_STATUS, LP4_LPC_CMD_DONE, 1);
-	}
-	if (MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPC_CMD_RSP)) {
-		pr_info("%s LPC_CMD_RSP already set, clearing", __func__);
-		MNH_SCU_OUTf(LPDDR4_LOW_POWER_STS, LPC_CMD_RSP, 1);
-	}
-	if (MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE)) {
-		pr_info("%s LPC_CMD_DONE already set, clearing", __func__);
-		MNH_SCU_OUTf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE, 1);
-	}
-}
-
-#define MR_TABLE_LEN 5
-const u8 mrw_fsps[MNH_DDR_NUM_FSPS][MR_TABLE_LEN][2] = {
-	{
-		{  1, 0x04 },
-		{  2, 0x00 },
-		{  3, 0x31 },
-		{ 11, 0x00 },
-		{ 22, 0x00 }
-	},
-	{
-		{  1, 0x04 },
-		{  2, 0x00 },
-		{  3, 0x31 },
-		{ 11, 0x00 },
-		{ 22, 0x00 },
-	},
-	{
-		{  1, 0x24 },
-		{  2, 0x12 },
-		{  3, 0x31 },
-		{ 11, 0x00 },
-		{ 22, 0x00 },
-	},
-	{
-		{  1, 0x44 },
-		{  2, 0x24 },
-		{  3, 0x31 },
-		{ 11, 0x00 },
-		{ 22, 0x00 },
-	}
-};
-
-int mnh_ddr_sw_switch(int index)
-{
-	static int iteration;
-	static u8 fsop = 1, fswr;
-	static u8 mr13val;
-	int old_lpi_wakeup_en, show_log, timeout;
-	int i, ret = -EIO;
-
-	uint16_t upd_high[MNH_DDR_NUM_FSPS];
-	uint16_t upd_norm[MNH_DDR_NUM_FSPS];
-
-	if ((index < 0) || (index >= MNH_DDR_NUM_FSPS)) {
-		pr_err("%s %d is not a valid FSP\n",
-			__func__, index);
-		return -EINVAL;
-	} else if (MNH_DDR_CTL_INf(133, CURRENT_REG_COPY) == index) {
-		pr_info("%s %d is already in use - skipping\n",
-			__func__, index);
-		return 0;
-	}
-	show_log = iteration++ % 1000;
-	if ((show_log == 0) || (show_log == 1)) {
-		pr_info("%s #%d fsp %d -> %d DLL RESET\n",
-			__func__, (iteration - 1),
-			MNH_DDR_CTL_INf(133, CURRENT_REG_COPY), index);
-	}
-
-	if (!MNH_SCU_INxf(LPDDR4_FSP_SETTING, index, FSP_SYS200_MODE))
-		mnh_lpddr_sys200_mode(false);
-
-	old_lpi_wakeup_en = MNH_DDR_CTL_INf(120, LPI_WAKEUP_EN);
-	/* need to make sure to disable lp, so phy regs
-	 * and DRAM mode regs can be accessed.
-	 */
-	mnh_ddr_disable_lp();
-	mnh_ddr_clr_int_status();
-
-	/* set software control */
-	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
-	MNH_SCU_OUTxf(LPDDR4_FSP_SETTING, index, FSP_SW_CTRL, 1);
-	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0);
-
-	mnh_ddr_clear_lpc_status();
-
-	/* step 0 */
-	MNH_DDR_CTL_OUTf(221, INHIBIT_DRAM_CMD, 3);
-	MNH_DDR_CTL_OUTf(120, LPI_WAKEUP_EN, 0);
-	udelay(10);
-	MNH_DDR_CTL_OUTf(54, AREFRESH, 1);
-	/* CDNS added this line */
-	MNH_DDR_PHY_OUTf(1098, PHY_INIT_UPDATE_CONFIG, 0);
-
-	timeout = 1000;
-	udelay(1); /* CDNS addition start */
-	MNH_DDR_CTL_OUTf(112, LP_CMD, 1);
-	while (!mnh_ddr_int_status_bit(LP_CMD_SBIT) &&
-		timeout-- > 0) {
-		udelay(1);
-	}
-	if (mnh_ddr_clr_int_status_bit(LP_CMD_SBIT)) {
-		pr_err("%s %d LP_CMD not clearing\n",
-			__func__, __LINE__);
-		ret = -EIO;
-		goto sw_switch_error_exit;
-	}  /* CDNS addition end */
-
-	timeout = 1000;
-	while (!mnh_ddr_int_status_bit(INHIBIT_DRAM_CMD_SBIT) && timeout-- > 0)
-		udelay(1);
-	if (mnh_ddr_clr_int_status_bit(INHIBIT_DRAM_CMD_SBIT)) {
-		pr_err("%s %d INHIBIT not clearing\n",
-			__func__, __LINE__);
-		ret = -EIO;
-		goto sw_switch_error_exit;
-	}
-
-	MNH_DDR_CTL_OUTf(223, CTRLUPD_REQ_PER_AREF_EN, 0);
-	MNH_DDR_CTL_OUTf(525, CTRLUPD_AREF_HP_ENABLE, 0);
-	MNH_DDR_PHY_OUTf(1100, PHY_UPDATE_MASK, 1);
-	/* step 1 */
-	upd_high[0] = MNH_DDR_CTL_INf(88, UPD_CTRLUPD_HIGH_THRESHOLD_F0);
-	upd_norm[0] = MNH_DDR_CTL_INf(88, UPD_CTRLUPD_NORM_THRESHOLD_F0);
-	upd_high[1] = MNH_DDR_CTL_INf(91, UPD_CTRLUPD_HIGH_THRESHOLD_F1);
-	upd_norm[1] = MNH_DDR_CTL_INf(90, UPD_CTRLUPD_NORM_THRESHOLD_F1);
-	upd_high[2] = MNH_DDR_CTL_INf(93, UPD_CTRLUPD_HIGH_THRESHOLD_F2);
-	upd_norm[2] = MNH_DDR_CTL_INf(93, UPD_CTRLUPD_NORM_THRESHOLD_F2);
-	upd_high[3] = MNH_DDR_CTL_INf(96, UPD_CTRLUPD_HIGH_THRESHOLD_F3);
-	upd_norm[3] = MNH_DDR_CTL_INf(95, UPD_CTRLUPD_NORM_THRESHOLD_F3);
-
-	MNH_DDR_CTL_OUTf(88, UPD_CTRLUPD_HIGH_THRESHOLD_F0, 0);
-	MNH_DDR_CTL_OUTf(88, UPD_CTRLUPD_NORM_THRESHOLD_F0, 0);
-	MNH_DDR_CTL_OUTf(91, UPD_CTRLUPD_HIGH_THRESHOLD_F1, 0);
-	MNH_DDR_CTL_OUTf(90, UPD_CTRLUPD_NORM_THRESHOLD_F1, 0);
-	MNH_DDR_CTL_OUTf(93, UPD_CTRLUPD_HIGH_THRESHOLD_F2, 0);
-	MNH_DDR_CTL_OUTf(93, UPD_CTRLUPD_NORM_THRESHOLD_F2, 0);
-	MNH_DDR_CTL_OUTf(96, UPD_CTRLUPD_HIGH_THRESHOLD_F3, 0);
-	MNH_DDR_CTL_OUTf(95, UPD_CTRLUPD_NORM_THRESHOLD_F3, 0);
-	mr13val = (fsop << 7) | (fswr << 6) | (1 << 4);
-	if (mnh_ddr_write_mode_reg(13, mr13val)) {
-		pr_err("%s %d error writing MR13\n",
-			__func__, __LINE__);
-		ret = -EIO;
-		goto sw_switch_error_exit;
-	}
-
-	/* step 2 */
-	for (i = 0; i < MR_TABLE_LEN; i++) {
-		if (mnh_ddr_write_mode_reg(mrw_fsps[index][i][0],
-				mrw_fsps[index][i][1])) {
-			pr_err("%s %d error (%d %d) writing mr: 0x%02x\n",
-				__func__, __LINE__, index, i,
-				mrw_fsps[index][i][0]);
-			ret = -EIO;
-			goto sw_switch_error_exit;
-		}
-	}
-
-	/* step 3 */
-	fsop = (fsop == 1) ? 0 : 1;
-	mr13val = (fsop << 7) | (fswr << 6) | (1 << 4) | (1 << 3);
-	if (mnh_ddr_write_mode_reg(13, mr13val)) {
-		pr_err("%s %d error writing MR13\n",
-			__func__, __LINE__);
-		ret = -EIO;
-		goto sw_switch_error_exit;
-	}
-	fswr = (fswr == 1) ? 0 : 1;
-
-	/* step 4 */
-	mnh_ddr_send_lp_cmd(LP_CMD_SRPD);
-	/* step 5 */
-	/* removed using iso for switch */
-	/* step 6 moved to step 0 */
-	/* step 7 */
-	MNH_DDR_PHY_OUTf(1099, PHY_DLL_RST_EN, 1);
-
-	/* step 8 */
-	/* Prepare memory controller for switch */
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LPC_FREQ_CHG_COPY_NUM, index);
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LPC_EXT_CMD, LP_CMD_FREQ_SWITCH);
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LPC_EXT_CMD_REQ, 1);
-
-	timeout = 1000;
-	while (!MNH_SCU_INf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ) &&
-		(timeout-- > 0))
-		udelay(1);
-
-	if (!MNH_SCU_INf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ)) {
-		pr_err("%s: Missed SCU_IRQ_STATUS.LP4_FREQ_CHG_REQ!\n",
-			__func__);
-		ret = -ETIME;
-		goto sw_switch_error_exit;
-	}
-
-	/* clear it */
-	MNH_SCU_OUTf(SCU_IRQ_STATUS, LP4_FREQ_CHG_REQ, 1);
-	/* load clock settings from the fsp of interest */
-	WRITE_CLK_FROM_FSP(index);
-	/* effect the clock change */
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 1);
-	udelay(100);
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
-
-	/* step 9 */
-	MNH_DDR_PHY_OUTf(1099, PHY_DLL_RST_EN, 2);
-	/* step 10 */
-	/* inform memory controller freq change is done */
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FREQ_CHG_ACK, 1);
-	timeout = 1000;
-	while (!MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE) &&
-		(timeout-- > 0))
-		udelay(1);
-
-	if (!MNH_SCU_INf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE)) {
-		pr_err("%s Missed: LPDDR4_LOW_POWER_STS.LPC_CMD_DONE\n",
-			__func__);
-		ret = -ETIME;
-		goto sw_switch_error_exit;
-	}
-
-	/* steps 11 - 13 removed because we're not using iso */
-
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
-	/* clear done */
-	MNH_SCU_OUTf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE, 1);
-	/* step 14 */
-	/* undo previous changes. */
-	MNH_DDR_CTL_OUTf(223, CTRLUPD_REQ_PER_AREF_EN, 1);
-	MNH_DDR_CTL_OUTf(525, CTRLUPD_AREF_HP_ENABLE, 1);
-	/* CDNS added this line */
-	MNH_DDR_PHY_OUTf(1098, PHY_INIT_UPDATE_CONFIG, 7);
-	MNH_DDR_PHY_OUTf(1100, PHY_UPDATE_MASK, 0);
-	MNH_DDR_CTL_OUTf(221, INHIBIT_DRAM_CMD, 0);
-	MNH_DDR_CTL_OUTf(88, UPD_CTRLUPD_HIGH_THRESHOLD_F0, upd_high[0]);
-	MNH_DDR_CTL_OUTf(88, UPD_CTRLUPD_NORM_THRESHOLD_F0, upd_norm[0]);
-	MNH_DDR_CTL_OUTf(91, UPD_CTRLUPD_HIGH_THRESHOLD_F1, upd_high[1]);
-	MNH_DDR_CTL_OUTf(90, UPD_CTRLUPD_NORM_THRESHOLD_F1, upd_norm[1]);
-	MNH_DDR_CTL_OUTf(93, UPD_CTRLUPD_HIGH_THRESHOLD_F2, upd_high[2]);
-	MNH_DDR_CTL_OUTf(93, UPD_CTRLUPD_NORM_THRESHOLD_F2, upd_norm[2]);
-	MNH_DDR_CTL_OUTf(96, UPD_CTRLUPD_HIGH_THRESHOLD_F3, upd_high[3]);
-	MNH_DDR_CTL_OUTf(95, UPD_CTRLUPD_NORM_THRESHOLD_F3, upd_norm[3]);
-
-	MNH_DDR_CTL_OUTf(120, LPI_WAKEUP_EN, old_lpi_wakeup_en);
-	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0x4CD9);
-	MNH_SCU_OUTxf(LPDDR4_FSP_SETTING, index, FSP_SW_CTRL, 0);
-	MNH_SCU_OUTf(PLL_PASSCODE, PASSCODE, 0);
-
-	mnh_ddr_clr_int_status_bit(DFI_UPDATE_ERROR_SBIT);
-	mnh_ddr_clr_int_status_bit(DFS_COMPLETE_SBIT);
-	mnh_ddr_clr_int_status_bit(DFI_STATE_CHANGE_SBIT);
-	ret = 0;
-
-	if (MNH_SCU_INxf(LPDDR4_FSP_SETTING, index, FSP_SYS200_MODE))
-		mnh_lpddr_sys200_mode(true);
-
-sw_switch_error_exit:
-	if (mnh_ddr_print_phy_status())
-		ret = -EIO;
-
-	return ret;
 }
 
 static void mnh_ddr_pull_config(void)

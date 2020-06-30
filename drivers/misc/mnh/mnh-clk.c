@@ -1,7 +1,7 @@
 /*
  *
  * MNH Clock Driver
- * Copyright (c) 2016-2018, Intel Corporation.
+ * Copyright (c) 2016-2017, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -24,8 +24,6 @@
 #include "mnh-hwio.h"
 #include "mnh-hwio-bases.h"
 #include "mnh-hwio-scu.h"
-#include "mnh-hwio-cpu.h"
-#include "mnh-hwio-ddr-ctl.h"
 #include "mnh-clk.h"
 #include "mnh-ddr.h"
 
@@ -39,17 +37,6 @@
 	HW_OUT(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
 #define SCU_OUTf(...) \
 	HW_OUTf(HWIO_SCU_BASE_ADDR, SCU, __VA_ARGS__)
-
-#define MNH_CPU_IN(reg) \
-	HW_IN(HWIO_CPU_BASE_ADDR, CPU, reg)
-#define MNH_DDR_CTL_IN(reg) \
-	HW_IN(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg)
-#define MNH_DDR_CTL_INf(reg, fld) \
-	HW_INf(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg, fld)
-#define MNH_DDR_CTL_OUTf(reg, fld, val) \
-	HW_OUTf(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg, fld, val)
-#define MNH_DDR_CTL_OUT(reg, val) \
-	HW_OUT(HWIO_DDR_CTL_BASE_ADDR, DDR_CTL, reg, val)
 
 #define PLL_UNLOCK 0x4CD9
 #define LP4_LPC_FREQ_SWITCH 0x8A
@@ -544,7 +531,74 @@ EXPORT_SYMBOL_GPL(mnh_ipu_freq_change);
  */
 int mnh_lpddr_freq_change(int index)
 {
-	return mnh_ddr_sw_switch(index);
+	int status = 0;
+	int timeout = 0;
+	enum mnh_lpddr_freq_type ddr_freq;
+
+	if (!mnh_clk)
+		return -ENODEV;
+
+	dev_dbg(mnh_clk->dev, "%s: %d\n", __func__, index);
+
+	if (index < LPDDR_FREQ_MIN || index > LPDDR_FREQ_MAX)
+		return -EINVAL;
+
+	/* Check the requested FSP is already in use */
+	ddr_freq = SCU_INf(LPDDR4_LOW_POWER_STS, LPDDR4_CUR_FSP);
+	if (ddr_freq == index) {
+		dev_dbg(mnh_clk->dev, "%s: requested fsp%d is in use\n",
+			__func__, index);
+		return 0;
+	}
+
+	/* Power up LPDDR PLL if the FSP setting uses it */
+	if (!SCU_INxf(LPDDR4_FSP_SETTING, index, FSP_SYS200_MODE))
+		mnh_lpddr_sys200_mode(false);
+
+	/* Disable LPC SW override */
+	SCU_OUTf(LPDDR4_LOW_POWER_CFG, LP4_FSP_SW_OVERRIDE, 0);
+
+	/* Configure FSP index */
+	SCU_OUTf(LPDDR4_LOW_POWER_CFG, LPC_FREQ_CHG_COPY_NUM, index);
+
+	/* Configure LPC cmd for frequency switch */
+	SCU_OUTf(LPDDR4_LOW_POWER_CFG, LPC_EXT_CMD, LP4_LPC_FREQ_SWITCH);
+
+	/* Initiate LPC cmd to LPDDR controller */
+	dev_dbg(mnh_clk->dev, "%s: lpddr freq switching from fsp%d to fsp%d\n",
+		__func__, ddr_freq, index);
+	SCU_OUTf(LPDDR4_LOW_POWER_CFG, LPC_EXT_CMD_REQ, 1);
+
+	/* Wait until LPC cmd process is done */
+	do {
+		status = SCU_INf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE);
+	} while ((++timeout < PLL_LOCK_TIMEOUT) && (status != 1));
+
+	/* Clear LPC cmd status */
+	SCU_OUTf(LPDDR4_LOW_POWER_STS, LPC_CMD_DONE, 1);
+
+	/* Check LPC error status */
+	if (SCU_INf(LPDDR4_LOW_POWER_STS, LPC_CMD_RSP) == LPC_CMD_ERR) {
+		/* Clear error status */
+		SCU_OUTf(LPDDR4_LOW_POWER_STS, LPC_CMD_RSP, 1);
+		dev_err(mnh_clk->dev, "Failed to process lpc cmd:0x%x\n",
+			LP4_LPC_FREQ_SWITCH);
+		return -EIO;
+	}
+
+	/* Check FSPx switch status */
+	if (SCU_INf(LPDDR4_LOW_POWER_STS, LPDDR4_CUR_FSP) != index) {
+		dev_err(mnh_clk->dev, "Failed to switch to fsp%d\n", index);
+		return -EIO;
+	}
+
+	/* Power down LPDDR PLL if the FSP setting doesn't use it */
+	if (SCU_INxf(LPDDR4_FSP_SETTING, index, FSP_SYS200_MODE))
+		mnh_lpddr_sys200_mode(true);
+
+	mnh_ddr_clr_int_status();
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(mnh_lpddr_freq_change);
 
@@ -827,7 +881,8 @@ static ssize_t lpddr_freq_show(struct device *dev,
 			       struct device_attribute *attr,
 			       char *buf)
 {
-	uint32_t var = MNH_DDR_CTL_INf(133, CURRENT_REG_COPY);
+	uint32_t var = SCU_INf(LPDDR4_LOW_POWER_STS,
+				LPDDR4_CUR_FSP);
 
 	dev_dbg(mnh_clk->dev, "%s: %d\n", __func__, var);
 	return snprintf(buf, PAGE_SIZE, "FSP%d\n", var);
