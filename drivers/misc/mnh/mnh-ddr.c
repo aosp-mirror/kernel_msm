@@ -544,8 +544,8 @@ const u8 mrw_fsps[MNH_DDR_NUM_FSPS][MR_TABLE_LEN][2] = {
 int mnh_ddr_sw_switch(int index)
 {
 	static int iteration;
-	u8 fsop, fswr;
-	u8 mr13val;
+	static u8 fsop = 1, fswr;
+	static u8 mr13val;
 	int old_lpi_wakeup_en, show_log, timeout;
 	int i, ret = -EIO;
 
@@ -638,10 +638,6 @@ int mnh_ddr_sw_switch(int index)
 	MNH_DDR_CTL_OUTf(93, UPD_CTRLUPD_NORM_THRESHOLD_F2, 0);
 	MNH_DDR_CTL_OUTf(96, UPD_CTRLUPD_HIGH_THRESHOLD_F3, 0);
 	MNH_DDR_CTL_OUTf(95, UPD_CTRLUPD_NORM_THRESHOLD_F3, 0);
-
-	fsop = MNH_DDR_CTL_INf(169, FSP_OP_CURRENT);
-	fswr = !MNH_DDR_CTL_INf(169, FSP_WR_CURRENT);
-
 	mr13val = (fsop << 7) | (fswr << 6) | (1 << 4);
 	if (mnh_ddr_write_mode_reg(13, mr13val)) {
 		pr_err("%s %d error writing MR13\n",
