@@ -385,6 +385,21 @@
 				trip = <&skin_critical>;
 				cooling-device = <&msm_gpu 1 1>;
 			};
+			cpu0-svs {
+				trip = <&skin_critical>;
+				cooling-device =
+					<&CPU0 5 5>;
+			};
+			cpu6-svs {
+				trip = <&skin_critical>;
+				cooling-device =
+					<&CPU6 6 6>;
+			};
+			cpu7-svs {
+				trip = <&skin_critical>;
+				cooling-device =
+					<&CPU7 6 6>;
+			};
 		};
 	};
 

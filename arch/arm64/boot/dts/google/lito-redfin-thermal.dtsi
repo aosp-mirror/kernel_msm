@@ -297,7 +297,7 @@
 				type = "passive";
 			};
 			skin_emergency_pre_lv1: skin-emergency-pre-lv1 {
-				temperature = <48000>;
+				temperature = <46500>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
