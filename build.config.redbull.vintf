@@ -3,6 +3,11 @@ BUILD_BOOT_IMG=true
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common.clang
 POST_DEFCONFIG_CMDS="check_defconfig && update_config"
 
+EN_THINLTO=
+if [[ "${ENABLE_THINLTO:-0}" -eq 1 ]]; then
+       EN_THINLTO="-e THINLTO"
+fi
+
 ABI_DEFINITION=abi_gki_aarch64_redbull.xml
 KMI_WHITELIST=abi_gki_aarch64_redbull_whitelist
 TRIM_NONLISTED_KMI=1
@@ -11,6 +16,7 @@ KMI_WHITELIST_STRICT_MODE=1
 function update_config() {
   # Disable debugfs
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+    ${EN_THINLTO} \
     -d DEBUG_FS \
 
   (cd ${OUT_DIR} && \

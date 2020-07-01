@@ -1,2 +1,0 @@
-KERNEL_DIR=private/msm-google
-. ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.abi
