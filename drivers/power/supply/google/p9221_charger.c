@@ -2729,12 +2729,11 @@ static ssize_t rtx_status_show(struct device *dev,
 	if (charger->pdata->switch_gpio < 0)
 		charger->rtx_state = RTX_NOTSUPPORTED;
 
-	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
-	if (ret == 0) {
-		if (reg & P9382A_MODE_TXMODE)
+	if (p9221_is_online(charger)) {
+		charger->rtx_state = RTX_DISABLED;
+		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
+		if ((ret == 0) && (reg & P9382A_MODE_TXMODE))
 			charger->rtx_state = RTX_ACTIVE;
-		else
-			charger->rtx_state = RTX_DISABLED;
 	} else {
 		/* FIXME: b/147213330
 		 * if otg enabled, rtx disabled.
