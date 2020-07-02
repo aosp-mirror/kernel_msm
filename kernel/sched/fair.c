@@ -6251,15 +6251,20 @@ schedtune_margin(unsigned long signal, long boost, long capacity)
 	return margin;
 }
 
-inline int
-schedtune_cpu_margin(unsigned long util, int cpu)
+inline long schedtune_cpu_margin_with(unsigned long util, int cpu,
+				      struct task_struct *p)
 {
-	int boost = schedtune_cpu_boost(cpu);
+	int boost = schedtune_cpu_boost_with(cpu, p);
+	long margin;
 
 	if (boost == 0)
-		return 0;
+		margin = 0;
+	else
+		margin = schedtune_margin(util, boost, capacity_orig_of(cpu));
 
-	return schedtune_margin(util, boost, capacity_orig_of(cpu));
+	trace_sched_boost_cpu(cpu, util, margin);
+
+	return margin;
 }
 
 long schedtune_task_margin(struct task_struct *task)
@@ -6277,23 +6282,24 @@ long schedtune_task_margin(struct task_struct *task)
 	return margin;
 }
 
+#ifdef CONFIG_SCHED_WALT
 unsigned long
 stune_util(int cpu, unsigned long other_util,
 		 struct sched_walt_cpu_load *walt_load)
 {
-	unsigned long util = min_t(unsigned long, SCHED_CAPACITY_SCALE,
-				   cpu_util_freq(cpu, walt_load) + other_util);
-	long margin = schedtune_cpu_margin(util, cpu);
-
-	trace_sched_boost_cpu(cpu, util, margin);
+	unsigned long util =
+		min_t(unsigned long, SCHED_CAPACITY_SCALE,
+		      cpu_util_freq_walt(cpu, walt_load) + other_util);
+	long margin = schedtune_cpu_margin_with(util, cpu, NULL);
 
 	return util + margin;
 }
+#endif
 
 #else /* CONFIG_SCHED_TUNE */
 
-inline int
-schedtune_cpu_margin(unsigned long util, int cpu)
+inline long schedtune_cpu_margin_with(unsigned long util, int cpu,
+				      struct task_struct *p)
 {
 	return 0;
 }
