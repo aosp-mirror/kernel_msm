@@ -71,6 +71,8 @@
 
 #define PREFIX_SERIALNO   "androidboot.serialno="
 #define DEV_SN_LENGTH         20
+#define STR_(x)	#x
+#define STR(x)	STR_(x)
 
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
 #error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
@@ -3536,21 +3538,19 @@ static void batt_check_device_sn(struct batt_drv *batt_drv)
 
 	// new battery, store the device SN
 	if (dev_info[0] == 0xFF) {
-		char dev_sn[DEV_SN_LENGTH];
-		char *cmdline;
-		int len = 0;
+		char dev_sn[DEV_SN_LENGTH + 1] = {0};
+		const char *cmdline;
 
 		// get the device SN
-		cmdline = kstrdup(saved_command_line, GFP_KERNEL);
-		cmdline = strnstr(cmdline, PREFIX_SERIALNO, strlen(cmdline));
-		len = strlen(PREFIX_SERIALNO);
-		ret = sscanf(&cmdline[len], "%s", dev_sn);
+		cmdline = strnstr(saved_command_line, PREFIX_SERIALNO,
+				  strlen(saved_command_line));
+		ret = sscanf(cmdline ?: "",
+			     PREFIX_SERIALNO "%" STR(DEV_SN_LENGTH) "s",
+			     dev_sn);
 		if (ret == 0) {
 			pr_err("get device SN fail\n");
-			kfree(cmdline);
 			return;
 		}
-		kfree(cmdline);
 
 		// store the device SN
 		ret = gbms_storage_write(GBMS_TAG_DINF, dev_sn, strlen(dev_sn));
