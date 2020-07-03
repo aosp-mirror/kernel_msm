@@ -1480,7 +1480,9 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 	if (icl_ua == INT_MAX)
 		goto set_mode;
 
-#if 0
+	if (chg->force_hcmode)
+		goto force_hcmode;
+
 	/* configure current */
 	if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB
 		&& (chg->typec_legacy
@@ -1513,7 +1515,10 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 		}
 		icl_override = SW_OVERRIDE_HC_MODE;
 	}
-#else
+
+	goto set_mode;
+
+force_hcmode:
 	/* b/155860936 Always use HC_MODE except for 100mA and 150mA */
 
 	switch (icl_ua) {
@@ -1544,7 +1549,6 @@ int smblib_set_icl_current(struct smb_charger *chg, int icl_ua)
 		goto out;
 	}
 	icl_override = SW_OVERRIDE_HC_MODE;
-#endif
 
 set_mode:
 	rc = smblib_icl_override(chg, icl_override);
@@ -1553,9 +1557,7 @@ set_mode:
 		goto out;
 	}
 
-#if 0 /* b/155860936 */
 unsuspend:
-#endif
 	/* unsuspend after configuring current and override */
 	rc = smblib_set_usb_suspend(chg, false);
 	if (rc < 0) {
@@ -1563,14 +1565,9 @@ unsuspend:
 		goto out;
 	}
 
-#if 0
 	/* Re-run AICL */
-	if (icl_override != SW_OVERRIDE_HC_MODE)
+	if (icl_override != SW_OVERRIDE_HC_MODE || chg->force_hcmode)
 		rc = smblib_run_aicl(chg, RERUN_AICL);
-#else
-	/* b/155860936 Always rerun AICL */
-	rc = smblib_run_aicl(chg, RERUN_AICL);
-#endif
 out:
 	return rc;
 }

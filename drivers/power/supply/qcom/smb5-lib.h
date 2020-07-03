@@ -657,6 +657,9 @@ struct smb_charger {
 	/* lpd timer work */
 	struct workqueue_struct *wq;
 	struct work_struct	lpd_recheck_work;
+
+	/* b/155860936 */
+	bool force_hcmode;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
