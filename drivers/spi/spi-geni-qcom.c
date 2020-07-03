@@ -163,15 +163,6 @@ static struct spi_master *get_spi_master(struct device *dev)
 	return spi;
 }
 
-static void spi_disable_cmd_done(struct spi_geni_master *mas)
-{
-	unsigned int common_geni_m_irq_en =
-		geni_read_reg(mas->base, SE_GENI_M_IRQ_EN);
-
-	common_geni_m_irq_en &= ~M_CMD_DONE_EN;
-	geni_write_reg(common_geni_m_irq_en, mas->base, SE_GENI_M_IRQ_EN);
-}
-
 static int get_spi_clk_cfg(u32 speed_hz, struct spi_geni_master *mas,
 			int *clk_idx, int *clk_div)
 {
@@ -1049,7 +1040,6 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 			mas->cur_xfer_mode = SE_DMA;
 			geni_se_select_mode(mas->base, mas->cur_xfer_mode);
 		}
-		spi_disable_cmd_done(mas);
 	} else {
 		if (mas->cur_xfer_mode != FIFO_MODE) {
 			mas->cur_xfer_mode = FIFO_MODE;
@@ -1099,8 +1089,6 @@ static void handle_fifo_timeout(struct spi_geni_master *mas,
 
 	geni_se_dump_dbg_regs(&mas->spi_rsc, mas->base, mas->ipc);
 	reinit_completion(&mas->xfer_done);
-	if (mas->cur_xfer_mode == FIFO_MODE)
-		spi_disable_cmd_done(mas);
 	geni_cancel_m_cmd(mas->base);
 	if (mas->cur_xfer_mode == FIFO_MODE)
 		geni_write_reg(0, mas->base, SE_GENI_TX_WATERMARK_REG);
