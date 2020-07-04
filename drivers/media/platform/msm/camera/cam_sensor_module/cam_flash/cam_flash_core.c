@@ -1506,6 +1506,12 @@ int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg)
 				rc = -EINVAL;
 				goto rel_cmd_buf;
 			}
+			if (flash_operation_info->count >
+			    CAM_FLASH_MAX_LED_TRIGGERS) {
+				CAM_ERR(CAM_FLASH, "led count out of limit");
+				rc = -EINVAL;
+				goto rel_cmd_buf;
+			}
 
 			flash_data->opcode = flash_operation_info->opcode;
 			flash_data->cmn_attr.count =
