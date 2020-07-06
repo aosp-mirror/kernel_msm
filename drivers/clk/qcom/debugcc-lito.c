@@ -852,6 +852,12 @@ static int clk_debug_lito_probe(struct platform_device *pdev)
 		}
 	}
 
+	ret = clk_debug_measure_register(&gcc_debug_mux.hw);
+	if (ret) {
+		dev_err(&pdev->dev, "Could not register Measure clock\n");
+		return ret;
+	}
+
 	for (i = 0; i < ARRAY_SIZE(debugcc_lito_hws); i++) {
 		clk = devm_clk_register(&pdev->dev, debugcc_lito_hws[i]);
 		if (IS_ERR(clk)) {
@@ -860,10 +866,6 @@ static int clk_debug_lito_probe(struct platform_device *pdev)
 			return PTR_ERR(clk);
 		}
 	}
-
-	ret = clk_debug_measure_register(&gcc_debug_mux.hw);
-	if (ret)
-		dev_err(&pdev->dev, "Could not register Measure clock\n");
 
 	return ret;
 }
