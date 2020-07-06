@@ -545,6 +545,7 @@ static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
 static int p9221_send_data(struct p9221_charger_data *charger)
 {
 	int ret;
+	u16 size_reg;
 
 	if (charger->tx_busy)
 		return -EBUSY;
@@ -563,8 +564,22 @@ static int p9221_send_data(struct p9221_charger_data *charger)
 		goto error;
 	}
 
-	ret = p9221_reg_write_8(charger, P9221R5_COM_CHAN_SEND_SIZE_REG,
-				charger->tx_len);
+	if (charger->chip_id == P9382A_CHIP_ID) {
+		size_reg = P9382A_COM_CHAN_SEND_SIZE_REG;
+		/* set packet type to 0x100 */
+		ret = p9221_reg_write_8(charger, P9382A_COM_PACKET_TYPE_ADDR,
+					BIDI_COM_PACKET_TYPE);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Failed to write packet type %d\n", ret);
+			goto error;
+		}
+	} else {
+		/* P9221 chip */
+		size_reg = P9221R5_COM_CHAN_SEND_SIZE_REG;
+	}
+
+	ret = p9221_reg_write_8(charger, size_reg, charger->tx_len);
 	if (ret) {
 		dev_err(&charger->client->dev, "Failed to load txsz %d\n", ret);
 		goto error;
@@ -618,7 +633,7 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 				 stat);
 			/* write packet type to 0x100 */
 			ret = p9221_reg_write_8(charger,
-						PROPRIETARY_PACKET_TYPE_ADDR,
+						P9382A_COM_PACKET_TYPE_ADDR,
 						PROPRIETARY_PACKET_TYPE);
 
 			memset(charger->tx_buf, 0, P9221R5_DATA_SEND_BUF_SIZE);
@@ -3392,7 +3407,7 @@ static void p9382_txid_work(struct work_struct *work)
 
 	// write packet type to 0x100
 	ret = p9221_reg_write_8(charger,
-				PROPRIETARY_PACKET_TYPE_ADDR,
+				P9382A_COM_PACKET_TYPE_ADDR,
 				PROPRIETARY_PACKET_TYPE);
 
 	memset(charger->tx_buf, 0, P9221R5_DATA_SEND_BUF_SIZE);
