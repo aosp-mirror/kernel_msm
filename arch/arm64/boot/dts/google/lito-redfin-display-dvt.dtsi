@@ -13,6 +13,13 @@
 
 &sde_dsi {
 	google,gamma_fixup_panel_id = /bits/ 8 <0x3A 0x64 0x43>;
-	/* For comamnd 0xC8, copy 6 bytes starting at P64 to P109 */
-	google,gamma_fixup_location = <0xC8 63 108 6>;
+	/* cmd, src_idx, dst_idx, mask */
+	google,gamma_fixup_location = <0xC8 60 105 0xFF>,
+				      <0xC8 61 106 0xF0>,
+				      <0xC8 63 108 0xFF>,
+				      <0xC8 64 109 0xFF>,
+				      <0xC8 65 110 0xFF>,
+				      <0xC8 66 111 0xFF>,
+				      <0xC8 67 112 0xFF>,
+				      <0xC8 68 113 0xFF>;
 };
