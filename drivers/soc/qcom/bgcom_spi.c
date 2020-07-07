@@ -277,7 +277,9 @@ static int bgcom_transfer(void *handle, uint8_t *tx_buf,
 		tx_xfer->rx_buf = rx_buf;
 
 	tx_xfer->len = txn_len;
+	pm_runtime_get_sync(spi->master->dev.parent);
 	ret = spi_sync(spi, &bg_spi->msg1);
+	pm_runtime_put_sync_suspend(spi->master->dev.parent);
 	mutex_unlock(&bg_spi->xfer_mutex);
 
 	if (ret)
