@@ -132,3 +132,7 @@
 &usb0 {
 	google,switch-vbus = <500>;
 };
+
+&pm7250b_charger {
+	google,force-hcmode;
+};
