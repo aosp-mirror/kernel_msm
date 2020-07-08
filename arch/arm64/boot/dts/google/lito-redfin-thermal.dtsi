@@ -139,7 +139,7 @@
 &thermal_zones {
 	skin-therm-cpu {
 		polling-delay-passive = <5000>;
-		polling-delay = <0>;
+		polling-delay = <300000>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&pm8150l_adc_tm ADC_AMUX_THM1_PU2>;
 		wake-capable-sensor;
@@ -246,7 +246,7 @@
 
 	skin-therm {
 		polling-delay-passive = <5000>;
-		polling-delay = <0>;
+		polling-delay = <300000>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&pm8150l_adc_tm ADC_AMUX_THM1_PU2>;
 		wake-capable-sensor;
