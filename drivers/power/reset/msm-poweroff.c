@@ -491,6 +491,12 @@ static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 
 static void do_msm_poweroff(void)
 {
+#ifdef CONFIG_OPPO
+/* wsw.bsp.kernel,2019/12/30, set pon debounce to 250ms(0x0C) */
+	extern void oppo_set_pon_debounce_ctl(uint8_t val);
+	oppo_set_pon_debounce_ctl(0x0C);
+#endif
+
 	pr_notice("Powering off the SoC\n");
 
 #ifdef CONFIG_OPPO_CHARGING_MODIFY

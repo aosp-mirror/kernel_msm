@@ -435,6 +435,21 @@ out:
 	return rc;
 }
 
+#ifdef CONFIG_OPPO
+/* wsw.bsp.kernel,2019/12/30, export set pon debounce function */
+void oppo_set_pon_debounce_ctl(uint8_t val)
+{
+	struct qpnp_pon *pon = sys_reset_dev;
+
+	if (!pon)
+		return;
+
+	qpnp_pon_masked_write(pon, QPNP_PON_DBC_CTL(pon),
+					QPNP_PON_DBC_DELAY_MASK(pon), val);
+}
+EXPORT_SYMBOL(oppo_set_pon_debounce_ctl);
+#endif
+
 static int qpnp_pon_get_dbc(struct qpnp_pon *pon, u32 *delay)
 {
 	int rc;
