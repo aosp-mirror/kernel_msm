@@ -480,7 +480,7 @@ static ssize_t spidev_write(struct file *filp,
 
 	up(&spidev->write_buf_ready_sem);
 
-	if (down_timeout(&spidev->status_ready_sem, msecs_to_jiffies(5000)) < 0) {
+	if (down_timeout(&spidev->status_ready_sem, msecs_to_jiffies(2000)) < 0) {
 		log_e("user snshub driver has no response!");
 		while(!down_trylock(&spidev->write_buf_ready_sem));
 		status = -EFAULT;
