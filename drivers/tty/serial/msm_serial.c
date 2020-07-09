@@ -1951,14 +1951,16 @@ static struct platform_driver msm_platform_driver = {
 static int __init msm_serial_init(void)
 {
 	int ret;
-
 #ifdef CONFIG_OPPO
 // WSW.BSP.Kernel.uart, 2020-4-13, modify for uart log
 	extern unsigned int oppo_ftm_mode;
 	if (3 != oppo_ftm_mode && user_printk_disable_uart && is_user_build) {
 	    pr_err("msm_serial_init: driver is needn't initialize\n");
 	    return 0;
-	};
+	} else if (3 != oppo_ftm_mode && 0 == is_user_build) {
+           printk("userdebug msm_serial_init: driver is needn't initialize\n");
+           return 0;
+        }
 	if (3 == oppo_ftm_mode && is_user_build)
 	    msm_uart_driver.cons = NULL;
 #endif /* CONFIG_OPPO */
