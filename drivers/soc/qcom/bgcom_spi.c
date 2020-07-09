@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -49,7 +49,7 @@
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 #define CMA_BFFR_POOL_SIZE (128*1024)
 
-#define MAX_RETRY 500
+#define MAX_RETRY 100
 
 enum bgcom_state {
 	/*BGCOM Staus ready*/
@@ -849,7 +849,7 @@ int bgcom_resume(void *handle)
 			bg_spi->bg_state = BGCOM_STATE_ACTIVE;
 			break;
 		}
-		udelay(10);
+		udelay(1000);
 		++retry;
 	} while (retry < MAX_RETRY);
 
@@ -1049,6 +1049,7 @@ static int bg_spi_remove(struct spi_device *spi)
 {
 	struct bg_spi_priv *bg_spi = spi_get_drvdata(spi);
 
+	bg_com_drv = NULL;
 	mutex_destroy(&bg_spi->xfer_mutex);
 	devm_kfree(&spi->dev, bg_spi);
 	spi_set_drvdata(spi, NULL);

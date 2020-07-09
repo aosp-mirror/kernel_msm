@@ -907,7 +907,7 @@ static int fg_get_msoc_smooth(struct fg_chip *chip, int *msoc)
 		    *msoc = chip->msoc_soomth - 1;
 		    chip->msoc_soomth = *msoc;
 	    }
-	    else if (chip->msoc_flag == 1 && oppo_usb_plugin == true)
+	    else if ((chip->msoc_flag == 1) && (oppo_usb_plugin == true) && (chip->oppo_chg_ctl == 0))
 	    {
 	        *msoc = chip->msoc_soomth + 1;
 		    chip->msoc_soomth = *msoc;
