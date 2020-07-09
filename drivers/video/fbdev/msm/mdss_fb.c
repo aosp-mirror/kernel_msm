@@ -304,6 +304,7 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 
 	if (!IS_CALIB_MODE_BL(mfd) && (!mfd->ext_bl_ctrl || !value ||
 							!mfd->bl_level)) {
+		pr_info("bl_lvl:%lld\n", bl_lvl);
 		mutex_lock(&mfd->bl_lock);
 		mdss_fb_set_backlight(mfd, bl_lvl);
 		mutex_unlock(&mfd->bl_lock);
@@ -1430,6 +1431,7 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->fb_imgType = MDP_RGBA_8888;
 	mfd->calib_mode_bl = 0;
 	mfd->unset_bl_level = U32_MAX;
+	mfd->last_bl_lvl = 0;
 	mfd->bl_extn_level = -1;
 
 	mfd->pdev = pdev;
@@ -1856,15 +1858,22 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	bool bl_notify_needed = false;
 	bool twm_en = false;
 
+	pr_info("%pS, bkl_lvl:%d\n",
+		__builtin_return_address(0), bkl_lvl);
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
 		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
 		mfd->panel_info->cont_splash_enabled) {
 		mfd->unset_bl_level = bkl_lvl;
+		if (bkl_lvl > 0)
+			mfd->last_bl_lvl = bkl_lvl;
 		return;
 	} else if (mdss_fb_is_power_on(mfd) && mfd->panel_info->panel_dead) {
 		mfd->unset_bl_level = mfd->bl_level;
+		mfd->last_bl_lvl = mfd->bl_level;
 	} else {
 		mfd->unset_bl_level = U32_MAX;
+		if (bkl_lvl > 0)
+			mfd->last_bl_lvl = bkl_lvl;
 	}
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
@@ -1916,13 +1925,17 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 	u32 temp;
 	bool bl_notify = false;
 
-	if (mfd->unset_bl_level == U32_MAX)
+	if ((mfd->unset_bl_level == U32_MAX) && (mfd->last_bl_lvl == 0))
 		return;
 	mutex_lock(&mfd->bl_lock);
 	if (!mfd->allow_bl_update) {
 		pdata = dev_get_platdata(&mfd->pdev->dev);
 		if ((pdata) && (pdata->set_backlight)) {
-			mfd->bl_level = mfd->unset_bl_level;
+			if(mfd->unset_bl_level != U32_MAX)
+				mfd->bl_level = mfd->unset_bl_level;
+			else
+				mfd->bl_level =  mfd->last_bl_lvl;
+
 			temp = mfd->bl_level;
 			if (mfd->mdp.ad_calc_bl)
 				(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
@@ -1934,6 +1947,8 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level_scaled = mfd->unset_bl_level;
 			mfd->allow_bl_update = true;
+			pr_info("%pS: bl:%d,last_bl:%d\n",
+				__builtin_return_address(0), temp,mfd->last_bl_lvl);
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);
