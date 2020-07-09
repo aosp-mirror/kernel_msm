@@ -701,9 +701,6 @@ static int spidev_probe(struct spi_device *spi)
 	if (!spidev->spi_tx_buffer)
 		return -ENOMEM;
 
-	if (spidev_gpio_init(spidev) < 0)
-		log_e("spidev_gpio_init failed!");
-
 	spi_set_drvdata(spi, spidev);
 
 	wakeup_source_init(&spidev->upload_wakesrc, "upload_wakesrc");
@@ -719,6 +716,8 @@ static int spidev_probe(struct spi_device *spi)
 	if (!spidev->read_packet_area)
 		return -ENOMEM;
 
+	if (spidev_gpio_init(spidev) < 0)
+		log_e("spidev_gpio_init failed!");
 
 	for (i = 0; i < ARRAY_SIZE(g_cdev_info_list); ++i)
 		data_cdev_init(spidev, &g_cdev_info_list[i]);
