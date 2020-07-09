@@ -4391,12 +4391,14 @@ static int fg_psy_get_property(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
 		#ifdef CONFIG_OPPO_CHARGING_MODIFY
-		if(battery_empty)
-			power_supply_changed(chip->batt_psy);
 		if (cap_update)
 		{
 			cap_update = false;
 			rc = fg_get_prop_capacity_smooth(chip, &pval->intval);
+			if(battery_empty){
+				msleep(1000);
+				power_supply_changed(chip->batt_psy);
+			}
 		}
 		else
 		{
