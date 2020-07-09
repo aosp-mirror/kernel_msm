@@ -1640,13 +1640,6 @@ static int smb2_init_hw(struct smb2 *chip)
 		return rc;
 	}
 
-    // wsw.bsp.charger, 2019-12-17, charge time setting
-	rc = smblib_masked_write(chg, FAST_CHARGE_SAFETY_TIMER_CFG,
-				FAST_CHARGE_SAFETY_TIMER_MASK, 0x2);
-	if (rc < 0) {
-		pr_err("Couldn't set fast charge safety time rc=%d\n", rc);
-		return rc;
-	}
 #endif
 	/* set a slower soft start setting for OTG */
 	rc = smblib_masked_write(chg, DC_ENG_SSUPPLY_CFG2_REG,
