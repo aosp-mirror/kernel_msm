@@ -881,6 +881,9 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
 	s_ctrl->is_probe_succeed = 0;
 	s_ctrl->last_flush_req = 0;
 	s_ctrl->sensor_state = CAM_SENSOR_INIT;
+	/* reset hw sync control */
+	memset(&s_ctrl->hw_sync_ctrl, 0,
+	       sizeof(struct cam_sensor_hw_sync_ctrl));
 }
 
 int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
@@ -1102,6 +1105,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			CAM_ERR(CAM_SENSOR, "fail in Sensor Power Down");
 			goto free_power_settings;
 		}
+		/* reset hw sync control */
+		memset(&s_ctrl->hw_sync_ctrl, 0,
+		       sizeof(struct cam_sensor_hw_sync_ctrl));
 		/*
 		 * Set probe succeeded flag to 1 so that no other camera shall
 		 * probed on this slot
@@ -1162,6 +1168,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			CAM_ERR(CAM_SENSOR, "Sensor Power up failed");
 			goto release_mutex;
 		}
+		/* reset hw sync control */
+		memset(&s_ctrl->hw_sync_ctrl, 0,
+		       sizeof(struct cam_sensor_hw_sync_ctrl));
 
 		if (s_ctrl->soc_info.index == IR_MASTER &&
 			s_ctrl->hw_version >= 2)
@@ -1232,6 +1241,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		s_ctrl->streamon_count = 0;
 		s_ctrl->streamoff_count = 0;
 		s_ctrl->last_flush_req = 0;
+		/* reset hw sync control */
+		memset(&s_ctrl->hw_sync_ctrl, 0,
+		       sizeof(struct cam_sensor_hw_sync_ctrl));
 	}
 		break;
 	case CAM_QUERY_CAP: {
