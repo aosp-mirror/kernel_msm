@@ -63,6 +63,11 @@
 #define WLC_ALIGN_DEFAULT_SCALAR	4
 #define WLC_ALIGN_IRQ_THRESHOLD		10
 #define WLC_ALIGN_DEFAULT_HYSTERESIS	5000
+#define WLC_ALIGN_CURRENT_THRESHOLD	450
+#define WLC_ALIGN_DEFAULT_SCALAR_LOW_CURRENT	    200
+#define WLC_ALIGN_DEFAULT_SCALAR_HIGH_CURRENT	    118
+#define WLC_ALIGN_DEFAULT_OFFSET_LOW_CURRENT	    125000
+#define WLC_ALIGN_DEFAULT_OFFSET_HIGH_CURRENT	    139000
 
 #define RTX_BEN_DISABLED	0
 #define RTX_BEN_ON		1
@@ -540,6 +545,7 @@ static int p9221_set_cmd_reg(struct p9221_charger_data *charger, u8 cmd)
 static int p9221_send_data(struct p9221_charger_data *charger)
 {
 	int ret;
+	u16 size_reg;
 
 	if (charger->tx_busy)
 		return -EBUSY;
@@ -558,8 +564,22 @@ static int p9221_send_data(struct p9221_charger_data *charger)
 		goto error;
 	}
 
-	ret = p9221_reg_write_8(charger, P9221R5_COM_CHAN_SEND_SIZE_REG,
-				charger->tx_len);
+	if (charger->chip_id == P9382A_CHIP_ID) {
+		size_reg = P9382A_COM_CHAN_SEND_SIZE_REG;
+		/* set packet type to 0x100 */
+		ret = p9221_reg_write_8(charger, P9382A_COM_PACKET_TYPE_ADDR,
+					BIDI_COM_PACKET_TYPE);
+		if (ret) {
+			dev_err(&charger->client->dev,
+				"Failed to write packet type %d\n", ret);
+			goto error;
+		}
+	} else {
+		/* P9221 chip */
+		size_reg = P9221R5_COM_CHAN_SEND_SIZE_REG;
+	}
+
+	ret = p9221_reg_write_8(charger, size_reg, charger->tx_len);
 	if (ret) {
 		dev_err(&charger->client->dev, "Failed to load txsz %d\n", ret);
 		goto error;
@@ -613,7 +633,7 @@ static int p9221_send_csp(struct p9221_charger_data *charger, u8 stat)
 				 stat);
 			/* write packet type to 0x100 */
 			ret = p9221_reg_write_8(charger,
-						PROPRIETARY_PACKET_TYPE_ADDR,
+						P9382A_COM_PACKET_TYPE_ADDR,
 						PROPRIETARY_PACKET_TYPE);
 
 			memset(charger->tx_buf, 0, P9221R5_DATA_SEND_BUF_SIZE);
@@ -976,11 +996,111 @@ static void p9221_init_align(struct p9221_charger_data *charger)
 			      msecs_to_jiffies(P9221_ALIGN_DELAY_MS));
 }
 
-static void p9221_align_work(struct work_struct *work)
+static void p9382_align_check(struct p9221_charger_data *charger)
+{
+	int res, wlc_freq_threshold;
+	u32 wlc_freq, current_scaling = 0;
+
+	if (charger->current_filtered <= WLC_ALIGN_CURRENT_THRESHOLD) {
+		current_scaling =
+			charger->pdata->alignment_scalar_low_current *
+			charger->current_filtered / 10;
+		wlc_freq_threshold =
+			charger->pdata->alignment_offset_low_current +
+			current_scaling;
+	} else {
+		current_scaling =
+			charger->pdata->alignment_scalar_high_current *
+			charger->current_filtered / 10;
+		wlc_freq_threshold =
+			charger->pdata->alignment_offset_high_current -
+			current_scaling;
+	}
+
+	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
+	if (res != 0) {
+		logbuffer_log(charger->log, "align: failed to read op_freq");
+		return;
+	}
+
+	if (wlc_freq < wlc_freq_threshold)
+		charger->alignment = 0;
+	else
+		charger->alignment = 100;
+
+	if (charger->alignment != charger->alignment_last) {
+		schedule_work(&charger->uevent_work);
+		logbuffer_log(charger->log,
+			      "align: alignment=%i. op_freq=%u. current_avg=%u",
+			      charger->alignment, wlc_freq,
+			      charger->current_filtered);
+		charger->alignment_last = charger->alignment;
+	}
+}
+
+static void p9221_align_check(struct p9221_charger_data *charger,
+			      u32 current_scaling)
 {
 	int res, align_buckets, i, wlc_freq_threshold, wlc_adj_freq;
+	u32 wlc_freq;
+
+	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
+
+	if (res != 0) {
+		logbuffer_log(charger->log, "align: failed to read op_freq");
+		return;
+	}
+
+	align_buckets = charger->pdata->nb_alignment_freq - 1;
+
+	charger->alignment = -1;
+	wlc_adj_freq = wlc_freq + current_scaling;
+
+	if (wlc_adj_freq < charger->pdata->alignment_freq[0]) {
+		logbuffer_log(charger->log, "align: freq below range");
+		return;
+	}
+
+	for (i = 0; i < align_buckets; i += 1) {
+		if ((wlc_adj_freq > charger->pdata->alignment_freq[i]) &&
+		    (wlc_adj_freq <= charger->pdata->alignment_freq[i + 1])) {
+			charger->alignment = (WLC_ALIGNMENT_MAX * i) /
+					     (align_buckets - 1);
+			break;
+		}
+	}
+
+	if (i >= align_buckets) {
+		logbuffer_log(charger->log, "align: freq above range");
+		return;
+	}
+
+	if (charger->alignment == charger->alignment_last)
+		return;
+
+	/*
+	 *  Frequency needs to be higher than frequency + hysteresis before
+	 *  increasing alignment score.
+	 */
+	wlc_freq_threshold = charger->pdata->alignment_freq[i] +
+			     charger->pdata->alignment_hysteresis;
+
+	if ((charger->alignment < charger->alignment_last) ||
+	    (wlc_adj_freq >= wlc_freq_threshold)) {
+		schedule_work(&charger->uevent_work);
+		logbuffer_log(charger->log,
+			      "align: alignment=%i. op_freq=%u. current_avg=%u",
+			      charger->alignment, wlc_freq,
+			      charger->current_filtered);
+		charger->alignment_last = charger->alignment;
+	}
+}
+
+static void p9221_align_work(struct work_struct *work)
+{
+	int res;
 	u16 current_now, current_filter_sample, tx_mfg_code_reg;
-	u32 wlc_freq, current_scaling = 0;
+	u32 current_scaling = 0;
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, align_work.work);
 
@@ -1060,56 +1180,11 @@ static void p9221_align_work(struct work_struct *work)
 			  charger->current_filtered;
 
 no_scaling:
-	res = p9221_reg_read_cooked(charger, P9221R5_OP_FREQ_REG, &wlc_freq);
 
-	if (res != 0) {
-		logbuffer_log(charger->log, "align: failed to read op_freq");
-		return;
-	}
-
-	align_buckets = charger->pdata->nb_alignment_freq - 1;
-
-	charger->alignment = -1;
-	wlc_adj_freq = wlc_freq + current_scaling;
-
-	if (wlc_adj_freq < charger->pdata->alignment_freq[0]) {
-		logbuffer_log(charger->log, "align: freq below range");
-		return;
-	}
-
-	for (i = 0; i < align_buckets; i += 1) {
-		if ((wlc_adj_freq > charger->pdata->alignment_freq[i]) &&
-		    (wlc_adj_freq <= charger->pdata->alignment_freq[i + 1])) {
-			charger->alignment = (WLC_ALIGNMENT_MAX * i) /
-					     (align_buckets - 1);
-			break;
-		}
-	}
-
-	if (i >= align_buckets) {
-		logbuffer_log(charger->log, "align: freq above range");
-		return;
-	}
-
-	if (charger->alignment == charger->alignment_last)
-		return;
-
-	/*
-	 *  Frequency needs to be higher than frequency + hysteresis before
-	 *  increasing alignment score.
-	 */
-	wlc_freq_threshold = charger->pdata->alignment_freq[i] +
-			     charger->pdata->alignment_hysteresis;
-
-	if ((charger->alignment < charger->alignment_last) ||
-	    (wlc_adj_freq >= wlc_freq_threshold)) {
-		schedule_work(&charger->uevent_work);
-		logbuffer_log(charger->log,
-			      "align: alignment=%i. op_freq=%u. current_avg=%u",
-			     charger->alignment, wlc_freq,
-			     charger->current_filtered);
-		charger->alignment_last = charger->alignment;
-	}
+	if (charger->chip_id == P9221_CHIP_ID)
+		p9221_align_check(charger, current_scaling);
+	else
+		p9382_align_check(charger);
 }
 
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
@@ -2669,12 +2744,11 @@ static ssize_t rtx_status_show(struct device *dev,
 	if (charger->pdata->switch_gpio < 0)
 		charger->rtx_state = RTX_NOTSUPPORTED;
 
-	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
-	if (ret == 0) {
-		if (reg & P9382A_MODE_TXMODE)
+	if (p9221_is_online(charger)) {
+		charger->rtx_state = RTX_DISABLED;
+		ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG, &reg);
+		if ((ret == 0) && (reg & P9382A_MODE_TXMODE))
 			charger->rtx_state = RTX_ACTIVE;
-		else
-			charger->rtx_state = RTX_DISABLED;
 	} else {
 		/* FIXME: b/147213330
 		 * if otg enabled, rtx disabled.
@@ -3333,7 +3407,7 @@ static void p9382_txid_work(struct work_struct *work)
 
 	// write packet type to 0x100
 	ret = p9221_reg_write_8(charger,
-				PROPRIETARY_PACKET_TYPE_ADDR,
+				P9382A_COM_PACKET_TYPE_ADDR,
 				PROPRIETARY_PACKET_TYPE);
 
 	memset(charger->tx_buf, 0, P9221R5_DATA_SEND_BUF_SIZE);
@@ -3943,6 +4017,50 @@ static int p9221_parse_dt(struct device *dev,
 	if (ret)
 		pdata->icl_ramp_delay_ms = -1 ;
 
+	ret = of_property_read_u32(node, "google,alignment_scalar_low_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_scalar_low_current =
+			WLC_ALIGN_DEFAULT_SCALAR_LOW_CURRENT;
+	else
+		pdata->alignment_scalar_low_current = data;
+
+	dev_info(dev, "google,alignment_scalar_low_current set to: %d\n",
+		 pdata->alignment_scalar_low_current);
+
+	ret = of_property_read_u32(node, "google,alignment_scalar_high_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_scalar_high_current =
+			  WLC_ALIGN_DEFAULT_SCALAR_HIGH_CURRENT;
+	else
+		pdata->alignment_scalar_high_current = data;
+
+	dev_info(dev, "google,alignment_scalar_high_current set to: %d\n",
+		 pdata->alignment_scalar_high_current);
+
+	ret = of_property_read_u32(node, "google,alignment_offset_low_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_offset_low_current =
+			WLC_ALIGN_DEFAULT_OFFSET_LOW_CURRENT;
+	else
+		pdata->alignment_offset_low_current = data;
+
+	dev_info(dev, "google,alignment_offset_low_current set to: %d\n",
+		 pdata->alignment_offset_low_current);
+
+	ret = of_property_read_u32(node, "google,alignment_offset_high_current",
+				   &data);
+	if (ret < 0)
+		pdata->alignment_offset_high_current =
+			WLC_ALIGN_DEFAULT_OFFSET_HIGH_CURRENT;
+	else
+		pdata->alignment_offset_high_current = data;
+
+	dev_info(dev, "google,alignment_offset_high_current set to: %d\n",
+		 pdata->alignment_offset_high_current);
+
 	return 0;
 }
 
@@ -4259,7 +4377,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	charger->log = debugfs_logbuffer_register("wireless");
+	charger->log = logbuffer_register("wireless");
 	if (IS_ERR(charger->log)) {
 		ret = PTR_ERR(charger->log);
 		dev_err(charger->dev,
@@ -4267,7 +4385,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 		charger->log = NULL;
 	}
 
-	charger->rtx_log = debugfs_logbuffer_register("rtx");
+	charger->rtx_log = logbuffer_register("rtx");
 	if (IS_ERR(charger->rtx_log)) {
 		ret = PTR_ERR(charger->rtx_log);
 		dev_err(charger->dev,
@@ -4307,9 +4425,9 @@ static int p9221_charger_remove(struct i2c_client *client)
 	power_supply_unreg_notifier(&charger->nb);
 	mutex_destroy(&charger->io_lock);
 	if (charger->log)
-		debugfs_logbuffer_unregister(charger->log);
+		logbuffer_unregister(charger->log);
 	if (charger->rtx_log)
-		debugfs_logbuffer_unregister(charger->rtx_log);
+		logbuffer_unregister(charger->rtx_log);
 	return 0;
 }
 

@@ -54,6 +54,8 @@
 
 #define SHUNT_UOHMS_DEFAULT						100000
 
+#define EFFICIENCY_CONSTANT_DEFAULT					100
+
 #define PAC193X_VOLTAGE_MILLIVOLTS_MAX					32000
 /* 32000mV */
 #define PAC193X_VOLTAGE_U_RES						16
@@ -287,6 +289,7 @@ struct pac193x_chip_info {
 	u8				chip_revision;
 
 	u32				shunts[PAC193X_MAX_NUM_CHANNELS];
+	u32				efficiency[PAC193X_MAX_NUM_CHANNELS];
 	const char			*rail_name[PAC193X_MAX_NUM_CHANNELS];
 	const char			*subsys_name[PAC193X_MAX_NUM_CHANNELS];
 	struct reg_data			chip_reg_data;
@@ -664,7 +667,7 @@ static ssize_t average_value_show(struct device *dev,
 		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
 		temp /= chip_info->shunts[cnt] / 1000;
 		temp *= chip_info->chip_reg_data.vsense_avg[cnt];
-		temp *= 1000000;
+		temp *= (1000000 / 100) * chip_info->efficiency[cnt];
 		current_value = temp >> bit_resolution;
 
 		len += scnprintf(buf + len, PAGE_SIZE - len,
@@ -724,7 +727,7 @@ static ssize_t inst_value_show(struct device *dev,
 		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
 		temp /= chip_info->shunts[cnt] / 1000;
 		temp *= chip_info->chip_reg_data.vsense[cnt];
-		temp *= 1000000;
+		temp *= (1000000 / 100) * chip_info->efficiency[cnt];
 		current_value = temp >> bit_resolution;
 
 		/* convert resistor value from uOhm to mOhm */
@@ -735,7 +738,8 @@ static ssize_t inst_value_show(struct device *dev,
 		temp /= chip_info->shunts[cnt] / 1000;
 		temp *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
 		temp *= chip_info->chip_reg_data.vpower[cnt];
-		power_value = temp >> bit_resolution_power;
+		temp = temp >> bit_resolution_power;
+		power_value = (temp * chip_info->efficiency[cnt]) / 100;
 
 		len += scnprintf(buf + len, PAGE_SIZE - len,
 				 "%s, %d, %d, %d\n",
@@ -788,6 +792,7 @@ static ssize_t energy_value_show(struct device *dev,
 
 		/* Convert to uW-secs */
 		temp /= chip_info->sample_rate_value;
+		temp = (temp / 100) * chip_info->efficiency[cnt];
 
 		len += scnprintf(buf + len, PAGE_SIZE - len, "%s, %lu\n",
 				 ptr,
@@ -1644,8 +1649,17 @@ static const char *pac193x_match_of_device(struct i2c_client *client,
 		if (!chip_info->chip_reg_data.active_channels[crt_ch]) {
 		/* set the shunt value to 0 for the disabled channels */
 			chip_info->shunts[crt_ch] = 0;
+			chip_info->efficiency[crt_ch] = 0;
 			crt_ch++;
 			continue;
+		}
+
+		if (of_property_read_u32(node,
+			"efficiency-const", &chip_info->efficiency[crt_ch])) {
+			pr_err("invalid efficiency-const value on %s\n",
+				node->full_name);
+			chip_info->efficiency[crt_ch] =
+					EFFICIENCY_CONSTANT_DEFAULT;
 		}
 
 		if (of_property_read_u32(node,

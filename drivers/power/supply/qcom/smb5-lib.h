@@ -19,9 +19,7 @@
 #include "storm-watch.h"
 #include "battery.h"
 
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 #include "../google/logbuffer.h"
-#endif
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -115,6 +113,8 @@ enum print_reason {
 #define USBIN_150MA     150000
 #define USBIN_500MA     500000
 #define USBIN_900MA     900000
+
+#define USBIN_OFFSET	50000
 
 #define SUSPEND_ICL_MAX USBIN_25MA
 
@@ -649,15 +649,17 @@ struct smb_charger {
 
 	struct regulator *ext_vbus;
 
-#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 	/* logging */
 	struct logbuffer *log;
-#endif
+
 	bool moisture_detection_enabled;
 
 	/* lpd timer work */
 	struct workqueue_struct *wq;
 	struct work_struct	lpd_recheck_work;
+
+	/* b/155860936 */
+	bool force_hcmode;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);

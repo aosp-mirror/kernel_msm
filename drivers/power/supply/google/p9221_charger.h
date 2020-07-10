@@ -264,9 +264,11 @@
 						 P9382_STAT_TXUNDERPOWER | \
 						 P9382_STAT_TXFOD)
 /*
- * Send PPP in Tx mode
+ * Send communication message
  */
-#define PROPRIETARY_PACKET_TYPE_ADDR		0x100
+#define P9382A_COM_PACKET_TYPE_ADDR		0x100
+#define P9382A_COM_CHAN_SEND_SIZE_REG		0x101
+#define BIDI_COM_PACKET_TYPE			0x98
 #define PROPRIETARY_PACKET_TYPE			0x80
 #define FAST_SERIAL_ID_HEADER			0x4F
 #define FAST_SERIAL_ID_SIZE			4
@@ -311,6 +313,10 @@ struct p9221_charger_platform_data {
 	u32				alignment_scalar;
 	u32				alignment_hysteresis;
 	u32				icl_ramp_delay_ms;
+	u32				alignment_scalar_low_current;
+	u32				alignment_scalar_high_current;
+	u32				alignment_offset_low_current;
+	u32				alignment_offset_high_current;
 };
 
 struct p9221_charger_data {

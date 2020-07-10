@@ -20,24 +20,28 @@
 		status = "okay";
 		ch1: channel@0 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "PPVAR_VPH_PWR_OLED";
 		     subsys-name = "Display";
 		     channel_enabled;
 		};
 		ch2: channel@1 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "PPVAR_VPH_PWR_WLAN";
 		     subsys-name = "WLAN";
 		     channel_enabled;
 		};
 		ch3: channel@2 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "WCN3998_VDD13 [from PP1304_L2C]";
 		     subsys-name = "WLAN";
 		     channel_enabled;
 		};
 		ch4: channel@3 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <115>;
 		     rail-name = "PPVAR_VPH_PWR_S1C";
 		     subsys-name = "CPU(SILVER)";
 		     channel_enabled;
@@ -51,12 +55,14 @@
 		status = "okay";
 		ch5: channel@0 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "PPVAR_VPH_PWR_S2A_S3A";
 		     subsys-name = "CPU(GOLD)";
 		     channel_enabled;
 		};
 		ch6: channel@1 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "PPVAR_VPH_PWR_S1A_S9A_S10A";
 		     subsys-name = "VDD_CX(SM7250)";
 		     channel_enabled;
@@ -76,12 +82,14 @@
 		status = "okay";
 		ch9: channel@0 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "PPVAR_VPH_PWR_RF";
 		     subsys-name = "Cellular";
 		     channel_enabled;
 		};
 		ch10: channel@1 {
 		     uohms-shunt-res = <10000>;
+		     efficiency-const = <100>;
 		     rail-name = "PPVAR_VPH_PWR_QTM525";
 		     subsys-name = "Cellular(mmWave)";
 		     channel_enabled;

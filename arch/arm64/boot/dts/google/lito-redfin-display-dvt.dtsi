@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&sde_dsi {
+	google,gamma_fixup_panel_id = /bits/ 8 <0x3A 0x64 0x43>;
+	/* cmd, src_idx, dst_idx, mask */
+	google,gamma_fixup_location = <0xC8 60 105 0xFF>,
+				      <0xC8 61 106 0xF0>,
+				      <0xC8 63 108 0xFF>,
+				      <0xC8 64 109 0xFF>,
+				      <0xC8 65 110 0xFF>,
+				      <0xC8 66 111 0xFF>,
+				      <0xC8 67 112 0xFF>,
+				      <0xC8 68 113 0xFF>;
+};

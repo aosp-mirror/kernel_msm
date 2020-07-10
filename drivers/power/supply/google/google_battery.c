@@ -33,6 +33,7 @@
 #include "google_psy.h"
 #include "qmath.h"
 #include "logbuffer.h"
+#include <crypto/hash.h>
 
 #include <linux/debugfs.h>
 
@@ -71,6 +72,8 @@
 
 #define PREFIX_SERIALNO   "androidboot.serialno="
 #define DEV_SN_LENGTH         20
+#define STR_(x)	#x
+#define STR(x)	STR_(x)
 
 #if (GBMS_CCBIN_BUCKET_COUNT < 1) || (GBMS_CCBIN_BUCKET_COUNT > 100)
 #error "GBMS_CCBIN_BUCKET_COUNT needs to be a value from 1-100"
@@ -321,6 +324,9 @@ struct batt_drv {
 	bool eeprom_inside;
 	int hist_data_max_cnt;
 	int hist_delta_cycle_cnt;
+
+	/* Battery device info */
+	u8 dev_info[GBMS_DINF_LEN];
 
 	/* Battery pack info for Suez*/
 	const char batt_pack_info[GBMS_MINF_LEN];
@@ -2349,8 +2355,11 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 	 * based charging is active
 	 */
 	changed |= msc_logic_health(&batt_drv->chg_health, batt_drv);
-	if (batt_drv->chg_health.rest_state == CHG_HEALTH_ACTIVE)
+	if (batt_drv->chg_health.rest_state == CHG_HEALTH_ACTIVE) {
 		batt_drv->msc_state = MSC_HEALTH;
+		/* make sure using rest_fv_uv when HEALTH_ACTIVE */
+		batt_drv->fv_uv = 0;
+	}
 
 msc_logic_done:
 	/* set ->cc_max = 0 on RL and SW_JEITA, no vote on interval in RL_DSG */
@@ -2387,11 +2396,11 @@ msc_logic_done:
 		const int rest_fv_uv = batt_drv->chg_health.rest_fv_uv;
 
 		vote(batt_drv->fv_votable, MSC_LOGIC_VOTER,
-			!disable_votes && (batt_drv->fv_uv != -1),
+			!disable_votes && (batt_drv->fv_uv > 0),
 			batt_drv->fv_uv);
 
 		vote(batt_drv->fv_votable, MSC_HEALTH_VOTER,
-			!disable_votes && (rest_fv_uv != -1),
+			!disable_votes && (rest_fv_uv > 0),
 			rest_fv_uv);
 	}
 
@@ -3520,39 +3529,99 @@ void bat_log_ttf_estimate(const char *label, int ssoc,
 		      res);
 }
 
+static int batt_do_sha256(const u8 *data, unsigned int len, u8 *result)
+{
+	struct crypto_shash *tfm;
+	struct shash_desc *shash;
+	int size, ret = 0;
+
+	tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(tfm)) {
+		pr_err("Error SHA-256 transform: ld\n", PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+
+	size = sizeof(struct shash_desc) + crypto_shash_descsize(tfm);
+	shash = kmalloc(size, GFP_KERNEL);
+	if (!shash) {
+		crypto_free_shash(tfm);
+		return -ENOMEM;
+	}
+
+	shash->tfm = tfm;
+	ret = crypto_shash_digest(shash, data, len, result);
+	kfree(shash);
+	crypto_free_shash(tfm);
+
+	return ret;
+}
+
 static void batt_check_device_sn(struct batt_drv *batt_drv)
 {
-	char dev_info[GBMS_DINF_LEN];
-	int ret = 0;
+	const char *batt_pack_info = batt_drv->batt_pack_info;
+	u8 data[DEV_SN_LENGTH + GBMS_MINF_LEN];
+	u8 *dev_info = batt_drv->dev_info;
+	int ret = 0, len = 0;
+	char dev_sn[DEV_SN_LENGTH + 1] = {0};
+	const char *cmdline;
 
-	ret = gbms_storage_read(GBMS_TAG_DINF, (void *)dev_info, GBMS_DINF_LEN);
-	if (ret < 0) {
-		pr_err("read device SN fail, ret=%d\n", ret);
+	// get the device SN
+	cmdline = strnstr(saved_command_line, PREFIX_SERIALNO,
+			  strlen(saved_command_line));
+	ret = sscanf(cmdline ?: "",
+		     PREFIX_SERIALNO "%" STR(DEV_SN_LENGTH) "s",
+		     dev_sn);
+	if (ret == 0) {
+		pr_err("get device SN fail\n");
 		return;
 	}
 
-	// new battery, store the device SN
-	if (dev_info[0] == 0xFF) {
-		char dev_sn[DEV_SN_LENGTH];
-		char *cmdline;
-		int len = 0;
-
-		// get the device SN
-		cmdline = kstrdup(saved_command_line, GFP_KERNEL);
-		cmdline = strnstr(cmdline, PREFIX_SERIALNO, strlen(cmdline));
-		len = strlen(PREFIX_SERIALNO);
-		ret = sscanf(&cmdline[len], "%s", dev_sn);
-		if (ret == 0) {
-			pr_err("get device SN fail\n");
-			kfree(cmdline);
+	/* Get EEPROM battery SN */
+	if (!batt_drv->pack_info_ready)  {
+		ret = gbms_storage_read(GBMS_TAG_MINF, (void *)batt_pack_info,
+					GBMS_MINF_LEN);
+		if (ret < 0) {
+			pr_err("read batt_pack_info fail, ret=%d\n", ret);
 			return;
 		}
-		kfree(cmdline);
+		batt_drv->pack_info_ready = true;
+	}
 
-		// store the device SN
-		ret = gbms_storage_write(GBMS_TAG_DINF, dev_sn, strlen(dev_sn));
+	/* device SN + battery SN */
+	len = strlen(dev_sn);
+	memcpy(data, dev_sn, len);
+	memcpy(&data[len], batt_pack_info, GBMS_MINF_LEN);
+
+	/* hash data */
+	ret = batt_do_sha256(data, len + GBMS_MINF_LEN, data);
+	if (ret < 0) {
+		pr_err("execute batt_do_sha256 fail, ret=%d\n", ret);
+		return;
+	}
+
+	/* Get EEPROM device info. */
+	ret = gbms_storage_read(GBMS_TAG_DINF, (void *)dev_info,
+				GBMS_DINF_LEN);
+	if (ret < 0) {
+		pr_err("read device info. fail, ret=%d\n", ret);
+		return;
+	}
+
+	/* Compare EEPROM device info. with hash data */
+	if (dev_info[0] == 0xFF) {
+		/* New battery, store the device inforamtion */
+		ret = gbms_storage_write(GBMS_TAG_DINF, data, GBMS_DINF_LEN);
 		if (ret < 0)
-			pr_err("write device SN fail, ret=%d\n", ret);
+			pr_err("write device info. fail, ret=%d\n", ret);
+	} else if (strncmp(dev_info, dev_sn, len) == 0) {
+		/* Replace it */
+		ret = gbms_storage_write(GBMS_TAG_DINF, data, GBMS_DINF_LEN);
+		if (ret < 0)
+			pr_err("replace dev_info fail, ret=%d\n", ret);
+	} else if (strncmp(dev_info, data, GBMS_DINF_LEN) == 0) {
+		/* Check pass */
+	} else {
+		/* Check fail */
 	}
 }
 
@@ -4435,7 +4504,7 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0) {
 		pr_info("time to full not available\n");
 	} else {
-		batt_drv->ttf_stats.ttf_log = debugfs_logbuffer_register("ttf");
+		batt_drv->ttf_stats.ttf_log = logbuffer_register("ttf");
 		if (IS_ERR(batt_drv->ttf_stats.ttf_log)) {
 			ret = PTR_ERR(batt_drv->ttf_stats.ttf_log);
 			dev_err(batt_drv->device,
@@ -4576,7 +4645,7 @@ static int google_battery_probe(struct platform_device *pdev)
 			"Couldn't register as power supply, ret=%d\n", ret);
 	}
 
-	batt_drv->ssoc_log = debugfs_logbuffer_register("ssoc");
+	batt_drv->ssoc_log = logbuffer_register("ssoc");
 	if (IS_ERR(batt_drv->ssoc_log)) {
 		ret = PTR_ERR(batt_drv->ssoc_log);
 		dev_err(batt_drv->device,
@@ -4642,9 +4711,9 @@ static int google_battery_remove(struct platform_device *pdev)
 		wakeup_source_unregister(batt_drv->poll_ws);
 
 		if (batt_drv->ssoc_log)
-			debugfs_logbuffer_unregister(batt_drv->ssoc_log);
+			logbuffer_unregister(batt_drv->ssoc_log);
 		if (ttf_stats->ttf_log)
-			debugfs_logbuffer_unregister(ttf_stats->ttf_log);
+			logbuffer_unregister(ttf_stats->ttf_log);
 		if (batt_drv->tz_dev)
 			thermal_zone_of_sensor_unregister(batt_drv->device,
 					batt_drv->tz_dev);

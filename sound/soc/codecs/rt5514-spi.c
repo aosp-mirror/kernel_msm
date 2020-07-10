@@ -419,7 +419,7 @@ void rt5514_spi_request_switch(u32 mask, bool is_require)
 	}
 
 	if (spi_switch_mask > 0) {
-		pr_info("%s: on (mask=%2x)", __func__, spi_switch_mask);
+		pr_debug("%s: on (mask=%2x)", __func__, spi_switch_mask);
 		/* Set handshake GPIO */
 		gpio_set_value(handshake_gpio, 1);
 
@@ -437,7 +437,7 @@ void rt5514_spi_request_switch(u32 mask, bool is_require)
 		/* Set switch pin back */
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 0);
 	} else {
-		pr_info("%s: off (mask=%2x)", __func__, spi_switch_mask);
+		pr_debug("%s: off (mask=%2x)", __func__, spi_switch_mask);
 		/* Set switch pin to CHRE */
 		rt5514_set_gpio(RT5514_SPI_SWITCH_GPIO, 1);
 		/* Set handshake GPIO */
@@ -800,6 +800,7 @@ static void rt5514_schedule_copy(struct rt5514_dsp *rt5514_dsp, bool is_adc)
 		base_addr = RT5514_BUFFER_ADC_BASE;
 		limit_addr = RT5514_BUFFER_ADC_LIMIT;
 		rt5514_dsp->buf_rp_addr[2] = RT5514_BUFFER_ADC_WP;
+		dev_info(rt5514_dsp->dev, "adc is streaming\n");
 	} else {
 		rt5514_spi_burst_read(RT5514_HOTWORD_FLAG, (u8 *)&buf,
 			sizeof(buf));
@@ -1065,6 +1066,7 @@ static int rt5514_spi_hw_free(struct snd_pcm_substream *substream)
 		break;
 
 	case 2:
+		dev_info(rt5514_dsp->dev, "adc stream turns off\n");
 		cancel_delayed_work_sync(&rt5514_dsp->copy_work_2);
 		rt5514_spi_request_switch(SPI_SWITCH_MASK_WORK_2, 0);
 		break;

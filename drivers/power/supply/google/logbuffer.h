@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright 2019 Google, Inc
+ * Copyright 2020 Google, Inc
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +19,7 @@
 #include <stdarg.h>
 
 struct logbuffer;
+#if IS_ENABLED(CONFIG_GOOGLE_LOGBUFFER)
 void logbuffer_log(struct logbuffer *instance, const char *fmt, ...);
 void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
 		    va_list args);
@@ -26,8 +28,27 @@ void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
  * param name: name of the file in the /d/logbuffer/ directory.
  * returns the pointer to the logbuffer metadata.
  */
-struct logbuffer *debugfs_logbuffer_register(char *name);
+struct logbuffer *logbuffer_register(char *name);
 
-void debugfs_logbuffer_unregister(struct logbuffer *instance);
+void logbuffer_unregister(struct logbuffer *instance);
+#else
+void logbuffer_log(struct logbuffer *instance, const char *fmt, ...)
+{
+	return;
+}
+void logbuffer_vlog(struct logbuffer *instance, const char *fmt,
+		    va_list args)
+{
+	return;
+}
+struct logbuffer *logbuffer_register(char *name)
+{
+	return NULL;
+}
+void logbuffer_unregister(struct logbuffer *instance)
+{
+	return;
+}
+#endif
 #endif /* __GOOGLE_LOGBUFFER_H_ */
 

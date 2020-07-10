@@ -224,3 +224,7 @@
 	google,maxpower-switch;
 	ext-vbus-supply = <&ext_boost>;
 };
+
+&pm7250b_charger {
+	google,force-hcmode;
+};

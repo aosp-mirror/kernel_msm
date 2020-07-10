@@ -137,7 +137,7 @@ int tbn_request_bus(struct tbn_context *tbn)
 				dev_err(tbn->dev,
 					"%s: timeout!\n", __func__);
 		} else {
-			irq_set_irq_type(tbn->lpi2ap_irq, IRQ_TYPE_LEVEL_LOW);
+			irq_set_irq_type(tbn->lpi2ap_irq, IRQF_TRIGGER_FALLING);
 			enable_irq(tbn->lpi2ap_irq);
 			gpio_direction_output(tbn->ap2lpi_gpio,
 						TBN_BUS_OWNER_AP);
@@ -203,7 +203,7 @@ int tbn_release_bus(struct tbn_context *tbn)
 				dev_err(tbn->dev,
 					"%s: timeout!\n", __func__);
 		} else {
-			irq_set_irq_type(tbn->lpi2ap_irq, IRQ_TYPE_LEVEL_HIGH);
+			irq_set_irq_type(tbn->lpi2ap_irq, IRQF_TRIGGER_RISING);
 			enable_irq(tbn->lpi2ap_irq);
 			gpio_direction_output(tbn->ap2lpi_gpio,
 						TBN_BUS_OWNER_LPI);
@@ -305,7 +305,7 @@ struct tbn_context *tbn_init(struct device *dev)
 			err = devm_request_threaded_irq(tbn->dev,
 				tbn->lpi2ap_irq, NULL,
 				tbn_lpi2ap_irq_thread,
-				IRQF_TRIGGER_HIGH |
+				IRQF_TRIGGER_RISING |
 				IRQF_ONESHOT, "tbn", tbn);
 			if (err) {
 				dev_err(tbn->dev,

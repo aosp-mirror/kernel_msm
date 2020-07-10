@@ -16,25 +16,26 @@
 	skin-therm {
 		trips {
 			skin_emergency_pre_lv1: skin-emergency-pre-lv1 {
-				temperature = <48000>;
+				temperature = <45500>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
 		};
-
 		cooling-maps {
-			/* emergency pre level1 throttling */
 			cpu0-svs {
 				trip = <&skin_emergency_pre_lv1>;
-				cooling-device = <&CPU0 5 5>;
+				cooling-device =
+					<&CPU0 5 5>;
 			};
 			cpu6-svs {
 				trip = <&skin_emergency_pre_lv1>;
-				cooling-device = <&CPU6 6 6>;
+				cooling-device =
+					<&CPU6 6 6>;
 			};
 			cpu7-svs {
 				trip = <&skin_emergency_pre_lv1>;
-				cooling-device = <&CPU7 6 6>;
+				cooling-device =
+					<&CPU7 6 6>;
 			};
 		};
 	};
