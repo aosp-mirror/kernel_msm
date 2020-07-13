@@ -477,15 +477,15 @@
 		thermal-sensors = <&pm7250b_adc_tm ADC_AMUX_THM3_PU2>;
 		wake-capable-sensor;
 		trips {
-			usb_throttling_lv1: usb-throttling_lv1 {
+			usb_throttling_max: usb-throttling_max {
 				temperature = <60000>;
 				hysteresis = <10000>;
 				type = "passive";
 			};
 		};
 		cooling-maps {
-			usb_throttling_lv1 {
-				trip = <&usb_throttling_lv1>;
+			usb_throttling_max {
+				trip = <&usb_throttling_max>;
 				cooling-device =
 					<&google_overheat_mitigation
 					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
