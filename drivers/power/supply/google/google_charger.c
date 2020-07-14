@@ -572,7 +572,7 @@ static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 		return 0;
 
 	/* invalid */
-	if ((upperbd < lowerbd) ||
+	if ((upperbd <= lowerbd) ||
 	    (upperbd > DEFAULT_CHARGE_STOP_LEVEL) ||
 	    (lowerbd < DEFAULT_CHARGE_START_LEVEL))
 		return 0;
