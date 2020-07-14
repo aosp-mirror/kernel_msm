@@ -979,6 +979,12 @@ static int p9221_get_property(struct power_supply *psy,
 			return -ENODATA;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		/* Zero may be returned on transition to wireless "online", as
+		 * last_capacity is reset to -1 until capacity is re-written
+		 * from userspace, leading to a new csp packet being sent.
+		 *
+		 * b/80435107 for additional context
+		 */
 		if (charger->last_capacity > 0)
 			val->intval = charger->last_capacity;
 		else
