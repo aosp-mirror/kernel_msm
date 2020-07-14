@@ -75,7 +75,6 @@
 	};
 };
 
-
 &vbat_lvl0 {
 	temperature = <3200>;
 	hysteresis = <200>;
@@ -373,6 +372,7 @@
 	};
 
 	pm8150b-vbat-lvl0 {
+		polling-delay-passive = <100>;
 		cooling-maps {
 			vbat_cpu4 {
 				trip = <&vbat_lvl0>;
@@ -392,6 +392,7 @@
 	};
 
 	pm8150b-vbat-lvl1 {
+		polling-delay-passive = <100>;
 		cooling-maps {
 			vbat_cpu4 {
 				trip = <&vbat_lvl1>;
@@ -425,6 +426,7 @@
 	};
 
 	pm8150b-vbat-lvl2 {
+		polling-delay-passive = <100>;
 		cooling-maps {
 			vbat_gpu2 {
 				trip = <&vbat_lvl2>;
