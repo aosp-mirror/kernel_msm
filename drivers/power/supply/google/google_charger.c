@@ -616,7 +616,7 @@ static bool chg_is_custom_enabled(struct chg_drv *chg_drv)
 		return false;
 
 	/* invalid */
-	if ((upperbd < lowerbd) ||
+	if ((upperbd <= lowerbd) ||
 	    (upperbd > DEFAULT_CHARGE_STOP_LEVEL) ||
 	    (lowerbd < DEFAULT_CHARGE_START_LEVEL))
 		return false;
