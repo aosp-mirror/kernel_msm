@@ -455,7 +455,7 @@ passive_delay_store(struct device *dev, struct device_attribute *attr,
 			return -EINVAL;					\
 									\
 		tz->tzp->name = value;					\
-									\
+		thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED); \
 		return count;						\
 	}								\
 	static DEVICE_ATTR_RW(name)
