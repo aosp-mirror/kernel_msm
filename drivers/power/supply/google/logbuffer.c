@@ -157,6 +157,7 @@ static int logbuffer_dev_open(struct inode *inode, struct file *file)
 						  misc);
 
 	inode->i_private = instance;
+	file->private_data = NULL;
 	return single_open(file, logbuffer_seq_show, inode->i_private);
 }
 
