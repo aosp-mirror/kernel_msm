@@ -635,8 +635,8 @@
 		disable-thermal-zone;
 		trips {
 			usb_throttling_max: usb-throttling_max {
-				temperature = <5000>;
-				hysteresis = <0>;
+				temperature = <7000>;
+				hysteresis = <4000>;
 				type = "passive";
 			};
 		};
