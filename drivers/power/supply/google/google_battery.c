@@ -752,7 +752,11 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
 
 	/* force dsg curve when connect/disconnect with battery at 100% */
 	if (ssoc_level >= SSOC_FULL) {
+		const qnum_t rlt = qnum_fromint(ssoc_state->rl_soc_threshold);
+
 		gdf -=  qnum_rconst(ssoc_state->ssoc_delta);
+		if (gdf < rlt - qnum_rconst(ssoc_state->ssoc_delta))
+			gdf = rlt - qnum_rconst(ssoc_state->ssoc_delta);
 		type = SSOC_UIC_TYPE_DSG;
 	}
 
