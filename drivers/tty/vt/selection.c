@@ -28,6 +28,8 @@
 #include <linux/console.h>
 #include <linux/tty_flip.h>
 
+#include <linux/sched/signal.h>
+
 /* Don't take this from <ctype.h>: 011-015 on the screen aren't spaces */
 #define isspace(c)	((c) == ' ')
 
@@ -79,6 +81,11 @@ void clear_selection(void)
 		highlight(sel_start, sel_end);
 		sel_start = -1;
 	}
+}
+
+bool vc_is_sel(struct vc_data *vc)
+{
+	return vc == sel_cons;
 }
 
 /*
@@ -354,6 +361,7 @@ int paste_selection(struct tty_struct *tty)
 	unsigned int count;
 	struct  tty_ldisc *ld;
 	DECLARE_WAITQUEUE(wait, current);
+	int ret = 0;
 
 	console_lock();
 	poke_blanked_console();
@@ -368,6 +376,10 @@ int paste_selection(struct tty_struct *tty)
 	mutex_lock(&sel_lock);
 	while (sel_buffer && sel_buffer_lth > pasted) {
 		set_current_state(TASK_INTERRUPTIBLE);
+		if (signal_pending(current)) {
+			ret = -EINTR;
+			break;
+		}
 		if (tty_throttled(tty)) {
 			mutex_unlock(&sel_lock);
 			schedule();
@@ -386,5 +398,5 @@ int paste_selection(struct tty_struct *tty)
 
 	tty_buffer_unlock_exclusive(&vc->port);
 	tty_ldisc_deref(ld);
-	return 0;
+	return ret;
 }
