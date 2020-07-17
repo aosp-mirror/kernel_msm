@@ -7203,6 +7203,18 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static void dc_icl_timer_handler(struct timer_list *t)
+{
+	struct smb_charger *chg = container_of(t, struct smb_charger,
+					       dc_icl_timer);
+
+	smblib_dbg(chg, PR_WLS, "rerunning DCIN AICL\n");
+	dev_info(chg->dev, "rerunning DCIN AICL\n");
+
+	schedule_work(&chg->dcin_aicl_work);
+	chg->dc_icl_rerun = true;
+}
+
 static void dcin_aicl(struct smb_charger *chg)
 {
 	int rc, icl, icl_save;
@@ -7294,6 +7306,11 @@ unlock:
 unvote:
 	vote(chg->awake_votable, DCIN_AICL_VOTER, false, 0);
 	chg->dcin_aicl_done = aicl_done;
+	if (chg->dc_icl_rerun && chg->dcin_aicl_done) {
+		smblib_dbg(chg, PR_WLS, "DCIN AICL rerun done.\n");
+		dev_info(chg->dev, "DCIN AICL rerun done.\n");
+		chg->dc_icl_rerun = false;
+	}
 }
 
 static void dcin_aicl_delay_work(struct work_struct *work)
@@ -7325,6 +7342,7 @@ static enum alarmtimer_restart dcin_aicl_alarm_cb(struct alarm *alarm,
 	return ALARMTIMER_NORESTART;
 }
 
+#define DC_ICL_RERUN_TIMEOUT_MS		(10 * 1000)
 static void dcin_icl_decrement(struct smb_charger *chg)
 {
 	int rc, icl;
@@ -7346,6 +7364,11 @@ static void dcin_icl_decrement(struct smb_charger *chg)
 	if (ktime_us_delta(now, chg->dcin_uv_last_time) > (200 * 1000)) {
 		chg->dcin_uv_count = 0;
 	} else if (chg->dcin_uv_count >= 3) {
+		if (!chg->dc_icl_rerun)
+			mod_timer(&chg->dc_icl_timer,
+				  jiffies +
+				  msecs_to_jiffies(DC_ICL_RERUN_TIMEOUT_MS));
+
 		icl -= DCIN_ICL_STEP_UA;
 
 		smblib_dbg(chg, PR_WLS, "icl: %d mA\n", (icl / 1000));
@@ -7499,6 +7522,8 @@ irqreturn_t dc_plugin_irq_handler(int irq, void *data)
 		vote(chg->dc_suspend_votable, CHG_TERMINATION_VOTER, false, 0);
 		vote(chg->fcc_main_votable, WLS_PL_CHARGING_VOTER, false, 0);
 
+		del_timer_sync(&chg->dc_icl_timer);
+		chg->dc_icl_rerun = false;
 		chg->last_wls_vout = 0;
 		chg->dcin_aicl_done = false;
 		chg->dcin_icl_user_set = false;
@@ -8793,6 +8818,7 @@ int smblib_init(struct smb_charger *chg)
 	 */
 	chg->dead_battery = true;
 	timer_setup(&chg->apsd_timer, apsd_timer_cb, 0);
+	timer_setup(&chg->dc_icl_timer, dc_icl_timer_handler, 0);
 
 	INIT_DELAYED_WORK(&chg->role_reversal_check,
 					smblib_typec_role_check_work);
@@ -8941,6 +8967,7 @@ int smblib_deinit(struct smb_charger *chg)
 			cancel_work_sync(&chg->chg_termination_work);
 		}
 		del_timer_sync(&chg->apsd_timer);
+		del_timer_sync(&chg->dc_icl_timer);
 		cancel_work_sync(&chg->bms_update_work);
 		cancel_work_sync(&chg->jeita_update_work);
 		cancel_work_sync(&chg->pl_update_work);
