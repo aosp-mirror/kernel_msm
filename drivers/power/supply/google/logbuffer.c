@@ -38,6 +38,7 @@ struct logbuffer {
 	char id[ID_LENGTH];
 
 	struct miscdevice misc;
+	char name[50];
 };
 
 /* Device suspended since last logged. */
@@ -171,7 +172,6 @@ static const struct file_operations logbuffer_dev_operations = {
 struct logbuffer *logbuffer_register(char *name)
 {
 	struct logbuffer *instance;
-	char buf[50] = "logbuffer_";
 	int ret;
 
 	instance = kzalloc(sizeof(struct logbuffer), GFP_KERNEL);
@@ -187,9 +187,10 @@ struct logbuffer *logbuffer_register(char *name)
 		goto free_instance;
 	}
 
-	strlcat(buf, name, sizeof(buf));
+	strlcpy(instance->name, "logbuffer_", sizeof(instance->name));
+	strlcat(instance->name, name, sizeof(instance->name));
 	instance->misc.minor = MISC_DYNAMIC_MINOR;
-	instance->misc.name = buf;
+	instance->misc.name = instance->name;
 	instance->misc.fops = &logbuffer_dev_operations;
 
 	ret = misc_register(&instance->misc);
