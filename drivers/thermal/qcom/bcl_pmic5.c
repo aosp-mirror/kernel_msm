@@ -45,7 +45,6 @@
 #define BCL_VBAT_BASE_MV      2000
 #define BCL_VBAT_INC_MV       25
 #define BCL_VBAT_MAX_MV       3600
-#define BCL_VBAT_TRIP_WARN_LEVEL 3300
 
 #define MAX_PERPH_COUNT       2
 
@@ -317,16 +316,6 @@ static int bcl_get_vbat_trip(void *data, int type, int *trip)
 				"too" : "critical",
 				*trip, val);
 	}
-	if (*trip > BCL_VBAT_TRIP_WARN_LEVEL) {
-		pr_warn("vbat trip: %s : %d mv ADC:0x%02x\n over %d mv",
-		  (addr == BCL_VBAT_ADC_LOW) ?
-		  "" :
-		  ((addr == BCL_VBAT_COMP_LOW) ?  "too-low" : "critical-low"),
-		  *trip,
-		  val,
-		  BCL_VBAT_TRIP_WARN_LEVEL
-		  );
-	}
 
 	return 0;
 }
@@ -339,11 +328,6 @@ static int bcl_set_vbat(void *data, int low, int high)
 	struct bcl_peripheral_data *bat_data =
 		(struct bcl_peripheral_data *)data;
 
-	if (low < 0) {
-		pr_err("vbat: thermal zone:%s trip(%d), skip negative value",
-		  bat_data->tz_dev->type, low);
-		return 0;
-	}
 	mutex_lock(&bat_data->state_trans_lock);
 	thresh_value = low;
 
