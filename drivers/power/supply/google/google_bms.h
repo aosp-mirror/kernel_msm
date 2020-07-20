@@ -143,9 +143,9 @@ struct gbms_ce_tier_stats {
 	uint16_t	cc_in;
 	uint16_t	cc_total;
 
-	uint16_t	time_fast;
-	uint16_t	time_taper;
-	uint16_t	time_other;
+	uint32_t	time_fast;
+	uint32_t	time_taper;
+	uint32_t	time_other;
 
 	int16_t		temp_in;
 	int16_t		temp_min;
