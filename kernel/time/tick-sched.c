@@ -1280,6 +1280,8 @@ static void wakeup_user(void)
 	}
 }
 
+static void (*wake_callback)(void);
+
 /*
  * We rearm the timer until we get disabled by the idle code.
  * Called with interrupts disabled.
@@ -1305,6 +1307,12 @@ static enum hrtimer_restart tick_sched_timer(struct hrtimer *timer)
 			 * wakeup user if needed
 			 */
 			wakeup_user();
+		}
+		if (wake_callback && tick_do_timer_cpu == smp_processor_id()) {
+			/*
+			 * wakeup user if needed
+			 */
+			wake_callback();
 		}
 	}
 	else
@@ -1422,6 +1430,15 @@ int tick_check_oneshot_change(int allow_nohz)
 	tick_nohz_switch_to_nohz();
 	return 0;
 }
+
+void register_tick_sched_wakeup_callback(void (*cb)(void))
+{
+	if (!wake_callback)
+		wake_callback = cb;
+	else
+		pr_warn("tick-sched wake cb already exists; skipping.\n");
+}
+EXPORT_SYMBOL_GPL(register_tick_sched_wakeup_callback);
 
 ktime_t *get_next_event_cpu(unsigned int cpu)
 {
