@@ -352,14 +352,26 @@
 
 	/* Disable PM8150l BCL */
 	pm8150l-bcl-lvl0 {
-		disable-thermal-zone;
+		status = "disabled";
 	};
 
 	pm8150l-bcl-lvl1 {
-		disable-thermal-zone;
+		status = "disabled";
 	};
 
 	pm8150l-bcl-lvl2 {
-		disable-thermal-zone;
+		status = "disabled";
+	};
+
+	pm8150l-vph-lvl0 {
+		status = "disabled";
+	};
+
+	pm8150l-vph-lvl1 {
+		status = "disabled";
+	};
+
+	pm8150l-vph-lvl2 {
+		status = "disabled";
 	};
 };
