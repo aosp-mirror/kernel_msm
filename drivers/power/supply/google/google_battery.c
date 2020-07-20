@@ -1256,10 +1256,14 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 	if (batt_drv->vbatt_idx != -1 && batt_drv->temp_idx != -1) {
 		const time_t now = get_boot_sec();
 		const time_t elap = now - batt_drv->ce_data.last_update;
+		const int ibatt = GPSY_GET_PROP(batt_drv->fg_psy,
+						POWER_SUPPLY_PROP_CURRENT_NOW);
+		const int temp = GPSY_GET_PROP(batt_drv->fg_psy,
+					       POWER_SUPPLY_PROP_TEMP);
 
 		batt_chg_stats_update(batt_drv,
 				      batt_drv->temp_idx, batt_drv->vbatt_idx,
-				      0, 0, elap);
+				      ibatt / 1000, temp, elap);
 		batt_drv->ce_data.last_update = now;
 	}
 
