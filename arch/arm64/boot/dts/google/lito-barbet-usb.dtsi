@@ -220,7 +220,6 @@
 };
 
 &pm7250b_pdphy {
-	google,ext_vbus-supported;
 	google,maxpower-switch;
 	ext-vbus-supply = <&ext_boost>;
 };
