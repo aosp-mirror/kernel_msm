@@ -343,6 +343,11 @@ static int bcl_set_vbat(void *data, int low, int high)
 		pr_debug("vbat: enable irq:%d\n", bat_data->irq_num);
 	}
 
+	if ((low < BCL_VBAT_BASE_MV) || (low > BCL_VBAT_MAX_MV)) {
+		pr_err("vbat: low_thresh was out of range (%d)\n", low);
+		goto bcl_set_exit;
+	}
+
 	switch (bat_data->type) {
 	case BCL_VBAT_LVL0:
 		addr = BCL_VBAT_ADC_LOW;
@@ -362,10 +367,12 @@ static int bcl_set_vbat(void *data, int low, int high)
 		val = (int8_t)thresh_value;
 		break;
 	default:
-		return -ENODEV;
+		goto bcl_set_exit;
 	};
 
 	bcl_write_register(bat_data->dev, addr, val);
+
+bcl_set_exit:
 	mutex_unlock(&bat_data->state_trans_lock);
 
 	return 0;
