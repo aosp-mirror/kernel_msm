@@ -56,7 +56,7 @@
 #define P9382A_DC_ICL_EPP_1000		1000000
 #define P9382A_NEG_POWER_10W		(10 / 0.5)
 #define P9382A_NEG_POWER_11W		(11 / 0.5)
-#define P9382_RTX_TIMEOUT_MS		(10 * 1000)
+#define P9382_RTX_TIMEOUT_MS		(2 * 1000)
 
 #define WLC_ALIGNMENT_MAX		100
 #define WLC_MFG_GOOGLE			0x72
@@ -3466,7 +3466,7 @@ static void p9382_rtx_work(struct work_struct *work)
 	ret = p9221_reg_read_8(charger, P9221R5_SYSTEM_MODE_REG,
 			       &mode_reg);
 	if (ret == 0) {
-		if (charger->is_rtx_mode && !mode_reg) {
+		if (charger->is_rtx_mode && !(mode_reg & P9382A_MODE_TXMODE)) {
 			logbuffer_log(charger->rtx_log,
 				      "is_rtx_on: ben=%d, mode=%02x",
 				      charger->ben_state, mode_reg);
