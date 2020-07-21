@@ -2210,6 +2210,9 @@
   of_device_uevent_modalias
   strcspn
 
+# required by rq_stats.ko
+  register_tick_sched_wakeup_callback
+
 # required by rtc-pm8xxx.ko
   devm_request_any_context_irq
   devm_rtc_device_register
