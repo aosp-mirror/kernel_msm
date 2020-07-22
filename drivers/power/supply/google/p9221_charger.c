@@ -32,6 +32,7 @@
 #include "p9221_charger.h"
 #include "../google/logbuffer.h"
 #include <linux/crc8.h>
+#include <drm/drm_panel.h>
 
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(1 * 1000)
@@ -69,6 +70,9 @@
 #define WLC_ALIGN_DEFAULT_SCALAR_HIGH_CURRENT	    118
 #define WLC_ALIGN_DEFAULT_OFFSET_LOW_CURRENT	    125000
 #define WLC_ALIGN_DEFAULT_OFFSET_HIGH_CURRENT	    139000
+#define WLC_ALIGN_IGNORE_THRESHOLD	70
+#define WLC_ALIGN_IGNORE_L_DELAY_SEC	5
+#define WLC_ALIGN_IGNORE_H_DELAY_SEC	10
 
 #define RTX_BEN_DISABLED	0
 #define RTX_BEN_ON		1
@@ -870,6 +874,10 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->mfg = 0;
 	schedule_work(&charger->uevent_work);
 
+	/* use for ignore irq_det after Rx offline */
+	if (charger->is_screen_on)
+		charger->ignore_irq_det = true;
+
 	p9221_icl_ramp_reset(charger);
 	del_timer(&charger->vrect_timer);
 
@@ -1369,6 +1377,8 @@ static int p9221_set_property(struct power_supply *psy,
 		changed = true;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		charger->bkp_capacity = val->intval;
+
 		if (charger->last_capacity == val->intval)
 			break;
 
@@ -2950,6 +2960,11 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 
 	if (enable == 0) {
 		logbuffer_log(charger->rtx_log, "disable rtx\n");
+
+		/* use for ignore irq_det after RTx offline */
+		if (charger->is_screen_on)
+			charger->ignore_irq_det = true;
+
 		if (charger->is_rtx_mode) {
 			/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0 */
 			ret = p9221_set_cmd_reg(charger,
@@ -3761,12 +3776,18 @@ out:
 static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 {
 	struct p9221_charger_data *charger = irq_data;
+	u32 now_time, diff;
 
 	logbuffer_log(charger->log, "irq_det: online=%d ben=%d",
 		      charger->online, charger->ben_state);
 
 	/* If we are already online, just ignore the interrupt. */
 	if (p9221_is_online(charger))
+		return IRQ_HANDLED;
+
+	now_time = div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC);
+	diff = now_time - charger->store_time;
+	if ((diff <= charger->ignore_time) || (charger->ignore_irq_det))
 		return IRQ_HANDLED;
 
 	if (charger->align != POWER_SUPPLY_ALIGN_MOVE) {
@@ -3853,6 +3874,9 @@ static int p9221_parse_dt(struct device *dev,
 	int ret = 0;
 	u32 data;
 	struct device_node *node = dev->of_node;
+	int index;
+	struct of_phandle_args panelmap;
+	struct drm_panel *panel = NULL;
 
 	/* Enable */
 	ret = of_get_named_gpio(node, "idt,gpio_qien", 0);
@@ -4093,6 +4117,25 @@ static int p9221_parse_dt(struct device *dev,
 	dev_info(dev, "google,alignment_offset_high_current set to: %d\n",
 		 pdata->alignment_offset_high_current);
 
+	if (of_property_read_bool(node, "google,panel_map")) {
+		for (index = 0 ;; index++) {
+			ret = of_parse_phandle_with_fixed_args(node,
+					"google,panel_map",
+					1,
+					index,
+					&panelmap);
+			if (ret)
+				return -EPROBE_DEFER;
+			panel = of_drm_find_panel(panelmap.np);
+			of_node_put(panelmap.np);
+			if (!IS_ERR_OR_NULL(panel)) {
+				pdata->panel = panel;
+				pdata->initial_panel_index = panelmap.args[0];
+				break;
+			}
+		}
+	}
+
 	return 0;
 }
 
@@ -4122,6 +4165,57 @@ static const struct power_supply_desc p9221_psy_desc = {
 	.set_property = p9221_set_property,
 	.property_is_writeable = p9221_prop_is_writeable,
 	.no_thermal = true,
+};
+
+static int p9221_screen_state_chg_cb(struct notifier_block *nb,
+				     unsigned long val, void *data)
+{
+	struct p9221_charger_data *charger = container_of(nb,
+			struct p9221_charger_data, screen_nb);
+	struct drm_panel_notifier *evdata = (struct drm_panel_notifier *)data;
+	unsigned int blank;
+
+	if (val != DRM_PANEL_EVENT_BLANK)
+		return NOTIFY_DONE;
+
+	if (!charger || !evdata || !evdata->data) {
+		dev_err(&charger->client->dev,
+			"Bad screen state change notifier call.\n");
+		return NOTIFY_DONE;
+	}
+
+	blank = *((unsigned int *)evdata->data);
+	switch (blank) {
+	case DRM_PANEL_BLANK_POWERDOWN:
+	case DRM_PANEL_BLANK_LP:
+		charger->is_screen_on = false;
+		if (charger->ignore_irq_det) {
+			logbuffer_log(charger->log,
+				      "screen_nb: blank=%d (off)", blank);
+			charger->store_time =
+			    div_u64(ktime_to_ns(ktime_get_boottime()),
+				    NSEC_PER_SEC);
+			if (charger->bkp_capacity > WLC_ALIGN_IGNORE_THRESHOLD)
+				charger->ignore_time =
+					WLC_ALIGN_IGNORE_H_DELAY_SEC;
+			else
+				charger->ignore_time =
+					WLC_ALIGN_IGNORE_L_DELAY_SEC;
+			charger->ignore_irq_det = false;
+		}
+		break;
+	case DRM_PANEL_BLANK_UNBLANK:
+		charger->is_screen_on = true;
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block screen_state_chg_cb = {
+	.notifier_call = p9221_screen_state_chg_cb,
 };
 
 static int p9382a_tx_icl_vote_callback(struct votable *votable, void *data,
@@ -4326,6 +4420,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dc_icl_epp_neg = P9221_DC_ICL_EPP_UA;
 	charger->aicl_icl_ua = 0;
 	charger->aicl_delay_ms = 0;
+	charger->is_screen_on = true;
 
 	crc8_populate_msb(p9221_crc8_table, P9221_CRC8_POLYNOMIAL);
 
@@ -4410,6 +4505,20 @@ static int p9221_charger_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	/*
+	 * Register notifier for detect screen on/off state
+	 */
+
+	charger->screen_nb = screen_state_chg_cb;
+	if (!IS_ERR_OR_NULL(charger->pdata->panel)) {
+		ret = drm_panel_notifier_register(charger->pdata->panel,
+						  &charger->screen_nb);
+		if (ret)
+			dev_err(&client->dev,
+				"Fail to register screen change notifier:%d\n",
+				ret);
+	}
+
 	charger->log = logbuffer_register("wireless");
 	if (IS_ERR(charger->log)) {
 		ret = PTR_ERR(charger->log);
@@ -4457,6 +4566,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);
 	power_supply_unreg_notifier(&charger->nb);
+	drm_panel_notifier_unregister(charger->pdata->panel,
+				      &charger->screen_nb);
 	mutex_destroy(&charger->io_lock);
 	if (charger->log)
 		logbuffer_unregister(charger->log);
