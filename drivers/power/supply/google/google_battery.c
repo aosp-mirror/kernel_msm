@@ -4623,10 +4623,10 @@ static int gbatt_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
 {
-	int err = 0;
 	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	int rc, err = 0;
 
 	pm_runtime_get_sync(batt_drv->device);
 	if (!batt_drv->init_complete || !batt_drv->resume_complete) {
@@ -4773,14 +4773,17 @@ static int gbatt_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW: {
 		time_t res;
 
-		err = batt_ttf_estimate(&res, batt_drv);
-		if (err == 0)
+		rc = batt_ttf_estimate(&res, batt_drv);
+		if (rc == 0) {
 			val->intval = res;
-		else if (!batt_drv->fg_psy)
-			err = -EINVAL;
-		else
-			err = power_supply_get_property(batt_drv->fg_psy,
+		} else if (!batt_drv->fg_psy) {
+			val->intval = -1;
+		} else {
+			rc = power_supply_get_property(batt_drv->fg_psy,
 							psp, val);
+			if (rc < 0)
+				val->intval = -1;
+		}
 	} break;
 	case POWER_SUPPLY_PROP_TEMP:
 		err = gbatt_get_temp(batt_drv, &val->intval);
