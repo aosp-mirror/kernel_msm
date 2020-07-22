@@ -3470,7 +3470,6 @@ static void p9382_rtx_work(struct work_struct *work)
 			logbuffer_log(charger->rtx_log,
 				      "is_rtx_on: ben=%d, mode=%02x",
 				      charger->ben_state, mode_reg);
-			charger->rtx_err = RTX_VOUT_DROP;
 			charger->is_rtx_mode = false;
 			p9382_set_rtx(charger, false);
 		}

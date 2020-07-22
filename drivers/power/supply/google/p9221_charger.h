@@ -424,7 +424,6 @@ enum p9382_rtx_err {
       RTX_OVER_TEMP,
       RTX_TX_CONFLICT,
       RTX_HARD_OCP,
-      RTX_VOUT_DROP,
 };
 
 
