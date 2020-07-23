@@ -788,7 +788,7 @@ static void ct_dev_show(struct seq_file *s, const u8 *d, size_t count)
 
 	for (i = 0; i < count / 2; i++)
 		seq_printf(s, "%04x ", data[i]);
-	seq_printf(s, "\n", data[i]);
+	seq_printf(s, "\n");
 }
 
 struct gbms_storage_device *gbms_storage_create_device(const char *name,
