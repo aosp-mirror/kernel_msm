@@ -4495,7 +4495,7 @@ int ufshcd_query_flag(struct ufs_hba *hba, enum query_opcode opcode,
 
 	BUG_ON(!hba);
 
-	if (ufshcd_is_shutdown_ongoing(hba))
+	if (ufshcd_is_shutdown_ongoing(hba) && ufshcd_is_ufs_dev_poweroff(hba))
 		return -ENODEV;
 
 	ufshcd_hold_all(hba);
@@ -4566,7 +4566,7 @@ int ufshcd_query_attr(struct ufs_hba *hba, enum query_opcode opcode,
 
 	BUG_ON(!hba);
 
-	if (ufshcd_is_shutdown_ongoing(hba))
+	if (ufshcd_is_shutdown_ongoing(hba) && ufshcd_is_ufs_dev_poweroff(hba))
 		return -ENODEV;
 
 	ufshcd_hold_all(hba);
@@ -4661,7 +4661,7 @@ static int __ufshcd_query_descriptor(struct ufs_hba *hba,
 
 	BUG_ON(!hba);
 
-	if (ufshcd_is_shutdown_ongoing(hba))
+	if (ufshcd_is_shutdown_ongoing(hba) && ufshcd_is_ufs_dev_poweroff(hba))
 		return -ENODEV;
 
 	ufshcd_hold_all(hba);
