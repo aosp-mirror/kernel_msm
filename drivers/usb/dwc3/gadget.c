@@ -1734,6 +1734,7 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 
 out1:
 	dbg_ep_dequeue(dep->number, req);
+	dwc3_gadget_ep_skip_trbs(dep, req);
 	dwc3_gadget_giveback(dep, req, -ECONNRESET);
 
 out0:
