@@ -3193,10 +3193,7 @@ static void status_change_work(struct work_struct *work)
 		rc = power_supply_set_property(chip->batt_psy,
 			             POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
 	}
-	else
-	{
-	    chip->oppo_chg_ctl = 0;
-	}
+
     if (charger_log_enable)
 	    pr_info("%s, chip->charge_type:%d, chip->charge_status:%d, batt_temp:%d, chip->oppo_chg_ctl:%d\n",
 	         __func__, chip->charge_type, chip->charge_status, batt_temp, chip->oppo_chg_ctl);

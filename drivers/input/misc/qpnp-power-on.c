@@ -2076,7 +2076,7 @@ static int qpnp_pon_bb_set(const char *val,
 	reg &= ~QPNP_PON_BB_EN;
 	if (*(bool *)kp->arg)
 		reg |= QPNP_PON_BB_EN;
-
+    dev_info(&pon->pdev->dev,"qpnp_pon_bb_set, reg %d\n", reg);
 	rc = regmap_write(pon->regmap, QPNP_PON_XVDD_RB_SPARE(pon), reg);
 	if (rc) {
 		dev_err(&pon->pdev->dev,
@@ -2364,6 +2364,9 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		oppo_cap_ctl = true;
 	else
 		oppo_cap_ctl = false;
+	dev_info(&pon->pdev->dev,
+				"PMIC 0x88e: %x, oppo_cap_ctl: %d\n",
+				temp, oppo_cap_ctl);
 	#endif
 	pr_debug("%s: pon_subtype=%x, pon_version=%x\n", __func__,
 			pon->subtype, pon->pon_ver);
