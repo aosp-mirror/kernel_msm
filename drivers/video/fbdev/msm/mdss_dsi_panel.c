@@ -347,6 +347,7 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
+			msleep(1000); 	/*due to watch-face enter ambient mode slow, delay 1s enter AOD mode*/
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
 					CMD_REQ_COMMIT);
 			ctrl->idle = true;
