@@ -171,6 +171,8 @@ EXPORT_SYMBOL(oppo_enable_ship_mode_flag);
 // wsw.bsp.charger, 2019-12-20, charge log switch
 static bool charger_log_enable = false;
 module_param(charger_log_enable , bool, S_IRUGO | S_IWUSR);
+
+extern bool oppo_cap_ctl;
 #endif
 static int fg_decode_voltage_15b(struct fg_sram_param *sp,
 	enum fg_sram_param_id id, int val);
@@ -3184,6 +3186,17 @@ static void status_change_work(struct work_struct *work)
 	}
 
     #ifdef CONFIG_OPPO_CHARGING_MODIFY
+	if (oppo_cap_ctl == true)
+	{
+	    prop.intval = 0;
+		chip->oppo_chg_ctl = 1;
+		rc = power_supply_set_property(chip->batt_psy,
+			             POWER_SUPPLY_PROP_CHARGING_ENABLED, &prop);
+	}
+	else
+	{
+	    chip->oppo_chg_ctl = 0;
+	}
     if (charger_log_enable)
 	    pr_info("%s, chip->charge_type:%d, chip->charge_status:%d, batt_temp:%d, chip->oppo_chg_ctl:%d\n",
 	         __func__, chip->charge_type, chip->charge_status, batt_temp, chip->oppo_chg_ctl);

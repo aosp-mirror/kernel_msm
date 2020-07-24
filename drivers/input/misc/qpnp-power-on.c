@@ -138,6 +138,9 @@
 
 #define QPNP_PON_UVLO_DLOAD_EN			BIT(7)
 #define QPNP_PON_SMPL_EN			BIT(7)
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+#define QPNP_PON_BB_EN			    BIT(0)
+#endif
 
 /* Ranges */
 #define QPNP_PON_S1_TIMER_MAX			10256
@@ -2022,6 +2025,77 @@ static struct kernel_param_ops dload_on_uvlo_ops = {
 
 module_param_cb(dload_on_uvlo, &dload_on_uvlo_ops, &dload_on_uvlo, 0644);
 
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+static bool oppo_ctl_bb;
+static int qpnp_pon_bb_get(char *buf,
+		const struct kernel_param *kp)
+{
+	struct qpnp_pon *pon = sys_reset_dev;
+	int rc = 0;
+	uint reg;
+
+	if (!pon)
+		return -ENODEV;
+
+	rc = regmap_read(pon->regmap, QPNP_PON_XVDD_RB_SPARE(pon), &reg);
+	if (rc) {
+		dev_err(&pon->pdev->dev,
+			"Unable to read addr=%x, rc(%d)\n",
+			QPNP_PON_XVDD_RB_SPARE(pon), rc);
+		return rc;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d",
+			!!(QPNP_PON_BB_EN & reg));
+}
+
+static int qpnp_pon_bb_set(const char *val,
+		const struct kernel_param *kp)
+{
+	struct qpnp_pon *pon = sys_reset_dev;
+	int rc = 0;
+	uint reg;
+
+	if (!pon)
+		return -ENODEV;
+
+	rc = param_set_bool(val, kp);
+	if (rc) {
+		pr_err("Unable to set bms_reset: %d\n", rc);
+		return rc;
+	}
+
+	rc = regmap_read(pon->regmap, QPNP_PON_XVDD_RB_SPARE(pon), &reg);
+	if (rc) {
+		dev_err(&pon->pdev->dev,
+			"Unable to read addr=%x, rc(%d)\n",
+			QPNP_PON_XVDD_RB_SPARE(pon), rc);
+		return rc;
+	}
+
+	reg &= ~QPNP_PON_BB_EN;
+	if (*(bool *)kp->arg)
+		reg |= QPNP_PON_BB_EN;
+
+	rc = regmap_write(pon->regmap, QPNP_PON_XVDD_RB_SPARE(pon), reg);
+	if (rc) {
+		dev_err(&pon->pdev->dev,
+			"Unable to write to addr=%hx, rc(%d)\n",
+				QPNP_PON_XVDD_RB_SPARE(pon), rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+static struct kernel_param_ops power_on_bb_ops = {
+	.set = qpnp_pon_bb_set,
+	.get = qpnp_pon_bb_get,
+};
+
+module_param_cb(oppo_ctl_bb, &power_on_bb_ops, &oppo_ctl_bb, 0644);
+#endif
+
 #if defined(CONFIG_DEBUG_FS)
 
 static int qpnp_pon_debugfs_uvlo_get(void *data, u64 *val)
@@ -2163,7 +2237,9 @@ static int pon_register_twm_notifier(struct qpnp_pon *pon)
 
 	return rc;
 }
-
+#ifdef CONFIG_OPPO_CHARGING_MODIFY
+bool oppo_cap_ctl;
+#endif
 static int qpnp_pon_probe(struct platform_device *pdev)
 {
 	struct qpnp_pon *pon;
@@ -2281,7 +2357,14 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 			pon->subtype);
 		goto err_out;
 	}
-
+    #ifdef CONFIG_OPPO_CHARGING_MODIFY
+    rc = regmap_read(pon->regmap,
+			QPNP_PON_XVDD_RB_SPARE(pon), &temp);
+	if ((temp & 0x01) == 1)
+		oppo_cap_ctl = true;
+	else
+		oppo_cap_ctl = false;
+	#endif
 	pr_debug("%s: pon_subtype=%x, pon_version=%x\n", __func__,
 			pon->subtype, pon->pon_ver);
 
