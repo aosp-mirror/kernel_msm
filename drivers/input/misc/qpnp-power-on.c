@@ -139,6 +139,7 @@
 #define QPNP_PON_UVLO_DLOAD_EN			BIT(7)
 #define QPNP_PON_SMPL_EN			BIT(7)
 #ifdef CONFIG_OPPO_CHARGING_MODIFY
+bool oppo_cap_ctl;
 #define QPNP_PON_BB_EN			    BIT(0)
 #endif
 
@@ -2076,7 +2077,6 @@ static int qpnp_pon_bb_set(const char *val,
 	reg &= ~QPNP_PON_BB_EN;
 	if (*(bool *)kp->arg)
 		reg |= QPNP_PON_BB_EN;
-    dev_info(&pon->pdev->dev,"qpnp_pon_bb_set, reg %d\n", reg);
 	rc = regmap_write(pon->regmap, QPNP_PON_XVDD_RB_SPARE(pon), reg);
 	if (rc) {
 		dev_err(&pon->pdev->dev,
@@ -2084,6 +2084,11 @@ static int qpnp_pon_bb_set(const char *val,
 				QPNP_PON_XVDD_RB_SPARE(pon), rc);
 		return rc;
 	}
+	if ((reg & 0x01) == 1)
+		oppo_cap_ctl = true;
+	else
+		oppo_cap_ctl = false;
+    dev_info(&pon->pdev->dev,"qpnp_pon_bb_set, reg %d, oppo_cap_ctl %d\n", reg, oppo_cap_ctl);
 
 	return 0;
 }
@@ -2237,9 +2242,7 @@ static int pon_register_twm_notifier(struct qpnp_pon *pon)
 
 	return rc;
 }
-#ifdef CONFIG_OPPO_CHARGING_MODIFY
-bool oppo_cap_ctl;
-#endif
+
 static int qpnp_pon_probe(struct platform_device *pdev)
 {
 	struct qpnp_pon *pon;
