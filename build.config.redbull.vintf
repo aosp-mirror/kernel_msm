@@ -9,9 +9,9 @@ if [[ "${ENABLE_THINLTO:-0}" -eq 1 ]]; then
 fi
 
 ABI_DEFINITION=android/abi_gki_aarch64_redbull.xml
-KMI_WHITELIST=android/abi_gki_aarch64_redbull
+KMI_SYMBOL_LIST=android/abi_gki_aarch64_redbull
 TRIM_NONLISTED_KMI=1
-KMI_WHITELIST_STRICT_MODE=1
+KMI_SYMBOL_LIST_STRICT_MODE=1
 
 function update_config() {
   # Disable debugfs
