@@ -2343,11 +2343,11 @@ static int msc_logic(struct batt_drv *batt_drv)
 	batt_drv->cc_max = (ramp_cc_max) ? ramp_cc_max :
 			   GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx);
 
-	pr_info("MSC_LOGIC cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
+	pr_debug("MSC_LOGIC cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, ui=%d->%d\n",
 		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
 		batt_drv->temp_idx, temp_idx, batt_drv->vbatt_idx,
-		vbatt_idx, batt_drv->fv_uv, fv_uv,
-		batt_drv->cc_max);
+		vbatt_idx, batt_drv->fv_uv, fv_uv, batt_drv->cc_max,
+		update_interval);
 
 	/* next update */
 	batt_drv->msc_update_interval = update_interval;
@@ -2482,10 +2482,12 @@ msc_logic_done:
 	if (batt_drv->jeita_stop_charging)
 		batt_drv->cc_max = 0;
 
-	pr_info("%s fv_uv=%d cc_max=%d update_interval=%d\n",
+	pr_info("%s msc_state=%d cv_cnt=%d ov_cnt=%d temp_idx:%d, vbatt_idx:%d  fv_uv=%d cc_max=%d update_interval=%d\n",
 		(disable_votes) ? "MSC_DOUT" : "MSC_VOTE",
-		batt_drv->fv_uv,
-		batt_drv->cc_max,
+		batt_drv->msc_state,
+		batt_drv->checked_cv_cnt, batt_drv->checked_ov_cnt,
+		batt_drv->temp_idx, batt_drv->vbatt_idx,
+		batt_drv->fv_uv, batt_drv->cc_max,
 		batt_drv->msc_update_interval);
 
 	 /* google_charger has voted(<=0) on msc_interval_votable and the
