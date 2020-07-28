@@ -81,7 +81,7 @@
 	qcom,ignore-shutdown-soc-secs = <1209600>;
 
 	google,qg-cycle-disable;
-	google,qg-zero-ibat-offset-ctl = <15860>;
+	google,qg-zero-ibat-offset-ctl = <30500>;
 };
 
 &spmi_bus {
@@ -151,7 +151,7 @@
 		google,res-filt-length = <10>;
 		/* enable cycle counts */
 		google,cycle-counts;
-		google,zero-ibat-offset = <(-15860)>;
+		google,zero-ibat-offset = <(-30500)>;
 
 		#thermal-sensor-cells = <0>;
 		/* soc smoothing */
