@@ -59,6 +59,7 @@
 #define P9382A_NEG_POWER_11W		(11 / 0.5)
 #define P9382_RTX_TIMEOUT_MS		(2 * 1000)
 #define SCREEN_NB_INIT_DELAY_MS		(2 * 1000)
+#define CSP_SEND_DELAY_MS               (0.5 * 1000)
 
 #define WLC_ALIGNMENT_MAX		100
 #define WLC_MFG_GOOGLE			0x72
@@ -3461,11 +3462,22 @@ static void p9382_txid_work(struct work_struct *work)
 	dev_info(&charger->client->dev, "Fast serial ID send(%s)\n", s);
 
 	mutex_unlock(&charger->cmd_lock);
-	charger->last_capacity = -1;
+	cancel_delayed_work_sync(&charger->send_csp_work);
+	schedule_delayed_work(&charger->send_csp_work,
+			      msecs_to_jiffies(CSP_SEND_DELAY_MS));
 	return;
 error:
 	mutex_unlock(&charger->cmd_lock);
 	charger->com_busy = false;
+}
+
+static void p9382_send_csp_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, send_csp_work.work);
+
+	if (charger->last_capacity > 0)
+		p9221_send_csp(charger, charger->last_capacity);
 }
 
 static void p9382_rtx_work(struct work_struct *work)
@@ -3565,6 +3577,7 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			schedule_delayed_work(&charger->txid_work,
 					msecs_to_jiffies(TXID_SEND_DELAY_MS));
 		} else {
+			cancel_delayed_work_sync(&charger->send_csp_work);
 			charger->rtx_csp = 0;
 			charger->com_busy = false;
 		}
@@ -4375,6 +4388,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->rtx_work, p9382_rtx_work);
 	INIT_DELAYED_WORK(&charger->screen_nb_init_work,
 			  p9382_screen_nb_init_work);
+	INIT_DELAYED_WORK(&charger->send_csp_work, p9382_send_csp_work);
 	INIT_WORK(&charger->uevent_work, p9221_uevent_work);
 	INIT_WORK(&charger->rtx_disable_work, p9382_rtx_disable_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
@@ -4580,6 +4594,7 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->align_work);
 	cancel_delayed_work_sync(&charger->rtx_work);
 	cancel_delayed_work_sync(&charger->screen_nb_init_work);
+	cancel_delayed_work_sync(&charger->send_csp_work);
 	cancel_work_sync(&charger->uevent_work);
 	cancel_work_sync(&charger->rtx_disable_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);

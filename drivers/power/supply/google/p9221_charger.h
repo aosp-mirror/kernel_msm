@@ -341,6 +341,7 @@ struct p9221_charger_data {
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
 	struct delayed_work		txid_work;
+	struct delayed_work             send_csp_work;
 	struct delayed_work		rtx_work;
 	struct delayed_work		screen_nb_init_work;
 	struct work_struct		uevent_work;
