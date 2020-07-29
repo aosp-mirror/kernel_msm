@@ -14,7 +14,7 @@
 
 &qupv3_se11_i2c {
 	/* VD6281 */
-	status = "ok";
+	status = "disabled";
 	qcom,clk-freq-out = <1000000>;
 	vd6281: vd6281@20 {
 		compatible = "st,vd6281";
