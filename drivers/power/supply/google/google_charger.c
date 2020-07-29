@@ -204,6 +204,7 @@ struct chg_drv {
 	struct votable	*msc_fcc_votable;
 	struct votable	*msc_chg_disable_votable;
 	struct votable	*msc_pwr_disable_votable;
+	struct votable *msc_force_5v_votable;
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
@@ -367,10 +368,7 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 	if (chg_drv->chg_term.enable)
 		chg_reset_termination_data(chg_drv);
 
-	chg_update_capability(chg_drv->tcpm_psy,
-			      chg_drv->pps_data.default_pps_pdo ?
-			      PDO_PPS : PDO_FIXED_HIGH_VOLTAGE,
-			      chg_drv->pps_data.default_pps_pdo);
+	vote(chg_drv->msc_force_5v_votable, MSC_CHG_FULL_VOTER, false, 0);
 
 	if (chg_drv->chg_term.usb_5v == 1)
 		chg_drv->chg_term.usb_5v = 0;
@@ -1371,7 +1369,8 @@ update_charger:
 	/* tied to the charger: could tie to battery @ 100% instead */
 	if ((chg_drv->chg_term.usb_5v == 0) && chg_done) {
 		pr_info("MSC_CHG switch to 5V on full\n");
-		chg_update_capability(chg_drv->tcpm_psy, PDO_FIXED_5V, 0);
+		vote(chg_drv->msc_force_5v_votable, MSC_CHG_FULL_VOTER, true,
+		     0);
 		chg_drv->chg_term.usb_5v = 1;
 	} else if (chg_drv->pps_data.stage == PPS_ACTIVE && chg_done) {
 		pr_info("MSC_CHG switch to Fixed Profile on full\n");
@@ -2380,6 +2379,22 @@ static int msc_pwr_disable_cb(struct votable *votable, void *data,
 				      true);
 }
 
+static int msc_force_5v_cb(struct votable *votable, void *data, int force_5v,
+			   const char *client)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	unsigned int default_pdo = chg_drv->pps_data.default_pps_pdo ?
+						 PDO_PPS :
+						 PDO_FIXED_HIGH_VOLTAGE;
+
+	if (!chg_drv->tcpm_psy)
+		return 0;
+
+	return chg_update_capability(chg_drv->tcpm_psy,
+				     force_5v ? PDO_FIXED_5V : default_pdo,
+				     chg_drv->pps_data.default_pps_pdo);
+}
+
 static int chg_disable_std_votables(struct chg_drv *chg_drv)
 {
 	struct votable *qc_votable;
@@ -2466,6 +2481,14 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 		goto error_exit;
 	}
 
+	chg_drv->msc_force_5v_votable = create_votable(
+		VOTABLE_MSC_FORCE_5V, VOTE_SET_ANY, msc_force_5v_cb, chg_drv);
+	if (IS_ERR(chg_drv->msc_force_5v_votable)) {
+		ret = PTR_ERR(chg_drv->msc_force_5v_votable);
+		chg_drv->msc_force_5v_votable = NULL;
+		goto error_exit;
+	}
+
 	return 0;
 
 error_exit:
@@ -2474,12 +2497,14 @@ error_exit:
 	destroy_votable(chg_drv->msc_interval_votable);
 	destroy_votable(chg_drv->msc_chg_disable_votable);
 	destroy_votable(chg_drv->msc_pwr_disable_votable);
+	destroy_votable(chg_drv->msc_force_5v_votable);
 
 	chg_drv->msc_fv_votable = NULL;
 	chg_drv->msc_fcc_votable = NULL;
 	chg_drv->msc_interval_votable = NULL;
 	chg_drv->msc_chg_disable_votable = NULL;
 	chg_drv->msc_pwr_disable_votable = NULL;
+	chg_drv->msc_force_5v_votable = NULL;
 
 	return ret;
 }
@@ -3004,6 +3029,7 @@ static void chg_destroy_votables(struct chg_drv *chg_drv)
 	destroy_votable(chg_drv->msc_fcc_votable);
 	destroy_votable(chg_drv->msc_chg_disable_votable);
 	destroy_votable(chg_drv->msc_pwr_disable_votable);
+	destroy_votable(chg_drv->msc_force_5v_votable);
 }
 
 static int google_charger_remove(struct platform_device *pdev)
