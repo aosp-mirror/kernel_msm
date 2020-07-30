@@ -660,6 +660,8 @@ struct smb_charger {
 
 	/* b/155860936 */
 	bool force_hcmode;
+
+	bool cc_toggle_enable;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
