@@ -43,6 +43,7 @@
 
 #define COPY_WORK_DELAY_TIME_MS 100
 #define WAKEUP_TIMEOUT	5000
+#define MAX_STREAM_FLAG	3
 
 static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
@@ -61,7 +62,7 @@ struct rt5514_dsp {
 	struct mutex dma_lock;
 	struct snd_pcm_substream *substream[3];
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
-	unsigned int stream_flag[2];
+	unsigned int stream_flag[MAX_STREAM_FLAG];
 	unsigned int hotword_ignore_ms, musdet_ignore_ms;
 	size_t buf_size[3], get_size[2], dma_offset[3];
 };
@@ -1093,7 +1094,8 @@ static int rt5514_spi_hw_free(struct snd_pcm_substream *substream)
 		break;
 	}
 
-	rt5514_dsp->stream_flag[cpu_dai->id] = RT5514_DSP_NO_STREAM;
+	if (cpu_dai->id < MAX_STREAM_FLAG)
+		rt5514_dsp->stream_flag[cpu_dai->id] = RT5514_DSP_NO_STREAM;
 
 	return snd_pcm_lib_free_vmalloc_buffer(substream);
 }
