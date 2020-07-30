@@ -349,6 +349,14 @@ static int a6xx_gmu_start(struct kgsl_device *device)
 
 	kgsl_regwrite(device, A6XX_GMU_CX_GMU_WFI_CONFIG, 0x0);
 
+	/**
+	 * We may have asserted gbif halt as part of reset sequence which may
+	 * not get cleared if the gdsc was not reset. So clear it before
+	 * attempting GMU boot.
+	 */
+	if (adreno_has_gbif(ADRENO_DEVICE(device)))
+		kgsl_regwrite(device, A6XX_GBIF_HALT, 0x0);
+
 	/* Bring GMU out of reset */
 	gmu_core_regwrite(device, A6XX_GMU_CM3_SYSRESET, 0);
 	if (timed_poll_check(device,
