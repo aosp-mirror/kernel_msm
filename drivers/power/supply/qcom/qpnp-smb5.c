@@ -769,6 +769,7 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE,
 	POWER_SUPPLY_PROP_MOISTURE_DETECTED,
+	POWER_SUPPLY_PROP_CC_TOGGLE_ENABLE,
 	POWER_SUPPLY_PROP_HVDCP_OPTI_ALLOWED,
 	POWER_SUPPLY_PROP_QC_OPTI_DISABLE,
 	POWER_SUPPLY_PROP_VOLTAGE_VPH,
@@ -793,6 +794,9 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 	switch (psp) {
 	case POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE:
 		val->intval = chg->moisture_detection_enabled ? 1 : 0;
+		break;
+	case POWER_SUPPLY_PROP_CC_TOGGLE_ENABLE:
+		val->intval = chg->cc_toggle_enable ? 1 : 0;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		rc = smblib_get_prop_usb_present(chg, val);
@@ -1005,6 +1009,10 @@ static int smb5_usb_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE:
 		rc = enable_moisture_detection(chg, val->intval == 1);
 		break;
+	case POWER_SUPPLY_PROP_CC_TOGGLE_ENABLE:
+		chg->cc_toggle_enable = val->intval;
+		rc = smblib_set_prop_typec_power_role(chg, val);
+		break;
 	case POWER_SUPPLY_PROP_PD_CURRENT_MAX:
 		rc = smblib_set_prop_pd_current_max(chg, val);
 		break;
@@ -1132,6 +1140,7 @@ static int smb5_usb_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ADAPTER_CC_MODE:
 	case POWER_SUPPLY_PROP_APSD_RERUN:
 	case POWER_SUPPLY_PROP_DEAD_BATTERY:
+	case POWER_SUPPLY_PROP_CC_TOGGLE_ENABLE:
 		return 1;
 	case POWER_SUPPLY_PROP_MOISTURE_DETECTION_ENABLE:
 		if (!chg->lpd_disabled)
@@ -3684,6 +3693,8 @@ static int smb5_probe(struct platform_device *pdev)
 	chg->otg_present = false;
 	chg->main_fcc_max = -EINVAL;
 	chg->moisture_detection_enabled = false;
+	chg->cc_toggle_enable = true;
+
 	mutex_init(&chg->adc_lock);
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
