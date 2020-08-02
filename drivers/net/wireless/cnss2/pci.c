@@ -1099,6 +1099,10 @@ static int cnss_pci_set_mhi_state(struct cnss_pci_data *pci_priv,
 out:
 	cnss_pr_err("Failed to set MHI state: %s(%d)\n",
 		    cnss_mhi_state_to_str(mhi_state), mhi_state);
+
+	if (mhi_state == CNSS_MHI_RESUME)
+		CNSS_ASSERT(0);
+
 	return ret;
 }
 
@@ -3236,6 +3240,7 @@ static int cnss_pci_smmu_fault_handler(struct iommu_domain *domain,
 		return -ENODEV;
 	}
 
+	cnss_pci_update_status(pci_priv, CNSS_FW_DOWN);
 	cnss_force_fw_assert(&pci_priv->pci_dev->dev);
 
 	/* IOMMU driver requires non-zero return value to print debug info. */
@@ -4378,6 +4383,7 @@ static int cnss_pci_register_mhi(struct cnss_pci_data *pci_priv)
 	mhi_ctrl->sbl_size = SZ_512K;
 	mhi_ctrl->seg_len = SZ_512K;
 	mhi_ctrl->fbc_download = true;
+	mhi_ctrl->rddm_supported = true;
 
 	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
 						   "cnss-mhi", 0);

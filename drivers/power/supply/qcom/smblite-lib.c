@@ -467,8 +467,10 @@ void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
 	}
 	if (chg->suspend_input_on_debug_batt) {
 		vote(chg->usb_icl_votable, DEBUG_BOARD_VOTER, val.intval, 0);
-		if (val.intval)
+		if (val.intval) {
 			pr_info("Input suspended: Fake battery\n");
+			schgm_flashlite_config_usbin_collapse(chg, false);
+		}
 	} else {
 		vote(chg->chg_disable_votable, DEBUG_BOARD_VOTER,
 					val.intval, 0);
@@ -2657,6 +2659,10 @@ irqreturn_t smblite_typec_attach_detach_irq_handler(int irq, void *data)
 	bool attached = false;
 	int rc;
 
+	/* IRQ not expected to be executed for uUSB, return */
+	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
+		return IRQ_HANDLED;
+
 	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
 
 	rc = smblite_lib_read(chg, TYPE_C_STATE_MACHINE_STATUS_REG, &stat);
@@ -2998,9 +3004,6 @@ static void smblite_lib_thermal_regulation_work(struct work_struct *work)
 
 	/* check if DIE_TEMP is below LB */
 	if (!(stat & DIE_TEMP_MASK)) {
-		icl_ua += THERM_REGULATION_STEP_UA;
-		vote(chg->usb_icl_votable, SW_THERM_REGULATION_VOTER,
-				true, icl_ua);
 
 		/*
 		 * Check if we need further increments:
@@ -3009,8 +3012,12 @@ static void smblite_lib_thermal_regulation_work(struct work_struct *work)
 		 * ICL then remove vote and exit work.
 		 */
 		if (!strcmp(get_effective_client(chg->usb_icl_votable),
-				SW_THERM_REGULATION_VOTER))
+				SW_THERM_REGULATION_VOTER)) {
+			icl_ua += THERM_REGULATION_STEP_UA;
+			vote(chg->usb_icl_votable, SW_THERM_REGULATION_VOTER,
+					true, icl_ua);
 			goto reschedule;
+		}
 	}
 
 exit:
