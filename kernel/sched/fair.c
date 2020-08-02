@@ -2843,8 +2843,16 @@ static bool bitmap_testbit(unsigned long *map, unsigned long bit)
 
 static void inc_prioritized_task_count(struct rq *rq, struct task_struct *p)
 {
-	bool bitset = bitmap_testbit(per_cpu(prioritized_task_mask, cpu_of(rq)),
-				     p->pid);
+	bool bitset;
+
+	if (is_min_capacity_cpu(cpu_of(rq)))
+		return;
+
+	if (p->pid > PID_MAX_DEFAULT)
+		return;
+
+	bitset = bitmap_testbit(per_cpu(prioritized_task_mask, cpu_of(rq)),
+				p->pid);
 
 	if (schedtune_prefer_high_cap(p) && p->prio <= DEFAULT_PRIO) {
 		if (likely(!bitset)) {
@@ -2862,6 +2870,12 @@ static void inc_prioritized_task_count(struct rq *rq, struct task_struct *p)
 
 static void dec_prioritized_task_count(struct rq *rq, struct task_struct *p)
 {
+	if (is_min_capacity_cpu(cpu_of(rq)))
+		return;
+
+	if (p->pid > PID_MAX_DEFAULT)
+		return;
+
 	if (bitmap_testbit(per_cpu(prioritized_task_mask, cpu_of(rq)),
 			   p->pid)) {
 		__bitmap_clear(per_cpu(prioritized_task_mask, cpu_of(rq)),
@@ -8888,7 +8902,7 @@ static inline bool can_migrate_boosted_task(struct task_struct *p,
 	     task_in_related_thread_group(p) &&
 	     (capacity_orig_of(dst_cpu) < capacity_orig_of(src_cpu))) ||
 	    (schedtune_prefer_high_cap(p) && p->prio <= DEFAULT_PRIO &&
-	     is_min_capacity_cpu(dst_cpu)))
+	     !is_min_capacity_cpu(src_cpu) && is_min_capacity_cpu(dst_cpu)))
 		return false;
 	return true;
 }
