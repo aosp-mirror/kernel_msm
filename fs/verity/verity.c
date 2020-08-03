@@ -1111,8 +1111,8 @@ bool fsverity_verify_page(struct page *data_page)
 	 */
 	switch (vi->mode) {
 	case FS_VERITY_MODE_NEED_AUTHENTICATION:
-		pr_warn_ratelimited("Unauthenticated read; ino=%lu, index=%lu\n",
-				    inode->i_ino, index);
+		pr_debug_ratelimited("Unauthenticated read; ino=%lu, index=%lu\n",
+				     inode->i_ino, index);
 		break;
 	case FS_VERITY_MODE_AUTHENTICATION_FAILED:
 		pr_warn("Root authentication failed, failing read; inode=%lu, index=%lu\n",
