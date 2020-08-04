@@ -406,6 +406,8 @@ module_param_named(
 static int fg_restart;
 static bool fg_sram_dump;
 
+static int fg_get_battery_current(struct fg_chip *chip, int *val);
+
 /* All getters HERE */
 
 #define VOLTAGE_15BIT_MASK	GENMASK(14, 0)
@@ -632,15 +634,12 @@ static int comp_temp_by_chg_current(struct fg_chip *chip, int fg_temp,
 	if (pval.intval == POWER_SUPPLY_STATUS_CHARGING)
 		is_batt_charging = true;
 
-	rc = power_supply_get_property(batt_psy,
-				       POWER_SUPPLY_PROP_CURRENT_NOW, &pval);
+	rc = fg_get_battery_current(chip, &chg_current);
 	if (rc < 0) {
 		pr_warn("failed to get POWER_SUPPLY_PROP_CURRENT_NOW rc = %d\n",
 			rc);
 		return temp;
 	}
-
-	chg_current = pval.intval;
 
 	 /* sample charging current */
 	if (is_batt_charging)
