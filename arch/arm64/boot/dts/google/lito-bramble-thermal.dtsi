@@ -285,16 +285,6 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
-			skin_moderate: skin-moderate {
-				temperature = <41000>;
-				hysteresis = <1000>;
-				type = "passive";
-			};
-			skin_severe_pre_lv1: skin-severe-pre-lv1 {
-				temperature = <42000>;
-				hysteresis = <1000>;
-				type = "passive";
-			};
 			skin_severe: skin-severe {
 				temperature = <43000>;
 				hysteresis = <1000>;
@@ -313,53 +303,47 @@
 		};
 		cooling-maps {
 			/* light pre level 1 throttling */
-			wired-charge-ibat-3500mA {
+			wired-charge-pd-5v {
 				trip = <&skin_light_pre_lv1>;
-				cooling-device =
-					<&google_charger 1 1>;
+				cooling-device = <&google_charger_pd_5v
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
-			/* light throttling */
 			wired-charge-ibat-3000mA {
-				trip = <&skin_light>;
+				trip = <&skin_light_pre_lv1>;
 				cooling-device =
 					<&google_charger 2 2>;
 			};
-			/* moderate pre level 1 throttling */
-			wired-charge-ibat-2500mA {
-				trip = <&skin_moderate_pre_lv1>;
-				cooling-device =
-					<&google_charger 3 3>;
-			};
-			/* moderate pre level 2 throttling */
+			/* light throttling */
 			wired-charge-ibat-2000mA {
-				trip = <&skin_moderate_pre_lv2>;
+				trip = <&skin_light>;
 				cooling-device =
 					<&google_charger 4 4>;
 			};
-			/* moderate pre level 3 throttling */
+			/* moderate pre level 1 throttling */
 			wired-charge-ibat-1500mA {
-				trip = <&skin_moderate_pre_lv3>;
+				trip = <&skin_moderate_pre_lv1>;
 				cooling-device =
 					<&google_charger 5 5>;
 			};
-			/* moderate throttling */
+			/* moderate pre level 2 throttling */
 			wired-charge-ibat-1000mA {
-				trip = <&skin_moderate>;
+				trip = <&skin_moderate_pre_lv2>;
 				cooling-device =
 					<&google_charger 6 6>;
 			};
-			/* severe pre level 1 throttling */
+			/* moderate pre level 3 throttling */
 			wired-charge-ibat-500mA {
-				trip = <&skin_severe_pre_lv1>;
+				trip = <&skin_moderate_pre_lv3>;
 				cooling-device =
 					<&google_charger 7 7>;
 			};
-			/* critical throttling */
+			/* severe throttling */
 			wired-charge-disabled {
-				trip = <&skin_critical>;
+				trip = <&skin_severe>;
 				cooling-device = <&google_charger
 					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
+			/* critical throttling */
 			gpu-svs-l1 {
 				trip = <&skin_critical>;
 				cooling-device = <&msm_gpu 1 1>;
