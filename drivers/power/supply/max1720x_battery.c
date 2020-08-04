@@ -465,6 +465,7 @@ struct max1720x_chip {
 	struct power_supply *psy;
 	struct delayed_work init_work;
 	struct delayed_work filtercfg_work;
+	struct delayed_work dumpreg_work;
 	struct i2c_client *primary;
 	struct i2c_client *secondary;
 	struct regmap *regmap_nvram;
@@ -529,6 +530,7 @@ struct max1720x_chip {
 	/* Capacity Estimation */
 	struct gbatt_capacity_estimation cap_estimate;
 	struct logbuffer *ce_log;
+	struct logbuffer *maxfg_log;
 };
 
 #define MAX1720_EMPTY_VOLTAGE(profile, temp, cycle) \
@@ -2704,6 +2706,35 @@ static int max1720x_full_reset(struct max1720x_chip *chip)
 	return 0;
 }
 
+#define LOG_BUFFER_SIZE   256
+#define EACH_DUMP_SIZE   8
+static void max1720x_dumpreg_work(struct work_struct *work)
+{
+	struct max1720x_chip *chip =
+		container_of(work, struct max1720x_chip, dumpreg_work.work);
+	int len = 0;
+	u16 data;
+	unsigned int reg;
+	char buf[LOG_BUFFER_SIZE];
+
+	for (reg = 0x00; reg <= 0xFF; reg++) {
+		if (!max1720x_is_reg(chip->dev, reg))
+			continue;
+		if (!REGMAP_READ(chip->regmap, reg, &data)) {
+			len += scnprintf(&buf[len], sizeof(buf) - len,
+					     "%02X:%04X ", reg, data);
+			/* 14 is the size of time stamp */
+			if (len >= (LOG_BUFFER_SIZE - EACH_DUMP_SIZE - 14)) {
+				logbuffer_log(chip->maxfg_log, "%s", buf);
+				len = 0;
+			}
+		}
+	}
+
+	if (len > 0)  /* log the last line */
+		logbuffer_log(chip->maxfg_log, "%s", buf);
+}
+
 #define IRQ_STORM_TRIGGER_SECONDS		60
 #define IRQ_STORM_TRIGGER_MAX_COUNTS		50
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
@@ -2713,6 +2744,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	int err = 0, now_time = 0, interval_time, irq_cnt;
 	static int icnt;
 	static int stime;
+	static int dump_time;
 	bool storm = false;
 
 	now_time = div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC);
@@ -2840,7 +2872,30 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	if (fg_status & MAX1720X_STATUS_BR)
 		pr_debug("BR is set\n");
 
-	REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
+	err = REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
+	if (err != 0) {
+		logbuffer_log(chip->maxfg_log,
+			      "status:%#x failed to write %#x to status register (%d)",
+			      fg_status, fg_status_clr, err);
+	} else {
+		u16 temp;
+
+		err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &temp);
+		if (err != 0) {
+			logbuffer_log(chip->maxfg_log,
+				      "status=%#x, fg_status_clr=%#x failed to read status register (%d)",
+				      fg_status, fg_status_clr, err);
+		} else if (temp & ~fg_status_clr) {
+			logbuffer_log(chip->maxfg_log,
+				      "status=%#x, fg_status_clr=%#x, temp=%#x failed to clear status register",
+				      fg_status, fg_status_clr, temp);
+			/* Set 10 min to prevent dump too frequently */
+			if (now_time - dump_time > 600 || dump_time == 0) {
+				schedule_delayed_work(&chip->dumpreg_work, 0);
+				dump_time = now_time;
+			}
+		}
+	}
 
 	if (storm && (fg_status & MAX1720X_STATUS_DSOCI)) {
 		pr_debug("Force power_supply_change in storm\n");
@@ -4504,12 +4559,20 @@ static int max1720x_probe(struct i2c_client *client,
 		chip->ce_log = NULL;
 	}
 
+	chip->maxfg_log = debugfs_logbuffer_register("maxfg");
+	if (IS_ERR(chip->maxfg_log)) {
+		ret = PTR_ERR(chip->maxfg_log);
+		dev_err(dev, "failed to obtain logbuffer, ret=%d\n", ret);
+		chip->maxfg_log = NULL;
+	}
+
 	/* NOTE: set to AvSOC and filter on google battery side */
 	chip->reg_prop_capacity_raw =  MAX1720X_REPSOC;
 	INIT_DELAYED_WORK(&chip->cap_estimate.settle_timer,
 			  batt_ce_capacityfiltered_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
 	INIT_DELAYED_WORK(&chip->filtercfg_work, max1720x_filtercfg_work);
+	INIT_DELAYED_WORK(&chip->dumpreg_work, max1720x_dumpreg_work);
 
 	schedule_delayed_work(&chip->init_work, 0);
 
