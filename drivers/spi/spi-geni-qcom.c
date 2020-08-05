@@ -1287,11 +1287,16 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	int rx_wc = 0;
 	u8 *rx_buf = NULL;
 
-	if (!mas->cur_xfer)
+	rx_wc = (rx_fifo_status & RX_FIFO_WC_MSK);
+
+	/* Dummy read the fifo in case of unexpected rx fifo wm */
+	if (!mas->cur_xfer) {
+		for (i = 0; i < rx_wc; i++)
+			geni_read_reg(mas->base, SE_GENI_RX_FIFOn);
 		return;
+	}
 
 	rx_buf = mas->cur_xfer->rx_buf;
-	rx_wc = (rx_fifo_status & RX_FIFO_WC_MSK);
 	if (rx_fifo_status & RX_LAST) {
 		int rx_last_byte_valid =
 			(rx_fifo_status & RX_LAST_BYTE_VALID_MSK)
