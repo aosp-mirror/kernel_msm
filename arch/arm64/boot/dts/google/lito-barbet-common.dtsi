@@ -18,5 +18,4 @@
 #include "lito-barbet-nfc.dtsi"
 #include "lito-barbet-ese.dtsi"
 #include "lito-barbet-haptics.dtsi"
-#include "lito-barbet-rainbow.dtsi"
 #include "lito-barbet-display.dtsi"
