@@ -337,7 +337,6 @@
 		cam_clk-supply = <&titan_top_gdsc>;
 		regulator-names = "cam_vio", "cam_vana", "cam_vaf", "cam_vdig",
 			"cam_v_custom1", "cam_v_custom2", "cam_clk";
-		custom-gyro-support;
 		rgltr-cntrl-support;
 		pwm-switch;
 		rgltr-min-voltage = <1800000 2850000 2850000 2850000 1800000
