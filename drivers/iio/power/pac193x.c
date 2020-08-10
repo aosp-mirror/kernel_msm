@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 #include <linux/delay.h>
+#include <linux/math64.h>
 #include <linux/time.h>
 #include <linux/timer.h>
 #include <linux/util_macros.h>
@@ -761,6 +762,9 @@ static ssize_t energy_value_show(struct device *dev,
 			 chip_info->chip_reg_data.tstamp_ms);
 
 	for (cnt = 0; cnt < chip_info->phys_channels; cnt++) {
+		u64 a;
+		u64 b;
+
 		if (!chip_info->chip_reg_data.active_channels[cnt])
 			continue;
 
@@ -772,11 +776,11 @@ static ssize_t energy_value_show(struct device *dev,
 		ptr = chip_info->rail_name[cnt];
 
 		/* Scale register value to uW-secs */
-		temp = PAC193X_VSENSE_MILLIVOLTS_MAX;
-		temp /= chip_info->shunts[cnt] / 1000;
-		temp *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
-		temp *= chip_info->chip_reg_data.energy_sec_acc[cnt];
-		temp >>= bit_resolution;
+		a = PAC193X_VSENSE_MILLIVOLTS_MAX;
+		a /= chip_info->shunts[cnt] / 1000;
+		a *= PAC193X_VOLTAGE_MILLIVOLTS_MAX * 1000;
+		b = chip_info->chip_reg_data.energy_sec_acc[cnt];
+		temp = mul_u64_u64_shr(a, b, bit_resolution);
 
 		/* Convert to uW-secs */
 		temp /= chip_info->sample_rate_value;
