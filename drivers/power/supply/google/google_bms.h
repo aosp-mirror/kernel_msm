@@ -206,23 +206,23 @@ struct batt_ttf_stats {
  * health based changing can be enabled from userspace with a deadline
  *
  * initial state:
- * 	deadline = 0, rest_state = CHG_HEALTH_INACTIVE
+ *	deadline = 0, rest_state = CHG_HEALTH_INACTIVE
  *
  * deadline = -1 from userspace
- * 	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
+ *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
  * on deadline = 0 from userspace
  *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
  * on deadline > 0 from userspace
- * 	CHG_HEALTH_* -> CHG_HEALTH_ENABLED
+ *	CHG_HEALTH_* -> CHG_HEALTH_ENABLED
  *
  *  from CHG_HEALTH_ENABLED, msc_logic_health() can change the state to
- * 	CHG_HEALTH_ENABLED  <-> CHG_HEALTH_ACTIVE
- * 	CHG_HEALTH_ENABLED  -> CHG_HEALTH_DISABLED
+ *	CHG_HEALTH_ENABLED  <-> CHG_HEALTH_ACTIVE
+ *	CHG_HEALTH_ENABLED  -> CHG_HEALTH_DISABLED
  *
  * from CHG_HEALTH_ACTIVE, msc_logic_health() can change the state to
- * 	CHG_HEALTH_ACTIVE   <-> CHG_HEALTH_ENABLED
- * 	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DISABLED
- * 	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DONE
+ *	CHG_HEALTH_ACTIVE   <-> CHG_HEALTH_ENABLED
+ *	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DISABLED
+ *	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DONE
  */
 enum chg_health_state {
 	CHG_HEALTH_USER_DISABLED = -3,

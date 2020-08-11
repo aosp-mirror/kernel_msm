@@ -1311,7 +1311,7 @@ static int batt_chg_stats_soc_next(const struct gbms_charging_event *ce_data,
 {
 	int soc_next;
 
-	if (i == GBMS_STATS_TIER_COUNT -1)
+	if (i == GBMS_STATS_TIER_COUNT - 1)
 		return ce_data->last_soc;
 
 	soc_next = ce_data->tier_stats[i + 1].soc_in >> 8;
@@ -3407,7 +3407,7 @@ static ssize_t chg_health_charge_limit_get(struct device *dev,
 					   char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
-	struct batt_drv *batt_drv =(struct batt_drv *)
+	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n",
@@ -3419,10 +3419,13 @@ static ssize_t chg_health_charge_limit_set(struct device *dev,
 					   const char *buf, size_t count)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
-	struct batt_drv *batt_drv =(struct batt_drv *)
+	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
-	const int always_on_soc = simple_strtol(buf, NULL, 10);
 	enum chg_health_state rest_state;
+	long always_on_soc;
+
+	if (kstrtol(buf, 10, &always_on_soc) != 0)
+		return -EINVAL;
 
 	if (always_on_soc < -1 || always_on_soc > 99)
 		return -EINVAL;
