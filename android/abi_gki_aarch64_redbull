@@ -1314,9 +1314,6 @@
   proc_create
   seq_write
 
-# required by google-battery.ko
-  simple_strtoull
-
 # required by google-bms.ko
   full_name_hash
 
