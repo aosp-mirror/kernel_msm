@@ -481,6 +481,10 @@ struct cgroup {
 	/* Used to store internal freezer state */
 	struct cgroup_freezer_state freezer;
 
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+
 	/* ids of the ancestors at each level including self */
 	int ancestor_ids[];
 };
