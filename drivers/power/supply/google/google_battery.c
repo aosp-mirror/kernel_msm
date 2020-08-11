@@ -1247,6 +1247,12 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	return tier_idx;
 }
 
+int batt_chg_vbat2tier(const int vbatt_idx)
+{
+	return vbatt_idx < GBMS_STATS_TIER_COUNT ?
+		vbatt_idx : GBMS_STATS_TIER_COUNT - 1;
+}
+
 /* Only the qualified copy gets the timestamp and the exit voltage. */
 static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 				 char *reason,
@@ -1264,13 +1270,14 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 	if (batt_drv->vbatt_idx != -1 && batt_drv->temp_idx != -1) {
 		const time_t now = get_boot_sec();
 		const time_t elap = now - batt_drv->ce_data.last_update;
+		const int tier_idx = batt_chg_vbat2tier(batt_drv->vbatt_idx);
 		const int ibatt = GPSY_GET_PROP(batt_drv->fg_psy,
 						POWER_SUPPLY_PROP_CURRENT_NOW);
 		const int temp = GPSY_GET_PROP(batt_drv->fg_psy,
 					       POWER_SUPPLY_PROP_TEMP);
 
 		batt_chg_stats_update(batt_drv,
-				      batt_drv->temp_idx, batt_drv->vbatt_idx,
+				      batt_drv->temp_idx, tier_idx,
 				      ibatt / 1000, temp, elap);
 		batt_drv->ce_data.last_update = now;
 	}
@@ -2332,12 +2339,12 @@ static int msc_logic(struct batt_drv *batt_drv)
 	 * NOTE: temp_idx != -1 but batt_drv->msc_state could be -1
 	 */
 	mutex_lock(&batt_drv->stats_lock);
-	if (vbatt_idx != -1 && vbatt_idx < GBMS_STATS_TIER_COUNT) {
-		int tier_idx = batt_drv->vbatt_idx;
+	if (vbatt_idx != -1 && vbatt_idx < profile->volt_nb_limits) {
+		int tier_idx = batt_chg_vbat2tier(batt_drv->vbatt_idx);
 
 		/* this is the seed after the connect */
-		if (batt_drv->vbatt_idx == -1) {
-			tier_idx = vbatt_idx;
+		if (tier_idx == -1) {
+			tier_idx = batt_chg_vbat2tier(vbatt_idx);
 			elap = 0;
 		}
 
