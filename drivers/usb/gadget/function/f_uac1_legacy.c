@@ -584,7 +584,9 @@ f_audio_playback_ep_complete(struct usb_ep *ep, struct usb_request *req)
 			pr_debug("over-runs, audio write slow.. drop the packet\n");
 			f_audio_buffer_free(copy_buf);
 		} else {
+			spin_lock_irq(&audio->lock);
 			list_add_tail(&copy_buf->list, &audio->play_queue);
+			spin_unlock_irq(&audio->lock);
 		}
 		spin_unlock_irqrestore(&audio->playback_lock, flags);
 		schedule_work(&audio->playback_work);
