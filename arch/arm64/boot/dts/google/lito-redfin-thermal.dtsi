@@ -265,6 +265,11 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
+			skin_emergency_pre_lv1: skin-emergency-pre_lv1 {
+				temperature = <47000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
 			skin_backup_shutdown: skin-backup-shutdown {
 				temperature = <57000>;
 				hysteresis = <1000>;
@@ -353,6 +358,27 @@
 				trip = <&skin_critical>;
 				cooling-device =
 					<&CPU7 6 6>;
+			};
+			/* emergency pre level 1 throttling */
+			gpu-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&msm_gpu 2 2>;
+			};
+			cpu0-low-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&CPU0 6 6>;
+			};
+			cpu6-low-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&CPU6 7 7>;
+			};
+			cpu7-low-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&CPU7 7 7>;
 			};
 		};
 	};
