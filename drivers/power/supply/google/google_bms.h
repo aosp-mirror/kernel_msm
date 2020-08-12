@@ -342,6 +342,7 @@ const char *gbms_chg_ev_adapter_s(int adapter);
 #define VOTABLE_MSC_INTERVAL	"MSC_INTERVAL"
 #define VOTABLE_MSC_FCC		"MSC_FCC"
 #define VOTABLE_MSC_FV		"MSC_FV"
+#define VOTABLE_MSC_FORCE_5V "MSC_FORCE_5V"
 
 /* Binned cycle count */
 #define GBMS_CCBIN_BUCKET_COUNT	10
