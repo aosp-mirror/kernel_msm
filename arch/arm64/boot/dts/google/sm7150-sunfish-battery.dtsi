@@ -196,7 +196,7 @@
 		/* enable cycle counts */
 		google,cycle-counts;
 		/* rest charging */
-		google,chg-rest-rate = <5>;
+		google,chg-rest-rate = <8>;
 		google,chg-rest-soc = <80>;
 		/* battery high temperature update threshold */
 		google,update-high-temp-threshold = <550>;
