@@ -165,7 +165,7 @@
 		google,rl_soc-limits = <20 30 40 50 60 70 90 100>;
 		google,rl_soc-rates =  <25 26 27 28 29 28 27 22>;
 		/* rest charging */
-		google,chg-rest-rate = <5>;
+		google,chg-rest-rate = <8>;
 		google,chg-rest-soc = <80>;
 
 		/* battery history */
