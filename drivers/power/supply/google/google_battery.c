@@ -579,7 +579,7 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 			qnum_fracdgt(rls->rl_ssoc_target),
 			qnum_toint(ssoc->ssoc_rl),
 			qnum_fracdgt(ssoc->ssoc_rl));
-		pr_warn("%s: now=%d last_update=%d\n",
+		pr_warn("%s: now=%ld last_update=%ld\n",
 			__func__,
 			now,
 			rls->rl_ssoc_last_update);
@@ -602,11 +602,14 @@ static qnum_t ssoc_get_capacity_raw(const struct batt_ssoc_state *ssoc)
 	return ssoc->ssoc_rl;
 }
 
+#define SOC_ROUND_BASE	0.5
+
 /* reported to userspace: call while holding batt_lock */
 static int ssoc_get_capacity(const struct batt_ssoc_state *ssoc)
 {
 	const qnum_t raw = ssoc_get_capacity_raw(ssoc);
-	return qnum_roundint(raw, 0.5);
+
+	return qnum_roundint(raw, SOC_ROUND_BASE);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -629,11 +632,8 @@ void dump_ssoc_state(struct batt_ssoc_state *ssoc_state, struct logbuffer *log)
 		  ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve),
 		  ssoc_state->rl_status);
 
-	if (log) {
-		logbuffer_log(log, "%s", ssoc_state->ssoc_state_cstr);
-	} else {
-		pr_info("%s\n", ssoc_state->ssoc_state_cstr);
-	}
+	logbuffer_log(log, "%s", ssoc_state->ssoc_state_cstr);
+	pr_debug("%s\n", ssoc_state->ssoc_state_cstr);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -946,8 +946,9 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 {
-	int rc;
+	const qnum_t raw_full = ssoc_point_full - qnum_rconst(SOC_ROUND_BASE);
 	time_t estimate = batt_drv->ttf_stats.ttf_fake;
+	int rc;
 
 	if (batt_drv->ssoc_state.buck_enabled != 1)
 		return -EINVAL;
@@ -955,14 +956,23 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 	if (batt_drv->ttf_stats.ttf_fake != -1)
 		goto done;
 
+	/* TTF is 0 when UI shows 100% */
+	if (ssoc_get_capacity(&batt_drv->ssoc_state) == SSOC_FULL) {
+		estimate = 0;
+		goto done;
+	}
+
+	/*
+	 * example: 96.64% with SOC_ROUND_BASE = 0.5 -> UI = 97
+	 *    ttf = elap[96] * 0.36 + elap[97] + elap[98] +
+	 * 	    elap[99] * 0.5
+	 */
 	rc = ttf_soc_estimate(&estimate, &batt_drv->ttf_stats,
 			      &batt_drv->ce_data,
 			      ssoc_get_capacity_raw(&batt_drv->ssoc_state),
-			      ssoc_point_full);
+			      raw_full);
 	if (rc < 0)
 		estimate = -1;
-
-	pr_info("ttf_soc: estimate=%ld\n", estimate);
 
 	if (estimate == -1)
 		return -ERANGE;
