@@ -184,6 +184,7 @@
 		google,thermal-mitigation = <4000000 3500000 3000000
 						2500000 2000000 1500000
 						1000000 500000>;
+		google,thermal-pd-wa;
 		google,fv-max-uv = <4450000>;
 		google,chg-termination-5v;
 
@@ -193,6 +194,10 @@
 		google,pps-cc-tolerance-pct = <5>;
 		google,pps-awake;
 		google,usbc-connector = <&usb_con>;
+	};
+
+	google_charger_pd_5v: google,charger_pd_5v {
+		#cooling-cells = <2>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {

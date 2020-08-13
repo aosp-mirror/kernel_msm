@@ -2718,7 +2718,7 @@ static inline unsigned long cpu_util_rt(struct rq *rq)
 static inline unsigned long cpu_util(int cpu)
 {
 	return min(__cpu_util(cpu) + cpu_util_rt(cpu_rq(cpu)),
-	  capacity_orig_of(cpu));
+		   capacity_orig_of(cpu));
 }
 #endif
 #endif

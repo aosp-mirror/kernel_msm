@@ -12,6 +12,7 @@ ABI_DEFINITION=android/abi_gki_aarch64_redbull.xml
 KMI_SYMBOL_LIST=android/abi_gki_aarch64_redbull
 TRIM_NONLISTED_KMI=1
 KMI_SYMBOL_LIST_STRICT_MODE=1
+KMI_ENFORCED=1
 
 function update_config() {
   # Disable debugfs

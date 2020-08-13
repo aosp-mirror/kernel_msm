@@ -255,16 +255,6 @@
 				hysteresis = <1000>;
 				type = "passive";
 			};
-			skin_moderate: skin-moderate {
-				temperature = <41000>;
-				hysteresis = <1000>;
-				type = "passive";
-			};
-			skin_severe_pre_lv1: skin-severe-pre-lv1 {
-				temperature = <42000>;
-				hysteresis = <1000>;
-				type = "passive";
-			};
 			skin_severe: skin-severe {
 				temperature = <43000>;
 				hysteresis = <1000>;
@@ -272,6 +262,11 @@
 			};
 			skin_critical: skin-critical {
 				temperature = <45000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			skin_emergency_pre_lv1: skin-emergency-pre_lv1 {
+				temperature = <47000>;
 				hysteresis = <1000>;
 				type = "passive";
 			};
@@ -283,67 +278,65 @@
 		};
 		cooling-maps {
 			/* light pre level 1 throttling */
-			wired-charge-ibat-3500mA {
+			wired-charge-pd-5v {
 				trip = <&skin_light_pre_lv1>;
-				cooling-device =
-					<&google_charger 1 1>;
+				cooling-device = <&google_charger_pd_5v
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
-			/* light throttling */
-			wired-charge-ibat-3000mA {
-				trip = <&skin_light>;
-				cooling-device =
-					<&google_charger 2 2>;
-			};
-			/* moderate pre level 1 throttling */
 			wired-charge-ibat-2500mA {
-				trip = <&skin_moderate_pre_lv1>;
+				trip = <&skin_light_pre_lv1>;
 				cooling-device =
 					<&google_charger 3 3>;
 			};
-			/* moderate pre level 2 throttling */
-			wired-charge-ibat-2000mA {
-				trip = <&skin_moderate_pre_lv2>;
-				cooling-device =
-					<&google_charger 4 4>;
-			};
 			wireless-charge-iusb-500mA {
-				trip = <&skin_moderate_pre_lv2>;
+				trip = <&skin_light_pre_lv1>;
 				cooling-device =
 					<&google_wlc_charger 1 1>;
 			};
-			/* moderate pre level 3 throttling */
+			/* light throttling */
+			wired-charge-ibat-2000mA {
+				trip = <&skin_light>;
+				cooling-device =
+					<&google_charger 4 4>;
+			};
+			/* moderate pre level 1 throttling */
 			wired-charge-ibat-1500mA {
-				trip = <&skin_moderate_pre_lv3>;
+				trip = <&skin_moderate_pre_lv1>;
 				cooling-device =
 					<&google_charger 5 5>;
 			};
-			/* moderate throttling */
+			wireless-charge-iusb-360mA {
+				trip = <&skin_moderate_pre_lv1>;
+				cooling-device =
+					<&google_wlc_charger 2 2>;
+			};
+			/* moderate pre level 2 throttling */
 			wired-charge-ibat-1000mA {
-				trip = <&skin_moderate>;
+				trip = <&skin_moderate_pre_lv2>;
 				cooling-device =
 					<&google_charger 6 6>;
 			};
-			/* severe pre level 1 throttling */
+			/* moderate pre level 3 throttling */
 			wired-charge-ibat-500mA {
-				trip = <&skin_severe_pre_lv1>;
+				trip = <&skin_moderate_pre_lv3>;
 				cooling-device =
 					<&google_charger 7 7>;
 			};
-			/* severe throttling */
 			wireless-charge-iusb-110mA {
-				trip = <&skin_severe>;
+				trip = <&skin_moderate_pre_lv3>;
 				cooling-device =
-					<&google_wlc_charger 2 2>;
+					<&google_wlc_charger 3 3>;
+			};
+			/* severe throttling */
+			wireless-charge-disabled {
+				trip = <&skin_severe>;
+				cooling-device = <&google_wlc_charger
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
 			/* critical throttling */
 			wired-charge-disabled {
 				trip = <&skin_critical>;
 				cooling-device = <&google_charger
-					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
-			};
-			wireless-charge-disabled {
-				trip = <&skin_critical>;
-				cooling-device = <&google_wlc_charger
 					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
 			};
 			gpu-svs-l1 {
@@ -365,6 +358,27 @@
 				trip = <&skin_critical>;
 				cooling-device =
 					<&CPU7 6 6>;
+			};
+			/* emergency pre level 1 throttling */
+			gpu-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&msm_gpu 2 2>;
+			};
+			cpu0-low-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&CPU0 6 6>;
+			};
+			cpu6-low-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&CPU6 7 7>;
+			};
+			cpu7-low-svs {
+				trip = <&skin_emergency_pre_lv1>;
+				cooling-device =
+					<&CPU7 7 7>;
 			};
 		};
 	};
@@ -505,16 +519,48 @@
 	};
 
 	charger-therm {
-		polling-delay-passive = <0>;
-		polling-delay = <0>;
-		thermal-governor = "user_space";
+		polling-delay-passive = <300000>;
+		polling-delay = <5000>;
+		thermal-governor = "step_wise";
 		thermal-sensors = <&pm7250b_adc_tm ADC_AMUX_THM1_PU2>;
 		wake-capable-sensor;
 		trips {
-			active-config0 {
-				temperature = <125000>;
+			charger_lv1: charger-lv1 {
+				temperature = <42000>;
 				hysteresis = <1000>;
 				type = "passive";
+			};
+			charger_lv2: charger-lv2 {
+				temperature = <43000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+			charger_lv3: charger-lv3 {
+				temperature = <44000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			wired-charge-ibat-3500mA {
+				trip = <&charger_lv1>;
+				cooling-device =
+					<&google_charger 1 1>;
+			};
+			wired-charge-pd-5v {
+				trip = <&charger_lv2>;
+				cooling-device = <&google_charger_pd_5v
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
+			};
+			wired-charge-ibat-3000mA {
+				trip = <&charger_lv2>;
+				cooling-device =
+					<&google_charger 2 2>;
+			};
+			wired-charge-ibat-2500mA {
+				trip = <&charger_lv3>;
+				cooling-device =
+					<&google_charger 3 3>;
 			};
 		};
 	};
