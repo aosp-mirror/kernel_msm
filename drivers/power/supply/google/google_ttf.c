@@ -265,22 +265,29 @@ int ttf_soc_estimate(time_t *res,
 {
 	const int ssoc_in = ce_data->charging_stats.ssoc_in;
 	const int end = qnum_toint(last);
-	const int frac = qnum_fracdgt(soc);
 	int i = qnum_toint(soc);
-	time_t estimate = 0;
-	int ret;
+	time_t elap, estimate = 0;
+	int ret, frac;
 
-	if (end > 100)
+	if (last > qnum_rconst(100) || last < soc)
 		return -EINVAL;
 
-	ret = ttf_elap(&estimate, i, stats, ce_data);
-	if (ret < 0)
-		return ret;
+	if (last == soc) {
+		*res = 0;
+		return 0;
+	}
 
-	/* add ttf_elap starting from i + 1 */
-	estimate = (estimate * (100 - frac)) / 100;
+	/* 100 - first 2 digits of the fractional part of starting soc if any */
+	frac = (int)qnum_nfracdgt(soc, 2);
+	if (frac) {
+
+		ret = ttf_elap(&elap, i, stats, ce_data);
+		if (ret == 0)
+			estimate += (elap * (100 - frac)) / 100;
+	}
+
+	/* ttf_elap starting from i + 1 until end */
 	for (i += 1; i < end; i++) {
-		time_t elap;
 
 		if (i >= ssoc_in && i < ce_data->last_soc) {
 			/* use real data if within charging event */
@@ -293,6 +300,14 @@ int ttf_soc_estimate(time_t *res,
 		}
 
 		estimate += elap;
+	}
+
+	/* fist 2 digits of the fractional part of the last soc if any */
+	frac = (int)qnum_nfracdgt(last, 2);
+	if (frac) {
+		ret = ttf_elap(&elap, end, stats, ce_data);
+		if (ret == 0)
+			estimate += (elap * frac) / 100;
 	}
 
 	*res = estimate / 100;
