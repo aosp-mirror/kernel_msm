@@ -118,12 +118,10 @@
 	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
-			qcom,mdss-dsi-panel-width = <1080>;
-			qcom,mdss-dsi-panel-height = <1920>;
-			qcom,mdss-dsi-panel-phy-timings = [00 1d 08 07 23 22 07
-				07 05 02 04 00 19 17];
-			qcom,display-topology = <1 0 1>,
-						<2 0 1>;
+			qcom,mdss-dsi-panel-phy-timings = [00 1c 08 07 23 22 07
+				07 05 02 04 00 18 17];
+			qcom,display-topology = <1 1 1>,
+						<2 2 1>;
 			qcom,default-topology-index = <0>;
 		};
 	};
