@@ -519,8 +519,8 @@
 	};
 
 	charger-therm {
-		polling-delay-passive = <300000>;
-		polling-delay = <5000>;
+		polling-delay-passive = <5000>;
+		polling-delay = <300000>;
 		thermal-governor = "step_wise";
 		thermal-sensors = <&pm7250b_adc_tm ADC_AMUX_THM1_PU2>;
 		wake-capable-sensor;
