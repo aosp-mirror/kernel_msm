@@ -315,7 +315,7 @@ struct batt_drv {
 	u8 dev_info[GBMS_DINF_LEN];
 
 	/* Battery pack info for Suez*/
-	const char batt_pack_info[GBMS_MINF_LEN];
+	char batt_pack_info[GBMS_MINF_LEN];
 	bool pack_info_ready;
 };
 
