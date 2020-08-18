@@ -268,6 +268,7 @@ struct smb_charger {
 	struct votable		*chg_disable_votable;
 	struct votable		*pl_enable_votable_indirect;
 	struct votable		*icl_irq_disable_votable;
+	struct votable		*temp_change_irq_disable_votable;
 
 	/* work */
 	struct work_struct	bms_update_work;
@@ -470,7 +471,7 @@ int smblite_lib_get_irq_status(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblite_lib_set_prop_usb_type(struct smb_charger *chg,
 				const union power_supply_propval *val);
-
+void smblite_update_usb_desc(struct smb_charger *chg);
 int smblite_lib_init(struct smb_charger *chg);
 int smblite_lib_deinit(struct smb_charger *chg);
 #endif /* __SMBLITE_LIB_H */
