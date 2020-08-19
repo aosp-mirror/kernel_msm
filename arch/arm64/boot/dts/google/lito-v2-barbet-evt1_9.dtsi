@@ -15,4 +15,3 @@
 #include "lito-barbet-touch-dev.dtsi"
 #include "lito-barbet-camera-sensor.dtsi"
 #include "lito-barbet-pac193x.dtsi"
-#include "lito-barbet-usb-dev.dtsi"
