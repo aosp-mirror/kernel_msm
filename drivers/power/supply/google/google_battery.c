@@ -1196,7 +1196,6 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	enum chg_health_state rest_state = chg_health->rest_state;
 	time_t rest_deadline = chg_health->rest_deadline;
 	int tier_idx = GBMS_STATS_AC_TI_INVALID;
-	bool aon_enabled = chg_health->always_on_soc != -1;
 
 	switch (rest_state) {
 	/* user disabled with deadline */
@@ -1214,17 +1213,11 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 		break;
 	/* disconnected in active mode, TODO: log the deadline */
 	case CHG_HEALTH_ACTIVE:
-		if (aon_enabled)
-			tier_idx = GBMS_STATS_AC_TI_ACTIVE_AON;
-		else
-			tier_idx = GBMS_STATS_AC_TI_ACTIVE;
+		tier_idx = GBMS_STATS_AC_TI_ACTIVE;
 		break;
 	/* never became active */
 	case CHG_HEALTH_ENABLED:
-		if (aon_enabled)
-			tier_idx = GBMS_STATS_AC_TI_ENABLED_AON;
-		else
-			tier_idx = GBMS_STATS_AC_TI_ENABLED;
+		tier_idx = GBMS_STATS_AC_TI_ENABLED;
 		break;
 	/* active, worked */
 	case CHG_HEALTH_DONE:
@@ -1488,10 +1481,9 @@ static int batt_health_stats_cstr(char *buff, int size,
 	const int vti = batt_chg_health_vti(&ce_data->chg_health);
 	int len = 0;
 
-	len += scnprintf(&buff[len], size - len, "\nH: %d %d %ld %d\n",
+	len += scnprintf(&buff[len], size - len, "\nH: %d %d %ld\n",
 			 ce_data->chg_health.rest_state, vti,
-			 ce_data->chg_health.rest_deadline,
-			 ce_data->chg_health.always_on_soc);
+			 ce_data->chg_health.rest_deadline);
 
 	/* tier stats only when we have data or in verbose */
 	if (verbose && health_stats->soc_in != -1)
@@ -1993,21 +1985,20 @@ static bool msc_logic_health(struct batt_chg_health *rest,
 	int fv_uv = -1, cc_max = -1;
 	bool changed = false;
 	time_t ttf = 0;
-	bool aon_enabled = rest->always_on_soc != -1;
 
 	/* DONE, USER_DISABLED reset on disconnect, _DISABLED didn't meet DL */
 	if (rest_state == CHG_HEALTH_USER_DISABLED ||
 	    rest_state == CHG_HEALTH_DONE ||
-	    (aon_enabled == false && (rest_state == CHG_HEALTH_DISABLED ||
+	    (rest->always_on_soc == -1 && (rest_state == CHG_HEALTH_DISABLED ||
 	    rest_state == CHG_HEALTH_INACTIVE)))
 		goto done_exit;
 
 	/* enable if not USER_DISABLED and INACTIVE */
-	if (aon_enabled && rest_state == CHG_HEALTH_INACTIVE)
+	if (rest->always_on_soc != -1 && rest_state == CHG_HEALTH_INACTIVE)
 		rest_state = CHG_HEALTH_ENABLED;
 
 	/* rest->always_on_soc set ttf = 0 and honor a valid deadline */
-	if (aon_enabled == false) {
+	if (rest->always_on_soc == -1) {
 		int ret;
 
 		/*
