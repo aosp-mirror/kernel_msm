@@ -3836,7 +3836,7 @@ static ssize_t diagchar_read(struct file *file, char __user *buf, size_t count,
 		if (ret == -EFAULT) {
 			if ((session_info))
 				mutex_unlock(&driver->md_session_lock);
-			goto exit;
+			goto end;
 		}
 		if (!session_info)
 			mutex_unlock(&driver->md_session_lock);
