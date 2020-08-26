@@ -110,9 +110,11 @@ static int ttf_pwr_avg_cc(const struct batt_ttf_stats *stats, int soc)
 	int delta_cc;
 
 	/* soc average current demand */
-	if (stats->soc_stats.cc[soc] && stats->soc_stats.elap[soc])
+	if (stats->soc_stats.cc[soc + 1] && stats->soc_stats.cc[soc] &&
+	    stats->soc_stats.elap[soc])
 		sstat = &stats->soc_stats;
-	else if (stats->soc_ref.cc[soc] && stats->soc_ref.elap[soc])
+	else if (stats->soc_ref.cc[soc + 1] && stats->soc_ref.cc[soc] &&
+		 stats->soc_ref.elap[soc])
 		sstat = &stats->soc_ref;
 	else
 		return 0;
