@@ -69,6 +69,11 @@
 #define HCC_WRITE_AGAIN	0xF0F0
 #define HCC_DEFAULT_DELTA_CYCLE_CNT	25
 
+/* Interval value used when health is settings disabled when not running */
+#define CHG_DEADLINE_SETTING -1
+/* Internal value used when health is settings disabled while running */
+#define CHG_DEADLINE_SETTING_STOP -2
+
 #undef MODULE_PARAM_PREFIX
 #define MODULE_PARAM_PREFIX     "androidboot."
 #define DEV_SN_LENGTH         20
@@ -1214,11 +1219,11 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	switch (rest_state) {
 	/* user disabled with deadline */
 	case CHG_HEALTH_USER_DISABLED:
-		if (rest_deadline == -1)
+		if (rest_deadline == CHG_DEADLINE_SETTING)
 			tier_idx = GBMS_STATS_AC_TI_SETTING;
 		else if (rest_deadline == 0)
 			tier_idx = GBMS_STATS_AC_TI_PLUG;
-		else
+		else /* CHG_DEADLINE_SETTING_STOP */
 			tier_idx = GBMS_STATS_AC_TI_DISABLE;
 		break;
 	/* missed the deadline, TODO: log the deadline */
@@ -1517,7 +1522,7 @@ static int batt_health_stats_cstr(char *buff, int size,
 			 ce_data->ce_health.rest_deadline,
 			 ce_data->ce_health.always_on_soc);
 
-	/* tier stats only when we have data or in verbose */
+	/* no additional tier stats when vti is invalid */
 	if (vti == GBMS_STATS_AC_TI_INVALID)
 		return len;
 
@@ -1718,6 +1723,17 @@ static void batt_res_work(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
+static inline void batt_reset_rest_state(struct batt_chg_health *chg_health)
+{
+	/* NOTE: should not reset always_on_soc */
+	chg_health->rest_state = CHG_HEALTH_INACTIVE;
+	chg_health->rest_cc_max = -1;
+	chg_health->rest_fv_uv = -1;
+
+	if (chg_health->rest_deadline > 0)
+		chg_health->rest_deadline = 0;
+}
+
 /* should not reset rl state */
 static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 {
@@ -1745,11 +1761,7 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 	/* stats */
 	batt_drv->msc_state = -1;
 	/* health */
-	/* NOTE: should not reset always_on_soc */
-	batt_drv->chg_health.rest_state = CHG_HEALTH_INACTIVE;
-	batt_drv->chg_health.rest_deadline = 0;
-	batt_drv->chg_health.rest_cc_max = -1;
-	batt_drv->chg_health.rest_fv_uv = -1;
+	batt_reset_rest_state(&batt_drv->chg_health);
 }
 
 /* software JEITA, disable charging when outside the charge table.
@@ -1965,6 +1977,7 @@ static enum chg_health_state msc_health_active(const struct batt_drv *batt_drv)
  * for logging, userspace should use
  *   deadline == 0 on fast replug (leave initial deadline ok)
  *   deadline == -1 when the feature is disabled
+ *       if charge health was active/enabled, set to -2
  *   deadline == absolute requested deadline (if always_on is set)
  * return true if there was a change
  */
@@ -1978,7 +1991,12 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 	if (deadline_s < 0) {
 		new_deadline = chg_health->rest_deadline != deadline_s;
 		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
-		chg_health->rest_deadline = -1;
+
+		if (chg_health->rest_deadline > 0) /* was active */
+			chg_health->rest_deadline = CHG_DEADLINE_SETTING_STOP;
+		else
+			chg_health->rest_deadline = CHG_DEADLINE_SETTING;
+
 	/* disabled with replug */
 	} else if (deadline_s == 0) {
 		new_deadline = chg_health->rest_deadline != deadline_s;
@@ -2417,6 +2435,7 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 
 		/* change curve before changing the state */
 		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
+		batt_drv->chg_health.rest_deadline = 0;
 		batt_reset_chg_drv_state(batt_drv);
 		batt_update_cycle_count(batt_drv);
 		batt_rl_reset(batt_drv);
@@ -3523,7 +3542,8 @@ static ssize_t batt_set_chg_deadline(struct device *dev,
 	kstrtoll(buf, 10, &deadline_s);
 
 	mutex_lock(&batt_drv->chg_lock);
-	if (!batt_drv->ssoc_state.buck_enabled) {
+	/* Let deadline < 0 pass to set stats */
+	if (!batt_drv->ssoc_state.buck_enabled && deadline_s >= 0) {
 		mutex_unlock(&batt_drv->chg_lock);
 		return -EINVAL;
 	}
@@ -4814,12 +4834,6 @@ static void google_battery_init_work(struct work_struct *work)
 				   &batt_drv->chg_health.rest_rate);
 	if (ret < 0)
 		batt_drv->chg_health.rest_rate = 0;
-
-	/* health based charging, state */
-	batt_drv->chg_health.rest_state = CHG_HEALTH_INACTIVE;
-	batt_drv->chg_health.rest_deadline = 0;
-	batt_drv->chg_health.rest_cc_max = -1;
-	batt_drv->chg_health.rest_fv_uv = -1;
 
 	/* override setting google,battery-roundtrip = 0 in device tree */
 	batt_drv->disable_votes =
