@@ -646,7 +646,7 @@ static int sm7250_get_chg_status(const struct bms_dev *bms,
 	stat1 = stat1 & CHGR_BATTERY_CHARGER_STATUS_MASK;
 
 	if (!plugged)
-		ret = POWER_SUPPLY_STATUS_DISCHARGING;
+		return POWER_SUPPLY_STATUS_DISCHARGING;
 
 	switch (stat1) {
 	case SM7250_TRICKLE_CHARGE:
