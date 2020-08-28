@@ -118,6 +118,9 @@ static int ttf_ref_cc(const struct batt_ttf_stats *stats, int soc)
 
 	delta_cc = (sstat->cc[soc + 1] - sstat->cc[soc]);
 
+	pr_debug("%s %d: delta_cc=%d elap=%ld\n", __func__, soc,
+		delta_cc, sstat->elap[soc]);
+
 	return (delta_cc * 3600) / sstat->elap[soc];
 }
 
@@ -137,55 +140,54 @@ static int ttf_pwr_health(const struct gbms_charging_event *ce_data,
 static int ttf_pwr_equiv_icl(const struct gbms_charging_event *ce_data,
 			     int vbatt_idx, int soc)
 {
-	int act_icl, act_ibatt, health_icl = -1;
+	const struct gbms_chg_profile *profile = ce_data->chg_profile;
+	const int aratio = (ce_data->adapter_details.ad_voltage * 10000) /
+			   (profile->volt_limits[vbatt_idx] / 1000);
 	const struct gbms_ce_tier_stats *tier_stats;
+	const int efficiency = 95; /* TODO: use real efficiency */
+	int equiv_icl, act_icl, act_ibatt, health_ibatt = -1;
 
-	/* Health bases charging uses ce_data->health_stats vtier */
+	/* Health collects in ce_data->health_stats vtier */
 	if (ttf_pwr_health(ce_data, soc)) {
-		health_icl = ce_data->ce_health.rest_cc_max / 1000;
+		health_ibatt = ce_data->ce_health.rest_cc_max / 1000;
 		tier_stats = &ce_data->health_stats;
 	} else {
 		tier_stats = &ce_data->tier_stats[vbatt_idx];
 	}
 
-	/* actual adapter capabilities for vtier (changes with demand) */
+	/*
+	 * actual adapter capabilities at adapter voltage for vtier
+	 * NOTE: demand and cable might cause voltage and icl do droop
+	 */
 	act_icl = ttf_pwr_icl(tier_stats, &ce_data->adapter_details);
 	if (act_icl <= 0) {
-		pr_debug("%s: negative,null act_icl=%d health_icl=%d\n",
-			 __func__, act_icl, health_icl);
-		if (health_icl < 0)
-			return -EINVAL;
+		pr_debug("%s: negative,null act_icl=%d\n", __func__, act_icl);
+		return -EINVAL;
 	}
 
-	/* artificially lower aicl for health based charging */
-	if (health_icl > 0 && health_icl < act_icl) {
-		pr_debug("%s: health rest_state=%d reduce act_icl=%d->%d\n",
-			 __func__, ce_data->ce_health.rest_state,
-			 act_icl, health_icl);
-		act_icl = health_icl;
-	}
-
-	/* TODO: reduce act_icl for efficiency? */
+	/* scale icl (at adapter voltage) to vtier */
+	equiv_icl = (act_icl * aratio * 100) / efficiency;
+	pr_debug("%s: act_icl=%d aratio=%d equiv_icl=%d\n",
+		 __func__, act_icl, aratio, equiv_icl);
 
 	/* actual ibatt in this tier: act_ibatt==0 when too early to tell */
 	act_ibatt = ttf_pwr_ibatt(tier_stats);
+	if (act_ibatt == 0 && health_ibatt > 0)
+		act_ibatt = health_ibatt;
 	if (act_ibatt < 0) {
 		pr_debug("%s: discharging ibatt=%d\n", __func__, act_ibatt);
 		return -EINVAL;
 	}
 
-	/* assume that can deliver act_icl when act_ibatt == 0 */
-	if (act_ibatt > 0 && act_ibatt < act_icl) {
+	/* assume that can deliver equiv_icl when act_ibatt == 0 */
+	if (act_ibatt > 0 && act_ibatt < equiv_icl) {
 		pr_debug("%s: sysload ibatt=%d, reduce icl %d->%d\n",
-			 __func__, act_ibatt, act_icl, act_ibatt);
-		act_icl = act_ibatt;
+			 __func__, act_ibatt, equiv_icl, act_ibatt);
+		equiv_icl = act_ibatt;
 	}
 
-	/* TODO: if act_ibatt == 0 try to reduce act_icl for sysload */
-
-	pr_debug("%s: act_icl=%d\n", __func__, act_icl);
-
-	return act_icl;
+	pr_debug("%s: equiv_icl=%d\n", __func__, equiv_icl);
+	return equiv_icl;
 }
 
 /*
@@ -199,8 +201,7 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 {
 	const struct gbms_chg_profile *profile = ce_data->chg_profile;
 	int cc_max, vbatt_idx, temp_idx;
-	int avg_cc, pwr_demand;
-	int act_icl, pwr_avail;
+	int avg_cc, equiv_icl;
 	int ratio;
 
 	/* regular charging tier */
@@ -236,57 +237,53 @@ static int ttf_pwr_ratio(const struct batt_ttf_stats *stats,
 	cc_max = GBMS_CCCM_LIMITS(profile, temp_idx, vbatt_idx) / 1000;
 	/* statistical current demand for soc (<= cc_max) */
 	avg_cc = ttf_ref_cc(stats, soc);
-	if (avg_cc <= 0 || avg_cc > cc_max) {
-		/* no more than max rate, default to it if 0 */
+	if (avg_cc <= 0) {
+		/* default to cc_max if we have no data */
 		pr_debug("%s %d: demand use default avg_cc=%d->%d\n",
 			__func__, soc, avg_cc, cc_max);
 		avg_cc = cc_max;
 	}
 
 	/* statistical or reference max power demand for the tier at */
-	pwr_demand = (profile->volt_limits[vbatt_idx] / 10000) * avg_cc;
-	pr_debug("%s %d:%d,%d: pwr_demand=%d avg_cc=%d cc_max=%d\n",
-		 __func__, soc, temp_idx, vbatt_idx, pwr_demand,
+	pr_debug("%s %d:%d,%d: avg_cc=%d cc_max=%d\n",
+		 __func__, soc, temp_idx, vbatt_idx,
 		 avg_cc, cc_max);
 
-	/* equivalent input current: min(act_ibatt, act_icl) for tier */
-	act_icl = ttf_pwr_equiv_icl(ce_data, vbatt_idx, soc);
-	if (act_icl <= 0) {
+	/* equivalent input current for adapter at vtier */
+	equiv_icl = ttf_pwr_equiv_icl(ce_data, vbatt_idx, soc);
+	if (equiv_icl <= 0) {
 		pr_debug("%s %d: negative, null act_icl=%d\n",
-			 __func__, soc, act_icl);
+			 __func__, soc, equiv_icl);
 		return -EINVAL;
 	}
 
-	/* cc_max depends from temperature, we need this for ref ibatt */
-	if (cc_max < act_icl) {
+	/* lower to cc_max if in HOT and COLD */
+	if (cc_max < equiv_icl) {
 		pr_debug("%s %d: reduce act_icl=%d to cc_max=%d\n",
-			 __func__, soc, act_icl, cc_max);
-		act_icl = cc_max;
+			 __func__, soc, equiv_icl, cc_max);
+		equiv_icl = cc_max;
 	}
 
 	/*
-	 * This is the trick that makes everything work.
-	 *   act_icl = min(act_ibatt, act_icl)
+	 * This is the trick that makes everything work:
+	 *   equiv_icl = min(act_icl, act_ibatt, cc_max)
 	 *
-	 * act_icl = is adapter max or adapter actual icl (due to bad cable)
-	 * act_ibatt = is from reference adapter (close to cc_max, I hope)
-	 *   at reference temperature or actual < cc_max due to sysload or
-	 *   to temperature difference.
+	 * act_icl = adapter max or adapter actual icl (due to bad cable,
+	 *           AC enabled or temperature shift) scaled to vtier
+	 * act_ibatt = measured for
+	 *   at reference temperature or actual < cc_max due to sysload
+	 * cc_max = cc_max from profile (lower than ref for  HOT or COLD)
 	 *
-	 * act_icl = 0 -> (act_icl || act_ibatt) == 0
 	 */
-	pwr_avail = (ce_data->adapter_details.ad_voltage * 10) * act_icl;
-	if (!pwr_avail)
-		return -EINVAL;
 
 	/* ratio for elap time: it doesn't work if reference is not maximal */
-	if (pwr_avail < pwr_demand)
-		ratio = (pwr_demand * 100) / pwr_avail;
+	if (equiv_icl < avg_cc)
+		ratio = (avg_cc * 100) / equiv_icl;
 	else
 		ratio = 100;
 
-	pr_debug("%s %d: pwr_avail=%d, pwr_demand=%d ratio=%d\n",
-		 __func__, soc, pwr_avail, pwr_demand, ratio);
+	pr_debug("%s %d: equiv_icl=%d, avg_cc=%d ratio=%d\n",
+		 __func__, soc, equiv_icl, avg_cc, ratio);
 
 	return ratio;
 }
