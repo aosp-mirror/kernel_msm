@@ -1061,7 +1061,7 @@ void snd_card_change_online_state(struct snd_card *card, int online)
 	xchg(&card->offline_change, 1);
 	wake_up_interruptible(&card->offline_poll_wait);
 }
-EXPORT_SYMBOL(snd_card_change_online_state);
+EXPORT_SYMBOL_GPL(snd_card_change_online_state);
 
 /**
  * snd_card_is_online_state - return true if card is online state

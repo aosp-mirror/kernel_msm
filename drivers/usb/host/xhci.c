@@ -5301,13 +5301,17 @@ int xhci_get_core_id(struct usb_hcd *hcd)
 static int  xhci_stop_endpoint(struct usb_hcd *hcd,
 	struct usb_device *udev, struct usb_host_endpoint *ep)
 {
-	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+	struct xhci_hcd *xhci;
 	unsigned int ep_index;
 	struct xhci_virt_device *virt_dev;
 	struct xhci_command *cmd;
 	unsigned long flags;
 	int ret = 0;
 
+	if (!hcd || !udev || !ep)
+		return -EINVAL;
+
+	xhci = hcd_to_xhci(hcd);
 	cmd = xhci_alloc_command(xhci, true, GFP_NOIO);
 	if (!cmd)
 		return -ENOMEM;
@@ -5350,8 +5354,6 @@ free_cmd:
 	xhci_free_command(xhci, cmd);
 	return ret;
 }
-
-
 
 static const struct hc_driver xhci_hc_driver = {
 	.description =		"xhci-hcd",

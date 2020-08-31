@@ -343,10 +343,10 @@ struct usb_ep {
 	u8			address;
 	const struct usb_endpoint_descriptor	*desc;
 	const struct usb_ss_ep_comp_descriptor	*comp_desc;
-	enum ep_type		ep_type;
-	u8			ep_num;
-	u8			ep_intr_num;
-	bool			endless;
+	enum ep_type            ep_type;
+	u8                      ep_num;
+	u8                      ep_intr_num;
+	bool                    endless;
 };
 
 /*-------------------------------------------------------------------------*/

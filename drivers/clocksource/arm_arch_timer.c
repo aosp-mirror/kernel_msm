@@ -965,11 +965,11 @@ void arch_timer_mem_get_cval(u32 *lo, u32 *hi)
 	if (!arch_counter_base)
 		return;
 
-	ctrl = readl_relaxed_no_log(arch_counter_base + CNTV_CTL);
+	ctrl = readl_relaxed(arch_counter_base + CNTV_CTL);
 
 	if (ctrl & ARCH_TIMER_CTRL_ENABLE) {
-		*lo = readl_relaxed_no_log(arch_counter_base + CNTCVAL_LO);
-		*hi = readl_relaxed_no_log(arch_counter_base + CNTCVAL_HI);
+		*lo = readl_relaxed(arch_counter_base + CNTCVAL_LO);
+		*hi = readl_relaxed(arch_counter_base + CNTCVAL_HI);
 	}
 }
 EXPORT_SYMBOL_GPL(arch_timer_mem_get_cval);

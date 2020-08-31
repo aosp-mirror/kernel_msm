@@ -863,6 +863,10 @@ phys_addr_t usb_get_xfer_ring_phys_addr(struct usb_device *dev,
 }
 EXPORT_SYMBOL(usb_get_xfer_ring_phys_addr);
 
+/**
+ * usb_get_controller_id - returns the host controller id.
+ * @dev: the device whose host controller id is being queried.
+ */
 int usb_get_controller_id(struct usb_device *dev)
 {
 	if (dev->state == USB_STATE_NOTATTACHED)
@@ -870,13 +874,13 @@ int usb_get_controller_id(struct usb_device *dev)
 
 	return usb_hcd_get_controller_id(dev);
 }
-EXPORT_SYMBOL(usb_get_controller_id);
+EXPORT_SYMBOL_GPL(usb_get_controller_id);
 
 int usb_stop_endpoint(struct usb_device *dev, struct usb_host_endpoint *ep)
 {
 	return usb_hcd_stop_endpoint(dev, ep);
 }
-EXPORT_SYMBOL(usb_stop_endpoint);
+EXPORT_SYMBOL_GPL(usb_stop_endpoint);
 
 /*-------------------------------------------------------------------*/
 /*
