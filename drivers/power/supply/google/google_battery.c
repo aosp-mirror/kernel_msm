@@ -1107,6 +1107,9 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 	struct gbms_ce_tier_stats *tier;
 	int cc;
 
+	if (elap == 0)
+		return;
+
 	/* TODO: read at start of tier and update cc_total of previous */
 	cc = GPSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER);
 	if (cc < 0) {
