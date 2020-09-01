@@ -250,8 +250,7 @@ struct chg_drv {
 
 static void reschedule_chg_work(struct chg_drv *chg_drv)
 {
-	cancel_delayed_work_sync(&chg_drv->chg_work);
-	schedule_delayed_work(&chg_drv->chg_work, 0);
+	mod_delayed_work(system_wq, &chg_drv->chg_work, 0);
 }
 
 static enum alarmtimer_restart
