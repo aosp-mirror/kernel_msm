@@ -614,6 +614,7 @@ static void __init acpi_parse_and_init_cpus(void)
 #define acpi_parse_and_init_cpus(...)	do { } while (0)
 #endif
 void (*__smp_cross_call)(const struct cpumask *, unsigned int);
+/* Dummy vendor field */
 DEFINE_PER_CPU(bool, pending_ipi);
 EXPORT_SYMBOL_GPL(pending_ipi);
 

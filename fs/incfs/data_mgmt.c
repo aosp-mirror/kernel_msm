@@ -470,6 +470,7 @@ static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
 
 			if (zero)
 				pr_debug("incfs: Note saved_digest all zero - did you forget to load the hashes?\n");
+
 			return -EBADMSG;
 		}
 
