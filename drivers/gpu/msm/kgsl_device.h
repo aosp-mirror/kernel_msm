@@ -1012,8 +1012,12 @@ struct kgsl_pwr_limit {
 static inline void kgsl_trace_gpu_mem_total(struct kgsl_device *device,
 						s64 delta)
 {
-	u64 total_size = atomic64_add_return(delta, &device->total_mapped);
+	u64 total_size;
 
+	if (!device)
+		return;
+
+	total_size = atomic64_add_return(delta, &device->total_mapped);
 	trace_gpu_mem_total(0, 0, total_size);
 }
 #else
