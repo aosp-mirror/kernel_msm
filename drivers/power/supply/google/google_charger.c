@@ -360,9 +360,10 @@ static inline void chg_init_state(struct chg_drv *chg_drv)
 }
 
 /* NOTE: doesn't reset chg_drv->adapter_details.v = 0 see chg_work() */
-static inline void chg_reset_state(struct chg_drv *chg_drv)
+static inline int chg_reset_state(struct chg_drv *chg_drv)
 {
 	union gbms_charger_state chg_state = { .v = 0 };
+	int ret = 0;
 
 	chg_init_state(chg_drv);
 
@@ -378,9 +379,14 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 	vote(chg_drv->msc_interval_votable, CHG_PPS_VOTER, false, 0);
 
 	/* make sure the battery knows that it's disconnected */
-	GPSY_SET_INT64_PROP(chg_drv->bat_psy,
-			POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
-			chg_state.v);
+	ret = GPSY_SET_INT64_PROP(chg_drv->bat_psy,
+				  POWER_SUPPLY_PROP_CHARGE_CHARGER_STATE,
+				  chg_state.v);
+	/* handle google_battery not resume case */
+	if (ret == -EAGAIN)
+		return ret;
+
+	return 0;
 }
 
 static int info_usb_ad_type(int usb_type, int usbc_type)
@@ -1259,8 +1265,12 @@ static void chg_work(struct work_struct *work)
 			vote(chg_drv->msc_chg_disable_votable,
 			     MSC_CHG_VOTER, true, 0);
 
-			chg_reset_state(chg_drv);
-			chg_drv->stop_charging = 1;
+			rc = chg_reset_state(chg_drv);
+			if (rc == -EAGAIN)
+				schedule_delayed_work(&chg_drv->chg_work,
+						      msecs_to_jiffies(100));
+			else
+				chg_drv->stop_charging = 1;
 		}
 
 		goto exit_chg_work;
