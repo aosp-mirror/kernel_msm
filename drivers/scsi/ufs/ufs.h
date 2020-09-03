@@ -261,6 +261,8 @@ enum geometry_desc_param {
 	GEOMETRY_DESC_PARAM_WB_SUP_WB_TYPE	= 0x56,
 };
 
+#define UFSHCD_DEFAULT_PE_CYCLE		3000
+
 /* Health descriptor parameters offsets in bytes*/
 enum health_desc_param {
 	HEALTH_DESC_PARAM_LEN			= 0x0,
@@ -269,6 +271,7 @@ enum health_desc_param {
 	HEALTH_DESC_PARAM_LIFE_TIME_EST_A	= 0x3,
 	HEALTH_DESC_PARAM_LIFE_TIME_EST_B	= 0x4,
 	HEALTH_DESC_PARAM_LIFE_TIME_EST_C	= 0x24,
+	HEALTH_DESC_PARAM_ERASE_OFFSET		= 0x0D,
 };
 
 /*
