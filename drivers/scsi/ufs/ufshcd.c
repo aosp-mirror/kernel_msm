@@ -6340,6 +6340,28 @@ static inline void ufshcd_get_lu_power_on_wp_status(struct ufs_hba *hba,
 	}
 }
 
+static u32 health_get_bytes(u8 *desc_buf, int bytes, int len)
+{
+	u32 value = 0;
+
+	switch (len) {
+	case 1:
+		value = desc_buf[bytes];
+		break;
+	case 2:
+		value = desc_buf[bytes] << 8;
+		value += desc_buf[bytes + 1];
+		break;
+	case 4:
+		value = desc_buf[bytes] << 24;
+		value += desc_buf[bytes + 1] << 16;
+		value += desc_buf[bytes + 2] << 8;
+		value += desc_buf[bytes + 3];
+		break;
+	}
+	return value;
+}
+
 int ufshcd_update_health(struct ufs_hba *hba)
 {
 	int buff_len = QUERY_DESC_HEALTH_DEF_SIZE;
@@ -6364,6 +6386,13 @@ int ufshcd_update_health(struct ufs_hba *hba)
 			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_B];
 		hba->dev_info.life_time_estimation_c =
 			(u8)desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_C];
+		if (!hba->dev_info.life_time_estimation_c) {
+			u32 erase = health_get_bytes(desc_buf,
+					HEALTH_DESC_PARAM_ERASE_OFFSET, 2);
+			if (erase)
+				hba->dev_info.life_time_estimation_c =
+					erase * 100 / UFSHCD_DEFAULT_PE_CYCLE;
+		}
 		hba->dev_info.health_cached_t = ktime_get();
 	}
 	return err;
