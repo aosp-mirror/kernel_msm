@@ -210,9 +210,9 @@ struct batt_ttf_stats {
  *	deadline = 0, rest_state = CHG_HEALTH_INACTIVE
  *
  * deadline = -1 from userspace
- *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
+ *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED (settings disabled)
  * on deadline = 0 from userspace
- *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED
+ *	CHG_HEALTH_* -> CHG_HEALTH_USER_DISABLED (alarm, plug or misc. disabled)
  * on deadline > 0 from userspace
  *	CHG_HEALTH_* -> CHG_HEALTH_ENABLED
  *
@@ -236,9 +236,9 @@ enum chg_health_state {
 
 /* tier index used to log the session */
 enum gbms_stats_ac_tier_idx_t {
-	GBMS_STATS_AC_TI_DISABLE = -4,
-	GBMS_STATS_AC_TI_PLUG = -3,
-	GBMS_STATS_AC_TI_SETTING = -2,
+	GBMS_STATS_AC_TI_DISABLE_SETTING_STOP = -4,
+	GBMS_STATS_AC_TI_DISABLE_MISC = -3,
+	GBMS_STATS_AC_TI_DISABLE_SETTING = -2,
 	GBMS_STATS_AC_TI_INVALID = -1,
 	GBMS_STATS_AC_TI_VALID = 10,
 	GBMS_STATS_AC_TI_DISABLED,

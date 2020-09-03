@@ -1218,11 +1218,11 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	/* user disabled with deadline */
 	case CHG_HEALTH_USER_DISABLED:
 		if (rest_deadline == CHG_DEADLINE_SETTING)
-			tier_idx = GBMS_STATS_AC_TI_SETTING;
-		else if (rest_deadline == 0)
-			tier_idx = GBMS_STATS_AC_TI_PLUG;
-		else /* CHG_DEADLINE_SETTING_STOP */
-			tier_idx = GBMS_STATS_AC_TI_DISABLE;
+			tier_idx = GBMS_STATS_AC_TI_DISABLE_SETTING;
+		else if (rest_deadline == CHG_DEADLINE_SETTING_STOP)
+			tier_idx = GBMS_STATS_AC_TI_DISABLE_SETTING_STOP;
+		else
+			tier_idx = GBMS_STATS_AC_TI_DISABLE_MISC;
 		break;
 	/* missed the deadline, TODO: log the deadline */
 	case CHG_HEALTH_DISABLED:
