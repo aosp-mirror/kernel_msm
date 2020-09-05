@@ -42,6 +42,7 @@
 #define BATT_DELAY_INIT_MS		250
 #define BATT_WORK_FAST_RETRY_CNT	30
 #define BATT_WORK_FAST_RETRY_MS		1000
+#define BATT_WORK_DEBOUNCE_RETRY_MS	3000
 #define BATT_WORK_ERROR_RETRY_MS	1000
 
 #define DEFAULT_BATT_FAKE_CAPACITY		50
@@ -299,6 +300,7 @@ struct batt_drv {
 
 	/* time to full */
 	struct batt_ttf_stats ttf_stats;
+	bool ttf_debounce;
 
 	/* logging */
 	struct logbuffer *ssoc_log;
@@ -966,6 +968,12 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 	/* TTF is 0 when UI shows 100% */
 	if (ssoc_get_capacity(&batt_drv->ssoc_state) == SSOC_FULL) {
 		estimate = 0;
+		goto done;
+	}
+
+	/* debounce the stats until the battery is actually charging */
+	if (batt_drv->ttf_debounce) {
+		estimate = -1;
 		goto done;
 	}
 
@@ -1747,6 +1755,7 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 
 	/* polling */
 	batt_drv->batt_fast_update_cnt = 0;
+	batt_drv->ttf_debounce = 1;
 	batt_drv->fg_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	batt_drv->chg_done = false;
 	/* algo */
@@ -2475,7 +2484,7 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 		__pm_stay_awake(&batt_drv->poll_ws);
 		batt_drv->batt_fast_update_cnt = BATT_WORK_FAST_RETRY_CNT;
 		mod_delayed_work(system_wq, &batt_drv->batt_work,
-			BATT_WORK_FAST_RETRY_MS);
+				 BATT_WORK_FAST_RETRY_MS);
 
 		batt_drv->ssoc_state.buck_enabled = 1;
 		changed = true;
@@ -3832,7 +3841,6 @@ void bat_log_ttf_estimate(const char *label, int ssoc,
 	int cc, err;
 	time_t res = 0;
 
-
 	err = batt_ttf_estimate(&res, batt_drv);
 	if (err < 0) {
 		logbuffer_log(batt_drv->ttf_stats.ttf_log,
@@ -4171,17 +4179,22 @@ static void google_battery_work(struct work_struct *work)
 	/* wait for timeout or state equal to CHARGING, FULL or UNKNOWN
 	 * (which will likely not happen) even on ssoc error. msc_logic
 	 * hold poll_ws wakelock during this time.
+	 * Delay the estimates for time to full for BATT_WORK_DEBOUNCE_RETRY_MS
+	 * after the device start charging.
 	 */
 	if (batt_drv->batt_fast_update_cnt) {
 
 		if (fg_status != POWER_SUPPLY_STATUS_DISCHARGING &&
 		    fg_status != POWER_SUPPLY_STATUS_NOT_CHARGING) {
-			bat_log_ttf_estimate("Start", prev_ssoc, batt_drv);
 			batt_drv->batt_fast_update_cnt = 0;
+			update_interval = BATT_WORK_DEBOUNCE_RETRY_MS;
 		} else {
 			update_interval = BATT_WORK_FAST_RETRY_MS;
 			batt_drv->batt_fast_update_cnt -= 1;
 		}
+	} else if (batt_drv->ttf_debounce) {
+		batt_drv->ttf_debounce = 0;
+		bat_log_ttf_estimate("Start", prev_ssoc, batt_drv);
 	}
 
 	/* acquired in msc_logic */
