@@ -954,8 +954,12 @@ static void rt5514_spi_start_work(struct work_struct *work)
 
 	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
-			if (rt5514_watchdog_handler_cb)
-				rt5514_watchdog_handler_cb();
+			pm_wakeup_event(rt5514_dsp->dev, WAKEUP_TIMEOUT);
+			if (!snd_power_wait(component->card->snd_card,
+				SNDRV_CTL_POWER_D0)) {
+				if (rt5514_watchdog_handler_cb)
+					rt5514_watchdog_handler_cb();
+			}
 			return;
 		}
 	}
