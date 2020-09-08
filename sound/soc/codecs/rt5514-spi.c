@@ -54,6 +54,7 @@ static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
 static struct mutex switch_lock;
 static struct wakeup_source *rt5514_spi_ws;
+static struct wakeup_source *rt5514_watchdog_ws;
 static u32 spi_switch_mask;
 static int handshake_gpio, handshake_ack_irq;
 struct completion switch_ack;
@@ -952,17 +953,16 @@ static void rt5514_spi_start_work(struct work_struct *work)
 		container_of(work, struct rt5514_dsp, start_work.work);
 	struct snd_soc_component *component = rt5514_dsp->component;
 
+	__pm_stay_awake(rt5514_watchdog_ws);
 	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
-			pm_wakeup_event(rt5514_dsp->dev, WAKEUP_TIMEOUT);
-			if (!snd_power_wait(component->card->snd_card,
-				SNDRV_CTL_POWER_D0)) {
-				if (rt5514_watchdog_handler_cb)
-					rt5514_watchdog_handler_cb();
-			}
+			if (rt5514_watchdog_handler_cb)
+				rt5514_watchdog_handler_cb();
+			__pm_relax(rt5514_watchdog_ws);
 			return;
 		}
 	}
+	__pm_relax(rt5514_watchdog_ws);
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 	if (!(rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm) &&
@@ -1399,6 +1399,12 @@ static int rt5514_spi_probe(struct spi_device *spi)
 		return -ENODEV;
 	}
 
+	rt5514_watchdog_ws = wakeup_source_register(NULL, "rt5514-watchdog");
+	if (!rt5514_watchdog_ws) {
+		dev_err(&spi->dev, "Failed to register wakeup source\n");
+		return -ENODEV;
+	}
+
 	ret = devm_snd_soc_register_component(&spi->dev,
 					      &rt5514_spi_component,
 					      rt5514_spi_dai,
@@ -1406,6 +1412,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	if (ret < 0) {
 		dev_err(&spi->dev, "Failed to register component.\n");
 		wakeup_source_unregister(rt5514_spi_ws);
+		wakeup_source_unregister(rt5514_watchdog_ws);
 		return ret;
 	}
 
@@ -1460,6 +1467,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 
 no_handshake:
 	wakeup_source_unregister(rt5514_spi_ws);
+	wakeup_source_unregister(rt5514_watchdog_ws);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_IRQ, 1);
 	dev_info(&spi->dev, " rt5514-spi init success without handshake\n");
 
