@@ -973,7 +973,7 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 	 * Handle rounding (removing it from the end)
 	 * example: 96.64% with SOC_ROUND_BASE = 0.5 -> UI = 97
 	 *    ttf = elap[96] * 0.36 + elap[97] + elap[98] +
-	 * 	    elap[99] * (1 - 0.5)
+	 *          elap[99] * (1 - 0.5)
 	 */
 	rc = ttf_soc_estimate(&estimate, &batt_drv->ttf_stats,
 			      &batt_drv->ce_data, soc_raw, raw_full);
@@ -3576,7 +3576,7 @@ static ssize_t batt_show_time_to_ac(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
-	struct batt_drv *batt_drv =(struct batt_drv *)
+	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
 	const int soc = CHG_HEALTH_REST_SOC(&batt_drv->chg_health);
 	qnum_t soc_raw = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
@@ -3602,7 +3602,7 @@ static ssize_t batt_show_ac_soc(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
-	struct batt_drv *batt_drv =(struct batt_drv *)
+	struct batt_drv *batt_drv = (struct batt_drv *)
 					power_supply_get_drvdata(psy);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n",
