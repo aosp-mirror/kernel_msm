@@ -1731,15 +1731,19 @@ static void batt_res_work(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
+/* NOTE: should not reset always_on_soc */
 static inline void batt_reset_rest_state(struct batt_chg_health *chg_health)
 {
-	/* NOTE: should not reset always_on_soc */
-	chg_health->rest_state = CHG_HEALTH_INACTIVE;
 	chg_health->rest_cc_max = -1;
 	chg_health->rest_fv_uv = -1;
 
-	if (chg_health->rest_deadline > 0)
+	/* keep negative deadlines (they mean USER disabled) */
+	if (chg_health->rest_deadline < 0) {
+		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
+	} else {
+		chg_health->rest_state = CHG_HEALTH_INACTIVE;
 		chg_health->rest_deadline = 0;
+	}
 }
 
 /* should not reset rl state */
@@ -2011,6 +2015,8 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 		new_deadline = chg_health->rest_deadline != deadline_s;
 		/* ->rest_deadline will be reset to 0 on disconnect */
 		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
+
+	/* enabled from any previous state */
 	} else {
 		const time_t rest_deadline = get_boot_sec() + deadline_s;
 
@@ -2036,64 +2042,66 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	struct batt_chg_health *rest = &batt_drv->chg_health;
 	const time_t deadline = rest->rest_deadline;
-	const time_t now = get_boot_sec();
 	enum chg_health_state rest_state = rest->rest_state;
+	const bool aon_enabled = rest->always_on_soc != -1;
+	const time_t now = get_boot_sec();
 	int fv_uv = -1, cc_max = -1;
 	bool changed = false;
 	time_t ttf = 0;
-	bool aon_enabled = rest->always_on_soc != -1;
+	int ret;
 
-	/* DONE, USER_DISABLED reset on disconnect, _DISABLED didn't meet DL */
-	if (rest_state == CHG_HEALTH_USER_DISABLED ||
-	    rest_state == CHG_HEALTH_DONE ||
-	    (aon_enabled == false && (rest_state == CHG_HEALTH_DISABLED ||
-	    rest_state == CHG_HEALTH_INACTIVE)))
-		goto done_exit;
-
-	/* enable if not USER_DISABLED and INACTIVE */
+	/* move to ENABLED if INACTIVE when aon_enabled is set */
 	if (aon_enabled && rest_state == CHG_HEALTH_INACTIVE)
 		rest_state = CHG_HEALTH_ENABLED;
 
-	/* rest->always_on_soc set ttf = 0 and honor a valid deadline */
-	if (aon_enabled == false) {
-		int ret;
+	/*
+	 * on disconnect batt_reset_rest_state() will set rest_state to
+	 * CHG_HEALTH_USER_DISABLED if the deadline is negative.
+	 */
+	if (rest_state == CHG_HEALTH_USER_DISABLED ||
+	    rest_state == CHG_HEALTH_DISABLED ||
+	    rest_state == CHG_HEALTH_INACTIVE)
+		goto done_no_op;
 
-		/*
-		 * ttf_ret < 0 when the device is discharging.
-		 * This can happen with a large sysload on a underpowered
-		 * adapter. Current strategy leaves everything as is (hoping)
-		 * that the load is temporary.
-		 * NOTE: if in ACTIVE mode we could retest msc_health_active()
-		 * and reset to DISABLED if the value returned is not ACTIVE.
-		 * NOTE: ttf needs to know that health is enabled! this is
-		 * done in the caller.
-		 */
-		ret = batt_ttf_estimate(&ttf, batt_drv);
-		if (ret < 0)
-			return false;
+	/* Keeps AC enabled after DONE */
+	if (rest_state == CHG_HEALTH_DONE)
+		goto done_exit;
 
-		/* estimate is 0 at full, no need for it recharge logic */
-		if (ttf == 0) {
-			rest_state = CHG_HEALTH_DONE;
-			goto done_exit;
-		}
+	/*
+	 * ret < 0 right after plug-in or when the device is discharging due
+	 * to a large sysload or an underpowered adapter (or both). Current
+	 * strategy leaves everything as is (hoping) that the load is temporary
+	 */
+	ret = batt_ttf_estimate(&ttf, batt_drv);
+	if (ret < 0)
+		return false;
 
+	/* estimate is 0 at 100%: set to done and keep AC enabled in RL */
+	if (ttf == 0) {
+		rest_state = CHG_HEALTH_DONE;
+		goto done_exit;
 	}
 
-	/* disabled from any state when now + ttf is over a valid deadline */
-	if (deadline > 0 && (now + ttf) > deadline) {
-		/*
-		 * Disable if the deadline cannot be met with the current rate.
-		 * Set a new deadline or reset always_on_soc to re-enable for
-		 * this session.
-		 * TODO: consider adding a margin or debounce it.
-		 */
+	/*
+	 * rest_state here is either ENABLED or ACTIVE, transition to DISABLED
+	 * when the deadline cannot be met with the current rate. set a new
+	 * deadline or reset always_on_soc to re-enable AC for this session.
+	 * NOTE: A device with AON enabled might (will) receive a deadline if
+	 * plugged in within the AC window: ignore it.
+	 * NOTE: cannot have a negative deadline with rest_state different
+	 * from CHG_HEALTH_USER_DISABLED.
+	 * TODO: consider adding a margin or debounce it.
+	 */
+	if (aon_enabled == false && rest_state == CHG_HEALTH_ACTIVE &&
+	    deadline > 0 && now + ttf > deadline) {
 		rest_state = CHG_HEALTH_DISABLED;
 		goto done_exit;
 	}
 
 	/*
-	 * State will change from _ACTIVE to _ENABLED after a discharge.
+	 * rest_state here is either ENABLED or ACTIVE,
+	 * NOTE: State might transition from _ACTIVE to _ENABLED after a
+	 * discharge cycle that makes the battery fall under the threshold.
 	 * State will transition back to _ENABLED after some time unless
 	 * the deadline is met.
 	 */
@@ -2116,6 +2124,7 @@ done_exit:
 		/* TODO: make sure that we wakeup when we are close to ttf */
 	}
 
+done_no_op:
 	/* send a power supply event when rest_state changes */
 	changed = rest->rest_state != rest_state;
 
