@@ -448,9 +448,8 @@ static void usbc_virt_tz_should_be_enabled(struct overheat_info *ovh_info)
 
 	if (ovh_info->temp < ovh_info->clear_temp) {
 		usbc_virtual_sensors_set_mode(false, ovh_info);
-	} else if (ovh_info->throttle_state &&
-				!ovh_info->overheat_mitigation &&
-				ovh_info->usb_connected) {
+	} else if (ovh_info->throttle_state && !ovh_info->overheat_mitigation &&
+		   (ovh_info->usb_connected || ovh_info->accessory_connected)) {
 		usbc_virtual_sensors_set_mode(true, ovh_info);
 	}
 }
