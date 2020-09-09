@@ -2098,7 +2098,9 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	 * the deadline is met.
 	 */
 	rest_state = msc_health_active(batt_drv);
-	if (rest_state == CHG_HEALTH_ACTIVE) {
+
+done_exit:
+	if (rest_state == CHG_HEALTH_ACTIVE || rest_state == CHG_HEALTH_DONE) {
 		const int capacity_ma = batt_drv->battery_capacity;
 
 		cc_max = msc_logic_health_get_rate(rest, capacity_ma);
@@ -2114,7 +2116,6 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 		/* TODO: make sure that we wakeup when we are close to ttf */
 	}
 
-done_exit:
 	/* send a power supply event when rest_state changes */
 	changed = rest->rest_state != rest_state;
 
