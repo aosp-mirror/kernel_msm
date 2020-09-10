@@ -136,6 +136,9 @@ static int fastrpc_pdr_notifier_cb(struct notifier_block *nb,
 static struct dentry *debugfs_root;
 static struct dentry *debugfs_global_file;
 
+static atomic_long_t total_dma_bytes;
+static struct kobject *fastrpc_kobj;
+
 static inline uint64_t buf_page_start(uint64_t buf)
 {
 	uint64_t start = (uint64_t) buf & PAGE_MASK;
@@ -540,6 +543,8 @@ static void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
 			hyp_assign_phys(buf->phys, buf_page_size(buf->size),
 				srcVM, 2, destVM, destVMperm, 1);
 		}
+
+		atomic_long_sub(buf->size, &total_dma_bytes);
 		dma_free_attrs(fl->sctx->smmu.dev, buf->size, buf->virt,
 					buf->phys, buf->dma_attr);
 	}
@@ -751,6 +756,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			pr_err("failed to free remote heap allocation\n");
 			return;
 		}
+		atomic_long_sub(map->size, &total_dma_bytes);
 		if (map->phys) {
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
@@ -837,6 +843,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 					len, (unsigned long) map->attr));
 		if (err)
 			goto bail;
+		atomic_long_add(len, &total_dma_bytes);
 		map->phys = (uintptr_t)region_phys;
 		map->size = len;
 		map->va = (uintptr_t)region_vaddr;
@@ -1040,6 +1047,8 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	}
 	if (fl->sctx->smmu.cb && fl->cid != SDSP_DOMAIN_ID)
 		buf->phys += ((uint64_t)fl->sctx->smmu.cb << 32);
+
+	atomic_long_add(size, &total_dma_bytes);
 	vmid = fl->apps->channel[fl->cid].vmid;
 	if (vmid) {
 		int srcVM[1] = {VMID_HLOS};
@@ -4215,6 +4224,41 @@ bail:
 	return err;
 }
 
+static ssize_t total_dma_kb_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
+{
+	u64 size_in_bytes = atomic_long_read(&total_dma_bytes);
+
+	return snprintf(buf, PAGE_SIZE, "%llu\n", div_u64(size_in_bytes, 1024));
+}
+
+static struct kobj_attribute total_dma_kb_attr =
+	__ATTR_RO(total_dma_kb);
+
+static struct attribute *fastrpc_device_attrs[] = {
+	&total_dma_kb_attr.attr,
+	NULL,
+};
+
+ATTRIBUTE_GROUPS(fastrpc_device);
+
+static int fastrpc_init_sysfs(void)
+{
+	int ret;
+
+	fastrpc_kobj = kobject_create_and_add("fastrpc", kernel_kobj);
+	if (!fastrpc_kobj)
+		return -ENOMEM;
+
+	ret = sysfs_create_groups(fastrpc_kobj, fastrpc_device_groups);
+	if (ret) {
+		kobject_put(fastrpc_kobj);
+		return ret;
+	}
+
+	return 0;
+}
+
 static void fastrpc_deinit(void)
 {
 	struct fastrpc_channel_ctx *chan = gcinfo;
@@ -4343,8 +4387,15 @@ static int __init fastrpc_device_init(void)
 	struct device *dev = NULL;
 	struct device *secure_dev = NULL;
 	int err = 0, i;
+	int ret = 0;
 
 	debugfs_root = debugfs_create_dir("adsprpc", NULL);
+
+	ret = fastrpc_init_sysfs();
+	if (ret) {
+		pr_err("fastrpc: failed to add sysfs attributes ret=%d\n", ret);
+	}
+
 	memset(me, 0, sizeof(*me));
 	fastrpc_init(me);
 	me->dev = NULL;
@@ -4469,6 +4520,10 @@ static void __exit fastrpc_device_exit(void)
 	if (me->wake_source)
 		wakeup_source_unregister(me->wake_source);
 	debugfs_remove_recursive(debugfs_root);
+	if (fastrpc_kobj) {
+		sysfs_remove_groups(fastrpc_kobj, fastrpc_device_groups);
+		kobject_put(fastrpc_kobj);
+	}
 }
 
 late_initcall(fastrpc_device_init);
