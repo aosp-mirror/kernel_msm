@@ -117,6 +117,9 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+/* Timeout (in milliseconds) for the device to hold wakelock in  */
+#define MNH_SM_WAKEUP_SOURCE_TIMEOUT_PRODUCTION (180000)
+
 enum fw_image_state {
 	FW_IMAGE_NONE = 0,
 	FW_IMAGE_DOWNLOADING,
@@ -2250,10 +2253,11 @@ int mnh_sm_set_state(int state)
 	prev_state = mnh_sm_dev->state;
 
 	/*
-	 * Before cold boot or resume, hold a wakelock.
+	 * Before cold boot or resume, hold a wakelock with timeout.
 	 */
 	if (state == MNH_STATE_ACTIVE)
-		pm_stay_awake(mnh_sm_dev->dev);
+		pm_wakeup_event(mnh_sm_dev->dev,
+				MNH_SM_WAKEUP_SOURCE_TIMEOUT_PRODUCTION);
 
 	ret = mnh_sm_set_state_locked(state);
 
