@@ -2208,16 +2208,12 @@ static int mnh_sm_set_state_locked(int state)
 				 "%s: failed to transition to state %d (%d)\n",
 				 __func__, state, ret);
 
-			if (state == MNH_STATE_ACTIVE) {
-				mnh_sm_dev->powered = false;
-				reinit_completion(
-					&mnh_sm_dev->powered_complete);
-				mnh_sm_poweroff();
-				mnh_sm_enable_ready_irq(false);
-				mnh_sm_dev->state = MNH_STATE_OFF;
-			}
-
-			return ret;
+			/*
+			 * Always goes back to OFF state if a state change
+			 * failed, except when the target state is OFF.
+			 */
+			if (state != MNH_STATE_OFF)
+				return mnh_sm_set_state_locked(MNH_STATE_OFF);
 #if ALLOW_PARTIAL_ACTIVE
 		}
 #endif
