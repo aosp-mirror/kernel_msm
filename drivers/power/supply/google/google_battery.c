@@ -371,6 +371,7 @@ static int psy_changed(struct notifier_block *nb,
 #define SSOC_SPOOF 95
 #define SSOC_FULL 100
 #define UICURVE_BUF_SZ	(UICURVE_MAX * 15 + 1)
+#define SSOC_HIGH_SOC 90
 
 enum ssoc_uic_type {
 	SSOC_UIC_TYPE_DSG  = -1,
@@ -1015,6 +1016,14 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 	ce_data->health_stats.vtier_idx = GBMS_STATS_AC_TI_INVALID;
 	ce_data->health_stats.temp_idx = -1;
 	ce_data->health_stats.soc_in = -1;
+
+	ce_data->full_charge_stats.vtier_idx = GBMS_STATS_AC_TI_FULL_CHARGE;
+	ce_data->full_charge_stats.temp_idx = -1;
+	ce_data->full_charge_stats.soc_in = -1;
+
+	ce_data->high_soc_stats.vtier_idx = GBMS_STATS_AC_TI_HIGH_SOC;
+	ce_data->high_soc_stats.temp_idx = -1;
+	ce_data->high_soc_stats.soc_in = -1;
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
@@ -1097,42 +1106,13 @@ static void batt_chg_stats_soc_update(struct gbms_charging_event *ce_data,
 	ce_data->last_soc = index;
 }
 
-/* call holding stats_lock */
-static void batt_chg_stats_update(struct batt_drv *batt_drv,
-				  int temp_idx, int tier_idx,
-				  int ibatt_ma, int temp, time_t elap)
+static void batt_chg_stats_update_tier(const struct batt_drv *const batt_drv,
+				       int temp_idx, int ibatt_ma, int temp,
+				       time_t elap, int cc,
+				       struct gbms_ce_tier_stats *tier)
 {
-	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 	const int msc_state = batt_drv->msc_state;
-	struct gbms_ce_tier_stats *tier;
-	int cc;
-
-	/* TODO: read at start of tier and update cc_total of previous */
-	cc = GPSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER);
-	if (cc < 0) {
-		pr_debug("MSC_STAT cannot read cc=%d\n", cc);
-		return;
-	}
-	cc = cc / 1000;
-
-	/* works because msc_logic books the time BEFORE updating msc_state */
-	if (msc_state == MSC_HEALTH) {
-		tier = &batt_drv->ce_data.health_stats;
-
-		/* tier used for TTF during HC, check msc_logic_health() */
-	} else {
-		const qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
-
-		/* book to previous soc unless discharging */
-		if (msc_state != MSC_DSG) {
-
-			/* TODO: should I use ssoc instead? */
-			batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
-						tier_idx, cc);
-		}
-
-		tier = &batt_drv->ce_data.tier_stats[tier_idx];
-	}
+	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 
 	/* book to previous state */
 	batt_chg_stats_tier(tier, msc_state, elap);
@@ -1206,6 +1186,63 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv,
 	tier->sample_count += 1;
 }
 
+/* call holding stats_lock */
+static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
+				  int tier_idx, int ibatt_ma, int temp,
+				  time_t elap)
+{
+	const int msc_state = batt_drv->msc_state;
+	struct gbms_ce_tier_stats *tier;
+	int cc;
+	int soc_real = ssoc_get_real(&batt_drv->ssoc_state);
+
+	if (elap == 0)
+		return;
+
+	/* TODO: read at start of tier and update cc_total of previous */
+	cc = GPSY_GET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_CHARGE_COUNTER);
+	if (cc < 0) {
+		pr_debug("MSC_STAT cannot read cc=%d\n", cc);
+		return;
+	}
+	cc = cc / 1000;
+
+	if (batt_drv->batt_full) {
+		/* Override regular charge tiers when fully charged */
+		tier = &batt_drv->ce_data.full_charge_stats;
+
+	} else if (msc_state == MSC_HEALTH) {
+		/*
+		 * works because msc_logic books the time BEFORE updating
+		 * msc_state
+		 */
+
+		/* tier used for TTF during HC, check msc_logic_health() */
+		tier = &batt_drv->ce_data.health_stats;
+
+	} else {
+		const qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
+
+		/* book to previous soc unless discharging */
+		if (msc_state != MSC_DSG) {
+			/* TODO: should I use ssoc instead? */
+			batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
+						  tier_idx, cc);
+		}
+
+		tier = &batt_drv->ce_data.tier_stats[tier_idx];
+	}
+
+	batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp, elap, cc,
+				   tier);
+
+	/* Update this charge tier in parallel */
+	if (soc_real >= SSOC_HIGH_SOC) {
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+					   elap, cc,
+					   &batt_drv->ce_data.high_soc_stats);
+	}
+}
 
 static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 {
@@ -1418,9 +1455,8 @@ void bat_log_chg_stats(struct logbuffer *log,
 }
 
 /* End of charging: close stats, qualify event publish data */
-static void batt_chg_stats_pub(struct batt_drv *batt_drv,
-			       char *reason,
-			       bool force)
+static void batt_chg_stats_pub(struct batt_drv *batt_drv, char *reason,
+			       bool force, bool skip_uevent)
 {
 	bool publish;
 
@@ -1430,7 +1466,8 @@ static void batt_chg_stats_pub(struct batt_drv *batt_drv,
 		ttf_stats_update(&batt_drv->ttf_stats,
 				 &batt_drv->ce_qual, false);
 
-		kobject_uevent(&batt_drv->device->kobj, KOBJ_CHANGE);
+		if (skip_uevent == false)
+			kobject_uevent(&batt_drv->device->kobj, KOBJ_CHANGE);
 	}
 
 	bat_log_chg_stats(batt_drv->ttf_stats.ttf_log, &batt_drv->ce_data);
@@ -1582,12 +1619,25 @@ static int batt_chg_stats_cstr(char *buff, int size,
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->tier_stats[i],
 						verbose);
+
 		if (soc_next) {
 			len += scnprintf(&buff[len], size - len, "\n");
 			len += ttf_soc_cstr(&buff[len], size - len,
 					    &ce_data->soc_stats,
 					    soc_in, soc_next);
 		}
+	}
+
+	if (ce_data->full_charge_stats.soc_in != -1) {
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->full_charge_stats,
+						verbose);
+	}
+
+	if (ce_data->high_soc_stats.soc_in != -1) {
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->high_soc_stats,
+						verbose);
 	}
 
 	return len;
@@ -1999,7 +2049,12 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 	} else if (deadline_s == 0) {
 		new_deadline = chg_health->rest_deadline != deadline_s;
 		/* ->rest_deadline will be reset to 0 on disconnect */
-		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
+
+		/* Don't disable A/C if already done */
+		if (chg_health->rest_state != CHG_HEALTH_DONE)
+			chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
+
+		/* enabled from any previous state */
 	} else {
 		const time_t rest_deadline = get_boot_sec() + deadline_s;
 
@@ -2429,7 +2484,7 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 			goto msc_logic_exit;
 
 		/* here on: disconnect */
-		batt_chg_stats_pub(batt_drv, "disconnect", false);
+		batt_chg_stats_pub(batt_drv, "disconnect", false, false);
 		batt_res_state_set(&batt_drv->res_state, false);
 
 		/* change curve before changing the state */
@@ -2489,8 +2544,10 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 	} else if (batt_drv->batt_full) {
 		changed = batt_rl_enter(&batt_drv->ssoc_state,
 					BATT_RL_STATUS_RECHARGE);
+
+		/* We can skip the uevent because we have volt tiers >= 100 */
 		if (changed)
-			batt_chg_stats_pub(batt_drv, "100%", false);
+			batt_chg_stats_pub(batt_drv, "100%", false, true);
 	}
 
 	err = msc_logic(batt_drv);
@@ -3137,7 +3194,7 @@ static ssize_t batt_ctl_chg_stats_actual(struct device *dev,
 	switch (buf[0]) {
 	case 'p': /* publish data to qual */
 	case 'P': /* force publish data to qual */
-		batt_chg_stats_pub(batt_drv, "debug cmd", buf[0] == 'P');
+		batt_chg_stats_pub(batt_drv, "debug cmd", buf[0] == 'P', false);
 		break;
 	default:
 		count = -EINVAL;

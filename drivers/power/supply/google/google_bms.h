@@ -235,17 +235,20 @@ enum chg_health_state {
 };
 
 /* tier index used to log the session */
-enum gbms_stats_ac_tier_idx_t {
+enum gbms_stats_tier_idx_t {
 	GBMS_STATS_AC_TI_DISABLE_SETTING_STOP = -4,
 	GBMS_STATS_AC_TI_DISABLE_MISC = -3,
 	GBMS_STATS_AC_TI_DISABLE_SETTING = -2,
 	GBMS_STATS_AC_TI_INVALID = -1,
+	/* Regular charge tiers 0 -> 9 */
 	GBMS_STATS_AC_TI_VALID = 10,
 	GBMS_STATS_AC_TI_DISABLED,
 	GBMS_STATS_AC_TI_ENABLED,
 	GBMS_STATS_AC_TI_ACTIVE,
 	GBMS_STATS_AC_TI_ENABLED_AON,
 	GBMS_STATS_AC_TI_ACTIVE_AON,
+	GBMS_STATS_AC_TI_FULL_CHARGE = 100,
+	GBMS_STATS_AC_TI_HIGH_SOC = 101,
 };
 
 /* health state */
@@ -289,6 +292,9 @@ struct gbms_charging_event {
 	/* health based charging */
 	struct batt_chg_health		ce_health;	/* updated on close */
 	struct gbms_ce_tier_stats	health_stats;	/* updated in HC */
+
+	struct gbms_ce_tier_stats full_charge_stats;
+	struct gbms_ce_tier_stats high_soc_stats;
 };
 
 #define GBMS_CCCM_LIMITS(profile, ti, vi) \
