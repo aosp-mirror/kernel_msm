@@ -1784,12 +1784,14 @@ static int smblib_dc_suspend_vote_callback(struct votable *votable, void *data,
 	return smblib_set_dc_suspend(chg, (bool)suspend);
 }
 
+#define DC_ICL_CHANGE_RERUN_MS		(1 * 1000)
 static int smblib_dc_icl_vote_callback(struct votable *votable, void *data,
 			int icl_ua, const char *client)
 {
 	struct smb_charger *chg = data;
 	int rc = 0;
-	bool suspend;
+	bool suspend, rerun_aicl = false;
+	int cur_icl = 0;
 
 	if (icl_ua < 0) {
 		smblib_dbg(chg, PR_MISC, "No Voter hence suspending\n");
@@ -1799,6 +1801,14 @@ static int smblib_dc_icl_vote_callback(struct votable *votable, void *data,
 	suspend = (icl_ua <= SUSPEND_ICL_MAX);
 	if (suspend)
 		goto suspend;
+
+	rc = smblib_get_charge_param(chg, &chg->param.dc_icl, &cur_icl);
+	if (rc == 0) {
+		if ((cur_icl < icl_ua) &&
+		    !chg->dc_icl_rerun &&
+		    chg->dcin_aicl_done)
+			rerun_aicl = true;
+	}
 
 	rc = smblib_set_charge_param(chg, &chg->param.dc_icl, icl_ua);
 	if (rc < 0) {
@@ -1813,6 +1823,14 @@ suspend:
 		smblib_err(chg, "Couldn't vote to %s DC rc=%d\n",
 			suspend ? "suspend" : "resume", rc);
 		return rc;
+	}
+
+	if (rerun_aicl) {
+		dev_info(chg->dev, "AICL rerun after 1 sec because icl: %d->%d\n",
+			 cur_icl, icl_ua);
+		mod_timer(&chg->dc_icl_timer,
+			  jiffies +
+			  msecs_to_jiffies(DC_ICL_CHANGE_RERUN_MS));
 	}
 	return rc;
 }
