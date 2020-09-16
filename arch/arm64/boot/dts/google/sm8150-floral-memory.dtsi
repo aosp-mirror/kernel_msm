@@ -111,6 +111,12 @@
 		reg = <0 0xA4BFF000 0 0x1000>;
 	};
 
+	ramdumplog_mem: ramdumplog_region@0xa4c00000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xa4c00000 0 0x10000>;
+	};
+
 	pil_faceauth_fw_mem: pil_faceauth_fw_mem@a8800000 {
 		compatible = "removed-dma-pool";
 		no-map;
