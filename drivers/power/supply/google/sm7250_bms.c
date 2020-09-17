@@ -36,11 +36,14 @@
 
 #define BIAS_STS_READY	BIT(0)
 
+#define CHARGE_DISABLE_VOTER	"charge_disable"
+
 struct bms_dev {
 	struct	device			*dev;
 	struct	power_supply		*psy;
 	struct	regmap			*pmic_regmap;
 	struct	votable			*fv_votable;
+	struct	votable			*fcc_votable;
 	struct	notifier_block		nb;
 	int				batt_id_ohms;
 	int				rl_soc_threshold;
@@ -1112,7 +1115,11 @@ static int sm7250_psy_set_property(struct power_supply *psy,
 							ivalue, val, rc);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
-		rc = sm7250_charge_disable(bms, pval->intval != 0);
+		if (!bms->fcc_votable)
+			bms->fcc_votable = find_votable(VOTABLE_MSC_FCC);
+		if (bms->fcc_votable)
+			vote(bms->fcc_votable, CHARGE_DISABLE_VOTER,
+			     pval->intval, 0);
 		break;
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 		(void)sm7250_rerun_aicl(bms);
