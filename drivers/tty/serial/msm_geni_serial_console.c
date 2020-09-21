@@ -144,13 +144,13 @@ enum se_protocol_types {
 	I3C,
 };
 
-static void geni_write_reg_nolog_earlycon(unsigned int value,
+static void geni_write_reg_earlycon(unsigned int value,
 						void __iomem *base, int offset)
 {
 	writel_relaxed(value, (base + offset));
 }
 
-static unsigned int geni_read_reg_nolog_earlycon(void __iomem *base, int offset)
+static unsigned int geni_read_reg_earlycon(void __iomem *base, int offset)
 {
 	return readl_relaxed(base + offset);
 }
@@ -159,7 +159,7 @@ static int get_se_proto_earlycon(void __iomem *base)
 {
 	int proto;
 
-	proto = ((geni_read_reg_nolog_earlycon(base, GENI_FW_REVISION_RO)
+	proto = ((geni_read_reg_earlycon(base, GENI_FW_REVISION_RO)
 			& FW_REV_PROTOCOL_MSK) >> FW_REV_PROTOCOL_SHFT);
 	return proto;
 }
@@ -203,10 +203,10 @@ static int se_geni_irq_en_earlycon(void __iomem *base)
 {
 	unsigned int common_geni_m_irq_en;
 
-	common_geni_m_irq_en = geni_read_reg_nolog_earlycon(base,
+	common_geni_m_irq_en = geni_read_reg_earlycon(base,
 							SE_GENI_M_IRQ_EN);
 	common_geni_m_irq_en |= M_COMMON_GENI_M_IRQ_EN;
-	geni_write_reg_nolog_earlycon(common_geni_m_irq_en, base,
+	geni_write_reg_earlycon(common_geni_m_irq_en, base,
 							SE_GENI_M_IRQ_EN);
 	return 0;
 }
@@ -215,11 +215,11 @@ static int se_io_set_mode_earlycon(void __iomem *base)
 {
 	unsigned int io_mode;
 
-	io_mode = geni_read_reg_nolog_earlycon(base, SE_IRQ_EN);
+	io_mode = geni_read_reg_earlycon(base, SE_IRQ_EN);
 
 	io_mode |= (GENI_M_IRQ_EN);
 
-	geni_write_reg_nolog_earlycon(io_mode, base, SE_IRQ_EN);
+	geni_write_reg_earlycon(io_mode, base, SE_IRQ_EN);
 	return 0;
 }
 
@@ -228,13 +228,13 @@ static void se_io_init_earlycon(void __iomem *base)
 	unsigned int io_op_ctrl;
 	unsigned int geni_cgc_ctrl;
 
-	geni_cgc_ctrl = geni_read_reg_nolog_earlycon(base, GENI_CGC_CTRL);
+	geni_cgc_ctrl = geni_read_reg_earlycon(base, GENI_CGC_CTRL);
 	geni_cgc_ctrl |= DEFAULT_CGC_EN;
 	io_op_ctrl = DEFAULT_IO_OUTPUT_CTRL_MSK;
-	geni_write_reg_nolog_earlycon(geni_cgc_ctrl, base, GENI_CGC_CTRL);
+	geni_write_reg_earlycon(geni_cgc_ctrl, base, GENI_CGC_CTRL);
 
-	geni_write_reg_nolog_earlycon(io_op_ctrl, base, GENI_OUTPUT_CTRL);
-	geni_write_reg_nolog_earlycon(FORCE_DEFAULT, base,
+	geni_write_reg_earlycon(io_op_ctrl, base, GENI_OUTPUT_CTRL);
+	geni_write_reg_earlycon(FORCE_DEFAULT, base,
 							GENI_FORCE_DEFAULT_REG);
 }
 
@@ -256,12 +256,12 @@ static int geni_se_select_fifo_mode_earlycon(void __iomem *base)
 {
 	unsigned int common_geni_m_irq_en;
 
-	geni_write_reg_nolog_earlycon(0xFFFFFFFF, base, SE_GENI_M_IRQ_CLEAR);
-	geni_write_reg_nolog_earlycon(0xFFFFFFFF, base, SE_IRQ_EN);
+	geni_write_reg_earlycon(0xFFFFFFFF, base, SE_GENI_M_IRQ_CLEAR);
+	geni_write_reg_earlycon(0xFFFFFFFF, base, SE_IRQ_EN);
 
-	common_geni_m_irq_en = geni_read_reg_nolog_earlycon(base,
+	common_geni_m_irq_en = geni_read_reg_earlycon(base,
 							SE_GENI_M_IRQ_EN);
-	geni_write_reg_nolog_earlycon(common_geni_m_irq_en, base,
+	geni_write_reg_earlycon(common_geni_m_irq_en, base,
 							SE_GENI_M_IRQ_EN);
 	return 0;
 }
@@ -326,7 +326,7 @@ exit_get_clk_div_rate:
 
 static void msm_geni_serial_wr_char(struct uart_port *uport, int ch)
 {
-	geni_write_reg_nolog_earlycon(ch, uport->membase, SE_GENI_TX_FIFOn);
+	geni_write_reg_earlycon(ch, uport->membase, SE_GENI_TX_FIFOn);
 	/*
 	 * Ensure FIFO write clear goes through before
 	 * next iteration.
@@ -361,7 +361,7 @@ static int msm_geni_serial_poll_bit(struct uart_port *uport,
 	}
 
 	while (iter < total_iter) {
-		reg = geni_read_reg_nolog_earlycon(uport->membase, offset);
+		reg = geni_read_reg_earlycon(uport->membase, offset);
 		cond = reg & bit_field;
 		if (cond == set) {
 			met = true;
@@ -381,13 +381,13 @@ static void msm_geni_serial_poll_cancel_tx(struct uart_port *uport)
 	done = msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 						M_CMD_DONE_EN, true);
 	if (!done) {
-		geni_write_reg_nolog_earlycon(M_GENI_CMD_ABORT, uport->membase,
+		geni_write_reg_earlycon(M_GENI_CMD_ABORT, uport->membase,
 					SE_GENI_M_CMD_CTRL_REG);
 		irq_clear |= M_CMD_ABORT_EN;
 		msm_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 							M_CMD_ABORT_EN, true);
 	}
-	geni_write_reg_nolog_earlycon(irq_clear, uport->membase,
+	geni_write_reg_earlycon(irq_clear, uport->membase,
 				SE_GENI_M_IRQ_CLEAR);
 }
 
@@ -396,10 +396,15 @@ static void msm_geni_serial_setup_tx(struct uart_port *uport,
 {
 	u32 m_cmd = 0;
 
-	geni_write_reg_nolog_earlycon(xmit_size, uport->membase,
+	geni_write_reg_earlycon(xmit_size, uport->membase,
 				SE_UART_TX_TRANS_LEN);
 	m_cmd |= (UART_START_TX << M_OPCODE_SHFT);
-	geni_write_reg_nolog_earlycon(m_cmd, uport->membase, SE_GENI_M_CMD0);
+	geni_write_reg_earlycon(m_cmd, uport->membase, SE_GENI_M_CMD0);
+	/*
+	 * Writes to enable the primary sequencer should go through before
+	 * exiting this function.
+	 */
+	mb();
 }
 
 
@@ -419,7 +424,7 @@ __msm_geni_serial_console_write(struct uart_port *uport, const char *s,
 	}
 
 	bytes_to_send += new_line;
-	geni_write_reg_nolog_earlycon(tx_wm, uport->membase,
+	geni_write_reg_earlycon(tx_wm, uport->membase,
 					SE_GENI_TX_WATERMARK_REG);
 	msm_geni_serial_setup_tx(uport, bytes_to_send);
 	i = 0;
@@ -441,7 +446,7 @@ __msm_geni_serial_console_write(struct uart_port *uport, const char *s,
 			chars_to_write = (avail_fifo_bytes >> 1);
 		uart_console_write(uport, (s + i), chars_to_write,
 					msm_geni_serial_wr_char);
-		geni_write_reg_nolog_earlycon(M_TX_FIFO_WATERMARK_EN,
+		geni_write_reg_earlycon(M_TX_FIFO_WATERMARK_EN,
 			uport->membase, SE_GENI_M_IRQ_CLEAR);
 		/* Ensure this goes through before polling for WM IRQ again.*/
 		mb();
@@ -521,8 +526,8 @@ msm_geni_serial_earlycon_setup(struct earlycon_device *dev,
 	 * Make an unconditional cancel on the main sequencer to reset
 	 * it else we could end up in data loss scenarios.
 	 */
-	geni_write_reg_nolog_earlycon(0x21, uport->membase, GENI_SER_M_CLK_CFG);
-	geni_read_reg_nolog_earlycon(uport->membase, GENI_SER_M_CLK_CFG);
+	geni_write_reg_earlycon(0x21, uport->membase, GENI_SER_M_CLK_CFG);
+	geni_read_reg_earlycon(uport->membase, GENI_SER_M_CLK_CFG);
 
 	msm_geni_serial_poll_cancel_tx(uport);
 
@@ -530,21 +535,21 @@ msm_geni_serial_earlycon_setup(struct earlycon_device *dev,
 	geni_se_init_earlycon(uport->membase, (DEF_FIFO_DEPTH_WORDS >> 1),
 					(DEF_FIFO_DEPTH_WORDS - 2));
 	geni_se_select_fifo_mode_earlycon(uport->membase);
-	geni_write_reg_nolog_earlycon(cfg0, uport->membase,
+	geni_write_reg_earlycon(cfg0, uport->membase,
 				SE_GENI_TX_PACKING_CFG0);
-	geni_write_reg_nolog_earlycon(cfg1, uport->membase,
+	geni_write_reg_earlycon(cfg1, uport->membase,
 				SE_GENI_TX_PACKING_CFG1);
-	geni_write_reg_nolog_earlycon(tx_trans_cfg, uport->membase,
+	geni_write_reg_earlycon(tx_trans_cfg, uport->membase,
 				SE_UART_TX_TRANS_CFG);
-	geni_write_reg_nolog_earlycon(tx_parity_cfg, uport->membase,
+	geni_write_reg_earlycon(tx_parity_cfg, uport->membase,
 				SE_UART_TX_PARITY_CFG);
-	geni_write_reg_nolog_earlycon(bits_per_char, uport->membase,
+	geni_write_reg_earlycon(bits_per_char, uport->membase,
 				SE_UART_TX_WORD_LEN);
-	geni_write_reg_nolog_earlycon(stop_bit, uport->membase,
+	geni_write_reg_earlycon(stop_bit, uport->membase,
 				SE_UART_TX_STOP_BIT_LEN);
-	geni_write_reg_nolog_earlycon(s_clk_cfg, uport->membase,
+	geni_write_reg_earlycon(s_clk_cfg, uport->membase,
 				GENI_SER_M_CLK_CFG);
-	geni_read_reg_nolog_earlycon(uport->membase,
+	geni_read_reg_earlycon(uport->membase,
 				GENI_SER_M_CLK_CFG);
 
 	dev->con->write = msm_geni_serial_early_console_write;

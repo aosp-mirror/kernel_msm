@@ -2347,8 +2347,6 @@ static int validate_ranges(const char *mount_dir, struct test_file *file)
 
 		if (fba.start_index >= block_cnt) {
 			if (fba.index_out != fba.start_index) {
-				printf("Paul: %d, %d\n", (int)fba.index_out,
-				       (int)fba.start_index);
 				error = -EINVAL;
 				goto out;
 			}

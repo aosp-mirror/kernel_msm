@@ -252,7 +252,7 @@ struct iommu_ops {
 	size_t (*unmap)(struct iommu_domain *domain, unsigned long iova,
 		     size_t size);
 	size_t (*map_sg)(struct iommu_domain *domain, unsigned long iova,
-                        struct scatterlist *sg, unsigned int nents, int prot);
+			 struct scatterlist *sg, unsigned int nents, int prot);
 	void (*flush_iotlb_all)(struct iommu_domain *domain);
 	void (*iotlb_range_add)(struct iommu_domain *domain,
 				unsigned long iova, size_t size);
@@ -367,8 +367,10 @@ extern size_t iommu_unmap_fast(struct iommu_domain *domain,
 extern size_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 				struct scatterlist *sg, unsigned int nents,
 				int prot);
-extern size_t default_iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
-			   struct scatterlist *sg,unsigned int nents, int prot);
+extern size_t default_iommu_map_sg(struct iommu_domain *domain,
+				   unsigned long iova,
+				   struct scatterlist *sg, unsigned int nents,
+				   int prot);
 extern phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova);
 extern phys_addr_t iommu_iova_to_phys_hard(struct iommu_domain *domain,
 					   dma_addr_t iova);
