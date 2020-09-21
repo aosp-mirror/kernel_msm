@@ -2843,8 +2843,16 @@ static bool bitmap_testbit(unsigned long *map, unsigned long bit)
 
 static void inc_prioritized_task_count(struct rq *rq, struct task_struct *p)
 {
-	bool bitset = bitmap_testbit(per_cpu(prioritized_task_mask, cpu_of(rq)),
-				     p->pid);
+	bool bitset;
+
+	if (is_min_capacity_cpu(cpu_of(rq)))
+		return;
+
+	if (unlikely(p->pid > PID_MAX_DEFAULT))
+		return;
+
+	bitset = bitmap_testbit(per_cpu(prioritized_task_mask, cpu_of(rq)),
+				p->pid);
 
 	if (schedtune_prefer_high_cap(p) && p->prio <= DEFAULT_PRIO) {
 		if (likely(!bitset)) {
@@ -2862,6 +2870,12 @@ static void inc_prioritized_task_count(struct rq *rq, struct task_struct *p)
 
 static void dec_prioritized_task_count(struct rq *rq, struct task_struct *p)
 {
+	if (is_min_capacity_cpu(cpu_of(rq)))
+		return;
+
+	if (unlikely(p->pid > PID_MAX_DEFAULT))
+		return;
+
 	if (bitmap_testbit(per_cpu(prioritized_task_mask, cpu_of(rq)),
 			   p->pid)) {
 		__bitmap_clear(per_cpu(prioritized_task_mask, cpu_of(rq)),
@@ -7324,6 +7338,12 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 				}
 
 				/*
+				 * Skip searching for active CPU for tasks have
+				 * high priority & prefer_high_cap.
+				 */
+				if (prioritized_task)
+					continue;
+				/*
 				 * Case A.2: Target ACTIVE CPU
 				 * Favor CPUs with max spare capacity.
 				 */
@@ -7557,8 +7577,10 @@ static void find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 		: best_idle_cpu;
 
 	if (target_cpu == -1 && most_spare_cap_cpu != -1 &&
-		/* ensure we use active cpu for active migration */
-		!(p->state == TASK_RUNNING && !idle_cpu(most_spare_cap_cpu)))
+	    /* ensure we use active cpu for active migration */
+	    !(p->state == TASK_RUNNING && !idle_cpu(most_spare_cap_cpu)) &&
+		/* do not pick an overutilized most_spare_cap_cpu */
+		!cpu_overutilized(most_spare_cap_cpu))
 		target_cpu = most_spare_cap_cpu;
 
 	if (target_cpu == -1 && isolated_candidate != -1 &&
@@ -8009,9 +8031,16 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 
 	/* Bail out if no candidate was found. */
 	weight = cpumask_weight(candidates);
-	if (!weight)
-		goto unlock;
-
+	if (!weight) {
+		if (schedtune_prefer_high_cap(p))
+			/*
+			 * Now let the search in
+			 * select_task_rq_fair continue.
+			 */
+			goto fail;
+		else
+			goto unlock;
+	}
 	/* If there is only one sensible candidate, select it now. */
 	cpu = cpumask_first(candidates);
 	if (weight == 1 && ((uclamp_latency_sensitive(p) && idle_cpu(cpu)) ||
@@ -8888,7 +8917,8 @@ static inline bool can_migrate_boosted_task(struct task_struct *p,
 	     task_in_related_thread_group(p) &&
 	     (capacity_orig_of(dst_cpu) < capacity_orig_of(src_cpu))) ||
 	    (schedtune_prefer_high_cap(p) && p->prio <= DEFAULT_PRIO &&
-	     is_min_capacity_cpu(dst_cpu)))
+	     !is_min_capacity_cpu(src_cpu) && is_min_capacity_cpu(dst_cpu) &&
+	     per_cpu(prioritized_task_nr, src_cpu <= 1)))
 		return false;
 	return true;
 }

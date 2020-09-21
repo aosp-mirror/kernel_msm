@@ -2217,13 +2217,9 @@ struct usbpd *usbpd_create(struct device *parent)
 	if (!pd)
 		return ERR_PTR(-ENOMEM);
 
-#ifdef CONFIG_DEBUG_FS
 	pd->log = logbuffer_register("usbpd");
-	if (IS_ERR_OR_NULL(pd->log)) {
-		ret = PTR_ERR(pd->log);
-		goto free_pd;
-	}
-#endif
+	if (IS_ERR(pd->log))
+		pd->log = NULL;
 
 	mutex_init(&pd->lock);
 
@@ -2441,10 +2437,8 @@ del_pd:
 #endif
 	device_del(&pd->dev);
 free_buffer:
-#ifdef CONFIG_DEBUG_FS
-	logbuffer_unregister(pd->log);
-free_pd:
-#endif
+	if (pd->log)
+		logbuffer_unregister(pd->log);
 	num_pd_instances--;
 	put_device(&pd->dev);
 	return ERR_PTR(ret);
@@ -2470,8 +2464,9 @@ void usbpd_destroy(struct usbpd *pd)
 	destroy_workqueue(pd->wq);
 #ifdef CONFIG_DEBUG_FS
 	pd_engine_debugfs_exit(pd);
-	logbuffer_unregister(pd->log);
 #endif
+	if (pd->log)
+		logbuffer_unregister(pd->log);
 	num_pd_instances--;
 	device_unregister(&pd->dev);
 }
