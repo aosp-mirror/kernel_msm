@@ -1120,6 +1120,7 @@ static int sm7250_psy_set_property(struct power_supply *psy,
 		if (bms->fcc_votable)
 			vote(bms->fcc_votable, CHARGE_DISABLE_VOTER,
 			     pval->intval, 0);
+		rc = sm7250_charge_disable(bms, pval->intval != 0);
 		break;
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 		(void)sm7250_rerun_aicl(bms);
