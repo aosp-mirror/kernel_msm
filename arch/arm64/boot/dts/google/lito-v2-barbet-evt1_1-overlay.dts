@@ -12,5 +12,5 @@
 	model = "Google Inc. MSM sm7250 v2 Barbet EVT 1.1";
 	compatible = "google,barbet-sm7250", "qcom,sm7250";
 	qcom,msm-id = <400 0x20000>, <440 0x20000>;
-	qcom,board-id = <0x100f05 0>;
+	qcom,board-id = <0x100b05 0>;
 };
