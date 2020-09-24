@@ -2030,7 +2030,7 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 		pgoff_t end_index;
 		loff_t isize;
 		unsigned long nr, ret;
-		ktime_t event_ts = 0;
+		unsigned long event_ts = 0;
 
 		cond_resched();
 find_page:
@@ -2041,7 +2041,7 @@ find_page:
 
 		page = find_get_page(mapping, index);
 		if (!page) {
-			mm_event_start(&event_ts);
+			event_ts = jiffies;
 			if (iocb->ki_flags & IOCB_NOWAIT)
 				goto would_block;
 			page_cache_sync_readahead(mapping,
@@ -2091,7 +2091,7 @@ find_page:
 		}
 page_ok:
 		if (event_ts != 0)
-			mm_event_end(MM_READ_IO, event_ts);
+			mm_event_record(MM_READ_IO, event_ts);
 		/*
 		 * i_size must be checked after we know the page is Uptodate.
 		 *
