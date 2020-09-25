@@ -184,6 +184,124 @@
 			};
 		};
 
+		google,elvss-ranges {
+			/* This is for AOD/HBM mode */
+			google,dsi-elvss-range-off-command = [
+				/* Set ELVSS to default value */
+				39 01 00 00 00 00 03 F0 5A 5A
+				15 01 00 00 00 00 02 B0 06
+				15 01 00 00 00 00 02 B7 91
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-elvss-range-commands-state =
+				"dsi_lp_mode";
+
+			elvss-range@0 {
+				google,dsi-elvss-range-brightness-threshold =
+					<60>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x91 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 91
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@1 {
+				google,dsi-elvss-range-brightness-threshold =
+					<120>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x92 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 92
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@2 {
+				google,dsi-elvss-range-brightness-threshold =
+					<160>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x93 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 93
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@3 {
+				google,dsi-elvss-range-brightness-threshold =
+					<699>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x94 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 94
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@4 {
+				google,dsi-elvss-range-brightness-threshold =
+					<859>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x93 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 93
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@5 {
+				google,dsi-elvss-range-brightness-threshold =
+					<935>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x92 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 92
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@6 {
+				google,dsi-elvss-range-brightness-threshold =
+					<1023>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x91 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 91
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+		};
+
 		google,hbm-ranges {
 			google,dsi-hbm-exit-command = [
 				/* Set Dimming frames to 32 */
