@@ -15,12 +15,14 @@
 &soc {
 	barbet_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <10>;
+		#include "batterydata-qcom-b9-ATL-4620.dtsi"
+		#include "batterydata-qcom-b9-LWN-4620.dtsi"
+		#include "batterydata-qcom-b9-unknown.dtsi"
 		#include "batterydata-qcom-b5-Desay-ATL-3800.dtsi"
 		#include "batterydata-qcom-b5-Desay-COS-3800.dtsi"
 		#include "batterydata-qcom-b5-Desay-ATL-3750.dtsi"
 		#include "batterydata-qcom-b5m-Desay-ATL-3800.dtsi"
 		#include "batterydata-qcom-b5m-Desay-COS-3800.dtsi"
-		#include "batterydata-qcom-b5-unknown.dtsi"
 		#include "batterydata-qcom-s5-SWD-ATL.dtsi"
 		#include "batterydata-qcom-s5-SWD-LSN.dtsi"
 	};
