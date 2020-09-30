@@ -821,6 +821,15 @@ static void log_failure_reason(struct pil_tz_data *d)
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
 	spin_unlock_irqrestore(&d->subsys_desc.ssr_sysfs_lock, flags);
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
+	/*
+	 * Debug only for b/165807182:
+	 * Trigger full ramdump for specific SSR signature
+	 */
+	if (!strcmp(name, "modem")) {
+		if (strnstr(reason, "wal_Bp_Timeout_Assert_handler:77",
+				strlen(reason)))
+			BUG();
+	}
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)
