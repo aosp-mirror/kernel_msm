@@ -117,6 +117,9 @@ HW_OUTx(HWIO_PCIE_SS_BASE_ADDR, PCIE_SS, reg, inst, val)
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+/* Timeout (in milliseconds) for the device to hold wakelock in  */
+#define MNH_SM_WAKEUP_SOURCE_TIMEOUT_PRODUCTION (180000)
+
 enum fw_image_state {
 	FW_IMAGE_NONE = 0,
 	FW_IMAGE_DOWNLOADING,
@@ -2208,16 +2211,12 @@ static int mnh_sm_set_state_locked(int state)
 				 "%s: failed to transition to state %d (%d)\n",
 				 __func__, state, ret);
 
-			if (state == MNH_STATE_ACTIVE) {
-				mnh_sm_dev->powered = false;
-				reinit_completion(
-					&mnh_sm_dev->powered_complete);
-				mnh_sm_poweroff();
-				mnh_sm_enable_ready_irq(false);
-				mnh_sm_dev->state = MNH_STATE_OFF;
-			}
-
-			return ret;
+			/*
+			 * Always goes back to OFF state if a state change
+			 * failed, except when the target state is OFF.
+			 */
+			if (state != MNH_STATE_OFF)
+				return mnh_sm_set_state_locked(MNH_STATE_OFF);
 #if ALLOW_PARTIAL_ACTIVE
 		}
 #endif
@@ -2254,10 +2253,11 @@ int mnh_sm_set_state(int state)
 	prev_state = mnh_sm_dev->state;
 
 	/*
-	 * Before cold boot or resume, hold a wakelock.
+	 * Before cold boot or resume, hold a wakelock with timeout.
 	 */
 	if (state == MNH_STATE_ACTIVE)
-		pm_stay_awake(mnh_sm_dev->dev);
+		pm_wakeup_event(mnh_sm_dev->dev,
+				MNH_SM_WAKEUP_SOURCE_TIMEOUT_PRODUCTION);
 
 	ret = mnh_sm_set_state_locked(state);
 
