@@ -266,6 +266,8 @@
 
 #define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
 #define RT5514_SPI_SWITCH_GPIO	5
+#define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE	(128)
+#define DSP_IDENTIFIER_SIZE			(40)
 
 #define AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE (128)
 #define UNMUTE_TIMEOUT_MS	1000
@@ -304,6 +306,18 @@ struct _payload_st {
 	char data[AMBIENT_COMMON_MAX_PAYLOAD_BUFFER_SIZE];
 };
 
+struct _dsp_fw_ver_st {
+	unsigned short chip_id;
+	unsigned short feature_id;
+	unsigned short version;
+	unsigned short sub_version;
+};
+
+struct _dsp_mem_st {
+	unsigned int iram;
+	unsigned int dram;
+};
+
 struct rt5514_priv {
 	struct rt5514_platform_data pdata;
 	struct snd_soc_codec *codec;
@@ -320,10 +334,12 @@ struct rt5514_priv {
 	int pll_out;
 	int dsp_enabled, dsp_enabled_last, dsp_test, spi_switch;
 	int dsp_adc_enabled, dsp_buffer_channel;
+	int dsp_req, adc_req;
 	u8 *hotword_model_buf, *musdet_model_buf;
 	unsigned int hotword_model_len, musdet_model_len;
 	struct _payload_st payload;
 	bool v_p;
+	int i2c_patch_size;
 	char *fw_name[4];
 	unsigned int fw_addr[4];
 	bool is_streaming;
@@ -336,7 +352,5 @@ struct rt5514_priv {
 };
 
 int rt5514_set_gpio(int gpio, bool output);
-void rt5514_watchdog_handler(void);
-extern struct regmap *rt5514_g_i2c_regmap;
 
 #endif /* __RT5514_H__ */

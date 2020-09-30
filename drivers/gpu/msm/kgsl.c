@@ -369,12 +369,14 @@ kgsl_mem_entry_destroy(struct kref *kref)
 	struct kgsl_mem_entry *entry = container_of(kref,
 						    struct kgsl_mem_entry,
 						    refcount);
-	struct kgsl_device *device =
-				KGSL_MMU_DEVICE(entry->memdesc.pagetable->mmu);
+	struct kgsl_device *device = NULL;
 	unsigned int memtype;
 
 	if (entry == NULL)
 		return;
+
+	if (entry->memdesc.pagetable != NULL)
+		device = KGSL_MMU_DEVICE(entry->memdesc.pagetable->mmu);
 
 	/* pull out the memtype before the flags get cleared */
 	memtype = kgsl_memdesc_usermem_type(&entry->memdesc);

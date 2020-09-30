@@ -72,7 +72,6 @@ enum {
 	RT5514_DSP_CHRE,
 };
 
-#define RT5514_DBG_BUF_ADDR 0x4ff60000
 #define RT5514_DBG_BUF_SIZE 0x100
 #define RT5514_DBG_BUF_CNT  0x1f // (DBG_BUF_SIZE-2*4)/8
 
@@ -91,5 +90,8 @@ typedef struct _dbgBuf_Mem {
 int rt5514_spi_burst_read(unsigned int addr, u8 *rxbuf, size_t len);
 int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len);
 void rt5514_spi_request_switch(u32 mask, bool is_require);
+
+extern void (*rt5514_watchdog_handler_cb)(void);
+extern struct regmap *rt5514_g_i2c_regmap;
 
 #endif /* __RT5514_SPI_H__ */
