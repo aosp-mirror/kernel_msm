@@ -238,6 +238,7 @@ struct batt_drv {
 	bool init_complete;
 	bool resume_complete;
 	bool batt_present;
+	u32 fake_battery_present;
 
 	struct mutex batt_lock;
 	struct mutex chg_lock;
@@ -3814,6 +3815,8 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &debug_force_psy_update_fops);
 		debugfs_create_file("fake_temp", 0600, de,
 				    batt_drv, &debug_fake_temp_fops);
+		debugfs_create_u32("battery_present", 0600, de,
+				    &batt_drv->fake_battery_present);
 
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
@@ -4577,6 +4580,19 @@ static int gbatt_get_property(struct power_supply *psy,
 		err = power_supply_get_property(batt_drv->fg_psy, psp, val);
 		val->intval *= (-1);
 		break;
+	/* Can force the state here */
+	case POWER_SUPPLY_PROP_PRESENT:
+		if (batt_drv->fake_battery_present != -1) {
+			val->intval = batt_drv->fake_battery_present;
+		} else if (batt_drv->fg_psy) {
+			rc = power_supply_get_property(batt_drv->fg_psy,
+						       psp, val);
+			if (rc < 0)
+				val->intval = 0;
+		} else {
+			err = -EINVAL;
+		}
+		break;
 	/* TODO: "charger" will expose this but I'd rather use an API from
 	 * google_bms.h. Right now route it to fg_psy: just make sure that
 	 * fg_psy doesn't look it up in google_battery
@@ -4762,6 +4778,7 @@ static void google_battery_init_work(struct work_struct *work)
 	batt_drv->ssoc_state.buck_enabled = -1;
 	batt_drv->hold_taper_ws = false;
 	batt_drv->fake_temp = 0;
+	batt_drv->fake_battery_present = -1;
 	batt_reset_chg_drv_state(batt_drv);
 
 	mutex_init(&batt_drv->chg_lock);

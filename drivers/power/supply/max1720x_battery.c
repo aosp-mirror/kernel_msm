@@ -490,6 +490,7 @@ struct max1720x_chip {
 	int nb_history_pages;
 	int nb_history_flag_reg;
 
+	int fake_battery;
 	/* for storage interface */
 	struct max1720x_history history_storage;
 
@@ -2084,6 +2085,8 @@ static int max1720x_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PRESENT:
 		if (max17xxx_gauge_type == -1) {
 			val->intval = 0;
+		} else if (chip->fake_battery != -1) {
+			val->intval = chip->fake_battery;
 		} else {
 			err = REGMAP_READ(map, MAX1720X_STATUS, &data);
 			/* BST is 0 when the battery is present */
@@ -3519,6 +3522,21 @@ static ssize_t debug_get_nvram_por(struct file *filp,
 }
 
 BATTERY_DEBUG_ATTRIBUTE(debug_nvram_por_fops, debug_get_nvram_por, NULL);
+
+
+
+static int debug_fake_battery_set(void *data, u64 val)
+{
+	struct max1720x_chip *chip = (struct max1720x_chip *)data;
+
+	chip->fake_battery = (int)val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debug_fake_battery_fops, NULL,
+			debug_fake_battery_set, "%llu\n");
+
+
 #endif
 
 static int init_debugfs(struct max1720x_chip *chip)
@@ -3529,13 +3547,15 @@ static int init_debugfs(struct max1720x_chip *chip)
 	de = debugfs_create_dir("max1720x", 0);
 	if (de) {
 		debugfs_create_file("irq_none_cnt", 0644, de,
-				   chip, &irq_none_cnt_fops);
+				    chip, &irq_none_cnt_fops);
 		debugfs_create_file("nvram_por", 0440, de,
-				   chip, &debug_nvram_por_fops);
+				    chip, &debug_nvram_por_fops);
 		debugfs_create_file("fg_reset", 0400, de,
-				   chip, &debug_fg_reset_fops);
+				    chip, &debug_fg_reset_fops);
 		debugfs_create_file("ce_start", 0400, de,
-				   chip, &debug_ce_start_fops);
+				    chip, &debug_ce_start_fops);
+		debugfs_create_file("fake_battery", 0400, de,
+				    chip, &debug_fake_battery_fops);
 	}
 #endif
 	return 0;
@@ -4479,6 +4499,7 @@ static int max1720x_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	chip->dev = dev;
+	chip->fake_battery = -1;
 	i2c_set_clientdata(client, chip);
 	chip->primary = client;
 	chip->secondary = i2c_new_secondary_device(client, "nvram", 0xb);
