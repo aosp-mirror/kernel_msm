@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -73,7 +73,8 @@
 			<&dai_sec_tdm_rx_0>, <&dai_sec_tdm_tx_0>,
 			<&dai_tert_tdm_rx_0>, <&dai_tert_tdm_tx_0>,
 			<&dai_quat_tdm_rx_0>, <&dai_quat_tdm_tx_0>,
-			<&dai_quin_tdm_rx_0>, <&dai_quin_tdm_tx_0>;
+			<&dai_quin_tdm_rx_0>, <&dai_quin_tdm_tx_0>,
+			<&proxy_rx>, <&proxy_tx>;
 		asoc-cpu-names = "msm-dai-q6-dp.24608",
 			"msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
 			"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
@@ -99,7 +100,8 @@
 			"msm-dai-q6-tdm.36880", "msm-dai-q6-tdm.36881",
 			"msm-dai-q6-tdm.36896", "msm-dai-q6-tdm.36897",
 			"msm-dai-q6-tdm.36912", "msm-dai-q6-tdm.36913",
-			"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929";
+			"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929",
+			"msm-dai-q6-dev.8194", "msm-dai-q6-dev.8195";
 	};
 
 	tasha_snd: sound-tasha {
@@ -140,7 +142,8 @@
 			<&dai_sec_tdm_rx_0>, <&dai_sec_tdm_tx_0>,
 			<&dai_tert_tdm_rx_0>, <&dai_tert_tdm_tx_0>,
 			<&dai_quat_tdm_rx_0>, <&dai_quat_tdm_tx_0>,
-			<&dai_quin_tdm_rx_0>, <&dai_quin_tdm_tx_0>;
+			<&dai_quin_tdm_rx_0>, <&dai_quin_tdm_tx_0>,
+			<&proxy_rx>, <&proxy_tx>;
 		asoc-cpu-names = "msm-dai-q6-mi2s.0", "msm-dai-q6-mi2s.1",
 			"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
 			"msm-dai-q6-mi2s.4",
@@ -165,7 +168,8 @@
 			"msm-dai-q6-tdm.36880", "msm-dai-q6-tdm.36881",
 			"msm-dai-q6-tdm.36896", "msm-dai-q6-tdm.36897",
 			"msm-dai-q6-tdm.36912", "msm-dai-q6-tdm.36913",
-			"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929";
+			"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929",
+			"msm-dai-q6-dev.8194", "msm-dai-q6-dev.8195";
 	};
 
 	int_codec: sound {
@@ -205,7 +209,8 @@
 			<&dai_sec_tdm_rx_0>, <&dai_sec_tdm_tx_0>,
 			<&dai_tert_tdm_rx_0>, <&dai_tert_tdm_tx_0>,
 			<&dai_quat_tdm_rx_0>, <&dai_quat_tdm_tx_0>,
-			<&dai_quin_tdm_rx_0>, <&dai_quin_tdm_tx_0>;
+			<&dai_quin_tdm_rx_0>, <&dai_quin_tdm_tx_0>,
+			<&proxy_rx>, <&proxy_tx>;
 		asoc-cpu-names = "msm-dai-q6-dp.24608",
 			"msm-dai-q6-mi2s.0","msm-dai-q6-mi2s.1",
 			"msm-dai-q6-mi2s.2", "msm-dai-q6-mi2s.3",
@@ -227,7 +232,8 @@
 			"msm-dai-q6-tdm.36880", "msm-dai-q6-tdm.36881",
 			"msm-dai-q6-tdm.36896", "msm-dai-q6-tdm.36897",
 			"msm-dai-q6-tdm.36912", "msm-dai-q6-tdm.36913",
-			"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929";
+			"msm-dai-q6-tdm.36928", "msm-dai-q6-tdm.36929",
+			"msm-dai-q6-dev.8194", "msm-dai-q6-dev.8195";
 	};
 
 	cpe: qcom,msm-cpe-lsm {
