@@ -49,8 +49,9 @@ TRACE_EVENT(mm_event_record,
 
 	TP_printk("%s count=%d avg_lat=%u max_lat=%u",
 					show_mm_event_type(__entry->type),
-					__entry->count, __entry->avg_lat,
-					__entry->max_lat)
+					__entry->count,
+					jiffies_to_usecs(__entry->avg_lat),
+					jiffies_to_usecs(__entry->max_lat))
 );
 
 TRACE_EVENT(mm_event_vmstat_record,

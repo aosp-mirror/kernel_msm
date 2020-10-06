@@ -93,14 +93,9 @@ static void record_stat(void)
 	record_vmstat();
 }
 
-void mm_event_start(ktime_t *time)
+void mm_event_record(enum mm_event_type event, unsigned long s_jiffies)
 {
-	*time = ktime_get();
-}
-
-void mm_event_end(enum mm_event_type event, ktime_t start)
-{
-	s64 elapsed = ktime_us_delta(ktime_get(), start);
+	unsigned long elapsed = jiffies - s_jiffies;
 
 	current->mm_event[event].count++;
 	current->mm_event[event].accm_lat += elapsed;

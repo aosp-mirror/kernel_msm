@@ -1508,7 +1508,7 @@ static enum compact_result compact_zone(struct zone *zone, struct compact_contro
 	unsigned long end_pfn = zone_end_pfn(zone);
 	const int migratetype = gfpflags_to_migratetype(cc->gfp_mask);
 	const bool sync = cc->mode != MIGRATE_ASYNC;
-	ktime_t event_ts;
+	unsigned long event_ts;
 
 	ret = compaction_suitable(zone, cc->order, cc->alloc_flags,
 							cc->classzone_idx);
@@ -1554,7 +1554,7 @@ static enum compact_result compact_zone(struct zone *zone, struct compact_contro
 
 	cc->last_migrated_pfn = 0;
 
-	mm_event_start(&event_ts);
+	event_ts = jiffies;
 	trace_mm_compaction_begin(start_pfn, cc->migrate_pfn,
 				cc->free_pfn, end_pfn, sync);
 
@@ -1640,7 +1640,7 @@ check_drain:
 	}
 
 out:
-	mm_event_end(MM_COMPACTION, event_ts);
+	mm_event_record(MM_COMPACTION, event_ts);
 	/*
 	 * Release free pages and update where the free scanner should restart,
 	 * so we don't leave any returned pages behind in the next attempt.

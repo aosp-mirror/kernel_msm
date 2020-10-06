@@ -1846,9 +1846,8 @@ static ssize_t do_generic_file_read(struct file *filp, loff_t *ppos,
 		pgoff_t end_index;
 		loff_t isize;
 		unsigned long nr, ret;
-		ktime_t event_ts;
+		unsigned long event_ts = 0;
 
-		event_ts.tv64 = 0;
 		cond_resched();
 find_page:
 		if (fatal_signal_pending(current)) {
@@ -1858,7 +1857,7 @@ find_page:
 
 		page = find_get_page(mapping, index);
 		if (!page) {
-			mm_event_start(&event_ts);
+			event_ts = jiffies;
 			page_cache_sync_readahead(mapping,
 					ra, filp,
 					index, last_index - index);
@@ -1900,8 +1899,8 @@ find_page:
 			unlock_page(page);
 		}
 page_ok:
-		if (event_ts.tv64 != 0)
-			mm_event_end(MM_READ_IO, event_ts);
+		if (event_ts != 0)
+			mm_event_record(MM_READ_IO, event_ts);
 		/*
 		 * i_size must be checked after we know the page is Uptodate.
 		 *
