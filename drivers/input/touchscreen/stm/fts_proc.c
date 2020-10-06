@@ -934,16 +934,18 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		pr_info("Message received: size = %d, counter_id = %d, action = %04X\n",
 			mess.msg_size, mess.counter, mess.action);
 		size = MESSAGE_MIN_HEADER_SIZE + 2;	/* +2 error code */
-		if (count < mess.msg_size || p[count - 2] != MESSAGE_END_BYTE) {
+		numberParam = mess.msg_size - MESSAGE_MIN_HEADER_SIZE + 1;
+				/* +1 because put the internal op code */
+		if (count < mess.msg_size ||
+		    p[count - 2] != MESSAGE_END_BYTE ||
+		    numberParam < 0) {
 			pr_err("number of byte received or end byte wrong! msg_size = %d != %zu, last_byte = %02X != %02X ... ERROR %08X\n",
 				mess.msg_size, count, p[count - 1],
 				MESSAGE_END_BYTE, ERROR_OP_NOT_ALLOW);
 			res = ERROR_OP_NOT_ALLOW;
+			numberParam = 0;
 			goto END;
 		} else {
-			numberParam = mess.msg_size - MESSAGE_MIN_HEADER_SIZE +
-				      1;	/* +1 because put the internal
-						 * op code */
 			size = MESSAGE_MIN_HEADER_SIZE + 2;	/* +2 send also
 								 * the first 2
 								 * lsb of the
