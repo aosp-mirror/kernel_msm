@@ -4,7 +4,6 @@ POST_DEFCONFIG_CMDS="check_defconfig && update_debug_config"
 
 function update_debug_config() {
     ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
-         -e CONFIG_DMA_API_DEBUG \
          -e CONFIG_DEBUG_SHIRQ \
          -e CONFIG_DEBUG_KOBJECT \
          -e CONFIG_DEBUG_KOBJECT_RELEASE \
