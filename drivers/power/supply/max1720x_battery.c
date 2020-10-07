@@ -1132,11 +1132,12 @@ static void max1720x_handle_update_nconvgcfg(struct max1720x_chip *chip,
 #define MAX17201_HIST_CYCLE_COUNT_OFFSET	0x4
 #define MAX17201_HIST_TIME_OFFSET		0xf
 
-static int max1720x_get_cycle_count_offset(const struct max1720x_chip *chip)
+static int max1720x_get_cycle_count_offset(struct max1720x_chip *chip)
 {
 	int offset = 0, i, history_count;
 	struct max1720x_history hi;
 
+	mutex_lock(&chip->history_lock);
 	history_count = max1720x_history_read(&hi, chip);
 	for (i = 0; i < history_count; i++) {
 		u16 *entry = &hi.history[i * MAX1720X_HISTORY_PAGE_SIZE];
@@ -1147,6 +1148,7 @@ static int max1720x_get_cycle_count_offset(const struct max1720x_chip *chip)
 			break;
 		}
 	}
+	mutex_unlock(&chip->history_lock);
 
 	dev_dbg(chip->dev, "history_count=%d page_size=%d i=%d offset=%d\n",
 		history_count, MAX1720X_HISTORY_PAGE_SIZE, i, offset);
