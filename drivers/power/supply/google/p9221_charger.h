@@ -270,6 +270,7 @@ struct p9221_charger_platform_data {
 	u32				alignment_scalar;
 	u32				alignment_hysteresis;
 	u32				icl_ramp_delay_ms;
+	u32				power_mitigate_threshold;
 };
 
 struct p9221_charger_data {
@@ -287,6 +288,7 @@ struct p9221_charger_data {
 	struct delayed_work		align_work;
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
+	struct delayed_work		power_mitigation_work;
 	struct work_struct		uevent_work;
 	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
@@ -337,6 +339,10 @@ struct p9221_charger_data {
 	struct delayed_work		dcin_pon_work;
 	bool				is_mfg_google;
 	bool				is_low_power_tx;
+	u32				mitigate_threshold;
+	u32				fod_cnt;
+	bool				trigger_power_mitigation;
+	bool                            wait_for_online;
 };
 
 struct p9221_prop_reg_map_entry {
