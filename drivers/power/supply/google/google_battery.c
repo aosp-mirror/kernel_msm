@@ -127,6 +127,7 @@ struct batt_ssoc_rl_state {
 };
 
 #define SSOC_STATE_BUF_SZ 128
+#define SSOC_DELTA 3
 
 struct batt_ssoc_state {
 	/* output of gauge data filter */
@@ -256,6 +257,7 @@ struct batt_drv {
 	/* props */
 	int soh;
 	int fake_capacity;
+	int batt_health;
 	bool dead_battery;
 	int capacity_level;
 	bool chg_done;
@@ -726,17 +728,30 @@ static int ssoc_work(struct batt_ssoc_state *ssoc_state,
 	return 0;
 }
 
-/* Called on connect and disconnect to adjust the UI curve. Splice at GDF less
- * a fixed delta while UI is at 100% (i.e. in RL) to avoid showing 100% for
- * "too long" after disconnect.
- */
-#define SSOC_DELTA 3
-void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
-		       enum ssoc_uic_type type)
+void ssoc_change_curve_at_gdf(struct batt_ssoc_state *ssoc_state,
+			      qnum_t gdf, qnum_t capacity,
+			      enum ssoc_uic_type type)
 {
 	struct ssoc_uicurve *new_curve;
+
+	new_curve = (type == SSOC_UIC_TYPE_DSG) ? dsg_curve : chg_curve;
+	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
+	ssoc_state->ssoc_curve_type = type;
+
+	/* splice at (->ssoc_gdf,->ssoc_rl) because past spoof */
+	ssoc_uicurve_splice(ssoc_state->ssoc_curve, gdf, capacity);
+}
+
+/*
+ * Called on connect and disconnect to adjust the UI curve. On disconnect
+ * splice at GDF less a fixed delta while UI is at 100% (i.e. in RL) to
+ * avoid showing 100% for "too long" after disconnect.
+ */
+void ssoc_change_curve(struct batt_ssoc_state *ssoc_state, qnum_t delta,
+		       enum ssoc_uic_type type)
+{
+	qnum_t ssoc_level = ssoc_get_capacity(ssoc_state);
 	qnum_t gdf = ssoc_state->ssoc_gdf; /* actual battery level */
-	const qnum_t ssoc_level = ssoc_get_capacity(ssoc_state);
 
 	/* force dsg curve when connect/disconnect with battery at 100% */
 	if (ssoc_level >= SSOC_FULL) {
@@ -745,17 +760,13 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
 		gdf -=  qnum_rconst(ssoc_state->ssoc_delta);
 		if (gdf < rlt - qnum_rconst(ssoc_state->ssoc_delta))
 			gdf = rlt - qnum_rconst(ssoc_state->ssoc_delta);
+
 		type = SSOC_UIC_TYPE_DSG;
+		gdf -=  delta;
 	}
 
-	new_curve = (type == SSOC_UIC_TYPE_DSG) ? dsg_curve : chg_curve;
-	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
-	ssoc_state->ssoc_curve_type = type;
-
-	/* splice at (->ssoc_gdf,->ssoc_rl) because past spoof */
-	ssoc_uicurve_splice(ssoc_state->ssoc_curve,
-			    gdf,
-			    ssoc_get_capacity_raw(ssoc_state));
+	ssoc_change_curve_at_gdf(ssoc_state, gdf,
+				 ssoc_get_capacity_raw(ssoc_state), type);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -765,6 +776,7 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
  * NOTE: batt_rl_update_status() doesn't call this, it flip from DISCHARGE
  * to recharge on its own.
  * NOTE: call holding chg_lock
+ * FIX: BatteryDefenderUI different rules when battery defender is enabled
  * @pre rl_status != BATT_RL_STATUS_NONE
  */
 static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
@@ -923,7 +935,9 @@ static void batt_rl_reset(struct batt_drv *batt_drv)
 	batt_drv->ssoc_state.rl_status = BATT_RL_STATUS_NONE;
 }
 
-/* RL recharge: after SSOC work, restart charging.
+/*
+ * RL recharge: call after SSOC work, restart charging when gdf hit the
+ * recharge threshold.
  * NOTE: call holding chg_lock
  */
 static void batt_rl_update_status(struct batt_drv *batt_drv)
@@ -934,18 +948,18 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 	/* already in _RECHARGE or _NONE, done */
 	if (ssoc_state->rl_status != BATT_RL_STATUS_DISCHARGE)
 		return;
-
+	/* no threashold (why I am here???) */
+	if (!ssoc_state->rl_soc_threshold)
+		return;
 	/* recharge logic work on real soc */
 	soc = ssoc_get_real(ssoc_state);
-	if (ssoc_state->rl_soc_threshold &&
-	    soc <= ssoc_state->rl_soc_threshold) {
+	if (soc > ssoc_state->rl_soc_threshold)
+		return;
 
-		/* change state (will restart charge) on trigger */
-		ssoc_state->rl_status = BATT_RL_STATUS_RECHARGE;
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
-	}
-
+	/* change state (will restart charge) on trigger */
+	ssoc_state->rl_status = BATT_RL_STATUS_RECHARGE;
+	if (batt_drv->psy)
+		power_supply_changed(batt_drv->psy);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -2472,6 +2486,15 @@ static int msc_logic(struct batt_drv *batt_drv)
 	return 0;
 }
 
+/* no ssoc_delta when in overheat */
+static int ssoc_get_delta(struct batt_drv *batt_drv)
+{
+	const bool overheat = batt_drv->batt_health ==
+			      POWER_SUPPLY_HEALTH_OVERHEAT;
+
+	return overheat ? 0 : qnum_rconst(batt_drv->ssoc_state.ssoc_delta);
+}
+
 /* called holding chg_lock */
 static int batt_chg_logic(struct batt_drv *batt_drv)
 {
@@ -2493,7 +2516,9 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 		chg_state->f.vchrg,
 		chg_state->f.icl);
 
+	/* disconnect! */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
+		const qnum_t ssoc_delta = ssoc_get_delta(batt_drv);
 
 		if (batt_drv->ssoc_state.buck_enabled == 0)
 			goto msc_logic_exit;
@@ -2502,8 +2527,10 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 		batt_chg_stats_pub(batt_drv, "disconnect", false, false);
 		batt_res_state_set(&batt_drv->res_state, false);
 
-		/* change curve before changing the state */
-		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
+		/* change curve before changing the state. */
+		ssoc_change_curve(&batt_drv->ssoc_state, ssoc_delta,
+				  SSOC_UIC_TYPE_DSG);
+
 		batt_drv->chg_health.rest_deadline = 0;
 		batt_reset_chg_drv_state(batt_drv);
 		batt_update_cycle_count(batt_drv);
@@ -2525,8 +2552,17 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 
 	/* here when connected to power supply */
 	if (batt_drv->ssoc_state.buck_enabled <= 0) {
+		const qnum_t ssoc_delta = ssoc_get_delta(batt_drv);
 
-		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
+		/*
+		 * FIX: BatteryDefenderUI needs use a different curve because
+		 * bd->bd_voltage_trigger needs now to be 100%. In alternative
+		 * we use the regular charge curve and show that charging stop
+		 * BEFORE reaching 100%. This is similar to what we do if BD
+		 * trigger over bd->bd_voltage_trigger BUT under SSOC=100%
+		 */
+		ssoc_change_curve(&batt_drv->ssoc_state, ssoc_delta,
+				  SSOC_UIC_TYPE_CHG);
 
 		if (batt_drv->res_state.estimate_filter)
 			batt_res_state_set(&batt_drv->res_state, true);
@@ -3035,9 +3071,10 @@ static ssize_t debug_set_ssoc_uicurve(struct file *filp,
 
 	mutex_lock(&batt_drv->chg_lock);
 
+	/* FIX: BatteryDefenderUI doesn't really handle this yet */
 	curve_type = (int)simple_strtoull(buf, NULL, 10);
 	if (curve_type >= -1 && curve_type <= 1)
-		ssoc_change_curve(&batt_drv->ssoc_state, curve_type);
+		ssoc_change_curve(&batt_drv->ssoc_state, 0, curve_type);
 	else
 		ret = -EINVAL;
 
@@ -3814,6 +3851,10 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &debug_fake_temp_fops);
 
 
+		/* defender */
+		debugfs_create_u32("fake_capacity", 0600, de,
+				    &batt_drv->fake_capacity);
+
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
 				    batt_drv, &debug_chg_health_thr_soc_fops);
@@ -4170,23 +4211,39 @@ static void google_battery_work(struct work_struct *work)
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int update_interval = batt_drv->batt_update_interval;
 	const int prev_ssoc = ssoc_get_capacity(ssoc_state);
+	int present, fg_status, batt_temp, ret;
 	bool notify_psy_changed = false;
-	int fg_status, ret, batt_temp;
 
 	pr_debug("battery work item\n");
 
 	__pm_stay_awake(batt_drv->batt_ws);
 
-	fg_status = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS, &ret);
-	if (ret < 0)
+	/* chg_lock protect msc_logic */
+	mutex_lock(&batt_drv->chg_lock);
+
+	present = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
+	if (present && !batt_drv->batt_present) {
+		batt_drv->batt_present = true;
+		notify_psy_changed = true;
+	} else if (!present && batt_drv->batt_present) {
+		batt_drv->batt_present = false;
+
+		/* add debounce? */
+		notify_psy_changed = true;
+		mutex_unlock(&batt_drv->chg_lock);
 		goto reschedule;
+	}
+
+	fg_status = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS, &ret);
+	if (ret < 0) {
+		mutex_unlock(&batt_drv->chg_lock);
+		goto reschedule;
+	}
 
 	if (fg_status != batt_drv->fg_status)
 		notify_psy_changed = true;
 	batt_drv->fg_status = fg_status;
 
-	/* chg_lock protect msc_logic */
-	mutex_lock(&batt_drv->chg_lock);
 	/* batt_lock protect SSOC code etc. */
 	mutex_lock(&batt_drv->batt_lock);
 
@@ -4282,13 +4339,12 @@ static void google_battery_work(struct work_struct *work)
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
 	dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
 
-	if (notify_psy_changed)
-		power_supply_changed(batt_drv->psy);
-
 	if (batt_drv->eeprom_inside)
 		batt_history_data_collect(batt_drv);
 
 reschedule:
+	if (notify_psy_changed)
+		power_supply_changed(batt_drv->psy);
 
 	if (update_interval) {
 		pr_debug("rerun battery work in %d ms\n", update_interval);
@@ -4413,6 +4469,57 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 	return 0;
 }
 
+/* lock batt_drv->batt_lock */
+static int gbatt_get_capacity(struct batt_drv *batt_drv)
+{
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	int capacity;
+
+	if (batt_drv->fake_capacity >= 0 && batt_drv->fake_capacity <= 100)
+		capacity = batt_drv->fake_capacity;
+	else
+		capacity = ssoc_get_capacity(ssoc_state);
+
+	return capacity;
+}
+
+/* splice the curve at point when the SSOC is removed */
+static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
+{
+	/* reset the curve */
+	if (capacity < 0 && batt_drv->fake_capacity >= 0) {
+		struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+		const qnum_t cap = qnum_fromint(batt_drv->fake_capacity);
+		const qnum_t gdf = ssoc_state->ssoc_gdf;
+		enum ssoc_uic_type type;
+
+		if (gdf < qnum_fromint(batt_drv->fake_capacity)) {
+			type = SSOC_UIC_TYPE_DSG;
+		} else {
+			type = SSOC_UIC_TYPE_CHG;
+		}
+
+		pr_info("reset curve at gdf=%d.%d cap=%d.%d type=%d\n",
+			qnum_toint(gdf), qnum_fracdgt(gdf),
+			qnum_toint(cap), qnum_fracdgt(cap),
+			type);
+
+		/* current is the drop point on the discharge curve */
+		ssoc_change_curve_at_gdf(ssoc_state, gdf, cap, type);
+		ssoc_work(ssoc_state, batt_drv->fg_psy);
+		dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
+
+		/* reset capacity */
+		capacity = -EINVAL;
+	} else if (capacity > 0) {
+		/* TODO: convergence to the new capacity */
+
+	}
+
+	batt_drv->fake_capacity = capacity;
+}
+
+
 static int gbatt_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -4451,14 +4558,9 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (batt_drv->fake_capacity >= 0 &&
-				batt_drv->fake_capacity <= 100) {
-			val->intval = batt_drv->fake_capacity;
-		} else {
-			mutex_lock(&batt_drv->batt_lock);
-			val->intval = ssoc_get_capacity(ssoc_state);
-			mutex_unlock(&batt_drv->batt_lock);
-		}
+		mutex_lock(&batt_drv->batt_lock);
+		val->intval = gbatt_get_capacity(batt_drv);
+		mutex_unlock(&batt_drv->batt_lock);
 		break;
 
 	case POWER_SUPPLY_PROP_DEAD_BATTERY:
@@ -4539,11 +4641,17 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	/* health */
 	case POWER_SUPPLY_PROP_HEALTH:
-		if (!batt_drv->fg_psy)
-			return -EINVAL;
-		err = power_supply_get_property(batt_drv->fg_psy, psp, val);
-		if (err == 0)
+		if (batt_drv->batt_health != POWER_SUPPLY_HEALTH_UNKNOWN) {
+			val->intval = batt_drv->batt_health;
+		} else if (!batt_drv->fg_psy) {
+			val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
+		} else {
+			err = power_supply_get_property(batt_drv->fg_psy,
+							psp, val);
+			if (err < 0)
+				val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 			batt_drv->soh = val->intval;
+		}
 		break;
 	/* define this better */
 	case POWER_SUPPLY_PROP_SOH:
@@ -4680,9 +4788,11 @@ static int gbatt_set_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		batt_drv->fake_capacity = val->intval;
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
+		if (val->intval != batt_drv->fake_capacity) {
+			gbatt_set_capacity(batt_drv, val->intval);
+			if (batt_drv->psy)
+				power_supply_changed(batt_drv->psy);
+		}
 		break;
 	/* TODO: compat */
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
@@ -4710,6 +4820,13 @@ static int gbatt_set_property(struct power_supply *psy,
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		if (batt_drv->batt_health != val->intval) {
+			batt_drv->batt_health = val->intval;
+			if (batt_drv->psy)
+				power_supply_changed(batt_drv->psy);
+		}
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -4736,6 +4853,7 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
+	case POWER_SUPPLY_PROP_HEALTH:
 		return 1;
 	default:
 		break;
