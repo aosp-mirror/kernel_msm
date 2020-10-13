@@ -54,6 +54,7 @@ static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
 static struct mutex switch_lock;
 static struct wakeup_source rt5514_spi_ws;
+static struct wakeup_source rt5514_watchdog_ws;
 static u32 spi_switch_mask;
 static int handshake_gpio, handshake_ack_irq;
 struct completion switch_ack;
@@ -976,13 +977,16 @@ static void rt5514_spi_start_work(struct work_struct *work) {
 		container_of(work, struct rt5514_dsp, start_work.work);
 	struct snd_soc_component *component = rt5514_dsp->component;
 
+	__pm_stay_awake(&rt5514_watchdog_ws);
 	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
 			if (rt5514_watchdog_handler_cb)
-			rt5514_watchdog_handler_cb();
+				rt5514_watchdog_handler_cb();
+			__pm_relax(&rt5514_watchdog_ws);
 			return;
 		}
 	}
+	__pm_relax(&rt5514_watchdog_ws);
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 	if (!(rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm) &&
@@ -1406,6 +1410,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	mutex_init(&spi_lock);
 	mutex_init(&switch_lock);
 	wakeup_source_init(&rt5514_spi_ws, "rt5514-spi");
+	wakeup_source_init(&rt5514_watchdog_ws, "rt5514-watchdog");
 
 	ret = devm_snd_soc_register_platform(&spi->dev, &rt5514_spi_platform);
 	if (ret < 0) {
