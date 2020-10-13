@@ -39,6 +39,15 @@
 		google,cv-otv-margin = <15000>;
 		google,chg-cc-tolerance = <20>;
 
+		/* Defender */
+		google,bd-trigger-voltage = <4270000>;
+		google,bd-trigger-temp = <320>;
+		google,bd-resume-soc = <50>;
+		google,bd-resume-time = <3600>;	  /* 1 hour */
+		google,bd-trigger-time = <14400>; /* 4 hours*/
+		google,bd-recharge-voltage = <4250000>;
+		google,bd-resume-temp = <260>;
+
 		/* Taper WA */
 		google,chg-taper-wa;
 		google,chg-vtaper = <4150 4250 4400>;
