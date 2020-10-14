@@ -50,6 +50,9 @@
 #include <linux/debugfs.h>
 #include <linux/pm_qos.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/fastrpc.h>
+
 #define TZ_PIL_PROTECT_MEM_SUBSYS_ID 0x0C
 #define TZ_PIL_CLEAR_PROTECT_MEM_SUBSYS_ID 0x0D
 #define TZ_PIL_AUTH_QDSP6_PROC 1
@@ -458,6 +461,20 @@ static int hlosvmperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 static void fastrpc_pm_awake(int fl_wake_enable, bool *pm_awake_voted);
 static void fastrpc_pm_relax(bool *pm_awake_voted);
 
+static void track_buffer_alloc(int cid, size_t size)
+{
+	long total = atomic_long_add_return(size, &total_dma_bytes);
+
+	trace_fastrpc_dma_stat(cid, size, total);
+}
+
+static void track_buffer_free(int cid, size_t size)
+{
+	long total = atomic_long_sub_return(size, &total_dma_bytes);
+
+	trace_fastrpc_dma_stat(cid, -size, total);
+}
+
 static inline int64_t getnstimediff(struct timespec *start)
 {
 	int64_t ns;
@@ -543,8 +560,7 @@ static void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
 			hyp_assign_phys(buf->phys, buf_page_size(buf->size),
 				srcVM, 2, destVM, destVMperm, 1);
 		}
-
-		atomic_long_sub(buf->size, &total_dma_bytes);
+		track_buffer_free(fl->cid, buf->size);
 		dma_free_attrs(fl->sctx->smmu.dev, buf->size, buf->virt,
 					buf->phys, buf->dma_attr);
 	}
@@ -756,7 +772,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			pr_err("failed to free remote heap allocation\n");
 			return;
 		}
-		atomic_long_sub(map->size, &total_dma_bytes);
+		track_buffer_free(cid, map->size);
 		if (map->phys) {
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
@@ -843,7 +859,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 					len, (unsigned long) map->attr));
 		if (err)
 			goto bail;
-		atomic_long_add(len, &total_dma_bytes);
+		track_buffer_alloc(fl->cid, len);
 		map->phys = (uintptr_t)region_phys;
 		map->size = len;
 		map->va = (uintptr_t)region_vaddr;
@@ -1048,7 +1064,7 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	if (fl->sctx->smmu.cb && fl->cid != SDSP_DOMAIN_ID)
 		buf->phys += ((uint64_t)fl->sctx->smmu.cb << 32);
 
-	atomic_long_add(size, &total_dma_bytes);
+	track_buffer_alloc(fl->cid, size);
 	vmid = fl->apps->channel[fl->cid].vmid;
 	if (vmid) {
 		int srcVM[1] = {VMID_HLOS};
