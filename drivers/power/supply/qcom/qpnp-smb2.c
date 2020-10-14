@@ -1121,7 +1121,10 @@ static int smb2_batt_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_batt_status(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
-		rc = smblib_get_prop_batt_health(chg, val);
+		if (chg->batt_health != POWER_SUPPLY_HEALTH_UNKNOWN)
+			val->intval = chg->batt_health;
+		else
+			rc = smblib_get_prop_batt_health(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		rc = smblib_get_prop_batt_present(chg, val);
@@ -1364,6 +1367,9 @@ static int smb2_batt_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
 		rc = smblib_set_prop_input_current_max(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		chg->batt_health = val->intval;
+		break;
 	default:
 		rc = -EINVAL;
 	}
@@ -1391,6 +1397,7 @@ static int smb2_batt_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+	case POWER_SUPPLY_PROP_HEALTH:
 		return 1;
 	default:
 		break;
@@ -2530,6 +2537,7 @@ static int smb2_probe(struct platform_device *pdev)
 	chg->taper_control_enabled = POWER_SUPPLY_TAPER_CONTROL_MODE_STEPPER;
 	chg->name = "PMI";
 	chg->audio_headset_drp_wait_ms = &__audio_headset_drp_wait_ms;
+	chg->batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 
 	chg->regmap = dev_get_regmap(chg->dev->parent, NULL);
 	if (!chg->regmap) {

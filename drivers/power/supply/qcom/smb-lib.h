@@ -400,6 +400,9 @@ struct smb_charger {
 
 	/* logging */
 	struct logbuffer *log;
+
+	/* defender */
+	int batt_health;
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
