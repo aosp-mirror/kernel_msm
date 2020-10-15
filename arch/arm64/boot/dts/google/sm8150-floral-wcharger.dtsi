@@ -79,4 +79,5 @@
 						  140000 205000>;
 	google,alignment_scalar = <4>;
 	google,alignment_hysteresis = <5000>;
+	google,power_mitigate_threshold = <90>;
 };
