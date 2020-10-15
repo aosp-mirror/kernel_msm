@@ -55,7 +55,7 @@
 
 #define IPA_RNDIS_IPC_LOG_PAGES 50
 
-#ifdef CONFIG_IPA_IPC_LOGGING
+#ifdef CONFIG_ENABLE_IPC_LOGGING
 #define IPA_RNDIS_IPC_LOGGING(buf, fmt, args...) \
 	do { \
 		if (buf) \
@@ -64,7 +64,7 @@
 	} while (0)
 #else
 #define IPA_RNDIS_IPC_LOGGING(buf, fmt, args...)
-#endif /* CONFIG_IPA_IPC_LOGGING */
+#endif /* CONFIG_ENABLE_IPC_LOGGING */
 
 static void *ipa_rndis_logbuf;
 
