@@ -2147,10 +2147,9 @@ static int max1720x_get_property(struct power_supply *psy,
 		val->intval = chip->cap_estimate.delta_vfsoc_sum;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_ESTIMATE:
-		err = batt_ce_full_estimate(&chip->cap_estimate);
-		if (err < 0)
-			return -ENODATA;
-		val->intval = err * 100000;
+		val->intval = batt_ce_full_estimate(&chip->cap_estimate);
+		if (val->intval > 0)
+			val->intval *= 100000;
 		break;
 	case POWER_SUPPLY_PROP_RES_FILTER_COUNT:
 		err = batt_res_registers(chip, true, SEL_RES_FILTER_COUNT,
