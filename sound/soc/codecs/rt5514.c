@@ -1814,18 +1814,18 @@ static int rt5514_dmic_event(struct snd_soc_dapm_widget *w,
 	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
 
 	if (event & SND_SOC_DAPM_PRE_PMU) {
-		usleep_range(85000, 85100);
-
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
+		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
+			RT5514_AD_AD_MUTE, RT5514_AD_AD_MUTE);
 		/* un-mute all dmic path after power up */
 		cancel_delayed_work_sync(&rt5514->unmute_work);
-		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL1,
-			RT5514_AD_AD_MUTE, 0x0);
-		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER0_CTRL2,
-			RT5514_AD_AD_MUTE, 0x0);
-		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL1,
-			RT5514_AD_AD_MUTE, 0x0);
-		regmap_update_bits(rt5514->regmap, RT5514_DOWNFILTER1_CTRL2,
-			RT5514_AD_AD_MUTE, 0x0);
+		schedule_delayed_work(&rt5514->unmute_work,
+			msecs_to_jiffies(UNMUTE_SWITCH_MS));
 	}
 
 	return 0;
@@ -1939,12 +1939,13 @@ static const struct snd_soc_dapm_widget rt5514_dapm_widgets[] = {
 	SND_SOC_DAPM_ADC("Stereo2 ADC MIXR", NULL, SND_SOC_NOPM, 0, 0),
 
 	/* ADC PGA */
-	SND_SOC_DAPM_PGA("Stereo1 ADC MIX", SND_SOC_NOPM, 0, 0, NULL, 0),
-	SND_SOC_DAPM_PGA("Stereo2 ADC MIX", SND_SOC_NOPM, 0, 0, NULL, 0),
+	SND_SOC_DAPM_PGA_E("Stereo1 ADC MIX", SND_SOC_NOPM, 0, 0, NULL, 0,
+		rt5514_dmic_event, SND_SOC_DAPM_PRE_PMU),
+	SND_SOC_DAPM_PGA_E("Stereo2 ADC MIX", SND_SOC_NOPM, 0, 0, NULL, 0,
+		rt5514_dmic_event, SND_SOC_DAPM_PRE_PMU),
 
 	/* Audio Interface */
-	SND_SOC_DAPM_AIF_OUT_E("AIF1TX", "AIF1 Capture", 0, SND_SOC_NOPM, 0, 0,
-		rt5514_dmic_event, SND_SOC_DAPM_PRE_PMU),
+	SND_SOC_DAPM_AIF_OUT("AIF1TX", "AIF1 Capture", 0, SND_SOC_NOPM, 0, 0)
 };
 
 static const struct snd_soc_dapm_route rt5514_dapm_routes[] = {
