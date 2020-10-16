@@ -19,6 +19,7 @@
   * the file system which allow to communicate with the IC from userspace
   */
 
+#include <linux/ctype.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -837,7 +838,9 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 	u32 fileSize = 0;
 	u8 *readData = NULL;
 	u8 *cmd = NULL;	/* worst case needs count bytes */
+	u32 maxNum_cmd = 0;
 	u32 *funcToTest = NULL;
+	u32 maxNum_funcToTest = 0;
 	u64 addr = 0;
 	MutualSenseFrame frameMS;
 	MutualSenseFrame deltas;
@@ -882,29 +885,38 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		goto ERROR;
 	}
 
-	pbuf = kmalloc(count * sizeof(*pbuf), GFP_KERNEL);
+	if (count < 2) {
+		res = ERROR_OP_NOT_ALLOW;
+		goto ERROR;
+	}
+
+	/* alloc one more space to store '\0' at the end
+	 * for "echo -n CMDs" case
+	 */
+	pbuf = kmalloc((count + 1) * sizeof(*pbuf), GFP_KERNEL);
 	if (!pbuf) {
 		res = ERROR_ALLOC;
 		goto ERROR;
 	}
+	pbuf[count] = '\0';
 
-	funcToTest = kmalloc(((count + 1) / 3) * sizeof(*funcToTest),
+
+	maxNum_funcToTest = (count + 1) / 3;
+	funcToTest = kmalloc_array(maxNum_funcToTest, sizeof(*funcToTest),
 			     GFP_KERNEL);
 	if (!funcToTest) {
 		res = ERROR_ALLOC;
 		goto ERROR;
 	}
 
-	/*for(temp = 0; temp<count; temp++){
-	  *      pr_err("p[%d] = %02X\n", temp, p[temp]);
-	  * }*/
 	if (access_ok(VERIFY_READ, buf, count) < OK ||
 	    copy_from_user(pbuf, buf, count) != 0) {
 		res = ERROR_ALLOC;
 		goto END;
 	}
 
-	cmd = (u8 *)kmalloc_array(count, sizeof(u8), GFP_KERNEL);
+	maxNum_cmd = count;
+	cmd = kmalloc_array(maxNum_cmd, sizeof(u8), GFP_KERNEL);
 	if (cmd == NULL) {
 		res = ERROR_ALLOC;
 		pr_err("%s: Impossible allocate memory... ERROR %08X!\n",
@@ -922,16 +934,18 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 		pr_info("Message received: size = %d, counter_id = %d, action = %04X\n",
 			mess.msg_size, mess.counter, mess.action);
 		size = MESSAGE_MIN_HEADER_SIZE + 2;	/* +2 error code */
-		if (count < mess.msg_size || p[count - 2] != MESSAGE_END_BYTE) {
+		numberParam = mess.msg_size - MESSAGE_MIN_HEADER_SIZE + 1;
+				/* +1 because put the internal op code */
+		if (count < mess.msg_size ||
+		    p[count - 2] != MESSAGE_END_BYTE ||
+		    numberParam < 0) {
 			pr_err("number of byte received or end byte wrong! msg_size = %d != %zu, last_byte = %02X != %02X ... ERROR %08X\n",
 				mess.msg_size, count, p[count - 1],
 				MESSAGE_END_BYTE, ERROR_OP_NOT_ALLOW);
 			res = ERROR_OP_NOT_ALLOW;
+			numberParam = 0;
 			goto END;
 		} else {
-			numberParam = mess.msg_size - MESSAGE_MIN_HEADER_SIZE +
-				      1;	/* +1 because put the internal
-						 * op code */
 			size = MESSAGE_MIN_HEADER_SIZE + 2;	/* +2 send also
 								 * the first 2
 								 * lsb of the
@@ -998,44 +1012,75 @@ static ssize_t fts_driver_test_write(struct file *file, const char __user *buf,
 			/* -1 because i need to exclude the cmd[0] */
 		}
 	} else {
-		if (((count + 1) / 3) >= 1) {
-			sscanf(p, "%02X ", &funcToTest[0]);
-			p += 3;
-			cmd[0] = (u8)funcToTest[0];
-			numberParam = 1;
-		} else {
+		u8 result;
+		char *token;
+		char *path_token = NULL;
+		size_t token_len;
+
+		/* newline case at last char */
+		if (p[count - 1] == '\n')
+			p[count - 1] = '\0';
+
+		/* Parse the input string to retrieve 2 hex-digit width
+		 * cmds/args separated by one or more spaces, except for
+		 * the fw/limits file name.
+		 */
+		while (p &&
+			numberParam < min(maxNum_cmd, maxNum_funcToTest)) {
+
+			while (isspace(*p))
+				p++;
+
+			token = strsep(&p, " ");
+
+			if (!token || *token == '\0')
+				break;
+
+			token_len = strlen(token);
+
+			/* break the loop to handle FW/LIMITS path */
+			if (numberParam == 1 &&
+				(funcToTest[0] == CMD_GETFWFILE ||
+				funcToTest[0] == CMD_GETLIMITSFILE)) {
+				path_token = token;
+				break;
+			}
+
+			if (token_len != 2) {
+				pr_err("bad len. len=%zu\n", token_len);
+				res = ERROR_OP_NOT_ALLOW;
+				goto ERROR;
+			}
+
+			if (kstrtou8(token, 16, &result)) {
+				/* Conversion failed due to bad input.
+				 * Discard the entire buffer.
+				 */
+				pr_err("bad input\n");
+				res = ERROR_OP_NOT_ALLOW;
+				goto ERROR;
+			}
+
+			/* found a valid cmd/args */
+			cmd[numberParam] = funcToTest[numberParam] = result;
+			pr_info("functionToTest[%d] = %02X cmd[%d] = %02X\n",
+				numberParam, funcToTest[numberParam],
+				numberParam, cmd[numberParam]);
+			numberParam++;
+		}
+
+		/* FW/LIMITS path */
+		if (path_token && strlen(path_token)) {
+			strlcpy(path, path_token, sizeof(path));
+			numberParam++;
+		}
+
+		if (numberParam == 0) {
+			pr_err("Found invalid cmd/arg\n");
 			res = ERROR_OP_NOT_ALLOW;
 			goto END;
 		}
-
-		pr_info("functionToTest[0] = %02X cmd[0]= %02X\n",
-			 funcToTest[0], cmd[0]);
-		switch (funcToTest[0]) {
-		case CMD_GETFWFILE:
-		case CMD_GETLIMITSFILE:
-			if (count - 2 - 1 > 1) {
-				numberParam = 2;/** the first byte is an hex
-						  * string coded in three byte
-						  * (2 chars for hex and the
-						  * space)
-						  * and -1 for the space at the
-						  * end */
-				sscanf(p, "%100s", path);
-			}
-			break;
-
-		default:
-			for (; numberParam < (count + 1) / 3; numberParam++) {
-				sscanf(p, "%02X ", &funcToTest[numberParam]);
-				p += 3;
-				cmd[numberParam] = (u8)funcToTest[numberParam];
-				pr_info("functionToTest[%d] = %02X cmd[%d]= %02X\n",
-					numberParam, funcToTest[numberParam],
-					numberParam, cmd[numberParam]);
-			}
-		}
 	}
-
 
 	fw.data = NULL;
 	lim.data = NULL;
