@@ -54,5 +54,6 @@
 		google,alignment_scalar = <4>;
 		google,alignment_hysteresis = <5000>;
 		status = "ok";
+		google,power_mitigate_threshold = <90>;
 	};
 };
