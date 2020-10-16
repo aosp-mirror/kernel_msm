@@ -226,6 +226,7 @@ struct p9221_charger_platform_data {
 	int				nb_alignment_freq;
 	int				*alignment_freq;
 	u32				alignment_scalar;
+	u32				power_mitigate_threshold;
 	u32				alignment_hysteresis;
 };
 
@@ -244,6 +245,7 @@ struct p9221_charger_data {
 	struct delayed_work		align_work;
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
+	struct delayed_work		power_mitigation_work;
 	struct work_struct		uevent_work;
 	struct alarm			icl_ramp_alarm;
 	struct timer_list		vrect_timer;
@@ -284,6 +286,10 @@ struct p9221_charger_data {
 	int				alignment_time;
 	u32				current_filtered;
 	u32				current_sample_cnt;
+	u32				mitigate_threshold;
+	u32				fod_cnt;
+	bool				trigger_power_mitigation;
+	bool                            wait_for_online;
 };
 
 struct p9221_prop_reg_map_entry {
