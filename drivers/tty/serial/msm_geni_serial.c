@@ -388,6 +388,8 @@ static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
 						unsigned long arg)
 {
 	int ret = -ENOIOCTLCMD;
+	int usage_count;
+	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
 	switch (cmd) {
 	case TIOCPMGET: {
@@ -401,6 +403,12 @@ static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
 	case TIOCPMACT: {
 		ret = !pm_runtime_status_suspended(uport->dev);
 		break;
+	}
+	case TIOCUCGET: {
+		usage_count = atomic_read(&uport->dev->power.usage_count);
+		IPC_LOG_MSG(port->ipc_log_pwr, "%s :usage_count = %d\n",
+			    __func__, usage_count);
+		copy_to_user((int *)arg, &usage_count, sizeof(usage_count));
 	}
 	default:
 		break;
