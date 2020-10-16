@@ -67,12 +67,14 @@ dtbo-barbet += \
 	lito-v2-barbet-dev-overlay.dtbo \
 	lito-v2-barbet-evt-overlay.dtbo \
 	lito-v2-barbet-evt1_1-overlay.dtbo \
+	lito-v2-barbet-evt1_2-overlay.dtbo \
 	lito-v2-barbet-evt1_9-overlay.dtbo
 
 
 lito-v2-barbet-dev-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-evt1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-evt1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-evt1_9-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
 endif
