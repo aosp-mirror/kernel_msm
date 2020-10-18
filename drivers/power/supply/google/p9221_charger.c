@@ -3064,27 +3064,30 @@ static void p9221_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 
 	/* Proprietary packet */
 	if (irq_src & P9221R5_STAT_PPRCVD) {
-		const size_t maxsz = sizeof(charger->pp_buf) * 3 + 1;
-		char s[maxsz];
-		u8 tmp;
+		u8 buff[sizeof(charger->pp_buf)];
 
 		res = p9221_reg_read_n(charger,
 				       charger->addr_data_recv_buf_start,
-				       charger->pp_buf,
-				       sizeof(charger->pp_buf));
-		if (res)
+				       buff,
+				       sizeof(buff));
+		if (res) {
 			dev_err(&charger->client->dev,
 				"Failed to read PP len: %d\n", res);
+		} else if (buff[0] == FAST_SERIAL_ID_HEADER) {
+			const size_t maxsz = sizeof(charger->pp_buf) * 3 + 1;
+			char s[maxsz];
+			u8 tmp;
 
-		/* We only care about PP which come with 0x4F header */
-		charger->pp_buf_valid = (charger->pp_buf[0] == 0x4F);
+			memcpy(charger->pp_buf, buff, sizeof(charger->pp_buf));
 
-		p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
-			      s, maxsz, false);
-		dev_info(&charger->client->dev, "Received PP: %s\n", s);
+			/* We only care about PP which come with 0x4F header */
+			charger->pp_buf_valid = true;
 
-		if (charger->pp_buf_valid) {
-			/* Check if charging on a Tx phone */
+			p9221_hex_str(charger->pp_buf, sizeof(charger->pp_buf),
+				      s, maxsz, false);
+			dev_info(&charger->client->dev,
+				 "Received PP: %s\n", s);
+
 			tmp = charger->pp_buf[4] & ACCESSORY_TYPE_MASK;
 			charger->is_low_power_tx =
 				(tmp == ACCESSORY_TYPE_LOW_POWER_TX);

@@ -3692,7 +3692,7 @@ static int smb5_probe(struct platform_device *pdev)
 	chg->connector_health = -EINVAL;
 	chg->otg_present = false;
 	chg->main_fcc_max = -EINVAL;
-	chg->moisture_detection_enabled = false;
+	chg->moisture_detection_enabled = true;
 	chg->cc_toggle_enable = true;
 
 	mutex_init(&chg->adc_lock);
