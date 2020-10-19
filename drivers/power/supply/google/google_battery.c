@@ -595,15 +595,22 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 
 /* ------------------------------------------------------------------------- */
 
-/* a statement :-) */
-static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
+static int ssoc_get_real_raw(const struct batt_ssoc_state *ssoc)
 {
-	return qnum_toint(ssoc->ssoc_gdf);
+	return ssoc->ssoc_gdf;
 }
 
+/* a statement :-) */
 static qnum_t ssoc_get_capacity_raw(const struct batt_ssoc_state *ssoc)
 {
 	return ssoc->ssoc_rl;
+}
+
+static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
+{
+	const qnum_t real_raw = ssoc_get_real_raw(ssoc);
+
+	return qnum_toint(real_raw);
 }
 
 #define SOC_ROUND_BASE	0.5
@@ -967,7 +974,7 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 /* msc_logic_health() sync ce_data->ce_health to batt_drv->chg_health */
 static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 {
-	qnum_t soc_raw = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
+	qnum_t soc_raw = ssoc_get_real_raw(&batt_drv->ssoc_state);
 	qnum_t raw_full = ssoc_point_full - qnum_rconst(SOC_ROUND_BASE);
 	time_t estimate = batt_drv->ttf_stats.ttf_fake;
 	int rc;
@@ -1213,10 +1220,10 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 				  int tier_idx, int ibatt_ma, int temp,
 				  time_t elap)
 {
+	const int soc_real = ssoc_get_real(&batt_drv->ssoc_state);
 	const int msc_state = batt_drv->msc_state;
 	struct gbms_ce_tier_stats *tier;
 	int cc;
-	int soc_real = ssoc_get_real(&batt_drv->ssoc_state);
 
 	if (elap == 0)
 		return;
