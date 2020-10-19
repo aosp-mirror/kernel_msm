@@ -83,8 +83,12 @@ static int cs35l41_i2c_probe(struct i2c_client *client,
 			ret);
 		return ret;
 	}
-
-	return cs35l41_probe(cs35l41, pdata);
+	ret = cs35l41_probe(cs35l41, pdata);
+	if ((ret != 0) && (ret != -ENODEV) && (ret != -ENOMEM)) {
+		dev_err(dev, "I2C bus IO error. Try to defer probe\n");
+		ret = -EPROBE_DEFER;
+	}
+	return ret;
 }
 
 static int cs35l41_i2c_remove(struct i2c_client *client)
