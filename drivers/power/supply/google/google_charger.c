@@ -1751,31 +1751,32 @@ static void chg_work(struct work_struct *work)
 		const bool was_triggered = bd_state->triggered;
 
 		/* bd_work() is not running here */
-		rc = bd_update_stats(&chg_drv->bd_state, bat_psy);
+		rc = bd_update_stats(bd_state, bat_psy);
 		if (rc < 0)
 			pr_debug("MSC_DB BD update stats: %d\n", rc);
 
-		/* db_work() only takes care of disconnect */
-		disable_charging = bd_recharge_logic(bd_state,
-						     bd_state->last_voltage);
-		if (disable_charging) {
+		/* thaw SOC, clear overheat */
+		if (!bd_state->triggered && was_triggered) {
+			rc = bd_batt_set_state(chg_drv, false, -1);
+			if (rc < 0)
+				pr_err("MSC_BD cannot reset state (%d)\n", rc);
+		} else if (bd_state->triggered) {
 			const int lock_soc = soc; /* or set to 100 */
 
-			disable_pwrsrc = bd_state->last_voltage >
-					 bd_state->bd_trigger_voltage;
+			/* recharge logic */
+			disable_charging = bd_recharge_logic(bd_state,
+							bd_state->last_voltage);
+			if (disable_charging)
+				disable_pwrsrc = bd_state->last_voltage >
+						 bd_state->bd_trigger_voltage;
 
 			/* overheat and freeze, on trigger and reconnect */
 			if (!was_triggered || chg_drv->stop_charging) {
 				rc = bd_batt_set_state(chg_drv, true, lock_soc);
 				if (rc < 0)
-					pr_err("MSC_BD cannot set overheat (%d)\n", rc);
+					pr_err("MSC_BD cannot set overheat (%d)\n",
+						rc);
 			}
-
-		} else if (was_triggered) {
-			/* thaw SOC, clear overheat */
-			rc = bd_batt_set_state(chg_drv, false, -1);
-			if (rc < 0)
-				pr_err("MSC_BD cannot reset state (%d)\n", rc);
 		}
 	} else if (chg_drv->disable_charging) {
 		/* re-enable TEMP-DEFEND */
