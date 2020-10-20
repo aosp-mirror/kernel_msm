@@ -214,13 +214,14 @@
 		google,usbc-connector = <&usb_con>;
 
 		/* b/170700459 thresholds */
-		google,bd-recharge-voltage = <4250000>;
-		google,bd-resume-temp = <260>;
+		google,bd-resume-abs-temp = <260>;
 		google,bd-resume-soc = <50>;
-		google,bd-resume-time = <3600>;	  /* 1 hour */
+		google,bd-resume-time = <14400>;  /* 4 hours */
+		google,bd-resume-temp = <290>;
 		google,bd-trigger-time = <21600>; /* 6 hours */
 		google,bd-trigger-temp = <320>;
 		google,bd-trigger-voltage = <4270000>;
+		google,bd-recharge-voltage = <4250000>;
 	};
 
 	google_wlc_charger: google,wlc_charger {
