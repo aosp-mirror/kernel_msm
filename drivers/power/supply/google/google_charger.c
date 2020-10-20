@@ -1514,8 +1514,8 @@ static void bd_work(struct work_struct *work)
 
 	mutex_lock(&chg_drv->bd_lock);
 
-	pr_debug("MSC_BD_WORK: triggered=%d dsc_time=%lld\n",
-		bd_state->triggered, bd_state->disconnect_time);
+	pr_debug("MSC_BD_WORK: triggered=%d dsc_time=%lld delta=%lld\n",
+		bd_state->triggered, bd_state->disconnect_time, delta_time);
 
 	/* stop running if battery defender or retail mode are triggered */
 	if (!bd_state->triggered || !bd_state->disconnect_time)
@@ -1557,10 +1557,11 @@ static void bd_work(struct work_struct *work)
 		}
 	}
 
-	pr_debug("MSC_BD_WORK: triggered=%d time=%lld < %lld soc=%d > %d temp_avg=%lld > %d\n",
+	pr_debug("MSC_BD_WORK: triggered=%d time=%lld < %lld soc=%d > %d temp=%d temp_avg=%lld > %d\n",
 		bd_state->triggered,
 		delta_time, bd_state->bd_resume_time,
 		soc, bd_state->bd_resume_soc,
+		bd_state->last_temp,
 		bd_state->temp_sum / bd_state->time_sum,
 		bd_state->bd_resume_abs_temp);
 
@@ -1579,6 +1580,162 @@ bd_done:
 	__pm_relax(chg_drv->bd_ws);
 }
 
+static void chg_stop_bd_work(struct chg_drv *chg_drv)
+{
+	/* stop bd_work() when usb is back */
+	mutex_lock(&chg_drv->bd_lock);
+	if (chg_drv->bd_state.disconnect_time) {
+		chg_drv->bd_state.disconnect_time = 0;
+
+		/* might have never been scheduled */
+		cancel_delayed_work(&chg_drv->bd_work);
+	}
+	mutex_unlock(&chg_drv->bd_lock);
+}
+
+/*
+ * If triggered, clear overheat and thaw soc on disconnect.
+ * NOTE: Do not clear the defender state: will re-evaluate on next connect.
+ * NOTE: bd_batt_set_state() needs to come before the chg disable
+ */
+static int chg_start_bd_work(struct chg_drv *chg_drv)
+{
+	struct bd_data *bd_state = &chg_drv->bd_state;
+	const bool bd_ena = bd_state->bd_resume_soc ||
+			    bd_state->bd_resume_time;
+
+	mutex_lock(&chg_drv->bd_lock);
+
+	if (!bd_state->triggered) {
+		mutex_unlock(&chg_drv->bd_lock);
+		return 0;
+	}
+
+	if (!bd_state->disconnect_time) {
+		int ret;
+
+		ret = bd_batt_set_state(chg_drv, false, -1);
+		if (ret < 0) {
+			pr_err("MSC_BD set_batt_state (%d)\n", ret);
+			mutex_unlock(&chg_drv->bd_lock);
+			return ret;
+		}
+
+		bd_state->disconnect_time = get_boot_sec();
+	}
+
+	if (!bd_ena)
+		return 0;
+
+	mod_delayed_work(system_wq, &chg_drv->bd_work, 0);
+	mutex_unlock(&chg_drv->bd_lock);
+
+	return 0;
+}
+
+static int chg_run_defender(struct chg_drv *chg_drv)
+{
+	int soc, disable_charging = 0, disable_pwrsrc = 0;
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+	struct bd_data *bd_state = &chg_drv->bd_state;
+	int rc, ret;
+
+	/*
+	 * retry for max CHG_DRV_EGAIN_RETRIES * CHG_WORK_ERROR_RETRY_MS on
+	 * -EGAIN (race on wake). Retry is silent until we exceed the
+	 * threshold, ->egain_retries is reset on every wakeup.
+	 * NOTE: -EGAIN after this should be flagged
+	 */
+	ret = chg_work_read_soc(bat_psy, &soc);
+	if (ret == -EAGAIN) {
+		chg_drv->egain_retries += 1;
+		if (chg_drv->egain_retries < CHG_DRV_EAGAIN_RETRIES)
+			return ret;
+	}
+
+	/* update_interval = -1, will reschedule */
+	if (ret < 0)
+		return ret;
+
+	chg_drv->egain_retries = 0;
+
+	mutex_lock(&chg_drv->bd_lock);
+
+	/* DWELL-DEFEND and Retail case */
+	disable_charging = chg_work_is_charging_disabled(chg_drv, soc);
+	if (disable_charging && soc > chg_drv->charge_stop_level)
+		disable_pwrsrc = 1;
+
+	if (disable_charging) {
+		/*
+		 * This mode can be enabled from DWELL-DEFEND when in "idle",
+		 * while TEMP-DEFEND is triggered or from Retail Mode.
+		 * Clear the TEMP-DEFEND status (thaw SOC and clear HEALTH) and
+		 * have usespace to report HEALTH status.
+		 * NOTE: if here, bd_work() was already stopped.
+		 */
+		if (chg_drv->bd_state.triggered) {
+			rc = bd_batt_set_state(chg_drv, false, -1);
+			if (rc < 0)
+				pr_err("MSC_BD resume (%d)\n", rc);
+
+			bd_reset(&chg_drv->bd_state);
+		}
+
+		/* force TEMP-DEFEND off */
+		chg_drv->bd_state.enabled = 0;
+
+	} else if (chg_drv->bd_state.enabled) {
+		const bool was_triggered = bd_state->triggered;
+
+		/* bd_work() is not running here */
+		rc = bd_update_stats(bd_state, bat_psy);
+		if (rc < 0)
+			pr_debug("MSC_DB BD update stats: %d\n", rc);
+
+		/* thaw SOC, clear overheat */
+		if (!bd_state->triggered && was_triggered) {
+			rc = bd_batt_set_state(chg_drv, false, -1);
+			pr_info("MSC_BD resume (%d)\n", rc);
+		} else if (bd_state->triggered) {
+			const int lock_soc = soc; /* or set to 100 */
+
+			/* recharge logic */
+			disable_charging = bd_recharge_logic(bd_state,
+							bd_state->last_voltage);
+			if (disable_charging)
+				disable_pwrsrc = bd_state->last_voltage >
+						 bd_state->bd_trigger_voltage;
+
+			/* overheat and freeze, on trigger and reconnect */
+			if (!was_triggered || chg_drv->stop_charging) {
+				rc = bd_batt_set_state(chg_drv, true, lock_soc);
+
+				pr_info("MSC_BD triggered was=%d stop=%d lock_soc=%d\n",
+					was_triggered, chg_drv->stop_charging,
+					lock_soc);
+			}
+		}
+	} else if (chg_drv->disable_charging) {
+		/*
+		 * chg_drv->disable_charging && !disable_charging
+		 * re-enable TEMP-DEFEND
+		 */
+		bd_reset(&chg_drv->bd_state);
+
+		/* DWELL-DEFEND handles OVERHEAT status */
+	}
+
+	pr_debug("MSC_DB disable charging=%d pwrsrc=%d\n",
+		 disable_charging, disable_pwrsrc);
+
+	/* state in chg_drv->disable_charging, chg_drv->disable_pwrsrc */
+	chg_update_charging_state(chg_drv, disable_charging, disable_pwrsrc);
+	mutex_unlock(&chg_drv->bd_lock);
+
+	return 0;
+}
+
 /* No op on battery not present */
 static void chg_work(struct work_struct *work)
 {
@@ -1589,7 +1746,6 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	union gbms_ce_adapter_details ad = { .v = 0 };
 	union gbms_charger_state chg_state = { .v = 0 };
-	int soc, disable_charging = 0, disable_pwrsrc = 0;
 	int present, usb_online, wlc_online = 0;
 	int update_interval = -1;
 	bool chg_done = false;
@@ -1634,7 +1790,10 @@ static void chg_work(struct work_struct *work)
 		goto rerun_error;
 	} else if (!usb_online && !wlc_online && !present) {
 		const bool stop_charging = chg_drv->stop_charging != 1;
-		struct bd_data *bd_state = &chg_drv->bd_state;
+
+		rc = chg_start_bd_work(chg_drv);
+		if (rc < 0)
+			goto rerun_error;
 
 		if (stop_charging) {
 			pr_info("MSC_CHG no power source, disabling charging\n");
@@ -1650,33 +1809,6 @@ static void chg_work(struct work_struct *work)
 				chg_drv->stop_charging = 1;
 		}
 
-		mutex_lock(&chg_drv->bd_lock);
-		if (bd_state->triggered) {
-			const bool bd_ena = bd_state->bd_resume_soc ||
-					    bd_state->bd_resume_time;
-			/*
-			 * clear overheat and thaw soc on disconnect.
-			 * Do not clear the defender state: will re-evaluate on
-			 * next connect.
-			 */
-			if (!bd_state->disconnect_time) {
-				rc = bd_batt_set_state(chg_drv, false, -1);
-				if (rc < 0) {
-					pr_err("MSC_BD set_batt_state (%d)\n",
-					       rc);
-					mutex_unlock(&chg_drv->bd_lock);
-					goto rerun_error;
-				}
-
-				bd_state->disconnect_time = get_boot_sec();
-			}
-
-			if (bd_ena)
-				mod_delayed_work(system_wq,
-						 &chg_drv->bd_work, 0);
-		}
-		mutex_unlock(&chg_drv->bd_lock);
-
 		/* allow sleep (if disconnected) while draining */
 		if (chg_drv->disable_pwrsrc)
 			__pm_relax(chg_drv->bd_ws);
@@ -1684,129 +1816,52 @@ static void chg_work(struct work_struct *work)
 		goto exit_chg_work;
 	} else if (chg_drv->stop_charging != 0 && present) {
 
-		/* stop bd_work() when usb is back */
-		mutex_lock(&chg_drv->bd_lock);
-		if (chg_drv->bd_state.disconnect_time) {
-			chg_drv->bd_state.disconnect_time = 0;
-
-			/* might have never been scheduled */
-			cancel_delayed_work(&chg_drv->bd_work);
-		}
-		mutex_unlock(&chg_drv->bd_lock);
+		/* Stop BD work after disconnect */
+		chg_stop_bd_work(chg_drv);
 
 		/* will re-enable charging after setting FCC,CC_MAX */
 		if (chg_drv->therm_wlc_override_fcc)
 			(void)chg_therm_update_fcc(chg_drv);
 	}
 
-	/*
-	 * retry for max CHG_DRV_EGAIN_RETRIES * CHG_WORK_ERROR_RETRY_MS on
-	 * -EGAIN (race on wake). Retry is silent until we exceed the
-	 * threshold, ->egain_retries is reset on every wakeup.
-	 * NOTE: -EGAIN after this should be flagged
-	 */
-	rc = chg_work_read_soc(bat_psy, &soc);
-	if (rc == -EAGAIN) {
-		chg_drv->egain_retries += 1;
-		if (chg_drv->egain_retries < CHG_DRV_EAGAIN_RETRIES)
-			goto rerun_error;
-	}
-
+	/* updates chg_drv->disable_pwrsrc and chg_drv->disable_charging */
+	rc = chg_run_defender(chg_drv);
+	if (rc == -EAGAIN)
+		goto rerun_error;
 	if (rc < 0) {
-		/* update_interval = -1, will reschedule */
 		pr_err("MSC_BD cannot get capacity (%d)\n", rc);
 		goto update_charger;
 	}
 
-	chg_drv->egain_retries = 0;
+	/*
+	 * device might fall off the charger when disable_pwrsrc is set.
+	 * update_interval = 0 will reschedule if TEMP-DEFEND is enabled
+	 * NOTE: chg_drv->disable_charging
+	 */
+	if (chg_drv->disable_pwrsrc || chg_drv->disable_charging) {
+		update_interval = 0;
+	} else {
+		/* make sure ->fv_uv and ->cc_max are always correct */
+		chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
 
-	mutex_lock(&chg_drv->bd_lock);
-
-	/* DWELL-DEFEND and Retail case */
-	disable_charging = chg_work_is_charging_disabled(chg_drv, soc);
-	if (disable_charging && soc > chg_drv->charge_stop_level)
-		disable_pwrsrc = 1;
-
-	if (disable_charging) {
-		/*
-		 * This mode can be enabled from DWELL-DEFEND when in "idle",
-		 * while TEMP-DEFEND is triggered or from Retail Mode.
-		 * Clear the TEMP-DEFEND status (thaw SOC and clear HEALTH) and
-		 * have usespace to report HEALTH status.
-		 * NOTE: if here, bd_work() was already stopped.
-		 */
-		if (chg_drv->bd_state.triggered) {
-			rc = bd_batt_set_state(chg_drv, false, -1);
-			if (rc < 0)
-				pr_err("MSC_BD batt reset (%d)\n", rc);
-
-			bd_reset(&chg_drv->bd_state);
-		}
-
-		/* force TEMP-DEFEND off */
-		chg_drv->bd_state.enabled = 0;
-
-	} else if (chg_drv->bd_state.enabled) {
-		struct bd_data *bd_state = &chg_drv->bd_state;
-		const bool was_triggered = bd_state->triggered;
-
-		/* bd_work() is not running here */
-		rc = bd_update_stats(bd_state, bat_psy);
-		if (rc < 0)
-			pr_debug("MSC_DB BD update stats: %d\n", rc);
-
-		/* thaw SOC, clear overheat */
-		if (!bd_state->triggered && was_triggered) {
-			rc = bd_batt_set_state(chg_drv, false, -1);
-			if (rc < 0)
-				pr_err("MSC_BD cannot reset state (%d)\n", rc);
-		} else if (bd_state->triggered) {
-			const int lock_soc = soc; /* or set to 100 */
-
-			/* recharge logic */
-			disable_charging = bd_recharge_logic(bd_state,
-							bd_state->last_voltage);
-			if (disable_charging)
-				disable_pwrsrc = bd_state->last_voltage >
-						 bd_state->bd_trigger_voltage;
-
-			/* overheat and freeze, on trigger and reconnect */
-			if (!was_triggered || chg_drv->stop_charging) {
-				rc = bd_batt_set_state(chg_drv, true, lock_soc);
-				if (rc < 0)
-					pr_err("MSC_BD cannot set overheat (%d)\n",
-						rc);
-			}
-		}
-	} else if (chg_drv->disable_charging) {
-		/* re-enable TEMP-DEFEND */
-		bd_reset(&chg_drv->bd_state);
-
-		/* DWELL-DEFEND handles OVERHEAT status */
+		update_interval = chg_work_roundtrip(chg_drv, &chg_state);
+		if (update_interval >= 0)
+			chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
 	}
-
-	/* state in chg_drv->disable_charging, chg_drv->disable_pwrsrc */
-	chg_update_charging_state(chg_drv, disable_charging, disable_pwrsrc);
-	mutex_unlock(&chg_drv->bd_lock);
-
-	/* make sure ->fv_uv and ->cc_max are always correct */
-	chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
-	update_interval = chg_work_roundtrip(chg_drv, &chg_state);
-	if (update_interval >= 0)
-		chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
 
 	/* update_interval=0 when disconnected or on EOC (check for races)
 	 * update_interval=-1 on an error (from roundtrip or reading soc)
 	 * NOTE: might have cc_max==0 from the roundtrip on JEITA
 	 */
 update_charger:
-	if (!disable_charging && update_interval > 0) {
+	if (!chg_drv->disable_charging && update_interval > 0) {
 
 		/* msc_update_charger_cb will write to charger and reschedule */
 		vote(chg_drv->msc_interval_votable,
 			MSC_CHG_VOTER, true,
 			update_interval);
 
+		/* chg_drv->stop_charging set on disconnect, reset on connect */
 		if (chg_drv->stop_charging != 0) {
 			pr_info("MSC_CHG power source usb=%d wlc=%d, enabling charging\n",
 				usb_online, wlc_online);
@@ -1823,8 +1878,12 @@ update_charger:
 		if (res < 0)
 			pr_err("MSC_CHG cannot update charger (%d)\n", res);
 
+		pr_debug("MSC_CHG charging disabled res=%d rc=%d ui=%d\n",
+			 res, rc, update_interval);
+
 		if (res < 0 || rc < 0 || update_interval < 0)
 			goto rerun_error;
+
 	}
 
 	/* tied to the charger: could tie to battery @ 100% instead */
@@ -1841,13 +1900,20 @@ update_charger:
 	}
 
 	/* WAR: battery overcharge on a weak adapter */
-	if (chg_drv->chg_term.enable && chg_done && (soc == 100))
-		chg_eval_chg_termination(&chg_drv->chg_term);
+	if (chg_drv->chg_term.enable && chg_done) {
+		int soc;
+
+		rc = chg_work_read_soc(bat_psy, &soc);
+		if (rc == 0 && soc == 100)
+			chg_eval_chg_termination(&chg_drv->chg_term);
+	}
 
 	/* BD needs to keep checking the temperature after EOC */
 	if (chg_drv->bd_state.enabled) {
 		unsigned long jif = msecs_to_jiffies(CHG_WORK_BD_TRIGGERED_MS);
 
+		pr_debug("MSC_BD reschedule in %d ms\n",
+			 CHG_WORK_BD_TRIGGERED_MS);
 		schedule_delayed_work(&chg_drv->chg_work, jif);
 	}
 
@@ -1894,7 +1960,7 @@ exit_chg_work:
 	__pm_relax(chg_drv->chg_ws);
 }
 
-// ----------------------------------------------------------------------------
+/* ------------------------------------------------------------------------- */
 
 static int chg_parse_pdos(struct chg_drv *chg_drv)
 {
