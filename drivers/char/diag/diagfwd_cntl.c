@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -724,6 +724,7 @@ int diag_add_diag_id_to_list(uint8_t diag_id, char *process_name,
 	uint8_t pd_val, uint8_t peripheral)
 {
 	struct diag_id_tbl_t *new_item = NULL;
+	int process_len = 0;
 
 	if (!process_name || diag_id == 0)
 		return -EINVAL;
@@ -732,7 +733,8 @@ int diag_add_diag_id_to_list(uint8_t diag_id, char *process_name,
 	if (!new_item)
 		return -ENOMEM;
 	kmemleak_not_leak(new_item);
-	new_item->process_name = kzalloc(strlen(process_name) + 1, GFP_KERNEL);
+	process_len = strlen(process_name);
+	new_item->process_name = kzalloc(process_len + 1, GFP_KERNEL);
 	if (!new_item->process_name) {
 		kfree(new_item);
 		new_item = NULL;
@@ -742,7 +744,7 @@ int diag_add_diag_id_to_list(uint8_t diag_id, char *process_name,
 	new_item->diag_id = diag_id;
 	new_item->pd_val = pd_val;
 	new_item->peripheral = peripheral;
-	strlcpy(new_item->process_name, process_name, strlen(process_name) + 1);
+	strlcpy(new_item->process_name, process_name, process_len + 1);
 	INIT_LIST_HEAD(&new_item->link);
 	mutex_lock(&driver->diag_id_mutex);
 	list_add_tail(&new_item->link, &driver->diag_id_list);
@@ -838,7 +840,7 @@ static void process_diagid(uint8_t *buf, uint32_t len,
 	ctrl_pkt.pkt_id = DIAG_CTRL_MSG_DIAGID;
 	ctrl_pkt.version = 1;
 	strlcpy((char *)&ctrl_pkt.process_name, process_name,
-		strlen(process_name) + 1);
+		sizeof(ctrl_pkt.process_name));
 	ctrl_pkt.len = sizeof(ctrl_pkt.diag_id) + sizeof(ctrl_pkt.version) +
 			strlen(process_name) + 1;
 	err = diagfwd_write(peripheral, TYPE_CNTL, &ctrl_pkt, ctrl_pkt.len +

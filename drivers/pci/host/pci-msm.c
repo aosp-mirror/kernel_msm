@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -5519,7 +5519,7 @@ static void msm_pcie_config_link_pm_rc(struct msm_pcie_dev_t *dev,
 {
 	bool child_l0s_enable = 0, child_l1_enable = 0, child_l1ss_enable = 0;
 
-	if (!pdev->subordinate || !(&pdev->subordinate->devices)) {
+	if (!pdev->subordinate || list_empty(&pdev->subordinate->devices)) {
 		PCIE_DBG(dev,
 			"PCIe: RC%d: no device connected to root complex\n",
 			dev->rc_idx);
