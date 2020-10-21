@@ -1560,9 +1560,9 @@ int of_register_mhi_controller(struct mhi_controller *mhi_cntrl)
 	INIT_WORK(&mhi_cntrl->st_worker, mhi_pm_st_worker);
 	init_waitqueue_head(&mhi_cntrl->state_event);
 
-	mhi_cntrl->special_wq = alloc_ordered_workqueue("mhi_special_w",
+	mhi_cntrl->wq = alloc_ordered_workqueue("mhi_w",
 						WQ_MEM_RECLAIM | WQ_HIGHPRI);
-	if (!mhi_cntrl->special_wq)
+	if (!mhi_cntrl->wq)
 		goto error_alloc_cmd;
 
 	INIT_WORK(&mhi_cntrl->special_work, mhi_special_purpose_work);
@@ -1688,7 +1688,7 @@ error_add_dev:
 
 error_alloc_dev:
 	kfree(mhi_cntrl->mhi_cmd);
-	destroy_workqueue(mhi_cntrl->special_wq);
+	destroy_workqueue(mhi_cntrl->wq);
 
 error_alloc_cmd:
 	vfree(mhi_cntrl->mhi_chan);
@@ -1760,7 +1760,7 @@ int mhi_prepare_for_power_up(struct mhi_controller *mhi_cntrl)
 	 * allocate rddm table if specified, this table is for debug purpose
 	 * so we'll ignore erros
 	 */
-	if (mhi_cntrl->rddm_size) {
+	if (mhi_cntrl->rddm_supported && mhi_cntrl->rddm_size) {
 		mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->rddm_image,
 				     mhi_cntrl->rddm_size);
 
@@ -1773,6 +1773,13 @@ int mhi_prepare_for_power_up(struct mhi_controller *mhi_cntrl)
 					   &bhie_off);
 			if (ret) {
 				MHI_CNTRL_ERR("Error getting bhie offset\n");
+				goto bhie_error;
+			}
+
+			if (bhie_off >= mhi_cntrl->len) {
+				MHI_ERR("Invalid BHIE=0x%x  len=0x%x\n",
+					bhie_off, mhi_cntrl->len);
+				ret = -EINVAL;
 				goto bhie_error;
 			}
 
@@ -1940,7 +1947,8 @@ static int mhi_driver_remove(struct device *dev)
 		MHI_CH_STATE_DISABLED,
 		MHI_CH_STATE_DISABLED
 	};
-	int dir;
+	int dir, ret;
+	bool interrupted = false;
 
 	/* control device has no work to do */
 	if (mhi_dev->dev_type == MHI_CONTROLLER_TYPE)
@@ -1948,11 +1956,11 @@ static int mhi_driver_remove(struct device *dev)
 
 	MHI_LOG("Removing device for chan:%s\n", mhi_dev->chan_name);
 
-	/* reset both channels */
+	/* move both channels to suspended state and disallow processing */
 	for (dir = 0; dir < 2; dir++) {
 		mhi_chan = dir ? mhi_dev->ul_chan : mhi_dev->dl_chan;
 
-		if (!mhi_chan)
+		if (!mhi_chan || mhi_chan->offload_ch)
 			continue;
 
 		/* wake all threads waiting for completion */
@@ -1961,15 +1969,45 @@ static int mhi_driver_remove(struct device *dev)
 		complete_all(&mhi_chan->completion);
 		write_unlock_irq(&mhi_chan->lock);
 
-		/* move channel state to disable, no more processing */
 		mutex_lock(&mhi_chan->mutex);
 		write_lock_irq(&mhi_chan->lock);
+		if (mhi_chan->ch_state != MHI_CH_STATE_DISABLED) {
+			ch_state[dir] = mhi_chan->ch_state;
+			mhi_chan->ch_state = MHI_CH_STATE_SUSPENDED;
+		}
+		write_unlock_irq(&mhi_chan->lock);
+		mutex_unlock(&mhi_chan->mutex);
+	}
+
+	/* wait for each channel to close and reset both channels */
+	for (dir = 0; dir < 2; dir++) {
+		mhi_chan = dir ? mhi_dev->ul_chan : mhi_dev->dl_chan;
+
+		if (!mhi_chan || mhi_chan->offload_ch)
+			continue;
+
+		/* unbind request from userspace, wait for channel reset */
+		if (!(mhi_cntrl->power_down ||
+		    MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state)) &&
+		    ch_state[dir] != MHI_CH_STATE_DISABLED && !interrupted) {
+			MHI_ERR("Channel %s busy, wait for it to be reset\n",
+				mhi_dev->chan_name);
+			ret = wait_event_interruptible(mhi_cntrl->state_event,
+				mhi_chan->ch_state == MHI_CH_STATE_DISABLED ||
+				MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state));
+			if (unlikely(ret))
+				interrupted = true;
+		}
+
+		/* update channel state as an error can exit above wait */
+		mutex_lock(&mhi_chan->mutex);
+
+		write_lock_irq(&mhi_chan->lock);
 		ch_state[dir] = mhi_chan->ch_state;
-		mhi_chan->ch_state = MHI_CH_STATE_SUSPENDED;
 		write_unlock_irq(&mhi_chan->lock);
 
-		/* reset the channel */
-		if (!mhi_chan->offload_ch)
+		/* reset channel if it was left enabled */
+		if (ch_state[dir] != MHI_CH_STATE_DISABLED)
 			mhi_reset_chan(mhi_cntrl, mhi_chan);
 
 		mutex_unlock(&mhi_chan->mutex);
@@ -1987,7 +2025,7 @@ static int mhi_driver_remove(struct device *dev)
 
 		mutex_lock(&mhi_chan->mutex);
 
-		if (ch_state[dir] == MHI_CH_STATE_ENABLED &&
+		if (ch_state[dir] != MHI_CH_STATE_DISABLED &&
 		    !mhi_chan->offload_ch)
 			mhi_deinit_chan_ctxt(mhi_cntrl, mhi_chan);
 

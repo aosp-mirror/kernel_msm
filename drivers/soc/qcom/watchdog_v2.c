@@ -463,7 +463,7 @@ static void swap_irq_info_fn(void *a, void *b, int size)
 static struct irq_info *search(struct irq_info *key, struct irq_info *base,
 			       size_t num, compare_t cmp)
 {
-	struct irq_info *pivot;
+	struct irq_info *pivot = NULL;
 	int result;
 
 	while (num > 0) {
@@ -493,24 +493,24 @@ static void print_irq_stat(struct msm_watchdog_data *wdog_dd)
 	struct irq_info *info;
 
 
-	pr_info("(virq:irq_count)- ");
+	pr_debug("(virq:irq_count)-\n");
 	for (index = 0; index < NR_TOP_HITTERS; index++) {
 		info = &wdog_dd->irq_counts[index];
-		pr_cont("%u:%u ", info->irq, info->total_count);
+		pr_debug("%u:%u\n", info->irq, info->total_count);
 	}
-	pr_cont("\n");
+	pr_debug("\n");
 
-	pr_info("(cpu:irq_count)- ");
+	pr_debug("(cpu:irq_count)-\n");
 	for_each_possible_cpu(cpu)
-		pr_cont("%u:%u ", cpu, wdog_dd->tot_irq_count[cpu]);
-	pr_cont("\n");
+		pr_debug("%u:%u\n", cpu, wdog_dd->tot_irq_count[cpu]);
+	pr_debug("\n");
 
-	pr_info("(ipi:irq_count)- ");
+	pr_debug("(ipi:irq_count)-\n");
 	for (index = 0; index < NR_IPI; index++) {
 		info = &wdog_dd->ipi_counts[index];
-		pr_cont("%u:%u ", info->irq, info->total_count);
+		pr_debug("%u:%u\n", info->irq, info->total_count);
 	}
-	pr_cont("\n");
+	pr_debug("\n");
 }
 
 static void compute_irq_stat(struct work_struct *work)
@@ -568,7 +568,7 @@ static void compute_irq_stat(struct work_struct *work)
 			     arr_size, cmp_irq_info_fn);
 		pr_debug("*pos:%u key:%u\n",
 				pos->total_count, key.total_count);
-		if (pos->total_count >= key.total_count) {
+		if (pos && (pos->total_count >= key.total_count)) {
 			if (pos < start)
 				pos++;
 			else
@@ -803,7 +803,7 @@ static void minidump_reg_init_log_buf(void)
 	md_entry.phys_addr = log_buf_paddr;
 	md_entry.size = *log_buf_size;
 	md_entry.id = MINIDUMP_DEFAULT_ID;
-	if (msm_minidump_add_region(&md_entry))
+	if (msm_minidump_add_region(&md_entry) < 0)
 		pr_err("Failed to add init_log_buf in Minidump\n");
 }
 
@@ -1049,7 +1049,7 @@ static int msm_watchdog_probe(struct platform_device *pdev)
 	md_entry.phys_addr = virt_to_phys(wdog_dd);
 	md_entry.size = sizeof(*wdog_dd);
 	md_entry.id = MINIDUMP_DEFAULT_ID;
-	if (msm_minidump_add_region(&md_entry))
+	if (msm_minidump_add_region(&md_entry) < 0)
 		pr_info("Failed to add Watchdog data in Minidump\n");
 
 	return 0;

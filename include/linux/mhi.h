@@ -27,6 +27,7 @@ struct mhi_sfr_info;
  * @MHI_CB_EE_MISSION_MODE: MHI device entered Mission Mode ee
  * @MHI_CB_SYS_ERROR: MHI device enter error state (may recover)
  * @MHI_CB_FATAL_ERROR: MHI device entered fatal error
+ * @MHI_CB_BOOTUP_TIMEOUT: MHI device did not get to a bootup state in time
  */
 enum MHI_CB {
 	MHI_CB_IDLE,
@@ -39,6 +40,7 @@ enum MHI_CB {
 	MHI_CB_SYS_ERROR,
 	MHI_CB_FATAL_ERROR,
 	MHI_CB_FW_FALLBACK_IMG,
+	MHI_CB_BOOTUP_TIMEOUT,
 };
 
 /**
@@ -290,6 +292,7 @@ struct mhi_controller {
 
 	/* mhi host manages downloading entire fbc images */
 	bool fbc_download;
+	bool rddm_supported;
 	size_t rddm_size;
 	size_t sbl_size;
 	size_t seg_len;
@@ -354,7 +357,7 @@ struct mhi_controller {
 	/* worker for different state transitions */
 	struct work_struct st_worker;
 	struct work_struct special_work;
-	struct workqueue_struct *special_wq;
+	struct workqueue_struct *wq;
 
 	wait_queue_head_t state_event;
 
@@ -613,6 +616,7 @@ int mhi_device_get_sync(struct mhi_device *mhi_dev, int vote);
  * mhi_device_get_sync_atomic - Asserts device_wait and moves device to M0
  * @mhi_dev: Device associated with the channels
  * @timeout_us: timeout, in micro-seconds
+ * @in_panic: If requested while kernel is in panic state and no ISRs expected
  *
  * The device_wake is asserted to keep device in M0 or bring it to M0.
  * If device is not in M0 state, then this function will wait for device to
@@ -624,6 +628,8 @@ int mhi_device_get_sync(struct mhi_device *mhi_dev, int vote);
  * Clients can ignore that transition after this function returns as the device
  * is expected to immediately  move from M2 to M0 as wake is asserted and
  * wouldn't enter low power state.
+ * If in_panic boolean is set, no ISRs are expected, hence this API will have to
+ * resort to reading the MHI status register and poll on M0 state change.
  *
  * Returns:
  * 0 if operation was successful (however, M0 -> M2 -> M0 is possible later) as
@@ -631,7 +637,9 @@ int mhi_device_get_sync(struct mhi_device *mhi_dev, int vote);
  * -ETIMEDOUT is device faled to move to M0 before @timeout_us elapsed
  * -EIO if the MHI state is one of the ERROR states.
  */
-int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev, int timeout_us);
+int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev,
+			       int timeout_us,
+			       bool in_panic);
 
 /**
  * mhi_device_put - re-enable low power modes
@@ -833,6 +841,12 @@ int mhi_get_remote_time(struct mhi_device *mhi_dev,
 int mhi_get_remote_time_sync(struct mhi_device *mhi_dev,
 			     u64 *t_host,
 			     u64 *t_dev);
+
+/**
+ * mhi_get_exec_env - Return execution environment of the device
+ * @mhi_cntrl: MHI controller
+ */
+enum mhi_ee mhi_get_exec_env(struct mhi_controller *mhi_cntrl);
 
 /**
  * mhi_get_mhi_state - Return MHI state of device

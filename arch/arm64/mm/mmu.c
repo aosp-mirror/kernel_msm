@@ -399,13 +399,26 @@ static phys_addr_t pgd_pgtable_alloc(void)
 	return __pa(ptr);
 }
 
+/**
+ * create_pgtable_mapping - create a pagetable mapping for given
+ * physical start and end addresses.
+ * @start: physical start address.
+ * @end: physical end address.
+ */
 void create_pgtable_mapping(phys_addr_t start, phys_addr_t end)
 {
 	unsigned long virt = (unsigned long)phys_to_virt(start);
 
+	if (virt < VMALLOC_START) {
+		pr_warn("BUG: not creating mapping for %pa at 0x%016lx - outside kernel range\n",
+			&start, virt);
+		return;
+	}
+
 	__create_pgd_mapping(init_mm.pgd, start, virt, end - start,
 				PAGE_KERNEL, NULL, 0);
 }
+EXPORT_SYMBOL_GPL(create_pgtable_mapping);
 
 /*
  * This function can only be used to modify existing table entries,
@@ -1137,6 +1150,7 @@ int kern_addr_valid(unsigned long addr)
 
 	return pfn_valid(pte_pfn(pte));
 }
+EXPORT_SYMBOL_GPL(kern_addr_valid);
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 #if !ARM64_SWAPPER_USES_SECTION_MAPS
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
