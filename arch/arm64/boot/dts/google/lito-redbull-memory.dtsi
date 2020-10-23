@@ -78,6 +78,12 @@
 		reg = <0 0xB8641000 0 0x1000>;
 	};
 
+	ramdumplog_mem: ramdumplog_region@0xb8642000 {
+		compatible = "removed-dma-pool";
+		no-map;
+		reg = <0 0xb8642000 0 0x10000>;
+	};
+
 	kregistry_mem: kregistry_mem@C8000000 {
 		compatible = "removed-dma-pool";
 		no-map;

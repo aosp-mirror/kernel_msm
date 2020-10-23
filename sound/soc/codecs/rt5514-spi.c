@@ -43,6 +43,7 @@
 #define DRV_NAME "rt5514-spi"
 #define COPY_WORK_DELAY_TIME_MS 100
 #define WAKEUP_TIMEOUT	5000
+#define MAX_STREAM_FLAG	3
 
 void (*rt5514_watchdog_handler_cb)(void) = NULL;
 EXPORT_SYMBOL_GPL(rt5514_watchdog_handler_cb);
@@ -53,6 +54,7 @@ static struct spi_device *rt5514_spi;
 static struct mutex spi_lock;
 static struct mutex switch_lock;
 static struct wakeup_source *rt5514_spi_ws;
+static struct wakeup_source *rt5514_watchdog_ws;
 static u32 spi_switch_mask;
 static int handshake_gpio, handshake_ack_irq;
 struct completion switch_ack;
@@ -66,7 +68,7 @@ struct rt5514_dsp {
 	struct mutex dma_lock;
 	struct snd_pcm_substream *substream[3];
 	unsigned int buf_base[3], buf_limit[3], buf_rp[3], buf_rp_addr[3];
-	unsigned int stream_flag[2];
+	unsigned int stream_flag[MAX_STREAM_FLAG];
 	unsigned int hotword_ignore_ms, musdet_ignore_ms;
 	size_t buf_size[3], get_size[2], dma_offset[3];
 };
@@ -951,13 +953,16 @@ static void rt5514_spi_start_work(struct work_struct *work)
 		container_of(work, struct rt5514_dsp, start_work.work);
 	struct snd_soc_component *component = rt5514_dsp->component;
 
+	__pm_stay_awake(rt5514_watchdog_ws);
 	if (!snd_power_wait(component->card->snd_card, SNDRV_CTL_POWER_D0)) {
 		if (rt5514_watchdog_dbg_info(rt5514_dsp)) {
 			if (rt5514_watchdog_handler_cb)
 				rt5514_watchdog_handler_cb();
+			__pm_relax(rt5514_watchdog_ws);
 			return;
 		}
 	}
+	__pm_relax(rt5514_watchdog_ws);
 
 	mutex_lock(&rt5514_dsp->dma_lock);
 	if (!(rt5514_dsp->substream[0] && rt5514_dsp->substream[0]->pcm) &&
@@ -1077,7 +1082,8 @@ static int rt5514_spi_hw_free(struct snd_pcm_substream *substream)
 		break;
 	}
 
-	rt5514_dsp->stream_flag[cpu_dai->id] = RT5514_DSP_NO_STREAM;
+	if (cpu_dai->id < MAX_STREAM_FLAG)
+		rt5514_dsp->stream_flag[cpu_dai->id] = RT5514_DSP_NO_STREAM;
 
 	return snd_pcm_lib_free_vmalloc_buffer(substream);
 }
@@ -1393,6 +1399,12 @@ static int rt5514_spi_probe(struct spi_device *spi)
 		return -ENODEV;
 	}
 
+	rt5514_watchdog_ws = wakeup_source_register(NULL, "rt5514-watchdog");
+	if (!rt5514_watchdog_ws) {
+		dev_err(&spi->dev, "Failed to register wakeup source\n");
+		return -ENODEV;
+	}
+
 	ret = devm_snd_soc_register_component(&spi->dev,
 					      &rt5514_spi_component,
 					      rt5514_spi_dai,
@@ -1400,6 +1412,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 	if (ret < 0) {
 		dev_err(&spi->dev, "Failed to register component.\n");
 		wakeup_source_unregister(rt5514_spi_ws);
+		wakeup_source_unregister(rt5514_watchdog_ws);
 		return ret;
 	}
 
@@ -1454,6 +1467,7 @@ static int rt5514_spi_probe(struct spi_device *spi)
 
 no_handshake:
 	wakeup_source_unregister(rt5514_spi_ws);
+	wakeup_source_unregister(rt5514_watchdog_ws);
 	rt5514_spi_request_switch(SPI_SWITCH_MASK_NO_IRQ, 1);
 	dev_info(&spi->dev, " rt5514-spi init success without handshake\n");
 

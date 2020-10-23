@@ -72,7 +72,7 @@ config QCOM_CPUSS_DUMP
 	  If unsure, say N
 
 config QCOM_RUN_QUEUE_STATS
-       bool "Enable collection and exporting of QTI Run Queue stats to userspace"
+       tristate "Enable collection and exporting of QTI Run Queue stats to userspace"
        help
         This option enables the driver to periodically collecting the statistics
         of kernel run queue information and calculate the load of the system.

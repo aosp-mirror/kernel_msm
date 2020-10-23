@@ -184,6 +184,7 @@ static int of_thermal_get_temp(struct thermal_zone_device *tz,
 			       int *temp)
 {
 	struct __thermal_zone *data = tz->devdata;
+	int ret;
 
 	if (!data->senps || !data->senps->ops->get_temp)
 		return -EINVAL;
@@ -194,7 +195,10 @@ static int of_thermal_get_temp(struct thermal_zone_device *tz,
 		return 0;
 	}
 
-	return data->senps->ops->get_temp(data->senps->sensor_data, temp);
+	ret = data->senps->ops->get_temp(data->senps->sensor_data, temp);
+	*temp = *temp + tz->tzp->offset;
+
+	return ret;
 }
 
 static int of_thermal_set_trips(struct thermal_zone_device *tz,
@@ -536,13 +540,15 @@ static int of_thermal_aggregate_trip_types(struct thermal_zone_device *tz,
 	int min = INT_MIN;
 	int max = INT_MAX;
 	int tt, th, trip;
-	int temp = tz->temperature;
+	int temp;
 	struct thermal_zone_device *zone = NULL;
 	struct __thermal_zone *data = tz->devdata;
 	struct list_head *head;
 	enum thermal_trip_type type = 0;
 
 	head = &data->senps->first_tz;
+	temp = tz->temperature - tz->tzp->offset;
+
 	list_for_each_entry(data, head, list) {
 		zone = data->tzd;
 		if (data->mode == THERMAL_DEVICE_DISABLED)
@@ -654,8 +660,9 @@ static void handle_thermal_trip(struct thermal_zone_device *tz,
 		} else {
 			if (!of_thermal_is_trips_triggered(zone, trip_temp))
 				continue;
-			thermal_zone_device_update_temp(zone,
-				THERMAL_EVENT_UNSPECIFIED, trip_temp);
+			thermal_zone_device_update_temp(
+				zone, THERMAL_EVENT_UNSPECIFIED,
+				trip_temp + zone->tzp->offset);
 		}
 	}
 }

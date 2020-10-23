@@ -96,3 +96,27 @@
 		cirrus,fwname-use-revid;
 	};
 };
+
+&lpi_i2s1_sck_active { /* gpio6 */
+	config {
+		drive-strength = <16>; /*16mA*/
+	};
+};
+
+&lpi_i2s1_ws_active { /* gpio7 */
+	config {
+		drive-strength = <16>; /*16mA*/
+	};
+};
+
+&lpi_i2s1_sd0_active { /* gpio8 */
+	config {
+		drive-strength = <16>; /*16mA*/
+	};
+};
+
+&lpi_i2s1_sd1_active { /* gpio9 */
+	config {
+		drive-strength = <16>; /*16mA*/
+	};
+};
