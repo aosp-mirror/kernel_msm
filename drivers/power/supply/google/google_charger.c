@@ -1778,7 +1778,7 @@ static void chg_work(struct work_struct *work)
 
 	/* ICL=0 on discharge will (might) cause usb online to go to 0 */
 	present = GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT) ||
-		  wlc_online;
+		  GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_PRESENT);
 
 	if (usb_online  < 0 || wlc_online < 0) {
 		pr_err("MSC_CHG error reading usb=%d wlc=%d\n",
