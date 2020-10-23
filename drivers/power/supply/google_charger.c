@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/pm_wakeup.h>
+#include <linux/pmic-voter.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -34,6 +35,10 @@
 
 #define DEFAULT_CHARGE_STOP_LEVEL 100
 #define DEFAULT_CHARGE_START_LEVEL 0
+
+#define MSC_CHG_VOTER			"msc_chg"
+
+#define GBMS_ICL_MIN 100000 // 100 mA
 
 struct chg_profile {
 	u32 update_interval;
@@ -69,6 +74,9 @@ struct taper_wa_struct {
 };
 
 struct chg_drv {
+	struct votable	*usb_icl_votable;
+	struct votable	*dc_suspend_votable;
+
 	struct device *device;
 	struct power_supply *chg_psy;
 	const char *chg_psy_name;
@@ -341,6 +349,51 @@ static int msc_round_fv_uv(struct chg_profile *profile, int vtier, int fv_uv)
 	return result;
 }
 
+/* TODO: now created in qcom code, create in chg_create_votables() */
+static int chg_find_votables(struct chg_drv *chg_drv)
+{
+	if (!chg_drv->usb_icl_votable)
+		chg_drv->usb_icl_votable = find_votable("USB_ICL");
+	if (!chg_drv->dc_suspend_votable)
+		chg_drv->dc_suspend_votable = find_votable("DC_SUSPEND");
+
+	return (!chg_drv->usb_icl_votable || !chg_drv->dc_suspend_votable)
+		? -EINVAL : 0;
+}
+
+/* input suspend votes 0 ICL and call suspend on DC_ICL.
+ * If online is true, set ICL to a minimum threshold to leave the
+ * power supply online.
+ */
+static int chg_vote_input_suspend(struct chg_drv *chg_drv, char *voter,
+				  bool suspend, bool online)
+{
+	int rc;
+	int icl = 0;
+
+	if (chg_find_votables(chg_drv) < 0)
+		return -EINVAL;
+
+	if (online)
+		icl = GBMS_ICL_MIN;
+
+	rc = vote(chg_drv->usb_icl_votable, voter, suspend, icl);
+	if (rc < 0) {
+		dev_err(chg_drv->device, "Couldn't vote to %s USB rc=%d\n",
+			suspend ? "suspend" : "resume", rc);
+		return rc;
+	}
+
+	rc = vote(chg_drv->dc_suspend_votable, voter, suspend, 0);
+	if (rc < 0) {
+		dev_err(chg_drv->device, "Couldn't vote to %s DC rc=%d\n",
+			suspend ? "suspend" : "resume", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 #define CHG_WORK_ERROR_RETRY_MS 1000
 static void chg_work(struct work_struct *work)
 {
@@ -441,9 +494,11 @@ static void chg_work(struct work_struct *work)
 	chg_drv->disable_charging = disable_charging;
 
 	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
-		pr_info("set disable_pwrsrc(%d)", disable_pwrsrc);
-		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_INPUT_SUSPEND,
-			     disable_pwrsrc);
+		pr_info("MSC_CHG disable_pwrsrc %d -> %d",
+			chg_drv->disable_pwrsrc, disable_pwrsrc);
+
+		chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, disable_pwrsrc,
+						true);
 	}
 	chg_drv->disable_pwrsrc = disable_pwrsrc;
 
