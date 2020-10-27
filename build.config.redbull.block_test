@@ -7,7 +7,9 @@ function update_nocfi_config() {
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
     -m BLK_DEV_NULL_BLK \
     -m SCSI_DEBUG \
-    -m BLK_DEV_IO_TRACE \
+    -e FAULT_INJECTION \
+    -e BLK_DEV_NULL_BLK_FAULT_INJECTION \
+    -e BLK_DEV_IO_TRACE \
     -e THINLTO \
     -d CFI \
     -d CFI_PERMISSIVE \
