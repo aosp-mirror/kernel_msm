@@ -182,6 +182,10 @@ struct batt_ssoc_state {
 
 	/* buff */
 	char ssoc_state_cstr[SSOC_STATE_BUF_SZ];
+
+	/* Save/Restore fake capacity */
+	bool save_soc_available;
+	u16 save_soc;
 };
 
 struct gbatt_ccbin_data {
@@ -375,6 +379,7 @@ struct batt_drv {
 static int batt_chg_tier_stats_cstr(char *buff, int size,
 				    const struct gbms_ce_tier_stats *tier_stat,
 				    bool verbose);
+static int gbatt_get_capacity(struct batt_drv *batt_drv);
 
 static inline void batt_update_cycle_count(struct batt_drv *batt_drv)
 {
@@ -4993,6 +4998,29 @@ static void batt_history_data_collect(struct batt_drv *batt_drv)
 	}
 }
 
+static int gbatt_save_capacity(struct batt_ssoc_state *ssoc_state)
+{
+	const int ui_soc = ssoc_get_capacity(ssoc_state);
+	const int gdf_soc = ssoc_get_real(ssoc_state);
+	int ret = 0, save_now;
+
+	if (!ssoc_state->save_soc_available)
+		return ret;
+
+	if (ui_soc == gdf_soc)
+		save_now = 0;
+	else
+		save_now = ui_soc;
+
+	if (ssoc_state->save_soc != (u16)save_now) {
+		ssoc_state->save_soc = (u16)save_now;
+		ret = gbms_storage_write(GBMS_TAG_RSOC, &ssoc_state->save_soc,
+							sizeof(ssoc_state->save_soc));
+	}
+
+	return ret;
+}
+
 /*
  * poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
@@ -5084,6 +5112,10 @@ static void google_battery_work(struct work_struct *work)
 		if (full && !batt_drv->batt_full)
 			bat_log_ttf_estimate("Full", ssoc, batt_drv);
 		batt_drv->batt_full = full;
+
+		ret = gbatt_save_capacity(&batt_drv->ssoc_state);
+		if (ret < 0)
+			pr_warn("write save_soc fail, ret=%d\n", ret);
 	}
 
 	/* TODO: poll other data here if needed */
@@ -5291,6 +5323,31 @@ static int gbatt_get_capacity(struct batt_drv *batt_drv)
 	return capacity;
 }
 
+
+static void gbatt_reset_curve(struct batt_drv *batt_drv, int ssoc_cap)
+{
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	const qnum_t cap = qnum_fromint(ssoc_cap);
+	const qnum_t gdf = ssoc_state->ssoc_gdf;
+	enum ssoc_uic_type type;
+
+	if (gdf < cap) {
+		type = SSOC_UIC_TYPE_DSG;
+	} else {
+		type = SSOC_UIC_TYPE_CHG;
+	}
+
+	pr_info("reset curve at gdf=%d.%d cap=%d.%d type=%d\n",
+		qnum_toint(gdf), qnum_fracdgt(gdf),
+		qnum_toint(cap), qnum_fracdgt(cap),
+		type);
+
+	/* current is the drop point on the discharge curve */
+	ssoc_change_curve_at_gdf(ssoc_state, gdf, cap, type);
+	ssoc_work(ssoc_state, batt_drv->fg_psy);
+	dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
+}
+
 /* splice the curve at point when the SSOC is removed */
 static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 {
@@ -5300,26 +5357,7 @@ static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 	if (batt_drv->batt_health != POWER_SUPPLY_HEALTH_OVERHEAT) {
 		/* just set the value if not in overheat  */
 	} else if (capacity < 0 && batt_drv->fake_capacity >= 0) {
-		struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
-		const qnum_t cap = qnum_fromint(batt_drv->fake_capacity);
-		const qnum_t gdf = ssoc_state->ssoc_gdf;
-		enum ssoc_uic_type type;
-
-		if (gdf < qnum_fromint(batt_drv->fake_capacity)) {
-			type = SSOC_UIC_TYPE_DSG;
-		} else {
-			type = SSOC_UIC_TYPE_CHG;
-		}
-
-		pr_info("reset curve at gdf=%d.%d cap=%d.%d type=%d\n",
-			qnum_toint(gdf), qnum_fracdgt(gdf),
-			qnum_toint(cap), qnum_fracdgt(cap),
-			type);
-
-		/* current is the drop point on the discharge curve */
-		ssoc_change_curve_at_gdf(ssoc_state, gdf, cap, type);
-		ssoc_work(ssoc_state, batt_drv->fg_psy);
-		dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
+		gbatt_reset_curve(batt_drv, batt_drv->fake_capacity);
 	} else if (capacity > 0) {
 		/* TODO: convergence to the new capacity? */
 	}
@@ -5350,6 +5388,36 @@ static int gbatt_set_health(struct batt_drv *batt_drv, int health)
 		pr_err("failed to write fg_psy health\n");
 
 	return 0;
+}
+
+#define RESTORE_SOC_THRESHOLD	5
+static int gbatt_restore_capacity(struct batt_drv *batt_drv)
+{
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	int ret = 0, save_soc, gdf_soc, ori_target;
+
+	ret = gbms_storage_read(GBMS_TAG_RSOC, &ssoc_state->save_soc,
+						sizeof(ssoc_state->save_soc));
+
+	if (ret < 0)
+		return ret;
+
+	if (ssoc_state->save_soc) {
+		save_soc = (int)ssoc_state->save_soc;
+		gdf_soc = qnum_toint(ssoc_state->ssoc_gdf);
+		pr_info("save_soc:%d, gdf:%d", save_soc, gdf_soc);
+
+		if ((save_soc < gdf_soc) ||
+		    (save_soc - gdf_soc) > RESTORE_SOC_THRESHOLD)
+			return ret;
+
+		ori_target = ssoc_state->ssoc_rl_state.rl_track_target;
+		ssoc_state->ssoc_rl_state.rl_track_target = 1;
+		gbatt_reset_curve(batt_drv, save_soc);
+		ssoc_state->ssoc_rl_state.rl_track_target = ori_target;
+	}
+
+	return ret;
 }
 
 static int gbatt_get_property(struct power_supply *psy,
@@ -5821,6 +5889,15 @@ static void google_battery_init_work(struct work_struct *work)
 		goto retry_init_work;
 
 	dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->ssoc_log);
+
+	ret = gbatt_restore_capacity(batt_drv);
+	if (ret == -EPROBE_DEFER) /* wait gbms_storage_init_done */
+		goto retry_init_work;
+
+	if (ret < 0)
+		pr_warn("unable to restore capacity, ret=%d\n", ret);
+	else
+		batt_drv->ssoc_state.save_soc_available = true;
 
 	/* chg_profile will use cycle_count when aacr is enabled */
 	ret = batt_init_chg_profile(batt_drv);
