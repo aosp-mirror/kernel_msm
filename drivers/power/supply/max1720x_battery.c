@@ -402,6 +402,7 @@ enum max17x0x_reg_tags {
 	MAX17X0X_TAG_BCEA,
 	MAX17X0X_TAG_rset,
 	MAX17X0X_TAG_BRES,
+	MAX17X0X_TAG_RSOC,
 };
 
 struct max17x0x_reg {
@@ -633,7 +634,7 @@ static const struct max17x0x_reg max1720x[] = {
 	[MAX17X0X_TAG_SNUM] = { ATOM_INIT_MAP(0xcc, 0xd8, 0xd9, 0xda, 0xd6,
 					      0xdb, 0xdc, 0xdd, 0xde, 0xd1,
 					      0xd0) },
-
+	[MAX17X0X_TAG_RSOC] = { ATOM_INIT_MAP(0xc2) },
 	[MAX17X0X_TAG_HSTY] = { ATOM_INIT_SET(0xe0, 0xe1, 0xe4, 0xea, 0xeb,
 					      0xed, 0xef) },
 	[MAX17X0X_TAG_BCEA] = { ATOM_INIT_SET(MAX1720X_NUSER1D4,
@@ -662,7 +663,7 @@ static const struct max17x0x_reg max1730x[] = {
 	[MAX17X0X_TAG_SNUM] = { ATOM_INIT_MAP(0xce, 0xe6, 0xe7, 0xe8, 0xe9,
 					      0xea, 0xeb, 0xec, 0xed, 0xee,
 					      0xef) },
-
+	[MAX17X0X_TAG_RSOC] = { ATOM_INIT_MAP(0xc2) },
 	[MAX17X0X_TAG_HSTY] = { ATOM_INIT_SET(0xf0, 0xf2, 0xfb, 0xfe, 0xff) },
 	[MAX17X0X_TAG_BCEA] = { ATOM_INIT_SET(MAX1730X_NMANFCTRNAME0,
 					      MAX1730X_NDPLIMIT,
@@ -4332,7 +4333,8 @@ static int max17x0x_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 static int max17x0x_storage_iter(int index, gbms_tag_t *tag, void *ptr)
 {
 	struct max1720x_chip *chip = (struct max1720x_chip *)ptr;
-	static gbms_tag_t keys[] = { GBMS_TAG_SNUM, GBMS_TAG_BCNT };
+	static gbms_tag_t keys[] = { GBMS_TAG_SNUM, GBMS_TAG_BCNT,
+				     GBMS_TAG_RSOC };
 	const int count = ARRAY_SIZE(keys);
 
 	if (index >= 0 && index < count) {
@@ -4438,6 +4440,11 @@ static int max17x0x_storage_read(gbms_tag_t tag, void *buff, size_t size,
 		if (reg && reg->size != size)
 			return -ERANGE;
 	break;
+	case GBMS_TAG_RSOC:
+		reg = max17x0x_find_by_tag(MAX17X0X_TAG_RSOC);
+		if (reg && reg->size != size)
+			return -ERANGE;
+	break;
 	default:
 		reg = NULL;
 		break;
@@ -4463,6 +4470,11 @@ static int max17x0x_storage_write(gbms_tag_t tag, const void *buff, size_t size,
 	switch (tag) {
 	case GBMS_TAG_BCNT:
 		reg = max17x0x_find_by_tag(MAX17X0X_TAG_BCNT);
+		if (reg && reg->size != size)
+			return -ERANGE;
+	break;
+	case GBMS_TAG_RSOC:
+		reg = max17x0x_find_by_tag(MAX17X0X_TAG_RSOC);
 		if (reg && reg->size != size)
 			return -ERANGE;
 	break;

@@ -58,6 +58,7 @@ enum gbms_tags {
 	GBMS_TAG_DINF = 0x44494e46,
 	GBMS_TAG_BGPN = 0x4247504e,
 	GBMS_TAG_CNTB = 0x434e5442,
+	GBMS_TAG_RSOC = 0x52534F43,
 };
 
 /**
