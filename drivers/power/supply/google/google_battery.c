@@ -48,6 +48,7 @@
 #define DEFAULT_BATT_FAKE_CAPACITY		50
 #define DEFAULT_BATT_UPDATE_INTERVAL		30000
 #define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
+#define DEFAULT_BD_RL_SOC_THRESHOLD		90
 #define DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD	550
 
 #define MSC_ERROR_UPDATE_INTERVAL		5000
@@ -155,6 +156,10 @@ struct batt_ssoc_state {
 	/* recharge logic */
 	int rl_soc_threshold;
 	enum batt_rl_status rl_status;
+
+	/* trickle defender */
+	int bd_rl_soc_threshold;
+	int bd_trickle_cnt;
 
 	/* buff */
 	char ssoc_state_cstr[SSOC_STATE_BUF_SZ];
@@ -327,6 +332,7 @@ struct batt_drv {
 	/* Battery pack info for Suez*/
 	char batt_pack_info[GBMS_MINF_LEN];
 	bool pack_info_ready;
+
 };
 
 static int batt_chg_tier_stats_cstr(char *buff, int size,
@@ -940,7 +946,10 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
  */
 static void batt_rl_reset(struct batt_drv *batt_drv)
 {
-	batt_drv->ssoc_state.rl_status = BATT_RL_STATUS_NONE;
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+
+	ssoc_state->rl_status = BATT_RL_STATUS_NONE;
+	ssoc_state->bd_trickle_cnt = 0;
 }
 
 /*
@@ -951,7 +960,7 @@ static void batt_rl_reset(struct batt_drv *batt_drv)
 static void batt_rl_update_status(struct batt_drv *batt_drv)
 {
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
-	int soc;
+	int soc, rl_soc_threshold;
 
 	/* already in _RECHARGE or _NONE, done */
 	if (ssoc_state->rl_status != BATT_RL_STATUS_DISCHARGE)
@@ -961,13 +970,17 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 		return;
 	/* recharge logic work on real soc */
 	soc = ssoc_get_real(ssoc_state);
-	if (soc > ssoc_state->rl_soc_threshold)
+	rl_soc_threshold = (ssoc_state->bd_trickle_cnt > 0) ?
+		ssoc_state->bd_rl_soc_threshold : ssoc_state->rl_soc_threshold;
+	if (soc > rl_soc_threshold)
 		return;
 
 	/* change state (will restart charge) on trigger */
 	ssoc_state->rl_status = BATT_RL_STATUS_RECHARGE;
 	if (batt_drv->psy)
 		power_supply_changed(batt_drv->psy);
+
+	ssoc_state->bd_trickle_cnt++;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -4935,6 +4948,12 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->ssoc_state.rl_soc_threshold =
 				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
+
+	ret = of_property_read_u32(node, "google,bd-recharge-soc-threshold",
+				   &batt_drv->ssoc_state.bd_rl_soc_threshold);
+	if (ret < 0)
+		batt_drv->ssoc_state.bd_rl_soc_threshold =
+				DEFAULT_BD_RL_SOC_THRESHOLD;
 
 	ret = of_property_read_u32(node, "google,ssoc-delta",
 				   &batt_drv->ssoc_state.ssoc_delta);
