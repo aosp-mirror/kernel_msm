@@ -1005,6 +1005,11 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 		goto done;
 	}
 
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+		estimate = -1;
+		goto done;
+	}
+
 	/* debounce the stats until the battery is actually charging */
 	if (batt_drv->ttf_debounce) {
 		estimate = -1;
@@ -1156,6 +1161,9 @@ static void batt_chg_stats_update_tier(const struct batt_drv *const batt_drv,
 {
 	const int msc_state = batt_drv->msc_state;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
+
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT)
+		return;
 
 	/* book to previous state */
 	batt_chg_stats_tier(tier, msc_state, elap);
