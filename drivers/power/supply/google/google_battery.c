@@ -985,7 +985,12 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
-/* msc_logic_health() sync ce_data->ce_health to batt_drv->chg_health */
+/*
+ * msc_logic_health() sync ce_data->ce_health to batt_drv->chg_health
+ * return -EINVAL when the device is not connected to power or when
+ * ttf_soc_estimate() return a negative value.
+ *
+ */
 static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 {
 	qnum_t soc_raw = ssoc_get_real_raw(&batt_drv->ssoc_state);
@@ -1037,6 +1042,13 @@ done:
 
 /* ------------------------------------------------------------------------- */
 
+static void cev_ts_init(struct gbms_ce_tier_stats *stats, int8_t idx)
+{
+	stats->vtier_idx = idx;
+	stats->temp_idx = -1;
+	stats->soc_in = -1;
+}
+
 /* CEV = Charging EVent */
 static void cev_stats_init(struct gbms_charging_event *ce_data,
 			   const struct gbms_chg_profile *profile)
@@ -1054,24 +1066,17 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 	ttf_soc_init(&ce_data->soc_stats);
 	ce_data->last_soc = -1;
 
-	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++) {
-		ce_data->tier_stats[i].vtier_idx = i;
-		ce_data->tier_stats[i].temp_idx = -1;
-		ce_data->tier_stats[i].soc_in = -1;
-	}
+	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++)
+		cev_ts_init(&ce_data->tier_stats[i], i);
 
 	/* batt_chg_health_stats_close() will fix this */
-	ce_data->health_stats.vtier_idx = GBMS_STATS_AC_TI_INVALID;
-	ce_data->health_stats.temp_idx = -1;
-	ce_data->health_stats.soc_in = -1;
+	cev_ts_init(&ce_data->health_stats, GBMS_STATS_AC_TI_INVALID);
 
-	ce_data->full_charge_stats.vtier_idx = GBMS_STATS_AC_TI_FULL_CHARGE;
-	ce_data->full_charge_stats.temp_idx = -1;
-	ce_data->full_charge_stats.soc_in = -1;
+	cev_ts_init(&ce_data->full_charge_stats, GBMS_STATS_AC_TI_FULL_CHARGE);
+	cev_ts_init(&ce_data->high_soc_stats, GBMS_STATS_AC_TI_HIGH_SOC);
+	cev_ts_init(&ce_data->overheat_stats, GBMS_STATS_BD_TI_OVERHEAT_TEMP);
+	cev_ts_init(&ce_data->cc_lvl_stats, GBMS_STATS_BD_TI_CUSTOM_LEVELS);
 
-	ce_data->high_soc_stats.vtier_idx = GBMS_STATS_AC_TI_HIGH_SOC;
-	ce_data->high_soc_stats.temp_idx = -1;
-	ce_data->high_soc_stats.soc_in = -1;
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
@@ -1159,14 +1164,14 @@ static void batt_chg_stats_update_tier(const struct batt_drv *const batt_drv,
 				       time_t elap, int cc,
 				       struct gbms_ce_tier_stats *tier)
 {
-	const int msc_state = batt_drv->msc_state;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 
-	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT)
-		return;
-
-	/* book to previous state */
-	batt_chg_stats_tier(tier, msc_state, elap);
+	/*
+	 * book time to previous msc_state for this tier, there is an
+	 * interesting wrinkle here since some tiers (health, full, etc)
+	 * might be entered and exited multiple times.
+	 */
+	batt_chg_stats_tier(tier, batt_drv->msc_state, elap);
 
 	if (tier->soc_in == -1) {
 		int soc_in;
@@ -1243,8 +1248,9 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 				  time_t elap)
 {
 	const int soc_real = ssoc_get_real(&batt_drv->ssoc_state);
-	const int msc_state = batt_drv->msc_state;
-	struct gbms_ce_tier_stats *tier;
+	const int msc_state = batt_drv->msc_state; /* last msc_state */
+	struct gbms_charging_event *ce_data = &batt_drv->ce_data;
+	struct gbms_ce_tier_stats *tier = NULL;
 	int cc;
 
 	if (elap == 0)
@@ -1258,18 +1264,32 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 	}
 	cc = cc / 1000;
 
+	/* Update this charge tiers in parallel */
+	if (soc_real >= SSOC_HIGH_SOC)
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+					   elap, cc,
+					   &ce_data->high_soc_stats);
+
+	/* TODO: log to new voltage tiers, list in go/pixel-vtier-defs */
 	if (batt_drv->batt_full) {
+
+
 		/* Override regular charge tiers when fully charged */
-		tier = &batt_drv->ce_data.full_charge_stats;
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma,
+					   temp, elap, cc,
+					   &ce_data->full_charge_stats);
 
 	} else if (msc_state == MSC_HEALTH) {
 		/*
-		 * works because msc_logic books the time BEFORE updating
-		 * msc_state
+		 * It works because msc_logic call BEFORE updating msc_state.
+		 * NOTE: that OVERHEAT and CCLVL disable AC, I should not be
+		 * here if either of them are set.
 		 */
 
 		/* tier used for TTF during HC, check msc_logic_health() */
-		tier = &batt_drv->ce_data.health_stats;
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma,
+					   temp, elap, cc,
+					   &ce_data->health_stats);
 
 	} else {
 		const qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
@@ -1277,22 +1297,43 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 		/* book to previous soc unless discharging */
 		if (msc_state != MSC_DSG) {
 			/* TODO: should I use ssoc instead? */
-			batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
+			batt_chg_stats_soc_update(ce_data, soc, elap,
 						  tier_idx, cc);
 		}
 
-		tier = &batt_drv->ce_data.tier_stats[tier_idx];
+		/*
+		 * ce_data.tier_stats[tier_idx] are used for time to full.
+		 * Do not book to them if we are in overheat or LVL
+		 */
+		tier = &ce_data->tier_stats[tier_idx];
 	}
 
-	batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp, elap, cc,
-				   tier);
-
-	/* Update this charge tier in parallel */
-	if (soc_real >= SSOC_HIGH_SOC) {
+	/* batt_drv->batt_health is protected with chg_lock, */
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
 		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
 					   elap, cc,
-					   &batt_drv->ce_data.high_soc_stats);
+					   &ce_data->overheat_stats);
+		tier = NULL;
 	}
+
+	/* custom charge levels (DWELL-DEFEND or RETAIL) */
+	if (batt_drv->chg_state.f.flags & GBMS_CS_FLAG_CCLVL) {
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+					   elap, cc,
+					   &ce_data->cc_lvl_stats);
+		tier = NULL;
+	}
+
+	/*
+	 * Time/current spent in OVERHEAT or at CustomLevel should not
+	 * be booked to ce_data.tier_stats[tier_idx]
+	 */
+
+	if (!tier)
+		return;
+
+	batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+				   elap, cc, tier);
 }
 
 static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
@@ -1305,6 +1346,7 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	switch (rest_state) {
 	/* battery defender did it */
 	case CHG_HEALTH_BD_DISABLED:
+	case CHG_HEALTH_CCLVL_DISABLED:
 		tier_idx = GBMS_STATS_AC_TI_DEFENDER;
 		break;
 	/* user disabled with deadline */
@@ -1682,17 +1724,25 @@ static int batt_chg_stats_cstr(char *buff, int size,
 		}
 	}
 
-	if (ce_data->full_charge_stats.soc_in != -1) {
+	if (ce_data->full_charge_stats.soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->full_charge_stats,
 						verbose);
-	}
 
-	if (ce_data->high_soc_stats.soc_in != -1) {
+	if (ce_data->high_soc_stats.soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->high_soc_stats,
 						verbose);
-	}
+
+	if (ce_data->overheat_stats.soc_in != -1)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->overheat_stats,
+						verbose);
+
+	if (ce_data->cc_lvl_stats.soc_in != -1)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->cc_lvl_stats,
+						verbose);
 
 	return len;
 }
@@ -2155,7 +2205,8 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	 * on disconnect batt_reset_rest_state() will set rest_state to
 	 * CHG_HEALTH_USER_DISABLED if the deadline is negative.
 	 */
-	if (rest_state == CHG_HEALTH_BD_DISABLED ||
+	if (rest_state == CHG_HEALTH_CCLVL_DISABLED ||
+	    rest_state == CHG_HEALTH_BD_DISABLED ||
 	    rest_state == CHG_HEALTH_USER_DISABLED ||
 	    rest_state == CHG_HEALTH_DISABLED ||
 	    rest_state == CHG_HEALTH_INACTIVE)
@@ -2165,7 +2216,13 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	if (rest_state == CHG_HEALTH_DONE)
 		goto done_exit;
 
-	/* disable AC because BD triggered */
+	/* disable AC because we are running custom charging levels */
+	if (batt_drv->chg_state.f.flags & GBMS_CS_FLAG_CCLVL) {
+		rest_state = CHG_HEALTH_CCLVL_DISABLED;
+		goto done_exit;
+	}
+
+	/* disable AC because BD-TEMP triggered */
 	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
 		rest_state = CHG_HEALTH_BD_DISABLED;
 		goto done_exit;
@@ -4231,7 +4288,8 @@ static void batt_history_data_collect(struct batt_drv *batt_drv)
 	}
 }
 
-/* poll the battery, run SOC%, dead battery, critical.
+/*
+ * poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
  */
 static void google_battery_work(struct work_struct *work)
@@ -4336,6 +4394,7 @@ static void google_battery_work(struct work_struct *work)
 	}
 
 	mutex_unlock(&batt_drv->batt_lock);
+
 
 	/* wait for timeout or state equal to CHARGING, FULL or UNKNOWN
 	 * (which will likely not happen) even on ssoc error. msc_logic

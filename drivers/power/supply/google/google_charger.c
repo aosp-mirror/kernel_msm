@@ -593,24 +593,36 @@ static int chg_usb_online(struct power_supply *usb_psy)
 
 	return usb_online;
 }
-/* returns 1 if charging should be disabled given the current battery capacity
- * given in percent, return 0 if charging should happen
- */
-static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
+
+static bool chg_is_custom_enabled(struct chg_drv *chg_drv)
 {
-	int disable_charging = 0;
-	int upperbd = chg_drv->charge_stop_level;
-	int lowerbd = chg_drv->charge_start_level;
+	const int upperbd = chg_drv->charge_stop_level;
+	const int lowerbd = chg_drv->charge_start_level;
 
 	/* disabled */
 	if ((upperbd == DEFAULT_CHARGE_STOP_LEVEL) &&
 	    (lowerbd == DEFAULT_CHARGE_START_LEVEL))
-		return 0;
+		return false;
 
 	/* invalid */
 	if ((upperbd < lowerbd) ||
 	    (upperbd > DEFAULT_CHARGE_STOP_LEVEL) ||
 	    (lowerbd < DEFAULT_CHARGE_START_LEVEL))
+		return false;
+
+	return true;
+}
+
+/* returns 1 if charging should be disabled given the current battery capacity
+ * given in percent, return 0 if charging should happen
+ */
+static int chg_work_is_charging_disabled(struct chg_drv *chg_drv, int capacity)
+{
+	const int upperbd = chg_drv->charge_stop_level;
+	const int lowerbd = chg_drv->charge_start_level;
+	int disable_charging = 0;
+
+	if (!chg_is_custom_enabled(chg_drv))
 		return 0;
 
 	if (chg_drv->lowerdb_reached && upperbd <= capacity) {
@@ -1149,6 +1161,9 @@ static int chg_work_roundtrip(struct chg_drv *chg_drv,
 	if (chg_drv->chg_mode == CHG_DRV_MODE_NOIRDROP)
 		chg_state->f.vchrg = 0;
 
+	if (chg_is_custom_enabled(chg_drv))
+		chg_state->f.flags |= GBMS_CS_FLAG_CCLVL;
+
 	/* might return negative values in fv_uv and cc_max */
 	rc = chg_work_batt_roundtrip(chg_state, chg_drv->bat_psy,
 				     &fv_uv, &cc_max);
@@ -1656,7 +1671,7 @@ static int chg_run_defender(struct chg_drv *chg_drv)
 	if (disable_charging && soc > chg_drv->charge_stop_level)
 		disable_pwrsrc = 1;
 
-	if (disable_charging) {
+	if (chg_is_custom_enabled(chg_drv)) {
 		/*
 		 * This mode can be enabled from DWELL-DEFEND when in "idle",
 		 * while TEMP-DEFEND is triggered or from Retail Mode.
@@ -1715,9 +1730,6 @@ static int chg_run_defender(struct chg_drv *chg_drv)
 
 		/* DWELL-DEFEND handles OVERHEAT status */
 	}
-
-	pr_debug("MSC_DB disable charging=%d pwrsrc=%d\n",
-		 disable_charging, disable_pwrsrc);
 
 	/* state in chg_drv->disable_charging, chg_drv->disable_pwrsrc */
 	chg_update_charging_state(chg_drv, disable_charging, disable_pwrsrc);
@@ -1822,25 +1834,24 @@ static void chg_work(struct work_struct *work)
 	if (rc == -EAGAIN)
 		goto rerun_error;
 	if (rc < 0) {
-		pr_err("MSC_BD cannot get capacity (%d)\n", rc);
+		pr_err("MSC_BD cannot run defender (%d)\n", rc);
 		goto update_charger;
 	}
 
-	/*
-	 * device might fall off the charger when disable_pwrsrc is set.
-	 * update_interval = 0 will reschedule if TEMP-DEFEND is enabled
-	 * NOTE: chg_drv->disable_charging
-	 */
-	if (chg_drv->disable_pwrsrc || chg_drv->disable_charging) {
-		update_interval = 0;
-	} else {
-		/* make sure ->fv_uv and ->cc_max are always correct */
+	/* device might fall off the charger when disable_pwrsrc is set. */
+	if (!chg_drv->disable_pwrsrc)
 		chg_work_adapter_details(&ad, usb_online, wlc_online, chg_drv);
 
-		update_interval = chg_work_roundtrip(chg_drv, &chg_state);
-		if (update_interval >= 0)
-			chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
-	}
+	update_interval = chg_work_roundtrip(chg_drv, &chg_state);
+	if (update_interval >= 0)
+		chg_done = (chg_state.f.flags & GBMS_CS_FLAG_DONE) != 0;
+
+	/*
+	 * chg_drv->disable_pwrsrc -> chg_drv->disable_charging
+	 * update_interval = 0 will reschedule if TEMP-DEFEND is enabled
+	 */
+	if (chg_drv->disable_charging)
+		update_interval = 0;
 
 	/* update_interval=0 when disconnected or on EOC (check for races)
 	 * update_interval=-1 on an error (from roundtrip or reading soc)
