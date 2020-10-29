@@ -225,6 +225,7 @@ struct batt_ttf_stats {
  *	CHG_HEALTH_ACTIVE   -> CHG_HEALTH_DONE
  */
 enum chg_health_state {
+	CHG_HEALTH_BD_DISABLED = -5,
 	CHG_HEALTH_USER_DISABLED = -3,
 	CHG_HEALTH_DISABLED = -2,
 	CHG_HEALTH_DONE = -1,
@@ -235,6 +236,7 @@ enum chg_health_state {
 
 /* tier index used to log the session */
 enum gbms_stats_tier_idx_t {
+	GBMS_STATS_AC_TI_DEFENDER = -5,
 	GBMS_STATS_AC_TI_DISABLE_SETTING_STOP = -4,
 	GBMS_STATS_AC_TI_DISABLE_MISC = -3,
 	GBMS_STATS_AC_TI_DISABLE_SETTING = -2,

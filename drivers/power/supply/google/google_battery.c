@@ -1303,6 +1303,10 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	bool aon_enabled = chg_health->always_on_soc != -1;
 
 	switch (rest_state) {
+	/* battery defender did it */
+	case CHG_HEALTH_BD_DISABLED:
+		tier_idx = GBMS_STATS_AC_TI_DEFENDER;
+		break;
 	/* user disabled with deadline */
 	case CHG_HEALTH_USER_DISABLED:
 		if (rest_deadline == CHG_DEADLINE_SETTING)
@@ -2151,7 +2155,8 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	 * on disconnect batt_reset_rest_state() will set rest_state to
 	 * CHG_HEALTH_USER_DISABLED if the deadline is negative.
 	 */
-	if (rest_state == CHG_HEALTH_USER_DISABLED ||
+	if (rest_state == CHG_HEALTH_BD_DISABLED ||
+	    rest_state == CHG_HEALTH_USER_DISABLED ||
 	    rest_state == CHG_HEALTH_DISABLED ||
 	    rest_state == CHG_HEALTH_INACTIVE)
 		goto done_no_op;
@@ -2160,10 +2165,18 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	if (rest_state == CHG_HEALTH_DONE)
 		goto done_exit;
 
+	/* disable AC because BD triggered */
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+		rest_state = CHG_HEALTH_BD_DISABLED;
+		goto done_exit;
+	}
+
 	/*
 	 * ret < 0 right after plug-in or when the device is discharging due
 	 * to a large sysload or an underpowered adapter (or both). Current
-	 * strategy leaves everything as is (hoping) that the load is temporary
+	 * strategy leaves everything as is (hoping) that the load is temporary.
+	 * The estimate will be negative when BD is triggered and during the
+	 * debounce period.
 	 */
 	ret = batt_ttf_estimate(&ttf, batt_drv);
 	if (ret < 0)
@@ -2186,7 +2199,7 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	 * TODO: consider adding a margin or debounce it.
 	 */
 	if (aon_enabled == false && rest_state == CHG_HEALTH_ACTIVE &&
-	    deadline > 0 && now + ttf > deadline) {
+	    deadline > 0 && ttf != -1 && now + ttf > deadline) {
 		rest_state = CHG_HEALTH_DISABLED;
 		goto done_exit;
 	}
@@ -4537,6 +4550,14 @@ static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 	batt_drv->fake_capacity = capacity;
 }
 
+static void gbatt_set_health(struct batt_drv *batt_drv, int health)
+{
+	batt_drv->batt_health = health;
+
+	/* disable health charging if in overheat */
+	if (health == POWER_SUPPLY_HEALTH_OVERHEAT)
+		msc_logic_health(batt_drv);
+}
 
 static int gbatt_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
@@ -4824,11 +4845,13 @@ static int gbatt_set_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		mutex_lock(&batt_drv->chg_lock);
 		if (val->intval != batt_drv->fake_capacity) {
 			gbatt_set_capacity(batt_drv, val->intval);
 			if (batt_drv->psy)
 				power_supply_changed(batt_drv->psy);
 		}
+		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	/* TODO: compat */
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
@@ -4857,11 +4880,13 @@ static int gbatt_set_property(struct power_supply *psy,
 			power_supply_changed(batt_drv->psy);
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
+		mutex_lock(&batt_drv->chg_lock);
 		if (batt_drv->batt_health != val->intval) {
-			batt_drv->batt_health = val->intval;
+			gbatt_set_health(batt_drv, val->intval);
 			if (batt_drv->psy)
 				power_supply_changed(batt_drv->psy);
 		}
+		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	default:
 		ret = -EINVAL;
