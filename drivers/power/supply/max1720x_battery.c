@@ -1139,8 +1139,11 @@ static int max1720x_get_cycle_count_offset(struct max1720x_chip *chip)
 
 	mutex_lock(&chip->history_lock);
 	history_count = max1720x_history_read(&hi, chip);
-	if (history_count < 0)
+	if (history_count < 0) {
+		mutex_unlock(&chip->history_lock);
 		return 0;
+	}
+
 	for (i = 0; i < history_count; i++) {
 		u16 *entry = &hi.history[i * MAX1720X_HISTORY_PAGE_SIZE];
 
