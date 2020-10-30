@@ -498,6 +498,7 @@ struct max1720x_chip {
 	u16 RConfig;
 	int batt_id;
 	int cycle_count;
+	int cycle_count_offset;
 	bool init_complete;
 	bool resume_complete;
 	u16 health_status;
@@ -1631,11 +1632,14 @@ static int max1720x_get_cycle_count(struct max1720x_chip *chip)
 		return err;
 
 	cycle_count = reg_to_cycles(temp);
-	if (chip->cycle_count == -1 || cycle_count < chip->cycle_count)
-		cycle_count += max1720x_get_cycle_count_offset(chip);
+	if ((chip->cycle_count == -1) ||
+	    ((cycle_count + chip->cycle_count_offset) < chip->cycle_count))
+		chip->cycle_count_offset =
+			max1720x_get_cycle_count_offset(chip);
 
-	chip->cycle_count = cycle_count;
-	return cycle_count;
+	chip->cycle_count = cycle_count + chip->cycle_count_offset;
+
+	return chip->cycle_count;
 }
 
 static void max1720x_handle_update_empty_voltage(struct max1720x_chip *chip,
