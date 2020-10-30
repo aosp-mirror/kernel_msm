@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2015-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -767,8 +767,8 @@ static void __diag_socket_init(struct diag_socket_info *info)
 	info->data_ready = 0;
 	atomic_set(&info->flow_cnt, 0);
 	spin_lock_init(&info->lock);
-	strlcpy(wq_name, "DIAG_SOCKET_", 10);
-	strlcat(wq_name, info->name, sizeof(info->name));
+	strlcpy(wq_name, "DIAG_SOCKET_", sizeof(wq_name));
+	strlcpy(wq_name, info->name, sizeof(wq_name));
 	init_waitqueue_head(&info->read_wait_q);
 	info->wq = create_singlethread_workqueue(wq_name);
 	if (!info->wq) {

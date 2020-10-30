@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4211,7 +4211,7 @@ static int __init diagchar_init(void)
 	pr_debug("diagchar initializing ..\n");
 	driver->num = 1;
 	driver->name = ((void *)driver) + sizeof(struct diagchar_dev);
-	strlcpy(driver->name, "diag", 4);
+	strlcpy(driver->name, "diag", 5);
 	/* Get major number from kernel and initialize */
 	ret = alloc_chrdev_region(&dev, driver->minor_start,
 				    driver->num, driver->name);
