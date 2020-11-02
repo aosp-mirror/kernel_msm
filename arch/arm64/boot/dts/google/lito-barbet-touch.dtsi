@@ -123,6 +123,7 @@
 		st,max-coords = <1079 2399>;
 		st,panel_map = <&dsi_sofef01_sdc_fhd_plus_cmd 0>;
 		st,force-pi-cfg-ver-map = <0x300>;
+		st,save-golden-ms-raw;
 		tbn,lpi2ap_gpio = <&tlmm 5 0>;
 		tbn,ap2lpi_gpio = <&tlmm 35 0>;
 
