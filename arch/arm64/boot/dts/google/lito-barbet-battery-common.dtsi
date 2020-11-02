@@ -35,7 +35,7 @@
 
 &pm7250b_qg {
 	qcom,battery-data = <&barbet_batterydata>;
-	qcom,qg-iterm-ma = <690>;
+	qcom,qg-iterm-ma = <640>;
 };
 
 &google_battery {
