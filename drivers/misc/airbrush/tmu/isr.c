@@ -78,7 +78,7 @@ static int ab_tmu_isr_notify(struct notifier_block *nb,
 		unsigned long irq, void *data)
 {
 	struct ab_tmu_isr *isr = container_of(nb, struct ab_tmu_isr, nb);
-	u32 intnc_val = (u32)data;
+	u32 intnc_val = (u64)data;
 
 	if (irq == ABC_MSI_AON_INTNC &&
 			(intnc_val & (1 << (isr->irq - ABC_MSI_COUNT))))
