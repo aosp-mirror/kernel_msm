@@ -1744,7 +1744,7 @@ static void chg_work(struct work_struct *work)
 	struct power_supply *bat_psy = chg_drv->bat_psy;
 	union gbms_ce_adapter_details ad = { .v = 0 };
 	union gbms_charger_state chg_state = { .v = 0 };
-	int present, usb_online, wlc_online = 0;
+	int present, usb_online, wlc_online = 0, wlc_present = 0;
 	int update_interval = -1;
 	bool chg_done = false;
 	int success, rc = 0;
@@ -1773,12 +1773,15 @@ static void chg_work(struct work_struct *work)
 	vote(chg_drv->msc_interval_votable, MSC_CHG_VOTER, true, 0);
 
 	usb_online = chg_usb_online(usb_psy);
-	if (wlc_psy)
+
+	if (wlc_psy) {
 		wlc_online = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
+		wlc_present = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_PRESENT);
+	}
 
 	/* ICL=0 on discharge will (might) cause usb online to go to 0 */
 	present = GPSY_GET_PROP(usb_psy, POWER_SUPPLY_PROP_PRESENT) ||
-		  GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_PRESENT);
+		  wlc_present;
 
 	if (usb_online  < 0 || wlc_online < 0) {
 		pr_err("MSC_CHG error reading usb=%d wlc=%d\n",
