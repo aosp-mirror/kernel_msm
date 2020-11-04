@@ -1062,7 +1062,7 @@ static int oscar_lowprio_irq_notify(struct notifier_block *nb,
 	    container_of(nb, struct oscar_dev, lowprio_irq_nb);
 	struct gasket_interrupt_data *interrupt_data =
 		oscar_dev->gasket_dev->interrupt_data;
-	u32 intnc_val = (u32)data;
+	u32 intnc_val = (u64)data;
 
 	if (irq == ABC_MSI_AON_INTNC &&
 	    (intnc_val & 1 << INTNC_TPU_WIREINTERRUPT2))
