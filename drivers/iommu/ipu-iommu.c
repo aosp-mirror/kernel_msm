@@ -310,7 +310,7 @@ static void ipu_iommu_tlb_sync(void *priv)
 		MMU_SYNC, MMU_SYNC_SYNC_MASK, false /*is_read*/);
 	if (IS_ERR(rsp)) {
 		dev_err(iommu->dev, "%s Error (%d) writing to mmu sync register\n",
-				__func__, (int)rsp);
+				__func__, rsp);
 		return;
 	}
 
@@ -320,7 +320,7 @@ static void ipu_iommu_tlb_sync(void *priv)
 		if (IS_ERR(rsp)) {
 			dev_err(iommu->dev,
 				"%s Error (%d) reading status register\n",
-				__func__, (int)rsp);
+				__func__, rsp);
 			return;
 		}
 		if (!(rsp->regs[0].value & MMU_SYNC_SYNC_MASK))
