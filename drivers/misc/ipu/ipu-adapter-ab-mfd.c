@@ -536,7 +536,7 @@ static int ipu_adapter_ab_mfd_low_priority_irq_notify(struct notifier_block *nb,
 	struct ipu_adapter_ab_mfd_data *dev_data =
 		container_of(nb, struct ipu_adapter_ab_mfd_data,
 				low_priority_irq_nb);
-	uint32_t intnc_val = (uint32_t)data;
+	uint32_t intnc_val = (enum abc_intnc_ints)data;
 
 	if (irq != ABC_MSI_AON_INTNC)
 		return NOTIFY_DONE;
@@ -585,7 +585,7 @@ static int ipu_adapter_ab_mfd_atomic_sync32_shared_memory(struct device *dev,
 		return -ENOLINK;
 	}
 
-	if ((uint32_t)buffer_vaddr % sizeof(uint32_t) != 0) {
+	if ((unsigned long)buffer_vaddr % sizeof(uint32_t) != 0) {
 		dev_err(dev, "%s: error: unaligned access\n", __func__);
 		mutex_unlock(&dev_data->sync_lock);
 		return -EINVAL;
