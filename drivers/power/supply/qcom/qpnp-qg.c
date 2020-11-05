@@ -5147,7 +5147,7 @@ static int qpnp_qg_probe(struct platform_device *pdev)
 	chip->last_fifo_v_uv = 0;
 	chip->vbat_fifo_acc = false;
 
-	chip->qg_version = (u8)of_device_get_match_data(&pdev->dev);
+	chip->qg_version = (enum qg_version)of_device_get_match_data(&pdev->dev);
 
 	switch (chip->qg_version) {
 	case QG_LITE:
