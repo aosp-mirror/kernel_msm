@@ -931,7 +931,7 @@ void cam_eeprom_shutdown(struct cam_eeprom_ctrl_t *e_ctrl)
 
 		kfree(power_info->power_setting);
 		kfree(power_info->power_down_setting);
-                power_info->power_setting = NULL;
+		power_info->power_setting = NULL;
 		power_info->power_down_setting = NULL;
 		power_info->power_setting_size = 0;
 		power_info->power_down_setting_size = 0;

@@ -1560,7 +1560,7 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 							soc_info->rgltr_name[j],
 							rc);
 						soc_info->rgltr[j] = NULL;
-                                                goto power_up_failed;
+						goto power_up_failed;
 					}
 
 					rc =  cam_soc_util_regulator_enable(
@@ -1655,6 +1655,7 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 						rc);
 
 					soc_info->rgltr[vreg_idx] = NULL;
+					goto power_up_failed;
 				}
 
 				rc =  cam_soc_util_regulator_enable(
@@ -1665,6 +1666,12 @@ int cam_sensor_core_power_up(struct cam_sensor_power_ctrl_t *ctrl,
 					soc_info->rgltr_op_mode[vreg_idx],
 					soc_info->rgltr_delay[vreg_idx]);
 
+				if (rc) {
+					CAM_ERR(CAM_SENSOR,
+						"Reg Enable failed for %s",
+						soc_info->rgltr_name[vreg_idx]);
+					goto power_up_failed;
+				}
 				power_setting->data[0] =
 						soc_info->rgltr[vreg_idx];
 			}
@@ -1750,6 +1757,18 @@ power_up_failed:
 					soc_info->rgltr_max_volt[vreg_idx],
 					soc_info->rgltr_op_mode[vreg_idx],
 					soc_info->rgltr_delay[vreg_idx]);
+
+				if (rc) {
+					CAM_ERR(CAM_SENSOR,
+					"Fail to disalbe reg: %s",
+					soc_info->rgltr_name[vreg_idx]);
+					soc_info->rgltr[vreg_idx] = NULL;
+					msm_cam_sensor_handle_reg_gpio(
+						power_setting->seq_type,
+						gpio_num_info,
+						GPIOF_OUT_INIT_LOW);
+					continue;
+				}
 
 				power_setting->data[0] =
 						soc_info->rgltr[vreg_idx];
@@ -1874,7 +1893,6 @@ int msm_camera_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 					"config clk reg failed rc: %d", ret);
 				continue;
 			}
-
 			break;
 		case SENSOR_RESET:
 		case SENSOR_STANDBY:
