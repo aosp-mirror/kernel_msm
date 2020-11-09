@@ -1359,6 +1359,7 @@ static int bd_update_stats(struct bd_data *bd_state,
 	const bool triggered = bd_state->triggered;
 	const time_t now = get_boot_sec();
 	int ret, vbatt, temp;
+	long long temp_avg;
 
 	if (!bd_state->enabled)
 		return 0;
@@ -1391,9 +1392,10 @@ static int bd_update_stats(struct bd_data *bd_state,
 		return 0;
 
 	/* exit and entry criteria */
+	temp_avg = bd_state->temp_sum / bd_state->time_sum;
 	if (triggered && temp <= bd_state->bd_resume_abs_temp)
 		bd_reset(bd_state);
-	else if (temp >= bd_state->bd_trigger_temp)
+	else if (temp_avg >= bd_state->bd_trigger_temp)
 		bd_state->triggered = 1;
 
 	return 0;
