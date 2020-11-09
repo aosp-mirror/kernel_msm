@@ -214,7 +214,7 @@
 		google,usbc-connector = <&usb_con>;
 
 		/* b/170700459 thresholds */
-		google,bd-resume-abs-temp = <260>;
+		google,bd-resume-abs-temp = <280>;
 		google,bd-resume-soc = <50>;
 		google,bd-resume-time = <14400>;  /* 4 hours */
 		google,bd-resume-temp = <290>;
