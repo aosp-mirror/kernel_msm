@@ -491,6 +491,10 @@
   __memcpy_toio
   memdup_user
   memmove
+  mempool_alloc
+  mempool_free
+  mempool_kfree
+  mempool_kmalloc
   memremap
   memset
   __memset_io
@@ -1210,14 +1214,23 @@
   crc_ccitt_table
   kernel_restart
   kernel_setsockopt
-  mempool_alloc
   mempool_create
   mempool_destroy
-  mempool_free
-  mempool_kfree
-  mempool_kmalloc
   send_sig_info
   time64_to_tm
+
+# required by dm-user.ko
+  bio_advance
+  bio_endio
+  bio_put
+  _copy_from_iter
+  copy_page_from_iter
+  copy_page_to_iter
+  _copy_to_iter
+  dm_register_target
+  dm_unregister_target
+  mempool_exit
+  mempool_init
 
 # required by dwc3-haps.ko
   pcim_enable_device
