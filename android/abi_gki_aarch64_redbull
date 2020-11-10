@@ -1435,8 +1435,6 @@
   ptr_to_hashval
   sched_setattr
   split_page
-  vm_map_ram
-  vm_unmap_ram
   zone_watermark_ok_safe
 
 # required by ipa3.ko
@@ -2344,6 +2342,7 @@
   __sock_recv_ts_and_drops
   sock_wake_async
   sock_wfree
+  timer_reduce
   unregister_net_sysctl_table
   __wake_up_sync_key
   __xfrm_policy_check
@@ -2697,3 +2696,7 @@
   xhci_resume
   xhci_run
   xhci_suspend
+
+# preserved by --additions-only
+  vm_map_ram
+  vm_unmap_ram
