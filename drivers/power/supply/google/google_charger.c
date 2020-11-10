@@ -1396,8 +1396,10 @@ static int bd_update_stats(struct bd_data *bd_state,
 	if (bd_state->last_update == 0)
 		bd_state->last_update = now;
 
-	bd_state->time_sum += now - bd_state->last_update;
-	bd_state->temp_sum += temp * (now - bd_state->last_update);
+	if (temp >= bd_state->bd_trigger_temp) {
+		bd_state->time_sum += now - bd_state->last_update;
+		bd_state->temp_sum += temp * (now - bd_state->last_update);
+	}
 	bd_state->last_voltage = vbatt;
 	bd_state->last_temp = temp;
 	bd_state->last_update = now;
