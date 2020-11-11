@@ -428,7 +428,8 @@ static int of_thermal_get_trip_temp(struct thermal_zone_device *tz, int trip,
 	if (trip >= data->ntrips || trip < 0)
 		return -EDOM;
 
-	if (data->senps && data->senps->ops->get_trip_temp) {
+	if (data->senps && data->senps->ops &&
+	    data->senps->ops->get_trip_temp) {
 		int ret;
 
 		ret = data->senps->ops->get_trip_temp(data->senps->sensor_data,
@@ -589,6 +590,9 @@ static bool of_thermal_is_trips_triggered(struct thermal_zone_device *tz,
 	struct __thermal_zone *data = tz->devdata;
 	bool triggered = false;
 
+	if (!tz->tzp)
+		return triggered;
+
 	mutex_lock(&tz->lock);
 	last_temp = tz->temperature;
 	for (trip = 0; trip < data->ntrips; trip++) {
@@ -646,10 +650,19 @@ static void handle_thermal_trip(struct thermal_zone_device *tz,
 		bool temp_valid, int trip_temp)
 {
 	struct thermal_zone_device *zone;
-	struct __thermal_zone *data = tz->devdata;
+	struct __thermal_zone *data;
 	struct list_head *head;
 
+	if (!tz || !tz->devdata)
+		return;
+
+	data = tz->devdata;
+
+	if (!data->senps)
+		return;
+
 	head = &data->senps->first_tz;
+
 	list_for_each_entry(data, head, list) {
 		zone = data->tzd;
 		if (data->mode == THERMAL_DEVICE_DISABLED)
@@ -678,7 +691,7 @@ void of_thermal_handle_trip_temp(struct thermal_zone_device *tz,
 {
 	return handle_thermal_trip(tz, true, trip_temp);
 }
-EXPORT_SYMBOL(of_thermal_handle_trip_temp);
+EXPORT_SYMBOL_GPL(of_thermal_handle_trip_temp);
 
 /*
  * of_thermal_handle_trip - Handle thermal trip from sensors
@@ -689,7 +702,7 @@ void of_thermal_handle_trip(struct thermal_zone_device *tz)
 {
 	return handle_thermal_trip(tz, false, 0);
 }
-EXPORT_SYMBOL(of_thermal_handle_trip);
+EXPORT_SYMBOL_GPL(of_thermal_handle_trip);
 
 static struct thermal_zone_device_ops of_thermal_ops = {
 	.get_mode = of_thermal_get_mode,
@@ -1330,6 +1343,8 @@ __init *thermal_of_build_thermal_zone(struct device_node *np)
 
 	tz->is_wakeable = of_property_read_bool(np,
 					"wake-capable-sensor");
+	tz->default_disable = of_property_read_bool(np,
+					"disable-thermal-zone");
 	/*
 	 * REVIST: for now, the thermal framework supports only
 	 * one sensor per thermal zone. Thus, we are considering

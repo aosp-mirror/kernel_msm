@@ -474,6 +474,8 @@ struct dma_buf {
  * @dev: device attached to the buffer.
  * @node: list of dma_buf_attachment.
  * @priv: exporter specific attachment data.
+ * @dma_map_attrs: DMA attributes to be used when the exporter maps the buffer
+ * through dma_buf_map_attachment.
  *
  * This structure holds the attachment information between the dma_buf buffer
  * and its user device(s). The list contains one attachment struct per device
@@ -575,6 +577,7 @@ int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
 void *dma_buf_vmap(struct dma_buf *);
 void dma_buf_vunmap(struct dma_buf *, void *vaddr);
 int dma_buf_get_flags(struct dma_buf *dma_buf, unsigned long *flags);
+int dma_buf_get_uuid(struct dma_buf *dmabuf, uuid_t *uuid);
 
 /**
  * dma_buf_set_destructor - set the dma-buf's destructor
@@ -589,4 +592,5 @@ static inline void dma_buf_set_destructor(struct dma_buf *dmabuf,
 	dmabuf->dtor = dtor;
 	dmabuf->dtor_data = dtor_data;
 }
+
 #endif /* __DMA_BUF_H__ */

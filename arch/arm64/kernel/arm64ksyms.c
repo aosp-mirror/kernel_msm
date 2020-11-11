@@ -89,9 +89,9 @@ extern long long __lshrti3(long long a, int b);
 EXPORT_SYMBOL(__lshrti3);
 
 	/* caching functions */
-EXPORT_SYMBOL(__dma_inv_area);
-EXPORT_SYMBOL(__dma_clean_area);
-EXPORT_SYMBOL(__dma_flush_area);
+EXPORT_SYMBOL_GPL(__dma_inv_area);
+EXPORT_SYMBOL_GPL(__dma_clean_area);
+EXPORT_SYMBOL_GPL(__dma_flush_area);
 EXPORT_SYMBOL_GPL(__flush_dcache_area);
 
 EXPORT_SYMBOL_GPL(__bss_stop);

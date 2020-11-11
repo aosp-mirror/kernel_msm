@@ -61,7 +61,7 @@ ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 EXPORT_SYMBOL(panic_notifier_list);
 
 void (*vendor_panic_cb)(u64 sp);
-EXPORT_SYMBOL(vendor_panic_cb);
+EXPORT_SYMBOL_GPL(vendor_panic_cb);
 
 static long no_blink(int state)
 {

@@ -22,7 +22,6 @@ bool irq_pm_check_wakeup(struct irq_desc *desc)
 		desc->depth++;
 		irq_disable(desc);
 		pm_system_irq_wakeup(irq_desc_get_irq(desc));
-		log_wakeup_reason(irq_desc_get_irq(desc));
 		return true;
 	}
 	return false;

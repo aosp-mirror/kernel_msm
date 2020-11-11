@@ -817,7 +817,6 @@ cpufreq_platform_cooling_register(struct cpufreq_policy *policy,
 }
 EXPORT_SYMBOL(cpufreq_platform_cooling_register);
 
-
 /**
  * cpufreq_cooling_unregister - function to remove cpufreq cooling device.
  * @cdev: thermal cooling device pointer.

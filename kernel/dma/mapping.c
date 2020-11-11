@@ -321,7 +321,7 @@ void dma_common_free_remap(void *cpu_addr, size_t size, unsigned long vm_flags,
 	struct vm_struct *area = find_vm_area(cpu_addr);
 
 	if (!area || (area->flags & vm_flags) != vm_flags) {
-		WARN(!no_warn, "trying to free invalid coherent area: %pK\n",
+		WARN(!no_warn, "trying to free invalid coherent area: %p\n",
 			cpu_addr);
 		return;
 	}

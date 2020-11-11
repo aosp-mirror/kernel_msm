@@ -1367,6 +1367,8 @@ Run:
 			"Callback failed on %s in %pS returned %d",
 			dev_name(dev), callback, error);
 		async_error = error;
+		log_suspend_abort_reason("Callback failed on %s in %pS returned %d",
+					 dev_name(dev), callback, error);
 		goto Complete;
 	}
 
@@ -1581,6 +1583,8 @@ Run:
 	error = dpm_run_callback(callback, dev, state, info);
 	if (error) {
 		async_error = error;
+		log_suspend_abort_reason("Callback failed on %s in %pS returned %d",
+					 dev_name(dev), callback, error);
 		goto Complete;
 	}
 	dpm_propagate_wakeup_to_parent(dev);
