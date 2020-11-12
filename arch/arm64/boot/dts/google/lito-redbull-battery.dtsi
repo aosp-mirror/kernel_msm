@@ -191,7 +191,7 @@
 		google,chg-termination-5v;
 
 		/* TODO: remove when using proper "charger" */
-		google,chg-cc-tolerance = <25>;
+		google,chg-cc-tolerance = <45>;
 
 		google,pps-cc-tolerance-pct = <5>;
 		google,pps-awake;
