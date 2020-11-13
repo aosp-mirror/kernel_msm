@@ -347,6 +347,13 @@ static void acc_complete_out(struct usb_ep *ep, struct usb_request *req)
 	wake_up(&dev->read_wq);
 }
 
+static void acc_complete_get_protocol(struct usb_ep *ep,
+				      struct usb_request *req)
+{
+	struct usb_gadget *gadget = req->context;
+	dev_info(&gadget->dev, "%s: req->status = %d\n", __func__, req->status);
+}
+
 static void acc_complete_set_string(struct usb_ep *ep, struct usb_request *req)
 {
 	struct acc_dev	*dev = ep->driver_data;
@@ -956,12 +963,15 @@ int acc_ctrlrequest(struct usb_composite_dev *cdev,
 		}
 	} else if (b_requestType == (USB_DIR_IN | USB_TYPE_VENDOR)) {
 		if (b_request == ACCESSORY_GET_PROTOCOL) {
-			dev_info(&cdev->gadget->dev, "%s: got ACCESSORY_GET_PROTOCOL(51) request\n",
-				__func__);
+			dev_info(&cdev->gadget->dev,
+				 "%s: got"
+				 " ACCESSORY_GET_PROTOCOL (51) request,",
+				 __func__);
 			schedule_work(&dev->getprotocol_work);
 			*((u16 *)cdev->req->buf) = PROTOCOL_VERSION;
 			value = sizeof(u16);
-			cdev->req->complete = acc_complete_setup_noop;
+			cdev->req->context = cdev->gadget;
+			cdev->req->complete = acc_complete_get_protocol;
 			/* clear any string left over from a previous session */
 			memset(dev->manufacturer, 0, sizeof(dev->manufacturer));
 			memset(dev->model, 0, sizeof(dev->model));
