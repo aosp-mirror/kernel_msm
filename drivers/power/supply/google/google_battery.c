@@ -4581,8 +4581,12 @@ static int gbatt_get_capacity(struct batt_drv *batt_drv)
 /* splice the curve at point when the SSOC is removed */
 static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 {
-	/* reset the curve */
-	if (capacity < 0 && batt_drv->fake_capacity >= 0) {
+	if (capacity < 0)
+		capacity = -EINVAL;
+
+	if (batt_drv->batt_health != POWER_SUPPLY_HEALTH_OVERHEAT) {
+		/* just set the value if not in overheat  */
+	} else if (capacity < 0 && batt_drv->fake_capacity >= 0) {
 		struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 		const qnum_t cap = qnum_fromint(batt_drv->fake_capacity);
 		const qnum_t gdf = ssoc_state->ssoc_gdf;
@@ -4603,12 +4607,8 @@ static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 		ssoc_change_curve_at_gdf(ssoc_state, gdf, cap, type);
 		ssoc_work(ssoc_state, batt_drv->fg_psy);
 		dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
-
-		/* reset capacity */
-		capacity = -EINVAL;
 	} else if (capacity > 0) {
-		/* TODO: convergence to the new capacity */
-
+		/* TODO: convergence to the new capacity? */
 	}
 
 	batt_drv->fake_capacity = capacity;
