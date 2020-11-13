@@ -1450,8 +1450,8 @@ static int bd_recharge_logic(struct bd_data *bd_state, int vbatt)
 	return disable_charging;
 }
 
-/* ingnore the failure to set CAPACITY, it might not be implemented */
-static int bd_batt_set_soc(struct chg_drv *chg_drv, int soc)
+/* ignore the failure to set CAPACITY: it might not be implemented */
+static int bd_batt_set_soc(struct chg_drv *chg_drv , int soc)
 {
 	const bool freeze = soc >= 0;
 	int rc;
@@ -1482,14 +1482,28 @@ static int bd_batt_set_overheat(struct chg_drv *chg_drv, bool hot)
 
 static int bd_batt_set_state(struct chg_drv *chg_drv, bool hot, int soc)
 {
+	const bool lock_soc = false; /* b/173141442 */
 	const bool freeze = soc != -1;
-	int ret = 0;
+	int ret = 0; /* LOOK! */
 
-	/* OVERHEAT is used to rebuild the curve */
-	if (freeze != chg_drv->freeze_soc)
-		ret = bd_batt_set_soc(chg_drv, soc);
-	if (ret == 0 && chg_drv->overheat != hot)
+	/*
+	 * OVERHEAT changes handling of writes to POWER_SUPPLY_PROP_CAPACITY.
+	 * Locking/Unlocking SOC in OVERHEAT causes google_battery to adjust
+	 * the curves for the BD logic (if needed).
+	 */
+	if (hot && chg_drv->overheat != hot) {
+
 		ret = bd_batt_set_overheat(chg_drv, hot);
+		if (ret == 0 && freeze != chg_drv->freeze_soc && lock_soc)
+			ret = bd_batt_set_soc(chg_drv, soc);
+
+	} else if (!hot && chg_drv->overheat != hot) {
+
+		if (freeze != chg_drv->freeze_soc && lock_soc)
+			ret = bd_batt_set_soc(chg_drv, soc);
+		if (ret == 0)
+			ret = bd_batt_set_overheat(chg_drv, hot);
+	}
 
 	return ret;
 }
