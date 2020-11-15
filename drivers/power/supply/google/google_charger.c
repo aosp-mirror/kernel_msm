@@ -186,7 +186,9 @@ struct bd_data {
 	u32 bd_trigger_voltage;	/* also recharge upper bound */
 	u32 bd_trigger_temp;	/* single reading */
 	u32 bd_trigger_time;	/* debounce window after trigger*/
+	u32 bd_drainto_soc;
 	u32 bd_recharge_voltage;
+	u32 bd_recharge_soc;
 
 	u32 bd_resume_abs_temp;	/* at any time after trigger */
 
@@ -1315,10 +1317,12 @@ static void bd_reset(struct bd_data *bd_state)
 	bd_state->triggered = 0;
 
 	/* also disabled when externally triggered, resume_temp is optional */
-	bd_state->enabled = bd_state->bd_trigger_voltage &&
+	bd_state->enabled = ((bd_state->bd_trigger_voltage &&
+				bd_state->bd_recharge_voltage) ||
+				(bd_state->bd_drainto_soc &&
+				bd_state->bd_recharge_soc)) &&
 			    bd_state->bd_trigger_time &&
 			    bd_state->bd_trigger_temp &&
-			    bd_state->bd_recharge_voltage &&
 			    can_resume;
 }
 
@@ -1331,6 +1335,11 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 				   &bd_state->bd_trigger_voltage);
 	if (ret < 0)
 		bd_state->bd_trigger_voltage = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-drainto-soc",
+				   &bd_state->bd_drainto_soc);
+	if (ret < 0)
+		bd_state->bd_drainto_soc = 0;
 
 	ret = of_property_read_u32(dev->of_node, "google,bd-trigger-temp",
 				   &bd_state->bd_trigger_temp);
@@ -1346,6 +1355,11 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 				   &bd_state->bd_recharge_voltage);
 	if (ret < 0)
 		bd_state->bd_recharge_voltage = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-recharge-soc",
+				   &bd_state->bd_recharge_soc);
+	if (ret < 0)
+		bd_state->bd_recharge_soc = 0;
 
 	ret = of_property_read_u32(dev->of_node, "google,bd-resume-abs-temp",
 				   &bd_state->bd_resume_abs_temp);
@@ -1391,7 +1405,8 @@ static int bd_update_stats(struct bd_data *bd_state,
 		return ret;
 
 	/* not over vbat and !triggered, nothing to see here */
-	if (vbatt < bd_state->bd_trigger_voltage && !triggered)
+	if (vbatt < bd_state->bd_trigger_voltage && !triggered &&
+		(!bd_state->bd_drainto_soc && !bd_state->bd_recharge_soc))
 		return 0;
 
 	/* it needs to keep averaging after trigger */
@@ -1426,32 +1441,42 @@ static int bd_update_stats(struct bd_data *bd_state,
 }
 
 /* @return true if BD needs to be triggered */
-static int bd_recharge_logic(struct bd_data *bd_state, int vbatt)
+static int bd_recharge_logic(struct bd_data *bd_state, int val)
 {
-	const int lowerbd = bd_state->bd_recharge_voltage;
-	const int upperbd = bd_state->bd_trigger_voltage;
+	int lowerbd, upperbd;
 	int disable_charging = 0;
+
+	if (bd_state->bd_drainto_soc && bd_state->bd_recharge_soc) {
+		lowerbd = bd_state->bd_recharge_soc;
+		upperbd = bd_state->bd_drainto_soc;
+	} else if (bd_state->bd_recharge_voltage &&
+			bd_state->bd_trigger_voltage) {
+		lowerbd = bd_state->bd_recharge_voltage;
+		upperbd = bd_state->bd_trigger_voltage;
+	} else {
+		return 0;
+	}
 
 	if (!bd_state->triggered)
 		return 0;
 
 	/* recharge logic between bd_recharge_voltage and bd_trigger_voltage */
-	if (bd_state->lowerbd_reached && vbatt >= upperbd) {
-		pr_info("MSC_BD lowerbd=%d, upperbd=%d, vbatt=%d, lowerbd_reached=1->0, charging off\n",
-			lowerbd, upperbd, vbatt);
+	if (bd_state->lowerbd_reached && val >= upperbd) {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, lowerbd_reached=1->0, charging off\n",
+			lowerbd, upperbd, val);
 		bd_state->lowerbd_reached = false;
 		disable_charging = 1;
-	} else if (!bd_state->lowerbd_reached && vbatt > lowerbd) {
-		pr_info("MSC_BD lowerbd=%d, upperbd=%d, vbatt=%d, charging off\n",
-			lowerbd, upperbd, vbatt);
+	} else if (!bd_state->lowerbd_reached && val > lowerbd) {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, charging off\n",
+			lowerbd, upperbd, val);
 		disable_charging = 1;
-	} else if (!bd_state->lowerbd_reached && vbatt <= lowerbd) {
-		pr_info("MSC_BD lowerbd=%d, upperbd=%d, vbatt=%d, lowerbd_reached=0->1, charging on\n",
-			lowerbd, upperbd, vbatt);
+	} else if (!bd_state->lowerbd_reached && val <= lowerbd) {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, lowerbd_reached=0->1, charging on\n",
+			lowerbd, upperbd, val);
 		bd_state->lowerbd_reached = true;
 	} else {
-		pr_info("MSC_BD lowerbd=%d, upperbd=%d, vbatt=%d, charging on\n",
-			lowerbd, upperbd, vbatt);
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, charging on\n",
+			lowerbd, upperbd, val);
 	}
 
 	return disable_charging;
@@ -1741,11 +1766,20 @@ static int chg_run_defender(struct chg_drv *chg_drv)
 			const int lock_soc = soc; /* or set to 100 */
 
 			/* recharge logic */
-			disable_charging = bd_recharge_logic(bd_state,
+			if (bd_state->bd_drainto_soc) {
+				disable_charging =
+					bd_recharge_logic(bd_state, soc);
+				if (disable_charging)
+					disable_pwrsrc =
+						soc > bd_state->bd_drainto_soc;
+			} else {
+				disable_charging = bd_recharge_logic(bd_state,
 							bd_state->last_voltage);
-			if (disable_charging)
-				disable_pwrsrc = bd_state->last_voltage >
-						 bd_state->bd_trigger_voltage;
+				if (disable_charging)
+					disable_pwrsrc =
+						bd_state->last_voltage >
+						bd_state->bd_trigger_voltage;
+			}
 
 			/* overheat and freeze, on trigger and reconnect */
 			if (!was_triggered || chg_drv->stop_charging) {
@@ -2278,6 +2312,37 @@ static ssize_t bd_trigger_voltage_store(struct device *dev,
 static DEVICE_ATTR_RW(bd_trigger_voltage);
 
 static ssize_t
+bd_drainto_soc_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_drainto_soc);
+}
+
+static ssize_t bd_drainto_soc_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_SOC || val < MIN_BD_SOC)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_drainto_soc = val;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(bd_drainto_soc);
+
+static ssize_t
 bd_trigger_temp_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -2369,6 +2434,37 @@ static ssize_t bd_recharge_voltage_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(bd_recharge_voltage);
+
+static ssize_t
+bd_recharge_soc_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_recharge_soc);
+}
+
+static ssize_t bd_recharge_soc_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_SOC || val < MIN_BD_SOC)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_recharge_soc = val;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(bd_recharge_soc);
 
 static ssize_t
 bd_resume_abs_temp_show(struct device *dev,
@@ -2903,6 +2999,13 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 		return ret;
 	}
 
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_drainto_soc);
+	if (ret != 0) {
+		pr_err("Failed to create bd_drainto_soc files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
 	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_temp);
 	if (ret != 0) {
 		pr_err("Failed to create bd_trigger_temp files, ret=%d\n",
@@ -2921,6 +3024,13 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 				&dev_attr_bd_recharge_voltage);
 	if (ret != 0) {
 		pr_err("Failed to create bd_recharge_voltage files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_recharge_soc);
+	if (ret != 0) {
+		pr_err("Failed to create bd_recharge_soc files, ret=%d\n",
 		       ret);
 		return ret;
 	}
