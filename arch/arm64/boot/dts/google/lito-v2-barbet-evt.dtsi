@@ -14,6 +14,7 @@
 #include "lito-barbet.dtsi"
 #include "lito-barbet-camera-sensor.dtsi"
 #include "lito-barbet-pac193x.dtsi"
+#include "lito-barbet-thermal-evt.dtsi"
 
 &dsi_sofef01_sdc_fhd_plus_cmd {
 	google,hbm-ranges {

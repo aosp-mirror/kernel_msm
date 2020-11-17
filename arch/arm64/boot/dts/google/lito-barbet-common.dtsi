@@ -13,7 +13,6 @@
 
 #include "lito-redbull-common.dtsi"
 #include "lito-barbet-audio.dtsi"
-#include "lito-barbet-thermal.dtsi"
 #include "lito-barbet-usb.dtsi"
 #include "lito-barbet-nfc.dtsi"
 #include "lito-barbet-ese.dtsi"
