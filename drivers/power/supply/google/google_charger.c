@@ -1631,8 +1631,10 @@ static int chg_start_bd_work(struct chg_drv *chg_drv)
 		bd_state->disconnect_time = get_boot_sec();
 	}
 
-	if (!bd_ena)
+	if (!bd_ena) {
+		mutex_unlock(&chg_drv->bd_lock);
 		return 0;
+	}
 
 	mod_delayed_work(system_wq, &chg_drv->bd_work, 0);
 	mutex_unlock(&chg_drv->bd_lock);
