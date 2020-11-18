@@ -3872,6 +3872,74 @@ static const DEVICE_ATTR_RO(ssoc_details);
 
 /* ------------------------------------------------------------------------- */
 
+static ssize_t show_bd_trickle_cnt(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_trickle_cnt);
+}
+
+static ssize_t set_bd_trickle_cnt(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	batt_drv->ssoc_state.bd_trickle_cnt = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trickle_cnt, 0660,
+		   show_bd_trickle_cnt, set_bd_trickle_cnt);
+
+static ssize_t show_bd_rl_soc_threshold(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_rl_soc_threshold);
+}
+
+#define BD_RL_SOC_FULL		100
+#define BD_RL_SOC_LOW		0
+static ssize_t set_bd_rl_soc_threshold(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val >= BD_RL_SOC_FULL) || (val <= BD_RL_SOC_LOW))
+		return count;
+
+	batt_drv->ssoc_state.bd_rl_soc_threshold = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_rl_soc_threshold, 0660,
+		   show_bd_rl_soc_threshold, set_bd_rl_soc_threshold);
+
+/* ------------------------------------------------------------------------- */
+
 static int batt_init_fs(struct batt_drv *batt_drv)
 {
 	struct dentry *de = NULL;
@@ -3932,6 +4000,17 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create ttf_details\n");
 
+	/* TRICKLE-DEFEND */
+	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_bd_trickle_cnt);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_trickle_cnt\n");
+
+	ret = device_create_file(&batt_drv->psy->dev,
+				 &dev_attr_bd_rl_soc_threshold);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_rl_soc_threshold\n");
 
 #ifdef CONFIG_DEBUG_FS
 	de = debugfs_create_dir("google_battery", 0);
