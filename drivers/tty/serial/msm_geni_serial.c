@@ -117,9 +117,9 @@
 #define WAIT_XFER_MAX_ITER	(2)
 #define WAIT_XFER_MAX_TIMEOUT_US	(10000)
 #define WAIT_XFER_MIN_TIMEOUT_US	(9000)
-#define IPC_LOG_PWR_PAGES	(6)
-#define IPC_LOG_MISC_PAGES	(10)
-#define IPC_LOG_TX_RX_PAGES	(10)
+#define IPC_LOG_PWR_PAGES (30)
+#define IPC_LOG_MISC_PAGES (30)
+#define IPC_LOG_TX_RX_PAGES (30)
 #define DATA_BYTES_PER_LINE	(32)
 
 #define IPC_LOG_MSG(ctx, x...) do { \
@@ -265,6 +265,12 @@ static void dump_ipc(void *ipc_ctx, char *prefix, char *string,
 static bool device_pending_suspend(struct uart_port *uport)
 {
 	int usage_count = atomic_read(&uport->dev->power.usage_count);
+	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
+
+	IPC_LOG_MSG(port->ipc_log_pwr,
+		    "%s: usage_count:%d ioctl_count:%d, suspend=%d\n", __func__,
+		    usage_count, port->ioctl_count,
+		    pm_runtime_status_suspended(uport->dev));
 
 	return (pm_runtime_status_suspended(uport->dev) || !usage_count);
 }
@@ -355,6 +361,7 @@ static int vote_clock_on(struct uart_port *uport)
 		"%s :%s ioctl:%d usage_count:%d edge-Count:%d\n",
 		__func__, current->comm, port->ioctl_count,
 		usage_count, port->edge_count);
+
 	return 0;
 }
 
@@ -401,13 +408,21 @@ static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
 		break;
 	}
 	case TIOCPMACT: {
+		usage_count = atomic_read(&uport->dev->power.usage_count);
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s : TIOCPMACT usage_count = %d\n", __func__,
+			    usage_count);
 		ret = !pm_runtime_status_suspended(uport->dev);
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s : TIOCPMACT 1 usage_count = %d\n", __func__,
+			    usage_count);
 		break;
 	}
 	case TIOCUCGET: {
 		usage_count = atomic_read(&uport->dev->power.usage_count);
-		IPC_LOG_MSG(port->ipc_log_pwr, "%s :usage_count = %d\n",
-			    __func__, usage_count);
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s : TIOCUCGET usage_count = %d\n", __func__,
+			    usage_count);
 		copy_to_user((int *)arg, &usage_count, sizeof(usage_count));
 	}
 	default:
@@ -532,23 +547,85 @@ static int msm_geni_serial_power_on(struct uart_port *uport)
 
 			IPC_LOG_MSG(port->ipc_log_pwr,
 					"%s:Manual resume\n", __func__);
+			IPC_LOG_MSG(
+				port->ipc_log_pwr,
+				"%s : pm_runtime_disable bef usage_count = %d\n",
+				__func__,
+				atomic_read(&uport->dev->power.usage_count));
 			pm_runtime_disable(uport->dev);
+			IPC_LOG_MSG(
+				port->ipc_log_pwr,
+				"%s : pm_runtime_disable aft usage_count = %d\n",
+				__func__,
+				atomic_read(&uport->dev->power.usage_count));
+			IPC_LOG_MSG(
+				port->ipc_log_pwr,
+				"%s : msm_geni_serial_runtime_resume bef usage_count = %d\n",
+				__func__,
+				atomic_read(&uport->dev->power.usage_count));
 			ret = msm_geni_serial_runtime_resume(uport->dev);
+			IPC_LOG_MSG(
+				port->ipc_log_pwr,
+				"%s : msm_geni_serial_runtime_resume aft usage_count = %d\n",
+				__func__,
+				atomic_read(&uport->dev->power.usage_count));
 			if (ret) {
 				IPC_LOG_MSG(port->ipc_log_pwr,
 					"%s:Manual RPM CB failed %d\n",
 								__func__, ret);
 			} else {
+				IPC_LOG_MSG(
+					port->ipc_log_pwr,
+					"%s : pm_runtime_get_noresume bef usage_count = %d\n",
+					__func__,
+					atomic_read(
+					    &uport->dev->power.usage_count));
 				pm_runtime_get_noresume(uport->dev);
+				IPC_LOG_MSG(
+					port->ipc_log_pwr,
+					"%s : pm_runtime_get_noresume aft usage_count = %d\n",
+					__func__,
+					atomic_read(
+					    &uport->dev->power.usage_count));
+				IPC_LOG_MSG(
+					port->ipc_log_pwr,
+					"%s : pm_runtime_set_active bef usage_count = %d\n",
+					__func__,
+					atomic_read(
+					    &uport->dev->power.usage_count));
 				pm_runtime_set_active(uport->dev);
+				IPC_LOG_MSG(
+					port->ipc_log_pwr,
+					"%s : pm_runtime_set_active aft usage_count = %d\n",
+					__func__,
+					atomic_read(
+					    &uport->dev->power.usage_count));
 				enable_irq(uport->irq);
 			}
+			IPC_LOG_MSG(
+				port->ipc_log_pwr,
+				"%s : pm_runtime_enable bef usage_count = %d\n",
+				__func__,
+				atomic_read(&uport->dev->power.usage_count));
 			pm_runtime_enable(uport->dev);
+			IPC_LOG_MSG(
+				port->ipc_log_pwr,
+				"%s : pm_runtime_enable aft usage_count = %d\n",
+				__func__,
+				atomic_read(&uport->dev->power.usage_count));
 			if (lock)
 				mutex_unlock(&tport->mutex);
 		}
 	} else {
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s : pm_runtime_get_sync bef usage_count = %d\n",
+			    __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 		ret = pm_runtime_get_sync(uport->dev);
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s : pm_runtime_get_sync aft usage_count = %d\n",
+			    __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 		if (ret < 0) {
 			IPC_LOG_MSG(port->ipc_log_pwr, "%s Err\n", __func__);
 			WARN_ON_ONCE(1);
@@ -570,8 +647,12 @@ static void msm_geni_serial_power_off(struct uart_port *uport)
 								__func__);
 		return;
 	}
+	IPC_LOG_MSG(port->ipc_log_misc, "%s.Power off. usage_count:%d\n",
+		    __func__, atomic_read(&uport->dev->power.usage_count));
 	pm_runtime_mark_last_busy(uport->dev);
 	pm_runtime_put_autosuspend(uport->dev);
+	IPC_LOG_MSG(port->ipc_log_misc, "%s.Power off. 1 usage_count:%d\n",
+		    __func__, atomic_read(&uport->dev->power.usage_count));
 }
 
 static int msm_geni_serial_poll_bit(struct uart_port *uport,
@@ -1012,9 +1093,13 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 	}
 
 	if (!uart_console(uport)) {
-		IPC_LOG_MSG(msm_port->ipc_log_misc,
-				"%s.Power on.\n", __func__);
+		IPC_LOG_MSG(msm_port->ipc_log_pwr,
+			    "%s.Power on. usage_count:%d\n", __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 		pm_runtime_get(uport->dev);
+		IPC_LOG_MSG(msm_port->ipc_log_pwr,
+			    "%s.Power on 1. usage_count:%d\n", __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 	}
 
 	if (msm_port->xfer_mode == FIFO_MODE) {
@@ -1051,8 +1136,15 @@ check_flow_ctrl:
 		ios_log_limit = 0;
 	}
 exit_start_tx:
-	if (!uart_console(uport))
+	if (!uart_console(uport)) {
+		IPC_LOG_MSG(msm_port->ipc_log_pwr,
+			    "%s.Power off. usage_count:%d\n", __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 		msm_geni_serial_power_off(uport);
+		IPC_LOG_MSG(msm_port->ipc_log_pwr,
+			    "%s.Power off 1. usage_count:%d\n", __func__,
+			    atomic_read(&uport->dev->power.usage_count));
+	}
 }
 
 static void msm_geni_serial_tx_fsm_rst(struct uart_port *uport)
@@ -1735,7 +1827,15 @@ static irqreturn_t msm_geni_wakeup_isr(int isr, void *dev)
 					__func__, port->wakeup_byte);
 		port->edge_count = 0;
 		tty_flip_buffer_push(tty->port);
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s __pm_wakeup_event bef usage_count:%d\n",
+			    __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 		__pm_wakeup_event(port->geni_wake, WAKEBYTE_TIMEOUT_MSEC);
+		IPC_LOG_MSG(port->ipc_log_pwr,
+			    "%s __pm_wakeup_event aft usage_count:%d\n",
+			    __func__,
+			    atomic_read(&uport->dev->power.usage_count));
 	} else if (port->edge_count < 2) {
 		port->edge_count++;
 	}
@@ -1826,8 +1926,15 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			}
 			msm_port->ioctl_count = 0;
 		}
-
+		IPC_LOG_MSG(
+			msm_port->ipc_log_misc,
+			"%s.pm_runtime_put_sync_suspend bef usage_count:%d\n",
+			__func__, atomic_read(&uport->dev->power.usage_count));
 		ret = pm_runtime_put_sync_suspend(uport->dev);
+		IPC_LOG_MSG(
+			msm_port->ipc_log_misc,
+			"%s.pm_runtime_put_sync_suspend aft usage_count:%d\n",
+			__func__, atomic_read(&uport->dev->power.usage_count));
 		if (ret) {
 			IPC_LOG_MSG(msm_port->ipc_log_pwr,
 			"%s: Failed to suspend:%d\n", __func__, ret);
