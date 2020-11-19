@@ -39,7 +39,7 @@
 };
 
 &google_battery {
-	google,chg-battery-capacity = <0>;
+	google,chg-battery-capacity = <4620>;
 
 	/* charge table for barbet */
 	google,chg-temp-limits = <0 100 200 420 460 480 550>;
