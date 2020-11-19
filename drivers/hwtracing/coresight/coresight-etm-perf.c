@@ -154,9 +154,10 @@ static void free_event_data(struct work_struct *work)
 		struct list_head **ppath;
 
 		ppath = etm_event_cpu_path_ptr(event_data, cpu);
-		source = coresight_get_source(event_data->path[cpu]);
-		if (!(IS_ERR_OR_NULL(*ppath)))
+		if (!(IS_ERR_OR_NULL(*ppath))) {
+			source = coresight_get_source(*ppath);
 			coresight_release_path(source, *ppath);
+		}
 		*ppath = NULL;
 	}
 
