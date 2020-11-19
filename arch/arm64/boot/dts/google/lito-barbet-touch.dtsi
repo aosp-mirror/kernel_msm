@@ -124,6 +124,7 @@
 		st,panel_map = <&dsi_sofef01_sdc_fhd_plus_cmd 0>;
 		st,force-pi-cfg-ver-map = <0x300>;
 		st,save-golden-ms-raw;
+		st,touch_offload_id = [30 30 62 39]; /* '0' '0' 'b' '9' */
 		tbn,lpi2ap_gpio = <&tlmm 5 0>;
 		tbn,ap2lpi_gpio = <&tlmm 35 0>;
 

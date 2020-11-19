@@ -15,5 +15,6 @@
 		st,disable-auto-fw-update;
 		st,max-coords = <1079 2339>;
 		st,panel_map = <&dsi_sofef01_sdc_1080p_cmd 0>;
+		st,touch_offload_id = [30 30 62 39]; /* '0' '0' 'b' '9' */
 	};
 };
