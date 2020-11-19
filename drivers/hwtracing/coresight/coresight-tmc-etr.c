@@ -2067,12 +2067,9 @@ out:
 
 static int tmc_disable_etr_sink(struct coresight_device *csdev)
 {
-	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	int ret;
 
-	mutex_lock(&drvdata->mem_lock);
 	ret = _tmc_disable_etr_sink(csdev, false);
-	mutex_unlock(&drvdata->mem_lock);
 	return ret;
 }
 
