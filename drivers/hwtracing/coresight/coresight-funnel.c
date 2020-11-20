@@ -93,7 +93,7 @@ static int funnel_enable(struct coresight_device *csdev, int inport,
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	if (first_enable)
-		dev_info(drvdata->dev, "FUNNEL inport %d enabled\n", inport);
+		dev_dbg(drvdata->dev, "FUNNEL inport %d enabled\n", inport);
 	return rc;
 }
 

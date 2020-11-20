@@ -1535,7 +1535,7 @@ out:
 	if (!ret) {
 		if (drvdata->out_mode == TMC_ETR_OUT_MODE_MEM)
 			tmc_etr_byte_cntr_start(drvdata->byte_cntr);
-		dev_info(drvdata->dev, "TMC-ETR enabled\n");
+		dev_dbg(drvdata->dev, "TMC-ETR enabled\n");
 	}
 
 	return ret;
@@ -2057,7 +2057,7 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 		}
 	}
 out:
-	dev_info(drvdata->dev, "TMC-ETR disabled\n");
+	dev_dbg(drvdata->dev, "TMC-ETR disabled\n");
 	return 0;
 }
 
