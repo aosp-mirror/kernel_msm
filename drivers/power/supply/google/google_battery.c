@@ -764,12 +764,11 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state, qnum_t delta,
 	if (ssoc_level >= SSOC_FULL) {
 		const qnum_t rlt = qnum_fromint(ssoc_state->rl_soc_threshold);
 
-		gdf -=  qnum_rconst(ssoc_state->ssoc_delta);
-		if (gdf < rlt - qnum_rconst(ssoc_state->ssoc_delta))
-			gdf = rlt - qnum_rconst(ssoc_state->ssoc_delta);
+		gdf -=  delta;
+		if (gdf < rlt - delta)
+			gdf = rlt - delta;
 
 		type = SSOC_UIC_TYPE_DSG;
-		gdf -=  delta;
 	}
 
 	ssoc_change_curve_at_gdf(ssoc_state, gdf,
