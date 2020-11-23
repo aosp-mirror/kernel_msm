@@ -43,6 +43,14 @@
 #define CHG_WORK_ERROR_RETRY_MS		1000
 #define CHG_WORK_BD_TRIGGERED_MS	(5 * 60 * 1000)
 
+#define MAX_BD_VOLTAGE	4300000
+#define MIN_BD_VOLTAGE	3800000
+#define MAX_BD_SOC	100
+#define MIN_BD_SOC	0
+#define MAX_BD_TEMP	500
+#define MIN_BD_TEMP	0
+
+
 struct chg_profile {
 	u32 update_interval;
 	u32 battery_capacity;
@@ -1721,6 +1729,257 @@ static ssize_t set_charge_start_level(struct device *dev,
 static DEVICE_ATTR(charge_start_level, 0660,
 		   show_charge_start_level, set_charge_start_level);
 
+static ssize_t show_bd_trigger_voltage(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_trigger_voltage);
+}
+
+static ssize_t set_bd_trigger_voltage(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_VOLTAGE || val < MIN_BD_VOLTAGE)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_trigger_voltage = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trigger_voltage, 0660,
+		   show_bd_trigger_voltage, set_bd_trigger_voltage);
+
+static ssize_t show_bd_trigger_temp(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_trigger_temp);
+}
+
+static ssize_t set_bd_trigger_temp(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_TEMP || val < MIN_BD_TEMP)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_trigger_temp = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trigger_temp, 0660,
+		   show_bd_trigger_temp, set_bd_trigger_temp);
+
+static ssize_t show_bd_trigger_time(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_trigger_time);
+}
+
+static ssize_t set_bd_trigger_time(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val < 0)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_trigger_time = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trigger_time, 0660,
+		   show_bd_trigger_time, set_bd_trigger_time);
+
+static ssize_t show_bd_recharge_voltage(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_recharge_voltage);
+}
+
+static ssize_t set_bd_recharge_voltage(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_VOLTAGE || val < MIN_BD_VOLTAGE)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_recharge_voltage = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_recharge_voltage, 0660,
+		   show_bd_recharge_voltage, set_bd_recharge_voltage);
+
+static ssize_t show_bd_resume_abs_temp(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_abs_temp);
+}
+
+static ssize_t set_bd_resume_abs_temp(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_TEMP || val < MIN_BD_TEMP)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_abs_temp = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_resume_abs_temp, 0660,
+		   show_bd_resume_abs_temp, set_bd_resume_abs_temp);
+
+
+static ssize_t show_bd_resume_time(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_time);
+}
+
+static ssize_t set_bd_resume_time(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val < 0)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_time = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_resume_time, 0660,
+		   show_bd_resume_time, set_bd_resume_time);
+
+static ssize_t show_bd_resume_temp(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_temp);
+}
+
+static ssize_t set_bd_resume_temp(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_TEMP || val < MIN_BD_TEMP)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_temp = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_resume_temp, 0660,
+		    show_bd_resume_temp, set_bd_resume_temp);
+
+static ssize_t show_bd_resume_soc(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_soc);
+}
+
+static ssize_t set_bd_resume_soc(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_SOC || val < MIN_BD_SOC)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_soc = val;
+
+	return count;
+}
+static DEVICE_ATTR(bd_resume_soc, 0660, show_bd_resume_soc, set_bd_resume_soc);
+
 #ifdef CONFIG_DEBUG_FS
 
 /* use qcom VS maxim fg and more... */
@@ -1825,22 +2084,6 @@ static int init_debugfs(struct chg_drv *chg_drv)
 				   chg_drv, &cv_otv_margin_fops);
 		debugfs_create_file("fv_uv_margin", 0644, de,
 				   chg_drv, &fv_uv_margin_fops);
-		debugfs_create_u32("bd_trigger_voltage", 0644, de,
-			   &chg_drv->bd_state.bd_trigger_voltage);
-		debugfs_create_u32("bd_trigger_temp", 0644, de,
-			   &chg_drv->bd_state.bd_trigger_temp);
-		debugfs_create_u32("bd_trigger_time", 0644, de,
-			   &chg_drv->bd_state.bd_trigger_time);
-		debugfs_create_u32("bd_recharge_voltage", 0644, de,
-			   &chg_drv->bd_state.bd_recharge_voltage);
-		debugfs_create_u32("bd_resume_abs_temp", 0644, de,
-			   &chg_drv->bd_state.bd_resume_abs_temp);
-		debugfs_create_u32("bd_resume_time", 0644, de,
-			   &chg_drv->bd_state.bd_resume_time);
-		debugfs_create_u32("bd_resume_temp", 0644, de,
-			   &chg_drv->bd_state.bd_resume_temp);
-		debugfs_create_u32("bd_resume_soc", 0644, de,
-			   &chg_drv->bd_state.bd_resume_soc);
 		debugfs_create_u32("bd_triggered", 0644, de,
 			   &chg_drv->bd_state.triggered);
 		debugfs_create_file("bd_enabled", 0600, de,
@@ -1992,6 +2235,63 @@ static int google_charger_probe(struct platform_device *pdev)
 	ret = device_create_file(&pdev->dev, &dev_attr_charge_start_level);
 	if (ret != 0) {
 		pr_err("Failed to create charge_start_level files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_voltage);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_voltage files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_temp);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_temp files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_time);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_time files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device,
+				 &dev_attr_bd_recharge_voltage);
+	if (ret != 0) {
+		pr_err("Failed to create bd_recharge_voltage files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_abs_temp);
+	if (ret != 0) {
+		pr_err("Failed to create bd_resume_abs_temp files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_time);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_time files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_temp);
+	if (ret != 0) {
+		pr_err("Failed to create bd_resume_temp files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_soc);
+	if (ret != 0) {
+		pr_err("Failed to create bd_resume_soc files, ret=%d\n",
 		       ret);
 		return ret;
 	}
