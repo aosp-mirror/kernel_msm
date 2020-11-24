@@ -206,6 +206,7 @@ struct bd_data {
 	time_t disconnect_time;
 	u32 triggered;		/* (d) */
 	u32 enabled;		/* (d) */
+	u32 bd_temp_enable;	/* for UI setting interface */
 
 	bool lowerbd_reached;
 	bool bd_temp_dry_run;
@@ -1264,6 +1265,7 @@ static void bd_reset(struct bd_data *bd_state)
 				bd_state->bd_recharge_soc)) &&
 			    bd_state->bd_trigger_time &&
 			    bd_state->bd_trigger_temp &&
+			    bd_state->bd_temp_enable &&
 			    can_resume;
 }
 
@@ -1326,6 +1328,7 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 		 of_property_read_bool(dev->of_node, "google,bd-temp-dry-run");
 
 	/* also call to resume charging */
+	bd_state->bd_temp_enable = 1;
 	bd_reset(bd_state);
 	if (!bd_state->enabled)
 		dev_warn(dev, "TEMP-DEFEND not enabled\n");
@@ -2240,6 +2243,42 @@ charge_disable_show(struct device *dev,
 static DEVICE_ATTR_RO(charge_disable);
 
 static ssize_t
+bd_temp_enable_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			chg_drv->bd_state.bd_temp_enable);
+}
+
+static ssize_t bd_temp_enable_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (chg_drv->bd_state.bd_temp_enable == val)
+		return count;
+
+	chg_drv->bd_state.bd_temp_enable = val;
+
+	bd_reset(&chg_drv->bd_state);
+
+	if (chg_drv->bat_psy)
+		power_supply_changed(chg_drv->bat_psy);
+
+
+	return count;
+}
+static DEVICE_ATTR_RW(bd_temp_enable);
+
+static ssize_t
 bd_trigger_voltage_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -2982,6 +3021,13 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 	ret = device_create_file(chg_drv->device, &dev_attr_charge_disable);
 	if (ret != 0) {
 		pr_err("Failed to create charge_disable files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_temp_enable);
+	if (ret != 0) {
+		pr_err("Failed to create bd_temp_enable files, ret=%d\n",
 		       ret);
 		return ret;
 	}
