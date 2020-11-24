@@ -2748,6 +2748,7 @@ static void max1720x_dumpreg_work(struct work_struct *work)
 
 #define IRQ_STORM_TRIGGER_SECONDS		60
 #define IRQ_STORM_TRIGGER_MAX_COUNTS		50
+#define IRQ_LOG_PERIOD		600
 static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 {
 	struct max1720x_chip *chip = (struct max1720x_chip *)obj;
@@ -2757,6 +2758,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	static int stime;
 	static int dump_time;
 	bool storm = false;
+	bool is_log = false;
 
 	now_time = div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC);
 	if (now_time < IRQ_STORM_TRIGGER_SECONDS) {
@@ -2884,15 +2886,14 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 		pr_debug("BR is set\n");
 
 	err = REGMAP_WRITE(chip->regmap, MAX1720X_STATUS, fg_status_clr);
-	if (err != 0) {
-		logbuffer_log(chip->maxfg_log,
-			      "status:%#x failed to write %#x to status register (%d)",
-			      fg_status, fg_status_clr, err);
-	} else {
-		u16 temp;
+	is_log = (now_time - dump_time > IRQ_LOG_PERIOD) || dump_time == 0;
+	if (err == 0) {
+		u16 temp = 0;
 
 		err = REGMAP_READ(chip->regmap, MAX1720X_STATUS, &temp);
-		if (err != 0) {
+		if (!is_log) {
+			/* do nothing */
+		} else if (err != 0) {
 			logbuffer_log(chip->maxfg_log,
 				      "status=%#x, fg_status_clr=%#x failed to read status register (%d)",
 				      fg_status, fg_status_clr, err);
@@ -2900,12 +2901,14 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 			logbuffer_log(chip->maxfg_log,
 				      "status=%#x, fg_status_clr=%#x, temp=%#x failed to clear status register",
 				      fg_status, fg_status_clr, temp);
-			/* Set 10 min to prevent dump too frequently */
-			if (now_time - dump_time > 600 || dump_time == 0) {
-				schedule_delayed_work(&chip->dumpreg_work, 0);
-				dump_time = now_time;
-			}
+
+			schedule_delayed_work(&chip->dumpreg_work, 0);
+			dump_time = now_time;
 		}
+	} else if (is_log) {
+		logbuffer_log(chip->maxfg_log,
+			      "status:%#x failed to write %#x to status register (%d)",
+			      fg_status, fg_status_clr, err);
 	}
 
 	if (storm && (fg_status & MAX1720X_STATUS_DSOCI)) {
