@@ -115,6 +115,8 @@
 		google,bd-trigger-temp = <320>;
 		google,bd-trigger-voltage = <4270000>;
 		google,bd-recharge-voltage = <4250000>;
+		google,bd-drainto-soc = <80>;
+		google,bd-recharge-soc = <79>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
