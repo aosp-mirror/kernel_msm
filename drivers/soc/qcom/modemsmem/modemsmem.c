@@ -230,7 +230,8 @@ static int modem_smem_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id modem_smem_of_match[] = {
-	{.compatible = "modemsmem",}
+	{ .compatible = "modemsmem", },
+	{},
 };
 MODULE_DEVICE_TABLE(of, modem_smem_of_match);
 
