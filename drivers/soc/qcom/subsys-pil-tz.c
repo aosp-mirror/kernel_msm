@@ -822,12 +822,17 @@ static void log_failure_reason(struct pil_tz_data *d)
 	spin_unlock_irqrestore(&d->subsys_desc.ssr_sysfs_lock, flags);
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
 	/*
-	 * Debug only for b/165807182:
+	 * Debug only
 	 * Trigger full ramdump for specific SSR signature
+	 * b/165807182 - wal_Bp_Timeout_Assert_handler:77
+	 * b/169414590 - NOCError
 	 */
 	if (!strcmp(name, "modem")) {
 		if (strnstr(reason, "wal_Bp_Timeout_Assert_handler:77",
 				strlen(reason)))
+			BUG();
+		if (strnstr(reason, "NOCError", strlen(reason)) &&
+                    strnstr(reason, "wlan_process", strlen(reason)))
 			BUG();
 	}
 }
