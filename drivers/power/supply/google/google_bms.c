@@ -464,6 +464,7 @@ int gbms_read_charger_state(union gbms_charger_state *chg_state,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(gbms_read_charger_state);
 
 /* ------------------------------------------------------------------------- */
 
