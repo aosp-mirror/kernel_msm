@@ -255,8 +255,8 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->checked_cv_cnt = 0;
 	chg_drv->checked_ov_cnt = 0;
 	chg_drv->checked_tier_switch_cnt = 0;
-	chg_drv->disable_charging = 0;
-	chg_drv->disable_pwrsrc = 0;
+	chg_drv->disable_charging = -1;
+	chg_drv->disable_pwrsrc = -1;
 	chg_drv->lowerdb_reached = true;
 	chg_drv->stop_charging = true;
 	chg_drv->last_cnt_time = 0;
