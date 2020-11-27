@@ -208,6 +208,7 @@ struct bd_data {
 	u32 enabled;		/* (d) */
 
 	bool lowerbd_reached;
+	bool bd_temp_dry_run;
 };
 
 struct chg_drv {
@@ -1321,6 +1322,9 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 	if (ret < 0)
 		bd_state->bd_resume_time = 0;
 
+	bd_state->bd_temp_dry_run =
+		 of_property_read_bool(dev->of_node, "google,bd-temp-dry-run");
+
 	/* also call to resume charging */
 	bd_reset(bd_state);
 	if (!bd_state->enabled)
@@ -1409,6 +1413,9 @@ static int bd_recharge_logic(struct bd_data *bd_state, int val)
 	}
 
 	if (!bd_state->triggered)
+		return 0;
+
+	if (bd_state->bd_temp_dry_run)
 		return 0;
 
 	/* recharge logic between bd_recharge_voltage and bd_trigger_voltage */
@@ -2542,6 +2549,41 @@ static ssize_t bd_resume_soc_store(struct device *dev,
 
 static DEVICE_ATTR_RW(bd_resume_soc);
 
+static ssize_t
+bd_temp_dry_run_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			chg_drv->bd_state.bd_temp_dry_run);
+}
+
+static ssize_t bd_temp_dry_run_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	bool dry_run = chg_drv->bd_state.bd_temp_dry_run;
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > 0 && !dry_run) {
+		chg_drv->bd_state.bd_temp_dry_run = true;
+	} else if (val <= 0 && dry_run) {
+		chg_drv->bd_state.bd_temp_dry_run = false;
+		if (chg_drv->bd_state.triggered)
+			bd_reset(&chg_drv->bd_state);
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(bd_temp_dry_run);
+
 /* TODO: now created in qcom code, create in chg_create_votables() */
 static int chg_find_votables(struct chg_drv *chg_drv)
 {
@@ -3011,6 +3053,13 @@ static int chg_init_fs(struct chg_drv *chg_drv)
 	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_soc);
 	if (ret != 0) {
 		pr_err("Failed to create bd_resume_soc files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_temp_dry_run);
+	if (ret != 0) {
+		pr_err("Failed to create bd_temp_dry_run files, ret=%d\n",
 		       ret);
 		return ret;
 	}
