@@ -36,3 +36,7 @@ config QCOM_KGSL_USE_SHMEM
 	  there will be no support for the memory pools and higher order pages.
 	  But using shmem will help in making kgsl pages available for
 	  reclaiming.
+
+config CORESIGHT_ADRENO
+	bool
+	default y if QCOM_KGSL=y && CORESIGHT=y
