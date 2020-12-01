@@ -663,9 +663,11 @@ static int tmc_probe(struct amba_device *adev, const struct amba_id *id)
 			return ret;
 
 		drvdata->byte_cntr = byte_cntr_init(adev, drvdata);
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 		ret = tmc_etr_bam_init(adev, drvdata);
 		if (ret)
 			return ret;
+#endif /* CONFIG_USB_F_QDSS */
 	}
 
 	drvdata->csdev = coresight_register(&desc);

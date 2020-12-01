@@ -317,6 +317,7 @@ exit_unreg_chrdev_region:
 	return ret;
 }
 
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 static int usb_transfer_small_packet(struct qdss_request *usb_req,
 			struct byte_cntr *drvdata, size_t *small_size)
 {
@@ -553,6 +554,7 @@ static int usb_bypass_init(struct byte_cntr *byte_cntr_data)
 
 	return 0;
 }
+#endif /* CONFIG_USB_F_QDSS */
 
 struct byte_cntr *byte_cntr_init(struct amba_device *adev,
 				 struct tmc_drvdata *drvdata)
@@ -571,12 +573,14 @@ struct byte_cntr *byte_cntr_init(struct amba_device *adev,
 	if (!byte_cntr_data)
 		return NULL;
 
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 	byte_cntr_data->sw_usb = of_property_read_bool(np, "qcom,sw-usb");
 	if (byte_cntr_data->sw_usb) {
 		ret = usb_bypass_init(byte_cntr_data);
 		if (ret)
 			return NULL;
 	}
+#endif /* CONFIG_USB_F_QDSS */
 	ret = devm_request_irq(dev, byte_cntr_irq, etr_handler,
 			       IRQF_TRIGGER_RISING | IRQF_SHARED,
 			       "tmc-etr", byte_cntr_data);

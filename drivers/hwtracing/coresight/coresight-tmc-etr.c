@@ -1142,6 +1142,7 @@ static void tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
 	drvdata->etr_buf = NULL;
 }
 
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 static int tmc_etr_fill_usb_bam_data(struct tmc_drvdata *drvdata)
 {
 	struct tmc_etr_bam_data *bamdata = drvdata->bamdata;
@@ -1421,6 +1422,7 @@ int tmc_etr_bam_init(struct amba_device *adev,
 
 	return sps_register_bam_device(&bamdata->props, &bamdata->handle);
 }
+#endif /* CONFIG_USB_F_QDSS */
 
 static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 {
@@ -1459,6 +1461,7 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 			}
 			coresight_cti_map_trigout(drvdata->cti_flush, 3, 0);
 			coresight_cti_map_trigin(drvdata->cti_reset, 0, 0);
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 		} else if (drvdata->byte_cntr->sw_usb) {
 			if (!drvdata->etr_buf) {
 				free_buf = new_buf =
@@ -1484,6 +1487,7 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 				dev_err(drvdata->dev, "usb_qdss_open failed\n");
 				return -ENODEV;
 			}
+#endif /* CONFIG_USB_F_QDSS */
 		}
 		spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
@@ -2002,6 +2006,7 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 	WARN_ON_ONCE(drvdata->mode == CS_MODE_DISABLED);
 	if (drvdata->mode != CS_MODE_DISABLED) {
 		if (drvdata->out_mode == TMC_ETR_OUT_MODE_USB) {
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 			if (!drvdata->byte_cntr->sw_usb) {
 				__tmc_etr_disable_to_bam(drvdata);
 				spin_unlock_irqrestore(&drvdata->spinlock,
@@ -2018,6 +2023,7 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 				spin_lock_irqsave(&drvdata->spinlock, flags);
 				tmc_etr_disable_hw(drvdata);
 			}
+#endif /* CONFIG_USB_F_QDSS */
 		} else {
 			tmc_etr_disable_hw(drvdata);
 		}
@@ -2056,7 +2062,9 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 			drvdata->etr_buf = NULL;
 		}
 	}
+#if IS_BUILTIN(CONFIG_USB_F_QDSS)
 out:
+#endif /* CONFIG_USB_F_QDSS */
 	dev_dbg(drvdata->dev, "TMC-ETR disabled\n");
 	return 0;
 }
