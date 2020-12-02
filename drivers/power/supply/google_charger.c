@@ -589,8 +589,7 @@ static int bd_update_stats(struct bd_data *bd_state,
 		return 0;
 
 	/* not over vbat and !triggered, nothing to see here */
-	if (vbatt < bd_state->bd_trigger_voltage && !triggered &&
-	    (!bd_state->bd_drainto_soc && !bd_state->bd_recharge_soc))
+	if (vbatt < bd_state->bd_trigger_voltage && !triggered)
 		return 0;
 
 	/* it needs to keep averaging after trigger */
