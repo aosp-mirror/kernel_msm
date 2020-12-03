@@ -4390,6 +4390,11 @@ static int typec_try_sink(struct smb_charger *chg)
 			goto try_sink_exit;
 		}
 
+		if (stat & TYPEC_VBUS_ERROR_STATUS_BIT) {
+			smblib_err(chg, "vbus-error\n");
+			goto try_sink_exit;
+		}
+
 		debounce_done = stat & TYPEC_DEBOUNCE_DONE_STATUS_BIT;
 		vbus_detected = stat & TYPEC_VBUS_STATUS_BIT;
 
