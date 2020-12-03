@@ -442,7 +442,7 @@ struct tcpm_port {
 	 * SNK_READY for non-pd link.
 	 *
 	 * When set, port requests CC advertisement based current limit during
-	 * SNK_DISCOVERY, current gets limited to PD_P_SNK_STDBY_5V during SNK_TRANSITION_SINK,
+	 * SNK_DISCOVERY, current gets limited to PD_P_SNK_STDBY during SNK_TRANSITION_SINK,
 	 * PD based current limit gets set after RX of PD_CTRL_PSRDY.
 	 */
 	bool psnkstdby_after_accept;
@@ -984,6 +984,24 @@ static void tcpm_port_in_hard_reset(struct tcpm_port *port, bool status)
 
 	if (port->tcpc->set_in_hard_reset)
 		port->tcpc->set_in_hard_reset(port->tcpc, status);
+}
+
+static int tcpm_set_stdby_current(struct tcpm_port *port)
+{
+	int ret = -EOPNOTSUPP;
+	u32 stdby_ma = 0;
+
+	if (port->supply_voltage)
+		stdby_ma = PD_P_SNK_STDBY * 1000 / port->supply_voltage;
+
+	if (port->tcpc->set_current_limit) {
+		tcpm_log(port, "Setting standby current %u mV @ %u mA",
+			 port->supply_voltage, stdby_ma);
+		ret = port->tcpc->set_current_limit(port->tcpc, stdby_ma,
+						    port->supply_voltage);
+	}
+
+	return ret;
 }
 
 /*
@@ -4713,10 +4731,13 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 		break;
 	case SNK_TRANSITION_SINK:
-		if (port->psnkstdby_after_accept)
-			tcpm_set_current_limit(port, tcpm_get_current_limit(port) >
-					       PD_P_SNK_STDBY_5V ? PD_P_SNK_STDBY_5V :
-					       tcpm_get_current_limit(port), 5000);
+		if (port->psnkstdby_after_accept &&
+		    port->supply_voltage != port->req_supply_voltage &&
+		    !port->pps_data.active) {
+			if (PD_P_SNK_STDBY <
+			    port->current_limit * port->supply_voltage / 1000)
+				tcpm_set_stdby_current(port);
+		}
 	case SNK_TRANSITION_SINK_VBUS:
 		tcpm_set_state(port, hard_reset_state(port),
 			       PD_T_PS_TRANSITION);
