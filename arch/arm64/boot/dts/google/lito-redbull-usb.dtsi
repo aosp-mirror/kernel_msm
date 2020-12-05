@@ -44,6 +44,7 @@
 		power-role = "dual";
 		try-power-role = "sink";
 		self-powered;
+		psnkstdby-after-accept;
 		source-pdos = <PDO_FIXED(5000, 900,
 					 PDO_FIXED_SUSPEND
 					 | PDO_FIXED_USB_COMM
