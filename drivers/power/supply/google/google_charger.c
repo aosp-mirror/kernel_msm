@@ -1318,7 +1318,6 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 		 of_property_read_bool(dev->of_node, "google,bd-temp-dry-run");
 
 	/* also call to resume charging */
-	bd_state->bd_temp_enable = 1;
 	bd_reset(bd_state);
 	if (!bd_state->enabled)
 		dev_warn(dev, "TEMP-DEFEND not enabled\n");
