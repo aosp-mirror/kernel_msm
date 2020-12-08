@@ -4750,13 +4750,19 @@ static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 	batt_drv->fake_capacity = capacity;
 }
 
-static void gbatt_set_health(struct batt_drv *batt_drv, int health)
+static int gbatt_set_health(struct batt_drv *batt_drv, int health)
 {
+	if (health > POWER_SUPPLY_HEALTH_HOT ||
+	    health < POWER_SUPPLY_HEALTH_UNKNOWN)
+		return -EINVAL;
+
 	batt_drv->batt_health = health;
 
 	/* disable health charging if in overheat */
 	if (health == POWER_SUPPLY_HEALTH_OVERHEAT)
 		msc_logic_health(batt_drv);
+
+	return 0;
 }
 
 static int gbatt_get_property(struct power_supply *psy,
@@ -5070,8 +5076,8 @@ static int gbatt_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_HEALTH:
 		mutex_lock(&batt_drv->chg_lock);
 		if (batt_drv->batt_health != val->intval) {
-			gbatt_set_health(batt_drv, val->intval);
-			if (batt_drv->psy)
+			ret = gbatt_set_health(batt_drv, val->intval);
+			if (ret == 0 && batt_drv->psy)
 				power_supply_changed(batt_drv->psy);
 		}
 		mutex_unlock(&batt_drv->chg_lock);
