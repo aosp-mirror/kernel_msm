@@ -155,7 +155,8 @@ struct batt_ssoc_state {
 	enum batt_rl_status rl_status;
 
 	/* trickle defender */
-	int bd_rl_soc_threshold;
+	bool bd_trickle_enable;
+	int bd_trickle_recharge_soc;
 	int bd_trickle_cnt;
 	bool bd_trickle_dry_run;
 
@@ -980,8 +981,14 @@ static void batt_rl_update_status(struct batt_drv *batt_drv)
 		return;
 	/* recharge logic work on real soc */
 	soc = ssoc_get_real(ssoc_state);
-	rl_soc_threshold = ((bd_cnt > 0) && !bd_dry_run) ?
-		ssoc_state->bd_rl_soc_threshold : ssoc_state->rl_soc_threshold;
+
+	if (ssoc_state->bd_trickle_enable)
+		rl_soc_threshold = ((bd_cnt > 0) && !bd_dry_run) ?
+			ssoc_state->bd_trickle_recharge_soc :
+			ssoc_state->rl_soc_threshold;
+	else
+		rl_soc_threshold = ssoc_state->rl_soc_threshold;
+
 	if (soc > rl_soc_threshold)
 		return;
 
@@ -3883,6 +3890,36 @@ static const DEVICE_ATTR_RO(ssoc_details);
 
 /* ------------------------------------------------------------------------- */
 
+static ssize_t bd_trickle_enable_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_trickle_enable);
+}
+
+static ssize_t bd_trickle_enable_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	batt_drv->ssoc_state.bd_trickle_enable = !!val;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(bd_trickle_enable);
+
 static ssize_t bd_trickle_cnt_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -3912,7 +3949,7 @@ static ssize_t bd_trickle_cnt_store(struct device *dev,
 
 static DEVICE_ATTR_RW(bd_trickle_cnt);
 
-static ssize_t bd_rl_soc_threshold_show(struct device *dev,
+static ssize_t bd_trickle_recharge_soc_show(struct device *dev,
 					struct device_attribute *attr,
 					char *buf)
 {
@@ -3920,14 +3957,14 @@ static ssize_t bd_rl_soc_threshold_show(struct device *dev,
 	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			 batt_drv->ssoc_state.bd_rl_soc_threshold);
+			 batt_drv->ssoc_state.bd_trickle_recharge_soc);
 }
 
 #define BD_RL_SOC_FULL		100
-#define BD_RL_SOC_LOW		0
-static ssize_t bd_rl_soc_threshold_store(struct device *dev,
-					 struct device_attribute *attr,
-					 const char *buf, size_t count)
+#define BD_RL_SOC_LOW		50
+static ssize_t bd_trickle_recharge_soc_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
@@ -3937,15 +3974,15 @@ static ssize_t bd_rl_soc_threshold_store(struct device *dev,
 	if (ret < 0)
 		return ret;
 
-	if ((val >= BD_RL_SOC_FULL) || (val <= BD_RL_SOC_LOW))
+	if ((val >= BD_RL_SOC_FULL) || (val < BD_RL_SOC_LOW))
 		return count;
 
-	batt_drv->ssoc_state.bd_rl_soc_threshold = val;
+	batt_drv->ssoc_state.bd_trickle_recharge_soc = val;
 
 	return count;
 }
 
-static DEVICE_ATTR_RW(bd_rl_soc_threshold);
+static DEVICE_ATTR_RW(bd_trickle_recharge_soc);
 
 static ssize_t bd_trickle_dry_run_show(struct device *dev,
 				       struct device_attribute *attr, char *buf)
@@ -4039,16 +4076,22 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				"Failed to create ttf_details\n");
 
 	/* TRICKLE-DEFEND */
+	ret = device_create_file(&batt_drv->psy->dev,
+				 &dev_attr_bd_trickle_enable);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_trickle_enable\n");
+
 	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_bd_trickle_cnt);
 	if (ret)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create bd_trickle_cnt\n");
 
 	ret = device_create_file(&batt_drv->psy->dev,
-				 &dev_attr_bd_rl_soc_threshold);
+				 &dev_attr_bd_trickle_recharge_soc);
 	if (ret)
 		dev_err(&batt_drv->psy->dev,
-				"Failed to create bd_rl_soc_threshold\n");
+				"Failed to create bd_trickle_recharge_soc\n");
 
 	ret = device_create_file(&batt_drv->psy->dev,
 				 &dev_attr_bd_trickle_dry_run);
@@ -5175,11 +5218,11 @@ static void google_battery_init_work(struct work_struct *work)
 		batt_drv->ssoc_state.rl_soc_threshold =
 				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
 
-	ret = of_property_read_u32(node, "google,bd-recharge-soc-threshold",
-				   &batt_drv->ssoc_state.bd_rl_soc_threshold);
+	ret = of_property_read_u32(node, "google,bd-trickle-recharge-soc",
+				&batt_drv->ssoc_state.bd_trickle_recharge_soc);
 	if (ret < 0)
-		batt_drv->ssoc_state.bd_rl_soc_threshold =
-				DEFAULT_BD_RL_SOC_THRESHOLD;
+		batt_drv->ssoc_state.bd_trickle_recharge_soc =
+					DEFAULT_BD_RL_SOC_THRESHOLD;
 
 	batt_drv->ssoc_state.bd_trickle_dry_run = false;
 
