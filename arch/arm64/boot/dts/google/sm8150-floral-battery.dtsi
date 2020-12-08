@@ -189,7 +189,7 @@
 		/* battery high temperature update threshold */
 		google,update-high-temp-threshold = <550>;
 		/* TRICKLE-DEFEND threshold */
-		google,bd-recharge-soc-threshold = <80>;
+		google,bd-trickle-recharge-soc = <80>;
 
 		#thermal-sensor-cells = <0>;
 	};
