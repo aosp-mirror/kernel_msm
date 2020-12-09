@@ -105,6 +105,18 @@
 			 30   0   0
 		>;
 		google,chg-cc-tolerance = <25>;
+
+		/* b/170700459 thresholds */
+		google,bd-resume-abs-temp = <280>;
+		google,bd-resume-soc = <50>;
+		google,bd-resume-time = <14400>;  /* 4 hours */
+		google,bd-resume-temp = <290>;
+		google,bd-trigger-time = <21600>; /* 6 hours */
+		google,bd-trigger-temp = <320>;
+		google,bd-trigger-voltage = <4270000>;
+		google,bd-recharge-voltage = <4250000>;
+		google,bd-drainto-soc = <80>;
+		google,bd-recharge-soc = <79>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {

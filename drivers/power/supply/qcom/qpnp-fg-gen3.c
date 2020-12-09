@@ -4044,6 +4044,10 @@ static int fg_psy_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CC_STEP_SEL:
 		pval->intval = chip->ttf.cc_step.sel;
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		rc = power_supply_get_property(chip->batt_psy,
+					       POWER_SUPPLY_PROP_HEALTH, pval);
+		break;
 	default:
 		pr_err("unsupported property %d\n", psp);
 		rc = -EINVAL;
@@ -4143,6 +4147,14 @@ static int fg_psy_set_property(struct power_supply *psy,
 		rc = fg_set_jeita_threshold(chip, JEITA_HOT, pval->intval);
 		if (rc < 0) {
 			pr_err("Error in writing jeita_hot, rc=%d\n", rc);
+			return rc;
+		}
+		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		rc = power_supply_set_property(chip->batt_psy,
+					       POWER_SUPPLY_PROP_HEALTH, pval);
+		if (rc < 0) {
+			pr_err("Error in writing health, rc=%d\n", rc);
 			return rc;
 		}
 		break;

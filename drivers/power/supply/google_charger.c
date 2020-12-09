@@ -40,6 +40,17 @@
 
 #define GBMS_ICL_MIN 100000 // 100 mA
 
+#define CHG_WORK_ERROR_RETRY_MS		1000
+#define CHG_WORK_BD_TRIGGERED_MS	(5 * 60 * 1000)
+
+#define MAX_BD_VOLTAGE	4300000
+#define MIN_BD_VOLTAGE	3800000
+#define MAX_BD_SOC	100
+#define MIN_BD_SOC	0
+#define MAX_BD_TEMP	500
+#define MIN_BD_TEMP	0
+
+
 struct chg_profile {
 	u32 update_interval;
 	u32 battery_capacity;
@@ -73,6 +84,36 @@ struct taper_wa_struct {
 	unsigned long last_taper_wa_cnt_time;
 };
 
+struct bd_data {
+	u32 bd_trigger_voltage;	/* also recharge upper bound */
+	u32 bd_trigger_temp;	/* single reading */
+	u32 bd_trigger_time;	/* debounce window after trigger*/
+	u32 bd_drainto_soc;
+	u32 bd_recharge_voltage;
+	u32 bd_recharge_soc;
+
+	u32 bd_resume_abs_temp;	/* at any time after trigger */
+
+	u32 bd_resume_soc;	/* any time after disconnect */
+	u32 bd_resume_time;	/* debounce window for resume temp */
+	u32 bd_resume_temp;	/* check resume_time after disconnect */
+
+	long long temp_sum;
+	time_t time_sum;
+
+	int last_voltage;
+	int last_temp;
+	time_t last_update;
+
+	time_t disconnect_time;
+
+	u32 triggered;		/* (d) */
+	u32 enabled;		/* (d) */
+	u32 bd_temp_enable;	/* for UI setting interface */
+
+	bool lowerbd_reached;
+};
+
 struct chg_drv {
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
@@ -103,6 +144,17 @@ struct chg_drv {
 
 	int chg_mode;
 	int fv_uv;
+
+	/* retail & battery defender */
+	struct delayed_work bd_work;
+
+	struct mutex bd_lock;
+	struct bd_data bd_state;
+	struct wakeup_source bd_ws;
+
+	bool overheat;			/* battery reports overheat */
+	bool freeze_soc;		/* battery soc freeze & thaw */
+
 	int disable_charging;
 	int disable_pwrsrc;
 	bool lowerdb_reached;
@@ -117,6 +169,8 @@ struct chg_drv {
 /* Used as left operand also */
 #define CCCM_LIMITS(profile, ti, vi) \
 	profile->cccm_limits[(ti * profile->volt_nb_limits) + vi]
+
+#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
 
 static int psy_changed(struct notifier_block *nb,
 		       unsigned long action, void *data)
@@ -202,8 +256,8 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	chg_drv->checked_cv_cnt = 0;
 	chg_drv->checked_ov_cnt = 0;
 	chg_drv->checked_tier_switch_cnt = 0;
-	chg_drv->disable_charging = 0;
-	chg_drv->disable_pwrsrc = 0;
+	chg_drv->disable_charging = -1;
+	chg_drv->disable_pwrsrc = -1;
 	chg_drv->lowerdb_reached = true;
 	chg_drv->stop_charging = true;
 	chg_drv->last_cnt_time = 0;
@@ -394,7 +448,370 @@ static int chg_vote_input_suspend(struct chg_drv *chg_drv, char *voter,
 	return 0;
 }
 
-#define CHG_WORK_ERROR_RETRY_MS 1000
+/* check for retail, battery defender */
+static void chg_update_charging_state(struct chg_drv *chg_drv,
+				      int disable_charging,
+				      int disable_pwrsrc)
+{
+
+	/* disable charging is set in retail mode */
+	if (disable_charging != chg_drv->disable_charging) {
+		pr_info("MSC_CHG disable_charging %d -> %d",
+			chg_drv->disable_charging, disable_charging);
+		PSY_SET_PROP(chg_drv->chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE,
+			     disable_charging);
+	}
+	chg_drv->disable_charging = disable_charging;
+
+	/* when disable_pwrsrc is set, disable_charging is set also */
+	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
+		pr_info("MSC_CHG disable_pwrsrc %d -> %d",
+			chg_drv->disable_pwrsrc, disable_pwrsrc);
+
+		/* applied right away */
+		chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, disable_pwrsrc,
+				       true);
+		/* take a wakelock */
+		if (disable_pwrsrc)
+			__pm_stay_awake(&chg_drv->bd_ws);
+		else
+			__pm_relax(&chg_drv->bd_ws);
+
+	}
+	chg_drv->disable_pwrsrc = disable_pwrsrc;
+}
+
+/* called on init, and to reset the trigger */
+static void bd_reset(struct bd_data *bd_state)
+{
+	bool can_resume = bd_state->bd_resume_abs_temp ||
+			  bd_state->bd_resume_time ||
+			  (bd_state->bd_resume_time == 0 &&
+			  bd_state->bd_resume_soc == 0);
+
+	bd_state->time_sum = 0;
+	bd_state->temp_sum = 0;
+	bd_state->last_update = 0;
+	bd_state->last_voltage = 0;
+	bd_state->last_temp = 0;
+	bd_state->triggered = 0;
+	/* also disabled when externally triggered, resume_temp is optional */
+	bd_state->enabled = ((bd_state->bd_trigger_voltage &&
+			      bd_state->bd_recharge_voltage) ||
+			      (bd_state->bd_drainto_soc &&
+			      bd_state->bd_recharge_soc)) &&
+			    bd_state->bd_trigger_time &&
+			    bd_state->bd_trigger_temp &&
+			    bd_state->bd_temp_enable &&
+			    can_resume;
+}
+
+static void bd_init(struct bd_data *bd_state, struct device *dev)
+{
+	int ret;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-trigger-voltage",
+				   &bd_state->bd_trigger_voltage);
+	if (ret < 0)
+		bd_state->bd_trigger_voltage = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-drainto-soc",
+				   &bd_state->bd_drainto_soc);
+	if (ret < 0)
+		bd_state->bd_drainto_soc = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-trigger-temp",
+				   &bd_state->bd_trigger_temp);
+	if (ret < 0)
+		bd_state->bd_trigger_temp = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-trigger-time",
+				   &bd_state->bd_trigger_time);
+	if (ret < 0)
+		bd_state->bd_trigger_time = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-recharge-voltage",
+				   &bd_state->bd_recharge_voltage);
+	if (ret < 0)
+		bd_state->bd_recharge_voltage = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-recharge-soc",
+				   &bd_state->bd_recharge_soc);
+	if (ret < 0)
+		bd_state->bd_recharge_soc = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-resume-abs-temp",
+				   &bd_state->bd_resume_abs_temp);
+	if (ret < 0)
+		bd_state->bd_resume_abs_temp = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-resume-soc",
+				   &bd_state->bd_resume_soc);
+	if (ret < 0)
+		bd_state->bd_resume_soc = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-resume-temp",
+				   &bd_state->bd_resume_temp);
+	if (ret < 0)
+		bd_state->bd_resume_temp = 0;
+
+	ret = of_property_read_u32(dev->of_node, "google,bd-resume-time",
+				   &bd_state->bd_resume_time);
+	if (ret < 0)
+		bd_state->bd_resume_time = 0;
+
+
+	/* also call to resume charging */
+	bd_reset(bd_state);
+	if (!bd_state->enabled)
+		dev_warn(dev, "TEMP-DEFEND not enabled\n", ret);
+
+	pr_info("MSC_BD: trig volt=%d,%d temp=%d,time=%d drainto=%d,%d resume=%d,%d %d,%d\n",
+		bd_state->bd_trigger_voltage, bd_state->bd_recharge_voltage,
+		bd_state->bd_trigger_temp, bd_state->bd_trigger_time,
+		bd_state->bd_drainto_soc, bd_state->bd_recharge_soc,
+		bd_state->bd_resume_abs_temp, bd_state->bd_resume_soc,
+		bd_state->bd_resume_temp, bd_state->bd_resume_time);
+}
+
+/* */
+static int bd_update_stats(struct bd_data *bd_state,
+			   struct power_supply *bat_psy)
+{
+	const bool triggered = bd_state->triggered;
+	const time_t now = get_boot_sec();
+	int vbatt, temp;
+	long long temp_avg;
+
+	if (!bd_state->enabled)
+		return 0;
+
+	vbatt = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW);
+	if (vbatt == -EINVAL)
+		return 0;
+
+	/* not over vbat and !triggered, nothing to see here */
+	if (vbatt < bd_state->bd_trigger_voltage && !triggered)
+		return 0;
+
+	/* it needs to keep averaging after trigger */
+	temp = PSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_TEMP);
+	if (temp == -EINVAL)
+		return 0;
+
+	/* it needs to keep averaging if triggered */
+	if (bd_state->last_update == 0)
+		bd_state->last_update = now;
+
+	if (temp >= bd_state->bd_trigger_temp) {
+		bd_state->time_sum += now - bd_state->last_update;
+		bd_state->temp_sum += temp * (now - bd_state->last_update);
+	}
+	bd_state->last_voltage = vbatt;
+	bd_state->last_update = now;
+	bd_state->last_temp = temp;
+
+	/* wait until we have at least bd_trigger_time */
+	if (bd_state->time_sum < bd_state->bd_trigger_time)
+		return 0;
+
+	/* exit and entry criteria */
+	temp_avg = bd_state->temp_sum / bd_state->time_sum;
+	if (triggered && temp <= bd_state->bd_resume_abs_temp) {
+		pr_info("MSC_BD: resume time_sum=%lld, temp_sum=%lld, temp_avg=%d\n",
+			bd_state->time_sum, bd_state->temp_sum, temp_avg);
+		bd_reset(bd_state);
+	} else if (temp_avg >= bd_state->bd_trigger_temp) {
+		pr_info("MSC_BD: trigger time_sum=%lld, temp_sum=%lld, temp_avg=%d\n",
+			bd_state->time_sum, bd_state->temp_sum, temp_avg);
+		bd_state->triggered = 1;
+	}
+
+	return 0;
+}
+
+/* @return true if BD needs to be triggered */
+static int bd_recharge_logic(struct bd_data *bd_state, int val)
+{
+	int lowerbd, upperbd;
+	int disable_charging = 0;
+
+	if (!bd_state->triggered)
+		return 0;
+
+	if (bd_state->bd_drainto_soc && bd_state->bd_recharge_soc) {
+		lowerbd = bd_state->bd_recharge_soc;
+		upperbd = bd_state->bd_drainto_soc;
+	} else if (bd_state->bd_recharge_voltage &&
+		   bd_state->bd_trigger_voltage) {
+		lowerbd = bd_state->bd_recharge_voltage;
+		upperbd = bd_state->bd_trigger_voltage;
+	} else {
+		return 0;
+	}
+
+	/* recharge logic between bd_recharge_voltage and bd_trigger_voltage */
+	if (bd_state->lowerbd_reached && val >= upperbd) {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, lowerbd_reached=1->0, charging off\n",
+			lowerbd, upperbd, val);
+		bd_state->lowerbd_reached = false;
+		disable_charging = 1;
+	} else if (!bd_state->lowerbd_reached && val > lowerbd) {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, charging off\n",
+			lowerbd, upperbd, val);
+		disable_charging = 1;
+	} else if (!bd_state->lowerbd_reached && val <= lowerbd) {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, lowerbd_reached=0->1, charging on\n",
+			lowerbd, upperbd, val);
+		bd_state->lowerbd_reached = true;
+	} else {
+		pr_info("MSC_BD lowerbd=%d, upperbd=%d, val=%d, charging on\n",
+			lowerbd, upperbd, val);
+	}
+
+	return disable_charging;
+}
+
+
+/* ingnore the failure to set CAPACITY, it might not be implemented */
+static int bd_batt_set_soc(struct chg_drv *chg_drv , int soc)
+{
+	const bool freeze = soc >= 0;
+	int rc = 0;
+
+	pr_debug("MSC_BD soc=%d %s (%d)\n", soc,
+		 soc == -1 ? "THAW" : "FREEZE", rc);
+
+	chg_drv->freeze_soc = freeze;
+	return 0;
+}
+
+static int bd_batt_set_overheat(struct chg_drv *chg_drv , bool hot)
+{
+	const int health = hot ? POWER_SUPPLY_HEALTH_OVERHEAT :
+				 POWER_SUPPLY_HEALTH_UNKNOWN;
+	int ret;
+
+	ret = PSY_SET_PROP(chg_drv->bat_psy, POWER_SUPPLY_PROP_HEALTH, health);
+	if (ret == 0)
+		chg_drv->overheat = hot;
+
+	pr_info("MSC_BD OVERHEAT hot=%d (%d)\n", hot, ret);
+
+	return ret;
+}
+
+static int bd_batt_set_state(struct chg_drv *chg_drv, bool hot, int soc)
+{
+	const bool freeze = soc != -1;
+	int ret = 0;
+
+	/* OVERHEAT is used to rebuild the curve */
+	if (freeze != chg_drv->freeze_soc)
+		ret = bd_batt_set_soc(chg_drv, soc);
+	if (ret == 0 && chg_drv->overheat != hot)
+		ret = bd_batt_set_overheat(chg_drv, hot);
+	return ret;
+}
+
+static int chg_work_read_soc(struct power_supply *bat_psy, int *soc)
+{
+	union power_supply_propval val;
+	int ret = 0;
+
+	ret = power_supply_get_property(bat_psy, POWER_SUPPLY_PROP_CAPACITY,
+					&val);
+	if (ret == 0)
+		*soc = val.intval;
+
+	return ret;
+}
+
+/*
+ * Run in background after disconnect to reset the trigger.
+ * The UI% is not frozen here: only battery health state remain
+ * POWER_SUPPLY_HEALTH_OVERHEAT until the condition clears.
+ */
+
+static void bd_work(struct work_struct *work)
+{
+	struct chg_drv *chg_drv =
+		container_of(work, struct chg_drv, bd_work.work);
+	struct bd_data *bd_state = &chg_drv->bd_state;
+	int interval_ms = CHG_WORK_BD_TRIGGERED_MS;
+	const time_t now = get_boot_sec();
+	const long long delta_time = now - bd_state->disconnect_time;
+	int ret, soc = 0;
+
+	__pm_stay_awake(&chg_drv->bd_ws);
+
+	mutex_lock(&chg_drv->bd_lock);
+
+	pr_debug("MSC_BD_WORK: triggered=%d dsc_time=%ld delta=%lld\n",
+		bd_state->triggered, bd_state->disconnect_time, delta_time);
+
+	/* stop running if the cable in. */
+	if (!chg_drv->stop_charging)
+		goto bd_done;
+
+	/* stop running if battery defender or retail mode are triggered */
+	if (!bd_state->triggered || !bd_state->disconnect_time)
+		goto bd_done;
+
+	if (bd_state->bd_resume_soc &&
+	    chg_work_read_soc(chg_drv->bat_psy, &soc) == 0 &&
+	    soc < bd_state->bd_resume_soc) {
+		pr_info("MSC_BD_WORK: done soc=%d limit=%d\n",
+			soc, bd_state->bd_resume_soc);
+		bd_reset(bd_state);
+		goto bd_rerun;
+	}
+
+	/* reset based on average or instant temp */
+	ret = bd_update_stats(bd_state, chg_drv->bat_psy);
+	if (ret < 0) {
+		pr_err("MSC_BD_WORK: update stats: %d\n", ret);
+		interval_ms = 1000;
+		goto bd_rerun;
+	}
+
+	/* reset on time since disconnect & optional temperature reading */
+	if (bd_state->bd_resume_time && delta_time > bd_state->bd_resume_time) {
+		const int temp = bd_state->last_temp; /* or use avg */
+		int triggered;
+
+		/* single reading < of resume temp, or total average temp */
+		triggered = temp > bd_state->bd_resume_temp;
+		if (!triggered) {
+			pr_info("MSC_BD_WORK: done time=%lld limit=%d, temp=%d limit=%d\n",
+				delta_time, bd_state->bd_resume_time,
+				temp, bd_state->bd_resume_temp);
+			bd_state->triggered = triggered;
+			goto bd_rerun;
+		}
+	}
+
+	pr_info("MSC_BD_WORK: triggered=%d time=%lld < %lld soc=%d > %d temp=%lld > %d\n",
+		bd_state->triggered,
+		delta_time, bd_state->bd_resume_time,
+		soc, bd_state->bd_resume_soc,
+		bd_state->last_temp,
+		bd_state->bd_resume_temp);
+
+bd_rerun:
+	if (!bd_state->triggered) {
+		/* disable the overheat flag, race with DWELL-DEFEND */
+		bd_batt_set_overheat(chg_drv, false);
+	} else {
+		schedule_delayed_work(&chg_drv->bd_work,
+				      msecs_to_jiffies(interval_ms));
+	}
+
+bd_done:
+	mutex_unlock(&chg_drv->bd_lock);
+	__pm_relax(&chg_drv->bd_ws);
+}
+
 static void chg_work(struct work_struct *work)
 {
 	struct chg_drv *chg_drv =
@@ -412,7 +829,9 @@ static void chg_work(struct work_struct *work)
 	int plugged, batt_status;
 	bool rerun_work = false;
 	int disable_charging;
-	int disable_pwrsrc;
+	int disable_pwrsrc = 0;
+	int rc;
+	static bool cable_in;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
@@ -438,8 +857,45 @@ static void chg_work(struct work_struct *work)
 
 	/* If no power source, disable charging and exit */
 	if (!usb_present && !wlc_online) {
-		pr_info("no power source detected, disabling charging\n");
-		reset_chg_drv_state(chg_drv);
+		const bool stop_charging = chg_drv->stop_charging != 1;
+		struct bd_data *bd_state = &chg_drv->bd_state;
+
+		if (stop_charging) {
+			pr_info("no power source detected, disabling charging\n");
+			reset_chg_drv_state(chg_drv);
+			chg_drv->stop_charging = 1;
+			bd_batt_set_state(chg_drv, false, -1);
+		}
+
+		mutex_lock(&chg_drv->bd_lock);
+		if (bd_state->triggered) {
+			const bool bd_ena = bd_state->bd_resume_soc ||
+					    bd_state->bd_resume_time;
+			/*
+			 * clear overheat and thaw soc on disconnect.
+			 * Don not clear the defender state, will
+			 * re-evaluate on next connect.
+			 */
+			if (!bd_state->disconnect_time) {
+				rc = bd_batt_set_state(chg_drv, false, -1);
+				if (rc < 0) {
+					pr_err("MSC_BD set_batt_state (%d)\n",
+					rc);
+					mutex_unlock(&chg_drv->bd_lock);
+					goto error_rerun;
+				}
+				bd_state->disconnect_time = get_boot_sec();
+			}
+			if (bd_ena)
+				mod_delayed_work(system_wq,
+						 &chg_drv->bd_work, 0);
+		}
+		mutex_unlock(&chg_drv->bd_lock);
+
+		/* allow sleep (if disconnected) while draining */
+		if (chg_drv->disable_pwrsrc)
+			__pm_relax(&chg_drv->bd_ws);
+
 		goto exit_chg_work;
 	}
 
@@ -478,29 +934,86 @@ static void chg_work(struct work_struct *work)
 		pr_info("batt. temp. ok, enabling charging\n");
 		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 0);
 		chg_drv->stop_charging = false;
+		cable_in = true;
 	}
 
+	/* BD and retail: disable_pwrsrc = fast drain to the stop level */
+	mutex_lock(&chg_drv->bd_lock);
 	disable_charging = is_charging_disabled(chg_drv, soc);
 	if (disable_charging && soc > chg_drv->charge_stop_level)
 		disable_pwrsrc = 1;
-	else
-		disable_pwrsrc = 0;
+	if (disable_charging) {
+		/* force TEMP-DEFEND off, stop bd_work() */
+		if (chg_drv->bd_state.triggered) {
+			bd_reset(&chg_drv->bd_state);
+			bd_batt_set_state(chg_drv, false, -1);
+		}
+		chg_drv->bd_state.enabled = false;
 
-	if (disable_charging != chg_drv->disable_charging) {
-		pr_info("set disable_charging(%d)", disable_charging);
-		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE,
-			     disable_charging);
+		/*
+		 * This mode can be enabled from DWELL-DEFEND when in "idle",
+		 * while TEMP-DEFEND is triggered and from Retail Mode.
+		 *
+		 * Retail should probably not flag OVERHEAT as this might
+		 * have unwanted interactions with the demo application.
+		 */
+		if (!chg_drv->disable_charging) {
+			rc = bd_batt_set_state(chg_drv, false, -1);
+			if (rc < 0)
+				pr_err("MSC_BD batt reset (%d)\n", rc);
+		}
+	} else if (chg_drv->bd_state.enabled) {
+		struct bd_data *bd_state = &chg_drv->bd_state;
+		const bool was_triggered = bd_state->triggered;
+
+		/* bd_work() is not running here */
+		rc = bd_update_stats(bd_state, bat_psy);
+		if (rc < 0)
+			pr_debug("MSC_DB BD update stats: %d\n", rc);
+
+		/* thaw SOC, clear overheat */
+		if (!bd_state->triggered && was_triggered) {
+			rc = bd_batt_set_state(chg_drv, false, -1);
+			if (rc < 0)
+				pr_err("MSC_BD cannot reset state (%d)\n", rc);
+		} else if (bd_state->triggered) {
+			const int lock_soc = soc; /* or set to 100 */
+
+			/* recharge logic */
+			if (bd_state->bd_drainto_soc) {
+				disable_charging =
+				    bd_recharge_logic(bd_state, soc);
+				if (disable_charging)
+					disable_pwrsrc =
+						soc > bd_state->bd_drainto_soc;
+			} else {
+				disable_charging = bd_recharge_logic(bd_state,
+							bd_state->last_voltage);
+				if (disable_charging)
+					disable_pwrsrc =
+						bd_state->last_voltage >
+						bd_state->bd_trigger_voltage;
+			}
+
+			/* overheat and freeze, on trigger and reconnect */
+			if (!was_triggered || chg_drv->stop_charging
+			    || cable_in) {
+				cable_in = false;
+				rc = bd_batt_set_state(chg_drv, true, lock_soc);
+				if (rc < 0)
+					pr_err("MSC_BD cannot set overheat (%d)\n",
+						rc);
+			}
+		}
+	} else if (chg_drv->disable_charging) {
+		/* re-enable TEMP-DEFEND */
+		bd_reset(&chg_drv->bd_state);
+		/* DWELL-DEFEND handles OVERHEAT status */
 	}
-	chg_drv->disable_charging = disable_charging;
 
-	if (disable_pwrsrc != chg_drv->disable_pwrsrc) {
-		pr_info("MSC_CHG disable_pwrsrc %d -> %d",
-			chg_drv->disable_pwrsrc, disable_pwrsrc);
-
-		chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, disable_pwrsrc,
-						true);
-	}
-	chg_drv->disable_pwrsrc = disable_pwrsrc;
+	/* state in chg_drv->disable_charging, chg_drv->disable_pwrsrc */
+	chg_update_charging_state(chg_drv, disable_charging, disable_pwrsrc);
+	mutex_unlock(&chg_drv->bd_lock);
 
 	/* no need to reschedule, battery psy event will reschedule work item */
 	if (chg_drv->disable_charging || chg_drv->disable_pwrsrc) {
@@ -594,7 +1107,6 @@ static void chg_work(struct work_struct *work)
 			} else if (-ibatt == cc_max) {
 			/* pullback, double penalty if at full current */
 				chg_drv->checked_ov_cnt *= 2;
-
 				pr_info("MSC_VOVER vt=%d  vb=%d ibatt=%d fv_uv=%d->%d\n",
 					vtier, vbatt, ibatt,
 					chg_drv->fv_uv, fv_uv);
@@ -1264,6 +1776,356 @@ static ssize_t set_charge_start_level(struct device *dev,
 static DEVICE_ATTR(charge_start_level, 0660,
 		   show_charge_start_level, set_charge_start_level);
 
+static ssize_t show_bd_temp_enable(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			chg_drv->bd_state.bd_temp_enable);
+}
+
+static ssize_t set_bd_temp_enable(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (chg_drv->bd_state.bd_temp_enable == val)
+		return count;
+
+	chg_drv->bd_state.bd_temp_enable = val;
+
+	bd_reset(&chg_drv->bd_state);
+
+	if (chg_drv->bat_psy)
+		power_supply_changed(chg_drv->bat_psy);
+
+	return count;
+}
+static DEVICE_ATTR(bd_temp_enable, 0660,
+		   show_bd_temp_enable, set_bd_temp_enable);
+
+
+static ssize_t show_bd_trigger_voltage(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_trigger_voltage);
+}
+
+static ssize_t set_bd_trigger_voltage(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_VOLTAGE || val < MIN_BD_VOLTAGE)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_trigger_voltage = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trigger_voltage, 0660,
+		   show_bd_trigger_voltage, set_bd_trigger_voltage);
+
+static ssize_t show_bd_drainto_soc(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_drainto_soc);
+}
+
+static ssize_t set_bd_drainto_soc(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_SOC || val < MIN_BD_SOC)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_drainto_soc = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_drainto_soc, 0660,
+		   show_bd_drainto_soc, set_bd_drainto_soc);
+
+static ssize_t show_bd_trigger_temp(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_trigger_temp);
+}
+
+static ssize_t set_bd_trigger_temp(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_TEMP || val < MIN_BD_TEMP)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_trigger_temp = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trigger_temp, 0660,
+		   show_bd_trigger_temp, set_bd_trigger_temp);
+
+static ssize_t show_bd_trigger_time(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_trigger_time);
+}
+
+static ssize_t set_bd_trigger_time(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val < 0)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_trigger_time = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trigger_time, 0660,
+		   show_bd_trigger_time, set_bd_trigger_time);
+
+static ssize_t show_bd_recharge_voltage(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_recharge_voltage);
+}
+
+static ssize_t set_bd_recharge_voltage(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_VOLTAGE || val < MIN_BD_VOLTAGE)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_recharge_voltage = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_recharge_voltage, 0660,
+		   show_bd_recharge_voltage, set_bd_recharge_voltage);
+
+static ssize_t show_bd_recharge_soc(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_recharge_soc);
+}
+
+static ssize_t set_bd_recharge_soc(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_SOC || val < MIN_BD_SOC)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_recharge_soc = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_recharge_soc, 0660,
+		   show_bd_recharge_soc, set_bd_recharge_soc);
+
+
+static ssize_t show_bd_resume_abs_temp(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_abs_temp);
+}
+
+static ssize_t set_bd_resume_abs_temp(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_TEMP || val < MIN_BD_TEMP)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_abs_temp = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_resume_abs_temp, 0660,
+		   show_bd_resume_abs_temp, set_bd_resume_abs_temp);
+
+
+static ssize_t show_bd_resume_time(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_time);
+}
+
+static ssize_t set_bd_resume_time(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val < 0)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_time = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_resume_time, 0660,
+		   show_bd_resume_time, set_bd_resume_time);
+
+static ssize_t show_bd_resume_temp(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_temp);
+}
+
+static ssize_t set_bd_resume_temp(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_TEMP || val < MIN_BD_TEMP)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_temp = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_resume_temp, 0660,
+		    show_bd_resume_temp, set_bd_resume_temp);
+
+static ssize_t show_bd_resume_soc(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 chg_drv->bd_state.bd_resume_soc);
+}
+
+static ssize_t set_bd_resume_soc(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct chg_drv *chg_drv = dev_get_drvdata(dev);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > MAX_BD_SOC || val < MIN_BD_SOC)
+		return -EINVAL;
+
+	chg_drv->bd_state.bd_resume_soc = val;
+
+	return count;
+}
+static DEVICE_ATTR(bd_resume_soc, 0660, show_bd_resume_soc, set_bd_resume_soc);
+
 #ifdef CONFIG_DEBUG_FS
 
 /* use qcom VS maxim fg and more... */
@@ -1324,6 +2186,35 @@ static int set_fv_uv_margin(void *data, u64 val)
 
 DEFINE_SIMPLE_ATTRIBUTE(fv_uv_margin_fops, get_fv_uv_margin,
 	set_fv_uv_margin, "%llu\n");
+
+static int bd_enabled_get(void *data, u64 *val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	mutex_lock(&chg_drv->bd_lock);
+	*val = chg_drv->bd_state.enabled;
+	mutex_unlock(&chg_drv->bd_lock);
+
+	return 0;
+}
+
+static int bd_enabled_set(void *data, u64 val)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+
+	mutex_lock(&chg_drv->bd_lock);
+
+	bd_reset(&chg_drv->bd_state);
+	if (val == 0)
+		chg_drv->bd_state.enabled = 0;
+
+	mutex_unlock(&chg_drv->bd_lock);
+
+	return 0;
+}
+DEFINE_SIMPLE_ATTRIBUTE(bd_enabled_fops, bd_enabled_get,
+			bd_enabled_set, "%lld\n");
+
 #endif
 
 static int init_debugfs(struct chg_drv *chg_drv)
@@ -1339,6 +2230,10 @@ static int init_debugfs(struct chg_drv *chg_drv)
 				   chg_drv, &cv_otv_margin_fops);
 		debugfs_create_file("fv_uv_margin", 0644, de,
 				   chg_drv, &fv_uv_margin_fops);
+		debugfs_create_u32("bd_triggered", 0644, de,
+			   &chg_drv->bd_state.triggered);
+		debugfs_create_file("bd_enabled", 0600, de,
+			    chg_drv, &bd_enabled_fops);
 	}
 #endif
 	return 0;
@@ -1406,6 +2301,11 @@ static void google_charger_init_work(struct work_struct *work)
 
 	wakeup_source_init(&chg_drv->chg_ws, "google-charger");
 	pr_info("google_charger_init_work done\n");
+
+	mutex_init(&chg_drv->bd_lock);
+	wakeup_source_init(&chg_drv->bd_ws, "defender");
+	INIT_DELAYED_WORK(&chg_drv->bd_work, bd_work);
+	bd_init(&chg_drv->bd_state, chg_drv->device);
 
 	/* catch state changes that happened before registering the notifier */
 	schedule_delayed_work(&chg_drv->chg_work,
@@ -1485,6 +2385,83 @@ static int google_charger_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_temp_enable);
+	if (ret != 0) {
+		pr_err("Failed to create bd_temp_enable files, ret=%d\n", ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_voltage);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_voltage files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_drainto_soc);
+	if (ret != 0) {
+		pr_err("Failed to create bd_drainto_soc files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_temp);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_temp files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_trigger_time);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_time files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device,
+				 &dev_attr_bd_recharge_voltage);
+	if (ret != 0) {
+		pr_err("Failed to create bd_recharge_voltage files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_recharge_soc);
+	if (ret != 0) {
+		pr_err("Failed to create bd_recharge_soc files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_abs_temp);
+	if (ret != 0) {
+		pr_err("Failed to create bd_resume_abs_temp files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_time);
+	if (ret != 0) {
+		pr_err("Failed to create bd_trigger_time files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_temp);
+	if (ret != 0) {
+		pr_err("Failed to create bd_resume_temp files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
+	ret = device_create_file(chg_drv->device, &dev_attr_bd_resume_soc);
+	if (ret != 0) {
+		pr_err("Failed to create bd_resume_soc files, ret=%d\n",
+		       ret);
+		return ret;
+	}
+
 	// TODO: move to debugfs
 	ret = device_create_file(&pdev->dev, &dev_attr_cv_range_accuracy);
 	if (ret != 0) {
@@ -1534,6 +2511,7 @@ static int google_charger_remove(struct platform_device *pdev)
 			power_supply_put(chg_drv->usb_psy);
 		if (chg_drv->wlc_psy)
 			power_supply_put(chg_drv->wlc_psy);
+		wakeup_source_trash(&chg_drv->bd_ws);
 		wakeup_source_trash(&chg_drv->chg_ws);
 	}
 
