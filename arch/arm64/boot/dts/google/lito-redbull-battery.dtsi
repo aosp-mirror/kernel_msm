@@ -96,6 +96,8 @@
 			io-channel-names = "batt-therm",
 					   "batt-id";
 
+			google,chg-term-voltage = <4400>;
+
 			sm7250_bms,chgr@1000 {
 				reg = <0x1000 0x100>;
 				interrupts =
