@@ -2134,6 +2134,7 @@
 # required by qrtr.ko
   alloc_skb_with_frags
   datagram_poll
+  idr_alloc_u32
   in_egroup_p
   netlink_capable
   __radix_tree_insert
@@ -2300,6 +2301,8 @@
   ipv6_getsockopt
   ipv6_setsockopt
   kfree_call_rcu
+  memcg_sockets_enabled_key
+  memory_cgrp_subsys_on_dfl_key
   napi_busy_loop
   net_enable_timestamp
   nf_conntrack_destroy
