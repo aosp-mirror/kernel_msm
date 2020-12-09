@@ -224,6 +224,9 @@
 		google,history-delta-cycle-count = <25>;
 
 		google,ssoc-delta = <2>;
+
+		/* TRICKLE-DEFEND threshold */
+		google,bd-trickle-recharge-soc = <80>;
 	};
 
 	google_charger: google,charger {
@@ -242,6 +245,18 @@
 
 		google,pps-awake;
 		google,usbc-connector = <&usb_con>;
+
+		/* b/170700459 thresholds */
+		google,bd-resume-abs-temp = <280>;
+		google,bd-resume-time = <14400>;  /* 4 hours */
+		google,bd-resume-temp = <290>;
+		google,bd-resume-soc = <50>;
+		google,bd-trigger-time = <21600>; /* 6 hours */
+		google,bd-trigger-temp = <320>;
+		google,bd-trigger-voltage = <4270000>;
+		google,bd-recharge-voltage = <4250000>;
+		google,bd-drainto-soc = <80>;
+		google,bd-recharge-soc = <79>;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
