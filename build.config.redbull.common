@@ -11,7 +11,7 @@ if [ -n "${BUILD_BOOT_IMG}" ]; then
 BUILD_INITRAMFS=1
 LZ4_RAMDISK=1
 MKBOOTIMG_PATH=tools/mkbootimg/mkbootimg.py
-GKI_RAMDISK_PREBUILT_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-bramble.img
+GKI_RAMDISK_PREBUILT_BINARY=${ROOT_DIR}/prebuilts/boot-artifacts/ramdisks/ramdisk-barbet.img
 KERNEL_BINARY=Image.lz4
 BOOT_IMAGE_HEADER_VERSION=3
 BASE_ADDRESS=0x00000000
