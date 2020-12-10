@@ -2485,7 +2485,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 			vbatt, ibatt, fv_uv);
 
 	} else {
-		const int tier_idx = batt_drv->vbatt_idx;
+		const int tier_idx = batt_chg_vbat2tier(batt_drv->vbatt_idx);
 		const int vtier = profile->volt_limits[vbatt_idx];
 		const int switch_cnt = profile->cv_tier_switch_cnt;
 		const int cc_next_max = GBMS_CCCM_LIMITS(profile, temp_idx,
