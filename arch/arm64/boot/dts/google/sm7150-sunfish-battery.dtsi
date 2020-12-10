@@ -226,7 +226,7 @@
 		google,ssoc-delta = <2>;
 
 		/* TRICKLE-DEFEND threshold */
-		google,bd-trickle-rechage-soc = <80>;
+		google,bd-trickle-recharge-soc = <80>;
 	};
 
 	google_charger: google,charger {
