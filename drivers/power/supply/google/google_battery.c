@@ -802,6 +802,8 @@ static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 			  enum batt_rl_status rl_status)
 {
 	const int rl_current = ssoc_state->rl_status;
+	const bool enable = ssoc_state->bd_trickle_enable;
+	const bool dry_run = ssoc_state->bd_trickle_dry_run;
 
 	/* NOTE: NO_OP when RL=DISCHARGE since batt_rl_update_status() flip
 	 * between BATT_RL_STATUS_DISCHARGE and BATT_RL_STATUS_RECHARGE
@@ -824,8 +826,12 @@ static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 	 * NONE->RECHARGE when battery is full (SOC==100%) before charger is.
 	 */
 	if (rl_status == BATT_RL_STATUS_DISCHARGE) {
-		ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
-		ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_DSG;
+		if (enable && !dry_run && ssoc_state->bd_trickle_cnt > 0) {
+			ssoc_change_curve(ssoc_state, 0, SSOC_UIC_TYPE_DSG);
+		} else {
+			ssoc_uicurve_dup(ssoc_state->ssoc_curve, dsg_curve);
+			ssoc_state->ssoc_curve_type = SSOC_UIC_TYPE_DSG;
+		}
 	}
 
 	ssoc_update(ssoc_state, ssoc_state->ssoc_gdf);
