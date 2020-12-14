@@ -1468,6 +1468,10 @@ static int bd_batt_set_state(struct chg_drv *chg_drv, bool hot, int soc)
 	const bool freeze = soc != -1;
 	int ret = 0; /* LOOK! */
 
+	/* do not change soc/health when dry run */
+	if (chg_drv->bd_state.bd_temp_dry_run)
+		return ret;
+
 	/*
 	 * OVERHEAT changes handling of writes to POWER_SUPPLY_PROP_CAPACITY.
 	 * Locking/Unlocking SOC in OVERHEAT causes google_battery to adjust
