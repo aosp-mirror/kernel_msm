@@ -4822,6 +4822,9 @@ static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
 
 static int gbatt_set_health(struct batt_drv *batt_drv, int health)
 {
+	int ret = 0;
+	union power_supply_propval val;
+
 	if (health > POWER_SUPPLY_HEALTH_HOT ||
 	    health < POWER_SUPPLY_HEALTH_UNKNOWN)
 		return -EINVAL;
@@ -4831,6 +4834,13 @@ static int gbatt_set_health(struct batt_drv *batt_drv, int health)
 	/* disable health charging if in overheat */
 	if (health == POWER_SUPPLY_HEALTH_OVERHEAT)
 		msc_logic_health(batt_drv);
+
+	val.intval = health;
+	ret = power_supply_set_property(batt_drv->fg_psy,
+					POWER_SUPPLY_PROP_HEALTH,
+					&val);
+	if (ret < 0)
+		pr_err("failed to write fg_psy health\n");
 
 	return 0;
 }
