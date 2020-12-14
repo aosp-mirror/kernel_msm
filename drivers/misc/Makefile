@@ -88,6 +88,7 @@ lkdtm-$(CONFIG_LKDTM)		+= lkdtm_usercopy.o
 
 obj-$(CONFIG_ACCESS_RAMOOPS)    += access_ramoops.o
 
+KASAN_SANITIZE_lkdtm_rodata.o	:= n
 KCOV_INSTRUMENT_lkdtm_rodata.o	:= n
 CFLAGS_lkdtm_rodata.o		+= $(DISABLE_LTO)
 
