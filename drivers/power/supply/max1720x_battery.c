@@ -502,6 +502,7 @@ struct max1720x_chip {
 	bool init_complete;
 	bool resume_complete;
 	u16 health_status;
+	int health;
 	int fake_capacity;
 	int previous_qh;
 	int current_capacity;
@@ -1489,6 +1490,8 @@ static int max1720x_get_battery_status(struct max1720x_chip *chip)
 static int max1720x_get_battery_health(struct max1720x_chip *chip)
 {
 	/* For health report what ever was recently alerted and clear it */
+	if (chip->health >= POWER_SUPPLY_HEALTH_UNKNOWN)
+		return chip->health;
 
 	if (chip->health_status & MAX1720X_STATUS_VMX) {
 		chip->health_status &= ~MAX1720X_STATUS_VMX;
@@ -2570,6 +2573,17 @@ static void max1720x_filtercfg_work(struct work_struct *work)
 
 }
 
+static int max1720x_set_battery_health(struct max1720x_chip *chip, int health)
+{
+	if (health < POWER_SUPPLY_HEALTH_UNKNOWN ||
+		health > POWER_SUPPLY_HEALTH_HOT)
+		return -EINVAL;
+
+	chip->health = health;
+
+	return 0;
+}
+
 static int max1720x_set_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 const union power_supply_propval *val)
@@ -2619,6 +2633,9 @@ static int max1720x_set_property(struct power_supply *psy,
 		idata = val->intval;
 		rc = batt_res_registers(chip, false, SEL_RES_AVG, &idata);
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		rc = max1720x_set_battery_health(chip, val->intval);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2636,6 +2653,7 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_BATT_CE_CTRL:
 	case POWER_SUPPLY_PROP_RES_FILTER_COUNT:
 	case POWER_SUPPLY_PROP_RESISTANCE_AVG:
+	case POWER_SUPPLY_PROP_HEALTH:
 		return 1;
 	default:
 		break;
@@ -4473,6 +4491,7 @@ static void max1720x_init_work(struct work_struct *work)
 
 	chip->prev_charge_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	chip->fake_capacity = -EINVAL;
+	chip->health = -EINVAL;
 	init_debugfs(chip);
 
 	/* Handle any IRQ that might have been set before init */
