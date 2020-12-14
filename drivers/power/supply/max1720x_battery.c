@@ -2285,7 +2285,8 @@ static int max1720x_capacity_check(int fullcapnom, int cycle_count,
 /* 1 changed, 0 no changes, < 0 error*/
 static int max1720x_fixup_dxacc(int plugged, struct max1720x_chip *chip)
 {
-	u16 temp, vfsoc = 0, repsoc = 0, fullcapnom, mixcap, repcap, fcrep;
+	u16 temp, fullcapnom, mixcap, repcap, fcrep;
+	u16 vfsoc = 0, repsoc = 0, avsoc = 0;
 	int cycle_count, capacity, new_capacity;
 	int err, loops;
 	int dpacc, dqacc;
@@ -2337,6 +2338,22 @@ static int max1720x_fixup_dxacc(int plugged, struct max1720x_chip *chip)
 		return err;
 	}
 
+	/* b/146218573: use avsoc in special charging profile */
+	if (chip->health == POWER_SUPPLY_HEALTH_OVERHEAT && plugged) {
+		chip->reg_prop_capacity_raw = MAX1720X_AVSOC;
+	} else if (chip->reg_prop_capacity_raw == MAX1720X_AVSOC) {
+		err = REGMAP_READ(chip->regmap, MAX1720X_AVSOC, &avsoc);
+		if (err == 0) {
+			err = REGMAP_WRITE(chip->regmap, MAX1720X_REPSOC,
+					   avsoc);
+			if (err == 0)
+				repsoc = avsoc;
+			else
+				pr_warn("Fail to write AvSOC to RepSOC\n");
+		}
+		chip->reg_prop_capacity_raw = MAX1720X_REPSOC;
+	}
+
 	/* vfsoc/repsoc perc, lsb = 1/256 */
 	mixcap = (((u32)vfsoc) * fcrep) / 25600;
 	repcap = (((u32)repsoc) * fcrep) / 25600;
@@ -2365,9 +2382,11 @@ static int max1720x_fixup_dxacc(int plugged, struct max1720x_chip *chip)
 		msleep(MAX17201_FIXUP_UPDATE_DELAY_MS);
 	}
 
-	dev_info(chip->dev, "Fix capacity: %d->%d, vfsoc=0x%x repsoc=0x%x fcrep=0x%x mixcap=0x%x repcap=0x%x ddqacc=0x%x dpacc=0x%x retries=%d (%d)\n",
+	dev_info(chip->dev, "Fix capacity: %d->%d, vfsoc=0x%x repsoc=0x%x "
+		"fcrep=0x%x mixcap=0x%x repcap=0x%x ddqacc=0x%x dpacc=0x%x "
+		"retries=%d raw_reg:0x%x (%d)\n",
 		 fullcapnom, new_capacity, vfsoc, repsoc, fcrep, mixcap, repcap,
-		 dqacc, dpacc, loops, err);
+		 dqacc, dpacc, loops, chip->reg_prop_capacity_raw, err);
 
 	/* TODO:  b/144630261 fix Google Capacity */
 
@@ -2573,13 +2592,44 @@ static void max1720x_filtercfg_work(struct work_struct *work)
 
 }
 
+static int max1720x_set_overheat_capacity(struct max1720x_chip *chip)
+{
+	bool plugged = chip->cap_estimate.cable_in;
+	bool overheat = chip->health == POWER_SUPPLY_HEALTH_OVERHEAT;
+	bool use_avsoc = chip->reg_prop_capacity_raw == MAX1720X_AVSOC;
+	u16 repsoc;
+	int err;
+
+	if (plugged && overheat && !use_avsoc) {
+		err = REGMAP_READ(chip->regmap, MAX1720X_REPSOC, &repsoc);
+		if (err < 0)
+			return err;
+
+		err = REGMAP_WRITE(chip->regmap, MAX1720X_AVSOC, repsoc);
+		if (err < 0)
+			return err;
+
+		chip->reg_prop_capacity_raw = MAX1720X_AVSOC;
+	}
+	return 0;
+}
+
 static int max1720x_set_battery_health(struct max1720x_chip *chip, int health)
 {
+	int rc = 0;
+
 	if (health < POWER_SUPPLY_HEALTH_UNKNOWN ||
 		health > POWER_SUPPLY_HEALTH_HOT)
 		return -EINVAL;
 
 	chip->health = health;
+
+	if (health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+		rc = max1720x_set_overheat_capacity(chip);
+		if (rc < 0)
+			dev_warn(chip->dev,
+				"set_overheat_capacity fail rc=%d\n", rc);
+	}
 
 	return 0;
 }
