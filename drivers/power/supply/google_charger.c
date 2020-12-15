@@ -38,8 +38,6 @@
 
 #define MSC_CHG_VOTER			"msc_chg"
 
-#define GBMS_ICL_MIN 100000 // 100 mA
-
 #define CHG_WORK_ERROR_RETRY_MS		1000
 #define CHG_WORK_BD_TRIGGERED_MS	(5 * 60 * 1000)
 
@@ -415,23 +413,16 @@ static int chg_find_votables(struct chg_drv *chg_drv)
 		? -EINVAL : 0;
 }
 
-/* input suspend votes 0 ICL and call suspend on DC_ICL.
- * If online is true, set ICL to a minimum threshold to leave the
- * power supply online.
- */
+/* input suspend votes 0 ICL and call suspend on DC_ICL */
 static int chg_vote_input_suspend(struct chg_drv *chg_drv, char *voter,
-				  bool suspend, bool online)
+				  bool suspend)
 {
 	int rc;
-	int icl = 0;
 
 	if (chg_find_votables(chg_drv) < 0)
 		return -EINVAL;
 
-	if (online)
-		icl = GBMS_ICL_MIN;
-
-	rc = vote(chg_drv->usb_icl_votable, voter, suspend, icl);
+	rc = vote(chg_drv->usb_icl_votable, voter, suspend, 0);
 	if (rc < 0) {
 		dev_err(chg_drv->device, "Couldn't vote to %s USB rc=%d\n",
 			suspend ? "suspend" : "resume", rc);
@@ -469,8 +460,7 @@ static void chg_update_charging_state(struct chg_drv *chg_drv,
 			chg_drv->disable_pwrsrc, disable_pwrsrc);
 
 		/* applied right away */
-		chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, disable_pwrsrc,
-				       true);
+		chg_vote_input_suspend(chg_drv, MSC_CHG_VOTER, disable_pwrsrc);
 		/* take a wakelock */
 		if (disable_pwrsrc)
 			__pm_stay_awake(&chg_drv->bd_ws);
