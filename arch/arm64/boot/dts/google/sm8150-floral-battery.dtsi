@@ -190,6 +190,8 @@
 		google,update-high-temp-threshold = <550>;
 		/* TRICKLE-DEFEND threshold */
 		google,bd-trickle-recharge-soc = <80>;
+		/* Enable TRICKLE-DEFEND */
+		google,bd-trickle-enable;
 
 		#thermal-sensor-cells = <0>;
 	};
@@ -226,6 +228,8 @@
 		google,bd-recharge-voltage = <4250000>;
 		google,bd-drainto-soc = <80>;
 		google,bd-recharge-soc = <79>;
+		/* Enable TEMP-DEFEND */
+		google,bd-temp-enable;
 	};
 
 	google_wlc_charger: google,wlc_charger {
