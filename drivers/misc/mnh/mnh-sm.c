@@ -263,6 +263,12 @@ static enum mnh_boot_mode mnh_boot_mode = MNH_BOOT_MODE_PCIE;
 /* callback when easel enters and leaves the active state */
 static hotplug_cb_t mnh_hotplug_cb;
 
+/*
+ * Prints power_stats to buf. Returns number of bytes copied.
+ * Excludes mnh_sm_dev.lock.
+ */
+static ssize_t mnh_sm_print_power_stats(char *buf, size_t buffer_max_len);
+
 static int mnh_sm_get_val_from_buf(const char *buf, unsigned long *val)
 {
 	uint8_t *token;
@@ -1522,6 +1528,13 @@ static ssize_t cpu_cg_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(cpu_cg);
 
+static ssize_t power_stats_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return mnh_sm_print_power_stats(buf, PAGE_SIZE);
+}
+static DEVICE_ATTR_RO(power_stats);
+
 #if IS_ENABLED(CONFIG_MNH_SIG)
 /* issue signature verification of the firmware in memory and print results */
 static ssize_t verify_fw_show(struct device *dev,
@@ -1569,6 +1582,7 @@ static struct attribute *mnh_sm_attrs[] = {
 	&dev_attr_mipi_config.attr,
 	&dev_attr_ddr_mbist.attr,
 	&dev_attr_cpu_cg.attr,
+	&dev_attr_power_stats.attr,
 #if IS_ENABLED(CONFIG_MNH_SIG)
 	&dev_attr_verify_fw.attr,
 #endif
@@ -1599,20 +1613,17 @@ static void mnh_sm_record_state_change(int prev_state, int new_state)
 	}
 }
 
-static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
-				size_t cnt, loff_t *ppos)
+static ssize_t mnh_sm_print_power_stats(char *buf, size_t buffer_max_len)
 {
-	const char * const states[MNH_STATE_MAX] = {"OFF", "ACTIVE", "SUSPEND"};
-	char *buf;
+	const char *const states[MNH_STATE_MAX] = { "OFF", "ACTIVE",
+						    "SUSPEND" };
 	int pos = 0;
-	int ret, i;
+	int i;
 	ktime_t last_entry;
 	ktime_t last_exit;
 	ktime_t adjusted_duration;
 	ktime_t partial_duration;
 
-
-#define BUFFER_MAX_LEN (4096)
 #define POWER_DEBUGFS_HEADER "Easel Subsystem Power Stats\n"
 #define PRINT_FORMAT  "%s\n"\
 				"\tCumulative count: %d\n"\
@@ -1620,15 +1631,9 @@ static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
 				"\tLast entry timestamp msec: %lld\n"\
 				"\tLast exit timestamp msec:  %lld\n"
 
-
-	buf = kzalloc(BUFFER_MAX_LEN, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	pos += scnprintf(buf + pos, BUFFER_MAX_LEN - pos, POWER_DEBUGFS_HEADER);
+	pos += scnprintf(buf + pos, buffer_max_len - pos, POWER_DEBUGFS_HEADER);
 
 	mutex_lock(&mnh_sm_dev->lock);
-
 	for (i = 0; i < MNH_STATE_MAX; i++) {
 		adjusted_duration = mnh_sm_dev->state_stats[i].duration;
 		last_entry = mnh_sm_dev->state_stats[i].last_entry;
@@ -1643,18 +1648,33 @@ static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
 				partial_duration);
 		}
 
-		pos += scnprintf(buf + pos, BUFFER_MAX_LEN - pos,
-			PRINT_FORMAT, states[i],
-			mnh_sm_dev->state_stats[i].counter,
-			ktime_to_ms(adjusted_duration),
-			ktime_to_ms(last_entry),
-			ktime_to_ms(last_exit));
+		pos += scnprintf(buf + pos, buffer_max_len - pos, PRINT_FORMAT,
+				 states[i], mnh_sm_dev->state_stats[i].counter,
+				 ktime_to_ms(adjusted_duration),
+				 ktime_to_ms(last_entry),
+				 ktime_to_ms(last_exit));
 	}
-
 	mutex_unlock(&mnh_sm_dev->lock);
-#undef BUFFER_MAX_LEN
+
 #undef POWER_DEBUGFS_HEADER
 #undef PRINT_FORMAT
+
+	return pos;
+}
+
+static ssize_t mnh_sm_dbgfs_read_powerstats(struct file *fp, char __user *ubuf,
+					    size_t cnt, loff_t *ppos)
+{
+	const size_t buffer_max_len = PAGE_SIZE;
+	char *buf;
+	int pos;
+	int ret;
+
+	buf = kzalloc(buffer_max_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	pos = mnh_sm_print_power_stats(buf, buffer_max_len);
 
 	ret = simple_read_from_buffer(ubuf, cnt, ppos, buf, pos);
 	kfree(buf);
