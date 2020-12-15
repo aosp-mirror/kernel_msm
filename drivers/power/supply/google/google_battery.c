@@ -5316,6 +5316,9 @@ static void google_battery_init_work(struct work_struct *work)
 		batt_drv->ssoc_state.bd_trickle_reset_sec =
 				DEFAULT_BD_TRICKLE_RESET_SEC;
 
+	batt_drv->ssoc_state.bd_trickle_enable =
+		of_property_read_bool(node, "google,bd-trickle-enable");
+
 	ret = of_property_read_u32(node, "google,ssoc-delta",
 				   &batt_drv->ssoc_state.ssoc_delta);
 	if (ret < 0)
