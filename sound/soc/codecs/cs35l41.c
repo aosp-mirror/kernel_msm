@@ -1442,11 +1442,11 @@ static int cs35l41_otp_unpack(void *data)
 	}
 
 	otp_map_match = cs35l41_find_otp_map(otp_id_reg);
-
 	if (otp_map_match == NULL) {
 		dev_err(cs35l41->dev, "OTP Map matching ID %d not found\n",
 				otp_id_reg);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
 
 	if (cs35l41->bus_spi) {
@@ -2684,44 +2684,60 @@ static int cs35l41_irq_gpio_config(struct cs35l41_private *cs35l41)
 {
 	struct irq_cfg *irq_gpio_cfg1 = &cs35l41->pdata.irq_config1;
 	struct irq_cfg *irq_gpio_cfg2 = &cs35l41->pdata.irq_config2;
-	int irq_pol = IRQF_TRIGGER_NONE;
+	int ret = 0, irq_pol = IRQF_TRIGGER_NONE;
 
 	if (irq_gpio_cfg1->is_present) {
-		if (irq_gpio_cfg1->irq_pol_inv)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO1_CTRL1,
-						CS35L41_GPIO_POL_MASK,
-						CS35L41_GPIO_POL_MASK);
-		if (irq_gpio_cfg1->irq_out_en)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO1_CTRL1,
-						CS35L41_GPIO_DIR_MASK,
-						0);
-		if (irq_gpio_cfg1->irq_src_sel)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO_PAD_CONTROL,
-						CS35L41_GPIO1_CTRL_MASK,
-						irq_gpio_cfg1->irq_src_sel <<
-						CS35L41_GPIO1_CTRL_SHIFT);
+		if (irq_gpio_cfg1->irq_pol_inv) {
+			ret = regmap_update_bits(cs35l41->regmap,
+						 CS35L41_GPIO1_CTRL1,
+						 CS35L41_GPIO_POL_MASK,
+						 CS35L41_GPIO_POL_MASK);
+			if (ret < 0)
+				goto err;
+		}
+		if (irq_gpio_cfg1->irq_out_en) {
+			ret = regmap_update_bits(cs35l41->regmap,
+						 CS35L41_GPIO1_CTRL1,
+						 CS35L41_GPIO_DIR_MASK, 0);
+			if (ret < 0)
+				goto err;
+		}
+		if (irq_gpio_cfg1->irq_src_sel) {
+			ret = regmap_update_bits(
+				cs35l41->regmap, CS35L41_GPIO_PAD_CONTROL,
+				CS35L41_GPIO1_CTRL_MASK,
+				irq_gpio_cfg1->irq_src_sel
+					<< CS35L41_GPIO1_CTRL_SHIFT);
+			if (ret < 0)
+				goto err;
+		}
 	}
 
 	if (irq_gpio_cfg2->is_present) {
-		if (irq_gpio_cfg2->irq_pol_inv)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO2_CTRL1,
-						CS35L41_GPIO_POL_MASK,
-						CS35L41_GPIO_POL_MASK);
-		if (irq_gpio_cfg2->irq_out_en)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO2_CTRL1,
-						CS35L41_GPIO_DIR_MASK,
-						0);
-		if (irq_gpio_cfg2->irq_src_sel)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO_PAD_CONTROL,
-						CS35L41_GPIO2_CTRL_MASK,
-						irq_gpio_cfg2->irq_src_sel <<
-						CS35L41_GPIO2_CTRL_SHIFT);
+		if (irq_gpio_cfg2->irq_pol_inv) {
+			ret = regmap_update_bits(cs35l41->regmap,
+						 CS35L41_GPIO2_CTRL1,
+						 CS35L41_GPIO_POL_MASK,
+						 CS35L41_GPIO_POL_MASK);
+			if (ret < 0)
+				goto err;
+		}
+		if (irq_gpio_cfg2->irq_out_en) {
+			ret = regmap_update_bits(cs35l41->regmap,
+						 CS35L41_GPIO2_CTRL1,
+						 CS35L41_GPIO_DIR_MASK, 0);
+			if (ret < 0)
+				goto err;
+		}
+		if (irq_gpio_cfg2->irq_src_sel) {
+			ret = regmap_update_bits(
+				cs35l41->regmap, CS35L41_GPIO_PAD_CONTROL,
+				CS35L41_GPIO2_CTRL_MASK,
+				irq_gpio_cfg2->irq_src_sel
+					<< CS35L41_GPIO2_CTRL_SHIFT);
+			if (ret < 0)
+				goto err;
+		}
 	}
 
 	if (irq_gpio_cfg2->irq_src_sel ==
@@ -2732,6 +2748,8 @@ static int cs35l41_irq_gpio_config(struct cs35l41_private *cs35l41)
 		irq_pol = IRQF_TRIGGER_HIGH;
 
 	return irq_pol;
+err:
+	return ret;
 }
 
 static int cs35l41_codec_remove(struct snd_soc_codec *codec)
@@ -3133,6 +3151,11 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	dsp->n_rx_channels = CS35L41_DSP_N_RX_RATES;
 	dsp->n_tx_channels = CS35L41_DSP_N_TX_RATES;
 	ret = wm_halo_init(dsp, &cs35l41->rate_lock);
+	if (ret != 0) {
+		dev_err(cs35l41->dev, "ret : %d, wm_halo_init failed\n", ret);
+		goto err;
+	}
+
 	cs35l41->halo_booted = false;
 
 	for (i = 0; i < CS35L41_DSP_N_RX_RATES; i++)
@@ -3140,15 +3163,39 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	for (i = 0; i < CS35L41_DSP_N_TX_RATES; i++)
 		dsp->tx_rate_cache[i] = 0x1;
 
-	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX5_SRC,
-					CS35L41_INPUT_SRC_VPMON);
-	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX6_SRC,
-					CS35L41_INPUT_SRC_CLASSH);
-	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX7_SRC,
-					CS35L41_INPUT_SRC_TEMPMON);
-	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX8_SRC,
-					CS35L41_INPUT_SRC_RSVD);
+	ret = regmap_write(cs35l41->regmap, CS35L41_DSP1_RX5_SRC,
+			   CS35L41_INPUT_SRC_VPMON);
+	if (ret < 0) {
+		dev_err(cs35l41->dev,
+			"ret : %d, Write INPUT_SRC_VPMON failed\n", ret);
+		goto err_dsp;
+	}
+	ret = regmap_write(cs35l41->regmap, CS35L41_DSP1_RX6_SRC,
+			   CS35L41_INPUT_SRC_CLASSH);
+	if (ret < 0) {
+		dev_err(cs35l41->dev,
+			"ret : %d, Write INPUT_SRC_CLASSH failed\n", ret);
+		goto err_dsp;
+	}
+	ret = regmap_write(cs35l41->regmap, CS35L41_DSP1_RX7_SRC,
+			   CS35L41_INPUT_SRC_TEMPMON);
+	if (ret < 0) {
+		dev_err(cs35l41->dev,
+			"ret : %d, Write INPUT_SRC_TEMPMON failed\n", ret);
+		goto err_dsp;
+	}
+	ret = regmap_write(cs35l41->regmap, CS35L41_DSP1_RX8_SRC,
+			   CS35L41_INPUT_SRC_RSVD);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "ret : %d, Write INPUT_SRC_RSVD failed\n",
+			ret);
+		goto err_dsp;
+	}
 
+	return 0;
+err_dsp:
+	wm_adsp2_remove(dsp);
+err:
 	return ret;
 }
 
@@ -3540,10 +3587,15 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	} else if (cs35l41->dev->of_node) {
 		ret = cs35l41_handle_of_data(cs35l41->dev, &cs35l41->pdata,
 					     cs35l41);
-		if (ret != 0)
-			return ret;
+		if (ret != 0) {
+			dev_err(cs35l41->dev,
+				"ret : %d, Failed to parse of data\n", ret);
+			ret = -ENODEV;
+			goto err;
+		}
 	} else {
-		ret = -EINVAL;
+		dev_err(cs35l41->dev, "No pdata or of node\n");
+		ret = -ENODEV;
 		goto err;
 	}
 
@@ -3585,11 +3637,21 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 			goto err;
 		}
 		usleep_range(1000, 1100);
-		regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS4, &int_status);
+		ret = regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS4,
+				  &int_status);
+		if (ret < 0)
+			dev_err(cs35l41->dev,
+				"ret : %d, Get IRQ1_STATUS4 failed\n", ret);
 		timeout--;
 	} while (!(int_status & CS35L41_OTP_BOOT_DONE));
 
-	regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS3, &int_status);
+	ret = regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS3, &int_status);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "ret: %d, Get IRQ1_STATUS3 failed\n",
+			ret);
+		goto err;
+	}
+
 	if (int_status & CS35L41_OTP_BOOT_ERR) {
 		dev_err(cs35l41->dev, "OTP Boot error\n");
 		ret = -EINVAL;
@@ -3598,13 +3660,14 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	ret = regmap_read(cs35l41->regmap, CS35L41_DEVID, &regid);
 	if (ret < 0) {
-		dev_err(cs35l41->dev, "Get Device ID failed\n");
+		dev_err(cs35l41->dev, "ret : %d, Get Device ID failed\n", ret);
 		goto err;
 	}
 
 	ret = regmap_read(cs35l41->regmap, CS35L41_REVID, &reg_revid);
 	if (ret < 0) {
-		dev_err(cs35l41->dev, "Get Revision ID failed\n");
+		dev_err(cs35l41->dev, "ret : %d, Get Revision ID failed\n",
+			ret);
 		goto err;
 	}
 
@@ -3622,7 +3685,12 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	}
 
 	irq_pol = cs35l41_irq_gpio_config(cs35l41);
-
+	if (irq_pol < 0) {
+		dev_err(cs35l41->dev,
+			"irq_pol : %d, failed to update irq configuration\n",
+			ret);
+		goto err;
+	}
 	mutex_init(&cs35l41->vol_ctl.vol_mutex);
 	cs35l41->vol_ctl.dig_vol = 0;
 	cs35l41->vol_ctl.ramp_init_att = 0;
@@ -3638,6 +3706,12 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	cs35l41->vol_ctl.prev_active_dev = CS35L41_OUTPUT_DEV_SPK;
 	cs35l41->vol_ctl.ramp_wq =
 		create_singlethread_workqueue("cs35l41_ramp");
+	if (cs35l41->vol_ctl.ramp_wq == NULL) {
+		dev_err(cs35l41->dev,
+			"ret : %d, create workqueue ramp failed\n", ret);
+		ret = -ENOMEM;
+		goto err_irq;
+	}
 	INIT_WORK(&cs35l41->vol_ctl.ramp_work, cs35l41_vol_ramp);
 
 	ret = devm_request_threaded_irq(cs35l41->dev, cs35l41->irq, NULL,
@@ -3647,12 +3721,17 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	/* CS35L41 needs INT for PDN_DONE */
 	if (ret != 0) {
 		dev_err(cs35l41->dev, "Failed to request IRQ: %d\n", ret);
-		goto err;
+		goto err_ramp;
 	}
 
 	/* Set interrupt masks for critical errors */
-	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
-			CS35L41_INT1_MASK_DEFAULT);
+	ret = regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
+			   CS35L41_INT1_MASK_DEFAULT);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "ret : %d, Write IRQ1_MASK1 failed\n",
+			ret);
+		goto err_ramp;
+	}
 
 	mutex_init(&cs35l41->force_int_lock);
 
@@ -3667,7 +3746,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		if (ret < 0) {
 			dev_err(cs35l41->dev,
 				"Failed to apply A0 errata patch %d\n", ret);
-			goto err;
+			goto err_otp;
 		}
 		break;
 	case CS35L41_REVID_B0:
@@ -3680,7 +3759,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		if (ret < 0) {
 			dev_err(cs35l41->dev,
 				"Failed to apply B0 errata patch %d\n", ret);
-			goto err;
+			goto err_otp;
 		}
 		break;
 	case CS35L41_REVID_B2:
@@ -3692,7 +3771,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		if (ret < 0) {
 			dev_err(cs35l41->dev,
 				"Failed to apply B2 errata patch %d\n", ret);
-			goto err;
+			goto err_otp;
 		}
 
 		if (cs35l41->pdata.hibernate_enable)
@@ -3713,19 +3792,29 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	ret = cs35l41_otp_unpack(cs35l41);
 	if (ret < 0) {
-		dev_err(cs35l41->dev, "OTP Unpack failed\n");
-		goto err;
+		dev_err(cs35l41->dev, "ret : %d, OTP Unpack failed\n", ret);
+		goto err_otp;
 	}
 
-	regmap_write(cs35l41->regmap,
-			CS35L41_DSP1_CCM_CORE_CTRL, 0);
-	cs35l41_dsp_init(cs35l41);
-
-	ret =  snd_soc_register_codec(cs35l41->dev, &soc_codec_dev_cs35l41,
-					cs35l41_dai, ARRAY_SIZE(cs35l41_dai));
+	ret = regmap_write(cs35l41->regmap, CS35L41_DSP1_CCM_CORE_CTRL, 0);
 	if (ret < 0) {
-		dev_err(cs35l41->dev, "%s: Register codec failed\n", __func__);
-		goto err;
+		dev_err(cs35l41->dev, "ret : %d, Write CCM_CORE_CTRL failed\n",
+			ret);
+		goto err_otp;
+	}
+
+	ret = cs35l41_dsp_init(cs35l41);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "ret : %d, cs35l41_dsp_init failed\n",
+			ret);
+		goto err_otp;
+	}
+
+	ret = snd_soc_register_codec(cs35l41->dev, &soc_codec_dev_cs35l41,
+				     cs35l41_dai, ARRAY_SIZE(cs35l41_dai));
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "ret : %d, Register codec failed\n", ret);
+		goto err_dsp;
 	}
 
 	dev_info(cs35l41->dev, "Cirrus Logic CS35L41 (%x), Revision: %02X\n",
@@ -3733,16 +3822,37 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	cs35l41->wq = create_singlethread_workqueue("cs35l41");
 	if (cs35l41->wq == NULL) {
+		dev_err(cs35l41->dev,
+			"ret : %d, create workqueue cs35l41 failed\n", ret);
 		ret = -ENOMEM;
-		goto err;
+		goto err_codec;
 	}
 
 	INIT_DELAYED_WORK(&cs35l41->hb_work, cs35l41_hibernate_work);
 	mutex_init(&cs35l41->hb_lock);
 
 #if IS_ENABLED(CONFIG_SND_SOC_CODEC_DETECT)
-	cs35l41_misc_init(cs35l41);
+	ret = cs35l41_misc_init(cs35l41);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "ret : %d, cs35l41_misc_init failed\n",
+			ret);
+		goto err_misc;
+	}
 #endif
+	return 0;
+err_misc:
+	destroy_workqueue(cs35l41->wq);
+	mutex_destroy(&cs35l41->hb_lock);
+err_codec:
+	snd_soc_unregister_codec(cs35l41->dev);
+err_dsp:
+	wm_adsp2_remove(&cs35l41->dsp);
+err_otp:
+	mutex_destroy(&cs35l41->force_int_lock);
+err_ramp:
+	destroy_workqueue(cs35l41->vol_ctl.ramp_wq);
+err_irq:
+	mutex_destroy(&cs35l41->vol_ctl.vol_mutex);
 err:
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
 	return ret;
@@ -3760,6 +3870,7 @@ int cs35l41_remove(struct cs35l41_private *cs35l41)
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
 	mutex_destroy(&cs35l41->force_int_lock);
 	wm_adsp2_remove(&cs35l41->dsp);
+	mutex_destroy(&cs35l41->rate_lock);
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
 	snd_soc_unregister_codec(cs35l41->dev);
 	return 0;

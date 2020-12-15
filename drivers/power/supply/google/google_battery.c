@@ -42,11 +42,13 @@
 #define BATT_DELAY_INIT_MS		250
 #define BATT_WORK_FAST_RETRY_CNT	30
 #define BATT_WORK_FAST_RETRY_MS		1000
+#define BATT_WORK_DEBOUNCE_RETRY_MS	3000
 #define BATT_WORK_ERROR_RETRY_MS	1000
 
 #define DEFAULT_BATT_FAKE_CAPACITY		50
 #define DEFAULT_BATT_UPDATE_INTERVAL		30000
 #define DEFAULT_BATT_DRV_RL_SOC_THRESHOLD	97
+#define DEFAULT_BD_RL_SOC_THRESHOLD		90
 #define DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD	550
 
 #define MSC_ERROR_UPDATE_INTERVAL		5000
@@ -129,6 +131,7 @@ struct batt_ssoc_rl_state {
 };
 
 #define SSOC_STATE_BUF_SZ 128
+#define SSOC_DELTA 3
 
 struct batt_ssoc_state {
 	/* output of gauge data filter */
@@ -153,6 +156,12 @@ struct batt_ssoc_state {
 	/* recharge logic */
 	int rl_soc_threshold;
 	enum batt_rl_status rl_status;
+
+	/* trickle defender */
+	bool bd_trickle_enable;
+	int bd_trickle_recharge_soc;
+	int bd_trickle_cnt;
+	bool bd_trickle_dry_run;
 
 	/* buff */
 	char ssoc_state_cstr[SSOC_STATE_BUF_SZ];
@@ -261,6 +270,7 @@ struct batt_drv {
 	/* props */
 	int soh;
 	int fake_capacity;
+	int batt_health;
 	bool dead_battery;
 	int capacity_level;
 	bool chg_done;
@@ -299,6 +309,7 @@ struct batt_drv {
 
 	/* time to full */
 	struct batt_ttf_stats ttf_stats;
+	bool ttf_debounce;
 
 	/* logging */
 	struct logbuffer *ssoc_log;
@@ -597,15 +608,22 @@ static qnum_t ssoc_apply_rl(struct batt_ssoc_state *ssoc)
 
 /* ------------------------------------------------------------------------- */
 
-/* a statement :-) */
-static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
+static int ssoc_get_real_raw(const struct batt_ssoc_state *ssoc)
 {
-	return qnum_toint(ssoc->ssoc_gdf);
+	return ssoc->ssoc_gdf;
 }
 
+/* a statement :-) */
 static qnum_t ssoc_get_capacity_raw(const struct batt_ssoc_state *ssoc)
 {
 	return ssoc->ssoc_rl;
+}
+
+static int ssoc_get_real(const struct batt_ssoc_state *ssoc)
+{
+	const qnum_t real_raw = ssoc_get_real_raw(ssoc);
+
+	return qnum_toint(real_raw);
 }
 
 #define SOC_ROUND_BASE	0.5
@@ -626,7 +644,7 @@ void dump_ssoc_state(struct batt_ssoc_state *ssoc_state, struct logbuffer *log)
 
 	scnprintf(ssoc_state->ssoc_state_cstr,
 		  sizeof(ssoc_state->ssoc_state_cstr),
-		  "SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d",
+		  "SSOC: l=%d%% gdf=%d.%02d uic=%d.%02d rl=%d.%02d ct=%d curve:%s rls=%d bd_cnt=%d",
 		  ssoc_get_capacity(ssoc_state),
 		  qnum_toint(ssoc_state->ssoc_gdf),
 		  qnum_fracdgt(ssoc_state->ssoc_gdf),
@@ -636,7 +654,8 @@ void dump_ssoc_state(struct batt_ssoc_state *ssoc_state, struct logbuffer *log)
 		  qnum_fracdgt(ssoc_state->ssoc_rl),
 		  ssoc_state->ssoc_curve_type,
 		  ssoc_uicurve_cstr(buff, sizeof(buff), ssoc_state->ssoc_curve),
-		  ssoc_state->rl_status);
+		  ssoc_state->rl_status,
+		  ssoc_state->bd_trickle_cnt);
 
 	logbuffer_log(log, "%s", ssoc_state->ssoc_state_cstr);
 	pr_debug("%s\n", ssoc_state->ssoc_state_cstr);
@@ -730,32 +749,39 @@ static int ssoc_work(struct batt_ssoc_state *ssoc_state,
 	return 0;
 }
 
-/* Called on connect and disconnect to adjust the UI curve. Splice at GDF less
- * a fixed delta while UI is at 100% (i.e. in RL) to avoid showing 100% for
- * "too long" after disconnect.
- */
-#define SSOC_DELTA 3
-void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
-		       enum ssoc_uic_type type)
+void ssoc_change_curve_at_gdf(struct batt_ssoc_state *ssoc_state,
+			      qnum_t gdf, qnum_t capacity,
+			      enum ssoc_uic_type type)
 {
 	struct ssoc_uicurve *new_curve;
-	qnum_t gdf = ssoc_state->ssoc_gdf; /* actual battery level */
-	const qnum_t ssoc_level = ssoc_get_capacity(ssoc_state);
-
-	/* force dsg curve when connect/disconnect with battery at 100% */
-	if (ssoc_level >= SSOC_FULL) {
-		gdf -=  qnum_rconst(ssoc_state->ssoc_delta);
-		type = SSOC_UIC_TYPE_DSG;
-	}
 
 	new_curve = (type == SSOC_UIC_TYPE_DSG) ? dsg_curve : chg_curve;
 	ssoc_uicurve_dup(ssoc_state->ssoc_curve, new_curve);
 	ssoc_state->ssoc_curve_type = type;
 
 	/* splice at (->ssoc_gdf,->ssoc_rl) because past spoof */
-	ssoc_uicurve_splice(ssoc_state->ssoc_curve,
-			    gdf,
-			    ssoc_get_capacity_raw(ssoc_state));
+	ssoc_uicurve_splice(ssoc_state->ssoc_curve, gdf, capacity);
+}
+
+/*
+ * Called on connect and disconnect to adjust the UI curve. On disconnect
+ * splice at GDF less a fixed delta while UI is at 100% (i.e. in RL) to
+ * avoid showing 100% for "too long" after disconnect.
+ */
+void ssoc_change_curve(struct batt_ssoc_state *ssoc_state, qnum_t delta,
+		       enum ssoc_uic_type type)
+{
+	qnum_t ssoc_level = ssoc_get_capacity(ssoc_state);
+	qnum_t gdf = ssoc_state->ssoc_gdf; /* actual battery level */
+
+	/* force dsg curve when connect/disconnect with battery at 100% */
+	if (ssoc_level >= SSOC_FULL) {
+		type = SSOC_UIC_TYPE_DSG;
+		gdf -=  delta;
+	}
+
+	ssoc_change_curve_at_gdf(ssoc_state, gdf,
+				 ssoc_get_capacity_raw(ssoc_state), type);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -765,6 +791,7 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state,
  * NOTE: batt_rl_update_status() doesn't call this, it flip from DISCHARGE
  * to recharge on its own.
  * NOTE: call holding chg_lock
+ * FIX: BatteryDefenderUI different rules when battery defender is enabled
  * @pre rl_status != BATT_RL_STATUS_NONE
  */
 static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
@@ -778,6 +805,15 @@ static bool batt_rl_enter(struct batt_ssoc_state *ssoc_state,
 	 */
 	if (rl_current == rl_status || rl_current == BATT_RL_STATUS_DISCHARGE)
 		return false;
+
+	/* bd_trickle_cnt -1 if the rl_status change does not happen at 100% */
+	if (rl_current == BATT_RL_STATUS_RECHARGE &&
+	    rl_status == BATT_RL_STATUS_DISCHARGE) {
+		if (ssoc_get_real(ssoc_state) != SSOC_FULL) {
+			if (ssoc_state->bd_trickle_cnt > 0)
+				ssoc_state->bd_trickle_cnt--;
+		}
+	}
 
 	/* NOTE: rl_status transition from *->DISCHARGE on charger FULL (during
 	 * charge or at the end of recharge) and transition from
@@ -920,53 +956,88 @@ static int ssoc_init(struct batt_ssoc_state *ssoc_state,
  */
 static void batt_rl_reset(struct batt_drv *batt_drv)
 {
-	batt_drv->ssoc_state.rl_status = BATT_RL_STATUS_NONE;
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+
+	ssoc_state->rl_status = BATT_RL_STATUS_NONE;
+	ssoc_state->bd_trickle_cnt = 0;
 }
 
-/* RL recharge: after SSOC work, restart charging.
+/*
+ * RL recharge: call after SSOC work, restart charging when gdf hit the
+ * recharge threshold.
  * NOTE: call holding chg_lock
  */
 static void batt_rl_update_status(struct batt_drv *batt_drv)
 {
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
-	int soc;
+	const bool bd_dry_run = ssoc_state->bd_trickle_dry_run;
+	const int bd_cnt = ssoc_state->bd_trickle_cnt;
+	int soc, rl_soc_threshold;
 
 	/* already in _RECHARGE or _NONE, done */
 	if (ssoc_state->rl_status != BATT_RL_STATUS_DISCHARGE)
 		return;
-
+	/* no threashold (why I am here???) */
+	if (!ssoc_state->rl_soc_threshold)
+		return;
 	/* recharge logic work on real soc */
 	soc = ssoc_get_real(ssoc_state);
-	if (ssoc_state->rl_soc_threshold &&
-	    soc <= ssoc_state->rl_soc_threshold) {
 
-		/* change state (will restart charge) on trigger */
-		ssoc_state->rl_status = BATT_RL_STATUS_RECHARGE;
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
-	}
+	if (ssoc_state->bd_trickle_enable)
+		rl_soc_threshold = ((bd_cnt > 0) && !bd_dry_run) ?
+			ssoc_state->bd_trickle_recharge_soc :
+			ssoc_state->rl_soc_threshold;
+	else
+		rl_soc_threshold = ssoc_state->rl_soc_threshold;
 
+	if (soc > rl_soc_threshold)
+		return;
+
+	/* change state (will restart charge) on trigger */
+	ssoc_state->rl_status = BATT_RL_STATUS_RECHARGE;
+	if (batt_drv->psy)
+		power_supply_changed(batt_drv->psy);
+
+	ssoc_state->bd_trickle_cnt++;
 }
 
 /* ------------------------------------------------------------------------- */
 
-/* msc_logic_health() sync ce_data->ce_health to batt_drv->chg_health */
+/*
+ * msc_logic_health() sync ce_data->ce_health to batt_drv->chg_health
+ * . return -EINVAL when the device is not connected to power -ERANGE when
+ *   ttf_soc_estimate() returns a negative value (invalid parameters, or
+ *   corrupted internal data)
+ * . the estimate is 0 when the device is at 100%.
+ * . the estimate is negative during debounce, when in overheat, when
+ *   custom charge levels are active.
+ */
 static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 {
-	qnum_t soc_raw = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
 	qnum_t raw_full = ssoc_point_full - qnum_rconst(SOC_ROUND_BASE);
-	time_t estimate = batt_drv->ttf_stats.ttf_fake;
+	qnum_t soc_raw = ssoc_get_real_raw(&batt_drv->ssoc_state);
+	time_t estimate;
 	int rc;
 
 	if (batt_drv->ssoc_state.buck_enabled != 1)
 		return -EINVAL;
 
-	if (batt_drv->ttf_stats.ttf_fake != -1)
+	if (batt_drv->ttf_stats.ttf_fake != -1) {
+		estimate = batt_drv->ttf_stats.ttf_fake;
 		goto done;
+	}
 
 	/* TTF is 0 when UI shows 100% */
 	if (ssoc_get_capacity(&batt_drv->ssoc_state) == SSOC_FULL) {
 		estimate = 0;
+		goto done;
+	}
+
+	/* no estimates during debounce or with special profiles */
+	if (batt_drv->ttf_debounce ||
+	    batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT ||
+	    batt_drv->chg_state.f.flags & GBMS_CS_FLAG_CCLVL) {
+		estimate = -1;
 		goto done;
 	}
 
@@ -975,6 +1046,8 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 	 * example: 96.64% with SOC_ROUND_BASE = 0.5 -> UI = 97
 	 *    ttf = elap[96] * 0.36 + elap[97] + elap[98] +
 	 *          elap[99] * (1 - 0.5)
+	 *
+	 * negative return value (usually) means data corruption
 	 */
 	rc = ttf_soc_estimate(&estimate, &batt_drv->ttf_stats,
 			      &batt_drv->ce_data, soc_raw, raw_full);
@@ -990,6 +1063,13 @@ done:
 }
 
 /* ------------------------------------------------------------------------- */
+
+static void cev_ts_init(struct gbms_ce_tier_stats *stats, int8_t idx)
+{
+	stats->vtier_idx = idx;
+	stats->temp_idx = -1;
+	stats->soc_in = -1;
+}
 
 /* CEV = Charging EVent */
 static void cev_stats_init(struct gbms_charging_event *ce_data,
@@ -1008,24 +1088,17 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 	ttf_soc_init(&ce_data->soc_stats);
 	ce_data->last_soc = -1;
 
-	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++) {
-		ce_data->tier_stats[i].vtier_idx = i;
-		ce_data->tier_stats[i].temp_idx = -1;
-		ce_data->tier_stats[i].soc_in = -1;
-	}
+	for (i = 0; i < GBMS_STATS_TIER_COUNT ; i++)
+		cev_ts_init(&ce_data->tier_stats[i], i);
 
 	/* batt_chg_health_stats_close() will fix this */
-	ce_data->health_stats.vtier_idx = GBMS_STATS_AC_TI_INVALID;
-	ce_data->health_stats.temp_idx = -1;
-	ce_data->health_stats.soc_in = -1;
+	cev_ts_init(&ce_data->health_stats, GBMS_STATS_AC_TI_INVALID);
 
-	ce_data->full_charge_stats.vtier_idx = GBMS_STATS_AC_TI_FULL_CHARGE;
-	ce_data->full_charge_stats.temp_idx = -1;
-	ce_data->full_charge_stats.soc_in = -1;
+	cev_ts_init(&ce_data->full_charge_stats, GBMS_STATS_AC_TI_FULL_CHARGE);
+	cev_ts_init(&ce_data->high_soc_stats, GBMS_STATS_AC_TI_HIGH_SOC);
+	cev_ts_init(&ce_data->overheat_stats, GBMS_STATS_BD_TI_OVERHEAT_TEMP);
+	cev_ts_init(&ce_data->cc_lvl_stats, GBMS_STATS_BD_TI_CUSTOM_LEVELS);
 
-	ce_data->high_soc_stats.vtier_idx = GBMS_STATS_AC_TI_HIGH_SOC;
-	ce_data->high_soc_stats.temp_idx = -1;
-	ce_data->high_soc_stats.soc_in = -1;
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
@@ -1113,11 +1186,14 @@ static void batt_chg_stats_update_tier(const struct batt_drv *const batt_drv,
 				       time_t elap, int cc,
 				       struct gbms_ce_tier_stats *tier)
 {
-	const int msc_state = batt_drv->msc_state;
 	const uint16_t icl_settled = batt_drv->chg_state.f.icl;
 
-	/* book to previous state */
-	batt_chg_stats_tier(tier, msc_state, elap);
+	/*
+	 * book time to previous msc_state for this tier, there is an
+	 * interesting wrinkle here since some tiers (health, full, etc)
+	 * might be entered and exited multiple times.
+	 */
+	batt_chg_stats_tier(tier, batt_drv->msc_state, elap);
 
 	if (tier->soc_in == -1) {
 		int soc_in;
@@ -1193,10 +1269,11 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 				  int tier_idx, int ibatt_ma, int temp,
 				  time_t elap)
 {
-	const int msc_state = batt_drv->msc_state;
-	struct gbms_ce_tier_stats *tier;
+	const int soc_real = ssoc_get_real(&batt_drv->ssoc_state);
+	const int msc_state = batt_drv->msc_state; /* last msc_state */
+	struct gbms_charging_event *ce_data = &batt_drv->ce_data;
+	struct gbms_ce_tier_stats *tier = NULL;
 	int cc;
-	int soc_real = ssoc_get_real(&batt_drv->ssoc_state);
 
 	if (elap == 0)
 		return;
@@ -1209,18 +1286,32 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 	}
 	cc = cc / 1000;
 
+	/* Update this charge tiers in parallel */
+	if (soc_real >= SSOC_HIGH_SOC)
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+					   elap, cc,
+					   &ce_data->high_soc_stats);
+
+	/* TODO: log to new voltage tiers, list in go/pixel-vtier-defs */
 	if (batt_drv->batt_full) {
+
+
 		/* Override regular charge tiers when fully charged */
-		tier = &batt_drv->ce_data.full_charge_stats;
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma,
+					   temp, elap, cc,
+					   &ce_data->full_charge_stats);
 
 	} else if (msc_state == MSC_HEALTH) {
 		/*
-		 * works because msc_logic books the time BEFORE updating
-		 * msc_state
+		 * It works because msc_logic call BEFORE updating msc_state.
+		 * NOTE: that OVERHEAT and CCLVL disable AC, I should not be
+		 * here if either of them are set.
 		 */
 
 		/* tier used for TTF during HC, check msc_logic_health() */
-		tier = &batt_drv->ce_data.health_stats;
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma,
+					   temp, elap, cc,
+					   &ce_data->health_stats);
 
 	} else {
 		const qnum_t soc = ssoc_get_capacity_raw(&batt_drv->ssoc_state);
@@ -1228,22 +1319,43 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 		/* book to previous soc unless discharging */
 		if (msc_state != MSC_DSG) {
 			/* TODO: should I use ssoc instead? */
-			batt_chg_stats_soc_update(&batt_drv->ce_data, soc, elap,
+			batt_chg_stats_soc_update(ce_data, soc, elap,
 						  tier_idx, cc);
 		}
 
-		tier = &batt_drv->ce_data.tier_stats[tier_idx];
+		/*
+		 * ce_data.tier_stats[tier_idx] are used for time to full.
+		 * Do not book to them if we are in overheat or LVL
+		 */
+		tier = &ce_data->tier_stats[tier_idx];
 	}
 
-	batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp, elap, cc,
-				   tier);
-
-	/* Update this charge tier in parallel */
-	if (soc_real >= SSOC_HIGH_SOC) {
+	/* batt_drv->batt_health is protected with chg_lock, */
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
 		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
 					   elap, cc,
-					   &batt_drv->ce_data.high_soc_stats);
+					   &ce_data->overheat_stats);
+		tier = NULL;
 	}
+
+	/* custom charge levels (DWELL-DEFEND or RETAIL) */
+	if (batt_drv->chg_state.f.flags & GBMS_CS_FLAG_CCLVL) {
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+					   elap, cc,
+					   &ce_data->cc_lvl_stats);
+		tier = NULL;
+	}
+
+	/*
+	 * Time/current spent in OVERHEAT or at CustomLevel should not
+	 * be booked to ce_data.tier_stats[tier_idx]
+	 */
+
+	if (!tier)
+		return;
+
+	batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+				   elap, cc, tier);
 }
 
 static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
@@ -1254,6 +1366,11 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 	bool aon_enabled = chg_health->always_on_soc != -1;
 
 	switch (rest_state) {
+	/* battery defender did it */
+	case CHG_HEALTH_BD_DISABLED:
+	case CHG_HEALTH_CCLVL_DISABLED:
+		tier_idx = GBMS_STATS_AC_TI_DEFENDER;
+		break;
 	/* user disabled with deadline */
 	case CHG_HEALTH_USER_DISABLED:
 		if (rest_deadline == CHG_DEADLINE_SETTING)
@@ -1630,17 +1747,25 @@ static int batt_chg_stats_cstr(char *buff, int size,
 		}
 	}
 
-	if (ce_data->full_charge_stats.soc_in != -1) {
+	if (ce_data->full_charge_stats.soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->full_charge_stats,
 						verbose);
-	}
 
-	if (ce_data->high_soc_stats.soc_in != -1) {
+	if (ce_data->high_soc_stats.soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->high_soc_stats,
 						verbose);
-	}
+
+	if (ce_data->overheat_stats.soc_in != -1)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->overheat_stats,
+						verbose);
+
+	if (ce_data->cc_lvl_stats.soc_in != -1)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->cc_lvl_stats,
+						verbose);
 
 	return len;
 }
@@ -1773,15 +1898,19 @@ static void batt_res_work(struct batt_drv *batt_drv)
 
 /* ------------------------------------------------------------------------- */
 
+/* NOTE: should not reset always_on_soc */
 static inline void batt_reset_rest_state(struct batt_chg_health *chg_health)
 {
-	/* NOTE: should not reset always_on_soc */
-	chg_health->rest_state = CHG_HEALTH_INACTIVE;
 	chg_health->rest_cc_max = -1;
 	chg_health->rest_fv_uv = -1;
 
-	if (chg_health->rest_deadline > 0)
+	/* keep negative deadlines (they mean USER disabled) */
+	if (chg_health->rest_deadline < 0) {
+		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
+	} else {
+		chg_health->rest_state = CHG_HEALTH_INACTIVE;
 		chg_health->rest_deadline = 0;
+	}
 }
 
 /* should not reset rl state */
@@ -1795,6 +1924,7 @@ static inline void batt_reset_chg_drv_state(struct batt_drv *batt_drv)
 
 	/* polling */
 	batt_drv->batt_fast_update_cnt = 0;
+	batt_drv->ttf_debounce = 1;
 	batt_drv->fg_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	batt_drv->chg_done = false;
 	/* algo */
@@ -2082,64 +2212,82 @@ static bool msc_logic_health(struct batt_drv *batt_drv)
 	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	struct batt_chg_health *rest = &batt_drv->chg_health;
 	const time_t deadline = rest->rest_deadline;
-	const time_t now = get_boot_sec();
 	enum chg_health_state rest_state = rest->rest_state;
+	const bool aon_enabled = rest->always_on_soc != -1;
+	const time_t now = get_boot_sec();
 	int fv_uv = -1, cc_max = -1;
 	bool changed = false;
 	time_t ttf = 0;
-	bool aon_enabled = rest->always_on_soc != -1;
+	int ret;
 
-	/* DONE, USER_DISABLED reset on disconnect, _DISABLED didn't meet DL */
-	if (rest_state == CHG_HEALTH_USER_DISABLED ||
-	    rest_state == CHG_HEALTH_DONE ||
-	    (aon_enabled == false && (rest_state == CHG_HEALTH_DISABLED ||
-	    rest_state == CHG_HEALTH_INACTIVE)))
-		goto done_exit;
-
-	/* enable if not USER_DISABLED and INACTIVE */
+	/* move to ENABLED if INACTIVE when aon_enabled is set */
 	if (aon_enabled && rest_state == CHG_HEALTH_INACTIVE)
 		rest_state = CHG_HEALTH_ENABLED;
 
-	/* rest->always_on_soc set ttf = 0 and honor a valid deadline */
-	if (aon_enabled == false) {
-		int ret;
+	/*
+	 * on disconnect batt_reset_rest_state() will set rest_state to
+	 * CHG_HEALTH_USER_DISABLED if the deadline is negative.
+	 */
+	if (rest_state == CHG_HEALTH_CCLVL_DISABLED ||
+	    rest_state == CHG_HEALTH_BD_DISABLED ||
+	    rest_state == CHG_HEALTH_USER_DISABLED ||
+	    rest_state == CHG_HEALTH_DISABLED ||
+	    rest_state == CHG_HEALTH_INACTIVE)
+		goto done_no_op;
 
-		/*
-		 * ttf_ret < 0 when the device is discharging.
-		 * This can happen with a large sysload on a underpowered
-		 * adapter. Current strategy leaves everything as is (hoping)
-		 * that the load is temporary.
-		 * NOTE: if in ACTIVE mode we could retest msc_health_active()
-		 * and reset to DISABLED if the value returned is not ACTIVE.
-		 * NOTE: ttf needs to know that health is enabled! this is
-		 * done in the caller.
-		 */
-		ret = batt_ttf_estimate(&ttf, batt_drv);
-		if (ret < 0)
-			return false;
+	/* Keeps AC enabled after DONE */
+	if (rest_state == CHG_HEALTH_DONE)
+		goto done_exit;
 
-		/* estimate is 0 at full, no need for it recharge logic */
-		if (ttf == 0) {
-			rest_state = CHG_HEALTH_DONE;
-			goto done_exit;
-		}
-
+	/* disable AC because we are running custom charging levels */
+	if (batt_drv->chg_state.f.flags & GBMS_CS_FLAG_CCLVL) {
+		rest_state = CHG_HEALTH_CCLVL_DISABLED;
+		goto done_exit;
 	}
 
-	/* disabled from any state when now + ttf is over a valid deadline */
-	if (deadline > 0 && (now + ttf) > deadline) {
-		/*
-		 * Disable if the deadline cannot be met with the current rate.
-		 * Set a new deadline or reset always_on_soc to re-enable for
-		 * this session.
-		 * TODO: consider adding a margin or debounce it.
-		 */
+	/* disable AC because BD-TEMP triggered */
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+		rest_state = CHG_HEALTH_BD_DISABLED;
+		goto done_exit;
+	}
+
+	/*
+	 * ret < 0 right after plug-in or when the device is discharging due
+	 * to a large sysload or an underpowered adapter (or both). Current
+	 * strategy leaves everything as is (hoping) that the load is temporary.
+	 * The estimate will be negative when BD is triggered and during the
+	 * debounce period.
+	 */
+	ret = batt_ttf_estimate(&ttf, batt_drv);
+	if (ret < 0)
+		return false;
+
+	/* estimate is 0 at 100%: set to done and keep AC enabled in RL */
+	if (ttf == 0) {
+		rest_state = CHG_HEALTH_DONE;
+		goto done_exit;
+	}
+
+	/*
+	 * rest_state here is either ENABLED or ACTIVE, transition to DISABLED
+	 * when the deadline cannot be met with the current rate. set a new
+	 * deadline or reset always_on_soc to re-enable AC for this session.
+	 * NOTE: A device with AON enabled might (will) receive a deadline if
+	 * plugged in within the AC window: ignore it.
+	 * NOTE: cannot have a negative deadline with rest_state different
+	 * from CHG_HEALTH_USER_DISABLED.
+	 * TODO: consider adding a margin or debounce it.
+	 */
+	if (aon_enabled == false && rest_state == CHG_HEALTH_ACTIVE &&
+	    deadline > 0 && ttf != -1 && now + ttf > deadline) {
 		rest_state = CHG_HEALTH_DISABLED;
 		goto done_exit;
 	}
 
 	/*
-	 * State will change from _ACTIVE to _ENABLED after a discharge.
+	 * rest_state here is either ENABLED or ACTIVE,
+	 * NOTE: State might transition from _ACTIVE to _ENABLED after a
+	 * discharge cycle that makes the battery fall under the threshold.
 	 * State will transition back to _ENABLED after some time unless
 	 * the deadline is met.
 	 */
@@ -2162,6 +2310,7 @@ done_exit:
 		/* TODO: make sure that we wakeup when we are close to ttf */
 	}
 
+done_no_op:
 	/* send a power supply event when rest_state changes */
 	changed = rest->rest_state != rest_state;
 
@@ -2338,7 +2487,7 @@ static int msc_logic(struct batt_drv *batt_drv)
 			vbatt, ibatt, fv_uv);
 
 	} else {
-		const int tier_idx = batt_drv->vbatt_idx;
+		const int tier_idx = batt_chg_vbat2tier(batt_drv->vbatt_idx);
 		const int vtier = profile->volt_limits[vbatt_idx];
 		const int switch_cnt = profile->cv_tier_switch_cnt;
 		const int cc_next_max = GBMS_CCCM_LIMITS(profile, temp_idx,
@@ -2459,6 +2608,15 @@ static int msc_logic(struct batt_drv *batt_drv)
 	return 0;
 }
 
+/* no ssoc_delta when in overheat */
+static int ssoc_get_delta(struct batt_drv *batt_drv)
+{
+	const bool overheat = batt_drv->batt_health ==
+			      POWER_SUPPLY_HEALTH_OVERHEAT;
+
+	return overheat ? 0 : qnum_rconst(batt_drv->ssoc_state.ssoc_delta);
+}
+
 /* called holding chg_lock */
 static int batt_chg_logic(struct batt_drv *batt_drv)
 {
@@ -2480,7 +2638,9 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 		chg_state->f.vchrg,
 		chg_state->f.icl);
 
+	/* disconnect! */
 	if ((batt_drv->chg_state.f.flags & GBMS_CS_FLAG_BUCK_EN) == 0) {
+		const qnum_t ssoc_delta = ssoc_get_delta(batt_drv);
 
 		if (batt_drv->ssoc_state.buck_enabled == 0)
 			goto msc_logic_exit;
@@ -2489,8 +2649,10 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 		batt_chg_stats_pub(batt_drv, "disconnect", false, false);
 		batt_res_state_set(&batt_drv->res_state, false);
 
-		/* change curve before changing the state */
-		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_DSG);
+		/* change curve before changing the state. */
+		ssoc_change_curve(&batt_drv->ssoc_state, ssoc_delta,
+				  SSOC_UIC_TYPE_DSG);
+
 		batt_drv->chg_health.rest_deadline = 0;
 		batt_reset_chg_drv_state(batt_drv);
 		batt_update_cycle_count(batt_drv);
@@ -2512,8 +2674,17 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 
 	/* here when connected to power supply */
 	if (batt_drv->ssoc_state.buck_enabled <= 0) {
+		const qnum_t ssoc_delta = ssoc_get_delta(batt_drv);
 
-		ssoc_change_curve(&batt_drv->ssoc_state, SSOC_UIC_TYPE_CHG);
+		/*
+		 * FIX: BatteryDefenderUI needs use a different curve because
+		 * bd->bd_voltage_trigger needs now to be 100%. In alternative
+		 * we use the regular charge curve and show that charging stop
+		 * BEFORE reaching 100%. This is similar to what we do if BD
+		 * trigger over bd->bd_voltage_trigger BUT under SSOC=100%
+		 */
+		ssoc_change_curve(&batt_drv->ssoc_state, ssoc_delta,
+				  SSOC_UIC_TYPE_CHG);
 
 		if (batt_drv->res_state.estimate_filter)
 			batt_res_state_set(&batt_drv->res_state, true);
@@ -2529,7 +2700,7 @@ static int batt_chg_logic(struct batt_drv *batt_drv)
 		__pm_stay_awake(&batt_drv->poll_ws);
 		batt_drv->batt_fast_update_cnt = BATT_WORK_FAST_RETRY_CNT;
 		mod_delayed_work(system_wq, &batt_drv->batt_work,
-			BATT_WORK_FAST_RETRY_MS);
+				 BATT_WORK_FAST_RETRY_MS);
 
 		batt_drv->ssoc_state.buck_enabled = 1;
 		changed = true;
@@ -3018,9 +3189,10 @@ static ssize_t debug_set_ssoc_uicurve(struct file *filp,
 
 	mutex_lock(&batt_drv->chg_lock);
 
+	/* FIX: BatteryDefenderUI doesn't really handle this yet */
 	curve_type = (int)simple_strtoull(buf, NULL, 10);
 	if (curve_type >= -1 && curve_type <= 1)
-		ssoc_change_curve(&batt_drv->ssoc_state, curve_type);
+		ssoc_change_curve(&batt_drv->ssoc_state, 0, curve_type);
 	else
 		ret = -EINVAL;
 
@@ -3597,7 +3769,7 @@ static ssize_t batt_set_chg_deadline(struct device *dev,
 	bool changed;
 
 	/* API works in seconds */
-	kstrtoll(buf, 10, &deadline_s);
+	deadline_s = simple_strtoll(buf, NULL, 10);
 
 	mutex_lock(&batt_drv->chg_lock);
 	/* Let deadline < 0 pass to set stats */
@@ -3716,6 +3888,135 @@ static const DEVICE_ATTR_RO(ssoc_details);
 
 /* ------------------------------------------------------------------------- */
 
+static ssize_t show_bd_trickle_enable(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_trickle_enable);
+}
+
+static ssize_t set_bd_trickle_enable(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	batt_drv->ssoc_state.bd_trickle_enable = !!val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trickle_enable, 0660,
+		   show_bd_trickle_enable, set_bd_trickle_enable);
+
+static ssize_t show_bd_trickle_cnt(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_trickle_cnt);
+}
+
+static ssize_t set_bd_trickle_cnt(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	batt_drv->ssoc_state.bd_trickle_cnt = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trickle_cnt, 0660,
+		   show_bd_trickle_cnt, set_bd_trickle_cnt);
+
+static ssize_t show_bd_trickle_recharge_soc(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_trickle_recharge_soc);
+}
+
+#define BD_RL_SOC_FULL		100
+#define BD_RL_SOC_LOW		50
+static ssize_t set_bd_trickle_recharge_soc(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val >= BD_RL_SOC_FULL) || (val < BD_RL_SOC_LOW))
+		return count;
+
+	batt_drv->ssoc_state.bd_trickle_recharge_soc = val;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trickle_recharge_soc, 0660,
+		   show_bd_trickle_recharge_soc, set_bd_trickle_recharge_soc);
+
+static ssize_t show_bd_trickle_dry_run(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 batt_drv->ssoc_state.bd_trickle_dry_run);
+}
+
+static ssize_t set_bd_trickle_dry_run(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	batt_drv->ssoc_state.bd_trickle_dry_run = val ? true : false;
+
+	return count;
+}
+
+static DEVICE_ATTR(bd_trickle_dry_run, 0660,
+		   show_bd_trickle_dry_run, set_bd_trickle_dry_run);
+
+/* ------------------------------------------------------------------------- */
+
 static int batt_init_fs(struct batt_drv *batt_drv)
 {
 	struct dentry *de = NULL;
@@ -3776,6 +4077,29 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 		dev_err(&batt_drv->psy->dev,
 				"Failed to create ttf_details\n");
 
+	/* TRICKLE-DEFEND */
+	ret = device_create_file(&batt_drv->psy->dev,
+				 &dev_attr_bd_trickle_enable);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_trickle_enable\n");
+
+	ret = device_create_file(&batt_drv->psy->dev, &dev_attr_bd_trickle_cnt);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_trickle_cnt\n");
+
+	ret = device_create_file(&batt_drv->psy->dev,
+				 &dev_attr_bd_trickle_recharge_soc);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_trickle_recharge_soc\n");
+
+	ret = device_create_file(&batt_drv->psy->dev,
+				 &dev_attr_bd_trickle_dry_run);
+	if (ret)
+		dev_err(&batt_drv->psy->dev,
+				"Failed to create bd_trickle_dry_run\n");
 
 #ifdef CONFIG_DEBUG_FS
 	de = debugfs_create_dir("google_battery", 0);
@@ -3796,6 +4120,10 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &debug_force_psy_update_fops);
 		debugfs_create_file("fake_temp", 0600, de,
 				    batt_drv, &debug_fake_temp_fops);
+
+		/* defender */
+		debugfs_create_u32("fake_capacity", 0600, de,
+				    &batt_drv->fake_capacity);
 
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
@@ -3884,7 +4212,6 @@ void bat_log_ttf_estimate(const char *label, int ssoc,
 {
 	int cc, err;
 	time_t res = 0;
-
 
 	err = batt_ttf_estimate(&res, batt_drv);
 	if (err < 0) {
@@ -4131,7 +4458,8 @@ static void batt_history_data_collect(struct batt_drv *batt_drv)
 	}
 }
 
-/* poll the battery, run SOC%, dead battery, critical.
+/*
+ * poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
  */
 static void google_battery_work(struct work_struct *work)
@@ -4142,23 +4470,39 @@ static void google_battery_work(struct work_struct *work)
 	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
 	int update_interval = batt_drv->batt_update_interval;
 	const int prev_ssoc = ssoc_get_capacity(ssoc_state);
+	int present, fg_status, batt_temp, ret;
 	bool notify_psy_changed = false;
-	int fg_status, ret, batt_temp;
 
 	pr_debug("battery work item\n");
 
 	__pm_stay_awake(&batt_drv->batt_ws);
 
-	fg_status = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS, &ret);
-	if (ret < 0)
+	/* chg_lock protect msc_logic */
+	mutex_lock(&batt_drv->chg_lock);
+
+	present = GPSY_GET_PROP(fg_psy, POWER_SUPPLY_PROP_PRESENT);
+	if (present && !batt_drv->batt_present) {
+		batt_drv->batt_present = true;
+		notify_psy_changed = true;
+	} else if (!present && batt_drv->batt_present) {
+		batt_drv->batt_present = false;
+
+		/* add debounce? */
+		notify_psy_changed = true;
+		mutex_unlock(&batt_drv->chg_lock);
 		goto reschedule;
+	}
+
+	fg_status = GPSY_GET_INT_PROP(fg_psy, POWER_SUPPLY_PROP_STATUS, &ret);
+	if (ret < 0) {
+		mutex_unlock(&batt_drv->chg_lock);
+		goto reschedule;
+	}
 
 	if (fg_status != batt_drv->fg_status)
 		notify_psy_changed = true;
 	batt_drv->fg_status = fg_status;
 
-	/* chg_lock protect msc_logic */
-	mutex_lock(&batt_drv->chg_lock);
 	/* batt_lock protect SSOC code etc. */
 	mutex_lock(&batt_drv->batt_lock);
 
@@ -4221,20 +4565,26 @@ static void google_battery_work(struct work_struct *work)
 
 	mutex_unlock(&batt_drv->batt_lock);
 
+
 	/* wait for timeout or state equal to CHARGING, FULL or UNKNOWN
 	 * (which will likely not happen) even on ssoc error. msc_logic
 	 * hold poll_ws wakelock during this time.
+	 * Delay the estimates for time to full for BATT_WORK_DEBOUNCE_RETRY_MS
+	 * after the device start charging.
 	 */
 	if (batt_drv->batt_fast_update_cnt) {
 
 		if (fg_status != POWER_SUPPLY_STATUS_DISCHARGING &&
 		    fg_status != POWER_SUPPLY_STATUS_NOT_CHARGING) {
-			bat_log_ttf_estimate("Start", prev_ssoc, batt_drv);
 			batt_drv->batt_fast_update_cnt = 0;
+			update_interval = BATT_WORK_DEBOUNCE_RETRY_MS;
 		} else {
 			update_interval = BATT_WORK_FAST_RETRY_MS;
 			batt_drv->batt_fast_update_cnt -= 1;
 		}
+	} else if (batt_drv->ttf_debounce) {
+		batt_drv->ttf_debounce = 0;
+		bat_log_ttf_estimate("Start", prev_ssoc, batt_drv);
 	}
 
 	/* acquired in msc_logic */
@@ -4249,13 +4599,12 @@ static void google_battery_work(struct work_struct *work)
 	batt_cycle_count_update(batt_drv, ssoc_get_real(ssoc_state));
 	dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
 
-	if (notify_psy_changed)
-		power_supply_changed(batt_drv->psy);
-
 	if (batt_drv->eeprom_inside)
 		batt_history_data_collect(batt_drv);
 
 reschedule:
+	if (notify_psy_changed)
+		power_supply_changed(batt_drv->psy);
 
 	if (update_interval) {
 		pr_debug("rerun battery work in %d ms\n", update_interval);
@@ -4336,6 +4685,12 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 	}
 
 	/* ->buck_enabled = 1, from here ownward device is connected */
+
+	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT) {
+		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		return 0;
+	}
+
 	if (!batt_drv->fg_psy)
 		return -EINVAL;
 
@@ -4380,6 +4735,71 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 	return 0;
 }
 
+/* lock batt_drv->batt_lock */
+static int gbatt_get_capacity(struct batt_drv *batt_drv)
+{
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	int capacity;
+
+	if (batt_drv->fake_capacity >= 0 && batt_drv->fake_capacity <= 100)
+		capacity = batt_drv->fake_capacity;
+	else
+		capacity = ssoc_get_capacity(ssoc_state);
+
+	return capacity;
+}
+
+/* splice the curve at point when the SSOC is removed */
+static void gbatt_set_capacity(struct batt_drv *batt_drv, int capacity)
+{
+	if (capacity < 0)
+		capacity = -EINVAL;
+
+	if (batt_drv->batt_health != POWER_SUPPLY_HEALTH_OVERHEAT) {
+		/* just set the value if not in overheat  */
+	} else if (capacity < 0 && batt_drv->fake_capacity >= 0) {
+		struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+		const qnum_t cap = qnum_fromint(batt_drv->fake_capacity);
+		const qnum_t gdf = ssoc_state->ssoc_gdf;
+		enum ssoc_uic_type type;
+
+		if (gdf < qnum_fromint(batt_drv->fake_capacity)) {
+			type = SSOC_UIC_TYPE_DSG;
+		} else {
+			type = SSOC_UIC_TYPE_CHG;
+		}
+
+		pr_info("reset curve at gdf=%d.%d cap=%d.%d type=%d\n",
+			qnum_toint(gdf), qnum_fracdgt(gdf),
+			qnum_toint(cap), qnum_fracdgt(cap),
+			type);
+
+		/* current is the drop point on the discharge curve */
+		ssoc_change_curve_at_gdf(ssoc_state, gdf, cap, type);
+		ssoc_work(ssoc_state, batt_drv->fg_psy);
+		dump_ssoc_state(ssoc_state, batt_drv->ssoc_log);
+	} else if (capacity > 0) {
+		/* TODO: convergence to the new capacity? */
+	}
+
+	batt_drv->fake_capacity = capacity;
+}
+
+static int gbatt_set_health(struct batt_drv *batt_drv, int health)
+{
+	if (health > POWER_SUPPLY_HEALTH_HOT ||
+	    health < POWER_SUPPLY_HEALTH_UNKNOWN)
+		return -EINVAL;
+
+	batt_drv->batt_health = health;
+
+	/* disable health charging if in overheat */
+	if (health == POWER_SUPPLY_HEALTH_OVERHEAT)
+		msc_logic_health(batt_drv);
+
+	return 0;
+}
+
 static int gbatt_get_property(struct power_supply *psy,
 				 enum power_supply_property psp,
 				 union power_supply_propval *val)
@@ -4418,14 +4838,9 @@ static int gbatt_get_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CAPACITY:
-		if (batt_drv->fake_capacity >= 0 &&
-				batt_drv->fake_capacity <= 100) {
-			val->intval = batt_drv->fake_capacity;
-		} else {
-			mutex_lock(&batt_drv->batt_lock);
-			val->intval = ssoc_get_capacity(ssoc_state);
-			mutex_unlock(&batt_drv->batt_lock);
-		}
+		mutex_lock(&batt_drv->batt_lock);
+		val->intval = gbatt_get_capacity(batt_drv);
+		mutex_unlock(&batt_drv->batt_lock);
 		break;
 
 	case POWER_SUPPLY_PROP_DEAD_BATTERY:
@@ -4506,11 +4921,17 @@ static int gbatt_get_property(struct power_supply *psy,
 
 	/* health */
 	case POWER_SUPPLY_PROP_HEALTH:
-		if (!batt_drv->fg_psy)
-			return -EINVAL;
-		err = power_supply_get_property(batt_drv->fg_psy, psp, val);
-		if (err == 0)
+		if (batt_drv->batt_health != POWER_SUPPLY_HEALTH_UNKNOWN) {
+			val->intval = batt_drv->batt_health;
+		} else if (!batt_drv->fg_psy) {
+			val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
+		} else {
+			rc = power_supply_get_property(batt_drv->fg_psy,
+							psp, val);
+			if (rc < 0)
+				val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 			batt_drv->soh = val->intval;
+		}
 		break;
 	/* define this better */
 	case POWER_SUPPLY_PROP_SOH:
@@ -4530,11 +4951,14 @@ static int gbatt_get_property(struct power_supply *psy,
 			val->intval = batt_drv->res_state.resistance_avg;
 		break;
 
+	/* cannot set err, negative estimate will revert to HAL */
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW: {
 		time_t res;
 
 		rc = batt_ttf_estimate(&res, batt_drv);
 		if (rc == 0) {
+			if (res < 0)
+				res = 0;
 			val->intval = res;
 		} else if (!batt_drv->fg_psy) {
 			val->intval = -1;
@@ -4650,9 +5074,13 @@ static int gbatt_set_property(struct power_supply *psy,
 		}
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
-		batt_drv->fake_capacity = val->intval;
-		if (batt_drv->psy)
-			power_supply_changed(batt_drv->psy);
+		mutex_lock(&batt_drv->chg_lock);
+		if (val->intval != batt_drv->fake_capacity) {
+			gbatt_set_capacity(batt_drv, val->intval);
+			if (batt_drv->psy)
+				power_supply_changed(batt_drv->psy);
+		}
+		mutex_unlock(&batt_drv->chg_lock);
 		break;
 	/* TODO: compat */
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
@@ -4680,6 +5108,15 @@ static int gbatt_set_property(struct power_supply *psy,
 		if (batt_drv->psy)
 			power_supply_changed(batt_drv->psy);
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		mutex_lock(&batt_drv->chg_lock);
+		if (batt_drv->batt_health != val->intval) {
+			ret = gbatt_set_health(batt_drv, val->intval);
+			if (ret == 0 && batt_drv->psy)
+				power_supply_changed(batt_drv->psy);
+		}
+		mutex_unlock(&batt_drv->chg_lock);
+		break;
 	default:
 		ret = -EINVAL;
 		break;
@@ -4706,6 +5143,7 @@ static int gbatt_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_ADAPTER_DETAILS:
 	case POWER_SUPPLY_PROP_CYCLE_COUNTS:
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
+	case POWER_SUPPLY_PROP_HEALTH:
 		return 1;
 	default:
 		break;
@@ -4771,6 +5209,14 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->ssoc_state.rl_soc_threshold =
 				DEFAULT_BATT_DRV_RL_SOC_THRESHOLD;
+
+	ret = of_property_read_u32(node, "google,bd-trickle-recharge-soc",
+				&batt_drv->ssoc_state.bd_trickle_recharge_soc);
+	if (ret < 0)
+		batt_drv->ssoc_state.bd_trickle_recharge_soc =
+					DEFAULT_BD_RL_SOC_THRESHOLD;
+
+	batt_drv->ssoc_state.bd_trickle_dry_run = false;
 
 	ret = of_property_read_u32(node, "google,ssoc-delta",
 				   &batt_drv->ssoc_state.ssoc_delta);

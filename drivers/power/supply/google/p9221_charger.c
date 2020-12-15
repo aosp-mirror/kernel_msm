@@ -1063,7 +1063,14 @@ static int p9221_get_property(struct power_supply *psy,
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_PRESENT:
-		val->intval = 1;
+		if (charger->dc_psy) {
+			ret = power_supply_get_property(charger->dc_psy,
+					POWER_SUPPLY_PROP_DC_RESET, val);
+			if (ret < 0)
+				val->intval = 1;
+		} else {
+			val->intval = 1;
+		}
 		break;
 	case POWER_SUPPLY_PROP_ONLINE: /* TODO: verify this */
 		val->intval = charger->online && charger->enabled;

@@ -32,6 +32,8 @@
 #include "cs35l41.h"
 #include <sound/cs35l41.h>
 
+#define MAX_DEFER_PROBE 10
+
 static struct regmap_config cs35l41_regmap_i2c = {
 	.reg_bits = 32,
 	.val_bits = 32,
@@ -52,6 +54,7 @@ static const struct i2c_device_id cs35l41_id_i2c[] = {
 	{"cs35l41", 0},
 	{}
 };
+static atomic_t defer_probe_count = ATOMIC_INIT(0);
 
 MODULE_DEVICE_TABLE(i2c, cs35l41_id_i2c);
 
@@ -81,10 +84,25 @@ static int cs35l41_i2c_probe(struct i2c_client *client,
 		ret = PTR_ERR(cs35l41->regmap);
 		dev_err(cs35l41->dev, "Failed to allocate register map: %d\n",
 			ret);
-		return ret;
+		goto err;
 	}
-
-	return cs35l41_probe(cs35l41, pdata);
+	ret = cs35l41_probe(cs35l41, pdata);
+	if ((ret != 0) && (ret != -ENODEV) && (ret != -ENOMEM)) {
+		if (atomic_read(&defer_probe_count) < MAX_DEFER_PROBE) {
+			dev_err(dev, "ret : %d. Try to defer probe\n", ret);
+			ret = -EPROBE_DEFER;
+		} else {
+			dev_err(dev, "ret: %d, probe: %d is over limit\n", ret,
+				atomic_read(&defer_probe_count));
+			ret = -EINVAL;
+		}
+		atomic_inc(&defer_probe_count);
+		goto err;
+	}
+	return 0;
+err:
+	mutex_destroy(&cs35l41->rate_lock);
+	return ret;
 }
 
 static int cs35l41_i2c_remove(struct i2c_client *client)

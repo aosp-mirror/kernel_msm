@@ -3766,13 +3766,23 @@ int wm_halo_init(struct wm_adsp *dsp, struct mutex *rate_lock)
 	dsp->rate_lock = rate_lock;
 	dsp->rx_rate_cache = kcalloc(dsp->n_rx_channels, sizeof(u8),
 				     GFP_KERNEL);
+	if (dsp->rx_rate_cache == NULL) {
+		ret = -ENOMEM;
+		goto err;
+	}
 	dsp->tx_rate_cache = kcalloc(dsp->n_tx_channels, sizeof(u8),
 				     GFP_KERNEL);
-
+	if (dsp->tx_rate_cache == NULL) {
+		ret = -ENOMEM;
+		goto err;
+	}
 	dsp->data_word_size = WM_ADSP_DATA_WORD_SIZE_DEFAULT;
 	dsp->data_word_mask = WM_ADSP_DATA_WORD_MASK_DEFAULT;
 
 	return 0;
+err:
+	mutex_destroy(&dsp->pwr_lock);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(wm_halo_init);
 
@@ -3808,6 +3818,8 @@ void wm_adsp2_remove(struct wm_adsp *dsp)
 
 	kfree(dsp->rx_rate_cache);
 	kfree(dsp->tx_rate_cache);
+
+	mutex_destroy(&dsp->pwr_lock);
 }
 EXPORT_SYMBOL_GPL(wm_adsp2_remove);
 
