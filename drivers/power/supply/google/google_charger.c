@@ -1377,6 +1377,9 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 	bd_state->bd_temp_dry_run =
 		 of_property_read_bool(dev->of_node, "google,bd-temp-dry-run");
 
+	bd_state->bd_temp_enable =
+		 of_property_read_bool(dev->of_node, "google,bd-temp-enable");
+
 	/* also call to resume charging */
 	bd_reset(bd_state);
 	if (!bd_state->enabled)
@@ -1527,6 +1530,10 @@ static int bd_batt_set_state(struct chg_drv *chg_drv, bool hot, int soc)
 	const bool lock_soc = false; /* b/173141442 */
 	const bool freeze = soc != -1;
 	int ret = 0; /* LOOK! */
+
+	/* do not change soc/health when dry run */
+	if (chg_drv->bd_state.bd_temp_dry_run)
+		return ret;
 
 	/*
 	 * OVERHEAT changes handling of writes to POWER_SUPPLY_PROP_CAPACITY.
