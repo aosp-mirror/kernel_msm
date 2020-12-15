@@ -319,6 +319,7 @@ struct p9221_charger_platform_data {
 	u32				alignment_offset_high_current;
 	struct drm_panel		*panel;
 	u32				initial_panel_index;
+	u32				power_mitigate_threshold;
 };
 
 struct p9221_charger_data {
@@ -344,6 +345,7 @@ struct p9221_charger_data {
 	struct delayed_work             send_csp_work;
 	struct delayed_work		rtx_work;
 	struct delayed_work		screen_nb_init_work;
+	struct delayed_work		power_mitigation_work;
 	struct work_struct		uevent_work;
 	struct work_struct		rtx_disable_work;
 	struct alarm			icl_ramp_alarm;
@@ -412,6 +414,10 @@ struct p9221_charger_data {
 	u32				store_time;
 	u32				ignore_time;
 	int				bkp_capacity;
+	u32				mitigate_threshold;
+	u32				fod_cnt;
+	bool				trigger_power_mitigation;
+	bool                            wait_for_online;
 };
 
 struct p9221_prop_reg_map_entry {
