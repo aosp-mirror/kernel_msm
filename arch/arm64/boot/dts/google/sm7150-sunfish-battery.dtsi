@@ -227,6 +227,8 @@
 
 		/* TRICKLE-DEFEND threshold */
 		google,bd-trickle-recharge-soc = <80>;
+		/* Enable TRICKLE-DEFEND */
+		google,bd-trickle-enable;
 	};
 
 	google_charger: google,charger {
@@ -257,6 +259,10 @@
 		google,bd-recharge-voltage = <4250000>;
 		google,bd-drainto-soc = <80>;
 		google,bd-recharge-soc = <79>;
+		/* Enable TEMP-DEFEND */
+		google,bd-temp-enable;
+		/* Set dry_run */
+		google,bd-temp-dry-run;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
