@@ -552,6 +552,7 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 
 
 	/* also call to resume charging */
+	bd_state->bd_temp_enable = 1;
 	bd_reset(bd_state);
 	if (!bd_state->enabled)
 		dev_warn(dev, "TEMP-DEFEND not enabled\n", ret);
