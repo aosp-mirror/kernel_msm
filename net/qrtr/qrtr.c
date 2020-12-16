@@ -523,7 +523,7 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	struct qrtr_hdr_v1 *hdr;
 	int confirm_rx;
 	size_t len = skb->len;
-	int rc = -ENODEV;
+	int rc;
 
 	if (!atomic_read(&node->hello_sent) && type != QRTR_TYPE_HELLO) {
 		kfree_skb(skb);
