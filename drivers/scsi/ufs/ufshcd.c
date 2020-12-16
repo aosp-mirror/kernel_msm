@@ -976,33 +976,34 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 					unsigned int tag, const char *str)
 {
 	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
+	struct scsi_cmnd *cmd = lrbp->cmd;
 	char *cmd_type = NULL;
 	u8 opcode = 0;
 	u8 cmd_id = 0, idn = 0;
 	sector_t lba = ULONG_MAX;
 	u32 transfer_len = UINT_MAX;
 
-	if (lrbp->cmd) { /* data phase exists */
+	if (cmd) { /* data phase exists */
 		/* trace UPIU also */
 		ufshcd_add_cmd_upiu_trace(hba, tag, str);
-		opcode = (u8)(*lrbp->cmd->cmnd);
+		opcode = cmd->cmnd[0];
 		if (is_read_opcode(opcode) || is_write_opcode(opcode) ||
 				is_unmap_opcode(opcode)) {
 			/*
 			 * Currently we only fully trace read(10), write(10),
 			 * read(16), write(16), unmap commands
 			 */
-			if (lrbp->cmd->request && lrbp->cmd->request->bio) {
-				lba = scsi_get_lba(lrbp->cmd);
-				transfer_len = scsi_get_bytes(lrbp->cmd);
+			if (cmd->request && cmd->request->bio) {
+				lba = scsi_get_lba(cmd);
+				transfer_len = scsi_get_bytes(cmd);
 			}
 		}
 	}
 
-	if (lrbp->cmd && ((lrbp->command_type == UTP_CMD_TYPE_SCSI) ||
+	if (cmd && ((lrbp->command_type == UTP_CMD_TYPE_SCSI) ||
 			  (lrbp->command_type == UTP_CMD_TYPE_UFS_STORAGE))) {
 		cmd_type = "scsi";
-		cmd_id = (u8)(*lrbp->cmd->cmnd);
+		cmd_id = cmd->cmnd[0];
 	} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE) {
 		if (hba->dev_cmd.type == DEV_CMD_TYPE_NOP) {
 			cmd_type = "nop";
@@ -2441,12 +2442,12 @@ start:
 		 * work and to enable clocks.
 		 */
 	case CLKS_OFF:
-		ufshcd_scsi_block_requests(hba);
 		hba->clk_gating.state = REQ_CLKS_ON;
 		trace_ufshcd_clk_gating(dev_name(hba->dev),
 					hba->clk_gating.state);
-		queue_work(hba->clk_gating.clk_gating_workq,
-			   &hba->clk_gating.ungate_work);
+		if (queue_work(hba->clk_gating.clk_gating_workq,
+			       &hba->clk_gating.ungate_work))
+			ufshcd_scsi_block_requests(hba);
 		/*
 		 * fall through to check if we should wait for this
 		 * work to be done or not.
