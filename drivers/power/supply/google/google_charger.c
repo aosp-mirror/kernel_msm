@@ -3749,12 +3749,23 @@ static int chg_get_thermal_pd_wa(struct thermal_cooling_device *tcd,
 	return 0;
 }
 
+#define THERM_PD_VOLTAGE_MAX 4350
 static int chg_set_thermal_pd_wa(struct thermal_cooling_device *tcd,
 				 unsigned long state)
 {
 	struct chg_thermal_device *tdev =
 		(struct chg_thermal_device *)tcd->devdata;
 	struct chg_drv *chg_drv = tdev->chg_drv;
+	struct power_supply *bat_psy = chg_drv->bat_psy;
+	int vbatt = 0;
+
+	vbatt = (GPSY_GET_PROP(bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW) / 1000);
+
+	if (vbatt > THERM_PD_VOLTAGE_MAX) {
+		pr_info("MSC_THERM_PD abort, state=%d vbatt=%d\n", !!state,
+			vbatt);
+		return 0;
+	}
 
 	vote(chg_drv->msc_force_5v_votable, THERMAL_DAEMON_VOTER, !!state, 0);
 	tdev->pd_wa_active = !!state;
