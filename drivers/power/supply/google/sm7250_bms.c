@@ -97,11 +97,9 @@ struct bias_config {
 #define DCDC_SOFT_ILIMIT_BIT			BIT(6)
 
 #define DCDC_POWER_PATH_STATUS_REG		0x110B
-#define DCIN_SUSPEND_STS_BIT			BIT(5)
 #define USE_USBIN_BIT				BIT(4)
 #define USE_DCIN_BIT				BIT(3)
 #define VALID_INPUT_POWER_SOURCE_STS_BIT	BIT(0)
-#define POWER_PATH				GENMASK(2, 1)
 
 #define BATIF_INT_RT_STS			0x1210
 #define BATIF_TERMINAL_MISSING_RT_STS_BIT	BIT(5)
@@ -137,13 +135,6 @@ enum sm7250_chg_status {
 	SM7250_TERMINATE_CHARGE	= 5,
 	SM7250_PAUSE_CHARGE	= 6,
 	SM7250_DISABLE_CHARGE	= 7,
-};
-
-enum sm7250_power_path {
-	SM7250_POWER_PATH_NOT_USED  = 0 << 1,
-	SM7250_POWERED_BY_BATTERY   = 1 << 1,
-	SM7250_POWERED_BY_USBIN	    = 2 << 1,
-	SM7250_POWERED_BY_DCIN	    = 3 << 1,
 };
 
 #define QG_STATUS2_REG				0x09
@@ -616,7 +607,7 @@ static int sm7250_get_chg_type(const struct bms_dev *bms)
 static int sm7250_get_chg_status(const struct bms_dev *bms,
 				 bool *dc_valid, bool *usb_valid)
 {
-	bool plugged, valid, power_by_batt;
+	bool plugged, valid;
 	int rc, ret;
 	int vchrg = 0;
 	u8 pstat, stat1, stat2;
@@ -627,8 +618,6 @@ static int sm7250_get_chg_status(const struct bms_dev *bms,
 
 	valid = (pstat & VALID_INPUT_POWER_SOURCE_STS_BIT);
 	plugged = (pstat & USE_DCIN_BIT) || (pstat & USE_USBIN_BIT);
-	power_by_batt = ((pstat & POWER_PATH) != SM7250_POWERED_BY_USBIN) &&
-			 ((pstat & POWER_PATH) != SM7250_POWERED_BY_DCIN);
 
 	*dc_valid = valid && (pstat & USE_DCIN_BIT);
 	*usb_valid = valid && (pstat & USE_USBIN_BIT);
@@ -673,10 +662,7 @@ static int sm7250_get_chg_status(const struct bms_dev *bms,
 		break;
 	/* disabled disconnect */
 	case SM7250_DISABLE_CHARGE:
-		if (power_by_batt)
-			ret = POWER_SUPPLY_STATUS_DISCHARGING;
-		else
-			ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	default:
 		ret = POWER_SUPPLY_STATUS_UNKNOWN;
