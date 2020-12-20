@@ -1676,16 +1676,11 @@ static void chg_stop_bd_work(struct chg_drv *chg_drv)
 static int chg_start_bd_work(struct chg_drv *chg_drv)
 {
 	struct bd_data *bd_state = &chg_drv->bd_state;
-	const bool bd_ena = bd_state->bd_resume_soc ||
-			    bd_state->bd_resume_time;
+	const bool bd_ena = bd_state->bd_resume_soc || bd_state->bd_resume_time;
 
 	mutex_lock(&chg_drv->bd_lock);
 
-	if (!bd_state->triggered) {
-		mutex_unlock(&chg_drv->bd_lock);
-		return 0;
-	}
-
+	/* always track disconnect time */
 	if (!bd_state->disconnect_time) {
 		int ret;
 
@@ -1699,11 +1694,13 @@ static int chg_start_bd_work(struct chg_drv *chg_drv)
 		bd_state->disconnect_time = get_boot_sec();
 	}
 
-	if (!bd_ena) {
+	/* caller might reset bd_state */
+	if (!bd_state->triggered || !bd_ena) {
 		mutex_unlock(&chg_drv->bd_lock);
 		return 0;
 	}
 
+	/* bd_work will keep track of time */
 	mod_delayed_work(system_wq, &chg_drv->bd_work, 0);
 	mutex_unlock(&chg_drv->bd_lock);
 
@@ -1886,6 +1883,9 @@ static void chg_work(struct work_struct *work)
 
 			vote(chg_drv->msc_chg_disable_votable,
 			     MSC_CHG_VOTER, true, 0);
+
+			if (!chg_drv->bd_state.triggered)
+				bd_reset(&chg_drv->bd_state);
 
 			rc = chg_reset_state(chg_drv);
 			if (rc == -EAGAIN)
