@@ -852,6 +852,8 @@ static void chg_work(struct work_struct *work)
 
 		if (stop_charging) {
 			pr_info("no power source detected, disabling charging\n");
+			if (!bd_state->triggered)
+				bd_reset(bd_state);
 			reset_chg_drv_state(chg_drv);
 			chg_drv->stop_charging = 1;
 			bd_batt_set_state(chg_drv, false, -1);
