@@ -54,7 +54,7 @@
 	>;
 
 	google,ttf-adapter = <1800>;
-	google,ttf-soc-table =  <37 77 82 89 92  96  98  100>;
-	google,ttf-elap-table = <38 42 61 78 103 155 201 336>;
-	google,ttf-tier-table = <0 67 81>;
+	google,ttf-soc-table =  <37 70 77 89 91 96  98  100>;
+	google,ttf-elap-table = <40 48 64 76 90 123 175 215 >;
+	google,ttf-tier-table = <0 50 77>;
 };
