@@ -1052,7 +1052,7 @@ static void ufshcd_print_uic_err_hist(struct ufs_hba *hba,
 		return;
 
 	for (i = 0; i < UIC_ERR_REG_HIST_LENGTH; i++) {
-		int p = (i + err_hist->pos - 1) % UIC_ERR_REG_HIST_LENGTH;
+		int p = (i + err_hist->pos) % UIC_ERR_REG_HIST_LENGTH;
 
 		if (err_hist->reg[p] == 0)
 			continue;
