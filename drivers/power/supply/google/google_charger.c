@@ -301,7 +301,7 @@ google_chg_alarm_handler(struct alarm *alarm, ktime_t time)
 
 	__pm_stay_awake(&chg_drv->chg_ws);
 
-	schedule_delayed_work(&chg_drv->chg_work, 0);
+	reschedule_chg_work(chg_drv);
 
 	return ALARMTIMER_NORESTART;
 }
