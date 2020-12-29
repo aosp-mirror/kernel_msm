@@ -25,9 +25,13 @@ struct dma_fast_smmu_mapping {
 	unsigned int	bitmap_size;
 	/* bitmap has 1s marked only valid mappings */
 	unsigned long	*bitmap;
+	unsigned long	next_start;
+#ifndef __GENKSYMS__
 	/* clean_bitmap has 1s marked for both valid and stale tlb mappings */
 	unsigned long	*clean_bitmap;
-	unsigned long	next_start;
+#else
+	unsigned long	upcoming_stale_bit;
+#endif
 	bool		have_stale_tlbs;
 
 	dma_addr_t	pgtbl_dma_handle;
