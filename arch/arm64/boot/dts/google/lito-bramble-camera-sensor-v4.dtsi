@@ -279,6 +279,8 @@
 		rgltr-min-voltage = <2850000>;
 		rgltr-max-voltage = <2850000>;
 		rgltr-load-current = <80000>;
+		gyro-correct-enable = <1>;
+		gyro-correct-index = <1>;
 	};
 
 	eeprom_rear_aux: qcom,eeprom@1 {
