@@ -3342,47 +3342,6 @@ DEFINE_SIMPLE_ATTRIBUTE(debug_chg_health_stage_fops, NULL,
 #endif
 
 /* ------------------------------------------------------------------------- */
-
-static ssize_t debug_get_fake_temp(struct file *filp,
-					   char __user *buf,
-					   size_t count, loff_t *ppos)
-{
-	struct batt_drv *batt_drv = filp->private_data;
-	char tmp[8];
-
-	mutex_lock(&batt_drv->chg_lock);
-	scnprintf(tmp, sizeof(tmp), "%d\n", batt_drv->fake_temp);
-	mutex_unlock(&batt_drv->chg_lock);
-
-	return simple_read_from_buffer(buf, count, ppos, tmp, strlen(tmp));
-}
-
-static ssize_t debug_set_fake_temp(struct file *filp,
-					 const char __user *user_buf,
-					 size_t count, loff_t *ppos)
-{
-	struct batt_drv *batt_drv = filp->private_data;
-	int ret = 0, val;
-	char buf[8];
-
-	ret = simple_write_to_buffer(buf, sizeof(buf), ppos, user_buf, count);
-	if (ret <= 0)
-		return -EFAULT;
-
-	ret = kstrtoint(buf, 0, &val);
-	if (ret < 0)
-		return ret;
-
-	mutex_lock(&batt_drv->chg_lock);
-	batt_drv->fake_temp = val;
-	mutex_unlock(&batt_drv->chg_lock);
-
-	return count;
-}
-
-BATTERY_DEBUG_ATTRIBUTE(debug_fake_temp_fops,
-				debug_get_fake_temp, debug_set_fake_temp);
-
 static ssize_t batt_ctl_chg_stats_actual(struct device *dev,
 					 struct device_attribute *attr,
 					 const char *buf, size_t count)
@@ -4189,8 +4148,8 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 				    batt_drv, &debug_ssoc_uicurve_cstr_fops);
 		debugfs_create_file("force_psy_update", 0400, de,
 				    batt_drv, &debug_force_psy_update_fops);
-		debugfs_create_file("fake_temp", 0600, de,
-				    batt_drv, &debug_fake_temp_fops);
+		debugfs_create_u32("fake_temp", 0600, de,
+				    &batt_drv->fake_temp);
 
 		/* defender */
 		debugfs_create_u32("fake_capacity", 0600, de,
