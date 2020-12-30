@@ -1,9 +1,9 @@
-ccflags-y += -Idrivers/media/platform/msm/camera/cam_utils
-ccflags-y += -Idrivers/media/platform/msm/camera/cam_req_mgr
-ccflags-y += -Idrivers/media/platform/msm/camera/cam_core
-ccflags-y += -Idrivers/media/platform/msm/camera/cam_cpas/include
-ccflags-y += -Idrivers/media/platform/msm/camera/cam_cpas/cpas_top
-ccflags-y += -Idrivers/media/platform/msm/camera/cam_cpas/camss_top
+ccflags-y += -Idrivers/media/platform/msm/camera_floral/cam_utils
+ccflags-y += -Idrivers/media/platform/msm/camera_floral/cam_req_mgr
+ccflags-y += -Idrivers/media/platform/msm/camera_floral/cam_core
+ccflags-y += -Idrivers/media/platform/msm/camera_floral/cam_cpas/include
+ccflags-y += -Idrivers/media/platform/msm/camera_floral/cam_cpas/cpas_top
+ccflags-y += -Idrivers/media/platform/msm/camera_floral/cam_cpas/camss_top
 
 obj-$(CONFIG_SPECTRA_CAMERA) += cpas_top/
 obj-$(CONFIG_SPECTRA_CAMERA) += camss_top/
