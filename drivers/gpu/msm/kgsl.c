@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -933,17 +933,24 @@ static struct kgsl_process_private *kgsl_process_private_new(
 	list_for_each_entry(private, &kgsl_driver.process_list, list) {
 		if (private->pid == cur_pid) {
 			if (!kgsl_process_private_get(private)) {
-				put_pid(cur_pid);
 				private = ERR_PTR(-EINVAL);
 			}
+			/*
+			 * We need to hold only one reference to the PID for
+			 * each process struct to avoid overflowing the
+			 * reference counter which can lead to use-after-free.
+			 */
+			put_pid(cur_pid);
 			return private;
 		}
 	}
 
 	/* Create a new object */
 	private = kzalloc(sizeof(struct kgsl_process_private), GFP_KERNEL);
-	if (private == NULL)
+	if (private == NULL) {
+		put_pid(cur_pid);
 		return ERR_PTR(-ENOMEM);
+	}
 
 	kref_init(&private->refcount);
 
