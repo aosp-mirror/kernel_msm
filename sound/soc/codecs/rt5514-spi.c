@@ -315,9 +315,15 @@ char *rt5514_codec_hwinfo(void)
 static bool rt5514_watchdog_dbg_info(struct rt5514_dsp *rt5514_dsp)
 {
 	struct _dbgBuf_Mem dbgbuf;
-	unsigned int i, val[5];
+	unsigned int i, val[5], ret = 0;
 
-	regmap_read(rt5514_g_i2c_regmap, 0x18002f04, &val[0]);
+	ret = regmap_read(rt5514_g_i2c_regmap, 0x18002f04, &val[0]);
+
+	if (ret) {
+		dev_err(rt5514_dsp->dev,
+			"Failed to i2c read %d\n", ret);
+		return true;
+	}
 
 	if (!(val[0] & 0x2))
 		return false;
