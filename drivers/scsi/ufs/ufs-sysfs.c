@@ -1264,6 +1264,7 @@ UFS_ERR_STATS_ATTR(err_suspend, UFS_ERR_SUSPEND);
 UFS_ERR_STATS_ATTR(err_linkstartup, UFS_ERR_LINKSTARTUP);
 UFS_ERR_STATS_ATTR(err_power_mode_change, UFS_ERR_POWER_MODE_CHANGE);
 UFS_ERR_STATS_ATTR(err_task_abort, UFS_ERR_TASK_ABORT);
+UFS_ERR_STATS_ATTR(err_host_reset, UFS_ERR_HOST_RESET);
 DEVICE_ATTR_RW(reset_err_status);
 
 static struct attribute *ufs_sysfs_err_stats[] = {
@@ -1279,6 +1280,7 @@ static struct attribute *ufs_sysfs_err_stats[] = {
 	&dev_attr_err_linkstartup.attr,
 	&dev_attr_err_power_mode_change.attr,
 	&dev_attr_err_task_abort.attr,
+	&dev_attr_err_host_reset.attr,
 	&dev_attr_reset_err_status.attr,
 	NULL,
 };

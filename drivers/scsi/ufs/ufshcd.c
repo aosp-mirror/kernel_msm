@@ -8403,7 +8403,7 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 out:
 	if (err)
 		dev_err(hba->dev, "%s: Host init failed %d\n", __func__, err);
-
+	ufshcd_update_error_stats(hba, UFS_ERR_HOST_RESET);
 	return err;
 }
 
