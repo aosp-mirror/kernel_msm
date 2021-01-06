@@ -8372,7 +8372,7 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba)
 out:
 	if (err)
 		dev_err(hba->dev, "%s: Host init failed %d\n", __func__, err);
-
+	ufshcd_update_error_stats(hba, UFS_ERR_HOST_RESET);
 	return err;
 }
 
@@ -12072,6 +12072,7 @@ UFS_ERR_STATS_ATTR(err_power_mode_change, UFS_ERR_POWER_MODE_CHANGE);
 UFS_ERR_STATS_ATTR(err_task_abort, UFS_ERR_TASK_ABORT);
 UFS_ERR_STATS_ATTR(err_autoh8_enter, UFS_ERR_AUTOH8_ENTER);
 UFS_ERR_STATS_ATTR(err_autoh8_exit, UFS_ERR_AUTOH8_EXIT);
+UFS_ERR_STATS_ATTR(err_host_reset, UFS_ERR_HOST_RESET);
 DEVICE_ATTR_RW(reset_err_status);
 
 static struct attribute *ufs_sysfs_err_stats[] = {
@@ -12090,6 +12091,7 @@ static struct attribute *ufs_sysfs_err_stats[] = {
 	&dev_attr_err_task_abort.attr,
 	&dev_attr_err_autoh8_enter.attr,
 	&dev_attr_err_autoh8_exit.attr,
+	&dev_attr_err_host_reset.attr,
 	&dev_attr_reset_err_status.attr,
 	NULL,
 };
