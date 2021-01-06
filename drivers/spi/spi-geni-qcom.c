@@ -1103,6 +1103,8 @@ static void setup_fifo_xfer(struct spi_transfer *xfer,
 		m_param |= FRAGMENTATION;
 
 	mas->cur_xfer = xfer;
+	GENI_SE_DBG(mas->ipc, false, mas->dev, "%s: cur_xfer=0x%x\n",
+		__func__, (unsigned long)mas->cur_xfer);
 	if (m_cmd & SPI_TX_ONLY) {
 		mas->tx_rem_bytes = xfer->len;
 		geni_write_reg(trans_len, mas->base, SE_SPI_TX_TRANS_LEN);
@@ -1386,7 +1388,7 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	u32 rx_fifo_status;
 	int rx_bytes = 0;
 	int rx_wc = 0;
-	u8 *rx_buf = NULL;
+	u8 *rx_buf = NULL, *rx_buf2 = NULL;
 
 	if (mas->spi_ssr.is_ssr_down)
 		return;
@@ -1413,6 +1415,12 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 			((mas->cur_word_len / BITS_PER_BYTE) + 1);
 	rx_bytes = min_t(int, mas->rx_rem_bytes, rx_bytes);
 	rx_buf += (mas->cur_xfer->len - mas->rx_rem_bytes);
+	GENI_SE_DBG(mas->ipc, false, mas->dev,
+		"%s: cur_xfer=0x%x rx_buf=0x%x len=%d rx_rem_bytes=%d\n",
+		__func__, (unsigned long)mas->cur_xfer,
+		(unsigned long)mas->cur_xfer->rx_buf,
+		mas->cur_xfer->len, mas->rx_rem_bytes);
+	rx_buf2 = rx_buf;
 	while (i < rx_bytes) {
 		u32 fifo_word = 0;
 		u8 *fifo_byte;
@@ -1428,8 +1436,11 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 		read_bytes = min_t(int, (rx_bytes - i), bytes_per_fifo);
 		fifo_word = geni_read_reg(mas->base, SE_GENI_RX_FIFOn);
 		fifo_byte = (u8 *)&fifo_word;
-		for (j = 0; j < read_bytes; j++)
+		for (j = 0; j < read_bytes; j++) {
+			if (rx_buf != rx_buf2)
+				panic("rx_buf inconsistent!");
 			rx_buf[i++] = fifo_byte[j];
+		}
 	}
 	mas->rx_rem_bytes -= rx_bytes;
 }
@@ -1452,6 +1463,8 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 	m_irq = geni_read_reg(mas->base, SE_GENI_M_IRQ_STATUS);
+	GENI_SE_DBG(mas->ipc, false, mas->dev, "%s: m_irq=0x%x\n",
+		__func__, m_irq);
 
 	if (mas->cur_xfer_mode == FIFO_MODE) {
 		if ((m_irq & M_RX_FIFO_WATERMARK_EN) ||
