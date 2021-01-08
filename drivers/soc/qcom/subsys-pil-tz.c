@@ -821,6 +821,23 @@ static void log_failure_reason(struct pil_tz_data *d)
 	strlcpy(reason, smem_reason, min(size, (size_t)MAX_SSR_REASON_LEN));
 	spin_unlock_irqrestore(&d->subsys_desc.ssr_sysfs_lock, flags);
 	pr_err("%s subsystem failure reason: %s.\n", name, reason);
+	/*
+	 * Debug only
+	 * Trigger full ramdump for specific SSR signature
+	 * b/174445068 - halphyRfaCtrlErrorHandler_trigger_assert
+	 * b/169414590 - NOCError
+	 * b/176352309 - platform_ccpm_init:773
+	 */
+	if (!strcmp(name, "modem")
+			&& strnstr(reason, "wlan_process", strlen(reason))) {
+		if (strnstr(reason, "halphyRfaCtrlErrorHandler_trigger_assert",
+				strlen(reason))
+				|| strnstr(reason, "NOCError", strlen(reason))
+				|| strnstr(reason, "platform_ccpm_init:773",
+				strlen(reason)))
+			BUG();
+	}
+
 }
 
 static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)
