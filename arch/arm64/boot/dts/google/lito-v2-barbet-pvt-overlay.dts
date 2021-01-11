@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "lito-v2-barbet-pvt.dtsi"
+
+/ {
+	model = "Google Inc. MSM sm7250 v2 Barbet PVT";
+	compatible = "google,barbet-sm7250", "qcom,sm7250";
+	qcom,msm-id = <400 0x20000>, <440 0x20000>;
+	qcom,board-id = <0x101e05 0>;
+};
