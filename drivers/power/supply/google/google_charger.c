@@ -1961,7 +1961,7 @@ update_charger:
 
 rerun_error:
 	success = schedule_delayed_work(&chg_drv->chg_work,
-					CHG_WORK_ERROR_RETRY_MS);
+				msecs_to_jiffies(CHG_WORK_ERROR_RETRY_MS));
 
 	/* no need to reschedule the pending after an error
 	 * NOTE: rc is the return code from battery properties
