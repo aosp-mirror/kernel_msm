@@ -548,5 +548,6 @@ struct gbms_storage_device *gbms_storage_create_device(const char *name,
 						       gbms_tag_t tag);
 void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
 
+bool gbms_temp_defend_dry_run(bool update, bool dry_run);
 
 #endif  /* __GOOGLE_BMS_H_ */
