@@ -824,15 +824,17 @@ static void log_failure_reason(struct pil_tz_data *d)
 	/*
 	 * Debug only
 	 * Trigger full ramdump for specific SSR signature
-	 * b/165807182 - wal_Bp_Timeout_Assert_handler:77
+	 * b/174445068 - halphyRfaCtrlErrorHandler_trigger_assert
 	 * b/169414590 - NOCError
+	 * b/176352309 - platform_ccpm_init:773
 	 */
-	if (!strcmp(name, "modem")) {
-		if (strnstr(reason, "wal_Bp_Timeout_Assert_handler:77",
+	if (!strcmp(name, "modem")
+			&& strnstr(reason, "wlan_process", strlen(reason))) {
+		if (strnstr(reason, "halphyRfaCtrlErrorHandler_trigger_assert",
+				strlen(reason))
+				|| strnstr(reason, "NOCError", strlen(reason))
+				|| strnstr(reason, "platform_ccpm_init:773",
 				strlen(reason)))
-			BUG();
-		if (strnstr(reason, "NOCError", strlen(reason)) &&
-                    strnstr(reason, "wlan_process", strlen(reason)))
 			BUG();
 	}
 }
