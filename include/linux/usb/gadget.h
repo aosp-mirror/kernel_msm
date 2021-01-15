@@ -343,10 +343,10 @@ struct usb_ep {
 	u8			address;
 	const struct usb_endpoint_descriptor	*desc;
 	const struct usb_ss_ep_comp_descriptor	*comp_desc;
-	enum ep_type		ep_type;
-	u8			ep_num;
-	u8			ep_intr_num;
-	bool			endless;
+	enum ep_type            ep_type;
+	u8                      ep_num;
+	u8                      ep_intr_num;
+	bool                    endless;
 };
 
 /*-------------------------------------------------------------------------*/
@@ -396,7 +396,7 @@ static inline int usb_ep_fifo_status(struct usb_ep *ep)
 static inline void usb_ep_fifo_flush(struct usb_ep *ep)
 { }
 
-static int usb_gsi_ep_op(struct usb_ep *ep,
+static inline int usb_gsi_ep_op(struct usb_ep *ep,
 		struct usb_gsi_request *req, enum gsi_ep_op op)
 { return 0; }
 #endif /* USB_GADGET */
@@ -488,6 +488,8 @@ struct usb_gadget_ops {
  * @connected: True if gadget is connected.
  * @lpm_capable: If the gadget max_speed is FULL or HIGH, this flag
  *	indicates that it supports LPM as per the LPM ECN & errata.
+ * @remote_wakeup: Indicates if the host has enabled the remote_wakeup
+ * feature.
  *
  * Gadgets have a mostly-portable "gadget driver" implementing device
  * functions, handling all usb configurations and interfaces.  Gadget
@@ -696,7 +698,8 @@ static inline int usb_gadget_frame_number(struct usb_gadget *gadget)
 { return 0; }
 static inline int usb_gadget_wakeup(struct usb_gadget *gadget)
 { return 0; }
-static int usb_gadget_func_wakeup(struct usb_gadget *gadget, int interface_id)
+static inline int usb_gadget_func_wakeup(struct usb_gadget *gadget,
+					 int interface_id)
 { return 0; }
 static inline int usb_gadget_set_selfpowered(struct usb_gadget *gadget)
 { return 0; }

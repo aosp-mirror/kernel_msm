@@ -119,6 +119,15 @@ static DEFINE_MUTEX(register_mutex);
 static struct snd_usb_audio *usb_chip[SNDRV_CARDS];
 static struct usb_driver usb_audio_driver;
 
+/**
+ * find_snd_usb_substream - helper API to find usb substream context
+ * information using card number, pcm device number and direction.
+ * @card_num: card number
+ * @pcm_idx: pcm device number
+ * @direction: SNDRV_PCM_STREAM_PLAYBACK or SNDRV_PCM_STREAM_CAPTURE
+ * @uchip: substream context.
+ * disconnect_cb: callback to use for cleanup on disconnect.
+ */
 struct snd_usb_substream *find_snd_usb_substream(unsigned int card_num,
 	unsigned int pcm_idx, unsigned int direction, struct snd_usb_audio
 	**uchip, void (*disconnect_cb)(struct snd_usb_audio *chip))
@@ -134,7 +143,7 @@ struct snd_usb_substream *find_snd_usb_substream(unsigned int card_num,
 	 * search using chip->card->number
 	 */
 	for (idx = 0; idx < SNDRV_CARDS; idx++) {
-		if (!usb_chip[idx])
+		if (!usb_chip[idx] || !usb_chip[idx]->card)
 			continue;
 		if (usb_chip[idx]->card->number == card_num) {
 			chip = usb_chip[idx];
@@ -149,13 +158,14 @@ struct snd_usb_substream *find_snd_usb_substream(unsigned int card_num,
 	}
 
 	if (pcm_idx >= chip->pcm_devs) {
-		pr_err("%s: invalid pcm dev number %u > %d\n", __func__,
-			pcm_idx, chip->pcm_devs);
+		usb_audio_err(chip, "%s: invalid pcm dev number %u > %d\n",
+			      __func__, pcm_idx, chip->pcm_devs);
 		goto err;
 	}
 
 	if (direction > SNDRV_PCM_STREAM_CAPTURE) {
-		pr_err("%s: invalid direction %u\n", __func__, direction);
+		usb_audio_err(chip, "%s: invalid direction %u\n", __func__,
+			      direction);
 		goto err;
 	}
 
@@ -164,8 +174,8 @@ struct snd_usb_substream *find_snd_usb_substream(unsigned int card_num,
 			subs = &as->substream[direction];
 			if (subs->interface < 0 && !subs->data_endpoint &&
 				!subs->sync_endpoint) {
-				pr_debug("%s: stream disconnected, bail out\n",
-					__func__);
+				usb_audio_err(chip, "%s: stream disconnected, bail out\n",
+					      __func__);
 				subs = NULL;
 				goto err;
 			}
@@ -179,7 +189,7 @@ done:
 err:
 	*uchip = chip;
 	if (!subs)
-		pr_debug("%s: substream instance not found\n", __func__);
+		pr_err("%s: substream instance not found\n", __func__);
 	mutex_unlock(&register_mutex);
 	return subs;
 }
@@ -748,10 +758,14 @@ static int usb_audio_probe(struct usb_interface *intf,
 			goto __error;
 	}
 
-	/* we are allowed to call snd_card_register() many times */
-	err = snd_card_register(chip->card);
-	if (err < 0)
-		goto __error;
+	/* we are allowed to call snd_card_register() many times, but first
+	 * check to see if a device needs to skip it or do anything special
+	 */
+	if (!snd_usb_registration_quirk(chip, ifnum)) {
+		err = snd_card_register(chip->card);
+		if (err < 0)
+			goto __error;
+	}
 
 	usb_chip[chip->index] = chip;
 	chip->num_interfaces++;

@@ -192,7 +192,13 @@ static inline void cpu_load_update_active(struct rq *this_rq) { }
 #ifdef CONFIG_64BIT
 # define NICE_0_LOAD_SHIFT	(SCHED_FIXEDPOINT_SHIFT + SCHED_FIXEDPOINT_SHIFT)
 # define scale_load(w)		((w) << SCHED_FIXEDPOINT_SHIFT)
-# define scale_load_down(w)	((w) >> SCHED_FIXEDPOINT_SHIFT)
+# define scale_load_down(w) \
+({ \
+	unsigned long __w = (w); \
+	if (__w) \
+		__w = max(2UL, __w >> SCHED_FIXEDPOINT_SHIFT); \
+	__w; \
+})
 #else
 # define NICE_0_LOAD_SHIFT	(SCHED_FIXEDPOINT_SHIFT)
 # define scale_load(w)		(w)
@@ -863,6 +869,7 @@ struct root_domain {
 	 */
 	struct perf_domain	*pd;
 
+	/* Vendor fields. */
 	/* First cpu with maximum and minimum original capacity */
 	int max_cap_orig_cpu, min_cap_orig_cpu;
 	/* First cpu with mid capacity */
@@ -2232,21 +2239,10 @@ static inline unsigned long cpu_util_cum(int cpu, int delta)
 	return (delta >= capacity) ? capacity : delta;
 }
 
-#ifdef CONFIG_SCHED_TUNE
+#ifdef CONFIG_SCHED_WALT
 extern unsigned long stune_util(int cpu, unsigned long other_util,
 				struct sched_walt_cpu_load *walt_load);
 #endif
-
-static inline unsigned long
-cpu_util_freq(int cpu, struct sched_walt_cpu_load *walt_load)
-{
-
-#ifdef CONFIG_SCHED_WALT
-	return cpu_util_freq_walt(cpu, walt_load);
-#else
-	return cpu_util(cpu);
-#endif
-}
 
 extern unsigned int capacity_margin_freq;
 
@@ -2653,16 +2649,13 @@ bool uclamp_boosted(struct task_struct *p);
  *
  * The utilization signals of all scheduling classes (CFS/RT/DL) and IRQ time
  * need to be aggregated differently depending on the usage made of them. This
- * enum is used within schedutil_freq_util() to differentiate the types of
+ * enum is used within schedutil_cpu_util() to differentiate the types of
  * utilization expected by the callers, and adjust the aggregation accordingly.
  */
 enum schedutil_type {
 	FREQUENCY_UTIL,
 	ENERGY_UTIL,
 };
-
-unsigned long schedutil_freq_util(int cpu, unsigned long util,
-			          unsigned long max, enum schedutil_type type);
 
 #ifdef CONFIG_SMP
 static inline unsigned long cpu_util_cfs(struct rq *rq)

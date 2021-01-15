@@ -4188,7 +4188,6 @@ struct wiphy_iftype_akm_suites {
  * @support_only_he_mbssid: don't parse MBSSID elements if it is not
  *	HE AP, in order to avoid compatibility issues.
  *	@support_mbssid must be set for this to have any effect.
- *
  */
 struct wiphy {
 	/* assign these fields before you register the wiphy */

@@ -1171,6 +1171,7 @@ struct drm_connector {
 	 * &drm_mode_config.connector_free_work.
 	 */
 	struct llist_node free_node;
+
 	/**
 	 * @panel:
 	 *

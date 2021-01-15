@@ -1705,6 +1705,9 @@ static void *vmstat_start(struct seq_file *m, loff_t *pos)
 static void *vmstat_next(struct seq_file *m, void *arg, loff_t *pos)
 {
 	(*pos)++;
+	//nr_gpu_heap is out-of-tree now so we don't want to export it.
+	if (*pos == NR_VM_ZONE_STAT_ITEMS + NR_VM_NUMA_STAT_ITEMS + NR_GPU_HEAP)
+		(*pos)++;
 	if (*pos >= ARRAY_SIZE(vmstat_text))
 		return NULL;
 	return (unsigned long *)m->private + *pos;

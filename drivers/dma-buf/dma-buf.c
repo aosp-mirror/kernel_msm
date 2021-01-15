@@ -1053,6 +1053,7 @@ static int dma_buf_begin_cpu_access_umapped(struct dma_buf *dmabuf,
 
 	return ret;
 }
+
 int dma_buf_begin_cpu_access_partial(struct dma_buf *dmabuf,
 				     enum dma_data_direction direction,
 				     unsigned int offset, unsigned int len)
@@ -1075,7 +1076,7 @@ int dma_buf_begin_cpu_access_partial(struct dma_buf *dmabuf,
 
 	return ret;
 }
-EXPORT_SYMBOL(dma_buf_begin_cpu_access_partial);
+EXPORT_SYMBOL_GPL(dma_buf_begin_cpu_access_partial);
 
 /**
  * dma_buf_end_cpu_access - Must be called after accessing a dma_buf from the
@@ -1130,7 +1131,7 @@ int dma_buf_end_cpu_access_partial(struct dma_buf *dmabuf,
 
 	return ret;
 }
-EXPORT_SYMBOL(dma_buf_end_cpu_access_partial);
+EXPORT_SYMBOL_GPL(dma_buf_end_cpu_access_partial);
 
 /**
  * dma_buf_kmap - Map a page of the buffer object into kernel address space. The
@@ -1297,7 +1298,7 @@ int dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags)
 {
 	int ret = 0;
 
-	if (WARN_ON(!dmabuf))
+	if (WARN_ON(!dmabuf) || !flags)
 		return -EINVAL;
 
 	if (dmabuf->ops->get_flags)

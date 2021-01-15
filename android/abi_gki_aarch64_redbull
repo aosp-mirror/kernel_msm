@@ -1,4 +1,4 @@
-[abi_whitelist]
+[abi_symbol_list]
 # commonly used symbols
   add_timer
   add_uevent_var
@@ -1435,8 +1435,6 @@
   ptr_to_hashval
   sched_setattr
   split_page
-  vm_map_ram
-  vm_unmap_ram
   zone_watermark_ok_safe
 
 # required by ipa3.ko
@@ -2344,6 +2342,7 @@
   __sock_recv_ts_and_drops
   sock_wake_async
   sock_wfree
+  timer_reduce
   unregister_net_sysctl_table
   __wake_up_sync_key
   __xfrm_policy_check
@@ -2513,6 +2512,78 @@
   trace_output_call
   utf16s_to_utf8s
 
+# required by usb-audio-qmi.ko
+  find_snd_usb_substream
+  snd_usb_enable_audio_stream
+  snd_usb_find_csint_desc
+  usb_alloc_coherent
+  usb_free_coherent
+  usb_get_controller_id
+  usb_get_sec_event_ring_phys_addr
+  usb_get_xfer_ring_phys_addr
+  usb_ifnum_to_if
+  usb_sec_event_ring_cleanup
+  usb_sec_event_ring_setup
+  usb_stop_endpoint
+
+# required by usb-dwc3-msm.ko
+  device_wakeup_disable
+  extcon_get_edev_name
+  extcon_get_property
+  irq_set_irqchip_state
+  pm_runtime_barrier
+  regulator_register_notifier
+  regulator_unregister_notifier
+  usb_gadget_vbus_connect
+  usb_gadget_vbus_disconnect
+  usb_register_atomic_notify
+  usb_register_notify
+  usb_speed_string
+  usb_unregister_atomic_notify
+  usb_unregister_notify
+
+# required by usb_f_diag.ko
+  refcount_dec_and_lock
+
+# required by usb_f_gsi.ko
+  dev_get_by_name
+  usb_composite_setup_continue
+  usb_ep_autoconfig_by_name
+  usb_func_ep_queue
+  usb_func_wakeup
+  usb_gsi_ep_op
+
+# required by usb_f_mtp.ko
+  usb_os_desc_prepare_interf_dir
+  vfs_write
+
+# required by usb_f_qdss.ko
+  usb_ep_autoconfig_ss
+
+# required by usf_dlkm.ko
+  strncpy_from_user
+
+# required by vd6281_module.ko
+  i2c_smbus_read_byte_data
+  i2c_smbus_write_byte_data
+
+# required by watchdog_v2.ko
+  cpu_pm_register_notifier
+  cpu_pm_unregister_notifier
+  __cpu_present_mask
+  disable_percpu_irq
+  enable_percpu_irq
+  free_percpu_irq
+  panic_timeout
+  __request_percpu_irq
+
+# required by wcd_core_dlkm.ko
+  devm_regmap_add_irq_chip
+  devm_regmap_del_irq_chip
+  handle_simple_irq
+  irq_create_mapping
+  regmap_irq_get_virq
+
 # required by wlan.ko
   bitmap_print_to_pagebuf
   __cfg80211_alloc_event_skb
@@ -2607,78 +2678,6 @@
   wiphy_unregister
   wireless_send_event
 
-# required by usb-audio-qmi.ko
-  find_snd_usb_substream
-  snd_usb_enable_audio_stream
-  snd_usb_find_csint_desc
-  usb_alloc_coherent
-  usb_free_coherent
-  usb_get_controller_id
-  usb_get_sec_event_ring_phys_addr
-  usb_get_xfer_ring_phys_addr
-  usb_ifnum_to_if
-  usb_sec_event_ring_cleanup
-  usb_sec_event_ring_setup
-  usb_stop_endpoint
-
-# required by usb-dwc3-msm.ko
-  device_wakeup_disable
-  extcon_get_edev_name
-  extcon_get_property
-  irq_set_irqchip_state
-  pm_runtime_barrier
-  regulator_register_notifier
-  regulator_unregister_notifier
-  usb_gadget_vbus_connect
-  usb_gadget_vbus_disconnect
-  usb_register_atomic_notify
-  usb_register_notify
-  usb_speed_string
-  usb_unregister_atomic_notify
-  usb_unregister_notify
-
-# required by usb_f_diag.ko
-  refcount_dec_and_lock
-
-# required by usb_f_gsi.ko
-  dev_get_by_name
-  usb_composite_setup_continue
-  usb_ep_autoconfig_by_name
-  usb_func_ep_queue
-  usb_func_wakeup
-  usb_gsi_ep_op
-
-# required by usb_f_mtp.ko
-  usb_os_desc_prepare_interf_dir
-  vfs_write
-
-# required by usb_f_qdss.ko
-  usb_ep_autoconfig_ss
-
-# required by usf_dlkm.ko
-  strncpy_from_user
-
-# required by vd6281_module.ko
-  i2c_smbus_read_byte_data
-  i2c_smbus_write_byte_data
-
-# required by watchdog_v2.ko
-  cpu_pm_register_notifier
-  cpu_pm_unregister_notifier
-  __cpu_present_mask
-  disable_percpu_irq
-  enable_percpu_irq
-  free_percpu_irq
-  panic_timeout
-  __request_percpu_irq
-
-# required by wcd_core_dlkm.ko
-  devm_regmap_add_irq_chip
-  devm_regmap_del_irq_chip
-  handle_simple_irq
-  irq_create_mapping
-  regmap_irq_get_virq
-
 # required by wsa883x_dlkm.ko
   snd_info_create_module_entry
   snd_soc_component_exit_regmap
@@ -2689,6 +2688,7 @@
   __usb_create_hcd
   usb_disabled
   usb_hcd_is_primary_hcd
+  usb_hcd_platform_shutdown
   usb_put_hcd
   usb_remove_hcd
   xhci_gen_setup
@@ -2696,3 +2696,7 @@
   xhci_resume
   xhci_run
   xhci_suspend
+
+# preserved by --additions-only
+  vm_map_ram
+  vm_unmap_ram

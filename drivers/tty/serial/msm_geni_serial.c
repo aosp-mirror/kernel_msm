@@ -117,9 +117,9 @@
 #define WAIT_XFER_MAX_ITER	(2)
 #define WAIT_XFER_MAX_TIMEOUT_US	(10000)
 #define WAIT_XFER_MIN_TIMEOUT_US	(9000)
-#define IPC_LOG_PWR_PAGES	(6)
-#define IPC_LOG_MISC_PAGES	(10)
-#define IPC_LOG_TX_RX_PAGES	(10)
+#define IPC_LOG_PWR_PAGES (6)
+#define IPC_LOG_MISC_PAGES (10)
+#define IPC_LOG_TX_RX_PAGES (10)
 #define DATA_BYTES_PER_LINE	(32)
 
 #define IPC_LOG_MSG(ctx, x...) do { \
@@ -1004,8 +1004,7 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 	}
 
 	if (!uart_console(uport)) {
-		IPC_LOG_MSG(msm_port->ipc_log_misc,
-				"%s.Power on.\n", __func__);
+		IPC_LOG_MSG(msm_port->ipc_log_misc, "%s.Power on.\n", __func__);
 		pm_runtime_get(uport->dev);
 	}
 

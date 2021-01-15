@@ -42,10 +42,11 @@ struct rw_semaphore {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
 #endif
-#ifdef CONFIG_RWSEM_PRIO_AWARE
-	/* count for waiters preempt to queue in wait list */
+        /* NOTICE: m_count is a vendor variable used for the config
+         * CONFIG_RWSEM_PRIO_AWARE. This is included here to maintain ABI
+         * compatibility with our vendors */
+        /* count for waiters preempt to queue in wait list */
 	long m_count;
-#endif
 };
 
 /*

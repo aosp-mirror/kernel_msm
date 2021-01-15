@@ -1119,7 +1119,7 @@ enum behavior {
 			 */
 };
 
-static inline int wait_on_page_bit_common(wait_queue_head_t *q,
+static inline __sched int wait_on_page_bit_common(wait_queue_head_t *q,
 	struct page *page, int bit_nr, int state, enum behavior behavior)
 {
 	struct wait_page_queue wait_page;

@@ -134,7 +134,11 @@ static int clk_pm_runtime_get(struct clk_core *core)
 		return 0;
 
 	ret = pm_runtime_get_sync(core->dev);
-	return ret < 0 ? ret : 0;
+	if (ret < 0) {
+		pm_runtime_put_noidle(core->dev);
+		return ret;
+	}
+	return 0;
 }
 
 static void clk_pm_runtime_put(struct clk_core *core)
@@ -4192,17 +4196,11 @@ static int __clk_core_init(struct clk_core *core)
 	if (core->flags & CLK_IS_CRITICAL) {
 		unsigned long flags;
 
-		ret = clk_core_prepare(core);
-		if (ret)
-			goto out;
+		clk_core_prepare(core);
 
 		flags = clk_enable_lock();
-		ret = clk_core_enable(core);
+		clk_core_enable(core);
 		clk_enable_unlock(flags);
-		if (ret) {
-			clk_core_unprepare(core);
-			goto out;
-		}
 	}
 
 	clk_core_hold_state(core);
@@ -4286,6 +4284,9 @@ static int __clk_core_init(struct clk_core *core)
 out:
 	clk_pm_runtime_put(core);
 unlock:
+	if (ret)
+		hlist_del_init(&core->child_node);
+
 	clk_prepare_unlock();
 
 	if (!ret)

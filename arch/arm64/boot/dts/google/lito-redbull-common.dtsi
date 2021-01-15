@@ -33,6 +33,12 @@
 #include "lito-redbull-usb.dtsi"
 #include "lito-redbull-citadel.dtsi"
 
+&aliases {
+	i2c0 = "/soc/i2c@984000";
+	i2c1 = "/soc/i2c@98c000";
+	i2c2 = "/soc/i2c@994000";
+};
+
 &soc {
 	gpio_keys {
 		compatible = "gpio-keys";

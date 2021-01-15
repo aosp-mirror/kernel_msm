@@ -3776,6 +3776,7 @@ static int chg_get_thermal_pd_wa(struct thermal_cooling_device *tcd,
 	return 0;
 }
 
+#define THERM_PD_VOLTAGE_MAX 4350
 static int chg_set_thermal_pd_wa(struct thermal_cooling_device *tcd,
 				 unsigned long state)
 {

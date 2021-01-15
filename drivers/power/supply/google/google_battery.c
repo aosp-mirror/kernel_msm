@@ -4146,6 +4146,10 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 		debugfs_create_u32("fake_capacity", 0600, de,
 				    &batt_drv->fake_capacity);
 
+		/* defender */
+		debugfs_create_u32("fake_capacity", 0600, de,
+				    &batt_drv->fake_capacity);
+
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
 				    batt_drv, &debug_chg_health_thr_soc_fops);
