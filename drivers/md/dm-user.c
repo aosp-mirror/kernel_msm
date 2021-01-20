@@ -130,7 +130,7 @@ struct target {
 	 * means no new messages will appear.  The destroyed flag triggers a
 	 * wakeup, which will end up removing the reference.
 	 */
-	long references;
+	struct kref references;
 	int dm_destroyed;
 };
 
@@ -541,22 +541,10 @@ int target_poll(struct target *t)
 	return !list_empty(&t->to_user) || t->dm_destroyed;
 }
 
-void target_put(struct target *t)
+void target_release(struct kref *ref)
 {
+	struct target *t = container_of(ref, struct target, references);
 	struct list_head *cur;
-
-	/*
-	 * This both releases a reference to the target and the lock.  We leave
-	 * it up to the caller to hold the lock, as they probably needed it for
-	 * something else.
-	 */
-	lockdep_assert_held(&t->lock);
-
-	t->references--;
-	if (t->references > 0) {
-		mutex_unlock(&t->lock);
-		return;
-	}
 
 	/*
 	 * There may be outstanding BIOs that have not yet been given to
@@ -574,6 +562,19 @@ void target_put(struct target *t)
 	kfree(t);
 }
 
+static void target_put(struct target *t)
+{
+	/*
+	 * This both releases a reference to the target and the lock.  We leave
+	 * it up to the caller to hold the lock, as they probably needed it for
+	 * something else.
+	 */
+	lockdep_assert_held(&t->lock);
+
+	if (!kref_put(&t->references, target_release))
+		mutex_unlock(&t->lock);
+}
+
 struct channel *channel_alloc(struct target *t)
 {
 	struct channel *c;
@@ -584,7 +585,7 @@ struct channel *channel_alloc(struct target *t)
 	if (c == NULL)
 		return NULL;
 
-	t->references++;
+	kref_get(&t->references);
 	c->target = t;
 	c->cur_from_user = &c->scratch_message_from_user;
 	mutex_init(&c->lock);
@@ -947,7 +948,8 @@ static int user_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	 * until after the miscdev has been unregistered and all extant
 	 * channels have been closed.
 	 */
-	t->references = 1;
+	kref_init(&t->references);
+	kref_get(&t->references);
 
 	mutex_init(&t->lock);
 	init_waitqueue_head(&t->wq);
