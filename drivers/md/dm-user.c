@@ -752,13 +752,6 @@ cleanup_unlock:
 	return total_processed;
 }
 
-static ssize_t dev_splice_read(struct file *in, loff_t *ppos,
-			       struct pipe_inode_info *pipe, size_t len,
-			       unsigned int flags)
-{
-	return -EOPNOTSUPP;
-}
-
 static ssize_t dev_write(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct channel *c = channel_from_file(iocb->ki_filp);
@@ -872,17 +865,6 @@ cleanup_unlock:
 	return total_processed;
 }
 
-static ssize_t dev_splice_write(struct pipe_inode_info *pipe, struct file *out,
-				loff_t *ppos, size_t len, unsigned int flags)
-{
-	return -EOPNOTSUPP;
-}
-
-static __poll_t dev_poll(struct file *file, poll_table *wait)
-{
-	return -EOPNOTSUPP;
-}
-
 static int dev_release(struct inode *inode, struct file *file)
 {
 	struct channel *c;
@@ -894,28 +876,13 @@ static int dev_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int dev_fasync(int fd, struct file *file, int on)
-{
-	return -EOPNOTSUPP;
-}
-
-static long dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	return -EOPNOTSUPP;
-}
-
 static const struct file_operations file_operations = {
 	.owner = THIS_MODULE,
 	.open = dev_open,
 	.llseek = no_llseek,
 	.read_iter = dev_read,
-	.splice_read = dev_splice_read,
 	.write_iter = dev_write,
-	.splice_write = dev_splice_write,
-	.poll = dev_poll,
 	.release = dev_release,
-	.fasync = dev_fasync,
-	.unlocked_ioctl = dev_ioctl,
 };
 
 static int user_ctr(struct dm_target *ti, unsigned int argc, char **argv)
