@@ -761,18 +761,17 @@
 		thermal-sensors = <&pm7250b_adc_tm ADC_AMUX_THM3_PU2>;
 		wake-capable-sensor;
 		trips {
-			usb_throttling_max: usb-throttling_max {
-				temperature = <60000>;
-				hysteresis = <10000>;
+			usb_throttling_lv1: usb-throttling_lv1 {
+				temperature = <40000>;
+				hysteresis = <1000>;
 				type = "passive";
 			};
 		};
 		cooling-maps {
-			usb_throttling_max {
-				trip = <&usb_throttling_max>;
+			usb_throttling_lv1 {
+				trip = <&usb_throttling_lv1>;
 				cooling-device =
-					<&google_overheat_mitigation
-					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
+					<&google_overheat_mitigation 1 1>;
 			};
 		};
 	};
@@ -791,12 +790,58 @@
 			};
 		};
 	};
+
+	usbc-virt {
+		polling-delay-passive = <2000>;
+		polling-delay = <2000>;
+		thermal-governor = "step_wise";
+		disable-thermal-zone;
+		trips {
+			usb_throttling_max: usb-throttling_max {
+				temperature = <7000>;
+				hysteresis = <4000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			usb_throttling_max {
+				trip = <&usb_throttling_max>;
+				cooling-device =
+					<&google_overheat_mitigation
+					THERMAL_MAX_LIMIT THERMAL_MAX_LIMIT>;
+			};
+		};
+	};
+
+	usbc-virt-monitor {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "user_space";
+		disable-thermal-zone;
+		trips {
+			active-config0 {
+				temperature = <125000>;
+				hysteresis = <1000>;
+				type = "passive";
+			};
+		};
+	};
 };
 
 &soc {
 	google,overheat_mitigation {
-		google,begin-mitigation-temp = <600>;
-		google,end-mitigation-temp = <500>;
+		google,begin-mitigation-temp = <400>;
+		google,end-mitigation-temp = <390>;
+		google,usbc-virt-sensor {
+			usbc-virt {
+				sensor-name = "usbc-virt";
+			};
+
+			usbc-virt-monitor {
+				sensor-name = "usbc-virt-monitor";
+				support_uevent;
+			};
+		};
 	};
 
 	adc_virtual_sensor: adc-virtual-sensor {
@@ -892,6 +937,24 @@
 		logic = "weight";
 		num_sensors = <2>;
 		sensor-names = "skin-sdm", "u-bound";
+		coefficients = <1 (-1)>;
+		avg-offset = <0>;
+		avg-denominator = <1>;
+	};
+
+	usbc-virt {
+		logic = "weight";
+		num_sensors = <2>;
+		sensor-names = "usbc-therm-adc", "charger-therm";
+		coefficients = <1 (-1)>;
+		avg-offset = <0>;
+		avg-denominator = <1>;
+	};
+
+	usbc-virt-monitor {
+		logic = "weight";
+		num_sensors = <2>;
+		sensor-names = "usbc-therm-adc", "charger-therm";
 		coefficients = <1 (-1)>;
 		avg-offset = <0>;
 		avg-denominator = <1>;
