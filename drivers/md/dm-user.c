@@ -650,7 +650,7 @@ static int dev_open(struct inode *inode, struct file *file)
 
 	if (c == NULL) {
 		mutex_unlock(&t->lock);
-		return -ENOSPC;
+		return -ENOMEM;
 	}
 
 	mutex_unlock(&t->lock);
@@ -931,7 +931,7 @@ static int user_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 	t = kzalloc(sizeof(*t), GFP_KERNEL);
 	if (t == NULL) {
-		r = -ENOSPC;
+		r = -ENOMEM;
 		goto cleanup_none;
 	}
 	ti->private = t;
@@ -961,7 +961,7 @@ static int user_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	t->miscdev.fops = &file_operations;
 	t->miscdev.name = kasprintf(GFP_KERNEL, "dm-user/%s", argv[2]);
 	if (t->miscdev.name == NULL) {
-		r = -ENOSPC;
+		r = -ENOMEM;
 		goto cleanup_message_pool;
 	}
 
@@ -985,7 +985,7 @@ static int user_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		DMERR("Unable to register miscdev %s for dm-user",
 		      t->miscdev.name);
-		r = -ENOSPC;
+		r = -ENOMEM;
 		goto cleanup_misc_name;
 	}
 
