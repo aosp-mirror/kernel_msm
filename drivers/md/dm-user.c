@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
+ * Copyright (C) 2020 Google, Inc
  * Copyright (C) 2020 Palmer Dabbelt <palmerdabbelt@google.com>
  */
 
