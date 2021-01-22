@@ -5568,9 +5568,6 @@ static int google_battery_remove(struct platform_device *pdev)
 	wakeup_source_unregister(batt_drv->taper_ws);
 	wakeup_source_unregister(batt_drv->poll_ws);
 
-	if (batt_drv->tz_dev)
-		thermal_zone_of_sensor_unregister(batt_drv->device,
-				batt_drv->tz_dev);
 	return 0;
 }
 
