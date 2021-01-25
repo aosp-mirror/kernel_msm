@@ -198,11 +198,11 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 		if (err)
 			goto exit;
 
-		ATRACE_BLOCK("el2_faceauth_process", {
-			err = el2_faceauth_process(
-				data->device, &start_step_data,
-				data->is_secure_camera);
-		});
+		ATRACE_BEGIN("el2_faceauth_process");
+		err = el2_faceauth_process(
+			data->device, &start_step_data,
+			data->is_secure_camera);
+		ATRACE_END();
 		if (err)
 			goto exit;
 
@@ -212,9 +212,9 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			polling_pause = M0_ENROLL_POLLING_PAUSE_US;
 			polling_interval = M0_ENROLL_POLLING_INTERVAL_US;
 		}
-		ATRACE_BLOCK("M0_POLLING_PAUSE_US", {
-			usleep_range(polling_pause, polling_pause + 1);
-		});
+		ATRACE_BLOCK("M0_POLLING_PAUSE_US",
+			usleep_range(polling_pause, polling_pause + 1)
+		);
 		stop = jiffies + msecs_to_jiffies(FACEAUTH_TIMEOUT_MS);
 		need_trace_end = true;
 		ATRACE_BEGIN("get_faceauth_process_result");
@@ -283,10 +283,10 @@ static long faceauth_dev_ioctl(struct file *file, unsigned int cmd,
 			err = -EFAULT;
 			goto exit;
 		}
-		ATRACE_BLOCK("el2_faceauth_gather_debug_log", {
-			err = el2_faceauth_gather_debug_log(
-				data->device, &debug_step_data);
-		});
+		ATRACE_BEGIN("el2_faceauth_gather_debug_log");
+		err = el2_faceauth_gather_debug_log(
+			data->device, &debug_step_data);
+		ATRACE_END();
 		break;
 	case FACEAUTH_DEV_IOC_DEBUG_DATA:
 		if (!data->debug_enabled) {
