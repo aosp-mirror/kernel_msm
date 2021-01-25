@@ -420,3 +420,13 @@ int gbms_cycle_count_sscan_bc(u16 *ccount, int bcnt, const char *buff)
 
 	return 0;
 }
+
+bool gbms_temp_defend_dry_run(bool update, bool dry_run)
+{
+	static bool is_dry_run;
+
+	if (update)
+		is_dry_run = dry_run;
+
+	return is_dry_run;
+}
