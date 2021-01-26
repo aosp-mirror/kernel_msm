@@ -2185,7 +2185,7 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 		if (chg_health->rest_state != CHG_HEALTH_DONE)
 			chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 
-		/* enabled from any previous state */
+	/* enabled from any previous state */
 	} else {
 		const time_t rest_deadline = get_boot_sec() + deadline_s;
 

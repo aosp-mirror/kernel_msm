@@ -96,6 +96,8 @@
 			io-channel-names = "batt-therm",
 					   "batt-id";
 
+			google,chg-term-voltage = <4400>;
+
 			sm7250_bms,chgr@1000 {
 				reg = <0x1000 0x100>;
 				interrupts =
@@ -212,6 +214,8 @@
 		google,bd-recharge-soc = <79>;
 		/* Enable TEMP-DEFEND */
 		google,bd-temp-enable;
+		/* Set dry_run */
+		google,bd-temp-dry-run;
 	};
 
 	google_charger_pd_5v: google,charger_pd_5v {
