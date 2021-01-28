@@ -30,8 +30,8 @@ typedef	s64 qnumud_t;
 #define QNUM_FMASK	(((qnum_t)1 << QNUM_FBITS) - 1)
 
 #define qnum_rconst(R) \
-	((qnum_t)((R) * (((qnumd_t)1 << QNUM_FBITS)\
-		+ ((R) >= 0 ? 0.5 : -0.5))))
+	((qnum_t)(((R) * ((qnumd_t)1 << QNUM_FBITS))\
+		+ ((R) * ((R) >= 0 ? 1 : -1) / 2)))
 
 #define qnum_fromint(I) ((qnumd_t)(I) << QNUM_FBITS)
 /* battery raw capacity is in Q8_8 */
