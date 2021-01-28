@@ -436,7 +436,7 @@ static void mlxsw_emad_trans_timeout_schedule(struct mlxsw_reg_trans *trans)
 {
 	unsigned long timeout = msecs_to_jiffies(MLXSW_EMAD_TIMEOUT_MS);
 
-	mlxsw_core_schedule_dw(&trans->timeout_dw, timeout);
+	mlxsw_core_schedule_dw(&trans->timeout_dw, timeout << trans->retries);
 }
 
 static int mlxsw_emad_transmit(struct mlxsw_core *mlxsw_core,
@@ -484,6 +484,9 @@ static void mlxsw_emad_transmit_retry(struct mlxsw_core *mlxsw_core,
 		trans->retries++;
 		err = mlxsw_emad_transmit(trans->core, trans);
 		if (err == 0)
+			return;
+
+		if (!atomic_dec_and_test(&trans->active))
 			return;
 	} else {
 		err = -EIO;
