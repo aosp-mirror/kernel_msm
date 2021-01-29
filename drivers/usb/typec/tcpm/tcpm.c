@@ -30,6 +30,8 @@
 #include <linux/usb/typec_altmode.h>
 #include <linux/workqueue.h>
 
+#include <../../../power/supply/google/logbuffer.h>
+
 #define FOREACH_CHUNK_STATE(S)			\
 	S(INVALID_CHUNK_STATE),			\
 	S(RCH_WAIT_FOR_MESSAGE),		\
@@ -434,6 +436,7 @@ struct tcpm_port {
 	int logbuffer_tail;
 	u8 *logbuffer[LOG_BUFFER_ENTRIES];
 #endif
+	struct logbuffer *log;
 
 	/* Chunk */
 	struct mutex chunk_lock;	/* chunk lock */
@@ -596,6 +599,8 @@ abort:
 	mutex_unlock(&port->logbuffer_lock);
 }
 
+#endif
+
 __printf(2, 3)
 static void tcpm_log(struct tcpm_port *port, const char *fmt, ...)
 {
@@ -611,7 +616,11 @@ static void tcpm_log(struct tcpm_port *port, const char *fmt, ...)
 		port->tcpc->log_rtc(port->tcpc);
 
 	va_start(args, fmt);
+#ifdef CONFIG_DEBUG_FS
 	_tcpm_log(port, fmt, args);
+#else
+	logbuffer_vlog(port->log, fmt, args);
+#endif
 	va_end(args);
 }
 
@@ -621,7 +630,11 @@ static void tcpm_log_force(struct tcpm_port *port, const char *fmt, ...)
 	va_list args;
 
 	va_start(args, fmt);
+#ifdef CONFIG_DEBUG_FS
 	_tcpm_log(port, fmt, args);
+#else
+	logbuffer_vlog(port->log, fmt, args);
+#endif
 	va_end(args);
 }
 
@@ -688,6 +701,8 @@ static void tcpm_log_source_caps(struct tcpm_port *port)
 	}
 }
 
+#ifdef CONFIG_DEBUG_FS
+
 static int tcpm_debug_show(struct seq_file *s, void *v)
 {
 	struct tcpm_port *port = (struct tcpm_port *)s->private;
@@ -731,11 +746,6 @@ static void tcpm_debugfs_exit(struct tcpm_port *port)
 
 #else
 
-__printf(2, 3)
-static void tcpm_log(const struct tcpm_port *port, const char *fmt, ...) { }
-__printf(2, 3)
-static void tcpm_log_force(struct tcpm_port *port, const char *fmt, ...) { }
-static void tcpm_log_source_caps(struct tcpm_port *port) { }
 static void tcpm_debugfs_init(const struct tcpm_port *port) { }
 static void tcpm_debugfs_exit(const struct tcpm_port *port) { }
 
@@ -6535,6 +6545,14 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	init_completion(&port->pps_complete);
 	tcpm_debugfs_init(port);
 
+#ifndef CONFIG_DEBUG_FS
+	port->log = logbuffer_register("tcpm");
+	if (IS_ERR_OR_NULL(port->log)) {
+		pr_err("tcpm: failed to obtain logbuffer instance\n");
+		port->log = NULL;
+	}
+#endif
+
 	err = tcpm_fw_get_caps(port, tcpc->fwnode);
 	if ((err < 0) && tcpc->config)
 		err = tcpm_copy_caps(port, tcpc->config);
@@ -6620,6 +6638,8 @@ out_role_sw_put:
 	usb_role_switch_put(port->role_sw);
 out_destroy_wq:
 	tcpm_debugfs_exit(port);
+	if (port->log)
+		logbuffer_unregister(port->log);
 	destroy_workqueue(port->wq);
 	return ERR_PTR(err);
 }
@@ -6635,6 +6655,8 @@ void tcpm_unregister_port(struct tcpm_port *port)
 	typec_unregister_port(port->typec_port);
 	usb_role_switch_put(port->role_sw);
 	tcpm_debugfs_exit(port);
+	if (port->log)
+		logbuffer_unregister(port->log);
 	destroy_workqueue(port->wq);
 	kfree(port->chunk_event);
 }

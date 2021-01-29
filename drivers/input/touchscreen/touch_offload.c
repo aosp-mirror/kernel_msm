@@ -257,7 +257,8 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 				goto kzalloc_channel_fail;
 			coord = (struct TouchOffloadDataCoord *)
 					frame->channel_data[chan];
-			coord->size_bytes = size;
+			coord->header.channel_type = TOUCH_DATA_TYPE_COORD;
+			coord->header.channel_size = size;
 			frame->channel_data_size[chan] = size;
 			frame->header.frame_size += size;
 			chan++;
@@ -277,9 +278,9 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 					goto kzalloc_channel_fail;
 				data = (struct TouchOffloadData2d *)
 						frame->channel_data[chan];
-				data->size_bytes = size;
-				pr_debug("%s: data->size_bytes = %u.\n",
-					 __func__, data->size_bytes);
+				data->header.channel_type =
+				    TOUCH_SCAN_TYPE_MUTUAL | mask;
+				data->header.channel_size = size;
 				frame->channel_data_size[chan] = size;
 				frame->header.frame_size += size;
 				chan++;
@@ -300,9 +301,9 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 					goto kzalloc_channel_fail;
 				data = (struct TouchOffloadData1d *)
 						frame->channel_data[chan];
-				data->size_bytes = size;
-				pr_debug("%s: data->size_bytes = %u.\n",
-					 __func__, data->size_bytes);
+				data->header.channel_type =
+				    TOUCH_SCAN_TYPE_SELF | mask;
+				data->header.channel_size = size;
 				frame->channel_data_size[chan] = size;
 				frame->header.frame_size += size;
 				chan++;
@@ -310,6 +311,7 @@ static int touch_offload_allocate_buffers(struct touch_offload_context *context,
 		}
 
 		frame->num_channels = chan;
+		frame->header.num_channels = chan;
 
 		if (context->packed_frame_size == 0)
 			context->packed_frame_size = frame->header.frame_size;
@@ -424,7 +426,7 @@ static long touch_offload_ioctl(struct file *file, unsigned int ioctl_num,
 	case TOUCH_OFFLOAD_IOC_WR_CONFIGURE:
 	{
 		struct TouchOffloadIocConfigure configure;
-		int NUM_BUFFERS = 3;
+		int NUM_BUFFERS = 4;
 		int num_channels;
 
 		err = copy_from_user(&configure, (void *)ioctl_param,

@@ -92,6 +92,8 @@
 #define FCC_CDEV_NAME "fcc"
 #define WLC_OF_CDEV_NAME "google,wlc_charger"
 #define WLC_CDEV_NAME "dc_icl"
+#define PD_WA_OF_CDEV_NAME "google,charger_pd_5v"
+#define PD_WA_CDEV_NAME "pd_wa"
 
 enum tcpm_psy_online_states {
 	TCPM_PSY_OFFLINE = 0,
@@ -142,9 +144,10 @@ struct pd_pps_data {
 struct chg_drv;
 
 enum chg_thermal_devices {
-	CHG_TERMAL_DEVICES_COUNT = 2,
+	CHG_TERMAL_DEVICES_COUNT = 3,
 	CHG_TERMAL_DEVICE_FCC = 0,
 	CHG_TERMAL_DEVICE_DC_IN = 1,
+	CHG_TERMAL_DEVICE_PD_WA = 2,
 };
 
 struct chg_thermal_device {
@@ -154,6 +157,7 @@ struct chg_thermal_device {
 	int *thermal_mitigation;
 	int thermal_levels;
 	int current_level;
+	bool pd_wa_active;
 };
 
 struct chg_termination {
@@ -204,6 +208,7 @@ struct chg_drv {
 	struct votable	*msc_fcc_votable;
 	struct votable	*msc_chg_disable_votable;
 	struct votable	*msc_pwr_disable_votable;
+	struct votable *msc_force_5v_votable;
 	struct votable	*usb_icl_votable;
 	struct votable	*dc_suspend_votable;
 	struct votable	*dc_icl_votable;
@@ -367,10 +372,7 @@ static inline void chg_reset_state(struct chg_drv *chg_drv)
 	if (chg_drv->chg_term.enable)
 		chg_reset_termination_data(chg_drv);
 
-	chg_update_capability(chg_drv->tcpm_psy,
-			      chg_drv->pps_data.default_pps_pdo ?
-			      PDO_PPS : PDO_FIXED_HIGH_VOLTAGE,
-			      chg_drv->pps_data.default_pps_pdo);
+	vote(chg_drv->msc_force_5v_votable, MSC_CHG_FULL_VOTER, false, 0);
 
 	if (chg_drv->chg_term.usb_5v == 1)
 		chg_drv->chg_term.usb_5v = 0;
@@ -1371,7 +1373,8 @@ update_charger:
 	/* tied to the charger: could tie to battery @ 100% instead */
 	if ((chg_drv->chg_term.usb_5v == 0) && chg_done) {
 		pr_info("MSC_CHG switch to 5V on full\n");
-		chg_update_capability(chg_drv->tcpm_psy, PDO_FIXED_5V, 0);
+		vote(chg_drv->msc_force_5v_votable, MSC_CHG_FULL_VOTER, true,
+		     0);
 		chg_drv->chg_term.usb_5v = 1;
 	} else if (chg_drv->pps_data.stage == PPS_ACTIVE && chg_done) {
 		pr_info("MSC_CHG switch to Fixed Profile on full\n");
@@ -2380,6 +2383,22 @@ static int msc_pwr_disable_cb(struct votable *votable, void *data,
 				      true);
 }
 
+static int msc_force_5v_cb(struct votable *votable, void *data, int force_5v,
+			   const char *client)
+{
+	struct chg_drv *chg_drv = (struct chg_drv *)data;
+	unsigned int default_pdo = chg_drv->pps_data.default_pps_pdo ?
+						 PDO_PPS :
+						 PDO_FIXED_HIGH_VOLTAGE;
+
+	if (!chg_drv->tcpm_psy)
+		return 0;
+
+	return chg_update_capability(chg_drv->tcpm_psy,
+				     force_5v ? PDO_FIXED_5V : default_pdo,
+				     chg_drv->pps_data.default_pps_pdo);
+}
+
 static int chg_disable_std_votables(struct chg_drv *chg_drv)
 {
 	struct votable *qc_votable;
@@ -2466,6 +2485,14 @@ static int chg_create_votables(struct chg_drv *chg_drv)
 		goto error_exit;
 	}
 
+	chg_drv->msc_force_5v_votable = create_votable(
+		VOTABLE_MSC_FORCE_5V, VOTE_SET_ANY, msc_force_5v_cb, chg_drv);
+	if (IS_ERR(chg_drv->msc_force_5v_votable)) {
+		ret = PTR_ERR(chg_drv->msc_force_5v_votable);
+		chg_drv->msc_force_5v_votable = NULL;
+		goto error_exit;
+	}
+
 	return 0;
 
 error_exit:
@@ -2474,12 +2501,14 @@ error_exit:
 	destroy_votable(chg_drv->msc_interval_votable);
 	destroy_votable(chg_drv->msc_chg_disable_votable);
 	destroy_votable(chg_drv->msc_pwr_disable_votable);
+	destroy_votable(chg_drv->msc_force_5v_votable);
 
 	chg_drv->msc_fv_votable = NULL;
 	chg_drv->msc_fcc_votable = NULL;
 	chg_drv->msc_interval_votable = NULL;
 	chg_drv->msc_chg_disable_votable = NULL;
 	chg_drv->msc_pwr_disable_votable = NULL;
+	chg_drv->msc_force_5v_votable = NULL;
 
 	return ret;
 }
@@ -2642,6 +2671,36 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 	return 0;
 }
 
+static int chg_get_thermal_pd_wa_max_state(struct thermal_cooling_device *tcd,
+					   unsigned long *state)
+{
+	*state = 1;
+	return 0;
+}
+
+static int chg_get_thermal_pd_wa(struct thermal_cooling_device *tcd,
+				 unsigned long *state)
+{
+	struct chg_thermal_device *tdev =
+		(struct chg_thermal_device *)tcd->devdata;
+	*state = tdev->pd_wa_active;
+	return 0;
+}
+
+static int chg_set_thermal_pd_wa(struct thermal_cooling_device *tcd,
+				 unsigned long state)
+{
+	struct chg_thermal_device *tdev =
+		(struct chg_thermal_device *)tcd->devdata;
+	struct chg_drv *chg_drv = tdev->chg_drv;
+
+	vote(chg_drv->msc_force_5v_votable, THERMAL_DAEMON_VOTER, !!state, 0);
+	tdev->pd_wa_active = !!state;
+	pr_info("MSC_THERM_PD state=%d\n", tdev->pd_wa_active);
+
+	return 0;
+}
+
 int chg_tdev_init(struct chg_thermal_device *tdev,
 		  const char *name,
 		  struct chg_drv *chg_drv)
@@ -2686,6 +2745,12 @@ static const struct thermal_cooling_device_ops chg_dc_icl_tcd_ops = {
 	.get_max_state = chg_get_max_charge_cntl_limit,
 	.get_cur_state = chg_get_cur_charge_cntl_limit,
 	.set_cur_state = chg_set_dc_in_charge_cntl_limit,
+};
+
+static const struct thermal_cooling_device_ops chg_pd_wa_tcd_ops = {
+	.get_max_state = chg_get_thermal_pd_wa_max_state,
+	.get_cur_state = chg_get_thermal_pd_wa,
+	.set_cur_state = chg_set_thermal_pd_wa,
 };
 
 /* ls /sys/devices/virtual/thermal/cdev-by-name/ */
@@ -2734,8 +2799,10 @@ int chg_thermal_device_init(struct chg_drv *chg_drv)
 						WLC_CDEV_NAME,
 						dc_icl,
 						&chg_dc_icl_tcd_ops);
-		if (!dc_icl->tcd)
+		if (!dc_icl->tcd) {
+			pr_err("error registering dc_icl cooling device\n");
 			goto error_exit;
+		}
 	}
 
 	chg_drv->therm_wlc_override_fcc =
@@ -2744,10 +2811,33 @@ int chg_thermal_device_init(struct chg_drv *chg_drv)
 	if (chg_drv->therm_wlc_override_fcc)
 		pr_info("WLC overrides FCC\n");
 
+	if (of_property_read_bool(chg_drv->device->of_node,
+				  "google,thermal-pd-wa")) {
+		struct chg_thermal_device *pd_wa =
+			&chg_drv->thermal_devices[CHG_TERMAL_DEVICE_PD_WA];
+		cooling_node = of_find_node_by_name(NULL, PD_WA_OF_CDEV_NAME);
+		if (!cooling_node) {
+			pr_err("No %s OF node for cooling device\n",
+			       PD_WA_OF_CDEV_NAME);
+		}
+
+		chg_drv->thermal_devices[CHG_TERMAL_DEVICE_PD_WA].chg_drv =
+			chg_drv;
+		pd_wa->tcd = thermal_of_cooling_device_register(
+			cooling_node, PD_WA_CDEV_NAME, pd_wa,
+			&chg_pd_wa_tcd_ops);
+		if (IS_ERR(pd_wa->tcd)) {
+			pr_err("error registering pd_wa cooling device\n");
+			goto error_pd_wa;
+		}
+	}
+
 	return 0;
 
+error_pd_wa:
+	thermal_cooling_device_unregister(
+		chg_drv->thermal_devices[CHG_TERMAL_DEVICE_DC_IN].tcd);
 error_exit:
-	pr_err("error registering dc_icl cooling device\n");
 	thermal_cooling_device_unregister(
 		chg_drv->thermal_devices[CHG_TERMAL_DEVICE_FCC].tcd);
 
@@ -3004,6 +3094,7 @@ static void chg_destroy_votables(struct chg_drv *chg_drv)
 	destroy_votable(chg_drv->msc_fcc_votable);
 	destroy_votable(chg_drv->msc_chg_disable_votable);
 	destroy_votable(chg_drv->msc_pwr_disable_votable);
+	destroy_votable(chg_drv->msc_force_5v_votable);
 }
 
 static int google_charger_remove(struct platform_device *pdev)

@@ -317,6 +317,8 @@ struct p9221_charger_platform_data {
 	u32				alignment_scalar_high_current;
 	u32				alignment_offset_low_current;
 	u32				alignment_offset_high_current;
+	struct drm_panel		*panel;
+	u32				initial_panel_index;
 };
 
 struct p9221_charger_data {
@@ -329,6 +331,7 @@ struct p9221_charger_data {
 	struct votable			*tx_icl_votable;
 	struct votable			*disable_dcin_en_votable;
 	struct notifier_block		nb;
+	struct notifier_block		screen_nb;
 	struct mutex			io_lock;
 	struct mutex			cmd_lock;
 	struct device			*dev;
@@ -338,7 +341,9 @@ struct p9221_charger_data {
 	struct delayed_work		tx_work;
 	struct delayed_work		icl_ramp_work;
 	struct delayed_work		txid_work;
+	struct delayed_work             send_csp_work;
 	struct delayed_work		rtx_work;
+	struct delayed_work		screen_nb_init_work;
 	struct work_struct		uevent_work;
 	struct work_struct		rtx_disable_work;
 	struct alarm			icl_ramp_alarm;
@@ -402,6 +407,11 @@ struct p9221_charger_data {
 	int				rtx_err;
 	bool				chg_on_rtx;
 	bool				is_rtx_mode;
+	bool				is_screen_on;
+	bool				ignore_irq_det;
+	u32				store_time;
+	u32				ignore_time;
+	int				bkp_capacity;
 };
 
 struct p9221_prop_reg_map_entry {

@@ -36,11 +36,14 @@
 
 #define BIAS_STS_READY	BIT(0)
 
+#define CHARGE_DISABLE_VOTER	"charge_disable"
+
 struct bms_dev {
 	struct	device			*dev;
 	struct	power_supply		*psy;
 	struct	regmap			*pmic_regmap;
 	struct	votable			*fv_votable;
+	struct	votable			*fcc_votable;
 	struct	notifier_block		nb;
 	int				batt_id_ohms;
 	int				rl_soc_threshold;
@@ -646,7 +649,7 @@ static int sm7250_get_chg_status(const struct bms_dev *bms,
 	stat1 = stat1 & CHGR_BATTERY_CHARGER_STATUS_MASK;
 
 	if (!plugged)
-		ret = POWER_SUPPLY_STATUS_DISCHARGING;
+		return POWER_SUPPLY_STATUS_DISCHARGING;
 
 	switch (stat1) {
 	case SM7250_TRICKLE_CHARGE:
@@ -1112,6 +1115,11 @@ static int sm7250_psy_set_property(struct power_supply *psy,
 							ivalue, val, rc);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
+		if (!bms->fcc_votable)
+			bms->fcc_votable = find_votable(VOTABLE_MSC_FCC);
+		if (bms->fcc_votable)
+			vote(bms->fcc_votable, CHARGE_DISABLE_VOTER,
+			     pval->intval, 0);
 		rc = sm7250_charge_disable(bms, pval->intval != 0);
 		break;
 	case POWER_SUPPLY_PROP_RERUN_AICL:

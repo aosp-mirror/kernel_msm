@@ -33,7 +33,7 @@
 
 &google_charger {
 	google,wlc-power-supply = "wireless";
-	google,wlc-thermal-mitigation = <1100000 500000 110000>;
+	google,wlc-thermal-mitigation = <1100000 500000 360000 110000>;
 	google,therm-wlc-overrides-fcc;
 };
 

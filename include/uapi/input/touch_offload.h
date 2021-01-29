@@ -10,7 +10,8 @@
 #define BUS_TYPE_I3C 2
 
 /* Indicates full heatmap frame vs. partial */
-#define HEATMAP_SIZE_FULL (1 << 31)
+#define HEATMAP_SIZE_PARTIAL  0
+#define HEATMAP_SIZE_FULL     1
 
 /* Touch channel data types */
 #define TOUCH_DATA_TYPE_COORD	  0x01
@@ -28,6 +29,11 @@
 
 /* TouchOffloadCaps
  *
+ * touch_offload_major_version - Major version for breaking changes
+ * touch_offload_minor_version - Minor version for small, compatible changes
+ * device_id - device-specific identifier
+ * display_width - width of device display in pixels
+ * display_height - height of device display in pixels
  * tx_size - number of TX channels
  * rx_size - number of RX channels
  * bus_type - bus interface type
@@ -44,22 +50,36 @@
  * num_sensitivity_settings - number of sensitivity options provided
  */
 struct TouchOffloadCaps {
-	int tx_size;
-	int rx_size;
-	int bus_type;
-	__u32 bus_speed_hz;
-	int heatmap_size;
-	int touch_data_types;
-	int touch_scan_types;
+	/* Version info */
+	__u32 touch_offload_major_version;
+	__u32 touch_offload_minor_version;
+	__u8 reserved1[8];
 
-	// feature flags
-	bool continuous_reporting;
-	bool noise_reporting;
-	bool cancel_reporting;
-	bool size_reporting;
-	bool filter_grip;
-	bool filter_palm;
-	int num_sensitivity_settings;
+	/* Device info */
+	__u32 device_id;
+	__u16 display_width;
+	__u16 display_height;
+	__u16 tx_size;
+	__u16 rx_size;
+	__u8 bus_type;
+	__u32 bus_speed_hz;
+	__u8 reserved2[16];
+
+	/* Algorithm info */
+	__u8 heatmap_size;
+	__u16 touch_data_types;
+	__u16 touch_scan_types;
+	__u8 reserved3[16];
+
+	/* Feature flags */
+	__u8 continuous_reporting;
+	__u8 noise_reporting;
+	__u8 cancel_reporting;
+	__u8 size_reporting;
+	__u8 filter_grip;
+	__u8 filter_palm;
+	__u8 num_sensitivity_settings;
+	__u8 reserved4[32];
 };
 
 /* TouchOffloadConfig
@@ -75,18 +95,20 @@ struct TouchOffloadCaps {
  * self_data_types - bitfield of self data types to collect
  */
 struct TouchOffloadConfig {
-	// feature flags
-	bool continuous_reporting;
-	bool noise_reporting;
-	bool cancel_reporting;
-	bool filter_grip;
-	bool filter_palm;
-	int sensitivity_setting;
+	/* Feature flags */
+	__u8 continuous_reporting;
+	__u8 noise_reporting;
+	__u8 cancel_reporting;
+	__u8 filter_grip;
+	__u8 filter_palm;
+	__u8 sensitivity_setting;
+	__u8 reserved1[16];
 
-	// Data to read
-	bool read_coords;
-	int mutual_data_types;
-	int self_data_types;
+	/* Data to read */
+	__u8 read_coords;
+	__u16 mutual_data_types;
+	__u16 self_data_types;
+	__u8 reserved2[16];
 };
 
 /* TouchOffloadFrameHeader
@@ -94,11 +116,23 @@ struct TouchOffloadConfig {
  * frame_size - number of bytes in the frame
  * index - unique, sequential frame index
  * timestamp - frame timestamp in nanoseconds
+ * num_channels - number of channels included in the frame
  */
 struct TouchOffloadFrameHeader {
 	__u32 frame_size;
 	__u64 index;
 	__u64 timestamp;
+	__u8 num_channels;
+} __attribute__((packed));
+
+/* TouchOffloadChannelHeader
+ *
+ * channel_type - touch type stored in the channel
+ * channel_size - size in bytes of the channel sample
+ */
+struct TouchOffloadChannelHeader {
+	__u8 channel_type;
+	__u32 channel_size;
 } __attribute__((packed));
 
 /* CoordStatus
@@ -125,39 +159,44 @@ enum CoordStatus {
  * x - x component of touch location
  * y - y component of touch location
  * status - type of touch
+ * major - size of the larger axis of the touch blob
+ * minor - size of the smaller axis of the touch blob
+ * pressure - z-axis or force exerted on touch touch point
  */
 struct TouchOffloadCoord {
 	__u16 x;
 	__u16 y;
 	enum CoordStatus status;
-	__u8 filler[32];
-	// major, minor, id
-	// touch type: coord, cancel, palm, etc
-	// explicit up event vs. down?
+	__u32 major;
+	__u32 minor;
+	__u32 pressure;
+	__u8 reserved1[16];
 } __attribute__((packed));
 
 /* TouchOffloadDataCoord
  *
- * size_bytes - number of bytes per coordinate channel frame
+ * header - header shared by all channels in a frame
  * coords - array of MAX_COORD coordinates
  */
 struct TouchOffloadDataCoord {
-	__u32 size_bytes;
+	struct TouchOffloadChannelHeader header;
 	struct TouchOffloadCoord coords[MAX_COORDS];
+	__u8 reserved1[16];
 } __attribute__((packed));
 #define TOUCH_OFFLOAD_FRAME_SIZE_COORD (sizeof(struct TouchOffloadDataCoord))
 
 /* TouchOffloadData2d
  *
- * size_bytes - size in bytes of this frame of 2D touch data
+ * header - header shared by all channels in a frame
  * tx_size - number of tx channels
  * rx_size - number of rx channels
  * data - pointer to raw touch data buffer
  */
 struct TouchOffloadData2d {
-	__u32 size_bytes;
+	struct TouchOffloadChannelHeader header;
 	__u16 tx_size;
 	__u16 rx_size;
+	__u8 reserved1[16];
 	__u8 data[1];
 } __attribute__((packed));
 #define TOUCH_OFFLOAD_DATA_SIZE_2D(rx, tx) (sizeof(__u16)*(rx)*(tx))
@@ -167,15 +206,16 @@ struct TouchOffloadData2d {
 
 /* TouchOffloadData1d
  *
- * size_bytes - size in bytes of this frame of 2D touch data
+ * header - header shared by all channels in a frame
  * tx_size - number of tx channels
  * rx_size - number of rx channels
  * data - pointer to raw touch data buffer
  */
 struct TouchOffloadData1d {
-	__u32 size_bytes;
+	struct TouchOffloadChannelHeader header;
 	__u16 tx_size;
 	__u16 rx_size;
+	__u8 reserved1[16];
 	__u8 data[1];
 } __attribute__((packed));
 #define TOUCH_OFFLOAD_DATA_SIZE_1D(rx, tx) (sizeof(__u16)*((rx)+(tx)))
@@ -191,6 +231,7 @@ struct TouchOffloadData1d {
  */
 struct TouchOffloadIocGetCaps {
 	struct TouchOffloadCaps caps;
+	__u8 reserved1[16];
 };
 
 /* TouchOffloadIocConfigure
@@ -199,15 +240,21 @@ struct TouchOffloadIocGetCaps {
  */
 struct TouchOffloadIocConfigure {
 	struct TouchOffloadConfig config;
+	__u8 reserved1[16];
 };
 
 /* TouchOffloadIocReport
  *
- * numCoords - number of coordinates contained in "coords"
+ * index - unique, sequential frame index
+ * timestamp - frame timestamp in nanoseconds
+ * num_coords - number of coordinates contained in "coords"
  * coords - array of coordinates to be reported to the driver
  */
 struct TouchOffloadIocReport {
-	__u8 numCoords;
+	__u64 index;
+	__u64 timestamp;
+	__u8 num_coords;
+	__u8 reserved1[16];
 	struct TouchOffloadCoord coords[MAX_COORDS];
 };
 
@@ -229,4 +276,4 @@ struct TouchOffloadIocReport {
 /* Ioctl to stop the touch_offload pipeline */
 #define TOUCH_OFFLOAD_IOC_STOP _IOC(TOUCH_OFFLOAD_MAGIC, 4)
 
-#endif // _UAPI_TOUCH_OFFLOAD_H
+#endif /* _UAPI_TOUCH_OFFLOAD_H */

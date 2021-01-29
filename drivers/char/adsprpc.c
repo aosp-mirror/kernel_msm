@@ -182,6 +182,9 @@ static int fastrpc_pdr_notifier_cb(struct notifier_block *nb,
 static struct dentry *debugfs_root;
 static struct dentry *debugfs_global_file;
 
+static atomic_long_t total_dma_bytes;
+static struct kobject *fastrpc_kobj;
+
 static inline void mem_barrier(void)
 {
 	__asm__ __volatile__("dmb sy":::"memory");
@@ -677,6 +680,7 @@ static void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
 				srcVM, 2, destVM, destVMperm, 1);
 		}
 		trace_fastrpc_dma_free(fl->cid, buf->phys, buf->size);
+		atomic_long_sub(buf->size, &total_dma_bytes);
 		dma_free_attrs(fl->sctx->smmu.dev, buf->size, buf->virt,
 					buf->phys, buf->dma_attr);
 	}
@@ -850,12 +854,23 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 {
 	struct fastrpc_apps *me = &gfa;
 	struct fastrpc_file *fl;
-	int vmid;
+	int vmid, cid = -1, err = 0;
 	struct fastrpc_session_ctx *sess;
 
 	if (!map)
 		return;
 	fl = map->fl;
+	if (fl && !(map->flags == ADSP_MMAP_HEAP_ADDR ||
+				map->flags == ADSP_MMAP_REMOTE_HEAP_ADDR)) {
+		cid = fl->cid;
+		VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
+		if (err) {
+			err = -ECHRNG;
+			pr_err("adsprpc: ERROR:%s, Invalid channel id: %d, err:%d\n",
+				__func__, cid, err);
+			return;
+		}
+	}
 	if (map->flags == ADSP_MMAP_HEAP_ADDR ||
 				map->flags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
 		spin_lock(&me->hlock);
@@ -881,6 +896,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			return;
 		}
 		trace_fastrpc_dma_free(-1, map->phys, map->size);
+		atomic_long_sub(map->size, &total_dma_bytes);
 		if (map->phys) {
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
@@ -969,6 +985,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 			goto bail;
 		trace_fastrpc_dma_alloc(fl->cid, (uint64_t)region_phys, len,
 			(unsigned long)map->attr, mflags);
+		atomic_long_add(len, &total_dma_bytes);
 		map->phys = (uintptr_t)region_phys;
 		map->size = len;
 		map->va = (uintptr_t)region_vaddr;
@@ -1196,6 +1213,7 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	trace_fastrpc_dma_alloc(fl->cid, buf->phys, size,
 		dma_attr, (int)rflags);
 
+	atomic_long_add(size, &total_dma_bytes);
 	vmid = fl->apps->channel[fl->cid].vmid;
 	if (vmid) {
 		int srcVM[1] = {VMID_HLOS};
@@ -2112,8 +2130,16 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 {
 	struct smq_msg *msg = &ctx->msg;
 	struct fastrpc_file *fl = ctx->fl;
-	struct fastrpc_channel_ctx *channel_ctx = &fl->apps->channel[fl->cid];
-	int err = 0;
+	struct fastrpc_channel_ctx *channel_ctx = NULL;
+	int err = 0, cid = -1;
+
+	channel_ctx = &fl->apps->channel[fl->cid];
+	cid = fl->cid;
+	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
+	if (err) {
+		err = -ECHRNG;
+		goto bail;
+	}
 
 	mutex_lock(&channel_ctx->smd_mutex);
 	msg->pid = fl->tgid;
@@ -2310,10 +2336,23 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 {
 	struct smq_invoke_ctx *ctx = NULL;
 	struct fastrpc_ioctl_invoke *invoke = &inv->inv;
-	int err = 0, interrupted = 0, cid = fl->cid;
+	int err = 0, interrupted = 0, cid = -1;
 	struct timespec64 invoket = {0};
 	int64_t *perf_counter = NULL;
 
+	cid = fl->cid;
+	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
+	if (err) {
+		err = -ECHRNG;
+		goto bail;
+	}
+	VERIFY(err, fl->sctx != NULL);
+	if (err) {
+		pr_err("adsprpc: ERROR: %s: user application %s domain is not set\n",
+			__func__, current->comm);
+		err = -EBADR;
+		goto bail;
+	}
 	if (fl->profile) {
 		perf_counter = getperfcounter(fl, PERF_COUNT);
 		ktime_get_real_ts64(&invoket);
@@ -2329,15 +2368,6 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 				__func__, current->comm, cid, invoke->handle);
 			goto bail;
 		}
-	}
-
-	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS &&
-		fl->sctx != NULL);
-	if (err) {
-		pr_err("adsprpc: ERROR: %s: kernel session not initialized yet for %s\n",
-			__func__, current->comm);
-		err = EBADR;
-		goto bail;
 	}
 
 	if (!kernel) {
@@ -3921,7 +3951,7 @@ static const struct file_operations debugfs_fops = {
 static int fastrpc_channel_open(struct fastrpc_file *fl)
 {
 	struct fastrpc_apps *me = &gfa;
-	int cid, err = 0;
+	int cid = -1, err = 0;
 
 	VERIFY(err, fl && fl->sctx && fl->cid >= 0 && fl->cid < NUM_CHANNELS);
 	if (err) {
@@ -4994,6 +5024,41 @@ bail:
 	return err;
 }
 
+static ssize_t total_dma_kb_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
+{
+	u64 size_in_bytes = atomic_long_read(&total_dma_bytes);
+
+	return snprintf(buf, PAGE_SIZE, "%llu\n", div_u64(size_in_bytes, 1024));
+}
+
+static struct kobj_attribute total_dma_kb_attr =
+	__ATTR_RO(total_dma_kb);
+
+static struct attribute *fastrpc_device_attrs[] = {
+	&total_dma_kb_attr.attr,
+	NULL,
+};
+
+ATTRIBUTE_GROUPS(fastrpc_device);
+
+static int fastrpc_init_sysfs(void)
+{
+	int ret;
+
+	fastrpc_kobj = kobject_create_and_add("fastrpc", kernel_kobj);
+	if (!fastrpc_kobj)
+		return -ENOMEM;
+
+	ret = sysfs_create_groups(fastrpc_kobj, fastrpc_device_groups);
+	if (ret) {
+		kobject_put(fastrpc_kobj);
+		return ret;
+	}
+
+	return 0;
+}
+
 static void fastrpc_deinit(void)
 {
 	struct fastrpc_channel_ctx *chan = gcinfo;
@@ -5048,6 +5113,7 @@ static int __init fastrpc_device_init(void)
 	struct device *dev = NULL;
 	struct device *secure_dev = NULL;
 	int err = 0, i;
+	int ret = 0;
 
 	debugfs_root = debugfs_create_dir("adsprpc", NULL);
 	if (IS_ERR_OR_NULL(debugfs_root)) {
@@ -5056,6 +5122,12 @@ static int __init fastrpc_device_init(void)
 		debugfs_remove_recursive(debugfs_root);
 		debugfs_root = NULL;
 	}
+
+	ret = fastrpc_init_sysfs();
+	if (ret) {
+		pr_err("fastrpc: failed to add sysfs attributes ret=%d\n", ret);
+	}
+
 	memset(me, 0, sizeof(*me));
 	fastrpc_init(me);
 	me->dev = NULL;
@@ -5191,6 +5263,10 @@ static void __exit fastrpc_device_exit(void)
 	if (me->wake_source_secure)
 		wakeup_source_unregister(me->wake_source_secure);
 	debugfs_remove_recursive(debugfs_root);
+	if (fastrpc_kobj) {
+		sysfs_remove_groups(fastrpc_kobj, fastrpc_device_groups);
+		kobject_put(fastrpc_kobj);
+	}
 }
 
 late_initcall(fastrpc_device_init);

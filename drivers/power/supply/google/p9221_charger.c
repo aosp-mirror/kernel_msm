@@ -32,6 +32,7 @@
 #include "p9221_charger.h"
 #include "../google/logbuffer.h"
 #include <linux/crc8.h>
+#include <drm/drm_panel.h>
 
 #define P9221_TX_TIMEOUT_MS		(20 * 1000)
 #define P9221_DCIN_TIMEOUT_MS		(1 * 1000)
@@ -57,6 +58,8 @@
 #define P9382A_NEG_POWER_10W		(10 / 0.5)
 #define P9382A_NEG_POWER_11W		(11 / 0.5)
 #define P9382_RTX_TIMEOUT_MS		(2 * 1000)
+#define SCREEN_NB_INIT_DELAY_MS		(2 * 1000)
+#define CSP_SEND_DELAY_MS               (0.5 * 1000)
 
 #define WLC_ALIGNMENT_MAX		100
 #define WLC_MFG_GOOGLE			0x72
@@ -69,6 +72,9 @@
 #define WLC_ALIGN_DEFAULT_SCALAR_HIGH_CURRENT	    118
 #define WLC_ALIGN_DEFAULT_OFFSET_LOW_CURRENT	    125000
 #define WLC_ALIGN_DEFAULT_OFFSET_HIGH_CURRENT	    139000
+#define WLC_ALIGN_IGNORE_THRESHOLD	70
+#define WLC_ALIGN_IGNORE_L_DELAY_SEC	5
+#define WLC_ALIGN_IGNORE_H_DELAY_SEC	10
 
 #define RTX_BEN_DISABLED	0
 #define RTX_BEN_ON		1
@@ -870,6 +876,10 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->mfg = 0;
 	schedule_work(&charger->uevent_work);
 
+	/* use for ignore irq_det after Rx offline */
+	if (charger->is_screen_on)
+		charger->ignore_irq_det = true;
+
 	p9221_icl_ramp_reset(charger);
 	del_timer(&charger->vrect_timer);
 
@@ -1369,6 +1379,8 @@ static int p9221_set_property(struct power_supply *psy,
 		changed = true;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
+		charger->bkp_capacity = val->intval;
+
 		if (charger->last_capacity == val->intval)
 			break;
 
@@ -2950,6 +2962,11 @@ static int p9382_set_rtx(struct p9221_charger_data *charger, bool enable)
 
 	if (enable == 0) {
 		logbuffer_log(charger->rtx_log, "disable rtx\n");
+
+		/* use for ignore irq_det after RTx offline */
+		if (charger->is_screen_on)
+			charger->ignore_irq_det = true;
+
 		if (charger->is_rtx_mode) {
 			/* Write 0x80 to 0x4E, check 0x4C reads back as 0x0 */
 			ret = p9221_set_cmd_reg(charger,
@@ -3445,11 +3462,22 @@ static void p9382_txid_work(struct work_struct *work)
 	dev_info(&charger->client->dev, "Fast serial ID send(%s)\n", s);
 
 	mutex_unlock(&charger->cmd_lock);
-	charger->last_capacity = -1;
+	cancel_delayed_work_sync(&charger->send_csp_work);
+	schedule_delayed_work(&charger->send_csp_work,
+			      msecs_to_jiffies(CSP_SEND_DELAY_MS));
 	return;
 error:
 	mutex_unlock(&charger->cmd_lock);
 	charger->com_busy = false;
+}
+
+static void p9382_send_csp_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, send_csp_work.work);
+
+	if (charger->last_capacity > 0)
+		p9221_send_csp(charger, charger->last_capacity);
 }
 
 static void p9382_rtx_work(struct work_struct *work)
@@ -3549,6 +3577,7 @@ static void rtx_irq_handler(struct p9221_charger_data *charger, u16 irq_src)
 			schedule_delayed_work(&charger->txid_work,
 					msecs_to_jiffies(TXID_SEND_DELAY_MS));
 		} else {
+			cancel_delayed_work_sync(&charger->send_csp_work);
 			charger->rtx_csp = 0;
 			charger->com_busy = false;
 		}
@@ -3761,12 +3790,18 @@ out:
 static irqreturn_t p9221_irq_det_thread(int irq, void *irq_data)
 {
 	struct p9221_charger_data *charger = irq_data;
+	u32 now_time, diff;
 
 	logbuffer_log(charger->log, "irq_det: online=%d ben=%d",
 		      charger->online, charger->ben_state);
 
 	/* If we are already online, just ignore the interrupt. */
 	if (p9221_is_online(charger))
+		return IRQ_HANDLED;
+
+	now_time = div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC);
+	diff = now_time - charger->store_time;
+	if ((diff <= charger->ignore_time) || (charger->ignore_irq_det))
 		return IRQ_HANDLED;
 
 	if (charger->align != POWER_SUPPLY_ALIGN_MOVE) {
@@ -4124,6 +4159,111 @@ static const struct power_supply_desc p9221_psy_desc = {
 	.no_thermal = true,
 };
 
+static int p9221_screen_state_chg_cb(struct notifier_block *nb,
+				     unsigned long val, void *data)
+{
+	struct p9221_charger_data *charger = container_of(nb,
+			struct p9221_charger_data, screen_nb);
+	struct drm_panel_notifier *evdata = (struct drm_panel_notifier *)data;
+	unsigned int blank;
+
+	if (val != DRM_PANEL_EVENT_BLANK)
+		return NOTIFY_DONE;
+
+	if (!charger || !evdata || !evdata->data) {
+		dev_err(&charger->client->dev,
+			"Bad screen state change notifier call.\n");
+		return NOTIFY_DONE;
+	}
+
+	blank = *((unsigned int *)evdata->data);
+	switch (blank) {
+	case DRM_PANEL_BLANK_POWERDOWN:
+	case DRM_PANEL_BLANK_LP:
+		charger->is_screen_on = false;
+		if (charger->ignore_irq_det) {
+			logbuffer_log(charger->log,
+				      "screen_nb: blank=%d (off)", blank);
+			charger->store_time =
+			    div_u64(ktime_to_ns(ktime_get_boottime()),
+				    NSEC_PER_SEC);
+			if (charger->bkp_capacity > WLC_ALIGN_IGNORE_THRESHOLD)
+				charger->ignore_time =
+					WLC_ALIGN_IGNORE_H_DELAY_SEC;
+			else
+				charger->ignore_time =
+					WLC_ALIGN_IGNORE_L_DELAY_SEC;
+			charger->ignore_irq_det = false;
+		}
+		break;
+	case DRM_PANEL_BLANK_UNBLANK:
+		charger->is_screen_on = true;
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block screen_state_chg_cb = {
+	.notifier_call = p9221_screen_state_chg_cb,
+};
+
+#define SCREEN_NB_INIT_TIMES		10
+static void p9382_screen_nb_init_work(struct work_struct *work)
+{
+	struct p9221_charger_data *charger = container_of(work,
+			struct p9221_charger_data, screen_nb_init_work.work);
+	struct device_node *node = charger->dev->of_node;
+	int index, ret = 0, cnt = 0;
+	struct of_phandle_args panelmap;
+	struct drm_panel *panel = NULL;
+
+	charger->is_screen_on = false;
+retry:
+	if (cnt > SCREEN_NB_INIT_TIMES)
+		return;
+
+	if (of_property_read_bool(node, "google,panel_map")) {
+		for (index = 0 ;; index++) {
+			ret = of_parse_phandle_with_fixed_args(node,
+					"google,panel_map",
+					1,
+					index,
+					&panelmap);
+			if (ret) {
+				cnt++;
+				msleep(SCREEN_NB_INIT_DELAY_MS);
+				goto retry;
+			}
+			panel = of_drm_find_panel(panelmap.np);
+			of_node_put(panelmap.np);
+			if (!IS_ERR_OR_NULL(panel)) {
+				charger->pdata->panel = panel;
+				charger->pdata->initial_panel_index =
+							panelmap.args[0];
+				break;
+			}
+		}
+	}
+
+	/*
+	 * Register notifier for detect screen on/off state
+	 */
+	if (!IS_ERR_OR_NULL(charger->pdata->panel)) {
+		charger->screen_nb = screen_state_chg_cb;
+		ret = drm_panel_notifier_register(charger->pdata->panel,
+						  &charger->screen_nb);
+		if (ret == 0)
+			charger->is_screen_on = true;
+		else
+			dev_err(charger->dev,
+				"Fail to register screen change notifier:%d\n",
+				ret);
+	}
+}
+
 static int p9382a_tx_icl_vote_callback(struct votable *votable, void *data,
 				       int icl_ua, const char *client)
 {
@@ -4246,6 +4386,9 @@ static int p9221_charger_probe(struct i2c_client *client,
 	INIT_DELAYED_WORK(&charger->align_work, p9221_align_work);
 	INIT_DELAYED_WORK(&charger->dcin_pon_work, p9221_dcin_pon_work);
 	INIT_DELAYED_WORK(&charger->rtx_work, p9382_rtx_work);
+	INIT_DELAYED_WORK(&charger->screen_nb_init_work,
+			  p9382_screen_nb_init_work);
+	INIT_DELAYED_WORK(&charger->send_csp_work, p9382_send_csp_work);
 	INIT_WORK(&charger->uevent_work, p9221_uevent_work);
 	INIT_WORK(&charger->rtx_disable_work, p9382_rtx_disable_work);
 	alarm_init(&charger->icl_ramp_alarm, ALARM_BOOTTIME,
@@ -4326,6 +4469,7 @@ static int p9221_charger_probe(struct i2c_client *client,
 	charger->dc_icl_epp_neg = P9221_DC_ICL_EPP_UA;
 	charger->aicl_icl_ua = 0;
 	charger->aicl_delay_ms = 0;
+	schedule_delayed_work(&charger->screen_nb_init_work, 0);
 
 	crc8_populate_msb(p9221_crc8_table, P9221_CRC8_POLYNOMIAL);
 
@@ -4449,6 +4593,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 	cancel_delayed_work_sync(&charger->dcin_pon_work);
 	cancel_delayed_work_sync(&charger->align_work);
 	cancel_delayed_work_sync(&charger->rtx_work);
+	cancel_delayed_work_sync(&charger->screen_nb_init_work);
+	cancel_delayed_work_sync(&charger->send_csp_work);
 	cancel_work_sync(&charger->uevent_work);
 	cancel_work_sync(&charger->rtx_disable_work);
 	alarm_try_to_cancel(&charger->icl_ramp_alarm);
@@ -4457,6 +4603,8 @@ static int p9221_charger_remove(struct i2c_client *client)
 	device_init_wakeup(charger->dev, false);
 	cancel_delayed_work_sync(&charger->notifier_work);
 	power_supply_unreg_notifier(&charger->nb);
+	drm_panel_notifier_unregister(charger->pdata->panel,
+				      &charger->screen_nb);
 	mutex_destroy(&charger->io_lock);
 	if (charger->log)
 		logbuffer_unregister(charger->log);
