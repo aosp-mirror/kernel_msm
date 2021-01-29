@@ -41,6 +41,7 @@
   bus_for_each_dev
   bus_register
   bus_unregister
+  call_rcu
   cancel_delayed_work
   cancel_delayed_work_sync
   cancel_work_sync
@@ -107,8 +108,10 @@
   cpu_subsys
   crypto_alloc_shash
   crypto_destroy_tfm
+  crypto_register_alg
   crypto_shash_digest
   crypto_shash_setkey
+  crypto_unregister_alg
   _ctype
   delayed_work_timer_fn
   del_timer
@@ -505,6 +508,7 @@
   module_put
   __msecs_to_jiffies
   msleep
+  msleep_interruptible
   __mutex_init
   mutex_lock
   mutex_lock_interruptible
@@ -1358,7 +1362,6 @@
   __break_lease
   clear_inode
   __close_fd
-  crc32_le
   d_add
   d_drop
   deactivate_locked_super
@@ -1366,6 +1369,8 @@
   dget_parent
   d_instantiate
   d_make_root
+  down_read_killable
+  down_write_killable
   dput
   flush_dcache_page
   fs_kobj
@@ -1415,6 +1420,7 @@
   user_path_at_empty
   vfs_create
   vfs_fallocate
+  vfs_fsync
   vfs_getattr
   vfs_getxattr
   vfs_link
@@ -2075,10 +2081,8 @@
   crypto_init_queue
   crypto_register_aead
   crypto_register_ahash
-  crypto_register_alg
   crypto_unregister_aead
   crypto_unregister_ahash
-  crypto_unregister_alg
   des_ekey
   llist_add_batch
   scatterwalk_ffwd
@@ -2114,6 +2118,7 @@
 # required by qrtr.ko
   alloc_skb_with_frags
   datagram_poll
+  idr_alloc_u32
   in_egroup_p
   netlink_capable
   __radix_tree_insert
@@ -2217,7 +2222,6 @@
 # required by sctp.ko
   __bitmap_shift_right
   __bitmap_weight
-  call_rcu
   compat_ip_getsockopt
   compat_ip_setsockopt
   compat_ipv6_getsockopt
@@ -2281,6 +2285,8 @@
   ipv6_getsockopt
   ipv6_setsockopt
   kfree_call_rcu
+  memcg_sockets_enabled_key
+  memory_cgrp_subsys_on_dfl_key
   napi_busy_loop
   net_enable_timestamp
   nf_conntrack_destroy
@@ -2640,7 +2646,6 @@
   iommu_iova_to_phys
   irq_set_affinity_hint
   mac_pton
-  msleep_interruptible
   netif_tx_stop_all_queues
   netlink_broadcast
   __netlink_kernel_create
@@ -2697,6 +2702,6 @@
   xhci_run
   xhci_suspend
 
-# preserved by --additions-only
-  vm_map_ram
-  vm_unmap_ram
+# required by zstd.ko
+  crypto_register_scomp
+  crypto_unregister_scomp
