@@ -97,7 +97,7 @@ EXPORT_SYMBOL(sysctl_max_skb_frags);
 static void skb_panic(struct sk_buff *skb, unsigned int sz, void *addr,
 		      const char msg[])
 {
-	pr_emerg("%s: text:%p len:%d put:%d head:%p data:%p tail:%#lx end:%#lx dev:%s\n",
+	pr_emerg("%s: text:%px len:%d put:%d head:%px data:%px tail:%#lx end:%#lx dev:%s\n",
 		 msg, addr, skb->len, sz, skb->head, skb->data,
 		 (unsigned long)skb->tail, (unsigned long)skb->end,
 		 skb->dev ? skb->dev->name : "<NULL>");
@@ -4243,7 +4243,7 @@ struct sk_buff *sock_dequeue_err_skb(struct sock *sk)
 	if (skb && (skb_next = skb_peek(q))) {
 		icmp_next = is_icmp_err_skb(skb_next);
 		if (icmp_next)
-			sk->sk_err = SKB_EXT_ERR(skb_next)->ee.ee_origin;
+			sk->sk_err = SKB_EXT_ERR(skb_next)->ee.ee_errno;
 	}
 	spin_unlock_irqrestore(&q->lock, flags);
 
