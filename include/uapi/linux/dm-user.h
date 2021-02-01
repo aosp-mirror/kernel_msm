@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.0+ WITH Linux-syscall-note */
 /*
+ * Copyright (C) 2020 Google, Inc
  * Copyright (C) 2020 Palmer Dabbelt <palmerdabbelt@google.com>
  */
 
