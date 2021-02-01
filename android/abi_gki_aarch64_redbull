@@ -1,4 +1,4 @@
-[abi_whitelist]
+[abi_symbol_list]
 # commonly used symbols
   add_timer
   add_uevent_var
@@ -1545,6 +1545,7 @@
   getboottime64
   get_random_u32
   get_task_mm
+  get_task_pid
   get_unmapped_area
   get_user_pages
   idr_for_each
