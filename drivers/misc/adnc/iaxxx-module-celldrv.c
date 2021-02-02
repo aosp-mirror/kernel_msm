@@ -122,11 +122,11 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 
 		/* validate the sensor parameters */
-		if (!(iaxxx_core_sensor_is_valid_script_id(sensor_info.inst_id)
+		if (!(iaxxx_core_sensor_is_valid_inst_id(sensor_info.inst_id)
 			&& iaxxx_core_sensor_is_valid_block_id(
 						sensor_info.block_id))
 			) {
-			pr_err("invalid scrip parameter received\n");
+			pr_err("invalid sensor parameter received\n");
 			return -EINVAL;
 		}
 		mutex_lock(&priv->module_lock);
@@ -141,7 +141,7 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 			return -EFAULT;
 
 		/* validate the sensor parameters */
-		if (!(iaxxx_core_sensor_is_valid_script_id(sensor_info.inst_id)
+		if (!(iaxxx_core_sensor_is_valid_inst_id(sensor_info.inst_id)
 			&& iaxxx_core_sensor_is_valid_block_id(
 						sensor_info.block_id))
 			) {
@@ -161,6 +161,8 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		/* validate the sensor parameters */
 		if (!(iaxxx_core_sensor_is_valid_block_id(
 							param_info.block_id)
+			&& iaxxx_core_sensor_is_valid_inst_id(
+							param_info.inst_id)
 			&& iaxxx_core_sensor_is_valid_param_id(
 							param_info.param_id)
 			&& iaxxx_core_sensor_is_valid_param_val(
@@ -190,6 +192,8 @@ static long module_dev_ioctl(struct file *file, unsigned int cmd,
 		/* validate the sensor parameters */
 		if (!(iaxxx_core_sensor_is_valid_block_id(
 							param_info.block_id)
+			&& iaxxx_core_sensor_is_valid_inst_id(
+							param_info.inst_id)
 			&& iaxxx_core_sensor_is_valid_param_id(
 							param_info.param_id))
 			) {
