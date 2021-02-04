@@ -101,6 +101,10 @@
 #define WLC_OF_CDEV_NAME "google,wlc_charger"
 #define WLC_CDEV_NAME "dc_icl"
 
+#define usb_pd_is_high_volt(ad) \
+	((ad)->ad_type == CHG_EV_ADAPTER_TYPE_USB_PD && \
+	(ad)->ad_voltage * 100 > PD_SNK_MIN_MV)
+
 enum tcpm_psy_online_states {
 	TCPM_PSY_OFFLINE = 0,
 	TCPM_PSY_FIXED_ONLINE,
@@ -1588,7 +1592,7 @@ static void bd_work(struct work_struct *work)
 	const time_t now = get_boot_sec();
 	const long long delta_time = now - bd_state->disconnect_time;
 	int interval_ms = CHG_WORK_BD_TRIGGERED_MS;
-	int ret, soc = 0;
+	int ret, soc = -1;
 
 	__pm_stay_awake(&chg_drv->bd_ws);
 
@@ -1601,9 +1605,15 @@ static void bd_work(struct work_struct *work)
 	if (!bd_state->triggered || !bd_state->disconnect_time)
 		goto bd_done;
 
+	ret = chg_work_read_soc(chg_drv->bat_psy, &soc);
+	if (ret < 0) {
+		pr_err("MSC_BD_WORK: error reading soc (%d)\n", ret);
+		interval_ms = 1000;
+		goto bd_rerun;
+	}
+
 	/* soc after disconnect (SSOC must not be locked) */
 	if (bd_state->bd_resume_soc &&
-	    chg_work_read_soc(chg_drv->bat_psy, &soc) == 0 &&
 	    soc < bd_state->bd_resume_soc) {
 		pr_info("MSC_BD_WORK: done soc=%d limit=%d\n",
 			soc, bd_state->bd_resume_soc);
@@ -1832,7 +1842,7 @@ static void chg_work(struct work_struct *work)
 	union gbms_ce_adapter_details ad = { .v = 0 };
 	union gbms_charger_state chg_state = { .v = 0 };
 	int present, usb_online, wlc_online = 0, wlc_present = 0;
-	int update_interval = -1;
+	int soc = -1, update_interval = -1;
 	bool chg_done = false;
 	int success, rc = 0;
 
@@ -1973,11 +1983,16 @@ update_charger:
 
 		if (res < 0 || rc < 0 || update_interval < 0)
 			goto rerun_error;
-
 	}
 
+	rc = chg_work_read_soc(bat_psy, &soc);
+	if (rc < 0)
+		pr_err("MSC_CHG error reading soc (%d)\n", rc);
+	if (soc != 100)
+		chg_done = false;
+
 	/* tied to the charger: could tie to battery @ 100% instead */
-	if ((chg_drv->chg_term.usb_5v == 0) && chg_done) {
+	if (!chg_drv->chg_term.usb_5v && chg_done && usb_pd_is_high_volt(&ad)) {
 		pr_info("MSC_CHG switch to 5V on full\n");
 		chg_update_capability(chg_drv->tcpm_psy, PDO_FIXED_5V, 0);
 		chg_drv->chg_term.usb_5v = 1;
@@ -1989,13 +2004,8 @@ update_charger:
 	}
 
 	/* WAR: battery overcharge on a weak adapter */
-	if (chg_drv->chg_term.enable && chg_done) {
-		int soc;
-
-		rc = chg_work_read_soc(bat_psy, &soc);
-		if (rc == 0 && soc == 100)
-			chg_eval_chg_termination(&chg_drv->chg_term);
-	}
+	if (chg_drv->chg_term.enable && chg_done)
+		chg_eval_chg_termination(&chg_drv->chg_term);
 
 	/* BD needs to keep checking the temperature after EOC */
 	if (chg_drv->bd_state.enabled) {
