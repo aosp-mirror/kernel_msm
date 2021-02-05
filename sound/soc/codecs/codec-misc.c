@@ -412,7 +412,7 @@ static int misc_probe(struct platform_device *pdev)
 	mutex_init(&misc_priv->amp_stat_priv.lock);
 
 	dev_set_drvdata(&codec_pdev->dev, misc_priv);
-	dev_info(&codec_pdev->dev, "%s: create codec_success\n");
+	dev_info(&codec_pdev->dev, "created codec_detect\n");
 	return ret;
 
 err_notifier_reg:
