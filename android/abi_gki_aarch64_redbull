@@ -1196,6 +1196,10 @@
 # required by cnss_prealloc.ko
   save_stack_trace
 
+# required by coresight-clk-amba-placeholder.ko
+  amba_driver_register
+  amba_driver_unregister
+
 # required by cpu_isolate.ko
   device_online
   sched_isolate_cpu
