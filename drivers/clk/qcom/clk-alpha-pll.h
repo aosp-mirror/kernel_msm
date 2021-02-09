@@ -17,6 +17,7 @@ enum {
 	CLK_ALPHA_PLL_TYPE_LUCID = CLK_ALPHA_PLL_TYPE_TRION,
 	CLK_ALPHA_PLL_TYPE_AGERA,
 	CLK_ALPHA_PLL_TYPE_ZONDA,
+	CLK_ALPHA_PLL_TYPE_ZONDA_EVO,
 	CLK_ALPHA_PLL_TYPE_ZONDA_5LPE,
 	CLK_ALPHA_PLL_TYPE_REGERA,
 	CLK_ALPHA_PLL_TYPE_LUCID_EVO,
@@ -174,6 +175,8 @@ extern const struct clk_ops clk_regera_pll_ops;
 
 extern const struct clk_ops clk_alpha_pll_lucid_evo_ops;
 extern const struct clk_ops clk_alpha_pll_fixed_lucid_evo_ops;
+extern const struct clk_ops clk_alpha_pll_fixed_zonda_evo_ops;
+extern const struct clk_ops clk_alpha_pll_postdiv_zonda_evo_ops;
 extern const struct clk_ops clk_alpha_pll_postdiv_lucid_evo_ops;
 
 #define clk_alpha_pll_lucid_ole_ops clk_alpha_pll_lucid_evo_ops
@@ -208,5 +211,7 @@ int clk_rivian_evo_pll_configure(struct clk_alpha_pll *pll,
 				struct regmap *regmap,
 				const struct alpha_pll_config *config);
 #define clk_rivian_ole_pll_configure clk_rivian_evo_pll_configure
-
+int clk_zonda_evo_pll_configure(struct clk_alpha_pll *pll,
+				struct regmap *regmap,
+				const struct alpha_pll_config *config);
 #endif
