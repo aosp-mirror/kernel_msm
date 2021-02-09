@@ -230,8 +230,6 @@
 		google,bd-recharge-soc = <79>;
 		/* Enable TEMP-DEFEND */
 		google,bd-temp-enable;
-		/* Set dry_run */
-		google,bd-temp-dry-run;
 	};
 
 	google_wlc_charger: google,wlc_charger {
