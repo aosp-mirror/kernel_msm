@@ -80,10 +80,6 @@ struct pid_link
 
 extern const struct file_operations pidfd_fops;
 
-struct file;
-
-extern struct pid *pidfd_pid(const struct file *file);
-
 static inline struct pid *get_pid(struct pid *pid)
 {
 	if (pid)

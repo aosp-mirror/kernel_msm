@@ -3154,11 +3154,8 @@ static bool access_pidfd_pidns(struct pid *pid)
 
 static struct pid *pidfd_to_pid(const struct file *file)
 {
-	struct pid *pid;
-
-	pid = pidfd_pid(file);
-	if (!IS_ERR(pid))
-		return pid;
+	if (file->f_op == &pidfd_fops)
+		return file->private_data;
 
 	return tgid_pidfd_to_pid(file);
 }
