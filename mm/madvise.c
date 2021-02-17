@@ -1215,7 +1215,8 @@ SYSCALL_DEFINE5(process_madvise, int, pidfd, const struct iovec __user *, vec,
 		goto put_pid;
 	}
 
-	if (!process_madvise_behavior_valid(behavior)) {
+	if (task->mm != current->mm &&
+	    !process_madvise_behavior_valid(behavior)) {
 		ret = -EINVAL;
 		goto release_task;
 	}
