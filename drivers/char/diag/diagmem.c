@@ -1,4 +1,5 @@
-/* Copyright (c) 2008-2014,2016,2019 The Linux Foundation.All rights reserved
+/* Copyright (c) 2008-2014, 2016, 2019, 2021 The Linux Foundation.
+ * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -9,7 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- */
+*/
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -152,6 +153,9 @@ void diagmem_setsize(int pool_idx, int itemsize, int poolsize)
 	}
 
 	diag_mempools[pool_idx].itemsize = itemsize;
+	if (diag_mempools[pool_idx].pool)
+		diag_mempools[pool_idx].pool->pool_data =
+			(void *)(uintptr_t)itemsize;
 	diag_mempools[pool_idx].poolsize = poolsize;
 	pr_debug("diag: Mempool %s sizes: itemsize %d poolsize %d\n",
 		 diag_mempools[pool_idx].name, diag_mempools[pool_idx].itemsize,
@@ -177,7 +181,8 @@ void *diagmem_alloc(struct diagchar_dev *driver, int size, int pool_type)
 					   mempool->name);
 			break;
 		}
-		if (size == 0 || size > mempool->itemsize) {
+		if (size == 0 || size > mempool->itemsize ||
+			size > (uintptr_t)mempool->pool->pool_data) {
 			pr_err_ratelimited("diag: cannot alloc from mempool %s, invalid size: %d\n",
 					   mempool->name, size);
 			break;
