@@ -1845,7 +1845,7 @@ static void batt_ce_capacityfiltered_work(struct work_struct *work)
 	int cc_sum = 0, vfsoc_sum = 0;
 	bool valid_estimate = false;
 	int rc = 0;
-	u16 data;
+	int data;
 
 	mutex_lock(&cap_esti->batt_ce_lock);
 
@@ -1935,8 +1935,7 @@ done:
 static int batt_ce_init(struct gbatt_capacity_estimation *cap_esti,
 			struct max1720x_chip *chip)
 {
-	int rc;
-	u16 vfsoc = 0;
+	int rc, vfsoc;
 
 	rc = max1720x_update_battery_qh_based_capacity(chip);
 	if (rc < 0)
