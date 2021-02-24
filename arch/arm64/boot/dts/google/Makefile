@@ -71,6 +71,8 @@ dtbo-barbet += \
 	lito-v2-barbet-evt1_9-overlay.dtbo \
 	lito-v2-barbet-dvt-overlay.dtbo \
 	lito-v2-barbet-dvt1_1-overlay.dtbo \
+	lito-v2-barbet-dvt1_2-overlay.dtbo \
+	lito-v2-barbet-dvt1_3-overlay.dtbo \
 	lito-v2-barbet-pvt-overlay.dtbo \
 	lito-v2-barbet-mp-overlay.dtbo
 
@@ -82,6 +84,8 @@ lito-v2-barbet-evt1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-evt1_9-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-dvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-dvt1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-dvt1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-dvt1_3-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-pvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-barbet-mp-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
