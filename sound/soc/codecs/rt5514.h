@@ -355,6 +355,9 @@ struct rt5514_priv {
 	unsigned int sound_model_addr[2];
 	bool load_default_sound_model;
 	struct delayed_work unmute_work;
+	struct delayed_work buffer_status_work;
+	bool buffer_status;
+	int zlatency_delay;
 };
 
 #endif /* __RT5514_H__ */

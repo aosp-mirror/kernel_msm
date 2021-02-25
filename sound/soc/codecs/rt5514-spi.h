@@ -51,6 +51,9 @@
 #define SPI_SWITCH_MASK_CHRE_QMI (1 << 10)
 #endif
 
+#define SPI_SWITCH_MASK_WORK_3 (1 << 11)
+#define ZEOR_LATENCY_BUFFER_MS 200
+
 /* SPI Command */
 enum {
 	RT5514_SPI_CMD_16_READ = 0,
@@ -66,6 +69,21 @@ enum {
 	RT5514_DSP_STREAM_HOTWORD,
 	RT5514_DSP_STREAM_MUSDET,
 	RT5514_DSP_STREAM_ADC,
+	RT5514_DSP_STREAM_ZLATENCY,
+};
+
+enum {
+	RT5514_ID_HOTWORD = 0,
+	RT5514_ID_MUSDET,
+	RT5514_ID_ADC,
+	RT5514_ID_ZLATENCY,
+	RT5514_ID_MAX,
+};
+
+enum rt5514_work_mode {
+	RT5514_MODE_IRQ = 0,
+	RT5514_MODE_ADC,
+	RT5514_MODE_ZLATENCY,
 };
 
 enum {
@@ -94,6 +112,8 @@ int rt5514_spi_burst_write(u32 addr, const u8 *txbuf, size_t len);
 void rt5514_spi_request_switch(u32 mask, bool is_require);
 
 extern void (*rt5514_watchdog_handler_cb)(void);
+extern bool (*rt5514_buffer_status_cb)(void);
+extern int (*rt5514_zlatency_cb)(void);
 extern struct regmap *rt5514_g_i2c_regmap;
 #define RT5514_SPI_SWITCH_GPIO	5
 int rt5514_set_gpio(int gpio, bool output);
