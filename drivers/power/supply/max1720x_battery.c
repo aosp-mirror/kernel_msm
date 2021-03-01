@@ -2848,7 +2848,7 @@ static irqreturn_t max1720x_fg_irq_thread_fn(int irq, void *obj)
 	pm_runtime_get_sync(chip->dev);
 	if (!chip->init_complete || !chip->resume_complete) {
 		pm_runtime_put_sync(chip->dev);
-		return -EAGAIN;
+		return IRQ_HANDLED;
 	}
 
 	pm_runtime_put_sync(chip->dev);
