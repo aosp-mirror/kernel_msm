@@ -658,6 +658,7 @@ config DM_BOW
 config DM_USER
 	tristate "Block device in userspace"
 	depends on BLK_DEV_DM
+	default y
 	help
 	  This device-mapper target allows a userspace daemon to provide the
 	  contents of a block device.  See
