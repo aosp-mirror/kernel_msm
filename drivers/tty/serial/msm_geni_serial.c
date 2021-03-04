@@ -1074,6 +1074,7 @@ static int msm_geni_serial_prep_dma_tx(struct uart_port *uport)
 						SE_GENI_M_IRQ_CLEAR);
 	msm_port->tx_dma = (dma_addr_t)NULL;
 	msm_port->xmit_size = 0;
+	msm_geni_serial_power_off(uport);
 	return ret;
 }
 
