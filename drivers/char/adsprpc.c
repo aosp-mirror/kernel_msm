@@ -2697,13 +2697,18 @@ static int fastrpc_internal_munmap(struct fastrpc_file *fl,
 	mutex_unlock(&fl->fl_map_mutex);
 	if (err)
 		goto bail;
-	VERIFY(err, !fastrpc_munmap_on_dsp(fl, map->raddr,
+	if (map) {
+		VERIFY(err, !fastrpc_munmap_on_dsp(fl, map->raddr,
 				map->phys, map->size, map->flags));
-	if (err)
+		if (err)
+			goto bail;
+		mutex_lock(&fl->fl_map_mutex);
+		fastrpc_mmap_free(map, 0);
+		mutex_unlock(&fl->fl_map_mutex);
+	} else {
+		err = -EINVAL;
 		goto bail;
-	mutex_lock(&fl->fl_map_mutex);
-	fastrpc_mmap_free(map, 0);
-	mutex_unlock(&fl->fl_map_mutex);
+	}
 bail:
 	if (err && map) {
 		mutex_lock(&fl->fl_map_mutex);
