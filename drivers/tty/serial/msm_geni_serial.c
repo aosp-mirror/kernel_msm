@@ -216,6 +216,7 @@ struct msm_geni_serial_port {
 	struct completion m_cmd_timeout;
 	struct completion s_cmd_timeout;
 	spinlock_t rx_lock;
+	bool bypass_flow_control;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -1472,7 +1473,8 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	}
 
 	if (!uart_console(uport)) {
-		msm_geni_serial_set_manual_flow(false, port);
+		if (!port->bypass_flow_control)
+			msm_geni_serial_set_manual_flow(false, port);
 		/*
 		 * Wait for the stale timeout to happen if there
 		 * is any data pending in the rx fifo.
@@ -1589,7 +1591,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	port->s_cmd = false;
 
 exit_rx_seq:
-	if (!uart_console(uport))
+	if (!uart_console(uport) && !port->bypass_flow_control)
 		msm_geni_serial_set_manual_flow(true, port);
 
 	geni_status = geni_read_reg_nolog(uport->membase, SE_GENI_STATUS);
@@ -2529,7 +2531,12 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 			return;
 		}
 	}
+
+	//Client must control Flow, don't touch RFR during baud change.
+	port->bypass_flow_control = true;
 	msm_geni_serial_stop_rx(uport);
+	port->bypass_flow_control = false;
+
 	/* baud rate */
 	baud = uart_get_baud_rate(uport, termios, old, 300, 4000000);
 	port->cur_baud = baud;
