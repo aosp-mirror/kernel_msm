@@ -2149,6 +2149,9 @@ static int iaxxx_put_apll_clk(struct snd_kcontrol *kcontrol,
 	u32 status = 0;
 	int val = ucontrol->value.enumerated.item[0];
 
+	if (val < IAXXX_ACLK_FREQ_NONE || val >= IAXXX_ACLK_FREQ_MAX)
+		return -EINVAL;
+
 	if (iaxxx->apll_clk == ucontrol->value.enumerated.item[0])
 		return 0;
 
@@ -4285,6 +4288,9 @@ static int iaxxx_calc_i2s_div(u32 bits_per_frame, u32 sampling_rate,
 	}
 
 	if (i == arr_len)
+		return -EINVAL;
+
+	if (apll_clk >= IAXXX_ACLK_FREQ_MAX || bit_clk >= IAXXX_PDM_CLK_MAX)
 		return -EINVAL;
 
 	n_val = i2s_div_config[apll_clk][bit_clk].N;
