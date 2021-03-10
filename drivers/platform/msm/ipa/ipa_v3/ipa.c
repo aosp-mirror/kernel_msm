@@ -145,6 +145,7 @@ static struct {
 	bool present[IPA_SMMU_CB_MAX];
 	bool arm_smmu;
 	bool fast_map;
+	bool fast_map_arr[IPA_SMMU_CB_MAX];
 	bool s1_bypass_arr[IPA_SMMU_CB_MAX];
 	bool use_64_bit_dma_mask;
 	u32 ipa_base;
@@ -548,6 +549,68 @@ static void ipa3_vlan_l2tp_msg_free_cb(void *buff, u32 len, u32 type)
 	kfree(buff);
 }
 
+static void ipa3_pdn_config_msg_free_cb(void *buff, u32 len, u32 type)
+{
+	if (!buff) {
+		IPAERR("Null buffer\n");
+		return;
+	}
+
+	kfree(buff);
+}
+
+static int ipa3_send_pdn_config_msg(unsigned long usr_param)
+{
+	int retval;
+	struct ipa_ioc_pdn_config *pdn_info;
+	struct ipa_msg_meta msg_meta;
+	void *buff;
+
+	memset(&msg_meta, 0, sizeof(msg_meta));
+
+	pdn_info = kzalloc(sizeof(struct ipa_ioc_pdn_config),
+		GFP_KERNEL);
+	if (!pdn_info)
+		return -ENOMEM;
+
+	if (copy_from_user((u8 *)pdn_info, (void __user *)usr_param,
+		sizeof(struct ipa_ioc_pdn_config))) {
+		kfree(pdn_info);
+		return -EFAULT;
+	}
+
+	msg_meta.msg_len = sizeof(struct ipa_ioc_pdn_config);
+	buff = pdn_info;
+
+	msg_meta.msg_type = pdn_info->pdn_cfg_type;
+
+	IPADBG("type %d, interface name: %s, enable:%d\n", msg_meta.msg_type,
+		pdn_info->dev_name, pdn_info->enable);
+
+	if (pdn_info->pdn_cfg_type == IPA_PDN_IP_PASSTHROUGH_MODE_CONFIG) {
+		IPADBG("Client MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
+			pdn_info->u.passthrough_cfg.client_mac_addr[0],
+			pdn_info->u.passthrough_cfg.client_mac_addr[1],
+			pdn_info->u.passthrough_cfg.client_mac_addr[2],
+			pdn_info->u.passthrough_cfg.client_mac_addr[3],
+			pdn_info->u.passthrough_cfg.client_mac_addr[4],
+			pdn_info->u.passthrough_cfg.client_mac_addr[5]);
+	}
+
+	retval = ipa3_send_msg(&msg_meta, buff,
+		ipa3_pdn_config_msg_free_cb);
+	if (retval) {
+		IPAERR("ipa3_send_msg failed: %d, msg_type %d\n",
+			retval,
+			msg_meta.msg_type);
+		kfree(buff);
+		return retval;
+	}
+	IPADBG("exit\n");
+
+	return 0;
+}
+
 static int ipa3_send_vlan_l2tp_msg(unsigned long usr_param, uint8_t msg_type)
 {
 	int retval;
@@ -631,6 +694,7 @@ static int ipa3_send_vlan_l2tp_msg(unsigned long usr_param, uint8_t msg_type)
 
 	return 0;
 }
+
 
 static void ipa3_gsb_msg_free_cb(void *buff, u32 len, u32 type)
 {
@@ -798,6 +862,74 @@ static void ipa3_get_pcie_ep_info(
 	}
 }
 
+static void ipa3_get_eth_ep_info(
+			struct ipa_ioc_get_ep_info *ep_info,
+			struct ipa_ep_pair_info *pair_info
+			)
+{
+	int ep_index = -1, i;
+
+	ep_info->num_ep_pairs = 0;
+	for (i = 0; i < ep_info->max_ep_pairs; i++) {
+		pair_info[i].consumer_pipe_num = -1;
+		pair_info[i].producer_pipe_num = -1;
+		pair_info[i].ep_id = -1;
+	}
+
+	ep_index = ipa3_get_ep_mapping(IPA_CLIENT_ETHERNET2_PROD);
+
+	if ((ep_index != -1) && ipa3_ctx->ep[ep_index].valid) {
+		pair_info[ep_info->num_ep_pairs].consumer_pipe_num = ep_index;
+		ep_index = ipa3_get_ep_mapping(IPA_CLIENT_ETHERNET2_CONS);
+		if ((ep_index != -1) && (ipa3_ctx->ep[ep_index].valid)) {
+			pair_info[ep_info->num_ep_pairs].producer_pipe_num =
+				ep_index;
+			pair_info[ep_info->num_ep_pairs].ep_id =
+				IPA_ETH1_EP_ID;
+
+			IPADBG("ep_pair_info consumer_pipe_num %d",
+			pair_info[ep_info->num_ep_pairs].consumer_pipe_num);
+			IPADBG(" producer_pipe_num %d ep_id %d\n",
+			pair_info[ep_info->num_ep_pairs].producer_pipe_num,
+				pair_info[ep_info->num_ep_pairs].ep_id);
+			ep_info->num_ep_pairs++;
+		} else {
+			pair_info[ep_info->num_ep_pairs].consumer_pipe_num = -1;
+			IPADBG("ep_pair_info consumer_pipe_num %d",
+			pair_info[ep_info->num_ep_pairs].consumer_pipe_num);
+			IPADBG(" producer_pipe_num %d ep_id %d\n",
+			pair_info[ep_info->num_ep_pairs].producer_pipe_num,
+				pair_info[ep_info->num_ep_pairs].ep_id);
+		}
+	}
+
+	ep_index = ipa3_get_ep_mapping(IPA_CLIENT_ETHERNET_PROD);
+
+	if ((ep_index != -1) && ipa3_ctx->ep[ep_index].valid) {
+		pair_info[ep_info->num_ep_pairs].consumer_pipe_num = ep_index;
+		ep_index = ipa3_get_ep_mapping(IPA_CLIENT_ETHERNET_CONS);
+		if ((ep_index != -1) && (ipa3_ctx->ep[ep_index].valid)) {
+			pair_info[ep_info->num_ep_pairs].producer_pipe_num =
+				ep_index;
+			pair_info[ep_info->num_ep_pairs].ep_id =
+				IPA_ETH0_EP_ID;
+
+			IPADBG("ep_pair_info consumer_pipe_num %d",
+			pair_info[ep_info->num_ep_pairs].consumer_pipe_num);
+			IPADBG(" producer_pipe_num %d ep_id %d\n",
+			pair_info[ep_info->num_ep_pairs].producer_pipe_num,
+				pair_info[ep_info->num_ep_pairs].ep_id);
+			ep_info->num_ep_pairs++;
+		} else {
+			pair_info[ep_info->num_ep_pairs].consumer_pipe_num = -1;
+			IPADBG("ep_pair_info consumer_pipe_num %d",
+			pair_info[ep_info->num_ep_pairs].consumer_pipe_num);
+			IPADBG(" producer_pipe_num %d ep_id %d\n",
+			pair_info[ep_info->num_ep_pairs].producer_pipe_num,
+				pair_info[ep_info->num_ep_pairs].ep_id);
+		}
+	}
+}
 
 static int ipa3_get_ep_info(struct ipa_ioc_get_ep_info *ep_info,
 							u8 *param)
@@ -812,6 +944,10 @@ static int ipa3_get_ep_info(struct ipa_ioc_get_ep_info *ep_info,
 
 	case IPA_DATA_EP_TYP_PCIE:
 		ipa3_get_pcie_ep_info(ep_info, pair_info);
+		break;
+
+	case IPA_DATA_EP_TYP_ETH:
+		ipa3_get_eth_ep_info(ep_info, pair_info);
 		break;
 
 	default:
@@ -871,6 +1007,51 @@ static int ipa3_send_gsb_msg(unsigned long usr_param, uint8_t msg_type)
 	return 0;
 }
 
+static void ipa3_mac_flt_list_free_cb(void *buff, u32 len, u32 type)
+{
+	if (!buff) {
+		IPAERR("Null buffer\n");
+		return;
+	}
+	kfree(buff);
+}
+
+static int ipa3_send_mac_flt_list(unsigned long usr_param)
+{
+	int retval;
+	struct ipa_msg_meta msg_meta;
+	void *buff;
+
+	buff = kzalloc(sizeof(struct ipa_ioc_mac_client_list_type),
+				GFP_KERNEL);
+	if (!buff)
+		return -ENOMEM;
+
+	if (copy_from_user(buff, (const void __user *)usr_param,
+		sizeof(struct ipa_ioc_mac_client_list_type))) {
+		kfree(buff);
+		return -EFAULT;
+	}
+	memset(&msg_meta, 0, sizeof(struct ipa_msg_meta));
+	msg_meta.msg_type = IPA_MAC_FLT_EVENT;
+	msg_meta.msg_len = sizeof(struct ipa_ioc_mac_client_list_type);
+
+	IPADBG("No of clients: %d, flt state: %d\n",
+		((struct ipa_ioc_mac_client_list_type *)buff)->num_of_clients,
+		((struct ipa_ioc_mac_client_list_type *)buff)->flt_state);
+
+	retval = ipa3_send_msg(&msg_meta, buff,
+		ipa3_mac_flt_list_free_cb);
+	if (retval) {
+		IPAERR("ipa3_send_msg failed: %d, msg_type %d\n",
+		retval,
+		msg_meta.msg_type);
+		kfree(buff);
+		return retval;
+	}
+	return 0;
+}
+
 static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int retval = 0;
@@ -894,6 +1075,7 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct ipa_ioc_get_vlan_mode vlan_mode;
 	struct ipa_ioc_wigig_fst_switch fst_switch;
 	struct ipa_nat_in_sram_info nat_in_sram_info;
+	union ipa_ioc_uc_activation_entry uc_act;
 	size_t sz;
 	int pre_entry;
 	int hdl;
@@ -906,7 +1088,16 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	if (!ipa3_is_ready()) {
 		IPAERR("IPA not ready, waiting for init completion\n");
-		wait_for_completion(&ipa3_ctx->init_completion_obj);
+		if (ipa3_ctx->manual_fw_load) {
+			if (!wait_for_completion_timeout(
+					&ipa3_ctx->init_completion_obj,
+					msecs_to_jiffies(1000))) {
+				IPAERR("IPA not ready, return\n");
+				return -ETIME;
+			}
+		} else {
+			wait_for_completion(&ipa3_ctx->init_completion_obj);
+		}
 	}
 
 	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
@@ -2870,14 +3061,20 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			break;
 		}
 
-		if (ep_info.max_ep_pairs != QUERY_MAX_EP_PAIRS)
+		if (ep_info.max_ep_pairs != QUERY_MAX_EP_PAIRS) {
 			IPAERR_RL("unexpected max_ep_pairs %d\n",
 			ep_info.max_ep_pairs);
+			retval = -EFAULT;
+			break;
+		}
 
-		if (ep_info.ep_pair_size !=
-			(QUERY_MAX_EP_PAIRS * sizeof(struct ipa_ep_pair_info)))
+		if (ep_info.ep_pair_size != (QUERY_MAX_EP_PAIRS *
+			sizeof(struct ipa_ep_pair_info))) {
 			IPAERR_RL("unexpected ep_pair_size %d\n",
 			ep_info.max_ep_pairs);
+			retval = -EFAULT;
+			break;
+		}
 
 		uptr = ep_info.info;
 		if (unlikely(!uptr)) {
@@ -2918,6 +3115,53 @@ static long ipa3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	case IPA_IOC_APP_CLOCK_VOTE:
 		retval = ipa3_app_clk_vote(
 			(enum ipa_app_clock_vote_type) arg);
+		break;
+
+	case IPA_IOC_PDN_CONFIG:
+		if (ipa3_send_pdn_config_msg(arg)) {
+			retval = -EFAULT;
+			break;
+		}
+		break;
+
+	case IPA_IOC_SET_MAC_FLT:
+		if (ipa3_send_mac_flt_list(arg)) {
+			retval = -EFAULT;
+			break;
+		}
+		break;
+
+	case IPA_IOC_ADD_UC_ACT_ENTRY:
+		if (copy_from_user(&uc_act, (const void __user *)arg,
+			sizeof(union ipa_ioc_uc_activation_entry))) {
+			IPAERR_RL("copy_from_user fails\n");
+			retval = -EFAULT;
+			break;
+		}
+
+		/* first field in both structs is cmd id */
+		if (uc_act.socks.cmd_id == IPA_SOCKSV5_ADD_COM_ID) {
+			retval = ipa3_add_socksv5_conn_usr(&uc_act.socks);
+		} else {
+			retval = ipa3_add_ipv6_nat_uc_activation_entry(
+				&uc_act.ipv6_nat);
+		}
+		if (retval) {
+			retval = -EFAULT;
+			break;
+		}
+		if (copy_to_user((void __user *)arg, &uc_act,
+			sizeof(union ipa_ioc_uc_activation_entry))) {
+			IPAERR_RL("copy_to_user fails\n");
+			retval = -EFAULT;
+			break;
+		}
+		break;
+	case IPA_IOC_DEL_UC_ACT_ENTRY:
+		if (ipa3_del_uc_act_entry((uint16_t)arg)) {
+			retval = -EFAULT;
+			break;
+		}
 		break;
 
 	default:
@@ -6465,6 +6709,9 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 
 	/* Check MHI configuration on MDM devices */
 	if (!ipa3_is_msm_device()) {
+		/* reset ecm default as non-vlan mode */
+		if (!ipa3_ctx->vlan_mode_set && ipa3_ctx->ipa_config_is_auto)
+			ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_ECM] = false;
 
 		if (strnstr(dbg_buff, "vlan", strlen(dbg_buff))) {
 			if (strnstr(dbg_buff, "eth", strlen(dbg_buff)))
@@ -6481,6 +6728,13 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 			 * when vlan mode is passed to our dev we expect
 			 * another write
 			 */
+			ipa3_ctx->vlan_mode_set = true;
+			IPAERR("emac vlan(%d)\n",
+				ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_EMAC]);
+			IPAERR("rndis vlan(%d)\n",
+				ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_RNDIS]);
+			IPAERR("ecm vlan(%d)\n",
+				ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_ECM]);
 			return count;
 		}
 
@@ -6769,6 +7023,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	ipa3_ctx->uc_act_tbl_total = 0;
 	ipa3_ctx->uc_act_tbl_next_index = 0;
 	ipa3_ctx->ipa_config_is_auto = resource_p->ipa_config_is_auto;
+	ipa3_ctx->manual_fw_load = resource_p->manual_fw_load;
 
 	if (ipa3_ctx->secure_debug_check_action == USE_SCM) {
 		if (ipa_is_mem_dump_allowed())
@@ -6903,7 +7158,7 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	}
 
 	IPADBG(
-	    "base(0x%x)+offset(0x%x)=(0x%x) mapped to (%pK) with len (0x%x)\n",
+	    "base(0x%x)+offset(0x%x)=(0x%x) mapped to (0x%x) with len (0x%x)\n",
 	    resource_p->ipa_mem_base,
 	    ipa3_ctx->ctrl->ipa_reg_base_ofst,
 	    resource_p->ipa_mem_base + ipa3_ctx->ctrl->ipa_reg_base_ofst,
@@ -7223,6 +7478,10 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 
 	mutex_init(&ipa3_ctx->app_clock_vote.mutex);
 
+	/* put ecm default as vlan mode */
+	if (ipa3_ctx->ipa_config_is_auto)
+		ipa3_ctx->vlan_mode_iface[IPA_VLAN_IF_ECM] = true;
+
 	return 0;
 
 fail_cdev_add:
@@ -7434,6 +7693,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	ipa_drv_res->ipa_fltrt_not_hashable = false;
 	ipa_drv_res->ipa_endp_delay_wa = false;
 	ipa_drv_res->ipa_config_is_auto = false;
+	ipa_drv_res->manual_fw_load = false;
 
 	/* Get IPA HW Version */
 	result = of_property_read_u32(pdev->dev.of_node, "qcom,ipa-hw-ver",
@@ -7843,6 +8103,13 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 	IPADBG(": secure-debug-check-action = %d\n",
 		   ipa_drv_res->secure_debug_check_action);
 
+	ipa_drv_res->manual_fw_load =
+		of_property_read_bool(pdev->dev.of_node,
+		"qcom,manual-fw-load");
+	IPADBG(": manual-fw-load (%s)\n",
+		ipa_drv_res->manual_fw_load
+		? "True" : "False");
+
 	return 0;
 }
 
@@ -7876,6 +8143,9 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 							"dma-coherent");
 	cb->valid = true;
 
+	if (of_property_read_bool(dev->of_node,
+			"qcom,smmu-fast-map"))
+		smmu_info.fast_map_arr[IPA_SMMU_CB_WLAN] = true;
 	if (of_property_read_bool(dev->of_node, "qcom,smmu-s1-bypass") ||
 		ipa3_ctx->ipa_config_is_mhi) {
 		smmu_info.s1_bypass_arr[IPA_SMMU_CB_WLAN] = true;
@@ -7903,7 +8173,8 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 		}
 		IPADBG(" WLAN SMMU ATTR ATOMIC\n");
 
-		if (smmu_info.fast_map) {
+		if (smmu_info.fast_map_arr[IPA_SMMU_CB_WLAN] ||
+						smmu_info.fast_map) {
 			if (iommu_domain_set_attr(cb->iommu,
 						DOMAIN_ATTR_FAST,
 						&fast)) {
@@ -7916,7 +8187,8 @@ static int ipa_smmu_wlan_cb_probe(struct device *dev)
 	}
 
 	pr_info("IPA smmu_info.s1_bypass_arr[WLAN]=%d smmu_info.fast_map=%d\n",
-		smmu_info.s1_bypass_arr[IPA_SMMU_CB_WLAN], smmu_info.fast_map);
+		smmu_info.s1_bypass_arr[IPA_SMMU_CB_WLAN],
+				smmu_info.fast_map_arr[IPA_SMMU_CB_WLAN]);
 
 	ret = iommu_attach_device(cb->iommu, dev);
 	if (ret) {
@@ -7984,6 +8256,10 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 		IPAERR("Fail to read UC start/size iova addresses\n");
 		return ret;
 	}
+
+	if (of_property_read_bool(dev->of_node,
+			"qcom,smmu-fast-map"))
+		smmu_info.fast_map_arr[IPA_SMMU_CB_UC] = true;
 	cb->va_start = iova_ap_mapping[0];
 	cb->va_size = iova_ap_mapping[1];
 	cb->va_end = cb->va_start + cb->va_size;
@@ -8048,7 +8324,8 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 		}
 		IPADBG("SMMU atomic set\n");
 
-		if (smmu_info.fast_map) {
+		if (smmu_info.fast_map_arr[IPA_SMMU_CB_UC] ||
+						smmu_info.fast_map) {
 			if (iommu_domain_set_attr(cb->mapping->domain,
 				DOMAIN_ATTR_FAST,
 				&fast)) {
@@ -8062,7 +8339,8 @@ static int ipa_smmu_uc_cb_probe(struct device *dev)
 	}
 
 	pr_info("IPA smmu_info.s1_bypass_arr[UC]=%d smmu_info.fast_map=%d\n",
-		smmu_info.s1_bypass_arr[IPA_SMMU_CB_UC], smmu_info.fast_map);
+		smmu_info.s1_bypass_arr[IPA_SMMU_CB_UC],
+				smmu_info.fast_map_arr[IPA_SMMU_CB_UC]);
 
 	IPADBG("UC CB PROBE sub pdev=%pK attaching IOMMU device\n", dev);
 	ret = arm_iommu_attach_device(cb->dev, cb->mapping);
@@ -8111,6 +8389,8 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 	u32 size_p;
 	phys_addr_t iova;
 	phys_addr_t pa;
+	u32 geometry_mapping[2];
+	struct iommu_domain_geometry geometry = {0};
 
 	IPADBG("AP CB probe: sub pdev=%pK\n", dev);
 
@@ -8125,6 +8405,9 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 		IPAERR("Fail to read AP start/size iova addresses\n");
 		return result;
 	}
+	if (of_property_read_bool(dev->of_node,
+			"qcom,smmu-fast-map"))
+		smmu_info.fast_map_arr[IPA_SMMU_CB_AP] = true;
 	cb->va_start = iova_ap_mapping[0];
 	cb->va_size = iova_ap_mapping[1];
 	cb->va_end = cb->va_start + cb->va_size;
@@ -8185,7 +8468,8 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 		}
 		IPADBG("AP/USB SMMU atomic set\n");
 
-		if (smmu_info.fast_map) {
+		if (smmu_info.fast_map_arr[IPA_SMMU_CB_AP] ||
+						smmu_info.fast_map) {
 			if (iommu_domain_set_attr(cb->mapping->domain,
 				DOMAIN_ATTR_FAST,
 				&fast)) {
@@ -8195,11 +8479,26 @@ static int ipa_smmu_ap_cb_probe(struct device *dev)
 				return -EIO;
 			}
 			IPADBG("SMMU fast map set\n");
+			result = of_property_read_u32_array(dev->of_node,
+					"qcom,geometry-mapping",
+					geometry_mapping, 2);
+			if (!result) {
+				IPAERR("AP Geometry start = %x size= %x\n",
+				geometry_mapping[0], geometry_mapping[1]);
+				geometry.aperture_start = geometry_mapping[0];
+				geometry.aperture_end = geometry_mapping[1];
+				if (iommu_domain_set_attr(cb->mapping->domain,
+					DOMAIN_ATTR_GEOMETRY,  &geometry)) {
+					IPAERR("Failed to set AP GEOMETRY\n");
+					return -EIO;
+				}
+			}
 		}
 	}
 
 	pr_info("IPA smmu_info.s1_bypass_arr[AP]=%d smmu_info.fast_map=%d\n",
-		smmu_info.s1_bypass_arr[IPA_SMMU_CB_AP], smmu_info.fast_map);
+		smmu_info.s1_bypass_arr[IPA_SMMU_CB_AP],
+					smmu_info.fast_map_arr[IPA_SMMU_CB_AP]);
 
 	result = arm_iommu_attach_device(cb->dev, cb->mapping);
 	if (result) {

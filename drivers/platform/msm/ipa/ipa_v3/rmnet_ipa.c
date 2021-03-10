@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -171,6 +171,7 @@ struct rmnet_ipa3_context {
 	atomic_t ap_suspend;
 	bool ipa_config_is_apq;
 	bool ipa_mhi_aggr_formet_set;
+	bool no_qmap_config;
 };
 
 static struct rmnet_ipa3_context *rmnet_ipa3_ctx;
@@ -1248,7 +1249,8 @@ static int ipa3_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_OK;
 	}
 
-	if (skb->protocol != htons(ETH_P_MAP)) {
+	if (skb->protocol != htons(ETH_P_MAP) &&
+		(!rmnet_ipa3_ctx->no_qmap_config)) {
 		IPAWANDBG_LOW
 		("SW filtering out none QMAP packet received from %s",
 		current->comm);
@@ -1269,17 +1271,22 @@ static int ipa3_wwan_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_BUSY;
 	}
 	if (netif_queue_stopped(dev)) {
-		if (qmap_check &&
-			atomic_read(&wwan_ptr->outstanding_pkts) <
-					outstanding_high_ctl) {
-			IPAWANERR("[%s]Queue stop, send ctrl pkts\n",
-							dev->name);
-			goto send;
-		} else {
-			IPAWANERR("[%s]fatal: %s stopped\n", dev->name,
-							__func__);
+		if (rmnet_ipa3_ctx->no_qmap_config) {
 			spin_unlock_irqrestore(&wwan_ptr->lock, flags);
 			return NETDEV_TX_BUSY;
+		} else {
+			if (qmap_check &&
+				atomic_read(&wwan_ptr->outstanding_pkts) <
+					outstanding_high_ctl) {
+				IPAWANERR("[%s]Queue stop, send ctrl pkts\n",
+						dev->name);
+				goto send;
+			} else {
+				IPAWANERR("[%s]fatal: %s stopped\n", dev->name,
+							__func__);
+				spin_unlock_irqrestore(&wwan_ptr->lock, flags);
+				return NETDEV_TX_BUSY;
+			}
 		}
 	}
 
@@ -1450,7 +1457,8 @@ static void apps_ipa_packet_receive_notify(void *priv,
 
 		IPAWANDBG_LOW("Rx packet was received");
 		skb->dev = IPA_NETDEV();
-		skb->protocol = htons(ETH_P_MAP);
+		if (!rmnet_ipa3_ctx->no_qmap_config)
+			skb->protocol = htons(ETH_P_MAP);
 
 		if (ipa3_rmnet_res.ipa_napi_enable) {
 			trace_rmnet_ipa_netif_rcv_skb3(dev->stats.rx_packets);
@@ -1478,8 +1486,39 @@ static void apps_ipa_packet_receive_notify(void *priv,
 	}
 }
 
-/* Send RSC endpoint info to modem using QMI indication message */
+/* Send MHI endpoint info to modem using QMI indication message */
+static int ipa_send_mhi_endp_ind_to_modem(void)
+{
+	struct ipa_endp_desc_indication_msg_v01 req;
+	struct ipa_ep_id_type_v01 *ep_info;
+	int ipa_mhi_prod_ep_idx =
+		ipa3_get_ep_mapping(IPA_CLIENT_MHI_LOW_LAT_PROD);
+	int ipa_mhi_cons_ep_idx =
+		ipa3_get_ep_mapping(IPA_CLIENT_MHI_LOW_LAT_CONS);
 
+	if (ipa_mhi_prod_ep_idx == IPA_EP_NOT_ALLOCATED ||
+		ipa_mhi_cons_ep_idx == IPA_EP_NOT_ALLOCATED)
+		return -EINVAL;
+
+	memset(&req, 0, sizeof(struct ipa_endp_desc_indication_msg_v01));
+	req.ep_info_len = 2;
+	req.ep_info_valid = true;
+	req.num_eps_valid = true;
+	req.num_eps = 2;
+	ep_info = &req.ep_info[0];
+	ep_info->ep_id = ipa_mhi_cons_ep_idx;
+	ep_info->ic_type = DATA_IC_TYPE_MHI_V01;
+	ep_info->ep_type = DATA_EP_DESC_TYPE_EMB_FLOW_CTL_PROD_V01;
+	ep_info->ep_status = DATA_EP_STATUS_CONNECTED_V01;
+	ep_info = &req.ep_info[1];
+	ep_info->ep_id = ipa_mhi_prod_ep_idx;
+	ep_info->ic_type = DATA_IC_TYPE_MHI_V01;
+	ep_info->ep_type = DATA_EP_DESC_TYPE_EMB_FLOW_CTL_CONS_V01;
+	ep_info->ep_status = DATA_EP_STATUS_CONNECTED_V01;
+	return ipa3_qmi_send_endp_desc_indication(&req);
+}
+
+/* Send RSC endpoint info to modem using QMI indication message */
 static int ipa_send_rsc_pipe_ind_to_modem(void)
 {
 	struct ipa_endp_desc_indication_msg_v01 req;
@@ -1495,7 +1534,7 @@ static int ipa_send_rsc_pipe_ind_to_modem(void)
 	ep_info->ic_type = DATA_IC_TYPE_AP_V01;
 	ep_info->ep_type = DATA_EP_DESC_TYPE_RSC_PROD_V01;
 	ep_info->ep_status = DATA_EP_STATUS_CONNECTED_V01;
-	return ipa3_qmi_send_rsc_pipe_indication(&req);
+	return ipa3_qmi_send_endp_desc_indication(&req);
 }
 
 static int handle3_ingress_format(struct net_device *dev,
@@ -1524,6 +1563,12 @@ static int handle3_ingress_format(struct net_device *dev,
 		IPAWANDBG("DL chksum set\n");
 	}
 
+
+	if ((in->u.data) & RMNET_IOCTL_INGRESS_FORMAT_IP_ROUTE) {
+		rmnet_ipa3_ctx->no_qmap_config = true;
+		ipa_wan_ep_cfg->bypass_agg = true;
+	}
+
 	if ((in->u.data) & RMNET_IOCTL_INGRESS_FORMAT_AGG_DATA) {
 		IPAWANDBG("get AGG size %d count %d\n",
 				  in->u.ingress_format.agg_size,
@@ -1546,8 +1591,11 @@ static int handle3_ingress_format(struct net_device *dev,
 		ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 8;
 		rmnet_ipa3_ctx->dl_csum_offload_enabled = true;
 	} else {
-		ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 4;
 		rmnet_ipa3_ctx->dl_csum_offload_enabled = false;
+		if (rmnet_ipa3_ctx->no_qmap_config)
+			ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 0;
+		else
+			ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 4;
 	}
 
 	ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_ofst_metadata_valid = 1;
@@ -1652,6 +1700,9 @@ static int handle3_egress_format(struct net_device *dev,
 		return -EFAULT;
 	}
 
+	if ((e->u.data) & RMNET_IOCTL_EGRESS_FORMAT_IP_ROUTE)
+		rmnet_ipa3_ctx->no_qmap_config = true;
+
 	ipa_wan_ep_cfg = &rmnet_ipa3_ctx->apps_to_ipa_ep_cfg;
 	if ((e->u.data) & RMNET_IOCTL_EGRESS_FORMAT_CHECKSUM) {
 		IPAWANDBG("UL chksum set\n");
@@ -1660,7 +1711,10 @@ static int handle3_egress_format(struct net_device *dev,
 			IPA_ENABLE_CS_OFFLOAD_UL;
 		ipa_wan_ep_cfg->ipa_ep_cfg.cfg.cs_metadata_hdr_offset = 1;
 	} else {
-		ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 4;
+		if (rmnet_ipa3_ctx->no_qmap_config)
+			ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 0;
+		else
+			ipa_wan_ep_cfg->ipa_ep_cfg.hdr.hdr_len = 4;
 	}
 
 	if ((e->u.data) & RMNET_IOCTL_EGRESS_FORMAT_AGGREGATION) {
@@ -4114,6 +4168,14 @@ void ipa3_q6_handshake_complete(bool ssr_bootup)
 	}
 	if (ipa3_ctx->ipa_mhi_proxy)
 		imp_handle_modem_ready();
+
+	/*
+	 * currently the endp_desc indication only send
+	 * on non-auto mode for low latency pipes
+	 */
+	if (ipa3_ctx->ipa_config_is_mhi &&
+		!ipa3_ctx->ipa_config_is_auto)
+		ipa_send_mhi_endp_ind_to_modem();
 }
 
 static inline bool rmnet_ipa3_check_any_client_inited

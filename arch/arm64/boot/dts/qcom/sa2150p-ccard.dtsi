@@ -12,6 +12,33 @@
 
 #include "qcs405.dtsi"
 
+&tlmm {
+	pinctrl-0 = <&status_gpio>;
+	pinctrl-names = "default";
+	status_gpio: status_gpio {
+		ap2mdm_status {
+			pins = "gpio80";
+			function = "gpio";
+			drive-strength = <8>;
+			bias-pull-up;
+			output-high;
+		};
+	};
+
+	sdx_ext_ipc_gpio_default: sdx_ext_ipc_gpio_default {
+		mux {
+			pins = "gpio14", "gpio79";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio14", "gpio79";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+	};
+};
+
 &pcie0_perst_default {
 	mux {
 		pins = "gpio107";
@@ -142,7 +169,45 @@
 		gpios = <&tlmm 96 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
+
+	qmi-tmd-devices {
+
+		/delete-node/ modem;
+
+		adsp {
+			qcom,instance-id = <0x1>;
+
+			adsp_vdd: adsp-vdd {
+				qcom,qmi-dev-name = "cpuv_restriction_cold";
+				#cooling-cells = <2>;
+			};
+		};
+	};
+
+	sdx_ext_ipc: qcom,sdx_ext_ipc {
+		compatible = "qcom,sdx-ext-ipc";
+		qcom,wakeup-gpio-in = <&tlmm 14 0x00>;
+		qcom,wakeup-gpio-out = <&tlmm 79 0x00>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sdx_ext_ipc_gpio_default>;
+	};
 };
+
+&thermal_zones {
+	aoss-lowf {
+		cooling-maps {
+
+			/delete-node/ modem_vdd_cdev;
+
+			adsp_vdd_cdev {
+				trip = <&aoss_lowf>;
+				cooling-device = <&adsp_vdd 0 0>;
+			};
+		};
+	};
+};
+
+#include "sdxprairie-thermal-common.dtsi"
 
 &usb3 {
 	qcom,ignore-wakeup-src-in-hostmode;
@@ -154,6 +219,23 @@
 
 &usb2s {
 	extcon = <&usb2_extcon>;
+};
+
+&ethqos_hw {
+	status = "okay";
+	vreg_emac_phy-supply = <&vreg_emac_phy>;
+	vreg_rgmii_io_pads-supply = <&vreg_rgmii_io_pads>;
+	rxc-skew-ps = <0>;
+
+	pinctrl-names = "dev-emac-mdc", "dev-emac-mdio",
+		"dev-emac-rgmii_txd0_state", "dev-emac-rgmii_txd1_state",
+		"dev-emac-rgmii_txd2_state", "dev-emac-rgmii_txd3_state",
+		"dev-emac-rgmii_txc_state",  "dev-emac-rgmii_tx_ctl_state",
+		"dev-emac-rgmii_rxd0_state", "dev-emac-rgmii_rxd1_state",
+		"dev-emac-rgmii_rxd2_state", "dev-emac-rgmii_rxd3_state",
+		"dev-emac-rgmii_rxc_state", "dev-emac-rgmii_rx_ctl_state",
+		"dev-emac-phy_intr", "dev-emac-phy_reset_state";
+	pinctrl-15 = <&emac_phy_reset_state>;
 };
 
 &emac_hw {
@@ -195,4 +277,52 @@
 	cd-gpios = <&tlmm 21 GPIO_ACTIVE_LOW>;
 
 	status = "ok";
+};
+
+&rpm_bus {
+	rpm-regulator-ldoa1 {
+		status = "disabled";
+		pms405_l1: regulator-l1 {
+			status = "disabled";
+		};
+	};
+
+	rpm-regulator-ldoa2 {
+		status = "disabled";
+		pms405_l2: regulator-l2 {
+			status = "disabled";
+		};
+	};
+
+	rpm-regulator-ldoa7 {
+		status = "disabled";
+		pms405_l7: regulator-l7 {
+			status = "disabled";
+		};
+	};
+
+	rpm-regulator-ldoa10 {
+		status = "disabled";
+		pms405_l10: regulator-l10 {
+			status = "disabled";
+		};
+	};
+};
+
+&pms405_vadc {
+	pa_therm1 {
+			/delete-property/ qcom,ratiometric;
+			/delete-property/ qcom,hw-settle-time;
+			label = "pa_therm1";
+			reg = <ADC_AMUX_THM1>;
+			qcom,pre-scaling = <1 1>;
+	};
+
+	pa_therm3 {
+			/delete-property/ qcom,ratiometric;
+			/delete-property/ qcom,hw-settle-time;
+			label = "pa_therm3";
+			reg = <ADC_AMUX_THM3>;
+			qcom,pre-scaling = <1 1>;
+	};
 };

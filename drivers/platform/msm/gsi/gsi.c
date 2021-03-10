@@ -2173,6 +2173,7 @@ static void gsi_program_chan_ctx(struct gsi_chan_props *props, unsigned int ee,
 		break;
 	case GSI_CHAN_PROT_AQC:
 	case GSI_CHAN_PROT_11AD:
+	case GSI_CHAN_PROT_QDSS:
 		prot_msb = 1;
 		break;
 	default:
@@ -2649,12 +2650,7 @@ static union __packed gsi_channel_scratch __gsi_update_mhi_channel_scratch(
 			gsi_ctx->per.ee));
 
 	/* UPDATE */
-	scr.mhi.mhi_host_wp_addr = mscr.mhi_host_wp_addr;
-	scr.mhi.assert_bit40 = mscr.assert_bit40;
-	scr.mhi.polling_configuration = mscr.polling_configuration;
-	scr.mhi.burst_mode_enabled = mscr.burst_mode_enabled;
 	scr.mhi.polling_mode = mscr.polling_mode;
-	scr.mhi.oob_mod_threshold = mscr.oob_mod_threshold;
 
 	if (gsi_ctx->per.ver < GSI_VER_2_5) {
 		scr.mhi.max_outstanding_tre = mscr.max_outstanding_tre;
@@ -3848,17 +3844,19 @@ int gsi_config_channel_mode(unsigned long chan_hdl, enum gsi_chan_mode mode)
 		return -GSI_STATUS_UNSUPPORTED_OP;
 	}
 
+	spin_lock_irqsave(&gsi_ctx->slock, flags);
+
 	if (atomic_read(&ctx->poll_mode))
 		curr = GSI_CHAN_MODE_POLL;
 	else
 		curr = GSI_CHAN_MODE_CALLBACK;
 
 	if (mode == curr) {
-		GSIDBG("already in requested mode %u chan_hdl=%lu\n",
+		GSIERR("already in requested mode %u chan_hdl=%lu\n",
 				curr, chan_hdl);
+		spin_unlock_irqrestore(&gsi_ctx->slock, flags);
 		return -GSI_STATUS_UNSUPPORTED_OP;
 	}
-	spin_lock_irqsave(&gsi_ctx->slock, flags);
 	if (curr == GSI_CHAN_MODE_CALLBACK &&
 			mode == GSI_CHAN_MODE_POLL) {
 		__gsi_config_ieob_irq(gsi_ctx->per.ee, 1 << ctx->evtr->id, 0);

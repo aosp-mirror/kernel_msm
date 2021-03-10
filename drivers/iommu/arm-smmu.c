@@ -278,6 +278,7 @@ struct arm_smmu_device {
 	u32				num_context_banks;
 	u32				num_s2_context_banks;
 	DECLARE_BITMAP(context_map, ARM_SMMU_MAX_CBS);
+	DECLARE_BITMAP(secure_context_map, ARM_SMMU_MAX_CBS);
 	struct arm_smmu_cb		*cbs;
 	atomic_t			irptndx;
 
@@ -1596,7 +1597,7 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 
 	dev_err(smmu->dev, "FAR    = 0x%016llx\n",
 		readq_relaxed(cb_base + ARM_SMMU_CB_FAR));
-	dev_err(smmu->dev, "PAR    = 0x%pK\n",
+	dev_err(smmu->dev, "PAR    = 0x%016llx\n",
 		readq_relaxed(cb_base + ARM_SMMU_CB_PAR));
 
 	dev_err(smmu->dev,
@@ -1616,15 +1617,15 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 		(fsr & 0x80000000) ? "MULTI " : "");
 
 	if (cfg->fmt == ARM_SMMU_CTX_FMT_AARCH32_S) {
-		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
+		dev_err(smmu->dev, "TTBR0  = 0x%08x\n",
 			readl_relaxed(cb_base + ARM_SMMU_CB_TTBR0));
-		dev_err(smmu->dev, "TTBR1  = 0x%pK\n",
+		dev_err(smmu->dev, "TTBR1  = 0x%08x\n",
 			readl_relaxed(cb_base + ARM_SMMU_CB_TTBR1));
 	} else {
-		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
+		dev_err(smmu->dev, "TTBR0  = 0x%016llx\n",
 			readq_relaxed(cb_base + ARM_SMMU_CB_TTBR0));
 		if (stage1)
-			dev_err(smmu->dev, "TTBR1  = 0x%pK\n",
+			dev_err(smmu->dev, "TTBR1  = 0x%016llx\n",
 				readq_relaxed(cb_base + ARM_SMMU_CB_TTBR1));
 	}
 
@@ -2213,6 +2214,14 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 
 	cfg->cbndx = ret;
 
+	if (!(smmu_domain->attributes & (1 << DOMAIN_ATTR_GEOMETRY))) {
+		/* Geometry is not set use the default geometry */
+		domain->geometry.aperture_start = 0;
+		domain->geometry.aperture_end = (1UL << ias) - 1;
+		if (domain->geometry.aperture_end >= SZ_1G * 4ULL)
+			domain->geometry.aperture_end = (SZ_1G * 4ULL) - 1;
+	}
+
 	if (arm_smmu_is_slave_side_secure(smmu_domain)) {
 		smmu_domain->pgtbl_cfg = (struct io_pgtable_cfg) {
 			.quirks         = quirks,
@@ -2223,6 +2232,8 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 			},
 			.tlb		= tlb_ops,
 			.iommu_dev      = smmu->dev,
+			.iova_base	= domain->geometry.aperture_start,
+			.iova_end	= domain->geometry.aperture_end,
 		};
 		fmt = ARM_MSM_SECURE;
 	} else  {
@@ -2233,6 +2244,8 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 			.oas		= oas,
 			.tlb		= tlb_ops,
 			.iommu_dev	= smmu->dev,
+			.iova_base	= domain->geometry.aperture_start,
+			.iova_end	= domain->geometry.aperture_end,
 		};
 	}
 
@@ -2380,6 +2393,11 @@ static void arm_smmu_destroy_domain_context(struct iommu_domain *domain)
 	arm_smmu_unassign_table(smmu_domain);
 	arm_smmu_secure_domain_unlock(smmu_domain);
 	__arm_smmu_free_bitmap(smmu->context_map, cfg->cbndx);
+	/* As the nonsecure context bank index is any way set to zero,
+	 * so, directly clearing up the secure cb bitmap.
+	 */
+	if (arm_smmu_is_slave_side_secure(smmu_domain))
+		__arm_smmu_free_bitmap(smmu->secure_context_map, cfg->cbndx);
 
 	arm_smmu_power_off(smmu->pwr);
 	arm_smmu_domain_reinit(smmu_domain);
@@ -3111,12 +3129,12 @@ static size_t arm_smmu_map_sg(struct iommu_domain *domain, unsigned long iova,
 
 out:
 	arm_smmu_assign_table(smmu_domain);
+	arm_smmu_secure_domain_unlock(smmu_domain);
 
 	if (size_to_unmap) {
 		arm_smmu_unmap(domain, __saved_iova_start, size_to_unmap);
 		iova = __saved_iova_start;
 	}
-	arm_smmu_secure_domain_unlock(smmu_domain);
 	arm_smmu_release_prealloc_memory(smmu_domain, &nonsecure_pool);
 	return iova - __saved_iova_start;
 }
@@ -3305,6 +3323,46 @@ static size_t msm_secure_smmu_map_sg(struct iommu_domain *domain,
 	return ret;
 }
 
+void *get_smmu_from_addr(struct iommu_device *iommu, void __iomem *addr)
+{
+	struct arm_smmu_device *smmu = NULL;
+	unsigned long base, mask;
+
+	smmu = arm_smmu_get_by_fwnode(iommu->fwnode);
+	if (!smmu)
+		return NULL;
+
+	base = (unsigned long)smmu->base;
+	mask = ~(smmu->size - 1);
+
+	if ((base & mask) == ((unsigned long)addr & mask))
+		return (void *)smmu;
+
+	return NULL;
+}
+
+bool arm_smmu_skip_write(void __iomem *addr)
+{
+	struct arm_smmu_device *smmu;
+	int cb;
+
+	smmu = arm_smmu_get_by_addr(addr);
+
+	/* Skip write if smmu not available by now */
+	if (!smmu)
+		return true;
+
+	/* Do not write to global space */
+	if (((unsigned long)addr & (smmu->size - 1)) < (smmu->size >> 1))
+		return true;
+
+	/* Finally skip writing to secure CB */
+	cb = ((unsigned long)addr & ((smmu->size >> 1) - 1)) >> PAGE_SHIFT;
+	if (test_bit(cb, smmu->secure_context_map))
+		return true;
+
+	return false;
+}
 #endif
 
 static int arm_smmu_add_device(struct device *dev)
@@ -3521,7 +3579,7 @@ static int arm_smmu_domain_get_attr(struct iommu_domain *domain,
 			ret = -ENODEV;
 			break;
 		}
-		info->pmds = smmu_domain->pgtbl_cfg.av8l_fast_cfg.pmds;
+		info->ops = smmu_domain->pgtbl_ops;
 		ret = 0;
 		break;
 	}
@@ -3782,7 +3840,6 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 		ret = 0;
 		break;
 	}
-
 	case DOMAIN_ATTR_CB_STALL_DISABLE:
 		if (*((int *)data))
 			smmu_domain->attributes |=
@@ -3795,6 +3852,44 @@ static int arm_smmu_domain_set_attr(struct iommu_domain *domain,
 				1 << DOMAIN_ATTR_NO_CFRE;
 		ret = 0;
 		break;
+	case DOMAIN_ATTR_GEOMETRY: {
+		struct iommu_domain_geometry *geometry =
+				(struct iommu_domain_geometry *)data;
+
+		if (smmu_domain->smmu != NULL) {
+			dev_err(smmu_domain->smmu->dev,
+			  "cannot set geometry attribute while attached\n");
+			ret = -EBUSY;
+			break;
+		}
+
+		if (geometry->aperture_start >= SZ_1G * 4ULL ||
+		    geometry->aperture_end >= SZ_1G * 4ULL) {
+			pr_err("fastmap does not support IOVAs >= 4GB\n");
+			ret = -EINVAL;
+			break;
+		}
+		if (smmu_domain->attributes
+			  & (1 << DOMAIN_ATTR_GEOMETRY)) {
+			if (geometry->aperture_start
+					< domain->geometry.aperture_start)
+				domain->geometry.aperture_start =
+					geometry->aperture_start;
+
+			if (geometry->aperture_end
+					> domain->geometry.aperture_end)
+				domain->geometry.aperture_end =
+					geometry->aperture_end;
+		} else {
+			smmu_domain->attributes |= 1 << DOMAIN_ATTR_GEOMETRY;
+			domain->geometry.aperture_start =
+						geometry->aperture_start;
+			domain->geometry.aperture_end = geometry->aperture_end;
+		}
+		ret = 0;
+		break;
+	}
+
 	default:
 		ret = -ENODEV;
 	}
@@ -4360,8 +4455,12 @@ static int arm_smmu_alloc_cb(struct iommu_domain *domain,
 			cb = smmu->s2crs[idx].cbndx;
 	}
 
-	if (cb >= 0 && arm_smmu_is_static_cb(smmu))
+	if (cb >= 0 && arm_smmu_is_static_cb(smmu)) {
 		smmu_domain->slave_side_secure = true;
+
+		if (arm_smmu_is_slave_side_secure(smmu_domain))
+			bitmap_set(smmu->secure_context_map, cb, 1);
+	}
 
 	if (cb < 0 && !arm_smmu_is_static_cb(smmu)) {
 		mutex_unlock(&smmu->stream_map_mutex);
@@ -5167,7 +5266,8 @@ static int arm_smmu_device_remove(struct platform_device *pdev)
 	if (arm_smmu_power_on(smmu->pwr))
 		return -EINVAL;
 
-	if (!bitmap_empty(smmu->context_map, ARM_SMMU_MAX_CBS))
+	if (!bitmap_empty(smmu->context_map, ARM_SMMU_MAX_CBS) ||
+	    !bitmap_empty(smmu->secure_context_map, ARM_SMMU_MAX_CBS))
 		dev_err(&pdev->dev, "removing device with active domains!\n");
 
 	idr_destroy(&smmu->asid_idr);
@@ -5218,7 +5318,7 @@ static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
 					  smmu_domain);
 		if (!pgtbl_ops) {
 			dev_err(smmu->dev, "failed to allocate page tables during pm restore for cxt %d\n",
-				idx, dev_name(dev));
+				idx);
 			return -ENOMEM;
 		}
 		smmu_domain->pgtbl_ops = pgtbl_ops;
@@ -5903,7 +6003,7 @@ static ssize_t arm_smmu_debug_testbus_read(struct file *file,
 							testbus_version);
 		arm_smmu_power_off(pwr);
 
-		snprintf(buf, buf_len, "0x%0x\n", val);
+		snprintf(buf, buf_len, "0x%0lx\n", val);
 	} else {
 
 		struct arm_smmu_device *smmu = file->private_data;
@@ -6317,7 +6417,7 @@ static ssize_t arm_smmu_debug_capturebus_config_read(struct file *file,
 		snprintf(buf + strlen(buf), buf_len - strlen(buf),
 				"Match_%d : 0x%0llx\n", i+1, match[i]);
 	}
-	snprintf(buf + strlen(buf), buf_len - strlen(buf), "0x%0x\n", val);
+	snprintf(buf + strlen(buf), buf_len - strlen(buf), "0x%0lx\n", val);
 
 	buflen = min(count, strlen(buf));
 	if (copy_to_user(ubuf, buf, buflen)) {
@@ -6397,7 +6497,7 @@ static irqreturn_t arm_smmu_debug_capture_bus_match(int irq, void *dev)
 	arm_smmu_power_off(tbu->pwr);
 	arm_smmu_power_off(smmu->pwr);
 
-	dev_info(tbu->dev, "TNX_TCR_CNTL : 0x%0llx\n", val);
+	dev_info(tbu->dev, "TNX_TCR_CNTL : 0x%0x\n", val);
 
 	for (i = 0; i < NO_OF_MASK_AND_MATCH; ++i) {
 		dev_info(tbu->dev,

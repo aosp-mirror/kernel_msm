@@ -417,6 +417,8 @@ static struct clk_rcg2 gcc_emac_rgmii_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_gp1_clk_src[] = {
+	F(80000, P_BI_TCXO, 1, 1, 240),
+	F(100000, P_BI_TCXO, 1, 1, 192),
 	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(25000000, P_GPLL0_OUT_EVEN, 12, 0, 0),
 	F(50000000, P_GPLL0_OUT_EVEN, 6, 0, 0),
@@ -1425,6 +1427,7 @@ static struct clk_rcg2 gcc_usb30_prim_mock_utmi_clk_src = {
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_0,
 	.freq_tbl = ftbl_gcc_usb30_prim_mock_utmi_clk_src,
+	.enable_safe_config = true,
 	.clkr.hw.init = &(struct clk_init_data){
 		.name = "gcc_usb30_prim_mock_utmi_clk_src",
 		.parent_names = gcc_parent_names_0,
@@ -4244,7 +4247,6 @@ static int gcc_sa8150_resume(struct device *dev)
 
 static const struct dev_pm_ops gcc_sa8150_pm_ops = {
 	.restore_early = gcc_sa8150_resume,
-	.thaw_early = gcc_sa8150_resume,
 };
 
 static void gcc_sm8150_fixup_sm8150v2(struct regmap *regmap)

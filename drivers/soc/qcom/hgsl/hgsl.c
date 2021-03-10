@@ -31,7 +31,9 @@
 
 #define HGSL_DEVICE_NAME  "hgsl"
 #define HGSL_DEV_NUM 1
-#define MAX_DB_QUEUE 4
+
+/* Support upto 3 GVMs: 3 DBQs(Low/Medium/High priority) per GVM */
+#define MAX_DB_QUEUE 9
 
 #define IORESOURCE_HWINF "hgsl_reg_hwinf"
 #define IORESOURCE_GMUCX "hgsl_reg_gmucx"
@@ -226,7 +228,9 @@ struct hgsl_db_cmds {
 	uint32_t ctx_id;
 	uint32_t cmd_flags;
 	uint32_t timestamp;
+	uint64_t user_profile_gpuaddr;
 	uint32_t num_ibs;
+	uint32_t ib_desc_gmuaddr;
 	struct hgsl_fw_ib_desc ib_descs[];
 } __packed;
 

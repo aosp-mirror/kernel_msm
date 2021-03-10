@@ -41,6 +41,7 @@
 #include <linux/list_sort.h>
 #include <linux/hashtable.h>
 #include <linux/mount.h>
+#include <linux/dcache.h>
 
 #include <uapi/linux/dma-buf.h>
 #include <uapi/linux/magic.h>
@@ -69,18 +70,34 @@ struct dma_proc {
 
 static struct dma_buf_list db_list;
 
+static void dmabuf_dent_put(struct dma_buf *dmabuf)
+{
+	if (atomic_dec_and_test(&dmabuf->dent_count)) {
+		kfree(dmabuf->name);
+		kfree(dmabuf);
+	}
+}
+
+
 static char *dmabuffs_dname(struct dentry *dentry, char *buffer, int buflen)
 {
 	struct dma_buf *dmabuf;
 	char name[DMA_BUF_NAME_LEN];
 	size_t ret = 0;
 
+	spin_lock(&dentry->d_lock);
 	dmabuf = dentry->d_fsdata;
-	mutex_lock(&dmabuf->lock);
+	if (!dmabuf || !atomic_add_unless(&dmabuf->dent_count, 1, 0)) {
+		spin_unlock(&dentry->d_lock);
+		goto out;
+	}
+	spin_unlock(&dentry->d_lock);
+	spin_lock(&dmabuf->name_lock);
 	if (dmabuf->name)
 		ret = strlcpy(name, dmabuf->name, DMA_BUF_NAME_LEN);
-	mutex_unlock(&dmabuf->lock);
-
+	spin_unlock(&dmabuf->name_lock);
+	dmabuf_dent_put(dmabuf);
+out:
 	return dynamic_dname(dentry, buffer, buflen, "/%s:%s",
 			     dentry->d_name.name, ret > 0 ? name : "");
 }
@@ -107,12 +124,16 @@ static struct file_system_type dma_buf_fs_type = {
 static int dma_buf_release(struct inode *inode, struct file *file)
 {
 	struct dma_buf *dmabuf;
+	struct dentry *dentry = file->f_path.dentry;
 
 	if (!is_dma_buf_file(file))
 		return -EINVAL;
 
 	dmabuf = file->private_data;
 
+	spin_lock(&dentry->d_lock);
+	dentry->d_fsdata = NULL;
+	spin_unlock(&dentry->d_lock);
 	BUG_ON(dmabuf->vmapping_counter);
 
 	/*
@@ -137,8 +158,7 @@ static int dma_buf_release(struct inode *inode, struct file *file)
 		reservation_object_fini(dmabuf->resv);
 
 	module_put(dmabuf->owner);
-	kfree(dmabuf->buf_name);
-	kfree(dmabuf);
+	dmabuf_dent_put(dmabuf);
 	return 0;
 }
 
@@ -372,8 +392,10 @@ static long dma_buf_set_name(struct dma_buf *dmabuf, const char __user *buf)
 		kfree(name);
 		goto out_unlock;
 	}
+	spin_lock(&dmabuf->name_lock);
 	kfree(dmabuf->name);
 	dmabuf->name = name;
+	spin_unlock(&dmabuf->name_lock);
 
 out_unlock:
 	mutex_unlock(&dmabuf->lock);
@@ -443,10 +465,10 @@ static void dma_buf_show_fdinfo(struct seq_file *m, struct file *file)
 	/* Don't count the temporary reference taken inside procfs seq_show */
 	seq_printf(m, "count:\t%ld\n", file_count(dmabuf->file) - 1);
 	seq_printf(m, "exp_name:\t%s\n", dmabuf->exp_name);
-	mutex_lock(&dmabuf->lock);
+	spin_lock(&dmabuf->name_lock);
 	if (dmabuf->name)
 		seq_printf(m, "name:\t%s\n", dmabuf->name);
-	mutex_unlock(&dmabuf->lock);
+	spin_unlock(&dmabuf->name_lock);
 }
 
 static const struct file_operations dma_buf_fops = {
@@ -603,11 +625,14 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->size = exp_info->size;
 	dmabuf->exp_name = exp_info->exp_name;
 	dmabuf->owner = exp_info->owner;
+	spin_lock_init(&dmabuf->name_lock);
 	init_waitqueue_head(&dmabuf->poll);
 	dmabuf->cb_excl.poll = dmabuf->cb_shared.poll = &dmabuf->poll;
 	dmabuf->cb_excl.active = dmabuf->cb_shared.active = 0;
 	dmabuf->buf_name = bufname;
+	dmabuf->name = bufname;
 	dmabuf->ktime = ktime_get();
+	atomic_set(&dmabuf->dent_count, 1);
 
 	if (!resv) {
 		resv = (struct reservation_object *)&dmabuf[1];

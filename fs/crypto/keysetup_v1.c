@@ -9,7 +9,7 @@
  * This file implements compatibility functions for the original encryption
  * policy version ("v1"), including:
  *
- * - Deriving per-file keys using the AES-128-ECB based KDF
+ * - Deriving per-file encryption keys using the AES-128-ECB based KDF
  *   (rather than the new method of using HKDF-SHA512)
  *
  * - Retrieving fscrypt master keys from process-subscribed keyrings
@@ -25,12 +25,17 @@
 #include <keys/user-type.h>
 #include <linux/hashtable.h>
 #include <linux/scatterlist.h>
+#include <linux/bio-crypt-ctx.h>
+#include <linux/siphash.h>
+#include <crypto/sha.h>
 
 #include "fscrypt_private.h"
 
 /* Table of keys referenced by DIRECT_KEY policies */
 static DEFINE_HASHTABLE(fscrypt_direct_keys, 6); /* 6 bits = 64 buckets */
 static DEFINE_SPINLOCK(fscrypt_direct_keys_lock);
+
+static struct crypto_shash *essiv_hash_tfm;
 
 /*
  * v1 key derivation function.  This generates the derived key by encrypting the
@@ -81,6 +86,36 @@ out:
 	skcipher_request_free(req);
 	crypto_free_skcipher(tfm);
 	return res;
+}
+
+static int fscrypt_do_sha256(const u8 *src, int srclen, u8 *dst)
+{
+	struct crypto_shash *tfm = READ_ONCE(essiv_hash_tfm);
+
+	/* init hash transform on demand */
+	if (unlikely(!tfm)) {
+		struct crypto_shash *prev_tfm;
+
+		tfm = crypto_alloc_shash("sha256", 0, 0);
+		if (IS_ERR(tfm)) {
+			fscrypt_warn(NULL,
+				     "error allocating SHA-256 transform: %ld",
+				     PTR_ERR(tfm));
+			return PTR_ERR(tfm);
+		}
+		prev_tfm = cmpxchg(&essiv_hash_tfm, NULL, tfm);
+		if (prev_tfm) {
+			crypto_free_shash(tfm);
+			tfm = prev_tfm;
+		}
+	}
+
+	{
+		SHASH_DESC_ON_STACK(desc, tfm);
+		desc->tfm = tfm;
+		desc->flags = 0;
+		return crypto_shash_digest(desc, src, srclen, dst);
+	}
 }
 
 /*
@@ -146,7 +181,7 @@ struct fscrypt_direct_key {
 	struct hlist_node		dk_node;
 	refcount_t			dk_refcount;
 	const struct fscrypt_mode	*dk_mode;
-	struct crypto_skcipher		*dk_ctfm;
+	struct fscrypt_prepared_key	dk_key;
 	u8				dk_descriptor[FSCRYPT_KEY_DESCRIPTOR_SIZE];
 	u8				dk_raw[FSCRYPT_MAX_KEY_SIZE];
 };
@@ -154,7 +189,7 @@ struct fscrypt_direct_key {
 static void free_direct_key(struct fscrypt_direct_key *dk)
 {
 	if (dk) {
-		crypto_free_skcipher(dk->dk_ctfm);
+		fscrypt_destroy_prepared_key(&dk->dk_key);
 		kzfree(dk);
 	}
 }
@@ -199,6 +234,8 @@ find_or_insert_direct_key(struct fscrypt_direct_key *to_insert,
 			continue;
 		if (ci->ci_mode != dk->dk_mode)
 			continue;
+		if (!fscrypt_is_key_prepared(&dk->dk_key, ci))
+			continue;
 		if (crypto_memneq(raw_key, dk->dk_raw, ci->ci_mode->keysize))
 			continue;
 		/* using existing tfm with same (descriptor, mode, raw_key) */
@@ -231,13 +268,10 @@ fscrypt_get_direct_key(const struct fscrypt_info *ci, const u8 *raw_key)
 		return ERR_PTR(-ENOMEM);
 	refcount_set(&dk->dk_refcount, 1);
 	dk->dk_mode = ci->ci_mode;
-	dk->dk_ctfm = fscrypt_allocate_skcipher(ci->ci_mode, raw_key,
-						ci->ci_inode);
-	if (IS_ERR(dk->dk_ctfm)) {
-		err = PTR_ERR(dk->dk_ctfm);
-		dk->dk_ctfm = NULL;
+	err = fscrypt_prepare_key(&dk->dk_key, raw_key, ci->ci_mode->keysize,
+				  false /*is_hw_wrapped*/, ci);
+	if (err)
 		goto err_free_dk;
-	}
 	memcpy(dk->dk_descriptor, ci->ci_policy.v1.master_key_descriptor,
 	       FSCRYPT_KEY_DESCRIPTOR_SIZE);
 	memcpy(dk->dk_raw, raw_key, ci->ci_mode->keysize);
@@ -253,32 +287,13 @@ err_free_dk:
 static int setup_v1_file_key_direct(struct fscrypt_info *ci,
 				    const u8 *raw_master_key)
 {
-	const struct fscrypt_mode *mode = ci->ci_mode;
 	struct fscrypt_direct_key *dk;
-
-	if (!fscrypt_mode_supports_direct_key(mode)) {
-		fscrypt_warn(ci->ci_inode,
-			     "Direct key mode not allowed with %s",
-			     mode->friendly_name);
-		return -EINVAL;
-	}
-
-	if (ci->ci_policy.v1.contents_encryption_mode !=
-	    ci->ci_policy.v1.filenames_encryption_mode) {
-		fscrypt_warn(ci->ci_inode,
-			     "Direct key mode not allowed with different contents and filenames modes");
-		return -EINVAL;
-	}
-
-	/* ESSIV implies 16-byte IVs which implies !DIRECT_KEY */
-	if (WARN_ON(mode->needs_essiv))
-		return -EINVAL;
 
 	dk = fscrypt_get_direct_key(ci, raw_master_key);
 	if (IS_ERR(dk))
 		return PTR_ERR(dk);
 	ci->ci_direct_key = dk;
-	ci->ci_ctfm = dk->dk_ctfm;
+	ci->ci_key = dk->dk_key;
 	return 0;
 }
 
@@ -288,7 +303,48 @@ static int setup_v1_file_key_derived(struct fscrypt_info *ci,
 {
 	u8 *derived_key;
 	int err;
+	int i;
+	union {
+		u8 bytes[FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE];
+		u32 words[FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE / sizeof(u32)];
+	} key_new;
 
+	/*Support legacy ice based content encryption mode*/
+	if ((fscrypt_policy_contents_mode(&ci->ci_policy) ==
+					  FSCRYPT_MODE_PRIVATE) &&
+					  fscrypt_using_inline_encryption(ci)) {
+		ci->ci_owns_key = true;
+		if (ci->ci_policy.v1.flags &
+		    FSCRYPT_POLICY_FLAG_IV_INO_LBLK_32) {
+			union {
+				siphash_key_t k;
+				u8 bytes[SHA256_DIGEST_SIZE];
+			} ino_hash_key;
+			int err;
+
+			/* hashed_ino = SipHash(key=SHA256(master_key),
+			 * data=i_ino)
+			 */
+			err = fscrypt_do_sha256(raw_master_key,
+						ci->ci_mode->keysize / 2,
+						ino_hash_key.bytes);
+			if (err)
+				return err;
+			ci->ci_hashed_ino = siphash_1u64(ci->ci_inode->i_ino,
+							 &ino_hash_key.k);
+		}
+		memcpy(key_new.bytes, raw_master_key, ci->ci_mode->keysize);
+
+		for (i = 0; i < ARRAY_SIZE(key_new.words); i++)
+			__cpu_to_be32s(&key_new.words[i]);
+
+		err = fscrypt_prepare_inline_crypt_key(&ci->ci_key,
+						       key_new.bytes,
+						       ci->ci_mode->keysize,
+						       false,
+						       ci);
+		return err;
+	}
 	/*
 	 * This cannot be a stack buffer because it will be passed to the
 	 * scatterlist crypto API during derive_key_aes().
@@ -302,7 +358,7 @@ static int setup_v1_file_key_derived(struct fscrypt_info *ci,
 	if (err)
 		goto out;
 
-	err = fscrypt_set_derived_key(ci, derived_key);
+	err = fscrypt_set_per_file_enc_key(ci, derived_key);
 out:
 	kzfree(derived_key);
 	return err;
@@ -310,25 +366,10 @@ out:
 
 int fscrypt_setup_v1_file_key(struct fscrypt_info *ci, const u8 *raw_master_key)
 {
-	int err;
-	if (ci->ci_policy.v1.flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY) {
+	if (ci->ci_policy.v1.flags & FSCRYPT_POLICY_FLAG_DIRECT_KEY)
 		return setup_v1_file_key_direct(ci, raw_master_key);
-	} else if(S_ISREG(ci->ci_inode->i_mode) &&
-		(fscrypt_policy_contents_mode(&(ci->ci_policy)) == FSCRYPT_MODE_PRIVATE)) {
-		/* Inline encryption: no key derivation required because IVs are
-		* assigned based on iv_sector.
-		*/
-		if (ci->ci_mode->keysize != FSCRYPT_MAX_KEY_SIZE) {
-			err = -EINVAL;
-		} else {
-			memcpy(ci->ci_raw_key, raw_master_key, ci->ci_mode->keysize);
-			err = 0;
-		}
-	}
-	else {
+	else
 		return setup_v1_file_key_derived(ci, raw_master_key);
-	}
-	return err;
 }
 
 int fscrypt_setup_v1_file_key_via_subscribed_keyrings(struct fscrypt_info *ci)

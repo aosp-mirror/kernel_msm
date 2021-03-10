@@ -56,6 +56,7 @@ static const struct adreno_vbif_platform a5xx_vbif_platforms[] = {
 	{ adreno_is_a512, a540_vbif },
 	{ adreno_is_a510, a530_vbif },
 	{ adreno_is_a508, a530_vbif },
+	{ adreno_is_a504, a530_vbif },
 	{ adreno_is_a505, a530_vbif },
 	{ adreno_is_a506, a530_vbif },
 };
@@ -127,6 +128,7 @@ static const struct {
 } a5xx_efuse_funcs[] = {
 	{ adreno_is_a530, a530_efuse_leakage },
 	{ adreno_is_a530, a530_efuse_speed_bin },
+	{ adreno_is_a504, a530_efuse_speed_bin },
 	{ adreno_is_a505, a530_efuse_speed_bin },
 	{ adreno_is_a512, a530_efuse_speed_bin },
 	{ adreno_is_a508, a530_efuse_speed_bin },
@@ -152,7 +154,7 @@ static void a5xx_platform_setup(struct adreno_device *adreno_dev)
 	uint64_t addr;
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 
-	if (adreno_is_a505_or_a506(adreno_dev) || adreno_is_a508(adreno_dev)) {
+	if (adreno_is_a504_to_a506(adreno_dev) || adreno_is_a508(adreno_dev)) {
 		gpudev->snapshot_data->sect_sizes->cp_meq = 32;
 		gpudev->snapshot_data->sect_sizes->cp_merciu = 1024;
 		gpudev->snapshot_data->sect_sizes->roq = 256;
@@ -1181,6 +1183,7 @@ static const struct {
 	{ adreno_is_a530, a530_hwcg_regs, ARRAY_SIZE(a530_hwcg_regs) },
 	{ adreno_is_a512, a512_hwcg_regs, ARRAY_SIZE(a512_hwcg_regs) },
 	{ adreno_is_a510, a510_hwcg_regs, ARRAY_SIZE(a510_hwcg_regs) },
+	{ adreno_is_a504, a50x_hwcg_regs, ARRAY_SIZE(a50x_hwcg_regs) },
 	{ adreno_is_a505, a50x_hwcg_regs, ARRAY_SIZE(a50x_hwcg_regs) },
 	{ adreno_is_a506, a50x_hwcg_regs, ARRAY_SIZE(a50x_hwcg_regs) },
 	{ adreno_is_a508, a50x_hwcg_regs, ARRAY_SIZE(a50x_hwcg_regs) },
@@ -1930,7 +1933,7 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	 * Below CP registers are 0x0 by default, program init
 	 * values based on a5xx flavor.
 	 */
-	if (adreno_is_a505_or_a506(adreno_dev) || adreno_is_a508(adreno_dev)) {
+	if (adreno_is_a504_to_a506(adreno_dev) || adreno_is_a508(adreno_dev)) {
 		kgsl_regwrite(device, A5XX_CP_MEQ_THRESHOLDS, 0x20);
 		kgsl_regwrite(device, A5XX_CP_MERCIU_SIZE, 0x400);
 		kgsl_regwrite(device, A5XX_CP_ROQ_THRESHOLDS_2, 0x40000030);
@@ -1956,7 +1959,7 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	 * vtxFifo and primFifo thresholds default values
 	 * are different.
 	 */
-	if (adreno_is_a505_or_a506(adreno_dev) || adreno_is_a508(adreno_dev))
+	if (adreno_is_a504_to_a506(adreno_dev) || adreno_is_a508(adreno_dev))
 		kgsl_regwrite(device, A5XX_PC_DBG_ECO_CNTL,
 						(0x100 << 11 | 0x100 << 22));
 	else if (adreno_is_a510(adreno_dev) || adreno_is_a512(adreno_dev))
@@ -2151,12 +2154,15 @@ static int a5xx_post_start(struct adreno_device *adreno_dev)
 		*cmds++ = 0xF;
 	}
 
-	if (adreno_is_preemption_enabled(adreno_dev))
+	if (adreno_is_preemption_enabled(adreno_dev)) {
 		cmds += _preemption_init(adreno_dev, rb, cmds, NULL);
+		rb->_wptr = rb->_wptr - (42 - (cmds - start));
+		ret = adreno_ringbuffer_submit_spin_nosync(rb, NULL, 2000);
+	} else {
+		rb->_wptr = rb->_wptr - (42 - (cmds - start));
+		ret = adreno_ringbuffer_submit_spin(rb, NULL, 2000);
+	}
 
-	rb->_wptr = rb->_wptr - (42 - (cmds - start));
-
-	ret = adreno_ringbuffer_submit_spin(rb, NULL, 2000);
 	if (ret)
 		adreno_spin_idle_debug(adreno_dev,
 				"hw initialization failed to idle\n");
@@ -2264,6 +2270,7 @@ static int _me_init_ucode_workarounds(struct adreno_device *adreno_dev)
 	switch (ADRENO_GPUREV(adreno_dev)) {
 	case ADRENO_REV_A510:
 		return 0x00000001; /* Ucode workaround for token end syncs */
+	case ADRENO_REV_A504:
 	case ADRENO_REV_A505:
 	case ADRENO_REV_A506:
 	case ADRENO_REV_A530:
@@ -2493,7 +2500,7 @@ static int _load_firmware(struct kgsl_device *device, const char *fwfile,
 
 	memcpy(firmware->memdesc.hostptr, &fw->data[4], fw->size - 4);
 	firmware->size = (fw->size - 4) / sizeof(uint32_t);
-	firmware->version = *(unsigned int *)&fw->data[4];
+	firmware->version = adreno_get_ucode_version((u32 *)fw->data);
 
 done:
 	release_firmware(fw);
@@ -3311,11 +3318,11 @@ static void a5xx_gpmu_int_callback(struct adreno_device *adreno_dev, int bit)
 }
 
 /*
- * a5x_gpc_err_int_callback() - Isr for GPC error interrupts
+ * a5xx_gpc_err_int_callback() - Isr for GPC error interrupts
  * @adreno_dev: Pointer to device
  * @bit: Interrupt bit
  */
-void a5x_gpc_err_int_callback(struct adreno_device *adreno_dev, int bit)
+static void a5xx_gpc_err_int_callback(struct adreno_device *adreno_dev, int bit)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
@@ -3325,7 +3332,7 @@ void a5x_gpc_err_int_callback(struct adreno_device *adreno_dev, int bit)
 	 * with help of register dump.
 	 */
 
-	KGSL_DRV_CRIT(device, "RBBM: GPC error\n");
+	KGSL_DRV_CRIT_RATELIMIT(device, "RBBM: GPC error\n");
 	adreno_irqctrl(adreno_dev, 0);
 
 	/* Trigger a fault in the dispatcher - this will effect a restart */
@@ -3363,7 +3370,7 @@ static struct adreno_irq_funcs a5xx_irq_funcs[32] = {
 	ADRENO_IRQ_CALLBACK(a5xx_err_callback),
 	/* 6 - RBBM_ATB_ASYNC_OVERFLOW */
 	ADRENO_IRQ_CALLBACK(a5xx_err_callback),
-	ADRENO_IRQ_CALLBACK(a5x_gpc_err_int_callback), /* 7 - GPC_ERR */
+	ADRENO_IRQ_CALLBACK(a5xx_gpc_err_int_callback), /* 7 - GPC_ERR */
 	ADRENO_IRQ_CALLBACK(a5xx_preempt_callback),/* 8 - CP_SW */
 	ADRENO_IRQ_CALLBACK(a5xx_cp_hw_err_callback), /* 9 - CP_HW_ERROR */
 	/* 10 - CP_CCU_FLUSH_DEPTH_TS */

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, 2019, Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, 2019-2020, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -68,18 +68,18 @@ static struct usb_interface_descriptor intf_in_only_desc = {
 	.bLength            =	sizeof(intf_in_only_desc),
 	.bDescriptorType    =	USB_DT_INTERFACE,
 	.bNumEndpoints      =	1,
-	.bInterfaceClass    =	0xFF,
-	.bInterfaceSubClass =	0xFF,
-	.bInterfaceProtocol =	0x30,
+	.bInterfaceClass    =	USB_CLASS_VENDOR_SPEC,
+	.bInterfaceSubClass =	USB_SUBCLASS_VENDOR_SPEC,
+	/* .bInterfaceProtocol = DYNAMIC */
 };
 
 static struct usb_interface_descriptor intf_desc = {
 	.bLength            =	sizeof(intf_desc),
 	.bDescriptorType    =	USB_DT_INTERFACE,
 	.bNumEndpoints      =	2,
-	.bInterfaceClass    =	0xFF,
-	.bInterfaceSubClass =	0xFF,
-	.bInterfaceProtocol =	0x30,
+	.bInterfaceClass    =	USB_CLASS_VENDOR_SPEC,
+	.bInterfaceSubClass =	USB_SUBCLASS_VENDOR_SPEC,
+	/* .bInterfaceProtocol = DYNAMIC */
 };
 
 static struct usb_endpoint_descriptor hs_bulk_in_desc = {
@@ -577,6 +577,15 @@ static void mdm_data_start_rx(struct mdm_data_port *port)
 	if (!ep) {
 		spin_unlock_irqrestore(&port->rx_lock, flags);
 		return;
+	}
+
+	if (!test_bit(CH_READY, &port->bridge_sts)) {
+		while (!list_empty(&port->rx_idle)) {
+			req = list_first_entry(&port->rx_idle,
+						struct usb_request, list);
+			list_del(&req->list);
+			usb_ep_free_request(ep, req);
+		}
 	}
 
 	while (atomic_read(&port->connected) && !list_empty(&port->rx_idle)) {
@@ -1142,6 +1151,15 @@ static int mdm_data_bind(struct usb_configuration *c, struct usb_function *f)
 	}
 
 	data_desc->bInterfaceNumber = usb_interface_id(c, f);
+
+	status = bridge_id_to_protocol(id);
+	if (status < 0) {
+		pr_err("%s: Invalid port\n", __func__);
+		return status;
+	}
+
+	data_desc->bInterfaceProtocol = status;
+
 	status = usb_string_id(cdev);
 	if (status < 0)
 		return status;

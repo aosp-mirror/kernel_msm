@@ -941,6 +941,10 @@ static void receive_file_work(struct work_struct *data)
 		mtp_log("- count(%lld) not multiple of mtu(%d)\n",
 						count, dev->ep_out->maxpacket);
 	mutex_lock(&dev->read_mutex);
+	if (dev->state == STATE_OFFLINE) {
+		r = -EIO;
+		goto fail;
+	}
 	while (count > 0 || write_req) {
 		if (count > 0) {
 			/* queue a request */
@@ -1023,6 +1027,7 @@ static void receive_file_work(struct work_struct *data)
 			read_req = NULL;
 		}
 	}
+fail:
 	mutex_unlock(&dev->read_mutex);
 	mtp_log("returning %d\n", r);
 	/* write the result */
@@ -1120,17 +1125,14 @@ static long mtp_send_receive_ioctl(struct file *fp, unsigned int code,
 	 * in kernel context, which is necessary for vfs_read and
 	 * vfs_write to use our buffers in the kernel address space.
 	 */
-	dev->xfer_result = 0;
-	if (dev->xfer_file_length) {
-		queue_work(dev->wq, work);
-		/* wait for operation to complete */
-		flush_workqueue(dev->wq);
-
-		/* read the result */
-		smp_rmb();
-	}
-	ret = dev->xfer_result;
+	queue_work(dev->wq, work);
+	/* wait for operation to complete */
+	flush_workqueue(dev->wq);
 	fput(filp);
+
+	/* read the result */
+	smp_rmb();
+	ret = dev->xfer_result;
 
 fail:
 	spin_lock_irq(&dev->lock);

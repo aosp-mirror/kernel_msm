@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2015, 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -588,26 +588,8 @@ static int diag_bridge_resume(struct usb_interface *ifc)
 static const struct usb_device_id diag_bridge_ids[] = {
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x901F, 0),
 	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90EF, 4),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90F0, 4),
-	.driver_info =  DEV_ID(0), },
 	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90F3, 0),
 	.driver_info =	DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x90FD, 0),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9102, 0),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9103, 0),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9104, 0),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9105, 0),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9106, 0),
-	.driver_info =  DEV_ID(0), },
-	{ USB_DEVICE_INTERFACE_NUMBER(0x5c6, 0x9107, 0),
-	.driver_info =  DEV_ID(0), },
 
 	{} /* terminating entry */
 };

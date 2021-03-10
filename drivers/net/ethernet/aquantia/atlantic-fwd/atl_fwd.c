@@ -1,10 +1,12 @@
-/*
- * aQuantia Corporation Network Driver
- * Copyright (C) 2018 aQuantia Corporation. All rights reserved
+// SPDX-License-Identifier: GPL-2.0-only
+/* Atlantic Network Driver
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
+ * Copyright (C) 2018 aQuantia Corporation
+ * Copyright (C) 2019-2020 Marvell International Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #include <linux/etherdevice.h>
@@ -360,7 +362,7 @@ void atl_fwd_release_ring(struct atl_fwd_ring *ring)
 			hwring->size * sizeof(*hwring->descs), hwring->daddr,
 			ops);
 	else
-		atl_free_descs(nic, &ring->hw);
+		atl_free_descs(nic, &ring->hw, 0);
 	kfree(ring);
 }
 EXPORT_SYMBOL(atl_fwd_release_ring);
@@ -459,7 +461,7 @@ struct atl_fwd_ring *atl_fwd_request_ring(struct net_device *ndev,
 		} else
 			ret = PTR_ERR(descs);
 	} else
-		ret = atl_alloc_descs(nic, hwring);
+		ret = atl_alloc_descs(nic, hwring, 0);
 
 	if (ret) {
 		atl_nic_err("%s: couldn't alloc the ring\n", __func__);
@@ -492,7 +494,7 @@ free_descs:
 			hwring->size * sizeof(*hwring->descs), hwring->daddr,
 			ops);
 	else
-		atl_free_descs(nic, hwring);
+		atl_free_descs(nic, hwring, 0);
 
 free_ring:
 	kfree(ring);
@@ -786,6 +788,11 @@ EXPORT_SYMBOL(atl_fwd_disable_event);
 
 int atl_fwd_receive_skb(struct net_device *ndev, struct sk_buff *skb)
 {
+	struct atl_nic *nic = netdev_priv(ndev);
+
+	nic->stats.rx_fwd.packets++;
+	nic->stats.rx_fwd.bytes += skb->len;
+
 	skb->protocol = eth_type_trans(skb, ndev);
 	return netif_rx(skb);
 }
@@ -793,8 +800,13 @@ EXPORT_SYMBOL(atl_fwd_receive_skb);
 
 int atl_fwd_napi_receive_skb(struct net_device *ndev, struct sk_buff *skb)
 {
-       skb->protocol = eth_type_trans(skb, ndev);
-       return netif_receive_skb(skb);
+	struct atl_nic *nic = netdev_priv(ndev);
+
+	nic->stats.rx_fwd.packets++;
+	nic->stats.rx_fwd.bytes += skb->len;
+
+	skb->protocol = eth_type_trans(skb, ndev);
+	return netif_receive_skb(skb);
 }
 EXPORT_SYMBOL(atl_fwd_napi_receive_skb);
 

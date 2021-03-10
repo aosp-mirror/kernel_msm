@@ -50,14 +50,12 @@ struct ssc_qup_nb {
 
 /**
  * struct ssc_qup_ssr	GENI Serial Engine SSC qup SSR Structure.
- * @probe_completed	To ignore up notification during probe.
  * @is_ssr_down	To check SE status.
  * @subsys_name	Subsystem name for ssr registration.
  * @active_list_head	List Head of all client in SSC QUPv3.
  */
 struct ssc_qup_ssr {
 	struct ssc_qup_nb ssc_qup_nb;
-	bool probe_completed;
 	bool is_ssr_down;
 	const char *subsys_name;
 	struct list_head active_list_head;
@@ -68,13 +66,11 @@ struct ssc_qup_ssr {
  * @active_list	List of SSC qup SE clients.
  * @force_suspend	Function pointer for Subsystem shutdown case.
  * @force_resume	Function pointer for Subsystem restart case.
- * @ssr_enable		To check SSC Qup SSR enable status.
  */
 struct se_rsc_ssr {
 	struct list_head active_list;
-	int (*force_suspend)(struct device *ctrl_dev);
-	int (*force_resume)(struct device *ctrl_dev);
-	bool ssr_enable;
+	void (*force_suspend)(struct device *ctrl_dev);
+	void (*force_resume)(struct device *ctrl_dev);
 };
 
 /**
@@ -386,6 +382,7 @@ struct se_geni_rsc {
 #define TX_EOT			(BIT(1))
 #define TX_SBE			(BIT(2))
 #define TX_RESET_DONE		(BIT(3))
+#define TX_GENI_CANCEL_IRQ	(BIT(14))
 
 /* SE_DMA_RX_IRQ_STAT Register fields */
 #define RX_DMA_DONE		(BIT(0))
@@ -394,8 +391,19 @@ struct se_geni_rsc {
 #define RX_RESET_DONE		(BIT(3))
 #define RX_FLUSH_DONE		(BIT(4))
 #define RX_GENI_GP_IRQ		(GENMASK(10, 5))
-#define RX_GENI_CANCEL_IRQ	(BIT(11))
+/*
+ * QUPs which have HW version <=1.2 11th bit of
+ * DMA_RX_IRQ_STAT register denotes RX_GENI_CANCEL_IRQ bit.
+ */
+#define RX_GENI_CANCEL_IRQ(n)	(((n.hw_major_ver <= 1) &&\
+				(n.hw_minor_ver <= 2)) ? BIT(11) : BIT(14))
 #define RX_GENI_GP_IRQ_EXT	(GENMASK(13, 12))
+
+/* DMA DEBUG Register fields */
+#define DMA_TX_ACTIVE		(BIT(0))
+#define DMA_RX_ACTIVE		(BIT(1))
+#define DMA_TX_STATE		(GENMASK(7, 4))
+#define DMA_RX_STATE		(GENMASK(11, 8))
 
 #define DEFAULT_BUS_WIDTH	(4)
 #define DEFAULT_SE_CLK		(19200000)

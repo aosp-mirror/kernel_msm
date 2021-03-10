@@ -642,6 +642,7 @@ int32_t cam_context_flush_ctx_to_hw(struct cam_context *ctx)
 			ctx->dev_name, ctx->ctx_id);
 
 	flush_args.num_req_pending = 0;
+	flush_args.last_flush_req = ctx->last_flush_req;
 	while (true) {
 		spin_lock(&ctx->lock);
 		if (list_empty(&temp_list)) {
@@ -1052,8 +1053,8 @@ static int cam_context_dump_context(struct cam_context *ctx,
 	struct cam_context_dump_header *hdr;
 	char *dst;
 	uint64_t *addr, *start;
-	uintptr_t cpu_addr;
-	size_t    buf_len;
+	uintptr_t cpu_addr = 0;
+	size_t    buf_len = 0;
 	uint32_t min_len, remain_len;
 	struct cam_ctx_request *req;
 	int i;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -74,7 +74,7 @@
 
 #define CAMX_CCI_DEV_NAME "cam-cci-driver"
 
-#define MAX_CCI 2
+#define MAX_CCI 4
 
 #define PRIORITY_QUEUE (QUEUE_0)
 #define SYNC_QUEUE (QUEUE_1)
@@ -324,7 +324,5 @@ static inline struct v4l2_subdev *cam_cci_get_subdev(int cci_dev_index)
 }
 #endif
 
-#define VIDIOC_MSM_CCI_CFG \
-	_IOWR('V', BASE_VIDIOC_PRIVATE + 23, struct cam_cci_ctrl *)
 
 #endif /* _CAM_CCI_DEV_H_ */

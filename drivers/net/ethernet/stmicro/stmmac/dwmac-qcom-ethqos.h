@@ -28,29 +28,71 @@
 #include <linux/uaccess.h>
 
 extern void *ipc_stmmac_log_ctxt;
+extern void *ipc_stmmac_log_ctxt_low;
 
 #define QCOM_ETH_QOS_MAC_ADDR_LEN 6
 #define QCOM_ETH_QOS_MAC_ADDR_STR_LEN 18
 
 #define IPCLOG_STATE_PAGES 50
 #define MAX_QMP_MSG_SIZE 96
+#define IPC_RATELIMIT_BURST 1
 #define __FILENAME__ (strrchr(__FILE__, '/') ? \
 		strrchr(__FILE__, '/') + 1 : __FILE__)
 
 #define DRV_NAME "qcom-ethqos"
 #define ETHQOSDBG(fmt, args...) \
-	pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+do {\
+	pr_debug(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+	if (ipc_stmmac_log_ctxt) { \
+		ipc_log_string(ipc_stmmac_log_ctxt, \
+		"%s: %s[%u]:[stmmac] DEBUG:" fmt, __FILENAME__,\
+		__func__, __LINE__, ## args); \
+	} \
+} while (0)
 #define ETHQOSERR(fmt, args...) \
 do {\
 	pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
 	if (ipc_stmmac_log_ctxt) { \
 		ipc_log_string(ipc_stmmac_log_ctxt, \
-		"%s: %s[%u]:[emac] ERROR:" fmt, __FILENAME__,\
+		"%s: %s[%u]:[stmmac] ERROR:" fmt, __FILENAME__,\
 		__func__, __LINE__, ## args); \
 	} \
 } while (0)
 #define ETHQOSINFO(fmt, args...) \
-	pr_info(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+do {\
+	pr_info(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args);\
+	if (ipc_stmmac_log_ctxt) { \
+		ipc_log_string(ipc_stmmac_log_ctxt, \
+		"%s: %s[%u]:[stmmac] INFO:" fmt, __FILENAME__,\
+		__func__, __LINE__, ## args); \
+	} \
+} while (0)
+
+#define IPC_LOW(fmt, args...) \
+do {\
+	if (ipc_stmmac_log_ctxt_low) { \
+		ipc_log_string(ipc_stmmac_log_ctxt_low, \
+		"%s: %s[%u]:[stmmac] DEBUG:" fmt, __FILENAME__, \
+		__func__, __LINE__, ## args); \
+	} \
+} while (0)
+
+/* Printing one error message in 5 seconds if multiple error messages
+ * are coming back to back.
+ */
+#define pr_err_ratelimited_ipc(fmt, ...) \
+	printk_ratelimited_ipc(KERN_ERR pr_fmt(fmt), ##__VA_ARGS__)
+#define printk_ratelimited_ipc(fmt, ...) \
+({ \
+	static DEFINE_RATELIMIT_STATE(_rs, DEFAULT_RATELIMIT_INTERVAL, \
+				       IPC_RATELIMIT_BURST); \
+	if (__ratelimit(&_rs)) \
+		printk(fmt, ##__VA_ARGS__); \
+})
+#define IPCERR_RL(fmt, args...) \
+	pr_err_ratelimited_ipc(DRV_NAME " %s:%d " fmt, __func__,\
+	__LINE__, ## args)
+
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
 #define SDCC_HC_REG_DDR_CONFIG		0xC
@@ -180,18 +222,22 @@ do {\
 #define ATH8035_PHY_ID 0x004dd072
 #define QCA8337_PHY_ID 0x004dd036
 #define ATH8030_PHY_ID 0x004dd076
-#define MICREL_PHY_ID PHY_ID_KSZ9031
 #define DWC_ETH_QOS_MICREL_PHY_INTCS 0x1b
 #define DWC_ETH_QOS_MICREL_PHY_CTL 0x1f
 #define DWC_ETH_QOS_BASIC_STATUS     0x0001
 #define LINK_STATE_MASK 0x4
 #define AUTONEG_STATE_MASK 0x20
 #define MICREL_LINK_UP_INTR_STATUS BIT(0)
+#define PHY_WOL 0x1
 
 #define VOTE_IDX_0MBPS 0
 #define VOTE_IDX_10MBPS 1
 #define VOTE_IDX_100MBPS 2
 #define VOTE_IDX_1000MBPS 3
+
+//Mac config
+#define MAC_CONFIGURATION 0x0
+#define MAC_LM BIT(12)
 
 #define TLMM_BASE_ADDRESS (tlmm_central_base_addr)
 
@@ -287,9 +333,29 @@ static inline u32 PPSX_MASK(u32 x)
 }
 
 enum IO_MACRO_PHY_MODE {
-		RGMII_MODE,
-		RMII_MODE,
-		MII_MODE
+	RGMII_MODE,
+	RMII_MODE,
+	MII_MODE
+};
+
+enum loopback_mode {
+	DISABLE_LOOPBACK = 0,
+	ENABLE_IO_MACRO_LOOPBACK,
+	ENABLE_MAC_LOOPBACK,
+	ENABLE_PHY_LOOPBACK
+};
+
+enum phy_power_mode {
+	DISABLE_PHY_IMMEDIATELY = 1,
+	ENABLE_PHY_IMMEDIATELY,
+	DISABLE_PHY_AT_SUSPEND_ONLY,
+	DISABLE_PHY_SUSPEND_ENABLE_RESUME,
+	DISABLE_PHY_ON_OFF,
+};
+
+enum current_phy_state {
+	PHY_IS_ON = 0,
+	PHY_IS_OFF,
 };
 
 #define RGMII_IO_BASE_ADDRESS ethqos->rgmii_base
@@ -308,9 +374,9 @@ enum IO_MACRO_PHY_MODE {
 #define RGMII_IO_MACRO_CONFIG_RGRD(data)\
 	((data) = (readl_relaxed((RGMII_IO_MACRO_CONFIG_RGOFFADDR))))
 
-#define RGMII_GPIO_CFG_TX_INT_MASK (unsigned long)(0x3)
+#define RGMII_GPIO_CFG_TX_INT_MASK (unsigned long)(0x7)
 
-#define RGMII_GPIO_CFG_TX_INT_WR_MASK (unsigned long)(0xfff9ffff)
+#define RGMII_GPIO_CFG_TX_INT_WR_MASK (unsigned long)(0xfff1ffff)
 
 #define RGMII_GPIO_CFG_TX_INT_UDFWR(data) do {\
 	unsigned long v;\
@@ -322,37 +388,68 @@ enum IO_MACRO_PHY_MODE {
 
 #define RGMII_GPIO_CFG_RX_INT_MASK (unsigned long)(0x3)
 
-#define RGMII_GPIO_CFG_RX_INT_WR_MASK (unsigned long)(0xffe7ffff)
+#define RGMII_GPIO_CFG_RX_INT_WR_MASK (unsigned long)(0xFFCFFFFF)
 
 #define RGMII_GPIO_CFG_RX_INT_UDFWR(data) do {\
 	unsigned long v;\
 	RGMII_IO_MACRO_CONFIG_RGRD(v);\
 	v = ((v & RGMII_GPIO_CFG_RX_INT_WR_MASK) | \
-	((data & RGMII_GPIO_CFG_RX_INT_MASK) << 19));\
+	((data & RGMII_GPIO_CFG_RX_INT_MASK) << 20));\
 	RGMII_IO_MACRO_CONFIG_RGWR(v);\
 } while (0)
+
+enum CV2X_MODE {
+	CV2X_MODE_DISABLE = 0x0,
+	CV2X_MODE_MDM,
+	CV2X_MODE_AP
+};
+
+struct ethqos_vlan_info {
+	u16 vlan_id;
+	u32 vlan_offset;
+	u32 rx_queue;
+	bool available;
+};
 
 struct ethqos_emac_por {
 	unsigned int offset;
 	unsigned int value;
 };
 
-static const struct ethqos_emac_por emac_v2_3_0_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x00C01343 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x00000000 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x00002060 },
+struct ethqos_emac_driver_data {
+	struct ethqos_emac_por *por;
+	unsigned int num_por;
 };
 
-static const struct ethqos_emac_por emac_v2_3_2_por[] = {
-	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0x00C01343 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
-	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
-	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
-	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
-	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x00002060 },
+struct ethqos_io_macro {
+	bool rx_prog_swap;
+	bool rx_dll_bypass;
+};
+
+struct ethqos_extra_dma_stats {
+	/* DMA status registers for all channels [0-4] */
+	unsigned long dma_ch_status[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_intr_enable[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_intr_status;
+	unsigned long dma_debug_status0;
+	unsigned long dma_debug_status1;
+
+	/* RX DMA descriptor status registers for all channels [0-4] */
+	unsigned long dma_ch_rx_control[MTL_MAX_RX_QUEUES];
+	unsigned long dma_ch_rxdesc_list_addr[MTL_MAX_RX_QUEUES];
+	unsigned long dma_ch_rxdesc_ring_len[MTL_MAX_RX_QUEUES];
+	unsigned long dma_ch_curr_app_rxdesc[MTL_MAX_RX_QUEUES];
+	unsigned long dma_ch_rxdesc_tail_ptr[MTL_MAX_RX_QUEUES];
+	unsigned long dma_ch_curr_app_rxbuf[MTL_MAX_RX_QUEUES];
+	unsigned long dma_ch_miss_frame_count[MTL_MAX_RX_QUEUES];
+
+	/* TX DMA descriptors status for all channels [0-5] */
+	unsigned long dma_ch_tx_control[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_txdesc_list_addr[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_txdesc_ring_len[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_curr_app_txdesc[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_txdesc_tail_ptr[MTL_MAX_TX_QUEUES];
+	unsigned long dma_ch_curr_app_txbuf[MTL_MAX_TX_QUEUES];
 };
 
 struct qcom_ethqos {
@@ -367,12 +464,16 @@ struct qcom_ethqos {
 	unsigned int speed;
 	unsigned int vote_idx;
 
+	struct iommu_domain *iommu_domain;
+	unsigned int *emac_reg_base_address;
+	unsigned int *rgmii_reg_base_address;
+
 	int gpio_phy_intr_redirect;
 	u32 phy_intr;
 	/* Work struct for handling phy interrupt */
 	struct work_struct emac_phy_work;
 
-	const struct ethqos_emac_por *por;
+	struct ethqos_emac_por *por;
 	unsigned int num_por;
 	unsigned int emac_ver;
 
@@ -395,6 +496,10 @@ struct qcom_ethqos {
 	dev_t avb_class_b_dev_t;
 	struct cdev *avb_class_b_cdev;
 	struct class *avb_class_b_class;
+
+	dev_t emac_dev_t;
+	struct cdev *emac_cdev;
+	struct class *emac_class;
 
 	unsigned long avb_class_a_intr_cnt;
 	unsigned long avb_class_b_intr_cnt;
@@ -429,6 +534,32 @@ struct qcom_ethqos {
 	bool ipa_enabled;
 	/* Key Performance Indicators */
 	bool print_kpi;
+
+	unsigned int emac_phy_off_suspend;
+	int loopback_speed;
+	enum loopback_mode current_loopback;
+	enum phy_power_mode current_phy_mode;
+	enum current_phy_state phy_state;
+	/*Backup variable for phy loopback*/
+	int backup_duplex;
+	int backup_speed;
+	u32 bmcr_backup;
+	/*Backup variable for suspend resume*/
+	int backup_suspend_speed;
+	u32 backup_bmcr;
+	unsigned backup_autoneg:1;
+
+	/* IO Macro parameters */
+	struct ethqos_io_macro io_macro;
+
+	/* QMI over ethernet parameter */
+	u32 qoe_mode;
+	struct ethqos_vlan_info qoe_vlan;
+	u32 cv2x_mode;
+	struct ethqos_vlan_info cv2x_vlan;
+	unsigned char cv2x_dev_addr[ETH_ALEN];
+
+	struct ethqos_extra_dma_stats xstats;
 };
 
 struct pps_cfg {
@@ -484,6 +615,9 @@ bool qcom_ethqos_is_phy_link_up(struct qcom_ethqos *ethqos);
 void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos);
 
 int ppsout_config(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg);
+int ethqos_phy_power_on(struct qcom_ethqos *ethqos);
+void  ethqos_phy_power_off(struct qcom_ethqos *ethqos);
+void ethqos_reset_phy_enable_interrupt(struct qcom_ethqos *ethqos);
 
 u16 dwmac_qcom_select_queue(
 	struct net_device *dev,
@@ -497,8 +631,9 @@ u16 dwmac_qcom_select_queue(
 #define PTP_UDP_EV_PORT 0x013F
 #define PTP_UDP_GEN_PORT 0x0140
 
-#define IPA_DMA_TX_CH 0
-#define IPA_DMA_RX_CH 0
+
+#define CV2X_TAG_TX_CHANNEL 3
+#define QMI_TAG_TX_CHANNEL 2
 
 #define VLAN_TAG_UCP_SHIFT 13
 #define CLASS_A_TRAFFIC_UCP 3
@@ -541,8 +676,10 @@ struct dwmac_qcom_avb_algorithm {
 	enum dwmac_qcom_queue_operating_mode op_mode;
 };
 
-void dwmac_qcom_program_avb_algorithm(
+int dwmac_qcom_program_avb_algorithm(
 	struct stmmac_priv *priv, struct ifr_data_struct *req);
 unsigned int dwmac_qcom_get_plat_tx_coal_frames(
 	struct sk_buff *skb);
+
+unsigned int dwmac_qcom_get_eth_type(unsigned char *buf);
 #endif

@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1908,6 +1908,10 @@ int cam_req_mgr_process_flush_req(void *priv, void *data)
 		}
 		in_q->wr_idx = 0;
 		in_q->rd_idx = 0;
+		complete(&link->workq_comp);
+		mutex_unlock(&link->req.lock);
+
+		return rc;
 	} else if (flush_info->flush_type ==
 		CAM_REQ_MGR_FLUSH_TYPE_CANCEL_REQ) {
 		idx = __cam_req_mgr_find_slot_for_req(in_q, flush_info->req_id);
@@ -2242,21 +2246,65 @@ static int cam_req_mgr_process_trigger(void *priv, void *data)
 	task_data = (struct crm_task_payload *)data;
 	trigger_data = (struct cam_req_mgr_trigger_notify *)&task_data->u;
 
-	CAM_DBG(CAM_REQ, "link_hdl %x frame_id %lld, trigger %x\n",
+	CAM_DBG(CAM_REQ, "link_hdl %x frame_id %lld, trigger %x req_id %llu",
 		trigger_data->link_hdl,
 		trigger_data->frame_id,
-		trigger_data->trigger);
+		trigger_data->trigger,
+		trigger_data->req_id);
 
 	in_q = link->req.in_q;
 
 	mutex_lock(&link->req.lock);
 
+	CAM_DBG(CAM_REQ, "++link_hdl %x frame_id %lld, trigger %x req_id %llu",
+		trigger_data->link_hdl,
+		trigger_data->frame_id,
+		trigger_data->trigger,
+		trigger_data->req_id);
+
 	if (trigger_data->trigger == CAM_TRIGGER_POINT_SOF) {
 		idx = __cam_req_mgr_find_slot_for_req(in_q,
 			trigger_data->req_id);
 		if (idx >= 0) {
-			if (idx == in_q->last_applied_idx)
+			if (idx == in_q->last_applied_idx) {
+				CAM_DBG(CAM_REQ,
+				"Reset last applied idx (%d) from req_id %llu",
+				in_q->last_applied_idx, trigger_data->req_id);
 				in_q->last_applied_idx = -1;
+			}
+			/*
+			 * In case of idx is matching the current rd_idx
+			 * increment the rd_idx to process next requests
+			 */
+			if (idx == in_q->rd_idx) {
+ #ifdef DEBUG_Q_DUMP
+				//DUMP ALL Qs
+				if (0 == (trigger_data->frame_id % 100)) {
+					int i;
+					//IN Q
+					CAM_WARN(CAM_REQ,
+					"== IN Q rd:%d wr:%d last:%d ==",
+					in_q->rd_idx, in_q->wr_idx,
+					in_q->last_applied_idx);
+					for (i = 0; i < in_q->num_slots; i++) {
+						CAM_WARN(CAM_REQ,
+						"%d-idx:%d req:%d st:%d skip:%d sync:%d rcovr:%d",
+						i, in_q->slot[i].idx,
+						in_q->slot[i].req_id,
+						in_q->slot[i].status,
+						in_q->slot[i].skip_idx,
+						in_q->slot[i].sync_mode,
+						in_q->slot[i].recover);
+					}
+				}
+#endif
+				CAM_DBG(CAM_REQ,
+				"Increment rd_idx %d from req_id %llu",
+				in_q->rd_idx,
+				trigger_data->req_id);
+				__cam_req_mgr_inc_idx(&in_q->rd_idx,
+				1, in_q->num_slots);
+			}
 			__cam_req_mgr_reset_req_slot(link, idx);
 		}
 	}
@@ -3386,10 +3434,21 @@ int cam_req_mgr_flush_requests(
 	init_completion(&link->workq_comp);
 	rc = cam_req_mgr_workq_enqueue_task(task, link, CRM_TASK_PRIORITY_0);
 
+	if (rc < 0) {
+		CAM_ERR(CAM_CRM, "Enqueue workq task failed for flush slotq");
+		goto end;
+	}
+
 	/* Blocking call */
 	rc = wait_for_completion_timeout(
 		&link->workq_comp,
 		msecs_to_jiffies(CAM_REQ_MGR_SCHED_REQ_TIMEOUT));
+	if (rc <= 0) {
+		CAM_ERR(CAM_CRM, "Flushing CRM slot queue timedout rc=%d", rc);
+		rc = -ETIMEDOUT;
+	} else {
+		rc = 0;
+	}
 end:
 	mutex_unlock(&g_crm_core_dev->crm_lock);
 	return rc;

@@ -227,15 +227,15 @@
 		};
 	};
 
-	qcom,cam_smmu {
+	cam_smmu: qcom,cam_smmu {
 		compatible = "qcom,msm-cam-smmu";
 		status = "ok";
 
 		msm_cam_smmu_ife {
 			compatible = "qcom,msm-cam-smmu-cb";
-			iommus = <&apps_smmu 0x820 0x0>,
+			iommus = <&apps_smmu 0x820 0x40>,
 				<&apps_smmu 0x840 0x0>,
-				<&apps_smmu 0x860 0x0>;
+				<&apps_smmu 0x860 0x40>;
 			label = "ife";
 			ife_iova_mem_map: iova-mem-map {
 				/* IO region is approximately 3.4 GB */
@@ -583,7 +583,7 @@
 		status = "ok";
 	};
 
-	qcom,cam-isp {
+	cam_isp_mgr: qcom,cam-isp {
 		compatible = "qcom,cam-isp";
 		arch-compat = "ife";
 		status = "ok";
@@ -959,7 +959,7 @@
 		status = "ok";
 	};
 
-	qcom,cam-jpeg {
+	cam_jpeg_mgr: qcom,cam-jpeg {
 		compatible = "qcom,cam-jpeg";
 		compat-hw-name = "qcom,jpegenc",
 			"qcom,jpegdma";
@@ -1030,7 +1030,7 @@
 		status = "ok";
 	};
 
-	qcom,cam-lrme {
+	cam_lrme_mgr: qcom,cam-lrme {
 		compatible = "qcom,cam-lrme";
 		arch-compat = "lrme";
 		status = "ok";

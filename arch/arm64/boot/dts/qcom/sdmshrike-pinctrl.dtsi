@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,6 +57,52 @@
 		ufs_dev_reset_deassert: ufs_dev_reset_deassert {
 			config {
 				pins = "ufs_reset";
+				bias-pull-down;		/* default: pull down */
+				/*
+				 * default: 3.1 mA
+				 * check comments under ufs_dev_reset_assert
+				 */
+				drive-strength = <8>;
+				output-high; /* active low reset */
+			};
+		};
+
+		ufs0_dev_reset_assert: ufs0_dev_reset_assert {
+			config {
+				pins = "ufs0_reset";
+				bias-pull-down;		/* default: pull down */
+				/*
+				 * UFS_RESET driver strengths are having
+				 * different values/steps compared to typical
+				 * GPIO drive strengths.
+				 *
+				 * Following table clarifies:
+				 *
+				 * HDRV value | UFS_RESET | Typical GPIO
+				 *   (dec)    |   (mA)    |    (mA)
+				 *     0      |   0.8     |    2
+				 *     1      |   1.55    |    4
+				 *     2      |   2.35    |    6
+				 *     3      |   3.1     |    8
+				 *     4      |   3.9     |    10
+				 *     5      |   4.65    |    12
+				 *     6      |   5.4     |    14
+				 *     7      |   6.15    |    16
+				 *
+				 * POR value for UFS_RESET HDRV is 3 which means
+				 * 3.1mA and we want to use that. Hence just
+				 * specify 8mA to "drive-strength" binding and
+				 * that should result into writing 3 to HDRV
+				 * field.
+				 */
+				drive-strength = <8>;	/* default: 3.1 mA */
+				output-low; /* active low reset */
+			};
+		};
+
+		ufs0_dev_reset_deassert: ufs0_dev_reset_deassert {
+			config {
+				pins = "ufs0_reset";
 				bias-pull-down;		/* default: pull down */
 				/*
 				 * default: 3.1 mA
@@ -2469,6 +2515,118 @@
 			};
 		};
 
+		cci4_active: cci4_active {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio0","gpio1";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio0","gpio1";
+				bias-pull-up; /* PULL UP*/
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci4_suspend: cci4_suspend {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio0","gpio1";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio0","gpio1";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci5_active: cci5_active {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio2","gpio3";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio2","gpio3";
+				bias-pull-up; /* PULL UP*/
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci5_suspend: cci5_suspend {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio2","gpio3";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio2","gpio3";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci6_active: cci6_active {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio39","gpio40";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio39","gpio40";
+				bias-pull-up; /* PULL UP*/
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci6_suspend: cci6_suspend {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio39","gpio40";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio39","gpio40";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci7_active: cci7_active {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio41","gpio42";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio41","gpio42";
+				bias-pull-up; /* PULL UP*/
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cci7_suspend: cci7_suspend {
+			mux {
+				/* CLK, DATA */
+				pins = "gpio41","gpio42";
+				function = "cci_i2c";
+			};
+
+			config {
+				pins = "gpio41","gpio42";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
 		fsa_usbc_ana_en_n@100 {
 			fsa_usbc_ana_en: fsa_usbc_ana_en {
 				mux {
@@ -3429,7 +3587,7 @@
 			};
 		};
 
-		cnss_pins {
+		cnss_pins: cnss_pins {
 			cnss_wlan_en_active: cnss_wlan_en_active {
 				mux {
 					pins = "gpio169";
@@ -3585,12 +3743,12 @@
 
 		bt_en_active: bt_en_active {
 			mux {
-				pins = "gpio172";
+				pins = "gpio172", "gpio171";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio172";
+				pins = "gpio172", "gpio171";
 				drive-strength = <2>;
 				bias-pull-down;
 			};
@@ -3651,8 +3809,8 @@
 				config {
 					pins = "gpio0", "gpio1", "gpio2",
 								"gpio3";
-					drive-strength = <6>;
-					bias-disable;
+					drive-strength = <2>;
+					bias-pull-down;
 				};
 			};
 		};
@@ -3899,6 +4057,75 @@
 					bias-disable;
 				};
 			};
+		};
+
+		qupv3_se4_4uart_pins: qupv3_se4_4uart_pins {
+			qupv3_se4_default_ctsrtsrx:
+				qupv3_se4_default_ctsrtsrx {
+				mux {
+					pins = "gpio51", "gpio52", "gpio54";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio51", "gpio52", "gpio54";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+			qupv3_se4_default_tx: qupv3_se4_default_tx {
+				mux {
+					pins = "gpio53";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio53";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
+			qupv3_se4_ctsrx: qupv3_se4_ctsrx {
+				mux {
+					pins = "gpio51", "gpio54";
+					function = "qup4";
+				};
+
+				config {
+					pins = "gpio51", "gpio54";
+					drive-strength = <2>;
+					bias-disable;
+				};
+			};
+
+			qupv3_se4_rts: qupv3_se4_rts {
+				mux {
+					pins = "gpio52";
+					function = "qup4";
+				};
+
+				config {
+					pins = "gpio52";
+					drive-strength = <2>;
+					bias-pull-down;
+				};
+			};
+
+			qupv3_se4_tx: qupv3_se4_tx {
+				mux {
+					pins = "gpio53";
+					function = "qup4";
+				};
+
+				config {
+					pins = "gpio53";
+					drive-strength = <2>;
+					bias-pull-up;
+				};
+			};
+
 		};
 
 		/* SE 5 pin mappings */
@@ -4843,7 +5070,7 @@
 				config {
 					pins = "gpio85", "gpio86";
 					drive-strength = <2>;
-					bias-disable;
+					bias-pull-down;
 				};
 			};
 		};

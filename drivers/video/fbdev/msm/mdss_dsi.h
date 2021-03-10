@@ -360,6 +360,7 @@ struct dsi_panel_timing {
 	struct mdss_panel_timing timing;
 	uint32_t phy_timing[12];
 	uint32_t phy_timing_8996[40];
+	uint32_t phy_timing_12nm[8];
 	/* DSI_CLKOUT_TIMING_CTRL */
 	char t_clk_post;
 	char t_clk_pre;
@@ -475,6 +476,7 @@ struct mdss_dsi_ctrl_pdata {
 	bool dsi_irq_line;
 	bool dcs_cmd_insert;
 	atomic_t te_irq_ready;
+	bool idle;
 
 	bool cmd_sync_wait_broadcast;
 	bool cmd_sync_wait_trigger;
@@ -506,6 +508,8 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_panel_cmds lp_on_cmds;
 	struct dsi_panel_cmds lp_off_cmds;
 	struct dsi_panel_cmds status_cmds;
+	struct dsi_panel_cmds idle_on_cmds; /* for lp mode */
+	struct dsi_panel_cmds idle_off_cmds;
 	u32 *status_valid_params;
 	u32 *status_cmds_rlen;
 	u32 *status_value;
@@ -656,15 +660,19 @@ void mdss_dsi_shadow_clk_deinit(struct device *dev,
 			struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 int mdss_dsi_pre_clkoff_cb(void *priv,
 			   enum mdss_dsi_clk_type clk_type,
+			   enum mdss_dsi_lclk_type l_type,
 			   enum mdss_dsi_clk_state new_state);
 int mdss_dsi_post_clkoff_cb(void *priv,
 			    enum mdss_dsi_clk_type clk_type,
+			    enum mdss_dsi_lclk_type l_type,
 			    enum mdss_dsi_clk_state curr_state);
 int mdss_dsi_post_clkon_cb(void *priv,
 			   enum mdss_dsi_clk_type clk_type,
+			   enum mdss_dsi_lclk_type l_type,
 			   enum mdss_dsi_clk_state curr_state);
 int mdss_dsi_pre_clkon_cb(void *priv,
 			  enum mdss_dsi_clk_type clk_type,
+			  enum mdss_dsi_lclk_type l_type,
 			  enum mdss_dsi_clk_state new_state);
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable);
 void mdss_dsi_phy_disable(struct mdss_dsi_ctrl_pdata *ctrl);
@@ -718,6 +726,7 @@ void mdss_dsi_cfg_lane_ctrl(struct mdss_dsi_ctrl_pdata *ctrl,
 void mdss_dsi_set_reg(struct mdss_dsi_ctrl_pdata *ctrl, int off,
 	u32 mask, u32 val);
 int mdss_dsi_phy_pll_reset_status(struct mdss_dsi_ctrl_pdata *ctrl);
+int mdss_dsi_panel_power_ctrl(struct mdss_panel_data *pdata, int power_state);
 int mdss_dsi_check_panel_status(struct mdss_dsi_ctrl_pdata *ctrl, void *arg);
 
 void mdss_dsi_debug_bus_init(struct mdss_dsi_data *sdata);
@@ -928,6 +937,11 @@ static inline bool mdss_dsi_is_panel_on_interactive(
 static inline bool mdss_dsi_is_panel_on_lp(struct mdss_panel_data *pdata)
 {
 	return mdss_panel_is_power_on_lp(pdata->panel_info.panel_power_state);
+}
+
+static inline bool mdss_dsi_is_panel_on_ulp(struct mdss_panel_data *pdata)
+{
+	return mdss_panel_is_power_on_ulp(pdata->panel_info.panel_power_state);
 }
 
 static inline bool mdss_dsi_ulps_feature_enabled(

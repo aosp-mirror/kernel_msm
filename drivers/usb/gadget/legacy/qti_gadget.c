@@ -15,6 +15,8 @@
 #include <linux/property.h>
 #include <linux/usb/composite.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
+#include <linux/kernel.h>
 
 struct qti_usb_function {
 	struct usb_function_instance *fi;
@@ -25,6 +27,10 @@ struct qti_usb_function {
 
 #define MAX_FUNC_NAME_LEN	48
 #define MAX_CFG_NAME_LEN       128
+
+#define QW_SIGN_LEN		14
+
+char qw_sign[QW_SIGN_LEN] = "MSFT100";
 
 struct qti_usb_config {
 	struct usb_configuration c;
@@ -40,23 +46,27 @@ struct qti_usb_gadget {
 	struct usb_composite_driver composite;
 
 	const char *composition_funcs;
+	bool enabled;
 	struct device *dev;
+	struct device_node *cfg_node;
 };
 
+extern char *saved_command_line;
 static char manufacturer_string[256] = "Qualcomm Technologies, Inc";
 module_param_string(manufacturer, manufacturer_string,
 		    sizeof(manufacturer_string), 0644);
 MODULE_PARM_DESC(quirks, "String representing name of manufacturer");
 
-static char product_string[256] = "USB_device_SN:12345";
+static char product_string[256] = "USB_device!_SN:12345";
 module_param_string(product, product_string,
 		    sizeof(product_string), 0644);
-MODULE_PARM_DESC(quirks, "String representing product name");
+MODULE_PARM_DESC(quirks, "String representing product string");
 
 static char serialno_string[256] = "12345";
-module_param_string(serialno, serialno_string,
-		    sizeof(serialno_string), 0644);
-MODULE_PARM_DESC(quirks, "String representing name of manufacturer");
+
+static char usb_pid_string[256];
+module_param_string(usb_pid, usb_pid_string, sizeof(usb_pid_string), 0644);
+MODULE_PARM_DESC(quirks, "String representing product id");
 
 /* String Table */
 static struct usb_string strings_dev[] = {
@@ -170,6 +180,12 @@ static int qti_composite_bind(struct usb_gadget *gadget,
 		usb_ep_autoconfig_reset(cdev->gadget);
 	}
 
+	if (cdev->use_os_string) {
+		ret = composite_os_desc_req_prepare(cdev, gadget->ep0);
+		if (ret)
+			goto remove_funcs;
+	}
+
 	usb_ep_autoconfig_reset(cdev->gadget);
 
 	return 0;
@@ -256,6 +272,7 @@ static int qti_usb_func_alloc(struct qti_usb_config *qcfg,
 {
 	struct qti_usb_function *qf;
 	struct usb_function_instance *fi;
+	struct usb_composite_dev *cdev = qcfg->c.cdev;
 	struct usb_function *f;
 	char buf[MAX_FUNC_NAME_LEN];
 	char *func_name;
@@ -307,6 +324,13 @@ static int qti_usb_func_alloc(struct qti_usb_config *qcfg,
 	/* stash the function until we bind it to the gadget */
 	list_add_tail(&f->list, &qcfg->func_list);
 
+	if (!strcmp(instance_name, "mbim")) {
+		cdev->os_desc_config = &qcfg->c;
+		cdev->use_os_string = true;
+		cdev->b_vendor_code = 0xA5;
+		memcpy(cdev->qw_sign, qw_sign, QW_SIGN_LEN);
+	}
+
 	return 0;
 }
 
@@ -343,7 +367,7 @@ static int qti_usb_config_add(struct qti_usb_gadget *gadget,
 				  const char *name, u8 num)
 {
 	struct qti_usb_config *qcfg;
-	int ret = 0;
+	int ret = 0, val = 0;
 
 	qcfg = kzalloc(sizeof(*qcfg), GFP_KERNEL);
 	if (!qcfg)
@@ -357,6 +381,11 @@ static int qti_usb_config_add(struct qti_usb_gadget *gadget,
 	qcfg->c.bConfigurationValue = num;
 	qcfg->c.bmAttributes = USB_CONFIG_ATT_ONE;
 	qcfg->c.MaxPower = CONFIG_USB_GADGET_VBUS_DRAW;
+
+	ret = of_property_read_u32(gadget->cfg_node, "qcom,bmAttributes", &val);
+	if (!ret)
+		qcfg->c.bmAttributes = (u8)val;
+
 	INIT_LIST_HEAD(&qcfg->func_list);
 	INIT_LIST_HEAD(&qcfg->qti_funcs);
 
@@ -413,6 +442,9 @@ static int qti_gadget_register(struct qti_usb_gadget *qg)
 {
 	int ret;
 
+	if (qg->enabled)
+		return -EINVAL;
+
 	ret = qti_usb_configs_make(qg, qg->composition_funcs);
 	if (ret)
 		return ret;
@@ -437,6 +469,8 @@ static int qti_gadget_register(struct qti_usb_gadget *qg)
 	if (ret)
 		goto free_name;
 
+	qg->enabled = true;
+
 	return 0;
 
 free_name:
@@ -449,28 +483,22 @@ free_configs:
 
 static void qti_gadget_unregister(struct qti_usb_gadget *qg)
 {
+	if (!qg->enabled)
+		return;
+
 	usb_gadget_unregister_driver(&qg->composite.gadget_driver);
 	kfree(qg->composite.gadget_driver.function);
 	qti_cleanup_configs_funcs(qg);
+
+	qg->enabled = false;
 }
 
 static int qti_gadget_get_properties(struct qti_usb_gadget *gadget)
 {
 	struct device *dev = gadget->dev;
-	int ret, val;
-
-	ret = device_property_read_string(dev, "qcom,composition",
-				    &gadget->composition_funcs);
-	if (ret) {
-		dev_err(dev, "USB gadget composition not specified\n");
-		return ret;
-	}
-
-	/* bail out if ffs is specified and let userspace handle it */
-	if (strstr(gadget->composition_funcs, "ffs.")) {
-		dev_err(dev, "user should enable ffs\n");
-		return -EINVAL;
-	}
+	struct device_node *child = NULL;
+	int ret = 0, val = 0, pid = 0;
+	char *start = NULL, *end = NULL;
 
 	ret = device_property_read_u32(dev, "qcom,vid", &val);
 	if (ret) {
@@ -478,13 +506,6 @@ static int qti_gadget_get_properties(struct qti_usb_gadget *gadget)
 		return ret;
 	}
 	gadget->cdev.desc.idVendor = (u16)val;
-
-	ret = device_property_read_u32(dev, "qcom,pid", &val);
-	if (ret) {
-		dev_err(dev, "USB gadget idProduct not specified\n");
-		return ret;
-	}
-	gadget->cdev.desc.idProduct = (u16)val;
 
 	ret = device_property_read_u32(dev, "qcom,class", &val);
 	if (!ret)
@@ -498,8 +519,95 @@ static int qti_gadget_get_properties(struct qti_usb_gadget *gadget)
 	if (!ret)
 		gadget->cdev.desc.bDeviceProtocol = (u8)val;
 
+	/* Check if pid passed via cmdline which takes precedence */
+	if (usb_pid_string[0] != 0) {
+		ret = kstrtoint(usb_pid_string, 16, &val);
+		if (ret)
+			return ret;
+	} else {
+		ret = device_property_read_u32(dev, "qcom,default-pid", &val);
+		if (ret) {
+			dev_dbg(dev, "USB gadget default-pid not specified\n");
+			return ret;
+		}
+	}
+
+	pid = val;
+
+	/* Extract serial # from kernel cmdline */
+	start = strnstr(saved_command_line, "androidboot.serialno=",
+			strlen(saved_command_line));
+	if (start) {
+		/* If serial # is at the end of the kernel cmdline
+		 * it will be terminated by NULL character
+		 */
+		end = strchrnul(start, ' ');
+		start += strlen("androidboot.serialno=");
+		strlcpy(serialno_string, start, (end - start)+1);
+	}
+
+	/* Product string contains a space but in kernel
+	 * cmdline it will be passed with a special character
+	 * '!' instead of space to maintain the design of
+	 * cmdline parameters
+	 */
+	strreplace(product_string, '!', ' ');
+
+	/* Go through all the child nodes and find matching pid */
+	while ((child = of_get_next_child(dev->of_node, child)) != NULL) {
+		of_property_read_u32(child, "qcom,pid", &val);
+		if (val == pid) {
+			of_property_read_string(child, "qcom,composition",
+					&gadget->composition_funcs);
+
+			gadget->cfg_node = child;
+			break;
+		}
+	}
+
+	/* Check if couldn't find a matching composition */
+	if (gadget->composition_funcs == NULL)
+		return -EINVAL;
+
+	/* bail out if ffs is specified and let userspace handle it */
+	if (strstr(gadget->composition_funcs, "ffs.")) {
+		dev_err(dev, "user should enable ffs\n");
+		return -EINVAL;
+	}
+
+	gadget->cdev.desc.idProduct = (u16)pid;
+
 	return 0;
 }
+
+static ssize_t enabled_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct qti_usb_gadget *qg = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%c\n",
+			qg->enabled ? 'Y' : 'N');
+}
+
+static ssize_t enabled_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct qti_usb_gadget *qg = dev_get_drvdata(dev);
+	bool enable;
+	int ret;
+
+	ret = strtobool(buf, &enable);
+	if (ret)
+		return ret;
+
+	if (enable)
+		qti_gadget_register(qg);
+	else
+		qti_gadget_unregister(qg);
+
+	return count;
+}
+static DEVICE_ATTR_RW(enabled);
 
 static int qti_gadget_probe(struct platform_device *pdev)
 {
@@ -524,6 +632,8 @@ static int qti_gadget_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	device_create_file(&pdev->dev, &dev_attr_enabled);
+
 	return 0;
 }
 
@@ -531,6 +641,7 @@ static int qti_gadget_remove(struct platform_device *pdev)
 {
 	struct qti_usb_gadget *qg = platform_get_drvdata(pdev);
 
+	device_remove_file(&pdev->dev, &dev_attr_enabled);
 	qti_gadget_unregister(qg);
 
 	return 0;

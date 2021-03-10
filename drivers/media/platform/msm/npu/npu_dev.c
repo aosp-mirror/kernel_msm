@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1577,7 +1577,7 @@ static int npu_process_kevent(struct npu_kevent *kevt)
 	switch (kevt->evt.type) {
 	case MSM_NPU_EVENT_TYPE_EXEC_V2_DONE:
 		ret = copy_to_user((void __user *)kevt->reserved[1],
-			(void *)&kevt->reserved[0],
+			(void *)kevt->reserved[0],
 			kevt->evt.u.exec_v2_done.stats_buf_size);
 		if (ret) {
 			pr_err("fail to copy to user\n");
@@ -2314,9 +2314,7 @@ static int npu_probe(struct platform_device *pdev)
 	if (rc)
 		goto error_driver_init;
 
-	rc = npu_debugfs_init(npu_dev);
-	if (rc)
-		goto error_driver_init;
+	npu_debugfs_init(npu_dev);
 
 	npu_dev->smmu_ctx.attach_cnt = 0;
 	npu_dev->smmu_ctx.mmu_mapping = arm_iommu_create_mapping(

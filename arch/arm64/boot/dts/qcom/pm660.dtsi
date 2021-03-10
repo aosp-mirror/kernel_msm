@@ -33,7 +33,7 @@
 			reg = <0x900 0x100>;
 		};
 
-		qcom,power-on@800 {
+		pm660_pon: qcom,power-on@800 {
 			compatible = "qcom,qpnp-power-on";
 			reg = <0x800 0x100>;
 			interrupts = <0x0 0x8 0x0 IRQ_TYPE_NONE>,
@@ -109,6 +109,12 @@
 				reg = <0x6100 0x100>;
 				interrupts = <0x0 0x61 0x1 IRQ_TYPE_NONE>;
 			};
+		};
+
+		pm660_pbs: qcom,pbs@7400 {
+			compatible = "qcom,qpnp-pbs";
+			reg = <0x7400 0x100>;
+			status = "disabled";
 		};
 
 		pm660_vadc: vadc@3100 {
@@ -359,6 +365,8 @@
 
 			qcom,default-sink-caps = <5000 3000>, /* 5V @ 3A */
 						 <9000 3000>; /* 9V @ 3A */
+			qcom,no-usb3-dp-concurrency;
+			qcom,pd-20-source-only;
 		};
 
 		pm660_adc_tm: vadc@3400 {
@@ -544,6 +552,106 @@
 };
 
 &thermal_zones {
+	ibat-high {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		thermal-sensors = <&bcl_sensor 0>;
+		wake-capable-sensor;
+
+		trips {
+			ibat-high {
+				temperature = <4200>;
+				hysteresis = <200>;
+				type = "passive";
+			};
+		};
+	};
+
+	ibat-vhigh {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		thermal-sensors = <&bcl_sensor 1>;
+		wake-capable-sensor;
+
+		trips {
+			ibat-vhigh {
+				temperature = <4300>;
+				hysteresis = <100>;
+				type = "passive";
+			};
+		};
+	};
+
+	vbat_adc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "low_limits_cap";
+		thermal-sensors = <&bcl_sensor 2>;
+		wake-capable-sensor;
+		tracks-low;
+
+		trips {
+			pm660_vbat_adc: vbat-adc {
+				temperature = <3200>;
+				hysteresis = <100>;
+				type = "passive";
+			};
+		};
+	};
+
+	vbat_low {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "low_limits_cap";
+		thermal-sensors = <&bcl_sensor 3>;
+		wake-capable-sensor;
+		tracks-low;
+
+		trips {
+			vbat-low {
+				temperature = <2800>;
+				hysteresis = <0>;
+				type = "passive";
+			};
+		};
+	};
+
+	vbat_too_low {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "low_limits_cap";
+		thermal-sensors = <&bcl_sensor 4>;
+		wake-capable-sensor;
+		tracks-low;
+
+		trips {
+			vbat-too-low {
+				temperature = <2600>;
+				hysteresis = <0>;
+				type = "passive";
+			};
+		};
+	};
+
+	soc {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "low_limits_cap";
+		thermal-sensors = <&bcl_sensor 5>;
+		wake-capable-sensor;
+		tracks-low;
+
+		trips {
+			pm660_low_soc: low-soc {
+				temperature = <10>;
+				hysteresis = <0>;
+				type = "passive";
+			};
+		};
+	};
+
 	pm660_temp_alarm: pm660-tz {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;

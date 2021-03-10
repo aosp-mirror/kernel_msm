@@ -1795,6 +1795,7 @@ static void ipa3_wq_handle_rx(struct work_struct *work)
 		else
 			ipa_pm_activate_sync(sys->pm_hdl);
 		napi_schedule(sys->napi_obj);
+		IPA_STATS_INC_CNT(sys->napi_sch_cnt);
 	} else
 		ipa3_handle_rx(sys);
 }
@@ -3748,7 +3749,10 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 				IPA_GENERIC_RX_BUFF_BASE_SZ);
 			sys->get_skb = ipa3_get_skb_ipa_rx;
 			sys->free_skb = ipa3_free_skb_rx;
-			in->ipa_ep_cfg.aggr.aggr_en = IPA_ENABLE_AGGR;
+			if (in->bypass_agg)
+				in->ipa_ep_cfg.aggr.aggr_en = IPA_BYPASS_AGGR;
+			else
+				in->ipa_ep_cfg.aggr.aggr_en = IPA_ENABLE_AGGR;
 			if (in->client == IPA_CLIENT_APPS_WAN_COAL_CONS)
 				in->ipa_ep_cfg.aggr.aggr = IPA_COALESCE;
 			else
@@ -3891,8 +3895,9 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 			 * Dont enable ipa_status for APQ, since MDM IPA
 			 * has IPA >= 4.5 with DPLv3.
 			 */
-			if (ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
-				ipa3_is_mhip_offload_enabled())
+			if ((ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
+				ipa3_is_mhip_offload_enabled()) ||
+				(ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5))
 				sys->ep->status.status_en = false;
 			else
 				sys->ep->status.status_en = true;
@@ -4357,6 +4362,7 @@ void __ipa_gsi_irq_rx_scedule_poll(struct ipa3_sys_context *sys)
 		clk_off = ipa_pm_activate(sys->pm_hdl);
 		if (!clk_off && sys->napi_obj) {
 			napi_schedule(sys->napi_obj);
+			IPA_STATS_INC_CNT(sys->napi_sch_cnt);
 			return;
 		}
 		queue_work(sys->wq, &sys->work);
@@ -4948,6 +4954,7 @@ start_poll:
 	 */
 	if (cnt < weight && ep->sys->len > IPA_DEFAULT_SYS_YELLOW_WM) {
 		napi_complete(ep->sys->napi_obj);
+		IPA_STATS_INC_CNT(ep->sys->napi_comp_cnt);
 		ret = ipa3_rx_switch_to_intr_mode(ep->sys);
 		if (ret == -GSI_STATUS_PENDING_IRQ &&
 				napi_reschedule(ep->sys->napi_obj))

@@ -1471,6 +1471,12 @@ config PAGE_OFFSET
 	default 0xB0000000 if VMSPLIT_3G_OPT
 	default 0xC0000000
 
+config COMMAND_LINE_SIZE
+	int "Maximum size of the command line."
+	default "1024"
+	help
+	This is the per architecture maximum command line size.
+
 config NR_CPUS
 	int "Maximum number of CPUs (2-32)"
 	range 2 32
@@ -1566,12 +1572,10 @@ config THUMB2_KERNEL
 	bool "Compile the kernel in Thumb-2 mode" if !CPU_THUMBONLY
 	depends on (CPU_V7 || CPU_V7M) && !CPU_V6 && !CPU_V6K
 	default y if CPU_THUMBONLY
-	select ARM_ASM_UNIFIED
 	select ARM_UNWIND
 	help
 	  By enabling this option, the kernel will be compiled in
-	  Thumb-2 mode. A compiler/assembler that understand the unified
-	  ARM-Thumb syntax is needed.
+	  Thumb-2 mode.
 
 	  If unsure, say N.
 
@@ -1605,9 +1609,6 @@ config THUMB2_AVOID_R_ARM_THM_JUMP11
 	  Only Thumb-2 kernels are affected.
 
 	  Unless you are sure your tools don't have this problem, say Y.
-
-config ARM_ASM_UNIFIED
-	bool
 
 config ARM_PATCH_IDIV
 	bool "Runtime patch udiv/sdiv instructions into __aeabi_{u}idiv()"
@@ -1777,29 +1778,6 @@ config ARM_MODULE_PLTS
 	  Say y if you are getting out of memory errors while loading modules
 
 source "mm/Kconfig"
-
-choice
-	prompt "Virtual Memory Reclaim"
-	default ENABLE_VMALLOC_SAVING
-	help
-	  Select the method of reclaiming virtual memory
-
-config ENABLE_VMALLOC_SAVING
-	bool "Reclaim memory for each subsystem"
-	help
-	  Enable this config to reclaim the virtual space belonging
-	  to any subsystem which is expected to have a lifetime of
-	  the entire system. This feature allows lowmem to be non-
-	  contiguous.
-
-config NO_VM_RECLAIM
-	bool "Do not reclaim memory"
-	help
-	  Do not reclaim any memory. This might result in less lowmem
-	  and wasting virtual memory space which could otherwise be
-	  reclaimed by using any of the other two config options.
-
-endchoice
 
 config FORCE_MAX_ZONEORDER
 	int "Maximum zone order"
@@ -2130,7 +2108,7 @@ config XIP_PHYS_ADDR
 config KEXEC
 	bool "Kexec system call (EXPERIMENTAL)"
 	depends on (!SMP || PM_SLEEP_SMP)
-	depends on !CPU_V7M
+	depends on MMU
 	select KEXEC_CORE
 	help
 	  kexec is a system call that implements the ability to shutdown your
@@ -2173,6 +2151,17 @@ config AUTO_ZRELADDR
 
 config EFI_STUB
 	bool
+
+config ARM_DECOMPRESSOR_LIMIT
+        hex "Limit the decompressor memory area"
+        default 0x3200000
+        help
+          Allows overriding of the memory size that decompressor maps with
+          read, write and execute permissions to avoid speculative prefetch.
+
+          By default ARM_DECOMPRESSOR_LIMIT maps first 1GB of memory
+          with read, write and execute permissions and reset of the memory
+          as strongly ordered.
 
 config EFI
 	bool "UEFI runtime support"

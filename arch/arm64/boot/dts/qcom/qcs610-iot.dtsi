@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,16 +13,38 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <dt-bindings/input/input.h>
-#include "qcs610.dtsi"
+
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/clock/qcom,gcc-sm6150.h>
+#include <dt-bindings/clock/qcom,camcc-sm6150.h>
+#include <dt-bindings/clock/qcom,cpucc-sm8150.h>
+#include <dt-bindings/clock/qcom,dispcc-sm6150.h>
+#include <dt-bindings/clock/qcom,gpucc-sm6150.h>
+
 #include "sm6150-sde.dtsi"
 #include "sm6150-sde-pll.dtsi"
 #include "sm6150-sde-display.dtsi"
 #include "qcs610-camera-sensor-idp.dtsi"
+#include "sm6150-audio-overlay.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. QCS610 IOT";
 	compatible = "qcom,qcs610-iot", "qcom,qcs610", "qcom,iot";
 	qcom,board-id = <32 0>;
+};
+
+&soc {
+	qcom,rmnet-ipa {
+		status="disabled";
+	};
+};
+
+&ipa_hw {
+	status="disabled";
+};
+
+&sm6150_snd {
+	/delete-property/ fsa4480-i2c-handle;
 };
 
 &qupv3_se3_i2c {
@@ -120,6 +142,7 @@
 		clock-names = "eth_axi_clk", "eth_ptp_clk",
 				"eth_rgmii_clk", "eth_slave_ahb_clk";
 		qcom,phy-reset = <&tlmm 36 GPIO_ACTIVE_HIGH>;
+		qcom,phy-reset-delay-msecs = <10 50>;
 		qcom,phy-intr-redirect = <&tlmm 76 GPIO_ACTIVE_LOW>;
 		gdsc_emac-supply = <&emac_gdsc>;
 		pinctrl-names = "dev-emac-mdc", "dev-emac-mdio",
@@ -160,6 +183,7 @@
 			compatible = "qcom,emac-smmu-embedded";
 			iommus = <&apps_smmu 0x1C0 0x0>;
 			qcom,iova-mapping = <0x80000000 0x40000000>;
+			qcom,smmu-geometry;
 		};
 	};
 
@@ -274,6 +298,38 @@
 	reg = <0 0x8fd00000 0 0x3100000>;
 };
 
+&pil_video_mem {
+	reg = <0 0x92e00000 0 0x500000>;
+};
+
+&wlan_msa_mem {
+	reg = <0 0x93300000 0 0x200000>;
+};
+
+&pil_cdsp_mem {
+	reg = <0 0x93500000 0 0x1e00000>;
+};
+
+&pil_adsp_mem {
+	reg = <0 0x95300000 0 0x1e00000>;
+};
+
+&pil_ipa_fw_mem {
+	reg = <0 0x97100000 0 0x10000>;
+};
+
+&pil_ipa_gsi_mem {
+	reg = <0 0x97110000 0 0x5000>;
+};
+
+&pil_gpu_mem {
+	reg = <0 0x97115000 0 0x2000>;
+};
+
+&msm_gpu {
+	/delete-node/qcom,gpu-mempools;
+};
+
 &sdhc_1 {
 	vdd-supply = <&pm6150l_l11>;
 	qcom,vdd-voltage-level = <2950000 2950000>;
@@ -308,6 +364,12 @@
 	cd-gpios = <&tlmm 99 GPIO_ACTIVE_LOW>;
 
 	status = "ok";
+};
+
+&usb0 {
+	dwc3@a600000 {
+		snps,usb3-u1u2-disable;
+	};
 };
 
 &L16A {
@@ -365,6 +427,14 @@
 
 			lt,supply-entry@0 {
 				reg = <0>;
+				lt,supply-name = "vdd";
+				lt,supply-min-voltage = <1800000>;
+				lt,supply-max-voltage = <1800000>;
+				lt,supply-enable-load = <200000>;
+				lt,supply-post-on-sleep = <50>;
+			};
+			lt,supply-entry@1 {
+				reg = <1>;
 				lt,supply-name = "vcc";
 				lt,supply-min-voltage = <3304000>;
 				lt,supply-max-voltage = <3304000>;
@@ -372,14 +442,7 @@
 				lt,supply-post-on-sleep = <50>;
 			};
 
-			lt,supply-entry@1 {
-				reg = <1>;
-				lt,supply-name = "vdd";
-				lt,supply-min-voltage = <1800000>;
-				lt,supply-max-voltage = <1800000>;
-				lt,supply-enable-load = <200000>;
-				lt,supply-post-on-sleep = <50>;
-			};
+
 		};
 
 		lt,customize-modes {

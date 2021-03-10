@@ -221,26 +221,10 @@
 };
 
 &thermal_zones {
-	cpu-1-7-lowf {
-		cooling-maps {
-			/delete-node/ mmcx_vdd_cdev;
-		};
-	};
-	gpuss-0-lowf {
-		cooling-maps {
-			/delete-node/ mmcx_vdd_cdev;
-		};
-	};
-	camera-lowf {
-		cooling-maps {
-			/delete-node/ mmcx_vdd_cdev;
-		};
-	};
-	mdm-scl-lowf {
-		cooling-maps {
-			/delete-node/ mmcx_vdd_cdev;
-		};
-	};
+	 /delete-node/ cpu-1-7-lowf;
+	 /delete-node/ gpuss-0-lowf;
+	 /delete-node/ camera-lowf;
+	 /delete-node/ mdm-scl-lowf;
 
 	lmh-dcvs-01 {
 		trips {
@@ -263,7 +247,7 @@
 	gpuss-max-step {
 		trips {
 			gpu-trip0 {
-				temperature = <100000>;
+				temperature = <105000>;
 			};
 		};
 	};
@@ -404,6 +388,15 @@
 	qcom,sde-mixer-display-pref = "primary", "none", "none",
 				"none", "none", "none";
 	/delete-property/ qcom,sde-has-dest-scaler;
+
+	/* roi misr related hw block */
+	qcom,sde-roi-misr-off = <0x82820 0x82880 0x828e0
+				0x82940 0x829a0 0x82a00>;
+	qcom,sde-roi-misr-size = <0x60>;
+
+	qcom,sde-dspp-blocks {
+		qcom,sde-dspp-roi-misr = <0x1200 0x00010000>;
+	};
 };
 
 #include <dt-bindings/gpio/gpio.h>
@@ -418,6 +411,10 @@
 		interrupts = <GIC_SPI 267 0>;
 		number-of-rate-detectors = <2>;
 		rate-detector-interfaces = <0 1>;
+		iommus = <&apps_smmu 0x1B5C 0x1>,
+			 <&apps_smmu 0x1B5E 0x0>;
+		qcom,smmu-s1-bypass;
+		qcom,iova-mapping = <0x0 0xFFFFFFFF>;
 
 		sdr0: qcom,hs0_i2s {
 			compatible = "qcom,hsi2s-interface";
@@ -429,9 +426,6 @@
 			pinctrl-1 = <&hs1_i2s_mclk_sleep &hs1_i2s_sck_sleep
 				     &hs1_i2s_ws_sleep &hs1_i2s_data0_sleep
 				     &hs1_i2s_data1_sleep>;
-			iommus = <&apps_smmu 0x1B5C 0x0>;
-			qcom,smmu-s1-bypass;
-			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
 			bit-clock-hz = <12288000>;
 			data-buffer-ms = <10>;
 			bit-depth = <32>;
@@ -461,9 +455,6 @@
 			pinctrl-1 = <&hs2_i2s_mclk_sleep &hs2_i2s_sck_sleep
 				     &hs2_i2s_ws_sleep &hs2_i2s_data0_sleep
 				     &hs2_i2s_data1_sleep>;
-			iommus = <&apps_smmu 0x1B5D 0x0>;
-			qcom,smmu-s1-bypass;
-			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
 			bit-clock-hz = <12288000>;
 			data-buffer-ms = <10>;
 			bit-depth = <32>;
@@ -493,9 +484,6 @@
 			pinctrl-1 = <&hs3_i2s_mclk_sleep &hs3_i2s_sck_sleep
 				     &hs3_i2s_ws_sleep &hs3_i2s_data0_sleep
 				     &hs3_i2s_data1_sleep>;
-			iommus = <&apps_smmu 0x1B5E 0x0>;
-			qcom,smmu-s1-bypass;
-			qcom,iova-mapping = <0x0 0xFFFFFFFF>;
 			bit-clock-hz = <12288000>;
 			data-buffer-ms = <10>;
 			bit-depth = <32>;
@@ -602,6 +590,7 @@
 			<98 512 250000 0>, <1 781 0 40000>; /* 1000Mbps vote */
 		qcom,bus-vector-names = "0", "10", "100", "1000";
 		snps,tso;
+		mac-address = [00 55 7B B5 7D f7];
 		rx-fifo-depth = <16384>;
 		tx-fifo-depth = <32768>;
 		snps,mtl-rx-config = <&mtl_rx_setup>;
@@ -650,7 +639,7 @@
 		pinctrl-16 = <&emac_pin_pps_0>;
 
 		snps,reset-active-low;
-		snps,reset-delays-us = <0 10000 100000>;
+		snps,reset-delays-us = <0 11000 70000>;
 		phy-mode = "rgmii";
 
 		ethqos_emb_smmu: ethqos_emb_smmu {
@@ -697,6 +686,7 @@
 		clock-names = "emac_axi_clk", "emac_ptp_clk",
 			"emac_rgmii_clk", "emac_slv_ahb_clk";
 		qcom,phy-reset = <&tlmm 79 GPIO_ACTIVE_HIGH>;
+		qcom,phy-reset-delay-msecs = <10 50>;
 		qcom,phy-intr-redirect = <&tlmm 124 GPIO_ACTIVE_LOW>;
 		gdsc_emac-supply = <&emac_gdsc>;
 		pinctrl-names = "dev-emac-mdc",
@@ -766,5 +756,10 @@
 	status="disabled";
 };
 
+&kgsl_msm_iommu {
+	qcom,secure-size = <0x20000000>; /* 512MB */
+};
+
 #include "sa8155-audio.dtsi"
+#include "sa8155-camera.dtsi"
 #include "sa8155-camera-sensor.dtsi"

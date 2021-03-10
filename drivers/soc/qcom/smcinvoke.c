@@ -13,6 +13,8 @@
  * GNU General Public License for more details.
  */
 
+#define pr_fmt(fmt) "smcinvoke: %s: " fmt, __func__
+
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
@@ -147,6 +149,7 @@ static LIST_HEAD(g_mem_objs);
 static uint16_t g_last_cb_server_id = CBOBJ_SERVER_ID_START;
 static uint16_t g_last_mem_rgn_id, g_last_mem_map_obj_id;
 static size_t g_max_cb_buf_size = SMCINVOKE_TZ_MIN_BUF_SIZE;
+static unsigned int cb_reqs_inflight;
 
 static long smcinvoke_ioctl(struct file *, unsigned int, unsigned long);
 static int smcinvoke_open(struct inode *, struct file *);
@@ -404,8 +407,10 @@ static int release_mem_obj_locked(int32_t tzhandle)
 	struct smcinvoke_mem_obj *mem_obj = find_mem_obj_locked(
 			TZHANDLE_GET_OBJID(tzhandle), is_mem_regn_obj);
 
-	if (!mem_obj)
+	if (!mem_obj) {
+		pr_err("memory object not found\n");
 		return OBJECT_ERROR_BADOBJ;
+	}
 
 	if (is_mem_regn_obj)
 		kref_put(&mem_obj->mem_regn_ref_cnt, del_mem_regn_obj_locked);
@@ -436,8 +441,10 @@ static int get_pending_cbobj_locked(uint16_t srvr_id, int16_t obj_id)
 	struct smcinvoke_cbobj *obj = NULL;
 	struct smcinvoke_server_info *server = get_cb_server_locked(srvr_id);
 
-	if (!server)
+	if (!server) {
+		pr_err("%s, server id : %u not found\n", __func__, srvr_id);
 		return OBJECT_ERROR_BADOBJ;
+	}
 
 	head = &server->pending_cbobjs;
 	list_for_each_entry(cbobj, head, list)
@@ -475,8 +482,10 @@ static int put_pending_cbobj_locked(uint16_t srvr_id, int16_t obj_id)
 	struct list_head *head = NULL;
 	struct smcinvoke_cbobj *cbobj = NULL;
 
-	if (!srvr_info)
+	if (!srvr_info) {
+		pr_err("%s, server id : %u not found\n", __func__, srvr_id);
 		return ret;
+	}
 
 	head = &srvr_info->pending_cbobjs;
 	list_for_each_entry(cbobj, head, list)
@@ -788,8 +797,10 @@ static int32_t smcinvoke_release_mem_obj_locked(void *buf, size_t buf_len)
 {
 	struct smcinvoke_tzcb_req *msg = buf;
 
-	if (msg->hdr.counts != OBJECT_COUNTS_PACK(0, 0, 0, 0))
+	if (msg->hdr.counts != OBJECT_COUNTS_PACK(0, 0, 0, 0)) {
+		pr_err("Invalid object count in %s\n", __func__);
 		return OBJECT_ERROR_INVALID;
+	}
 
 	return release_tzhandle_locked(msg->hdr.tzhandle);
 }
@@ -809,9 +820,10 @@ static int32_t smcinvoke_map_mem_region(void *buf, size_t buf_len)
 	struct sg_table *sgt = NULL;
 
 	if (msg->hdr.counts != OBJECT_COUNTS_PACK(0, 1, 1, 1) ||
-		(buf_len - msg->args[0].b.offset <  msg->args[0].b.size))
+		(buf_len - msg->args[0].b.offset <  msg->args[0].b.size)) {
+		pr_err("Invalid counts received for mapping mem obj\n");
 		return OBJECT_ERROR_INVALID;
-
+	}
 	/* args[0] = BO, args[1] = OI, args[2] = OO */
 	ob = buf + msg->args[0].b.offset;
 	oo =  &msg->args[2].handle;
@@ -821,6 +833,7 @@ static int32_t smcinvoke_map_mem_region(void *buf, size_t buf_len)
 						SMCINVOKE_MEM_RGN_OBJ);
 	if (!mem_obj) {
 		mutex_unlock(&g_smcinvoke_lock);
+		pr_err("Memory object not found\n");
 		return OBJECT_ERROR_BADOBJ;
 	}
 
@@ -830,6 +843,7 @@ static int32_t smcinvoke_map_mem_region(void *buf, size_t buf_len)
 					&smcinvoke_pdev->dev);
 		if (IS_ERR(buf_attach)) {
 			ret = OBJECT_ERROR_KMEM;
+			pr_err("dma buf attach failed, ret: %d\n", ret);
 			goto out;
 		}
 		mem_obj->buf_attach = buf_attach;
@@ -837,6 +851,7 @@ static int32_t smcinvoke_map_mem_region(void *buf, size_t buf_len)
 		sgt = dma_buf_map_attachment(buf_attach, DMA_BIDIRECTIONAL);
 		if (IS_ERR(sgt)) {
 			ret = OBJECT_ERROR_KMEM;
+			pr_err("mapping dma buffers failed, ret: %d\n", ret);
 			goto out;
 		}
 		mem_obj->sgt = sgt;
@@ -844,12 +859,14 @@ static int32_t smcinvoke_map_mem_region(void *buf, size_t buf_len)
 		/* contiguous only => nents=1 */
 		if (sgt->nents != 1) {
 			ret = OBJECT_ERROR_INVALID;
+			pr_err("sg enries are not contigous, ret: %d\n", ret);
 			goto out;
 		}
 		mem_obj->p_addr = sg_dma_address(sgt->sgl);
 		mem_obj->p_addr_len = sgt->sgl->length;
 		if (!mem_obj->p_addr) {
 			ret = OBJECT_ERROR_INVALID;
+			pr_err("invalid physical address, ret: %d\n", ret);
 			goto out;
 		}
 		mem_obj->mem_map_obj_id = next_mem_map_obj_id_locked();
@@ -879,6 +896,7 @@ static void process_kernel_obj(void *buf, size_t buf_len)
 		cb_req->result = OBJECT_OK;
 		break;
 	default:
+		pr_err(" invalid operation for tz kernel object\n");
 		cb_req->result = OBJECT_ERROR_INVALID;
 		break;
 	}
@@ -906,8 +924,10 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	struct smcinvoke_tzcb_req *cb_req = NULL, *tmp_cb_req = NULL;
 	struct smcinvoke_server_info *srvr_info = NULL;
 
-	if (buf_len < sizeof(struct smcinvoke_tzcb_req))
+	if (buf_len < sizeof(struct smcinvoke_tzcb_req)) {
+		pr_err("smaller buffer length : %u\n", buf_len);
 		return;
+	}
 
 	cb_req = buf;
 
@@ -917,6 +937,7 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	} else if (TZHANDLE_IS_MEM_OBJ(cb_req->hdr.tzhandle)) {
 		return process_mem_obj(buf, buf_len);
 	} else if (!TZHANDLE_IS_CB_OBJ(cb_req->hdr.tzhandle)) {
+		pr_err("Request object is not a callback object\n");
 		cb_req->result = OBJECT_ERROR_INVALID;
 		return;
 	}
@@ -930,12 +951,16 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	if (!tmp_cb_req) {
 		/* we need to return error to caller so fill up result */
 		cb_req->result = OBJECT_ERROR_KMEM;
+		pr_err("failed to create copy of request, set result: %d\n",
+							cb_req->result);
 		return;
 	}
 
 	cb_txn = kzalloc(sizeof(*cb_txn), GFP_KERNEL);
 	if (!cb_txn) {
 		cb_req->result = OBJECT_ERROR_KMEM;
+		pr_err("failed to allocate memory for request, result: %d\n",
+							cb_req->result);
 		kfree(tmp_cb_req);
 		return;
 	}
@@ -949,10 +974,12 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	kref_init(&cb_txn->ref_cnt);
 
 	mutex_lock(&g_smcinvoke_lock);
+	++cb_reqs_inflight;
 	srvr_info = get_cb_server_locked(
 				TZHANDLE_GET_SERVER(cb_req->hdr.tzhandle));
 	if (!srvr_info || srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 		/* ret equals Object_ERROR_DEFUNCT, at this point go to out */
+		pr_err("sever is either invalid or defunct\n");
 		mutex_unlock(&g_smcinvoke_lock);
 		goto out;
 	}
@@ -964,10 +991,11 @@ static void process_tzcb_req(void *buf, size_t buf_len, struct file **arr_filp)
 	 * we need not worry that server_info will be deleted because as long
 	 * as this CBObj is served by this server, srvr_info will be valid.
 	 */
-	wake_up_interruptible(&srvr_info->req_wait_q);
+	wake_up_interruptible_all(&srvr_info->req_wait_q);
 	ret = wait_event_interruptible(srvr_info->rsp_wait_q,
-			(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
-			(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT));
+		(cb_txn->state == SMCINVOKE_REQ_PROCESSED) ||
+		(srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT));
+
 out:
 	/*
 	 * we could be here because of either: a. Req is PROCESSED
@@ -984,10 +1012,12 @@ out:
 	} else if (!srvr_info ||
 		srvr_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT) {
 		cb_req->result = OBJECT_ERROR_DEFUNCT;
+		pr_err("server invalid, res: %d\n", cb_req->result);
 	} else {
 		pr_debug("%s wait_event interrupted ret = %d\n", __func__, ret);
 		cb_req->result = OBJECT_ERROR_ABORT;
 	}
+	--cb_reqs_inflight;
 	memcpy(buf, cb_req, buf_len);
 	kref_put(&cb_txn->ref_cnt, delete_cb_txn);
 	if (srvr_info)
@@ -1458,14 +1488,16 @@ static long process_server_req(struct file *filp, unsigned int cmd,
 	struct smcinvoke_server server_req = {0};
 	struct smcinvoke_server_info *server_info = NULL;
 
-	if (_IOC_SIZE(cmd) != sizeof(server_req))
+	if (_IOC_SIZE(cmd) != sizeof(server_req)) {
+		pr_err("invalid command size received for server request\n");
 		return -EINVAL;
-
+	}
 	ret = copy_from_user(&server_req, (void __user *)(uintptr_t)arg,
 					sizeof(server_req));
-	if (ret)
+	if (ret) {
+		pr_err("copying server request from user failed\n");
 		return -EFAULT;
-
+	}
 	server_info = kzalloc(sizeof(*server_info), GFP_KERNEL);
 	if (!server_info)
 		return -ENOMEM;
@@ -1500,31 +1532,47 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 						unsigned long arg)
 {
 	int ret = -1;
-	sigset_t pending_sig;
 	struct smcinvoke_file_data *server_obj = filp->private_data;
 	struct smcinvoke_accept user_args = {0};
 	struct smcinvoke_cb_txn *cb_txn = NULL;
 	struct smcinvoke_server_info *server_info = NULL;
 
-	if (_IOC_SIZE(cmd) != sizeof(struct smcinvoke_accept))
+	if (_IOC_SIZE(cmd) != sizeof(struct smcinvoke_accept)) {
+		pr_err("command size invalid for accept request\n");
 		return -EINVAL;
+	}
 
 	if (copy_from_user(&user_args, (void __user *)arg,
-					sizeof(struct smcinvoke_accept)))
+					sizeof(struct smcinvoke_accept))) {
+		pr_err("copying accept request from user failed\n");
 		return -EFAULT;
+	}
 
-	if (user_args.argsize != sizeof(union smcinvoke_arg))
+	if (user_args.argsize != sizeof(union smcinvoke_arg)) {
+		pr_err("arguments size is invalid for accept thread\n");
 		return -EINVAL;
+	}
 
 	/* ACCEPT is available only on server obj */
-	if (server_obj->context_type != SMCINVOKE_OBJ_TYPE_SERVER)
+	if (server_obj->context_type != SMCINVOKE_OBJ_TYPE_SERVER) {
+		pr_err("invalid object type received for accept req\n");
 		return -EPERM;
+	}
 
 	mutex_lock(&g_smcinvoke_lock);
 	server_info = get_cb_server_locked(server_obj->server_id);
-	mutex_unlock(&g_smcinvoke_lock);
-	if (!server_info)
+
+	if (!server_info) {
+		pr_err("No matching server with server id : %u found\n",
+					server_obj->server_id);
+		mutex_unlock(&g_smcinvoke_lock);
 		return -EINVAL;
+	}
+
+	if (server_info->state == SMCINVOKE_SERVER_STATE_DEFUNCT)
+		server_info->state = 0;
+
+	mutex_unlock(&g_smcinvoke_lock);
 
 	/* First check if it has response otherwise wait for req */
 	if (user_args.has_resp) {
@@ -1537,10 +1585,13 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 		 * invoke thread died while server was processing cb req.
 		 * if invoke thread dies, it would remove req from Q. So
 		 * no matching cb_txn would be on Q and hence NULL cb_txn.
+		 * In this case, we want this thread to come back and start
+		 * waiting for new cb requests, hence return EAGAIN here
 		 */
 		if (!cb_txn) {
 			pr_err("%s txn %d either invalid or removed from Q\n",
 					__func__, user_args.txn_id);
+			ret = -EAGAIN;
 			goto out;
 		}
 		ret = marshal_out_tzcb_req(&user_args, cb_txn,
@@ -1579,17 +1630,12 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 			 * server_info invalid. Other accept/invoke threads are
 			 * using server_info and would crash. So dont do that.
 			 */
-			pending_sig = (&current->pending)->signal;
-			if (sigismember(&pending_sig, SIGKILL)) {
-				mutex_lock(&g_smcinvoke_lock);
-				server_info->state =
-					SMCINVOKE_SERVER_STATE_DEFUNCT;
-				wake_up_interruptible(&server_info->rsp_wait_q);
-				mutex_unlock(&g_smcinvoke_lock);
-			}
+			mutex_lock(&g_smcinvoke_lock);
+			server_info->state = SMCINVOKE_SERVER_STATE_DEFUNCT;
+			mutex_unlock(&g_smcinvoke_lock);
+			wake_up_interruptible(&server_info->rsp_wait_q);
 			goto out;
 		}
-
 		mutex_lock(&g_smcinvoke_lock);
 		cb_txn = find_cbtxn_locked(server_info,
 						SMCINVOKE_NEXT_AVAILABLE_TXN,
@@ -1600,6 +1646,7 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 			ret = marshal_in_tzcb_req(cb_txn, &user_args,
 							server_obj->server_id);
 			if (ret) {
+				pr_err("failed to marshal in the callback request\n");
 				cb_txn->cb_req->result = OBJECT_ERROR_UNAVAIL;
 				cb_txn->state = SMCINVOKE_REQ_PROCESSED;
 				kref_put(&cb_txn->ref_cnt, delete_cb_txn);
@@ -1618,6 +1665,10 @@ static long process_accept_req(struct file *filp, unsigned int cmd,
 out:
 	if (server_info)
 		kref_put(&server_info->ref_cnt, destroy_cb_server);
+
+	if (ret && ret != -ERESTARTSYS)
+		pr_err("accept thread returning with ret: %d\n", ret);
+
 	return ret;
 }
 
@@ -1642,18 +1693,26 @@ static long process_invoke_req(struct file *filp, unsigned int cmd,
 	int32_t tzhandles_to_release[OBJECT_COUNTS_MAX_OO] = {0};
 	bool tz_acked = false;
 
-	if (_IOC_SIZE(cmd) != sizeof(req))
+	if (_IOC_SIZE(cmd) != sizeof(req)) {
+		pr_err("command size for invoke req is invalid\n");
 		return -EINVAL;
+	}
 
-	if (tzobj->context_type != SMCINVOKE_OBJ_TYPE_TZ_OBJ)
+	if (tzobj->context_type != SMCINVOKE_OBJ_TYPE_TZ_OBJ) {
+		pr_err("object type for invoke req is invalid\n");
 		return -EPERM;
+	}
 
 	ret = copy_from_user(&req, (void __user *)arg, sizeof(req));
-	if (ret)
+	if (ret) {
+		pr_err("copying invoke req failed\n");
 		return -EFAULT;
+	}
 
-	if (req.argsize != sizeof(union smcinvoke_arg))
+	if (req.argsize != sizeof(union smcinvoke_arg)) {
+		pr_err("arguments size for invoke req is invalid\n");
 		return -EINVAL;
+	}
 
 	nr_args = OBJECT_COUNTS_NUM_buffers(req.counts) +
 			OBJECT_COUNTS_NUM_objects(req.counts);
@@ -1677,6 +1736,7 @@ static long process_invoke_req(struct file *filp, unsigned int cmd,
 						get_order(inmsg_size));
 	if (!in_msg) {
 		ret = -ENOMEM;
+		pr_err("memory alloc failed for in msg in invoke req\n");
 		goto out;
 	}
 	memset(in_msg, 0, inmsg_size);
@@ -1688,14 +1748,17 @@ static long process_invoke_req(struct file *filp, unsigned int cmd,
 						get_order(outmsg_size));
 	if (!out_msg) {
 		ret = -ENOMEM;
+		pr_err("memory alloc failed for out msg in invoke req\n");
 		goto out;
 	}
 	memset(out_msg, 0, outmsg_size);
 
 	ret = marshal_in_invoke_req(&req, args_buf, tzobj->tzhandle, in_msg,
 			inmsg_size, filp_to_release, tzhandles_to_release);
-	if (ret)
+	if (ret) {
+		pr_err("failed to marshal in invoke req, ret :%d\n", ret);
 		goto out;
+	}
 
 	ret = prepare_send_scm_msg(in_msg, inmsg_size, out_msg, outmsg_size,
 					&req, args_buf, &tz_acked);
@@ -1704,8 +1767,10 @@ static long process_invoke_req(struct file *filp, unsigned int cmd,
 	 * If scm_call is success, TZ owns responsibility to release
 	 * refs for local objs.
 	 */
-	if (tz_acked == false)
+	if (!tz_acked) {
+		pr_debug("scm call successful\n");
 		goto out;
+	}
 	memset(tzhandles_to_release, 0, sizeof(tzhandles_to_release));
 
 	/*
@@ -1736,6 +1801,10 @@ out:
 	free_pages((long)out_msg, get_order(outmsg_size));
 	free_pages((long)in_msg, get_order(inmsg_size));
 	kfree(args_buf);
+
+	if (ret)
+		pr_err("invoke thread returning with ret = %d\n", ret);
+
 	return ret;
 }
 
@@ -1816,6 +1885,7 @@ static int smcinvoke_release(struct inode *nodp, struct file *filp)
 	out_buf = (uint8_t *)__get_free_page(GFP_KERNEL | __GFP_COMP);
 	if (!in_buf || !out_buf) {
 		ret = -ENOMEM;
+		pr_err("Failed to allocate memory\n");
 		goto out;
 	}
 
@@ -1897,6 +1967,25 @@ static int smcinvoke_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int __maybe_unused smcinvoke_suspend(struct platform_device *pdev,
+					pm_message_t state)
+{
+	int ret = 0;
+
+	mutex_lock(&g_smcinvoke_lock);
+	if (cb_reqs_inflight) {
+		pr_err("Failed to suspend smcinvoke driver\n");
+		ret = -EIO;
+	}
+	mutex_unlock(&g_smcinvoke_lock);
+	return ret;
+}
+
+static int __maybe_unused smcinvoke_resume(struct platform_device *pdev)
+{
+	return 0;
+}
+
 static const struct of_device_id smcinvoke_match[] = {
 	{
 		.compatible = "qcom,smcinvoke",
@@ -1907,6 +1996,8 @@ static const struct of_device_id smcinvoke_match[] = {
 static struct platform_driver smcinvoke_plat_driver = {
 	.probe = smcinvoke_probe,
 	.remove = smcinvoke_remove,
+	.suspend = smcinvoke_suspend,
+	.resume = smcinvoke_resume,
 	.driver = {
 		.name = "smcinvoke",
 		.owner = THIS_MODULE,

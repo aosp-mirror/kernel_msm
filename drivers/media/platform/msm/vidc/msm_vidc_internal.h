@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -231,6 +231,16 @@ struct msm_vidc_efuse_data {
 	enum efuse_purpose purpose;
 };
 
+struct msm_vidc_capability_range {
+	u32 min;
+	u32 max;
+};
+
+struct msm_vidc_image_capability {
+	struct msm_vidc_capability_range width;
+	struct msm_vidc_capability_range height;
+};
+
 enum vpu_version {
 	VPU_VERSION_4 = 1,
 	VPU_VERSION_5,
@@ -252,6 +262,8 @@ struct msm_vidc_platform_data {
 	unsigned int efuse_data_length;
 	struct msm_vidc_ubwc_config *ubwc_config;
 	unsigned int ubwc_config_length;
+	struct msm_vidc_image_capability *heic_image_capability;
+	struct msm_vidc_image_capability *hevc_image_capability;
 	unsigned int sku_version;
 	uint32_t vpu_ver;
 };
@@ -430,7 +442,7 @@ struct msm_vidc_core {
 
 struct msm_vidc_inst {
 	struct list_head list;
-	struct mutex sync_lock, lock, flush_lock;
+	struct mutex sync_lock, lock;
 	struct msm_vidc_core *core;
 	enum session_type session_type;
 	void *session;

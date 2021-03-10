@@ -641,6 +641,17 @@ static int ipa_create_ap_smmu_mapping_sgt(struct sg_table *sgt,
 		start_iova = va;
 	}
 
+	/*
+	 * In IPA4.5, GSI HW has such requirement:
+	 * Lower 16_bits of Ring base + ring length can’t exceed 16 bits
+	 */
+	if (ipa3_ctx->ipa_hw_type == IPA_HW_v4_5 &&
+		((u32)(va & IPA_LOW_16_BIT_MASK) + len) >=
+		IPA4_5_GSI_RING_SIZE_ALIGN) {
+		va = roundup(cb->next_addr, IPA4_5_GSI_RING_SIZE_ALIGN);
+		start_iova = va;
+	}
+
 	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
 		/* directly get sg_tbl PA from wlan-driver */
 		phys = sg->dma_address;
@@ -2268,7 +2279,7 @@ int ipa3_disconnect_gsi_wdi_pipe(u32 clnt_hdl)
 		ipa3_ctx->uc_wdi_ctx.stats_notify = NULL;
 	else
 		IPADBG("uc_wdi_ctx.stats_notify already null\n");
-	if (ipa3_ctx->ipa_hw_type > IPA_HW_v4_5 ||
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5 ||
 		(ipa3_ctx->ipa_hw_type == IPA_HW_v4_1 &&
 		ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ))
 		ipa3_uc_debug_stats_dealloc(IPA_HW_PROTOCOL_WDI);
@@ -2354,6 +2365,7 @@ int ipa3_enable_gsi_wdi_pipe(u32 clnt_hdl)
 	struct ipa3_ep_context *ep;
 	struct ipa_ep_cfg_ctrl ep_cfg_ctrl;
 	int ipa_ep_idx;
+	struct ipa_ep_cfg_holb holb_cfg;
 
 	IPADBG("ep=%d\n", clnt_hdl);
 
@@ -2373,6 +2385,18 @@ int ipa3_enable_gsi_wdi_pipe(u32 clnt_hdl)
 
 	memset(&ep_cfg_ctrl, 0, sizeof(struct ipa_ep_cfg_ctrl));
 	ipa3_cfg_ep_ctrl(ipa_ep_idx, &ep_cfg_ctrl);
+
+	if (IPA_CLIENT_IS_CONS(ep->client)) {
+		memset(&holb_cfg, 0, sizeof(holb_cfg));
+		holb_cfg.en = IPA_HOLB_TMR_EN;
+		if (ipa3_ctx->ipa_hw_type < IPA_HW_v4_5)
+			holb_cfg.tmr_val = IPA_HOLB_TMR_VAL;
+		else
+			holb_cfg.tmr_val = IPA_HOLB_TMR_VAL_4_5;
+
+		result = ipa3_cfg_ep_holb(clnt_hdl, &holb_cfg);
+	}
+
 
 	IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 	ep->gsi_offload_state |= IPA_WDI_ENABLED;
@@ -2653,7 +2677,7 @@ int ipa3_resume_gsi_wdi_pipe(u32 clnt_hdl)
 	}
 	pcmd_t = &ipa3_ctx->gsi_info[IPA_HW_PROTOCOL_WDI];
 	/* start uC gsi dbg stats monitor */
-	if (ipa3_ctx->ipa_hw_type > IPA_HW_v4_5 ||
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5 ||
 		(ipa3_ctx->ipa_hw_type == IPA_HW_v4_1 &&
 		ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ)) {
 		if (IPA_CLIENT_IS_PROD(ep->client)) {
@@ -2831,7 +2855,7 @@ retry_gsi_stop:
 	}
 	pcmd_t = &ipa3_ctx->gsi_info[IPA_HW_PROTOCOL_WDI];
 	/* stop uC gsi dbg stats monitor */
-	if (ipa3_ctx->ipa_hw_type > IPA_HW_v4_5 ||
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5 ||
 		(ipa3_ctx->ipa_hw_type == IPA_HW_v4_1 &&
 		ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ)) {
 		if (IPA_CLIENT_IS_PROD(ep->client)) {

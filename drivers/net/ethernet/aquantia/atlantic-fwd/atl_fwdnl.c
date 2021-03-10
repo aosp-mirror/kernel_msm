@@ -1,10 +1,12 @@
-/*
- * aQuantia Corporation Network Driver
- * Copyright (C) 2019 aQuantia Corporation. All rights reserved
+// SPDX-License-Identifier: GPL-2.0-only
+/* Atlantic Network Driver
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
+ * Copyright (C) 2019 aQuantia Corporation
+ * Copyright (C) 2019-2020 Marvell International Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #include <linux/dma-mapping.h>
@@ -798,7 +800,7 @@ static bool atlfwd_nl_tx_head_poll_ring(struct atl_fwd_ring *ring)
 		bump_ptr(sw_head, desc, 1);
 	} while (budget--);
 
-	WRITE_ONCE(desc->head, sw_head);
+	desc->head = sw_head;
 	pr_debug(ATL_FWDNL_PREFIX "bytes=%u, packets=%u, sw_head=%d\n", bytes,
 		 packets, sw_head);
 
@@ -950,7 +952,7 @@ static int atlfwd_nl_transmit_skb_ring(struct atl_fwd_ring *ring,
 		while (len > ATL_DATA_PER_TXD) {
 			desc.len = cpu_to_le16(ATL_DATA_PER_TXD);
 			txbuf->bytes = ATL_DATA_PER_TXD;
-			WRITE_ONCE(ring->hw.descs[desc_idx].tx, desc);
+			ring->hw.descs[desc_idx].tx = desc;
 			bump_ptr(desc_idx, ring_desc, 1);
 			txbuf = &ring_desc->txbufs[desc_idx];
 			memset(txbuf, 0, sizeof(*txbuf));
@@ -969,7 +971,7 @@ static int atlfwd_nl_transmit_skb_ring(struct atl_fwd_ring *ring,
 		if (!frags)
 			break;
 
-		WRITE_ONCE(ring->hw.descs[desc_idx].tx, desc);
+		ring->hw.descs[desc_idx].tx = desc;
 		bump_ptr(desc_idx, ring_desc, 1);
 		txbuf = &ring_desc->txbufs[desc_idx];
 		memset(txbuf, 0, sizeof(*txbuf));
@@ -990,7 +992,7 @@ static int atlfwd_nl_transmit_skb_ring(struct atl_fwd_ring *ring,
 	 */
 	txbuf->packets = 1;
 	txbuf->skb = skb;
-	WRITE_ONCE(ring->hw.descs[desc_idx].tx, desc);
+	ring->hw.descs[desc_idx].tx = desc;
 	bump_ptr(desc_idx, ring_desc, 1);
 	ring_desc->tail = desc_idx;
 
