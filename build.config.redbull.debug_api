@@ -11,7 +11,6 @@ function update_debug_config() {
          -e CONFIG_DEBUG_PI_LIST \
          -e CONFIG_DEBUG_NOTIFIERS \
          -e CONFIG_DEBUG_CREDENTIALS \
-         -e CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE \
          -d CFI \
          -d CFI_PERMISSIVE \
          -d CFI_CLANG \
