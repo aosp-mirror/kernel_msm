@@ -96,6 +96,8 @@
 #include <asm/cacheflush.h>
 #include <soc/qcom/boot_stats.h>
 
+#include "do_mounts.h"
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -1025,7 +1027,9 @@ static inline void mark_readonly(void)
 static int __ref kernel_init(void *unused)
 {
 	int ret;
-
+#ifdef CONFIG_EARLY_SERVICES
+	int status = 0;
+#endif
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
@@ -1038,6 +1042,15 @@ static int __ref kernel_init(void *unused)
 	rcu_end_inkernel_boot();
 	place_marker("M - DRIVER Kernel Boot Done");
 
+#ifdef CONFIG_EARLY_SERVICES
+	status = get_early_services_status();
+	if (status) {
+		struct kstat stat;
+		/* Wait for early services SE policy load completion signal */
+		while (vfs_stat("/dev/sedone", &stat) != 0)
+			;
+	}
+#endif
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)

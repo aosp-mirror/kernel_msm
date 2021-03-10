@@ -246,7 +246,11 @@ struct cam_hw_flush_args {
 	uint32_t                        num_req_active;
 	void                           *flush_req_active[20];
 	enum flush_type_t               flush_type;
+<<<<<<< HEAD
 	uint32_t last_flush_req;
+=======
+	uint32_t                        last_flush_req;
+>>>>>>> partner/qcom-msm-4.14
 };
 
 /**

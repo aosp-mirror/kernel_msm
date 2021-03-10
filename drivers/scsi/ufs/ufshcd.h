@@ -5,7 +5,7 @@
  * Copyright (C) 2011-2013 Samsung India Software Operations
  * Copyright (c) 2017-2018 Samsung Electronics Co., Ltd.
  * Copyright (C) 2018, Google, Inc.
- * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -854,6 +854,7 @@ extern void ufshcd_complete_lrb(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
  * @ufs_version: UFS Version to which controller complies
  * @var: pointer to variant specific data
  * @priv: pointer to variant specific private data
+ * @sg_entry_size: size of struct ufshcd_sg_entry (may include variant fields)
  * @irq: Irq number of the controller
  * @active_uic_cmd: handle of active UIC command
  * @uic_cmd_mutex: mutex for uic command
@@ -936,6 +937,7 @@ struct ufs_hba {
 	u32 ufs_version;
 	struct ufs_hba_variant *var;
 	void *priv;
+	size_t sg_entry_size;
 	unsigned int irq;
 	bool is_irq_enabled;
 	bool crash_on_err;

@@ -72,6 +72,7 @@ $(obj-vdso-c): %.o: %.c FORCE
 # Actual build commands
 quiet_cmd_vdsocc = VDSOC   $@
       cmd_vdsocc = ${CC} $(c_flags) -c -o $@ $<
+
 quiet_cmd_vdsoas = VDSOA   $@
       cmd_vdsoas = $(CC) $(a_flags) -c -o $@ $<
 

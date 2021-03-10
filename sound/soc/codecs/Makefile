@@ -241,6 +241,10 @@ snd-soc-cs35l41-objs := cs35l41.o cs35l41-tables.o
 snd-soc-cs35l41-i2c-objs := cs35l41-i2c.o
 snd-soc-cs35l41-spi-objs := cs35l41-spi.o
 snd-soc-codec-misc-objs := codec-misc.o
+snd-soc-tfa98xx-objs := tfa98xx.o
+snd-soc-tfa98xx-objs += tfa_container.o
+snd-soc-tfa98xx-objs += tfa_dsp.o
+snd-soc-tfa98xx-objs += tfa_init.o
 
 obj-$(CONFIG_SND_SOC_88PM860X)	+= snd-soc-88pm860x.o
 obj-$(CONFIG_SND_SOC_AB8500_CODEC)	+= snd-soc-ab8500-codec.o
@@ -486,3 +490,4 @@ obj-$(CONFIG_SND_SOC_CS35L41_SPI)	+= snd-soc-cs35l41-spi.o
 obj-$(CONFIG_SND_SOC_CODEC_DETECT)	+= snd-soc-codec-misc.o
 #knowles
 obj-$(CONFIG_SND_SOC_IAXXX))	+= adnc/
+obj-$(CONFIG_SND_SOC_TFA98XX)	+= snd-soc-tfa98xx.o

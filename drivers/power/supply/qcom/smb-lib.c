@@ -506,6 +506,43 @@ static int smblib_set_usb_pd_allowed_voltage(struct smb_charger *chg,
 /********************
  * HELPER FUNCTIONS *
  ********************/
+
+int smblib_force_ufp(struct smb_charger *chg)
+{
+	int rc;
+
+	/* force FSM in IDLE state */
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+			TYPEC_DISABLE_CMD_BIT, TYPEC_DISABLE_CMD_BIT);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't put FSM in idle rc=%d\n", rc);
+		return rc;
+	}
+
+	/* wait for FSM to enter idle state */
+	msleep(200);
+
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+			VCONN_EN_VALUE_BIT | UFP_EN_CMD_BIT, UFP_EN_CMD_BIT);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't force UFP mode rc=%d\n", rc);
+		return rc;
+	}
+
+	/* wait for mode change before enabling FSM */
+	usleep_range(10000, 11000);
+
+	/* release FSM from idle state */
+	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
+			TYPEC_DISABLE_CMD_BIT, 0);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't release FSM from idle rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 static int smblib_request_dpdm(struct smb_charger *chg, bool enable)
 {
 	int rc = 0;
@@ -688,6 +725,7 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	vote(chg->pl_enable_votable_indirect, USBIN_V_VOTER, false, 0);
 	vote(chg->usb_icl_votable, SW_QC3_VOTER, false, 0);
 	vote(chg->hvdcp_hw_inov_dis_votable, OV_VOTER, false, 0);
+	vote(chg->usb_icl_votable, USBIN_USBIN_BOOST_VOTER, false, 0);
 
 	cancel_delayed_work_sync(&chg->hvdcp_detect_work);
 
@@ -1077,6 +1115,11 @@ static int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		return -EINVAL;
 	}
 
+	if (power_role != TYPEC_DISABLE_CMD_BIT) {
+		if (chg->ufp_only_mode)
+			power_role = UFP_EN_CMD_BIT;
+	}
+
 	if (chg->wa_flags & TYPEC_PBS_WA_BIT) {
 		if (power_role == UFP_EN_CMD_BIT) {
 			/* disable PBS workaround when forcing sink mode */
@@ -1096,7 +1139,7 @@ static int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 	}
 
 	rc = smblib_masked_write(chg, TYPE_C_INTRPT_ENB_SOFTWARE_CTRL_REG,
-				 TYPEC_POWER_ROLE_CMD_MASK, power_role);
+				TYPEC_POWER_ROLE_CMD_MASK, power_role);
 	if (rc < 0) {
 		smblib_err(chg, "Couldn't write 0x%02x to TYPE_C_INTRPT_ENB_SOFTWARE_CTRL rc=%d\n",
 			power_role, rc);
@@ -1104,6 +1147,44 @@ static int __smblib_set_prop_typec_power_role(struct smb_charger *chg,
 	}
 
 	return rc;
+}
+
+static inline bool typec_in_src_mode(struct smb_charger *chg)
+{
+	return (chg->typec_mode > POWER_SUPPLY_TYPEC_NONE &&
+		chg->typec_mode < POWER_SUPPLY_TYPEC_SOURCE_DEFAULT);
+}
+
+int smblib_get_prop_typec_select_rp(struct smb_charger *chg,
+				    union power_supply_propval *val)
+{
+	int rc, rp;
+	u8 stat;
+
+	if (!typec_in_src_mode(chg))
+		return -ENODATA;
+
+	rc = smblib_read(chg, TYPE_C_CFG_2_REG, &stat);
+	if (rc < 0) {
+		smblib_err(chg, "Couldn't read TYPE_C_CURRSRC_CFG_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	switch (stat & EN_80UA_180UA_CUR_SOURCE_BIT) {
+	case TYPEC_SRC_RP_STD:
+		rp = POWER_SUPPLY_TYPEC_SRC_RP_STD;
+		break;
+	case TYPEC_SRC_RP_1P5A:
+		rp = POWER_SUPPLY_TYPEC_SRC_RP_1P5A;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	val->intval = rp;
+
+	return 0;
 }
 
 int smblib_toggle_stat(struct smb_charger *chg, int reset)
@@ -1626,14 +1707,18 @@ int smblib_vbus_regulator_enable(struct regulator_dev *rdev)
 	if (!chg->usb_icl_votable) {
 		chg->usb_icl_votable = find_votable("USB_ICL");
 
-		if (!chg->usb_icl_votable)
-			return -EINVAL;
+		if (!chg->usb_icl_votable) {
+			rc = -EINVAL;
+			goto unlock;
+		}
 	}
 	vote(chg->usb_icl_votable, USBIN_USBIN_BOOST_VOTER, true, 0);
 
 	rc = _smblib_vbus_regulator_enable(rdev);
 	if (rc >= 0)
 		chg->otg_en = true;
+	else
+		vote(chg->usb_icl_votable, USBIN_USBIN_BOOST_VOTER, false, 0);
 
 unlock:
 	mutex_unlock(&chg->otg_oc_lock);
@@ -2759,6 +2844,10 @@ static int smblib_handle_usb_current(struct smb_charger *chg,
 			if (rc < 0)
 				return rc;
 		}
+	} else if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB &&
+		usb_current == -ETIMEDOUT) {
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+					true, USBIN_100MA);
 	} else {
 		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
 					true, usb_current);
@@ -2811,6 +2900,42 @@ int smblib_set_prop_typec_power_role(struct smb_charger *chg,
 		return __smblib_set_prop_typec_power_role(chg, val);
 
 	return 0;
+}
+
+int smblib_set_prop_typec_select_rp(struct smb_charger *chg,
+				    const union power_supply_propval *val)
+{
+	int rc = 0;
+
+	if (!typec_in_src_mode(chg)) {
+		smblib_err(chg, "Couldn't set curr src: not in SRC mode\n");
+		return -EINVAL;
+	}
+
+	if (val->intval < 0 || val->intval >= TYPEC_SRC_RP_MAX_ELEMENTS)
+		return -EINVAL;
+
+	switch (val->intval) {
+	case TYPEC_SRC_RP_STD:
+		rc = smblib_masked_write(chg, TYPE_C_CFG_2_REG,
+			EN_80UA_180UA_CUR_SOURCE_BIT,
+			TYPEC_SRC_RP_STD);
+		break;
+	case TYPEC_SRC_RP_1P5A:
+	case TYPEC_SRC_RP_3A:
+	case TYPEC_SRC_RP_3A_DUPLICATE:
+		rc = smblib_masked_write(chg, TYPE_C_CFG_2_REG,
+			EN_80UA_180UA_CUR_SOURCE_BIT,
+			TYPEC_SRC_RP_1P5A);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (rc < 0)
+		smblib_err(chg, "Couldn't write to TYPE_C_CURRSRC_CFG rc=%d\n",
+				rc);
+	return rc;
 }
 
 int smblib_set_prop_pd_voltage_min(struct smb_charger *chg,
@@ -2916,7 +3041,7 @@ static int __smblib_set_prop_pd_active(struct smb_charger *chg, bool pd_active)
 
 		hvdcp = stat & QC_CHARGER_BIT;
 		vote(chg->apsd_disable_votable, PD_VOTER, false, 0);
-		vote(chg->pd_allowed_votable, PD_VOTER, true, 0);
+		vote(chg->pd_allowed_votable, PD_VOTER, false, 0);
 		vote(chg->usb_irq_enable_votable, PD_VOTER, false, 0);
 		vote(chg->hvdcp_disable_votable_indirect, PD_INACTIVE_VOTER,
 								false, 0);
@@ -4021,6 +4146,20 @@ static int typec_try_sink(struct smb_charger *chg)
 	bool debounce_done, vbus_detected, sink;
 	u8 stat;
 	int exit_mode = ATTACHED_SRC, rc;
+	int typec_mode;
+
+	if (!(*chg->try_sink_enabled))
+		return ATTACHED_SRC;
+
+	typec_mode = smblib_get_prop_typec_mode(chg);
+	if (typec_mode == POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER
+		|| typec_mode == POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY)
+		return ATTACHED_SRC;
+
+	/*
+	 * Try.SNK entry status - ATTACHWAIT.SRC state and detected Rd-open
+	 * or RD-Ra for TccDebounce time.
+	 */
 
 	/* ignore typec interrupt while try.snk WIP */
 	chg->try_sink_active = true;
@@ -4159,20 +4298,18 @@ try_sink_exit:
 static void typec_sink_insertion(struct smb_charger *chg)
 {
 	int exit_mode;
+	int typec_mode;
 
-	/*
-	 * Try.SNK entry status - ATTACHWAIT.SRC state and detected Rd-open
-	 * or RD-Ra for TccDebounce time.
-	 */
+	exit_mode = typec_try_sink(chg);
 
-	if (*chg->try_sink_enabled) {
-		exit_mode = typec_try_sink(chg);
-
-		if (exit_mode != ATTACHED_SRC) {
-			smblib_usb_typec_change(chg);
-			return;
-		}
+	if (exit_mode != ATTACHED_SRC) {
+		smblib_usb_typec_change(chg);
+		return;
 	}
+
+	typec_mode = smblib_get_prop_typec_mode(chg);
+	if (typec_mode == POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER)
+		chg->is_audio_adapter = true;
 
 	/* when a sink is inserted we should not wait on hvdcp timeout to
 	 * enable pd
@@ -4254,6 +4391,7 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	vote(chg->pl_enable_votable_indirect, USBIN_V_VOTER, false, 0);
 	vote(chg->awake_votable, PL_DELAY_VOTER, false, 0);
 
+	vote(chg->usb_icl_votable, USBIN_USBIN_BOOST_VOTER, false, 0);
 	chg->vconn_attempts = 0;
 	chg->otg_attempts = 0;
 	chg->pulse_cnt = 0;
@@ -4320,6 +4458,12 @@ static void smblib_handle_typec_removal(struct smb_charger *chg)
 	if (rc < 0)
 		smblib_err(chg, "Couldn't set USBIN_ADAPTER_ALLOW_5V_OR_9V_TO_12V rc=%d\n",
 			rc);
+
+	if (chg->is_audio_adapter == true)
+		/* wait for the audio driver to lower its en gpio */
+		msleep(*chg->audio_headset_drp_wait_ms);
+
+	chg->is_audio_adapter = false;
 
 	/* enable DRP */
 	val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
@@ -5221,6 +5365,8 @@ static int smblib_create_votables(struct smb_charger *chg)
 		rc = PTR_ERR(chg->disable_power_role_switch);
 		return rc;
 	}
+	vote(chg->disable_power_role_switch, DEFAULT_VOTER,
+			chg->ufp_only_mode, 0);
 
 	return rc;
 }

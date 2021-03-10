@@ -16,6 +16,10 @@
 #include "sa8155-pmic-overlay.dtsi"
 #include "sa8155-cnss.dtsi"
 
+&qupv3_3 {
+	status = "ok";
+};
+
 &qupv3_se0_spi {
 	status = "ok";
 
@@ -66,21 +70,10 @@
 		vio-supply = <&pm8150_2_l7>;
 		vdd-supply = <&pm8150_2_l16>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <41 IRQ_TYPE_EDGE_RISING>,
-				<42 IRQ_TYPE_EDGE_RISING>;
+		interrupts = <12 IRQ_TYPE_EDGE_RISING>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&sensor_int1_default
 			&sensor_int2_default>;
-		sensor_int1_default: sensor_int1_default {
-			pins = "gpio41";
-			drive-strength = <16>;
-			bias-pull-up;
-		};
-		sensor_int2_default: sensor_int2_default {
-			pins = "gpio42";
-			drive-strength = <16>;
-			bias-pull-up;
-		};
 	};
 };
 
@@ -91,7 +84,6 @@
 &soc {
 	qcom,lpass@17300000 {
 		status = "ok";
-		qcom,pil-force-shutdown;
 	};
 
 	qcom,ssc@5c00000 {

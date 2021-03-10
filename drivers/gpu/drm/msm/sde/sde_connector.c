@@ -568,21 +568,30 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 {
 	int rc;
 	struct sde_connector *c_conn = NULL;
+	struct dsi_display *display;
+	bool poms_pending = false;
 
 	if (!connector)
 		return;
 
-	rc = _sde_connector_update_dirty_properties(connector);
-	if (rc) {
-		SDE_ERROR("conn %d final pre kickoff failed %d\n",
-				connector->base.id, rc);
-		SDE_EVT32(connector->base.id, SDE_EVTLOG_ERROR);
+	c_conn = to_sde_connector(connector);
+
+	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
+		display = (struct dsi_display *) c_conn->display;
+		poms_pending = display->poms_pending;
+	}
+
+	if (!poms_pending) {
+		rc = _sde_connector_update_dirty_properties(connector);
+		if (rc) {
+			SDE_ERROR("conn %d final pre kickoff failed %d\n",
+					connector->base.id, rc);
+			SDE_EVT32(connector->base.id, SDE_EVTLOG_ERROR);
+		}
 	}
 
 	/* Disable ESD thread */
 	sde_connector_schedule_status_work(connector, false);
-
-	c_conn = to_sde_connector(connector);
 
 	c_conn->last_panel_power_mode = SDE_MODE_DPMS_OFF;
 }
@@ -1127,7 +1136,7 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 
 	if (idx == CONNECTOR_PROP_HDR_METADATA) {
 		rc = _sde_connector_set_ext_hdr_info(c_conn,
-			c_state, (void *)(uintptr_t)val);
+			c_state, (void __user *)(uintptr_t)val);
 		if (rc)
 			SDE_ERROR_CONN(c_conn, "cannot set hdr info %d\n", rc);
 	}

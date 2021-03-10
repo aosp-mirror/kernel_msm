@@ -678,6 +678,7 @@ static int cam_lrme_mgr_hw_dump(void *hw_mgr_priv, void *hw_dump_args)
 		CAM_ERR(CAM_LRME, "Failed to get hw device");
 		return rc;
 	}
+	memset(&lrme_dump_args, 0, sizeof(lrme_dump_args));
 	rc  = cam_mem_get_cpu_buf(dump_args->buf_handle,
 		&lrme_dump_args.cpu_addr,
 		&lrme_dump_args.buf_len);
@@ -710,6 +711,7 @@ static int cam_lrme_mgr_hw_flush(void *hw_mgr_priv, void *hw_flush_args)
 	struct cam_hw_flush_args *args;
 	struct cam_lrme_device *hw_device;
 	struct cam_lrme_frame_request *frame_req = NULL, *req_to_flush = NULL;
+	struct cam_lrme_frame_request *frame_req_temp = NULL;
 	struct cam_lrme_frame_request **req_list = NULL;
 	uint32_t device_index;
 	struct cam_lrme_hw_flush_args lrme_flush_args;
@@ -734,6 +736,23 @@ static int cam_lrme_mgr_hw_flush(void *hw_mgr_priv, void *hw_flush_args)
 		goto end;
 	}
 
+<<<<<<< HEAD
+=======
+	spin_lock(&hw_device->high_req_lock);
+	list_for_each_entry_safe(frame_req, frame_req_temp,
+		&hw_device->frame_pending_list_high, frame_list) {
+		list_del_init(&frame_req->frame_list);
+	}
+	spin_unlock(&hw_device->high_req_lock);
+
+	spin_lock(&hw_device->normal_req_lock);
+	list_for_each_entry_safe(frame_req, frame_req_temp,
+		&hw_device->frame_pending_list_normal, frame_list) {
+		list_del_init(&frame_req->frame_list);
+	}
+	spin_unlock(&hw_device->normal_req_lock);
+
+>>>>>>> partner/qcom-msm-4.14
 	req_list = (struct cam_lrme_frame_request **)args->flush_req_pending;
 	for (i = 0; i < args->num_req_pending; i++) {
 		frame_req = req_list[i];

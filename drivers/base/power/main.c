@@ -1337,10 +1337,13 @@ static int __device_suspend_late(struct device *dev, pm_message_t state, bool as
 	}
 
 	error = dpm_run_callback(callback, dev, state, info);
-	if (!error)
+	if (!error) {
 		dev->power.is_late_suspended = true;
-	else
+	} else {
 		async_error = error;
+		log_suspend_abort_reason("Callback failed on %s in %pS returned %d",
+					 dev_name(dev), callback, error);
+	}
 
 Complete:
 	TRACE_SUSPEND(error);
@@ -1524,6 +1527,7 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 	pm_runtime_barrier(dev);
 
 	if (pm_wakeup_pending()) {
+		dev->power.direct_complete = false;
 		async_error = -EBUSY;
 		goto Complete;
 	}
@@ -1601,7 +1605,6 @@ static int __device_suspend(struct device *dev, pm_message_t state, bool async)
 		dev->power.is_suspended = true;
 		if (parent) {
 			spin_lock_irq(&parent->power.lock);
-
 			dev->parent->power.direct_complete = false;
 			if (dev->power.wakeup_path
 			    && !dev->parent->power.ignore_children)

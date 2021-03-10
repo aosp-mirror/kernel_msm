@@ -1,7 +1,7 @@
 /*
  * Copyright (C) 2010-2011 Canonical Ltd <jeremy.kerr@canonical.com>
  * Copyright (C) 2011-2012 Linaro Ltd <mturquette@linaro.org>
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -3682,6 +3682,14 @@ static inline void clk_debug_reparent(struct clk_core *core,
 static inline void clk_debug_unregister(struct clk_core *core)
 {
 }
+
+void clk_debug_print_hw(struct clk_core *clk, struct seq_file *f)
+{
+}
+
+void clock_debug_print_enabled(bool print_parent)
+{
+}
 #endif
 
 /**
@@ -4287,6 +4295,7 @@ static int clk_add_and_print_opp(struct clk_hw *hw,
 				unsigned long rate, int uv, int n)
 {
 	struct clk_core *core = hw->core;
+	unsigned long rrate;
 	int j, ret = 0;
 
 	for (j = 0; j < count; j++) {
@@ -4297,8 +4306,11 @@ static int clk_add_and_print_opp(struct clk_hw *hw,
 			return ret;
 		}
 
-		if (n == 0 || n == core->num_rate_max - 1 ||
-					rate == clk_hw_round_rate(hw, INT_MAX))
+		clk_prepare_lock();
+		rrate = clk_hw_round_rate(hw, INT_MAX);
+		clk_prepare_unlock();
+
+		if (n == 0 || n == core->num_rate_max - 1 || rate == rrate)
 			pr_info("%s: set OPP pair(%lu Hz: %u uV) on %s\n",
 						core->name, rate, uv,
 						dev_name(device_list[j]));
@@ -4353,7 +4365,9 @@ static void clk_populate_clock_opp_table(struct device_node *np,
 	}
 
 	for (n = 0; ; n++) {
+		clk_prepare_lock();
 		rrate = clk_hw_round_rate(hw, rate + 1);
+		clk_prepare_unlock();
 		if (!rrate) {
 			pr_err("clk_round_rate failed for %s\n",
 							core->name);

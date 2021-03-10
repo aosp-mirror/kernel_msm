@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -81,6 +81,7 @@ static const struct of_device_id msm_dsi_of_match[] = {
 	{}
 };
 
+#ifdef CONFIG_DEBUG_FS
 static ssize_t debugfs_state_info_read(struct file *file,
 				       char __user *buff,
 				       size_t count,
@@ -207,6 +208,11 @@ static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl,
 	struct dentry *dir, *state_file, *reg_dump;
 	char dbg_name[DSI_DEBUG_NAME_LEN];
 
+	if (!dsi_ctrl || !parent) {
+		pr_err("Invalid params\n");
+		return -EINVAL;
+	}
+
 	dir = debugfs_create_dir(dsi_ctrl->name, parent);
 	if (IS_ERR_OR_NULL(dir)) {
 		rc = PTR_ERR(dir);
@@ -258,6 +264,17 @@ static int dsi_ctrl_debugfs_deinit(struct dsi_ctrl *dsi_ctrl)
 	debugfs_remove(dsi_ctrl->debugfs_root);
 	return 0;
 }
+#else
+static int dsi_ctrl_debugfs_init(struct dsi_ctrl *dsi_ctrl,
+					struct dentry *parent)
+{
+	return 0;
+}
+static int dsi_ctrl_debugfs_deinit(struct dsi_ctrl *dsi_ctrl)
+{
+	return 0;
+}
+#endif /* CONFIG_DEBUG_FS */
 
 static inline struct msm_gem_address_space*
 dsi_ctrl_get_aspace(struct dsi_ctrl *dsi_ctrl,
@@ -1953,7 +1970,6 @@ static struct platform_driver dsi_ctrl_driver = {
 	},
 };
 
-#if defined(CONFIG_DEBUG_FS)
 
 void dsi_ctrl_debug_dump(u32 *entries, u32 size)
 {
@@ -1975,7 +1991,6 @@ void dsi_ctrl_debug_dump(u32 *entries, u32 size)
 	mutex_unlock(&dsi_ctrl_list_lock);
 }
 
-#endif
 /**
  * dsi_ctrl_get() - get a dsi_ctrl handle from an of_node
  * @of_node:    of_node of the DSI controller.
@@ -2055,7 +2070,7 @@ int dsi_ctrl_drv_init(struct dsi_ctrl *dsi_ctrl, struct dentry *parent)
 {
 	int rc = 0;
 
-	if (!dsi_ctrl || !parent) {
+	if (!dsi_ctrl) {
 		pr_err("Invalid params\n");
 		return -EINVAL;
 	}
@@ -2664,8 +2679,7 @@ void dsi_ctrl_disable_status_interrupt(struct dsi_ctrl *dsi_ctrl,
 {
 	unsigned long flags;
 
-	if (!dsi_ctrl || dsi_ctrl->irq_info.irq_num == -1 ||
-			intr_idx >= DSI_STATUS_INTERRUPT_COUNT)
+	if (!dsi_ctrl || intr_idx >= DSI_STATUS_INTERRUPT_COUNT)
 		return;
 
 	spin_lock_irqsave(&dsi_ctrl->irq_info.irq_lock, flags);
@@ -2677,7 +2691,8 @@ void dsi_ctrl_disable_status_interrupt(struct dsi_ctrl *dsi_ctrl,
 					dsi_ctrl->irq_info.irq_stat_mask);
 
 			/* don't need irq if no lines are enabled */
-			if (dsi_ctrl->irq_info.irq_stat_mask == 0)
+			if (dsi_ctrl->irq_info.irq_stat_mask == 0 &&
+				dsi_ctrl->irq_info.irq_num != -1)
 				disable_irq_nosync(dsi_ctrl->irq_info.irq_num);
 		}
 

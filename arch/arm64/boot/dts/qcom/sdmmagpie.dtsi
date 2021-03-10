@@ -63,19 +63,16 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_0>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_0: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x20000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 
 				L3_0: l3-cache {
 				      compatible = "arm,arch-cache";
-				      cache-size = <0x100000>;
 				      cache-level = <3>;
 				};
 			};
@@ -102,13 +99,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_100>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_100: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x20000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -136,13 +131,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_200>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_200: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x20000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -169,13 +162,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_300>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_300: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x20000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -202,13 +193,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_400>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_400: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x20000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -235,13 +224,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_500>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_500: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x20000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -268,13 +255,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1740>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
-			cache-size = <0x10000>;
 			next-level-cache = <&L2_600>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			#cooling-cells = <2>;
 			L2_600: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x40000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			      qcom,dump-size = <0x48000>;
@@ -310,13 +295,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1740>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
-			cache-size = <0x10000>;
 			next-level-cache = <&L2_700>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			#cooling-cells = <2>;
 			L2_700: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x40000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			      qcom,dump-size = <0x48000>;
@@ -1467,6 +1450,7 @@
 			    "tsens_tm_physical";
 		interrupts = <0 506 0>, <0 508 0>;
 		interrupt-names = "tsens-upper-lower", "tsens-critical";
+		tsens-reinit-wa;
 		#thermal-sensor-cells = <1>;
 	};
 
@@ -1478,6 +1462,7 @@
 			    "tsens_tm_physical";
 		interrupts = <0 507 0>, <0 509 0>;
 		interrupt-names = "tsens-upper-lower", "tsens-critical";
+		tsens-reinit-wa;
 		#thermal-sensor-cells = <1>;
 	};
 
@@ -2870,13 +2855,12 @@
 
 	sdhc_1: sdhci@7c4000 {
 		compatible = "qcom,sdhci-msm-v5";
-		reg = <0x7c4000 0x1000>, <0x7c5000 0x1000>;
-		reg-names = "hc_mem", "cmdq_mem";
+		reg = <0x7c4000 0x1000>, <0x7c5000 0x1000>, <0x7C8000 0x8000>;
+		reg-names = "hc_mem", "cmdq_mem", "cmdq_ice";
 
 		interrupts = <IRQ_TYPE_NONE 641 IRQ_TYPE_NONE>,
 					<IRQ_TYPE_NONE 644 IRQ_TYPE_NONE>;
 		interrupt-names = "hc_irq", "pwr_irq";
-		sdhc-msm-crypto = <&sdcc1_ice>;
 
 		qcom,bus-width = <8>;
 		qcom,large-address-bus;
@@ -3088,11 +3072,11 @@
 
 	ufshc_mem: ufshc@1d84000 {
 		compatible = "qcom,ufshc";
-		reg = <0x1d84000 0x3000>;
+		reg = <0x1d84000 0x3000>, <0x1d90000 0x8000>;
+		reg-names = "ufs_mem", "ufs_ice";
 		interrupts = <0 265 0>;
 		phys = <&ufsphy_mem>;
 		phy-names = "ufsphy";
-		ufs-qcom-crypto = <&ufs_ice>;
 
 		lanes-per-direction = <1>;
 		dev-ref-clk-freq = <0>; /* 19.2 MHz */
@@ -3382,6 +3366,13 @@
 		qcom,minidump-id = <3>;
 		qcom,aux-minidump-ids = <4>;
 		qcom,complete-ramdump;
+
+		qcom,msm-bus,name = "pil-modem";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+			<129 512 0 0>,
+			<129 512 0 7000000>;
 
 		/* Inputs from mss */
 		interrupts-extended = <&pdc GIC_SPI 266 IRQ_TYPE_EDGE_RISING>,

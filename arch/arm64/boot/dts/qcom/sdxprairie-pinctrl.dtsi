@@ -1084,7 +1084,7 @@
 				config {
 					pins = "gpio63";
 					drive-strength = <2>;
-					bias-pull-up;
+					bias-disable;
 				};
 			};
 
@@ -1098,61 +1098,32 @@
 					pins = "gpio63";
 					drive-strength = <2>;
 					bias-pull-up;
-					output-high;
 				};
 			};
 
-			blsp1_uart2b_rx_active: blsp1_uart2b_rx_active {
+			blsp1_uart2b_rxcts_active: blsp1_uart2b_rxcts_active {
 				mux {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					function = "blsp_uart2";
 				};
 
 				config {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					drive-strength = <2>;
 					bias-disable;
 				};
 			};
 
-			blsp1_uart2b_rx_sleep: blsp1_uart2b_rx_sleep {
+			blsp1_uart2b_rxcts_sleep: blsp1_uart2b_rxcts_sleep {
 				mux {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio64";
+					pins = "gpio64", "gpio65";
 					drive-strength = <2>;
-					bias-pull-down;
-					input-enable;
-				};
-			};
-
-			blsp1_uart2b_cts_active: blsp1_uart2b_cts_active {
-				mux {
-					pins = "gpio65";
-					function = "blsp_uart2";
-				};
-
-				config {
-					pins = "gpio65";
-					drive-strength = <2>;
-					bias-disable;
-				};
-			};
-
-			blsp1_uart2b_cts_sleep: blsp1_uart2b_cts_sleep {
-				mux {
-					pins = "gpio65";
-					function = "gpio";
-				};
-
-				config {
-					pins = "gpio65";
-					drive-strength = <2>;
-					bias-disable;
-					input-enable;
+					bias-no-pull;
 				};
 			};
 
@@ -1165,7 +1136,7 @@
 				config {
 					pins = "gpio66";
 					drive-strength = <2>;
-					bias-pull-down;
+					bias-disable;
 				};
 			};
 
@@ -1178,8 +1149,7 @@
 				config {
 					pins = "gpio66";
 					drive-strength = <2>;
-					bias-pull-down;
-					output-low;
+					bias-no-pull;
 				};
 			};
 		};
@@ -1713,6 +1683,21 @@
 			config {
 				pins = "gpio32";
 				bias-pull-down;
+			};
+		};
+		sja1105_pin {
+			sja1105_default: sja1105_default {
+				mux {
+					pins =  "gpio89", "gpio91", "gpio102";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio89", "gpio91", "gpio102";
+					drive-strength = <4>;
+					bias-pull-up;
+					output-high;
+				};
 			};
 		};
 	};

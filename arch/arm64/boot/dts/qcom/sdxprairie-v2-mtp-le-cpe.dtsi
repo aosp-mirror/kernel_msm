@@ -57,12 +57,16 @@
 	status = "ok";
 };
 
-&blsp1_uart2b_hs {
-	status = "ok";
+&i2c_3 {
+	tavil_codec {
+		status = "disabled";
+	};
 };
 
-&vbus_detect {
-	status = "ok";
+&soc {
+	sound-tavil {
+		status = "disabled";
+	};
 };
 
 &cnss_qca6390 {

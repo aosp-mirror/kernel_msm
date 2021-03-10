@@ -1814,10 +1814,10 @@ static void _set_secvid(struct kgsl_device *device)
 		adreno_writereg64(adreno_dev,
 			ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE,
 			ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
-			KGSL_IOMMU_SECURE_BASE(&device->mmu));
+			device->mmu.secure_base);
 		adreno_writereg(adreno_dev,
 			ADRENO_REG_RBBM_SECVID_TSB_TRUSTED_SIZE,
-			KGSL_IOMMU_SECURE_SIZE);
+			device->mmu.secure_size);
 		if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_SECVID_SET_ONCE))
 			set = true;
 	}
@@ -2420,6 +2420,14 @@ int adreno_reset(struct kgsl_device *device, int fault)
 		}
 	}
 	if (ret) {
+		unsigned long flags = device->pwrctrl.ctrl_flags;
+
+		/*
+		 * Clear ctrl_flags to ensure clocks and regulators are
+		 * turned off
+		 */
+		device->pwrctrl.ctrl_flags = 0;
+
 		/* If soft reset failed/skipped, then pull the power */
 		kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 		/* since device is officially off now clear start bit */
@@ -2437,6 +2445,8 @@ int adreno_reset(struct kgsl_device *device, int fault)
 					break;
 			}
 		}
+
+		device->pwrctrl.ctrl_flags = flags;
 	}
 	if (ret)
 		return ret;

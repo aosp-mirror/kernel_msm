@@ -2672,13 +2672,19 @@ static int cam_icp_mgr_hfi_resume(struct cam_icp_hw_mgr *hw_mgr)
 		hw_mgr->a5_jtag_debug);
 }
 
+<<<<<<< HEAD
 static int cam_icp_retry_wait_for_abort(struct cam_icp_hw_ctx_data *ctx_data)
+=======
+static int cam_icp_retry_wait_for_abort(
+	struct cam_icp_hw_ctx_data *ctx_data)
+>>>>>>> partner/qcom-msm-4.14
 {
 	int retry_cnt = 1;
 	unsigned long rem_jiffies;
 	int timeout = 1000;
 
 	CAM_WARN(CAM_ICP, "FW timeout in abort ctx: %u retry_left: %d",
+<<<<<<< HEAD
 		 ctx_data->ctx_id, retry_cnt);
 	while (retry_cnt > 0) {
 		rem_jiffies = wait_for_completion_timeout(
@@ -2688,6 +2694,17 @@ static int cam_icp_retry_wait_for_abort(struct cam_icp_hw_ctx_data *ctx_data)
 			if (retry_cnt > 0) {
 				CAM_WARN(
 					CAM_ICP,
+=======
+		ctx_data->ctx_id, retry_cnt);
+	while (retry_cnt > 0) {
+		rem_jiffies = wait_for_completion_timeout(
+			&ctx_data->wait_complete,
+			msecs_to_jiffies((timeout)));
+		if (!rem_jiffies) {
+			retry_cnt--;
+			if (retry_cnt > 0) {
+				CAM_WARN(CAM_ICP,
+>>>>>>> partner/qcom-msm-4.14
 					"FW timeout in abort ctx: %u retry_left: %u",
 					ctx_data->ctx_id, retry_cnt);
 				continue;
@@ -2701,11 +2718,20 @@ static int cam_icp_retry_wait_for_abort(struct cam_icp_hw_ctx_data *ctx_data)
 	return -ETIMEDOUT;
 }
 
+<<<<<<< HEAD
 static int cam_icp_mgr_abort_handle_wq(void *priv, void *data)
 {
 	int rc;
 	size_t packet_size;
 	struct hfi_cmd_work_data *task_data = NULL;
+=======
+static int cam_icp_mgr_abort_handle_wq(
+	void *priv, void *data)
+{
+	int rc;
+	size_t packet_size;
+	struct hfi_cmd_work_data   *task_data = NULL;
+>>>>>>> partner/qcom-msm-4.14
 	struct cam_icp_hw_ctx_data *ctx_data;
 	struct hfi_cmd_ipebps_async *abort_cmd;
 
@@ -2715,13 +2741,22 @@ static int cam_icp_mgr_abort_handle_wq(void *priv, void *data)
 	}
 
 	task_data = (struct hfi_cmd_work_data *)data;
+<<<<<<< HEAD
 	ctx_data = (struct cam_icp_hw_ctx_data *)task_data->data;
+=======
+	ctx_data =
+		(struct cam_icp_hw_ctx_data *)task_data->data;
+>>>>>>> partner/qcom-msm-4.14
 	packet_size =
 		sizeof(struct hfi_cmd_ipebps_async) +
 		sizeof(struct hfi_cmd_abort) -
 		sizeof(((struct hfi_cmd_ipebps_async *)0)->payload.direct);
 	abort_cmd = kzalloc(packet_size, GFP_KERNEL);
+<<<<<<< HEAD
 	CAM_DBG(CAM_ICP, "abort pkt size = %d", (int)packet_size);
+=======
+	CAM_DBG(CAM_ICP, "abort pkt size = %d", (int) packet_size);
+>>>>>>> partner/qcom-msm-4.14
 	if (!abort_cmd) {
 		rc = -ENOMEM;
 		return rc;
@@ -3496,8 +3531,12 @@ static int cam_icp_mgr_config_hw(void *hw_mgr_priv, void *config_hw_args)
 	}
 
 	if (req_id <= ctx_data->last_flush_req)
+<<<<<<< HEAD
 		CAM_WARN(
 			CAM_ICP,
+=======
+		CAM_WARN(CAM_ICP,
+>>>>>>> partner/qcom-msm-4.14
 			"Anomaly submitting flushed req %llu [last_flush %llu] in ctx %u",
 			req_id, ctx_data->last_flush_req, ctx_data->ctx_id);
 	rc = cam_icp_mgr_enqueue_config(hw_mgr, config_args);
@@ -4518,6 +4557,46 @@ static int cam_icp_mgr_flush_req(struct cam_icp_hw_ctx_data *ctx_data,
 	return 0;
 }
 
+static int cam_icp_mgr_enqueue_abort(
+	struct cam_icp_hw_ctx_data *ctx_data)
+{
+	int timeout = 1000, rc;
+	unsigned long rem_jiffies = 0;
+	struct hfi_cmd_work_data *task_data;
+	struct crm_workq_task *task;
+
+	task = cam_req_mgr_workq_get_task(icp_hw_mgr.cmd_work);
+	if (!task) {
+		CAM_ERR(CAM_ICP, "no empty task");
+		return -ENOMEM;
+	}
+
+	reinit_completion(&ctx_data->wait_complete);
+	task_data = (struct hfi_cmd_work_data *)task->payload;
+	task_data->data = (void *)ctx_data;
+	task_data->type = ICP_WORKQ_TASK_CMD_TYPE;
+	task->process_cb = cam_icp_mgr_abort_handle_wq;
+	cam_req_mgr_workq_enqueue_task(task, &icp_hw_mgr,
+		CRM_TASK_PRIORITY_0);
+
+	rem_jiffies = wait_for_completion_timeout(&ctx_data->wait_complete,
+		msecs_to_jiffies((timeout)));
+	if (!rem_jiffies) {
+		rc = cam_icp_retry_wait_for_abort(ctx_data);
+		if (rc) {
+			CAM_ERR(CAM_ICP,
+				"FW timeout/err in abort handle command ctx: %u",
+				ctx_data->ctx_id);
+			cam_icp_mgr_process_dbg_buf(icp_hw_mgr.a5_dbg_lvl);
+			cam_hfi_queue_dump();
+			return rc;
+		}
+	}
+
+	CAM_DBG(CAM_ICP, "Abort after flush is success");
+	return 0;
+}
+
 static int cam_icp_mgr_hw_dump(void *hw_priv, void *hw_dump_args)
 {
 	struct cam_hw_dump_args *dump_args = hw_dump_args;
@@ -4569,6 +4648,7 @@ hw_dump:
 		frm_process->submit_timestamp[i].tv_usec,
 		cur_time.tv_sec,
 		cur_time.tv_usec);
+	memset(&icp_dump_args, 0, sizeof(icp_dump_args));
 	rc  = cam_mem_get_cpu_buf(dump_args->buf_handle,
 		&icp_dump_args.cpu_addr, &icp_dump_args.buf_len);
 	if (!icp_dump_args.cpu_addr || !icp_dump_args.buf_len || rc) {

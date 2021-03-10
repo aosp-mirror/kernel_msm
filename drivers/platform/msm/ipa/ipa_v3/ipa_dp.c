@@ -3749,7 +3749,10 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 				IPA_GENERIC_RX_BUFF_BASE_SZ);
 			sys->get_skb = ipa3_get_skb_ipa_rx;
 			sys->free_skb = ipa3_free_skb_rx;
-			in->ipa_ep_cfg.aggr.aggr_en = IPA_ENABLE_AGGR;
+			if (in->bypass_agg)
+				in->ipa_ep_cfg.aggr.aggr_en = IPA_BYPASS_AGGR;
+			else
+				in->ipa_ep_cfg.aggr.aggr_en = IPA_ENABLE_AGGR;
 			if (in->client == IPA_CLIENT_APPS_WAN_COAL_CONS)
 				in->ipa_ep_cfg.aggr.aggr = IPA_COALESCE;
 			else
@@ -3892,8 +3895,9 @@ static int ipa3_assign_policy(struct ipa_sys_connect_params *in,
 			 * Dont enable ipa_status for APQ, since MDM IPA
 			 * has IPA >= 4.5 with DPLv3.
 			 */
-			if (ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
-				ipa3_is_mhip_offload_enabled())
+			if ((ipa3_ctx->platform_type == IPA_PLAT_TYPE_APQ &&
+				ipa3_is_mhip_offload_enabled()) ||
+				(ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5))
 				sys->ep->status.status_en = false;
 			else
 				sys->ep->status.status_en = true;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,8 +11,7 @@
  */
 
 #include "qcs610-iot.dtsi"
-#include "sm6150-audio-overlay.dtsi"
-#include "sm6150-camera-sensor-idp.dtsi"
+
 / {
 	model = "Qualcomm Technologies, Inc. QCS610 IPC";
 	compatible = "qcom,qcs610-iot", "qcom,qcs610", "qcom,iot";
@@ -36,7 +35,7 @@
 &sm6150_snd {
 	status = "okay";
 	compatible = "qcom,sm6150-asoc-snd";
-	qcom,model = "sm6150-idp-snd-card";
+	qcom,model = "sm6150-ipc-snd-card";
 	qcom,audio-routing =
 		"AMIC1", "MIC BIAS1",
 		"MIC BIAS1", "Analog Mic1",
@@ -54,6 +53,8 @@
 		"MIC BIAS1", "Digital Mic3",
 		"TX_AIF1 CAP", "VA_MCLK",
 		"TX_AIF2 CAP", "VA_MCLK",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
 		"HPHL_OUT", "VA_MCLK",
 		"HPHR_OUT", "VA_MCLK",
 		"TX SWR_ADC0", "ADC1_OUTPUT",
@@ -66,29 +67,17 @@
 	qcom,wsa-max-devs = <1>;
 	qcom,wsa-devs = <&wsa881x_0211>, <&wsa881x_0213>;
 	qcom,wsa-aux-dev-prefix = "SpkrLeft", "SpkrLeft";
+	qcom,linein-det-swh = <1>;
+	qcom,lineout-det-swh = <1>;
+	qcom,linein-det-gpio = <&tlmm 1 0>;
+	qcom,lineout-det-gpio = <&tlmm 60 0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&jack_det_linein_default
+		     &jack_det_lineout_default>;
 };
 
 &pm6150_charger {
 	qcom,batteryless-platform;
-};
-
-&eeprom_rear {
-	cam_vana-supply = <&pm6150l_l4>;
-	rgltr-min-voltage = <1800000 2900000 1200000 0 2800000>;
-	rgltr-max-voltage = <1800000 2900000 1200000 0 2800000>;
-};
-
-&cam_cci {
-	qcom,cam-sensor@0 {
-		cam_vana-supply = <&pm6150l_l4>;
-		rgltr-min-voltage = <1800000 2900000 1200000 0>;
-		rgltr-max-voltage = <1800000 2900000 1200000 0>;
-	};
-};
-
-
-&led_flash_front {
-	status = "disabled";
 };
 
 &tlmm {

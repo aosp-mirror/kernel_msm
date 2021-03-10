@@ -70,6 +70,8 @@
 #define IPA_UC_WAII_MAX_SLEEP 1200
 #define IPA_HOLB_TMR_DIS 0x0
 #define IPA_HOLB_TMR_EN 0x1
+#define IPA_HOLB_TMR_VAL 65535
+#define IPA_HOLB_TMR_VAL_4_5 31
 /*
  * The transport descriptor size was changed to GSI_CHAN_RE_SIZE_16B, but
  * IPA users still use sps_iovec size as FIFO element size.
@@ -95,6 +97,10 @@
 
 #define IPA_WDI2_OVER_GSI() (ipa3_ctx->ipa_wdi2_over_gsi \
 		&& (ipa3_get_wdi_version() == IPA_WDI_2))
+
+/* Bit alignment for IPA4.5 GSI rings */
+#define IPA_LOW_16_BIT_MASK (0xFFFF)
+#define IPA4_5_GSI_RING_SIZE_ALIGN (16 * PAGE_SIZE)
 
 #define IPADBG(fmt, args...) \
 	do { \
@@ -1843,6 +1849,7 @@ struct ipa3_app_clock_vote {
  * @app_vote: holds userspace application clock vote count
  * IPA context - holds all relevant info about IPA driver and its state
  * @coal_cmd_pyld: holds the coslescing close frame command payload
+ * @manual_fw_load: bool,if fw load is done manually
  */
 struct ipa3_context {
 	struct ipa3_char_device_context cdev;
@@ -1989,6 +1996,7 @@ struct ipa3_context {
 	int num_ipa_cne_evt_req;
 	struct mutex ipa_cne_evt_lock;
 	bool use_ipa_pm;
+	bool vlan_mode_set;
 	bool vlan_mode_iface[IPA_VLAN_IF_MAX];
 	bool wdi_over_pcie;
 	u32 entire_ipa_block_size;
@@ -2022,7 +2030,10 @@ struct ipa3_context {
 	bool uc_act_tbl_valid;
 	struct mutex act_tbl_lock;
 	int uc_act_tbl_total;
+	int uc_act_tbl_socksv5_total;
+	int uc_act_tbl_ipv6_nat_total;
 	int uc_act_tbl_next_index;
+	bool manual_fw_load;
 };
 
 struct ipa3_plat_drv_res {
@@ -2072,6 +2083,7 @@ struct ipa3_plat_drv_res {
 	u32 secure_debug_check_action;
 	bool ipa_mhi_proxy;
 	bool ipa_wan_skb_page;
+	bool manual_fw_load;
 };
 
 /**
@@ -2395,6 +2407,9 @@ int ipa3_cfg_ep_route(u32 clnt_hdl, const struct ipa_ep_cfg_route *ipa_ep_cfg);
 
 int ipa3_cfg_ep_holb(u32 clnt_hdl, const struct ipa_ep_cfg_holb *ipa_ep_cfg);
 
+int ipa3_force_cfg_ep_holb(u32 clnt_hdl,
+	struct ipa_ep_cfg_holb *ipa_ep_cfg);
+
 void ipa3_cal_ep_holb_scale_base_val(u32 tmr_val,
 				struct ipa_ep_cfg_holb *ep_holb);
 
@@ -2413,6 +2428,15 @@ int ipa3_setup_uc_act_tbl(void);
 int ipa3_add_socksv5_conn(struct ipa_socksv5_info *info);
 
 int ipa3_del_socksv5_conn(uint32_t handle);
+
+int ipa3_add_socksv5_conn_usr(struct ipa_kernel_tests_socksv5_uc_tmpl *tmpl);
+
+int ipa3_add_ipv6_nat_uc_activation_entry(
+	struct ipa_ioc_ipv6_nat_uc_act_entry *entry);
+
+int ipa3_del_ipv6_nat_uc_activation_entry(uint16_t index);
+
+int ipa3_del_uc_act_entry(uint16_t index);
 
 /*
  * Header removal / addition
@@ -2824,6 +2848,10 @@ void ipa3_debugfs_post_init(void);
 void ipa3_debugfs_remove(void);
 
 void ipa3_dump_buff_internal(void *base, dma_addr_t phy_base, u32 size);
+
+int ipa3_conn_qdss_pipes(struct ipa_qdss_conn_in_params *in,
+	struct ipa_qdss_conn_out_params *out);
+int ipa3_disconn_qdss_pipes(void);
 #ifdef IPA_DEBUG
 #define IPA_DUMP_BUFF(base, phy_base, size) \
 	ipa3_dump_buff_internal(base, phy_base, size)
@@ -2878,6 +2906,7 @@ int ipa3_query_intf(struct ipa_ioc_query_intf *lookup);
 int ipa3_query_intf_tx_props(struct ipa_ioc_query_intf_tx_props *tx);
 int ipa3_query_intf_rx_props(struct ipa_ioc_query_intf_rx_props *rx);
 int ipa3_query_intf_ext_props(struct ipa_ioc_query_intf_ext_props *ext);
+int ipa3_get_max_pdn(void);
 
 void wwan_cleanup(void);
 

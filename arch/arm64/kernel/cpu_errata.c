@@ -717,7 +717,6 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		ERRATA_MIDR_REV_RANGE(MIDR_CORTEX_A76, 0,
 			MIDR_CPU_VAR_REV(0, 0),
 			MIDR_CPU_VAR_REV(2, 0)),
-
 	},
 	{
 		.desc = "ARM erratum 1188873",

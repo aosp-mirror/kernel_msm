@@ -21,6 +21,7 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <linux/ipa.h>
 #include <linux/vmalloc.h>
+#include <soc/qcom/boot_stats.h>
 
 #include "ipa_qmi_service.h"
 #include "ipa_mhi_proxy.h"
@@ -683,6 +684,9 @@ static int ipa3_qmi_init_modem_send_sync_msg(void)
 	}
 
 	pr_info("QMI_IPA_INIT_MODEM_DRIVER_REQ_V01 response received\n");
+
+	place_marker("M - QMI ready for commands");
+
 	return ipa3_check_qmi_response(rc,
 		QMI_IPA_INIT_MODEM_DRIVER_REQ_V01, resp.resp.result,
 		resp.resp.error, "ipa_init_modem_driver_resp_msg_v01");
@@ -791,10 +795,8 @@ static int ipa3_qmi_filter_request_ex_calc_length(
 {
 	int len = 0;
 
-	/*
-	 * caller should validate and send the req instead of sending max
-	 * length, the approximate length is calculated
-	 */
+	/* caller should validate and send the req */
+	/* instead of sending max length,the approximate length is calculated */
 	len += ((sizeof(struct ipa_install_fltr_rule_req_ex_msg_v01)) -
 		(QMI_IPA_MAX_FILTERS_EX_V01 *
 		sizeof(struct ipa_filter_spec_ex_type_v01) -
@@ -802,19 +804,26 @@ static int ipa3_qmi_filter_request_ex_calc_length(
 		(QMI_IPA_MAX_FILTERS_V01 *
 		sizeof(struct ipa_filter_spec_ex2_type_v01)));
 
-	if(req->filter_spec_ex_list_valid &&
-			req->filter_spec_ex_list_len > 0)
+	if (req->filter_spec_ex_list_valid &&
+		req->filter_spec_ex_list_len > 0) {
 		len += sizeof(struct ipa_filter_spec_ex_type_v01)*
 			req->filter_spec_ex_list_len;
-
-	if( req->xlat_filter_indices_list_valid &&
-			req->xlat_filter_indices_list_len > 0)
+	}
+	if (req->xlat_filter_indices_list_valid &&
+		req->xlat_filter_indices_list_len > 0) {
 		len += sizeof(uint32_t)*req->xlat_filter_indices_list_len;
+	}
 
-	if(req->filter_spec_ex2_list_valid &&
-		req->filter_spec_ex2_list_len > 0 )
+	if (req->filter_spec_ex2_list_valid &&
+		req->filter_spec_ex2_list_len > 0) {
 		len += sizeof(struct ipa_filter_spec_ex2_type_v01)*
-			req->filter_spec_ex2_list_len;
+		req->filter_spec_ex2_list_len;
+	}
+
+	if (req->ul_firewall_indices_list_valid &&
+		req->ul_firewall_indices_list_len > 0) {
+		len += sizeof(uint32_t)*req->ul_firewall_indices_list_len;
+	}
 
 	return len;
 }
@@ -2364,7 +2373,7 @@ int ipa3_qmi_send_mhi_cleanup_request(struct ipa_mhi_cleanup_req_msg_v01 *req)
 		resp.resp.error, "ipa_mhi_cleanup_req_msg");
 }
 
-int ipa3_qmi_send_rsc_pipe_indication(
+int ipa3_qmi_send_endp_desc_indication(
 	struct ipa_endp_desc_indication_msg_v01 *req)
 {
 	IPAWANDBG("Sending QMI_IPA_ENDP_DESC_INDICATION_V01\n");

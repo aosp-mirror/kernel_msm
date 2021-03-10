@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -36,7 +36,7 @@
 #define COOKIE_SIZE (BYTE_SIZE*COOKIE_NUM_BYTE)
 #define COOKIE_MASK ((1<<COOKIE_SIZE)-1)
 #define HANDLE_INIT (-1)
-#define CAM_SMMU_CB_MAX 5
+#define CAM_SMMU_CB_MAX 8
 
 #define GET_SMMU_HDL(x, y) (((x) << COOKIE_SIZE) | ((y) & COOKIE_MASK))
 #define GET_SMMU_TABLE_IDX(x) (((x) >> COOKIE_SIZE) & COOKIE_MASK)
@@ -105,7 +105,10 @@ struct cam_context_bank_info {
 	dma_addr_t va_start;
 	size_t va_len;
 	const char *name;
+	/* stage 2 only */
 	bool is_secure;
+	/* stage 1 */
+	bool is_secure_pixel;
 	uint8_t scratch_buf_support;
 	uint8_t firmware_support;
 	uint8_t shared_support;
@@ -453,7 +456,7 @@ void cam_smmu_set_client_page_fault_handler(int handle,
 	if (handler_cb) {
 		if (iommu_cb_set.cb_info[idx].cb_count == CAM_SMMU_CB_MAX) {
 			CAM_ERR(CAM_SMMU,
-				"%s Should not regiester more handlers",
+				"%s Should not register more handlers",
 				iommu_cb_set.cb_info[idx].name);
 			mutex_unlock(&iommu_cb_set.cb_info[idx].lock);
 			return;
@@ -718,11 +721,12 @@ static int cam_smmu_create_add_handle_in_table(char *name,
 					return 0;
 				}
 
-				CAM_ERR(CAM_SMMU,
-					"Error: %s already got handle 0x%x",
+				CAM_DBG(CAM_SMMU,
+					"%s already got handle 0x%x",
 					name, iommu_cb_set.cb_info[i].handle);
 
-				return -EINVAL;
+				*hdl = iommu_cb_set.cb_info[i].handle;
+				return 0;
 			}
 
 			/* make sure handle is unique */
@@ -3268,6 +3272,20 @@ static int cam_smmu_setup_cb(struct cam_context_bank_info *cb,
 		goto end;
 	}
 
+	if (cb->is_secure_pixel) {
+		int secure_vmid = VMID_CP_PIXEL;
+
+		rc = iommu_domain_set_attr(cb->mapping->domain,
+				DOMAIN_ATTR_SECURE_VMID, &secure_vmid);
+		if (rc) {
+			CAM_ERR(CAM_SMMU,
+				"programming secure vmid failed: %s %d",
+				dev_name(dev), rc);
+			rc = -ENODEV;
+			goto end;
+		}
+	}
+
 	return rc;
 end:
 	if (cb->shared_support) {
@@ -3343,6 +3361,10 @@ static int cam_smmu_get_memory_regions_info(struct device_node *of_node,
 
 	mem_map_node = of_get_child_by_name(of_node, "iova-mem-map");
 	cb->is_secure = of_property_read_bool(of_node, "qcom,secure-cb");
+
+	if (!cb->is_secure)
+		cb->is_secure_pixel = of_property_read_bool(of_node,
+			"qcom,secure-pixel-cb");
 
 	/*
 	 * We always expect a memory map node, except when it is a secure

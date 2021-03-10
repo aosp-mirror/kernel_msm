@@ -35,10 +35,13 @@ static void dwmac4_core_init(struct mac_device_info *hw,
 	if (mtu > 2000)
 		value |= GMAC_CONFIG_JE;
 
+	if (hw->crc_strip_en)
+		value |= GMAC_CONFIG_CRC;
+
 	if (hw->ps) {
 		value |= GMAC_CONFIG_TE;
 
-		value &= hw->link.speed_mask;
+		value &= ~(hw->link.speed_mask);
 		switch (hw->ps) {
 		case SPEED_1000:
 			value |= hw->link.speed1000;
@@ -191,6 +194,8 @@ static void dwmac4_prog_mtl_tx_algorithms(struct mac_device_info *hw,
 	default:
 		break;
 	}
+
+	writel_relaxed(value, ioaddr + MTL_OPERATION_MODE);
 }
 
 static void dwmac4_set_mtl_tx_queue_weight(struct mac_device_info *hw,
@@ -694,6 +699,7 @@ static void dwmac4_debug(void __iomem *ioaddr, struct stmmac_extra_stats *x,
 static const struct stmmac_ops dwmac4_ops = {
 	.core_init = dwmac4_core_init,
 	.set_mac = stmmac_set_mac,
+	.set_vlan = stmmac_set_vlan_filter_rx_queue,
 	.rx_ipc = dwmac4_rx_ipc_enable,
 	.rx_queue_enable = dwmac4_rx_queue_enable,
 	.rx_queue_prio = dwmac4_rx_queue_priority,
@@ -725,6 +731,7 @@ static const struct stmmac_ops dwmac4_ops = {
 static const struct stmmac_ops dwmac410_ops = {
 	.core_init = dwmac4_core_init,
 	.set_mac = stmmac_dwmac4_set_mac,
+	.set_vlan = stmmac_set_vlan_filter_rx_queue,
 	.rx_ipc = dwmac4_rx_ipc_enable,
 	.rx_queue_enable = dwmac4_rx_queue_enable,
 	.rx_queue_prio = dwmac4_rx_queue_priority,

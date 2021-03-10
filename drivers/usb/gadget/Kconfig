@@ -190,6 +190,9 @@ config USB_RNDIS
 config USB_F_RNDIS
 	tristate
 
+config USB_F_QCRNDIS
+	tristate
+
 config USB_F_MASS_STORAGE
 	tristate
 
@@ -254,7 +257,7 @@ config USB_F_MDM_DATA
 	tristate
 
 config USB_F_RMNET_BAM
-        tristate
+	tristate
 
 config USB_F_MBIM_BAM
         tristate
@@ -336,6 +339,15 @@ config USB_CONFIGFS_ECM_SUBSET
 	  On hardware that can't implement the full protocol,
 	  a simple CDC subset is used, placing fewer demands on USB.
 
+config USB_CONFIGFS_QCRNDIS
+	bool "QCRNDIS"
+	depends on USB_CONFIGFS
+	depends on NET
+	depends on RNDIS_IPA
+	select USB_U_ETHER
+	select USB_RNDIS
+	select USB_F_QCRNDIS
+
 config USB_CONFIGFS_RNDIS
 	bool "RNDIS"
 	depends on USB_CONFIGFS
@@ -354,9 +366,9 @@ config USB_CONFIGFS_RNDIS
 	   is given in comments found in that info file.
 
 config USB_CONFIGFS_RMNET_BAM
-        bool "RMNET_BAM"
-        depends on USB_CONFIGFS
-        select USB_F_RMNET_BAM
+	bool "RMNET_BAM"
+	depends on USB_CONFIGFS
+	select USB_F_RMNET_BAM
 	help
 	   RmNet interface is a new logical device in QMI framework for data
 	   services. RmNet in accordance with QMI architecture uses Data I/O
@@ -661,34 +673,6 @@ config USB_CONFIGFS_F_MDM_DATA
 	help
 	  USB QTI modem data function driver.
 
-choice
-	tristate "USB Gadget precomposed configurations"
-	default USB_ETH
-	optional
-	help
-	  A Linux "Gadget Driver" talks to the USB Peripheral Controller
-	  driver through the abstract "gadget" API.  Some other operating
-	  systems call these "client" drivers, of which "class drivers"
-	  are a subset (implementing a USB device class specification).
-	  A gadget driver implements one or more USB functions using
-	  the peripheral hardware.
-
-	  Gadget drivers are hardware-neutral, or "platform independent",
-	  except that they sometimes must understand quirks or limitations
-	  of the particular controllers they work with.  For example, when
-	  a controller doesn't support alternate configurations or provide
-	  enough of the right types of endpoints, the gadget driver might
-	  not be able work with that controller, or might need to implement
-	  a less common variant of a device class protocol.
-
-	  The available choices each represent a single precomposed USB
-	  gadget configuration. In the device model, each option contains
-	  both the device instantiation as a child for a USB gadget
-	  controller, and the relevant drivers for each function declared
-	  by the device.
-
 source "drivers/usb/gadget/legacy/Kconfig"
-
-endchoice
 
 endif # USB_GADGET

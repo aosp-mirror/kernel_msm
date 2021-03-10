@@ -2044,7 +2044,7 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
  *
  * I_SYNC_QUEUED	Inode is queued in b_io or b_more_io writeback lists.
  *			Used to detect that mark_inode_dirty() should not move
- * 			inode between dirty lists.
+ *			inode between dirty lists.
  *
  * Q: What is the difference between I_WILL_FREE and I_FREEING?
  */
@@ -3400,6 +3400,7 @@ int proc_nr_dentry(struct ctl_table *table, int write,
 int proc_nr_inodes(struct ctl_table *table, int write,
 		   void __user *buffer, size_t *lenp, loff_t *ppos);
 int __init get_filesystem_list(char *buf);
+int get_filesystem_list_runtime(char *buf);
 
 #define __FMODE_EXEC		((__force int) FMODE_EXEC)
 #define __FMODE_NONOTIFY	((__force int) FMODE_NONOTIFY)

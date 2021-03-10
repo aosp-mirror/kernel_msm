@@ -495,8 +495,8 @@ static bool irq_may_run(struct irq_desc *desc)
 			if (desc->action && desc->action->name)
 				name = desc->action->name;
 
-			log_bad_wake_reason("misconfigured IRQ %u %s", irq,
-					    name);
+			log_abnormal_wakeup_reason("misconfigured IRQ %u %s",
+						   irq, name);
 		}
 #endif
 		return true;

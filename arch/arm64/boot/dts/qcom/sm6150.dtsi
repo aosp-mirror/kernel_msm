@@ -45,7 +45,6 @@
 		i2c0 = &qupv3_se5_i2c;
 		i2c1 = &qupv3_se1_i2c;
 		i2c2 = &qupv3_se3_i2c;
-		i2c8 = &qupv3_se8_i2c;
 		hsuart0 = &qupv3_se7_4uart;
 		hsuart1 = &qupv3_se4_2uart;
 		swr0 = &swr0;
@@ -64,19 +63,16 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_0>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_0: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x10000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 
 				L3_0: l3-cache {
 				      compatible = "arm,arch-cache";
-				      cache-size = <0x100000>;
 				      cache-level = <3>;
 				};
 			};
@@ -103,13 +99,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_100>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_100: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x10000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -137,13 +131,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_200>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_200: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x10000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -170,13 +162,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_300>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_300: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x10000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -203,13 +193,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_400>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_400: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x10000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -236,13 +224,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1024>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
-			cache-size = <0x8000>;
 			next-level-cache = <&L2_500>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			#cooling-cells = <2>;
 			L2_500: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x10000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			};
@@ -269,13 +255,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1740>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
-			cache-size = <0x10000>;
 			next-level-cache = <&L2_600>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			#cooling-cells = <2>;
 			L2_600: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x40000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			      qcom,dump-size = <0x48000>;
@@ -311,13 +295,11 @@
 			enable-method = "psci";
 			capacity-dmips-mhz = <1740>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
-			cache-size = <0x10000>;
 			next-level-cache = <&L2_700>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			#cooling-cells = <2>;
 			L2_700: l2-cache {
 			      compatible = "arm,arch-cache";
-			      cache-size = <0x40000>;
 			      cache-level = <2>;
 			      next-level-cache = <&L3_0>;
 			      qcom,dump-size = <0x48000>;
@@ -652,7 +634,7 @@
 		};
 
 		disp_rdump_memory: disp_rdump_region@9c000000 {
-			reg = <0x0 0x9c000000 0x0 0x01000000>;
+			reg = <0x0 0x9c000000 0x0 0x0f00000>;
 			label = "disp_rdump_region";
 		};
 
@@ -669,7 +651,7 @@
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0x2000000>;
+			size = <0 0x2800000>;
 			linux,cma-default;
 		};
 	};
@@ -802,6 +784,22 @@
 			clock-frequency = <32000>;
 			clock-output-names = "chip_sleep_clk";
 			#clock-cells = <1>;
+		};
+
+		scc_pll_out_aux2: scc_pll_out_aux2 {
+			compatible = "fixed-clock";
+			clock-frequency = <600000000>;
+			clock-output-names = "scc_pll_out_aux2";
+			#clock-cells = <0>;
+		};
+
+		scc_pll_out_aux: scc_pll_out_aux {
+			compatible = "fixed-factor-clock";
+			clock-output-names = "scc_pll_out_aux";
+			clocks = <&scc_pll_out_aux2>;
+			clock-mult = <1>;
+			clock-div = <2>;
+			#clock-cells = <0>;
 		};
 	};
 
@@ -1411,12 +1409,11 @@
 
 	sdhc_1: sdhci@7c4000 {
 		compatible = "qcom,sdhci-msm-v5";
-		reg = <0x7c4000 0x1000>, <0x7c5000 0x1000>;
-		reg-names = "hc_mem", "cmdq_mem";
+		reg = <0x7c4000 0x1000>, <0x7c5000 0x1000>, <0x7C8000 0x8000>;
+		reg-names = "hc_mem", "cmdq_mem", "cmdq_ice";
 
 		interrupts = <0 641 0>, <0 644 0>;
 		interrupt-names = "hc_irq", "pwr_irq";
-		sdhc-msm-crypto = <&sdcc1_ice>;
 
 		qcom,bus-width = <8>;
 		qcom,large-address-bus;
@@ -1625,11 +1622,11 @@
 
 	ufshc_mem: ufshc@1d84000 {
 		compatible = "qcom,ufshc";
-		reg = <0x1d84000 0x3000>;
+		reg = <0x1d84000 0x3000>, <0x1d90000 0x8000>;
+		reg-names = "ufs_mem", "ufs_ice";
 		interrupts = <0 265 0>;
 		phys = <&ufsphy_mem>;
 		phy-names = "ufsphy";
-		ufs-qcom-crypto = <&ufs_ice>;
 
 		lanes-per-direction = <1>;
 		dev-ref-clk-freq = <0>; /* 19.2 MHz */
@@ -2389,13 +2386,15 @@
 				<&adsp_smp2p_in 0 0>,
 				<&adsp_smp2p_in 2 0>,
 				<&adsp_smp2p_in 1 0>,
-				<&adsp_smp2p_in 3 0>;
+				<&adsp_smp2p_in 3 0>,
+				<&adsp_smp2p_in 7 0>;
 
 		interrupt-names = "qcom,wdog",
 				"qcom,err-fatal",
 				"qcom,proxy-unvote",
 				"qcom,err-ready",
-				"qcom,stop-ack";
+				"qcom,stop-ack",
+				"qcom,shutdown-ack";
 
 		/* Outputs to lpass */
 		qcom,smem-states = <&adsp_smp2p_out 0>;
@@ -2481,13 +2480,15 @@
 				<&cdsp_smp2p_in 0 0>,
 				<&cdsp_smp2p_in 2 0>,
 				<&cdsp_smp2p_in 1 0>,
-				<&cdsp_smp2p_in 3 0>;
+				<&cdsp_smp2p_in 3 0>,
+				<&cdsp_smp2p_in 7 0>;
 
 		interrupt-names = "qcom,wdog",
 				"qcom,err-fatal",
 				"qcom,proxy-unvote",
 				"qcom,err-ready",
-				"qcom,stop-ack";
+				"qcom,stop-ack",
+				"qcom,shutdown-ack";
 
 		/* Outputs to turing */
 		qcom,smem-states = <&cdsp_smp2p_out 0>;

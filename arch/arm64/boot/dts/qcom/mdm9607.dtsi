@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -57,6 +57,12 @@
 			reg = <0x87c00000 0x400000>;
 		};
 
+		tz_apps_mem: tz_apps_region@0 {
+			compatible = "removed-dma-pool";
+			no-map;
+			reg = <0x88000000 0x500000>;
+		};
+
 		audio_mem: audio_region@0 {
 			compatible = "shared-dma-pool";
 			reusable;
@@ -69,7 +75,7 @@
 			reusable;
 			alignment = <0x400000>;
 			size = <0x0400000>;
-			status = "disabled";
+			status = "ok";
 		};
 	};
 
@@ -88,7 +94,7 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a7";
 			reg = <0x0>;
-			qcom,limits-info = <&mitigation_profile0>;
+			#cooling-cells = <2>;
 		};
 	};
 	soc: soc { };
@@ -1238,99 +1244,6 @@
 				&pri_mi2s_din_sleep>;
 	};
 
-	qcom,msm-thermal {
-		compatible = "qcom,msm-thermal";
-		qcom,sensor-id = <4>;
-		qcom,poll-ms = <250>;
-		qcom,limit-temp = <60>;
-		qcom,temp-hysteresis = <10>;
-		qcom,freq-step = <2>;
-		qcom,freq-mitigation-temp = <105>;
-		qcom,freq-mitigation-temp-hysteresis = <15>;
-		qcom,freq-mitigation-value = <800000>;
-		qcom,disable-cx-phase-ctrl;
-		qcom,disable-gfx-phase-ctrl;
-		qcom,disable-psm;
-		qcom,disable-ocr;
-		qcom,mx-restriction-temp = <10>;
-		qcom,mx-restriction-temp-hysteresis = <5>;
-		qcom,mx-retention-min =
-			<RPM_SMD_REGULATOR_LEVEL_NOM_PLUS>;
-		vdd-mx-supply = <&mdm9607_l12_floor_level>;
-		qcom,vdd-restriction-temp = <5>;
-		qcom,vdd-restriction-temp-hysteresis = <10>;
-		vdd-dig-supply = <&mdm9607_s3_floor_level>;
-		qcom,therm-ddr-lm-info = <2 78 70>;
-
-		qcom,vdd-dig-rstr{
-			qcom,vdd-rstr-reg = "vdd-dig";
-			qcom,levels = <RPM_SMD_REGULATOR_LEVEL_NOM_PLUS
-					RPM_SMD_REGULATOR_LEVEL_TURBO
-					RPM_SMD_REGULATOR_LEVEL_TURBO>;
-			qcom,min-level = <RPM_SMD_REGULATOR_LEVEL_RETENTION>;
-		};
-
-		 msm_thermal_freq: qcom,vdd-apps-rstr {
-			qcom,vdd-rstr-reg = "vdd-apps";
-			qcom,levels = <998400>;
-			qcom,freq-req;
-		};
-	};
-
-	qcom,sensor-information {
-		compatible = "qcom,sensor-information";
-		sensor_information0: qcom,sensor-information-0 {
-			qcom,sensor-type = "tsens";
-			qcom,sensor-name = "tsens_tz_sensor0";
-		};
-
-		sensor_information1: qcom,sensor-information-1 {
-			qcom,sensor-type =  "tsens";
-			qcom,sensor-name = "tsens_tz_sensor1";
-		};
-
-		sensor_information2: qcom,sensor-information-2 {
-			qcom,sensor-type =  "tsens";
-			qcom,sensor-name = "tsens_tz_sensor2";
-		};
-
-		sensor_information3: qcom,sensor-information-3 {
-			qcom,sensor-type = "tsens";
-			qcom,sensor-name = "tsens_tz_sensor3";
-		};
-
-		sensor_information4: qcom,sensor-information-4 {
-			qcom,sensor-type = "tsens";
-			qcom,sensor-name = "tsens_tz_sensor4";
-		};
-
-		sensor_information5: qcom,sensor-information-5 {
-			qcom,sensor-type = "adc";
-			qcom,sensor-name = "pa_therm0";
-		};
-
-		sensor_information6: qcom,sensor-information-6 {
-			qcom,sensor-type = "adc";
-			qcom,sensor-name = "pa_therm1";
-		};
-
-		sensor_information7: qcom,sensor-information-7 {
-			qcom,sensor-type = "adc";
-			qcom,sensor-name = "xo_therm";
-		};
-
-		sensor_information8: qcom,sensor-information-8 {
-			qcom,sensor-type = "adc";
-			qcom,sensor-name = "xo_therm_amux";
-		};
-	};
-
-	mitigation_profile0: qcom,limit_info-0 {
-		qcom,temperature-sensor = <&sensor_information4>;
-		qcom,boot-frequency-mitigate;
-		qcom,emergency-frequency-mitigate;
-	};
-
 	qcom,ipc-spinlock@1905000 {
 		compatible = "qcom,ipc-spinlock-sfpb";
 		reg = <0x1905000 0x8000>;
@@ -1392,7 +1305,7 @@
 			interrupts = <GIC_SPI 168 IRQ_TYPE_EDGE_RISING>;
 			label = "rpm";
 
-			rpm_requests: rpm_requests@0 {
+			rpmb: rpmb@0 {
 				compatible = "qcom,rpm-smd";
 				qcom,smd-channels = "rpm_requests";
 				interrupts = <GIC_SPI 168 IRQ_TYPE_EDGE_RISING>;
@@ -1485,6 +1398,12 @@
 			qcom,smdpkt-edge = "modem";
 			qcom,smdpkt-ch-name = "apr_apps2";
 			qcom,smdpkt-dev-name = "apr_apps2";
+		};
+
+		qcom,smdpkt-data-mdm1 {
+			qcom,smdpkt-edge = "modem";
+			qcom,smdpkt-ch-name = "DS";
+			qcom,smdpkt-dev-name = "at_mdm1";
 		};
 
 		qcom,smdpkt-data1 {
@@ -1766,14 +1685,15 @@
 		qcom,ce-opp-freq = <100000000>;
 	};
 
-	qcom_seecom: qseecom@87a80000 {
+	qcom_seecom: qseecom@88000000 {
 		compatible = "qcom,qseecom";
-		reg = <0x87a80000 0x100000>;
+		reg = <0x88000000 0x500000>;
 		reg-names = "secapp-region";
 		memory-region = <&qseecom_mem>;
 		qcom,hlos-num-ce-hw-instances = <1>;
 		qcom,hlos-ce-hw-instance = <0>;
 		qcom,qsee-ce-hw-instance = <0>;
+		qcom,support-bus-scaling;
 		qcom,msm-bus,name = "qseecom-noc";
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
@@ -1790,7 +1710,7 @@
 		clock-names = "core_clk_src", "core_clk",
 				"iface_clk", "bus_clk";
 		qcom,ce-opp-freq = <100000000>;
-		status = "disabled";
+		status = "ok";
 	};
 
 	qcom_tzlog: tz-log@8600720 {

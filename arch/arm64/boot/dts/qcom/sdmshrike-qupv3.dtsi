@@ -1,4 +1,4 @@
-/* Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,6 +29,7 @@
 		qcom,bus-mas-id = <MSM_BUS_MASTER_QUP_0>;
 		qcom,bus-slv-id = <MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,iommu-s1-bypass;
+		status = "ok";
 
 		iommu_qupv3_0_geni_se_cb: qcom,iommu_qupv3_0_geni_se_cb {
 			compatible = "qcom,qupv3-geni-se-cb";
@@ -326,6 +327,29 @@
 		status = "disabled";
 	};
 
+	/* 4-wire UART */
+	qupv3_se4_4uart: qcom,qup_uart@890000 {
+		compatible = "qcom,msm-geni-serial-hs";
+		reg = <0x890000 0x4000>;
+		reg-names = "se_phys";
+		clock-names = "se-clk", "m-ahb", "s-ahb";
+		clocks = <&clock_gcc GCC_QUPV3_WRAP0_S4_CLK>,
+			<&clock_gcc GCC_QUPV3_WRAP_0_M_AHB_CLK>,
+			<&clock_gcc GCC_QUPV3_WRAP_0_S_AHB_CLK>;
+		pinctrl-names = "default", "active", "sleep";
+		pinctrl-0 = <&qupv3_se4_default_ctsrtsrx>,
+				<&qupv3_se4_default_tx>;
+		pinctrl-1 = <&qupv3_se4_ctsrx>, <&qupv3_se4_rts>,
+						<&qupv3_se4_tx>;
+		pinctrl-2 = <&qupv3_se4_ctsrx>, <&qupv3_se4_rts>,
+						<&qupv3_se4_tx>;
+		interrupts-extended = <&pdc GIC_SPI 605 0>,
+				<&tlmm 54 0>;
+		qcom,wrapper-core = <&qupv3_0>;
+		qcom,wakeup-byte = <0xFD>;
+		status = "disabled";
+	};
+
 	/* QUPv3 East0 and East1 Instances
 	 * East1 0 : SE 8
 	 * East1 1 : SE 9
@@ -348,6 +372,7 @@
 		qcom,bus-mas-id = <MSM_BUS_MASTER_QUP_1>;
 		qcom,bus-slv-id = <MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,iommu-s1-bypass;
+		status = "ok";
 
 		iommu_qupv3_1_geni_se_cb: qcom,iommu_qupv3_1_geni_se_cb {
 			compatible = "qcom,qupv3-geni-se-cb";
@@ -616,6 +641,7 @@
 		qcom,bus-mas-id = <MSM_BUS_MASTER_QUP_2>;
 		qcom,bus-slv-id = <MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,iommu-s1-bypass;
+		status = "ok";
 
 		iommu_qupv3_2_geni_se_cb: qcom,iommu_qupv3_2_geni_se_cb {
 			compatible = "qcom,qupv3-geni-se-cb";
@@ -871,6 +897,11 @@
 		qcom,bus-mas-id = <MSM_BUS_MASTER_SENSORS_AHB>;
 		qcom,bus-slv-id = <MSM_BUS_SLAVE_EBI_CH0>;
 		qcom,iommu-s1-bypass;
+		qcom,subsys-name = "slpi";
+		clock-names = "corex", "core2x";
+		clocks = <&clock_scc SCC_QUPV3_CORE_CLK>,
+			<&clock_scc SCC_QUPV3_2XCORE_CLK>;
+		status = "disabled";
 
 		iommu_qupv3_3_geni_se_cb: qcom,iommu_qupv3_3_geni_se_cb {
 			compatible = "qcom,qupv3-geni-se-cb";

@@ -1,10 +1,12 @@
-/*
- * aQuantia Corporation Network Driver
- * Copyright (C) 2017 aQuantia Corporation. All rights reserved
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Atlantic Network Driver
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
+ * Copyright (C) 2017 aQuantia Corporation
+ * Copyright (C) 2019-2020 Marvell International Ltd.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #ifndef _ATL_HW_H_
@@ -39,18 +41,15 @@ struct atl_nic;
 #define ATL2_ACTION_ASSIGN_QUEUE(QUEUE) ATL2_ACTION(1, 0, (QUEUE), 1, 0)
 #define ATL2_ACTION_ASSIGN_TC(TC) ATL2_ACTION(1, 1, (TC), 1, 0)
 
-#define ATL2_RPF_L2_PROMISC_OFF_INDEX   0
-#define ATL2_RPF_VLAN_PROMISC_OFF_INDEX 1
-#define ATL2_RPF_L3L4_USER_INDEX        48
-#define ATL2_RPF_ET_PCP_USER_INDEX      64
-#define ATL2_RPF_VLAN_USER_INDEX        80
-#define ATL2_RPF_FLEX_USER_INDEX        96
-#define ATL2_RPF_VLAN_INDEX             122
-#define ATL2_RPF_MAC_INDEX              123
-#define ATL2_RPF_ALLMC_INDEX            124
-#define ATL2_RPF_UNTAG_INDEX            125
-#define ATL2_RPF_VLAN_PROMISC_ON_INDEX  126
-#define ATL2_RPF_L2_PROMISC_ON_INDEX    127
+enum {
+	ATL2_RPF_L2_PROMISC_OFF_INDEX = 0,
+	ATL2_RPF_VLAN_PROMISC_OFF_INDEX,
+	ATL2_RPF_L3L4_USER_INDEX,
+	ATL2_RPF_ET_PCP_USER_INDEX = ATL2_RPF_L3L4_USER_INDEX + 16,
+	ATL2_RPF_VLAN_USER_INDEX  = ATL2_RPF_ET_PCP_USER_INDEX + 16,
+	ATL2_RPF_FLEX_USER_INDEX  = ATL2_RPF_VLAN_USER_INDEX + 16,
+	ATL2_RPF_DEFAULT_RULE_INDEX  = ATL2_RPF_FLEX_USER_INDEX + 1,
+};
 
 #define ATL2_RPF_TAG_UC_OFFSET      0x0
 #define ATL2_RPF_TAG_ALLMC_OFFSET   0x6
@@ -75,10 +74,10 @@ struct atl_nic;
 #define ATL2_RPF_TAG_FLEX_MASK  (0x00000003 << ATL2_RPF_TAG_FLEX_OFFSET)
 #define ATL2_RPF_TAG_PCP_MASK   (0x00000007 << ATL2_RPF_TAG_PCP_OFFSET)
 
-#define ATL2_RPF_TAG_BASE_UC    (1 << ATL2_RPF_TAG_UC_OFFSET)
-#define ATL2_RPF_TAG_BASE_ALLMC (1 << ATL2_RPF_TAG_ALLMC_OFFSET)
-#define ATL2_RPF_TAG_BASE_UNTAG (1 << ATL2_RPF_TAG_UNTAG_OFFSET)
-#define ATL2_RPF_TAG_BASE_VLAN  (1 << ATL2_RPF_TAG_VLAN_OFFSET)
+#define ATL2_RPF_TAG_BASE_BC    (1 << ATL2_RPF_TAG_UC_OFFSET)
+#define ATL2_RPF_TAG_BASE_UC    (2 << ATL2_RPF_TAG_UC_OFFSET)
+
+#define ATL2_FW_HOSTLOAD_REQ_LEN_MAX 0x1000
 
 #define busy_wait(tries, wait, lvalue, fetch, cond)	\
 ({							\
@@ -125,12 +124,14 @@ enum atl_nic_state {
 
 #define ATL_WAKE_SUPPORTED (WAKE_MAGIC | WAKE_PHY)
 struct atl_hw {
+	atomic_t flags;
 	uint8_t __iomem *regs;
 	struct pci_dev *pdev;
 	unsigned long state;
 	enum atl_chip chip_id;
 	bool new_rpf;
 	struct atl_link_state link_state;
+	uint32_t lpi_timer;
 	unsigned wol_mode;
 	struct atl_mcp mcp;
 	uint32_t non_ring_intr_mask;
@@ -140,11 +141,12 @@ struct atl_hw {
 #define ATL_RSS_TBL_SIZE (1 << 6)
 	uint8_t rss_tbl[ATL_RSS_TBL_SIZE];
 	struct atl_thermal thermal;
-#define ATL_FW_CFG_DUMP_SIZE 2
-	uint32_t fw_cfg_dump[ATL_FW_CFG_DUMP_SIZE];
 #if IS_ENABLED(CONFIG_MACSEC) && defined(NETIF_F_HW_MACSEC)
 	struct atl_macsec_cfg macsec_cfg;
 #endif
+	s64 ptp_clk_offset;
+	int art_base_index;
+	int art_available;
 };
 
 struct atl_hw_ring {
@@ -323,8 +325,8 @@ void atl_set_rss_key(struct atl_hw *hw);
 int atl_set_rss_tbl(struct atl_hw *hw);
 void atl_set_uc_flt(struct atl_hw *hw, int idx, uint8_t mac_addr[ETH_ALEN]);
 
-int atl_alloc_descs(struct atl_nic *nic, struct atl_hw_ring *ring);
-void atl_free_descs(struct atl_nic *nic, struct atl_hw_ring *ring);
+int atl_alloc_descs(struct atl_nic *nic, struct atl_hw_ring *ring, size_t extra);
+void atl_free_descs(struct atl_nic *nic, struct atl_hw_ring *ring, size_t extra);
 void atl_set_intr_bits(struct atl_hw *hw, int idx, int rxbit, int txbit);
 int atl_alloc_link_intr(struct atl_nic *nic);
 void atl_free_link_intr(struct atl_nic *nic);

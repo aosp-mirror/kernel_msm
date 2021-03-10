@@ -40,14 +40,46 @@
 	};
 };
 
-&sde_dp {
+&sde_dp0 {
 	qcom,ext-disp = <&ext_disp>;
 	qcom,dp-hpd-gpio = <&ioexp 8 0>;
 	qcom,mst-fixed-topology-ports = <1 2>;
 
-	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep";
-	pinctrl-0 = <&dp_hpd_cfg_pins>;
-	pinctrl-1 = <&dp_hpd_cfg_pins>;
+	qcom,core-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		qcom,core-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "refgen";
+			qcom,supply-min-voltage = <0>;
+			qcom,supply-max-voltage = <0>;
+			qcom,supply-enable-load = <0>;
+			qcom,supply-disable-load = <0>;
+		};
+	};
+};
+
+&sde_dp1 {
+	qcom,ext-disp = <&ext_disp>;
+	qcom,dp-hpd-gpio = <&ioexp 9 0>;
+
+	qcom,core-supply-entries {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		qcom,core-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "refgen";
+			qcom,supply-min-voltage = <0>;
+			qcom,supply-max-voltage = <0>;
+			qcom,supply-enable-load = <0>;
+			qcom,supply-disable-load = <0>;
+		};
+	};
+};
+
+&sde_edp {
+	qcom,ext-disp = <&ext_disp>;
+	qcom,dp-hpd-gpio = <&ioexp 11 0>;
 
 	qcom,core-supply-entries {
 		#address-cells = <1>;
@@ -86,7 +118,9 @@
 			&dsi1_cdet_cfg_pins
 			&dsi2_hpd_cfg_pins
 			&dsi2_cdet_cfg_pins
-			&dp_hpd_cfg_pins>;
+			&dp0_hpd_cfg_pins
+			&dp1_hpd_cfg_pins
+			&edp_hpd_cfg_pins>;
 
 		dsi1_hpd_cfg_pins: gpio0-cfg {
 			pins = "gpio0";
@@ -108,8 +142,18 @@
 			bias-pull-down;
 		};
 
-		dp_hpd_cfg_pins: gpio8-cfg {
+		dp0_hpd_cfg_pins: gpio8-cfg {
 			pins = "gpio8";
+			bias-pull-down;
+		};
+
+		dp1_hpd_cfg_pins: gpio9-cfg {
+			pins = "gpio9";
+			bias-pull-down;
+		};
+
+		edp_hpd_cfg_pins: gpio11-cfg {
+			pins = "gpio11";
 			bias-pull-down;
 		};
 	};
@@ -199,7 +243,7 @@
 	dsi_anx_7625_1: qcom,dsi-display@17 {
 		label = "dsi_anx_7625_1";
 		qcom,dsi-display-active;
-		qcom,display-label = "primary";
+		qcom,display-type = "primary";
 
 		qcom,dsi-ctrl-num = <0>;
 		qcom,dsi-phy-num = <0>;
@@ -295,193 +339,11 @@
 			compatible = "qcom,msm-ext-disp-audio-codec-rx";
 		};
 	};
-
-	sde_sh_base0: qcom,shared-display-base@0 {
-		      qcom,shared-display-base-intf = <1>;
-		      qcom,shared-display-base-mode {
-			      qcom,mode-h-active = <1920>;
-			      qcom,mode-h-front-porch = <88>;
-			      qcom,mode-h-pulse-width = <44>;
-			      qcom,mode-h-back-porch = <148>;
-			      qcom,mode-h-active-high;
-			      qcom,mode-v-active = <1080>;
-			      qcom,mode-v-front-porch = <4>;
-			      qcom,mode-v-pulse-width = <5>;
-			      qcom,mode-v-back-porch = <36>;
-			      qcom,mode-v-active-high;
-			      qcom,mode-refresh-rate = <60>;
-			      qcom,mode-clock-in-khz = <148500>;
-		      };
-	      };
-
-
-	sde_sh0: qcom,shared-display@0 {
-		 compatible = "qcom,shared-display";
-		 qcom,shared-display-base = <&sde_sh_base0>;
-		 qcom,blend-stage-range = <0 8>;
-		 qcom,display-type = "primary";
-		 qcom,shared-display-src-mode {
-			 qcom,mode-h-active = <1920>;
-			 qcom,mode-v-active = <1080>;
-		 };
-		 qcom,shared-display-dst-mode {
-			 qcom,mode-x-offset = <0>;
-			 qcom,mode-y-offset = <0>;
-			 qcom,mode-width = <1920>;
-			 qcom,mode-height = <1080>;
-		 };
-	 };
-
-	sde_sh1: qcom,shared-display@1 {
-		 compatible = "qcom,shared-display";
-		 qcom,shared-display-base = <&sde_sh_base0>;
-		 qcom,blend-stage-range = <8 1>;
-		 qcom,shared-display-src-mode {
-			 qcom,mode-h-active = <1920>;
-			 qcom,mode-v-active = <1080>;
-		 };
-		 qcom,shared-display-dst-mode {
-			 qcom,mode-x-offset = <0>;
-			 qcom,mode-y-offset = <0>;
-			 qcom,mode-width = <1920>;
-			 qcom,mode-height = <1080>;
-		 };
-	 };
-
-	sde_sh2: qcom,shared-display@2 {
-		 compatible = "qcom,shared-display";
-		 qcom,shared-display-base = <&sde_sh_base0>;
-		 qcom,blend-stage-range = <9 1>;
-		 qcom,shared-display-src-mode {
-			 qcom,mode-h-active = <1920>;
-			 qcom,mode-v-active = <1080>;
-		 };
-		 qcom,shared-display-dst-mode {
-			 qcom,mode-x-offset = <0>;
-			 qcom,mode-y-offset = <0>;
-			 qcom,mode-width = <1920>;
-			 qcom,mode-height = <1080>;
-		 };
-	 };
-
-	sde_sh_base1: qcom,shared-display-base@1 {
-		      qcom,shared-display-base-intf = <0>;
-		      qcom,shared-display-base-mode {
-			      qcom,mode-h-active = <1920>;
-			      qcom,mode-h-front-porch = <88>;
-			      qcom,mode-h-pulse-width = <44>;
-			      qcom,mode-h-back-porch = <148>;
-			      qcom,mode-h-active-high;
-			      qcom,mode-v-active = <1080>;
-			      qcom,mode-v-front-porch = <4>;
-			      qcom,mode-v-pulse-width = <5>;
-			      qcom,mode-v-back-porch = <36>;
-			      qcom,mode-v-active-high;
-			      qcom,mode-refresh-rate = <60>;
-			      qcom,mode-clock-in-khz = <148500>;
-		      };
-	      };
-
-
-	sde_sh3: qcom,shared-display@3 {
-		 compatible = "qcom,shared-display";
-		 qcom,shared-display-base = <&sde_sh_base1>;
-		 qcom,blend-stage-range = <0 9>;
-		 qcom,shared-display-src-mode {
-			 qcom,mode-h-active = <1920>;
-			 qcom,mode-v-active = <1080>;
-		 };
-		 qcom,shared-display-dst-mode {
-			 qcom,mode-x-offset = <0>;
-			 qcom,mode-y-offset = <0>;
-			 qcom,mode-width = <1920>;
-			 qcom,mode-height = <1080>;
-		 };
-	 };
-
-	sde_sh4: qcom,shared-display@4 {
-		 compatible = "qcom,shared-display";
-		 qcom,shared-display-base = <&sde_sh_base1>;
-		 qcom,blend-stage-range = <9 1>;
-		 qcom,shared-display-src-mode {
-			 qcom,mode-h-active = <1920>;
-			 qcom,mode-v-active = <1080>;
-		 };
-		 qcom,shared-display-dst-mode {
-			 qcom,mode-x-offset = <0>;
-			 qcom,mode-y-offset = <0>;
-			 qcom,mode-width = <1920>;
-			 qcom,mode-height = <1080>;
-		 };
-	 };
-
-	 qcom,sde-shared-plane {
-		 compatible = "qcom,sde-shared-plane";
-		 qcom,add-planes {
-			 plane@0 {
-				 qcom,plane-name = "plane-4-splash";
-				 qcom,plane-parent = "plane-4";
-				 qcom,plane-init-active;
-				 qcom,plane-seamless-mode = "shared";
-			 };
-			 plane@1 {
-				 qcom,plane-name = "plane-3-splash";
-				 qcom,plane-parent = "plane-3";
-				 qcom,plane-init-active;
-				 qcom,plane-init-handoff;
-				 qcom,plane-seamless-mode = "shared";
-			 };
-			 plane@2 {
-				 qcom,plane-name = "plane-2-splash";
-				 qcom,plane-parent = "plane-2";
-				 qcom,plane-init-active;
-				 qcom,plane-init-handoff;
-				 qcom,plane-seamless-mode = "shared";
-			 };
-		 };
-	 };
-
-	sde_card1: qcom,sde-kms-lease@0 {
-		   compatible = "qcom,sde-kms-lease";
-		   qcom,dev-name = "msm_drm";
-		   qcom,lease-connectors = "DSI-2", "DSI-3", "DP-4", "DP-2",
-			   "DP-3";
-		   qcom,lease-planes = "plane-0", "plane-1", "plane-2",
-			   "plane-3","plane-4", "plane-5",
-			   "plane-6","plane-7", "plane-8",
-			   "plane-9","plane-10","plane-11",
-			   "plane-12","plane-13","plane-14",
-			   "plane-15";
-	   };
-
-	sde_card2: qcom,sde-kms-lease@1 {
-		   compatible = "qcom,sde-kms-lease";
-		   qcom,dev-name = "msm_drm2";
-		   qcom,lease-connectors = "DSI-5";
-		   qcom,lease-planes = "plane-4-splash";
-	   };
-
-	sde_card3: qcom,sde-kms-lease@2 {
-		   compatible = "qcom,sde-kms-lease";
-		   qcom,dev-name = "msm_drm3";
-		   qcom,lease-connectors = "DSI-4","DP-5";
-		   qcom,lease-planes = "plane-3-splash", "plane-2-splash";
-	   };
-};
-
-&mdss_dsi_phy0 {
-	qcom,panel-force-clock-lane-hs;
-};
-
-&mdss_dsi_phy1 {
-	qcom,panel-force-clock-lane-hs;
 };
 
 &mdss_mdp {
-	qcom,sde-reg-dma-version = <0>;
 	qcom,sde-ctl-display-pref = "primary", "none", "none",
 				"none", "none";
 	qcom,sde-mixer-display-pref = "primary", "none", "none",
 				"none", "none", "none";
-	connectors = <&dsi_dp1 &dsi_dp2 &sde_dp &sde_wb>;
 };

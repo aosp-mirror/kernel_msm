@@ -48,6 +48,8 @@ Optional Properties:
   - qcom,phy-init: The initialization sequence to bring up the PCIe PHY.
     Should be specified in groups (offset, value, delay, direction).
   - qcom,phy-status-reg: Register offset for PHY status.
+  - qcom,phy-status-reg2: For sdxprairie and above use only
+    qcom,phy-status-reg2 as register offset for PHY status.
   - qcom,dbi-base-reg: Register offset for DBI base address.
   - qcom,slv-space-reg: Register offset for slave address space size.
   - qcom,pcie-vendor-id: Vendor id to be written to the Vendor ID register.
@@ -70,6 +72,7 @@ Optional Properties:
 	- qcom,msm-bus,num-paths
 	- qcom,msm-bus,vectors-KBps
   - qcom,pcie-m2-autonomous: Enable L1ss sleep/exit to support M2 autonomous mode.
+  - qcom,mhi-soc-reset-offset: AXI register offset to initiate a SOC reset.
 
 Example:
 

@@ -169,7 +169,8 @@ struct coresight_connection {
  * @enable:	'true' if component is currently part of an active path.
  * @activated:	'true' only if a _sink_ has been activated.  A sink can be
  *		activated but not yet enabled.  Enabling for a _sink_
- *		appens when a source has been selected for that it.
+ *		happens when a source has been selected for that it.
+ * @reg_clk:	as defined by @coresight_reg_clk.
  * @ea:		Device attribute for sink representation under PMU directory.
  */
 struct coresight_device {

@@ -705,6 +705,12 @@ static struct request *attempt_merge(struct request_queue *q,
 	if (req_op(req) != req_op(next))
 		return NULL;
 
+	/*
+	 * not contiguous
+	 */
+	if (blk_rq_pos(req) + blk_rq_sectors(req) != blk_rq_pos(next))
+		return NULL;
+
 	if (rq_data_dir(req) != rq_data_dir(next)
 	    || req->rq_disk != next->rq_disk
 	    || req_no_special_merge(next))
@@ -731,19 +737,11 @@ static struct request *attempt_merge(struct request_queue *q,
 	 * counts here. Handle DISCARDs separately, as they
 	 * have separate settings.
 	 */
-
-	switch (blk_try_req_merge(req, next)) {
-	case ELEVATOR_DISCARD_MERGE:
+	if (req_op(req) == REQ_OP_DISCARD) {
 		if (!req_attempt_discard_merge(q, req, next))
 			return NULL;
-		break;
-	case ELEVATOR_BACK_MERGE:
-		if (!ll_merge_requests_fn(q, req, next))
-			return NULL;
-		break;
-	default:
+	} else if (!ll_merge_requests_fn(q, req, next))
 		return NULL;
-	}
 
 	/*
 	 * If failfast settings disagree or any of the two is already
@@ -772,7 +770,7 @@ static struct request *attempt_merge(struct request_queue *q,
 
 	req->__data_len += blk_rq_bytes(next);
 
-	if (!blk_discard_mergable(req))
+	if (req_op(req) != REQ_OP_DISCARD)
 		elv_merge_requests(q, req, next);
 
 	/*

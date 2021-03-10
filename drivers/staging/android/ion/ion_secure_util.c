@@ -36,6 +36,11 @@ bool is_secure_vmid_valid(int vmid)
 		vmid == VMID_CP_DSP_EXT);
 }
 
+bool is_secure_allocation(unsigned long flags)
+{
+	return !!(flags & (ION_FLAGS_CP_MASK | ION_FLAG_SECURE));
+}
+
 int get_secure_vmid(unsigned long flags)
 {
 	if (flags & ION_FLAG_CP_TOUCH)
@@ -150,6 +155,8 @@ int ion_hyp_assign_sg(struct sg_table *sgt, int *dest_vm_list,
 	int *dest_perms;
 	int i;
 	int ret = 0;
+	int j = -1;
+	int k = -1;
 
 	if (dest_nelems <= 0) {
 		pr_err("%s: dest_nelems invalid\n",
@@ -168,9 +175,19 @@ int ion_hyp_assign_sg(struct sg_table *sgt, int *dest_vm_list,
 		if (dest_vm_list[i] == VMID_CP_SEC_DISPLAY ||
 		    dest_vm_list[i] == VMID_CP_DSP_EXT)
 			dest_perms[i] = PERM_READ;
+		else if (dest_vm_list[i] == VMID_CP_CAMERA_ENCODE) {
+			j = i;
+			dest_perms[i] = PERM_READ | PERM_WRITE;
+		} else if (dest_vm_list[i] == VMID_CP_CAMERA) {
+			k = i;
+			dest_perms[i] = PERM_READ | PERM_WRITE;
+		}
 		else
 			dest_perms[i] = PERM_READ | PERM_WRITE;
 	}
+
+	if ((j != -1) && (k != -1))
+		dest_perms[j] = PERM_READ;
 
 	ret = hyp_assign_table(sgt, &source_vmid, 1,
 			       dest_vm_list, dest_perms, dest_nelems);

@@ -25,6 +25,7 @@
 #define __S_IFREG S_IFREG
 #endif
 
+<<<<<<< HEAD
 unsigned int rnd(unsigned int max, unsigned int *seed)
 {
 	return rand_r(seed) * ((uint64_t)max + 1) / RAND_MAX;
@@ -64,6 +65,8 @@ int drop_caches(void)
 	return 0;
 }
 
+=======
+>>>>>>> partner/qcom-msm-4.14
 int mount_fs(const char *mount_dir, const char *backing_dir,
 	     int read_timeout_ms)
 {
@@ -234,6 +237,7 @@ int open_commands_file(const char *mount_dir)
 
 int open_log_file(const char *mount_dir)
 {
+<<<<<<< HEAD
 	char file[255];
 	int fd;
 
@@ -256,6 +260,16 @@ int open_blocks_written_file(const char *mount_dir)
 	if (fd < 0)
 		perror("Can't open blocks_written file");
 	return fd;
+=======
+	char cmd_file[255];
+	int cmd_fd;
+
+	snprintf(cmd_file, ARRAY_SIZE(cmd_file), "%s/.log", mount_dir);
+	cmd_fd = open(cmd_file, O_RDWR | O_CLOEXEC);
+	if (cmd_fd < 0)
+		perror("Can't open log file");
+	return cmd_fd;
+>>>>>>> partner/qcom-msm-4.14
 }
 
 int wait_for_pending_reads(int fd, int timeout_ms,
@@ -286,6 +300,7 @@ int wait_for_pending_reads(int fd, int timeout_ms,
 	return read_res / sizeof(*prs);
 }
 
+<<<<<<< HEAD
 int wait_for_pending_reads2(int fd, int timeout_ms,
 	struct incfs_pending_read_info2 *prs, int prs_count)
 {
@@ -315,6 +330,9 @@ int wait_for_pending_reads2(int fd, int timeout_ms,
 }
 
 char *concat_file_name(const char *dir, const char *file)
+=======
+char *concat_file_name(const char *dir, char *file)
+>>>>>>> partner/qcom-msm-4.14
 {
 	char full_name[FILENAME_MAX] = "";
 

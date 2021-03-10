@@ -13,6 +13,8 @@
 #ifndef _IPA_ETH_I_H_
 #define _IPA_ETH_I_H_
 
+#include <linux/suspend.h>
+
 #define IPA_ETH_NET_DRIVER
 #define IPA_ETH_OFFLOAD_DRIVER
 #include <linux/ipa_eth.h>
@@ -33,10 +35,17 @@
 #define IPA_ETH_IPC_LOGDBG_DEFAULT false
 #endif
 
+/* Time to remain awake after a suspend abort due to NIC activity */
+#define IPA_ETH_WAKE_TIME_MS 500
+
+/* Time for NIC HW to settle down (ex. receive link interrupt) after a resume */
+#define IPA_ETH_RESUME_SETTLE_MS 2000
+
 #define IPA_ETH_PFDEV (ipa3_ctx ? ipa3_ctx->pdev : NULL)
 #define IPA_ETH_SUBSYS "ipa_eth"
 
 #define IPA_ETH_NET_DEVICE_MAX_EVENTS (NETDEV_CHANGE_TX_QUEUE_LEN + 1)
+#define IPA_ETH_PM_NOTIFIER_MAX_EVENTS (PM_POST_RESTORE + 1)
 
 enum ipa_eth_states {
 	IPA_ETH_ST_READY,
@@ -108,23 +117,24 @@ struct ipa_eth_upper_device {
 	struct net_device *net_dev;
 	struct ipa_eth_device *eth_dev;
 
-	bool linked; /* upper device is linked to real device */
-	bool watching; /* registered netdevice notifier */
+	bool up; /* interface is up */
 	bool registered; /* registered with IPA */
-
-	struct notifier_block netdevice_nb;
-
-	struct kref refcount;
 };
 
 struct ipa_eth_device_private {
 	struct ipa_eth_device *eth_dev;
 
-	struct mutex upper_mutex;
 	struct list_head upper_devices;
 
+	unsigned long assume_active;
+	struct rtnl_link_stats64 last_rtnl_stats;
+
+	struct notifier_block pm_nb;
 	struct notifier_block panic_nb;
 };
+
+#define eth_dev_priv(eth_dev) \
+		((struct ipa_eth_device_private *)((eth_dev)->ipa_priv))
 
 struct ipa_eth_bus {
 	struct list_head bus_list;
@@ -152,7 +162,35 @@ extern unsigned long ipa_eth_state;
 extern bool ipa_eth_noauto;
 extern bool ipa_eth_ipc_logdbg;
 
-bool ipa_eth_ready(void);
+bool ipa_eth_is_ready(void);
+bool ipa_eth_all_ready(void);
+
+static inline void ipa_eth_dev_assume_active_ms(
+	struct ipa_eth_device *eth_dev,
+	unsigned int msec)
+{
+	eth_dev_priv(eth_dev)->assume_active +=
+			DIV_ROUND_UP(msec, IPA_ETH_WAKE_TIME_MS);
+	pm_system_wakeup();
+}
+
+static inline void ipa_eth_dev_assume_active_inc(
+	struct ipa_eth_device *eth_dev,
+	unsigned int count)
+{
+	eth_dev_priv(eth_dev)->assume_active += count;
+	pm_system_wakeup();
+}
+
+static inline void ipa_eth_dev_assume_active_dec(
+	struct ipa_eth_device *eth_dev,
+	unsigned int count)
+{
+	if (eth_dev_priv(eth_dev)->assume_active > count)
+		eth_dev_priv(eth_dev)->assume_active -= count;
+	else
+		eth_dev_priv(eth_dev)->assume_active = 0;
+}
 
 struct ipa_eth_device *ipa_eth_alloc_device(
 	struct device *dev,
@@ -197,10 +235,12 @@ int ipa_eth_offload_save_regs(struct ipa_eth_device *eth_dev);
 int ipa_eth_offload_prepare_reset(struct ipa_eth_device *eth_dev, void *data);
 int ipa_eth_offload_complete_reset(struct ipa_eth_device *eth_dev, void *data);
 
+bool ipa_eth_net_check_active(struct ipa_eth_device *eth_dev);
+
 int ipa_eth_net_register_driver(struct ipa_eth_net_driver *nd);
 void ipa_eth_net_unregister_driver(struct ipa_eth_net_driver *nd);
-int ipa_eth_net_watch_upper(struct ipa_eth_device *eth_dev);
-int ipa_eth_net_unwatch_upper(struct ipa_eth_device *eth_dev);
+int ipa_eth_net_register_upper(struct ipa_eth_device *eth_dev);
+int ipa_eth_net_unregister_upper(struct ipa_eth_device *eth_dev);
 
 int ipa_eth_net_open_device(struct ipa_eth_device *eth_dev);
 void ipa_eth_net_close_device(struct ipa_eth_device *eth_dev);
@@ -238,6 +278,7 @@ int ipa_eth_uc_stats_stop(struct ipa_eth_device *eth_dev);
 
 const char *ipa_eth_device_event_name(enum ipa_eth_device_event event);
 const char *ipa_eth_net_device_event_name(unsigned long event);
+const char *ipa_eth_pm_notifier_event_name(unsigned long event);
 
 int ipa_eth_send_msg_connect(struct net_device *net_dev);
 int ipa_eth_send_msg_disconnect(struct net_device *net_dev);

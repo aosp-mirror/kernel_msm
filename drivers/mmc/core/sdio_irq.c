@@ -96,7 +96,6 @@ void sdio_run_irqs(struct mmc_host *host)
 {
 	mmc_claim_host(host);
 	if (host->sdio_irqs) {
-		host->sdio_irq_pending = true;
 		mmc_host_clk_hold(host);
 		process_sdio_pending_irqs(host);
 		mmc_host_clk_release(host);

@@ -2030,6 +2030,7 @@ static int __init qrtr_proto_init(void)
 	qrtr_backup_init();
 
 	return 0;
+
 }
 postcore_initcall(qrtr_proto_init);
 

@@ -36,6 +36,7 @@
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/secure_buffer.h>
 #include <linux/soc/qcom/smem.h>
+#include <soc/qcom/boot_stats.h>
 
 #include <linux/uaccess.h>
 #include <asm/setup.h>
@@ -59,15 +60,6 @@
 #define MAX_LEN 96
 #define NUM_OF_ENCRYPTED_KEY	3
 #define MINIDUMP_DEBUG_PROP "qcom,msm-imem-minidump-debug"
-
-#define pil_log(msg, desc)	\
-	do {			\
-		if (pil_ipc_log)		\
-			pil_ipc("[%s]: %s", desc->name, msg); \
-		else		\
-			trace_pil_event(msg, desc);	\
-	} while (0)
-
 
 #define pil_log(msg, desc)	\
 	do {			\
@@ -956,6 +948,8 @@ static int pil_init_mmap(struct pil_desc *desc, const struct pil_mdt *mdt)
 	if (ret)
 		return ret;
 
+	if (!strcmp(desc->name, "modem"))
+		place_marker("M - Modem Image Start Loading");
 
 	pil_info(desc, "loading from %pa to %pa\n", &priv->region_start,
 							&priv->region_end);
@@ -1419,6 +1413,10 @@ int pil_boot(struct pil_desc *desc)
 		goto err_auth_and_reset;
 	}
 	pil_log("reset_done", desc);
+
+	if (!strcmp(desc->name, "modem"))
+		place_marker("M - Modem out of reset");
+
 	pil_info(desc, "Brought out of reset\n");
 	desc->modem_ssr = false;
 err_auth_and_reset:

@@ -297,6 +297,7 @@ static void qcom_glink_channel_release(struct kref *ref)
 {
 	struct glink_channel *channel = container_of(ref, struct glink_channel,
 						     refcount);
+	struct glink_core_rx_intent *intent;
 	struct glink_core_rx_intent *tmp;
 	unsigned long flags;
 	int iid;
@@ -304,7 +305,18 @@ static void qcom_glink_channel_release(struct kref *ref)
 	CH_INFO(channel, "\n");
 	wake_up(&channel->intent_req_event);
 
+	/* cancel pending rx_done work */
+	kthread_cancel_work_sync(&channel->intent_work);
+
 	spin_lock_irqsave(&channel->intent_lock, flags);
+	/* Free all non-reuse intents pending rx_done work */
+	list_for_each_entry_safe(intent, tmp, &channel->done_intents, node) {
+		if (!intent->reuse) {
+			kfree(intent->data);
+			kfree(intent);
+		}
+	}
+
 	idr_for_each_entry(&channel->liids, tmp, iid) {
 		kfree(tmp->data);
 		kfree(tmp);
@@ -1945,6 +1957,20 @@ static void qcom_glink_notif_reset(void *data)
 	spin_unlock_irqrestore(&glink->idr_lock, flags);
 }
 
+#if 0
+static void qcom_glink_cancel_rx_work(struct qcom_glink *glink)
+{
+	struct glink_defer_cmd *dcmd;
+	struct glink_defer_cmd *tmp;
+
+	/* cancel any pending deferred rx_work */
+	cancel_work_sync(&glink->rx_work);
+
+	list_for_each_entry_safe(dcmd, tmp, &glink->rx_queue, node)
+		kfree(dcmd);
+}
+#endif
+
 struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 					   unsigned long features,
 					   struct qcom_glink_pipe *rx,
@@ -1954,6 +1980,8 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	static const char *unknown_irq = "unknown";
 	static const char *irq_prefix = "glink-native-";
 	struct qcom_glink *glink;
+	unsigned long irqflags;
+	bool vm_support;
 	u32 *arr;
 	int size;
 	int irq;
@@ -2022,9 +2050,17 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 		dev_err(dev, "failed to register early notif %d\n", ret);
 
 	irq = of_irq_get(dev->of_node, 0);
+
+	/* Use different irq flag option in case of gvm */
+	vm_support = of_property_read_bool(dev->of_node, "vm-support");
+	if (vm_support)
+		irqflags = IRQF_TRIGGER_RISING;
+	else
+		irqflags = IRQF_SHARED;
+
 	ret = devm_request_irq(dev, irq,
 			       qcom_glink_native_intr,
-			       IRQF_SHARED,
+			       irqflags,
 			       glink->irq_name, glink);
 	if (ret) {
 		dev_err(dev, "failed to request IRQ\n");
@@ -2035,6 +2071,10 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	ret = enable_irq_wake(glink->irq);
 	if (ret)
 		dev_err(dev, "failed to set irq wake\n");
+
+	ret = enable_irq_wake(irq);
+	if (ret < 0)
+		dev_err(dev, "enable_irq_wake() failed on %d\n", irq);
 
 	size = of_property_count_u32_elems(dev->of_node, "cpu-affinity");
 	if (size > 0) {
@@ -2084,7 +2124,6 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	struct glink_channel *channel;
 	int cid;
 	int ret;
-	unsigned long flags;
 
 	subsys_unregister_early_notifier(glink->name, XPORT_LAYER_NOTIF);
 	qcom_glink_notif_reset(glink);
@@ -2095,16 +2134,10 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	if (ret)
 		dev_warn(glink->dev, "Can't remove GLINK devices: %d\n", ret);
 
-	spin_lock_irqsave(&glink->idr_lock, flags);
 	idr_for_each_entry(&glink->lcids, channel, cid) {
-		spin_unlock_irqrestore(&glink->idr_lock, flags);
 		/* cancel pending rx_done work for each channel*/
 		kthread_cancel_work_sync(&channel->intent_work);
-		spin_lock_irqsave(&glink->idr_lock, flags);
 	}
-	spin_unlock_irqrestore(&glink->idr_lock, flags);
-
-	spin_lock_irqsave(&glink->idr_lock, flags);
 
 	/* Release any defunct local channels, waiting for close-ack */
 	idr_for_each_entry(&glink->lcids, channel, cid) {
@@ -2120,7 +2153,6 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 
 	idr_destroy(&glink->lcids);
 	idr_destroy(&glink->rcids);
-	spin_unlock_irqrestore(&glink->idr_lock, flags);
 
 	kthread_flush_worker(&glink->kworker);
 	kthread_stop(glink->task);

@@ -149,8 +149,11 @@ struct geni_i2c_dev {
 	struct dbg_buf_ctxt *dbg_buf_ptr;
 };
 
-static int ssr_i2c_force_suspend(struct device *dev);
-static int ssr_i2c_force_resume(struct device *dev);
+static void ssr_i2c_force_suspend(struct device *dev);
+static void ssr_i2c_force_resume(struct device *dev);
+
+static struct geni_i2c_dev *gi2c_dev_dbg[MAX_SE];
+static int arr_idx;
 
 static struct geni_i2c_dev *gi2c_dev_dbg[MAX_SE];
 static int arr_idx;
@@ -232,12 +235,6 @@ static inline void qcom_geni_i2c_calc_timeout(struct geni_i2c_dev *gi2c)
 
 static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 {
-	if (gi2c->cur)
-		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
-			"len:%d, slv-addr:0x%x, RD/WR:%d timeout:%u\n",
-			gi2c->cur->len, gi2c->cur->addr, gi2c->cur->flags,
-			gi2c->xfer_timeout);
-
 	if (err == I2C_NACK || err == GENI_ABORT_DONE) {
 		GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n",
 			     gi2c_log[err].msg);
@@ -246,8 +243,6 @@ static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev, "%s\n",
 			     gi2c_log[err].msg);
 	}
-	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s: se-mode:%d\n", __func__,
-							gi2c->se_mode);
 	geni_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base, gi2c->ipcl);
 err_ret:
 	gi2c->err = gi2c_log[err].err;
@@ -403,6 +398,7 @@ static void gi2c_ev_cb(struct dma_chan *ch, struct msm_gpi_cb const *cb_str,
 	case MSM_GPI_QUP_MAX_EVENT:
 		/* fall through to stall impacted channel */
 	case MSM_GPI_QUP_CH_ERROR:
+	case MSM_GPI_QUP_FW_ERROR:
 	case MSM_GPI_QUP_PENDING_EVENT:
 	case MSM_GPI_QUP_EOT_DESC_MISMATCH:
 		break;
@@ -420,9 +416,9 @@ static void gi2c_ev_cb(struct dma_chan *ch, struct msm_gpi_cb const *cb_str,
 	}
 	if (cb_str->cb_event != MSM_GPI_QUP_NOTIFY)
 		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
-				"GSI QN err:0x%x, status:0x%x, err:%d\n",
-				cb_str->error_log.error_code,
-				m_stat, cb_str->cb_event);
+			"GSI QN err:0x%x, status:0x%x, err:%d\n",
+			cb_str->error_log.error_code, m_stat,
+			cb_str->cb_event);
 }
 
 static void gi2c_gsi_cb_err(struct msm_gpi_dma_async_tx_cb_param *cb,
@@ -499,6 +495,7 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			goto geni_i2c_gsi_xfer_out;
 		}
 	}
+
 	if (!gi2c->rx_c) {
 		gi2c->rx_c = dma_request_slave_channel(gi2c->dev, "rx");
 		if (!gi2c->rx_c) {
@@ -945,8 +942,6 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	if (!res)
 		return -EINVAL;
 
-	gi2c->i2c_rsc.rsc_ssr.ssr_enable = of_property_read_bool(
-		pdev->dev.of_node, "ssr-enable");
 	wrapper_ph_node = of_parse_phandle(pdev->dev.of_node,
 				"qcom,wrapper-core", 0);
 	if (IS_ERR_OR_NULL(wrapper_ph_node)) {
@@ -977,14 +972,12 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Err getting SE Core clk %d\n", ret);
 		return ret;
 	}
-
 	gi2c->i2c_rsc.m_ahb_clk = devm_clk_get(&pdev->dev, "m-ahb");
 	if (IS_ERR(gi2c->i2c_rsc.m_ahb_clk)) {
 		ret = PTR_ERR(gi2c->i2c_rsc.m_ahb_clk);
 		dev_err(&pdev->dev, "Err getting M AHB clk %d\n", ret);
 		return ret;
 	}
-
 	gi2c->i2c_rsc.s_ahb_clk = devm_clk_get(&pdev->dev, "s-ahb");
 	if (IS_ERR(gi2c->i2c_rsc.s_ahb_clk)) {
 		ret = PTR_ERR(gi2c->i2c_rsc.s_ahb_clk);
@@ -1022,11 +1015,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	if (of_property_read_u32_array(pdev->dev.of_node, "qcom,clk-cfg",
 		geni_i2c_clk_map_dt, 5)) {
 		if (of_property_read_u32(pdev->dev.of_node, "qcom,clk-freq-out",
-				&gi2c->i2c_rsc.clk_freq_out)) {
-			dev_info(&pdev->dev,
-				"Bus frequency not specified, default to 400KHz.\n");
+				&gi2c->i2c_rsc.clk_freq_out))
 			gi2c->i2c_rsc.clk_freq_out = KHz(400);
-		}
+
 		ret = geni_i2c_clk_map_idx(gi2c);
 		if (ret) {
 			dev_err(gi2c->dev, "Invalid clk frequency %d KHz: %d\n",
@@ -1043,6 +1034,8 @@ static int geni_i2c_probe(struct platform_device *pdev)
 					gi2c->geni_i2c_clk_param.clk_freq_out;
 		dev_info(&pdev->dev, "Clk-cfg array present\n");
 	}
+	dev_info(&pdev->dev, "Bus frequency is set to %dHz.\n",
+						gi2c->i2c_rsc.clk_freq_out);
 
 	gi2c->irq = platform_get_irq(pdev, 0);
 	if (gi2c->irq < 0) {
@@ -1069,6 +1062,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 				   gi2c->irq, ret);
 		return ret;
 	}
+
 	disable_irq(gi2c->irq);
 	i2c_set_adapdata(&gi2c->adap, gi2c);
 	gi2c->adap.dev.parent = gi2c->dev;
@@ -1256,7 +1250,7 @@ static const struct dev_pm_ops geni_i2c_pm_ops = {
 	.thaw		= geni_i2c_hib_resume_noirq,
 };
 
-static int ssr_i2c_force_suspend(struct device *dev)
+static void ssr_i2c_force_suspend(struct device *dev)
 {
 	struct geni_i2c_dev *gi2c = dev_get_drvdata(dev);
 	int ret = 0;
@@ -1266,7 +1260,7 @@ static int ssr_i2c_force_suspend(struct device *dev)
 	if (!pm_runtime_status_suspended(gi2c->dev)) {
 		ret =  geni_i2c_runtime_suspend(gi2c->dev);
 		if (ret) {
-			dev_err(gi2c->dev, "runtime suspend failed\n");
+			dev_err(gi2c->dev, "%s failed ret:%d\n", __func__, ret);
 		} else {
 			pm_runtime_disable(gi2c->dev);
 			pm_runtime_set_suspended(gi2c->dev);
@@ -1276,11 +1270,9 @@ static int ssr_i2c_force_suspend(struct device *dev)
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s done\n", __func__);
 	mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
-
-	return ret;
 }
 
-static int ssr_i2c_force_resume(struct device *dev)
+static void ssr_i2c_force_resume(struct device *dev)
 {
 	struct geni_i2c_dev *gi2c = dev_get_drvdata(dev);
 
@@ -1289,8 +1281,6 @@ static int ssr_i2c_force_resume(struct device *dev)
 	gi2c->se_mode = UNINITIALIZED;
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s done\n", __func__);
 	mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
-
-	return 0;
 }
 
 static const struct of_device_id geni_i2c_dt_match[] = {

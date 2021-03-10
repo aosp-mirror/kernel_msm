@@ -1473,6 +1473,12 @@ config PAGE_OFFSET
 	default 0xB0000000 if VMSPLIT_3G_OPT
 	default 0xC0000000
 
+config COMMAND_LINE_SIZE
+	int "Maximum size of the command line."
+	default "1024"
+	help
+	This is the per architecture maximum command line size.
+
 config NR_CPUS
 	int "Maximum number of CPUs (2-32)"
 	range 2 32
@@ -1774,29 +1780,6 @@ config ARM_MODULE_PLTS
 	  Say y if you are getting out of memory errors while loading modules
 
 source "mm/Kconfig"
-
-choice
-	prompt "Virtual Memory Reclaim"
-	default ENABLE_VMALLOC_SAVING
-	help
-	  Select the method of reclaiming virtual memory
-
-config ENABLE_VMALLOC_SAVING
-	bool "Reclaim memory for each subsystem"
-	help
-	  Enable this config to reclaim the virtual space belonging
-	  to any subsystem which is expected to have a lifetime of
-	  the entire system. This feature allows lowmem to be non-
-	  contiguous.
-
-config NO_VM_RECLAIM
-	bool "Do not reclaim memory"
-	help
-	  Do not reclaim any memory. This might result in less lowmem
-	  and wasting virtual memory space which could otherwise be
-	  reclaimed by using any of the other two config options.
-
-endchoice
 
 config FORCE_MAX_ZONEORDER
 	int "Maximum zone order"
@@ -2170,6 +2153,17 @@ config AUTO_ZRELADDR
 
 config EFI_STUB
 	bool
+
+config ARM_DECOMPRESSOR_LIMIT
+        hex "Limit the decompressor memory area"
+        default 0x3200000
+        help
+          Allows overriding of the memory size that decompressor maps with
+          read, write and execute permissions to avoid speculative prefetch.
+
+          By default ARM_DECOMPRESSOR_LIMIT maps first 1GB of memory
+          with read, write and execute permissions and reset of the memory
+          as strongly ordered.
 
 config EFI
 	bool "UEFI runtime support"

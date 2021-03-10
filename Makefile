@@ -571,8 +571,12 @@ KBUILD_MODULES :=
 KBUILD_BUILTIN := 1
 
 # If we have only "make modules", don't compile built-in objects.
+# When we're building modules with modversions, we need to consider
+# the built-in objects during the descend as well, in order to
+# make sure the checksums are up to date before we record them.
+
 ifeq ($(MAKECMDGOALS),modules)
-  KBUILD_BUILTIN :=
+  KBUILD_BUILTIN := $(if $(CONFIG_MODVERSIONS),1)
 endif
 
 # If we have "make <whatever> modules", compile modules
@@ -880,7 +884,7 @@ LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
 KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
 KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)
 
-KBUILD_LDS_MODULE += $(srctree)/scripts/module-lto.lds
+KBUILD_LDFLAGS_MODULE += -T scripts/module-lto.lds
 
 # allow disabling only clang LTO where needed
 DISABLE_LTO_CLANG := -fno-lto
@@ -888,11 +892,11 @@ export DISABLE_LTO_CLANG
 endif
 
 ifdef CONFIG_LTO
-lto-flags	:= $(lto-clang-flags)
-KBUILD_CFLAGS	+= $(lto-flags)
+LTO_CFLAGS	:= $(lto-clang-flags)
+KBUILD_CFLAGS	+= $(LTO_CFLAGS)
 
 DISABLE_LTO	:= $(DISABLE_LTO_CLANG)
-export DISABLE_LTO
+export LTO_CFLAGS DISABLE_LTO
 
 # LDFINAL_vmlinux and LDFLAGS_FINAL_vmlinux can be set to override
 # the linker and flags for vmlinux_link.
@@ -918,12 +922,12 @@ endif
 
 ifdef CONFIG_CFI
 # cfi-flags are re-tested in prepare-compiler-check
-cfi-flags	:= $(cfi-clang-flags)
-KBUILD_CFLAGS	+= $(cfi-flags)
+CFI_CFLAGS	:= $(cfi-clang-flags)
+KBUILD_CFLAGS	+= $(CFI_CFLAGS)
 
 DISABLE_CFI	:= $(DISABLE_CFI_CLANG)
 DISABLE_LTO	+= $(DISABLE_CFI)
-export DISABLE_CFI
+export CFI_CFLAGS DISABLE_CFI
 endif
 
 ifdef CONFIG_SHADOW_CALL_STACK
@@ -1195,7 +1199,7 @@ $(sort $(vmlinux-deps)): $(vmlinux-dirs) ;
 
 PHONY += $(vmlinux-dirs)
 $(vmlinux-dirs): prepare scripts
-	$(Q)$(MAKE) $(build)=$@
+	$(Q)$(MAKE) $(build)=$@ need-builtin=1
 
 define filechk_kernel.release
 	echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion $(srctree))"
@@ -1265,7 +1269,7 @@ endif
 endif
 
 # Disable clang-specific config options when using a different compiler
-clang-specific-configs := LTO_CLANG CFI_CLANG SHADOW_CALL_STACK
+clang-specific-configs := LTO_CLANG CFI_CLANG SHADOW_CALL_STACK INIT_STACK_ALL
 
 PHONY += check-clang-specific-options
 check-clang-specific-options: $(KCONFIG_CONFIG) FORCE
@@ -1348,8 +1352,8 @@ else
 endif
 define filechk_utsrelease.h
 	if [ `echo -n "$(UTS_RELEASE)" | wc -c ` -gt $(uts_len) ]; then \
-	  echo '"$(UTS_RELEASE)" exceeds $(uts_len) characters' >&2;    \
-	  exit 1;                                                       \
+		echo '"$(UTS_RELEASE)" exceeds $(uts_len) characters' >&2;    \
+		exit 1;                                                       \
 	fi;                                                             \
 	(echo \#define UTS_RELEASE \"$(UTS_RELEASE)\";)
 endef
@@ -1440,13 +1444,6 @@ ifdef CONFIG_MODULES
 # By default, build modules as well
 
 all: modules
-
-# When we're building modules with modversions, we need to consider
-# the built-in objects during the descend as well, in order to
-# make sure the checksums are up to date before we record them.
-ifdef CONFIG_MODVERSIONS
-  KBUILD_BUILTIN := 1
-endif
 
 # Build modules
 #

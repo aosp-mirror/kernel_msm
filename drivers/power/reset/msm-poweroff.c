@@ -30,6 +30,7 @@
 #include <linux/kallsyms.h>
 #include <linux/io.h>
 #include <linux/syscore_ops.h>
+#include <linux/crash_dump.h>
 
 #include <asm/cacheflush.h>
 #include <asm/system_misc.h>
@@ -373,8 +374,8 @@ static void msm_restart_prepare(const char *cmd)
 	 * Write download mode flags if restart_mode says so
 	 * Kill download mode if master-kill switch is set
 	 */
-
-	set_dload_mode(download_mode &&
+	if (!is_kdump_kernel())
+		set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD));
 #endif
 
@@ -832,8 +833,8 @@ skip_sysfs_create:
 
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DEASSERT_PS_HOLD) > 0)
 		scm_deassert_ps_hold_supported = true;
-
-	set_dload_mode(download_mode);
+	if (!is_kdump_kernel())
+		set_dload_mode(download_mode);
 	if (!download_mode)
 		scm_disable_sdi();
 

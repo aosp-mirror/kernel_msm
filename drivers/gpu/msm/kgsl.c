@@ -3369,8 +3369,7 @@ struct kgsl_mem_entry *gpumem_alloc_entry(
 	/* Cap the alignment bits to the highest number we can handle */
 	align = MEMFLAGS(flags, KGSL_MEMALIGN_MASK, KGSL_MEMALIGN_SHIFT);
 	if (align >= ilog2(KGSL_MAX_ALIGN)) {
-		dev_info(dev_priv->device->dev,
-			"Alignment too large; restricting to %dK\n",
+		KGSL_CORE_ERR("Alignment too large; restricting to %dK\n",
 			KGSL_MAX_ALIGN >> 10);
 
 		flags &= ~((uint64_t) KGSL_MEMALIGN_MASK);
@@ -5064,6 +5063,12 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	if (status)
 		goto error_close_mmu;
 
+	/* Allocate memory for dma_parms and set the max_seg_size */
+	device->dev->dma_parms =
+		kzalloc(sizeof(*device->dev->dma_parms), GFP_KERNEL);
+
+	dma_set_max_seg_size(device->dev, KGSL_DMA_BIT_MASK);
+
 	/* Initialize the memory pools */
 	kgsl_init_page_pools(device->pdev);
 
@@ -5132,6 +5137,9 @@ EXPORT_SYMBOL(kgsl_device_platform_probe);
 void kgsl_device_platform_remove(struct kgsl_device *device)
 {
 	destroy_workqueue(device->events_wq);
+
+	kfree(device->dev->dma_parms);
+	device->dev->dma_parms = NULL;
 
 	kgsl_device_snapshot_close(device);
 

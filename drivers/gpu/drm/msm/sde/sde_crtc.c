@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -666,6 +666,7 @@ static void _sde_crtc_deinit_events(struct sde_crtc *sde_crtc)
 		return;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static int _sde_debugfs_fps_status_show(struct seq_file *s, void *data)
 {
 	struct sde_crtc *sde_crtc;
@@ -712,6 +713,7 @@ static int _sde_debugfs_fps_status(struct inode *inode, struct file *file)
 	return single_open(file, _sde_debugfs_fps_status_show,
 			inode->i_private);
 }
+#endif
 
 static ssize_t early_wakeup_store(struct device *device,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -1306,9 +1308,6 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 			return -EINVAL;
 		}
 
-		if (!mode_info.roi_caps.enabled)
-			continue;
-
 		sde_conn = to_sde_connector(conn_state->connector);
 		sde_conn_state = to_sde_connector_state(conn_state);
 
@@ -1317,6 +1316,9 @@ static int _sde_crtc_set_crtc_roi(struct drm_crtc *crtc,
 						&sde_conn->property_info,
 						&sde_conn_state->property_state,
 						CONNECTOR_PROP_ROI_V1);
+
+		if (!mode_info.roi_caps.enabled)
+			continue;
 
 		/*
 		 * current driver only supports same connector and crtc size,
@@ -2476,8 +2478,8 @@ int sde_crtc_get_secure_transition_ops(struct drm_crtc *crtc,
 		if (encoder->crtc != crtc)
 			continue;
 
-		post_commit |= sde_encoder_check_mode(encoder,
-						MSM_DISPLAY_CAP_VID_MODE);
+		post_commit |= sde_encoder_check_curr_mode(encoder,
+						MSM_DISPLAY_VIDEO_MODE);
 	}
 
 	SDE_DEBUG("crtc%d: secure_level %d old_valid_fb %d post_commit %d\n",
@@ -3862,8 +3864,8 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	_sde_crtc_dest_scaler_setup(crtc);
 
 	/* cancel the idle notify delayed work */
-	if (sde_encoder_check_mode(sde_crtc->mixers[0].encoder,
-					MSM_DISPLAY_CAP_VID_MODE) &&
+	if (sde_encoder_check_curr_mode(sde_crtc->mixers[0].encoder,
+					MSM_DISPLAY_VIDEO_MODE) &&
 		kthread_cancel_delayed_work_sync(&sde_crtc->idle_notify_work))
 		SDE_DEBUG("idle notify work cancelled\n");
 
@@ -3971,8 +3973,8 @@ static void sde_crtc_atomic_flush(struct drm_crtc *crtc,
 	_sde_crtc_wait_for_fences(crtc);
 
 	/* schedule the idle notify delayed work */
-	if (idle_time && sde_encoder_check_mode(sde_crtc->mixers[0].encoder,
-						MSM_DISPLAY_CAP_VID_MODE)) {
+	if (sde_encoder_check_curr_mode(sde_crtc->mixers[0].encoder,
+				MSM_DISPLAY_VIDEO_MODE) && idle_time) {
 		kthread_queue_delayed_work(&event_thread->worker,
 					&sde_crtc->idle_notify_work,
 					msecs_to_jiffies(idle_time));
@@ -5327,8 +5329,8 @@ static int _sde_crtc_check_secure_state(struct drm_crtc *crtc,
 		if (encoder->crtc != crtc)
 			continue;
 
-		is_video_mode |= sde_encoder_check_mode(encoder,
-						MSM_DISPLAY_CAP_VID_MODE);
+		is_video_mode |= sde_encoder_check_curr_mode(encoder,
+						MSM_DISPLAY_VIDEO_MODE);
 	}
 
 	sde_crtc = to_sde_crtc(crtc);
@@ -6037,8 +6039,6 @@ static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 	uint32_t offset, i;
 	struct drm_connector_state *old_conn_state, *new_conn_state;
 	struct drm_connector *conn;
-	struct sde_connector *sde_conn = NULL;
-	struct msm_display_info disp_info;
 	bool is_vid = false;
 	struct drm_encoder *encoder;
 
@@ -6046,8 +6046,9 @@ static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 	cstate = to_sde_crtc_state(state);
 
 	drm_for_each_encoder_mask(encoder, crtc->dev, state->encoder_mask) {
-		is_vid |= sde_encoder_check_mode(encoder,
-						MSM_DISPLAY_CAP_VID_MODE);
+		if (sde_encoder_check_curr_mode(encoder,
+			MSM_DISPLAY_VIDEO_MODE))
+			is_vid = true;
 		if (is_vid)
 			break;
 	}
@@ -6063,15 +6064,11 @@ static int _sde_crtc_get_output_fence(struct drm_crtc *crtc,
 			if (!new_conn_state || new_conn_state->crtc != crtc)
 				continue;
 
-			sde_conn = to_sde_connector(new_conn_state->connector);
-			if (sde_conn->display && sde_conn->ops.get_info) {
-				sde_conn->ops.get_info(conn, &disp_info,
-							sde_conn->display);
-				is_vid |= disp_info.capabilities &
-						MSM_DISPLAY_CAP_VID_MODE;
-				if (is_vid)
-					break;
-			}
+			if (sde_encoder_check_curr_mode(encoder,
+				MSM_DISPLAY_VIDEO_MODE))
+				is_vid = true;
+			if (is_vid)
+				break;
 		}
 	}
 

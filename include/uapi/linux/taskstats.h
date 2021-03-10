@@ -170,7 +170,6 @@ struct taskstats {
 	__u64	thrashing_delay_total;
 };
 
-
 /*
  * Commands sent from userspace
  * Not versioned. New commands should only be inserted at the enum's end

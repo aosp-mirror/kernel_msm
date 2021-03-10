@@ -198,6 +198,7 @@ void mmc_host_clk_hold(struct mmc_host *host)
 	spin_unlock_irqrestore(&host->clk_lock, flags);
 	mutex_unlock(&host->clk_gate_mutex);
 }
+EXPORT_SYMBOL(mmc_host_clk_hold);
 
 /**
  *	mmc_host_may_gate_card - check if this card may be gated
@@ -247,6 +248,7 @@ void mmc_host_clk_release(struct mmc_host *host)
 				      msecs_to_jiffies(host->clkgate_delay));
 	spin_unlock_irqrestore(&host->clk_lock, flags);
 }
+EXPORT_SYMBOL(mmc_host_clk_release);
 
 /**
  *	mmc_host_clk_rate - get current clock frequency setting
@@ -477,6 +479,16 @@ int mmc_retune(struct mmc_host *host)
 		if (host->ops->prepare_hs400_tuning)
 			host->ops->prepare_hs400_tuning(host, &host->ios);
 	}
+
+	/*
+	 * Timing should be adjusted to the HS400 target
+	 * operation frequency for tuning process.
+	 * Similar handling is also done in mmc_hs200_tuning()
+	 * This is handled properly in sdhci-msm.c from msm-5.4 onwards.
+	 */
+	if (host->card->mmc_avail_type & EXT_CSD_CARD_TYPE_HS400 &&
+		host->ios.bus_width == MMC_BUS_WIDTH_8)
+		mmc_set_timing(host, MMC_TIMING_MMC_HS400);
 
 	err = mmc_execute_tuning(host->card);
 	if (err)

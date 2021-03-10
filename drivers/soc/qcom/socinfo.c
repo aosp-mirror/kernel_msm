@@ -67,6 +67,7 @@ enum {
 	HW_PLATFORM_STP = 23,
 	HW_PLATFORM_SBC = 24,
 	HW_PLATFORM_ADP = 25,
+	HW_PLATFORM_TTP = 30,
 	HW_PLATFORM_HDK = 31,
 	HW_PLATFORM_IOT = 32,
 	HW_PLATFORM_IDP = 34,
@@ -91,6 +92,7 @@ const char *hw_platform[] = {
 	[HW_PLATFORM_STP] = "STP",
 	[HW_PLATFORM_SBC] = "SBC",
 	[HW_PLATFORM_ADP] = "ADP",
+	[HW_PLATFORM_TTP] = "TTP",
 	[HW_PLATFORM_HDK] = "HDK",
 	[HW_PLATFORM_IOT] = "IOT",
 	[HW_PLATFORM_IDP] = "IDP"
@@ -447,6 +449,16 @@ static struct msm_soc_info cpu_of_id[] = {
 	/* SDM660 ID */
 	[317] = {MSM_CPU_SDM660, "SDM660"},
 	[324] = {MSM_CPU_SDA660, "SDA660"},
+
+	/* SDM429W IDs*/
+	[416] = {MSM_CPU_SDM429W, "SDM429W"},
+	[437] = {MSM_CPU_SDA429W, "SDA429W"},
+
+	/* TRINKET-IOT IDs*/
+	[467] = {MSM_CPU_TRINKET_IOT, "TRINKET-IOT"},
+
+	/* TRINKETP-IOT IDs*/
+	[468] = {MSM_CPU_TRINKETP_IOT, "TRINKETP-IOT"},
 
 	/* Uninitialized IDs are not known to run Linux.
 	 * MSM_CPU_UNKNOWN is set to 0 to ensure these IDs are
@@ -1519,6 +1531,22 @@ static void * __init setup_dummy_socinfo(void)
 	} else if (early_machine_is_sda660()) {
 		dummy_socinfo.id = 324;
 		strlcpy(dummy_socinfo.build_id, "sda660 - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sdm429w()) {
+		dummy_socinfo.id = 416;
+		strlcpy(dummy_socinfo.build_id, "sdm429w - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_sda429w()) {
+		dummy_socinfo.id = 437;
+		strlcpy(dummy_socinfo.build_id, "sda429w - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_trinket_iot()) {
+		dummy_socinfo.id = 467;
+		strlcpy(dummy_socinfo.build_id, "trinket-iot - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_trinketp_iot()) {
+		dummy_socinfo.id = 468;
+		strlcpy(dummy_socinfo.build_id, "trinketp-iot - ",
 		sizeof(dummy_socinfo.build_id));
 	} else
 		strlcat(dummy_socinfo.build_id, "Dummy socinfo",

@@ -349,9 +349,6 @@ static int _freq_tbl_determine_rate(struct clk_hw *hw, const struct freq_tbl *f,
 
 	clk_flags = clk_hw_get_flags(hw);
 	p = clk_hw_get_parent_by_index(hw, index);
-	if (!p)
-		return -EINVAL;
-
 	if (clk_flags & CLK_SET_RATE_PARENT) {
 		if (f->pre_div) {
 			if (!rate)
@@ -1475,7 +1472,11 @@ static int clk_gfx3d_src_determine_rate(struct clk_hw *hw,
 	}
 
 	f = qcom_find_freq(rcg->freq_tbl, req->rate);
-	if (!f || (req->rate != f->freq))
+
+	if (!f)
+		return -EINVAL;
+
+	if (req->rate != f->freq)
 		req->rate = f->freq;
 
 	/* Indexes of source from the parent map */

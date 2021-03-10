@@ -89,6 +89,7 @@ static void adreno_get_submit_time(struct adreno_device *adreno_dev,
 static void adreno_ringbuffer_wptr(struct adreno_device *adreno_dev,
 		struct adreno_ringbuffer *rb)
 {
+	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
 	unsigned long flags;
 	int ret = 0;
 
@@ -103,6 +104,17 @@ static void adreno_ringbuffer_wptr(struct adreno_device *adreno_dev,
 			kgsl_pwrscale_busy(KGSL_DEVICE(adreno_dev));
 
 			/*
+			 * There could be a situation where GPU comes out of
+			 * ifpc after a fenced write transaction but before
+			 * reading AHB_FENCE_STATUS from KMD, it goes back to
+			 * ifpc due to inactivity (kernel scheduler plays a
+			 * role here). Put a keep alive vote to avoid such
+			 * unlikely scenario.
+			 */
+			if (gpudev->gpu_keepalive)
+				gpudev->gpu_keepalive(adreno_dev, true);
+
+			/*
 			 * Ensure the write posted after a possible
 			 * GMU wakeup (write could have dropped during wakeup)
 			 */
@@ -110,6 +122,9 @@ static void adreno_ringbuffer_wptr(struct adreno_device *adreno_dev,
 				ADRENO_REG_CP_RB_WPTR, rb->_wptr,
 				FENCE_STATUS_WRITEDROPPED0_MASK);
 			rb->skip_inline_wptr = false;
+			if (gpudev->gpu_keepalive)
+				gpudev->gpu_keepalive(adreno_dev, false);
+
 		}
 	} else {
 		/*
@@ -354,9 +369,9 @@ int adreno_ringbuffer_probe(struct adreno_device *adreno_dev, bool nopreempt)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct adreno_gpudev *gpudev = ADRENO_GPU_DEVICE(adreno_dev);
+	unsigned int priv = KGSL_MEMDESC_RANDOM | KGSL_MEMDESC_PRIVILEGED;
 	int i, r = 0;
 	int status = -ENOMEM;
-	unsigned int priv = KGSL_MEMDESC_RANDOM | KGSL_MEMDESC_PRIVILEGED;
 
 	if (!adreno_is_a3xx(adreno_dev)) {
 		status = kgsl_allocate_global(device, &device->scratch,
@@ -800,7 +815,6 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		ringcmds += cp_gpuaddr(adreno_dev, ringcmds,
 				SCRATCH_RPTR_GPU_ADDR(device, rb->id));
 	}
-
 
 	/*
 	 * If we have more ringbuffer commands than space reserved
