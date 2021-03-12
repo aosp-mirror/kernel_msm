@@ -5,6 +5,6 @@ if [[ "${BUILD_ABI:-0}" -eq 1 ]]; then
 fi
 
 BUILD_BOOT_IMG=true \
-	ENABLE_THINLTO=1 \
+	LTO=thin \
 	BUILD_CONFIG="private/msm-google/build.config.redbull.vintf" \
 	${BUILD_SCRIPT} "$@"

@@ -3,11 +3,6 @@ BUILD_BOOT_IMG=true
 . ${ROOT_DIR}/${KERNEL_DIR}/build.config.redbull.common.clang
 POST_DEFCONFIG_CMDS="check_defconfig && update_config"
 
-EN_THINLTO=
-if [[ "${ENABLE_THINLTO:-0}" -eq 1 ]]; then
-       EN_THINLTO="-e THINLTO"
-fi
-
 ABI_DEFINITION=android/abi_gki_aarch64_redbull.xml
 KMI_SYMBOL_LIST=android/abi_gki_aarch64_redbull
 KMI_SYMBOL_LIST_ADD_ONLY=1
@@ -19,7 +14,6 @@ function update_config() {
   # Disable debugfs
   # Disable coresight
   ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
-    ${EN_THINLTO} \
     -d DEBUG_FS \
     -d CORESIGHT \
     -e PID_IN_CONTEXTIDR \
