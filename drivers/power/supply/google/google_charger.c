@@ -1404,11 +1404,11 @@ static int bd_update_stats(struct bd_data *bd_state,
 	/* exit and entry criteria on temperature while connected */
 	temp_avg = bd_state->temp_sum / bd_state->time_sum;
 	if (triggered && temp <= bd_state->bd_resume_abs_temp) {
-		pr_info("MSC_BD: resume time_sum=%lld, temp_sum=%lld, temp_avg=%d\n",
+		pr_info("MSC_BD: resume time_sum=%ld, temp_sum=%lld, temp_avg=%lld\n",
 			bd_state->time_sum, bd_state->temp_sum, temp_avg);
 		bd_reset(bd_state);
 	} else if (!triggered && temp_avg >= bd_state->bd_trigger_temp) {
-		pr_info("MSC_BD: trigger time_sum=%lld, temp_sum=%lld, temp_avg=%d\n",
+		pr_info("MSC_BD: trigger time_sum=%ld, temp_sum=%lld, temp_avg=%lld\n",
 			bd_state->time_sum, bd_state->temp_sum, temp_avg);
 		bd_state->triggered = 1;
 	}

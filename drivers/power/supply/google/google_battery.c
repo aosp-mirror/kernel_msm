@@ -2320,11 +2320,11 @@ done_no_op:
 	if (!changed)
 		return false;
 
-	pr_info("MSC_HEALTH: now=%d deadline=%d aon_soc=%d ttf=%ld state=%d->%d fv_uv=%d, cc_max=%d\n",
+	pr_info("MSC_HEALTH: now=%ld deadline=%ld aon_soc=%d ttf=%ld state=%d->%d fv_uv=%d, cc_max=%d\n",
 		now, rest->rest_deadline, rest->always_on_soc,
 		ttf, rest->rest_state, rest_state, fv_uv, cc_max);
 	logbuffer_log(batt_drv->ttf_stats.ttf_log,
-		      "MSC_HEALTH: now=%d deadline=%d aon_soc=%d ttf=%ld state=%d->%d fv_uv=%d, cc_max=%d\n",
+		      "MSC_HEALTH: now=%ld deadline=%ld aon_soc=%d ttf=%ld state=%d->%d fv_uv=%d, cc_max=%d\n",
 		      now, rest->rest_deadline, rest->always_on_soc,
 		      ttf, rest->rest_state, rest_state, fv_uv, cc_max);
 
