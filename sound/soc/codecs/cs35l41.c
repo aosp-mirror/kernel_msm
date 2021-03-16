@@ -204,6 +204,7 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 		snd_soc_dapm_to_component(w->dapm);
 	struct cs35l41_private *cs35l41 =
 		snd_soc_component_get_drvdata(component);
+	int ret = 0;
 
 	dev_dbg(cs35l41->dev, "%s: event: %d halo_booted: %d\n",
 				__func__, event, cs35l41->halo_booted);
@@ -214,9 +215,20 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 			wm_adsp_event(w, kcontrol, event);
 			cs35l41->halo_booted = true;
 		}
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		/*
+		 * Workaround for PB 5.41.6 FW power consumption issue.
+		 * FW sets bit FILT_GLOBAL_OVR, so it should be cleared
+		 * after FW boot up
+		 */
+		ret = regmap_update_bits(cs35l41->regmap, CS35L41_CTRL_OVRRIDE,
+					CS35L41_FILT_GLOBAL_OVR_MASK, 0);
+		break;
 	default:
-		return 0;
+		break;
 	}
+	return ret;
 }
 
 static int cs35l41_halo_booted_get(struct snd_kcontrol *kcontrol,
@@ -2002,7 +2014,8 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 				SND_SOC_NOPM, 0, 0, cs35l41_dsp_power_ev,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_PRE_PMD),
 	SND_SOC_DAPM_OUT_DRV_E("DSP1", SND_SOC_NOPM, 0, 0, NULL, 0,
-				cs35l41_dsp_load_ev, SND_SOC_DAPM_POST_PMU),
+				cs35l41_dsp_load_ev,
+				SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
 	SND_SOC_DAPM_OUTPUT("SPK"),
 
 	SND_SOC_DAPM_AIF_IN_E("ASPRX1", NULL, 0, CS35L41_SP_ENABLES, 16, 0,

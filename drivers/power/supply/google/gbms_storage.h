@@ -145,6 +145,8 @@ extern struct gbms_storage_device *gbms_storage_create_device(const char *name,
 							      gbms_tag_t tag);
 extern void gbms_storage_cleanup_device(struct gbms_storage_device *gdev);
 
+extern bool gbms_temp_defend_dry_run(bool update, bool dry_run);
+
 #else
 
 int gbms_storage_register(struct gbms_storage_desc *desc, const char *name,
@@ -187,6 +189,10 @@ struct gbms_storage_device *gbms_storage_create_device(const char *name,
 	return NULL;
 }
 void gbms_storage_cleanup_device(struct gbms_storage_device *gdev)
+{
+	return;
+}
+bool gbms_temp_defend_dry_run(bool update, bool dry_run)
 {
 	return;
 }
