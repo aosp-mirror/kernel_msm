@@ -131,6 +131,7 @@ enum fps {
 	FPS60 = 60,
 	FPS90 = 90,
 	FPS120 = 120,
+	FPS144 = 144,
 };
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
@@ -869,9 +870,8 @@ struct task_struct {
 	const struct sched_class	*sched_class;
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
-
-	/* task boost vendor fields */
 	u64				last_sleep_ts;
+
 	int				boost;
 	u64				boost_period;
 	u64				boost_expires;
@@ -889,6 +889,8 @@ struct task_struct {
 	u64 cpu_cycles;
 	bool misfit;
 	u32 unfilter;
+	bool low_latency;
+	bool rtg_high_prio;
 #endif
 
 #ifdef CONFIG_CGROUP_SCHED

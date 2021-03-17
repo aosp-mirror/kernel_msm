@@ -670,6 +670,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 	struct vmap_area *va;
 	struct vmap_area *n_va;
 	bool do_free = false;
+	unsigned long flush_all_threshold = VMALLOC_END - VMALLOC_START;
 
 	lockdep_assert_held(&vmap_purge_lock);
 
@@ -685,7 +686,10 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 	if (!do_free)
 		return false;
 
-	flush_tlb_kernel_range(start, end);
+	if (end - start <= flush_all_threshold)
+		flush_tlb_kernel_range(start, end);
+	else
+		flush_tlb_all();
 
 	spin_lock(&vmap_area_lock);
 	llist_for_each_entry_safe(va, n_va, valist, purge_list) {

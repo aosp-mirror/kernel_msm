@@ -3596,7 +3596,7 @@ static void wmi_event_handle(struct wil6210_priv *wil,
 
 		if (mid == MID_BROADCAST)
 			mid = 0;
-		if (mid >= ARRAY_SIZE(wil->vifs) || mid >= GET_MAX_VIFS(wil)) {
+		if (mid >= GET_MAX_VIFS(wil)) {
 			wil_dbg_wmi(wil, "invalid mid %d, event skipped\n",
 				    mid);
 			return;
@@ -4341,6 +4341,8 @@ wil_get_vr_profile_name(enum wmi_vr_profile profile)
 		return "COMMON_AP";
 	case WMI_VR_PROFILE_COMMON_STA:
 		return "COMMON_STA";
+	case WMI_VR_PROFILE_COMMON_STA_PS:
+		return "COMMON_STA_PS";
 	default:
 		return "unknown";
 	}

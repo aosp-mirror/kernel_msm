@@ -718,6 +718,11 @@ struct perf_event {
 
 	/* TODO: need to cherry-pick 3d3eb5fb85d97. This is just padding for now
 	 * to reduce the ABI diff */
+	/*
+	 * Entry into the list that holds the events whose CPUs
+	 * are offline. These events will be installed once the
+	 * CPU wakes up and will be removed from the list after that
+	 */
 	struct list_head		dormant_event_entry;
 #endif /* CONFIG_PERF_EVENTS */
 };
@@ -1215,6 +1220,11 @@ int perf_event_max_stack_handler(struct ctl_table *table, int write,
 #define PERF_SECURITY_CPU		1
 #define PERF_SECURITY_KERNEL		2
 #define PERF_SECURITY_TRACEPOINT	3
+
+static inline bool perf_paranoid_any(void)
+{
+	return sysctl_perf_event_paranoid > 2;
+}
 
 static inline int perf_is_paranoid(void)
 {

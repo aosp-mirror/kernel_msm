@@ -71,6 +71,7 @@
 #include "iommu-logger.h"
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
+#include <linux/bitfield.h>
 
 /*
  * Apparently, some Qualcomm arm64 platforms which appear to expose their SMMU
@@ -156,7 +157,6 @@ struct arm_smmu_impl_def_reg {
 	u32 offset;
 	u32 value;
 };
-
 
 /*
  * attach_count
@@ -1463,7 +1463,7 @@ static void arm_smmu_testbus_dump(struct arm_smmu_device *smmu, u16 sid)
 							data->testbus_version);
 		else
 			arm_smmu_debug_dump_tcu_testbus(smmu->dev,
-							ARM_SMMU_GR0(smmu),
+							smmu->phys_addr,
 							data->tcu_base,
 							tcu_testbus_sel);
 		spin_unlock(&testbus_lock);
@@ -1950,6 +1950,46 @@ static phys_addr_t arm_smmu_verify_fault(struct iommu_domain *domain,
 	return (phys == 0 ? phys_post_tlbiall : phys);
 }
 
+int iommu_get_fault_ids(struct iommu_domain *domain,
+			struct iommu_fault_ids *f_ids)
+{
+	struct arm_smmu_domain *smmu_domain;
+	struct arm_smmu_cfg *cfg;
+	struct arm_smmu_device *smmu;
+	void __iomem *cb_base;
+	u32 fsr, fsynr1;
+	int ret;
+
+	if (!domain || !f_ids)
+		return -EINVAL;
+
+	smmu_domain = to_smmu_domain(domain);
+	cfg = &smmu_domain->cfg;
+	smmu = smmu_domain->smmu;
+
+	ret = arm_smmu_power_on(smmu->pwr);
+	if (ret)
+		return ret;
+
+	cb_base = ARM_SMMU_CB(smmu, cfg->cbndx);
+	fsr = readl_relaxed(cb_base + ARM_SMMU_CB_FSR);
+
+	if (!(fsr & FSR_FAULT)) {
+		arm_smmu_power_off(smmu->pwr);
+		return -EINVAL;
+	}
+
+	fsynr1 = readl_relaxed(cb_base + ARM_SMMU_CB_FSYNR1);
+	arm_smmu_power_off(smmu->pwr);
+
+	f_ids->bid = FIELD_GET(FSYNR1_BID, fsynr1);
+	f_ids->pid = FIELD_GET(FSYNR1_PID, fsynr1);
+	f_ids->mid = FIELD_GET(FSYNR1_MID, fsynr1);
+
+	return 0;
+}
+EXPORT_SYMBOL(iommu_get_fault_ids);
+
 static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 {
 	int flags, ret, tmp;
@@ -2012,6 +2052,11 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 			"Context fault handled by client: iova=0x%08lx, cb=%d, fsr=0x%x, fsynr0=0x%x, fsynr1=0x%x\n",
 			iova, cfg->cbndx, fsr, fsynr0, fsynr1);
 		dev_dbg(smmu->dev,
+			"Client info: BID=0x%x, PID=0x%x, MID=0x%x\n",
+			FIELD_GET(FSYNR1_BID, fsynr1),
+			FIELD_GET(FSYNR1_PID, fsynr1),
+			FIELD_GET(FSYNR1_MID, fsynr1));
+		dev_dbg(smmu->dev,
 			"soft iova-to-phys=%pa\n", &phys_soft);
 		ret = IRQ_HANDLED;
 		resume = RESUME_TERMINATE;
@@ -2024,7 +2069,11 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 			dev_err(smmu->dev,
 				"Unhandled context fault: iova=0x%08lx, cb=%d, fsr=0x%x, fsynr0=0x%x, fsynr1=0x%x\n",
 				iova, cfg->cbndx, fsr, fsynr0, fsynr1);
-
+			dev_err(smmu->dev,
+				"Client info: BID=0x%x, PID=0x%x, MID=0x%x\n",
+				FIELD_GET(FSYNR1_BID, fsynr1),
+				FIELD_GET(FSYNR1_PID, fsynr1),
+				FIELD_GET(FSYNR1_MID, fsynr1));
 
 			dev_err(smmu->dev,
 				"soft iova-to-phys=%pa\n", &phys_soft);
@@ -6350,23 +6399,23 @@ static ssize_t arm_smmu_debug_testbus_read(struct file *file,
 
 		struct arm_smmu_device *smmu = file->private_data;
 		struct qsmmuv500_archdata *data = smmu->archdata;
-		void __iomem *base = ARM_SMMU_GR0(smmu);
+		phys_addr_t phys_addr = smmu->phys_addr;
 		void __iomem *tcu_base = data->tcu_base;
 
 		arm_smmu_power_on(smmu->pwr);
 
 		if (ops == TESTBUS_SELECT) {
 			snprintf(buf, buf_len, "TCU clk testbus sel: 0x%0x\n",
-				arm_smmu_debug_tcu_testbus_select(base,
+				arm_smmu_debug_tcu_testbus_select(phys_addr,
 					tcu_base, CLK_TESTBUS, READ, 0));
 			snprintf(buf + strlen(buf), buf_len - strlen(buf),
 				 "TCU testbus sel : 0x%0x\n",
-				 arm_smmu_debug_tcu_testbus_select(base,
+				 arm_smmu_debug_tcu_testbus_select(phys_addr,
 					 tcu_base, PTW_AND_CACHE_TESTBUS,
 					 READ, 0));
 		} else {
 			snprintf(buf, buf_len, "0x%0x\n",
-				 arm_smmu_debug_tcu_testbus_output(base));
+				 arm_smmu_debug_tcu_testbus_output(phys_addr));
 		}
 
 		arm_smmu_power_off(smmu->pwr);
@@ -6388,7 +6437,7 @@ static ssize_t arm_smmu_debug_tcu_testbus_sel_write(struct file *file,
 	struct arm_smmu_device *smmu = file->private_data;
 	struct qsmmuv500_archdata *data = smmu->archdata;
 	void __iomem *tcu_base = data->tcu_base;
-	void __iomem *base = ARM_SMMU_GR0(smmu);
+	phys_addr_t phys_addr = smmu->phys_addr;
 	char *comma;
 	char buf[100];
 	u64 sel, val;
@@ -6424,11 +6473,12 @@ static ssize_t arm_smmu_debug_tcu_testbus_sel_write(struct file *file,
 	arm_smmu_power_on(smmu->pwr);
 
 	if (sel == 1)
-		arm_smmu_debug_tcu_testbus_select(base,
+		arm_smmu_debug_tcu_testbus_select(phys_addr,
 				tcu_base, CLK_TESTBUS, WRITE, val);
 	else if (sel == 2)
-		arm_smmu_debug_tcu_testbus_select(base,
-				tcu_base, PTW_AND_CACHE_TESTBUS, WRITE, val);
+		arm_smmu_debug_tcu_testbus_select(phys_addr,
+				tcu_base, PTW_AND_CACHE_TESTBUS,
+				WRITE, val);
 
 	arm_smmu_power_off(smmu->pwr);
 

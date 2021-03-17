@@ -250,24 +250,42 @@ static void __reset_isolation_suitable(struct zone *zone)
 
 	zone->compact_blockskip_flush = false;
 
-	/* Walk the zone and mark every pageblock as suitable for isolation */
-	for (pfn = start_pfn; pfn < end_pfn; pfn += pageblock_nr_pages) {
-		struct page *page;
-
+	/*
+	 * Walk the zone and update pageblock skip information. Source looks
+	 * for PageLRU while target looks for PageBuddy. When the scanner
+	 * is found, both PageBuddy and PageLRU are checked as the pageblock
+	 * is suitable as both source and target.
+	 */
+	for (; migrate_pfn < free_pfn; migrate_pfn += pageblock_nr_pages,
+					free_pfn -= pageblock_nr_pages) {
 		cond_resched();
 
-		page = pfn_to_online_page(pfn);
-		if (!page)
-			continue;
-		if (zone != page_zone(page))
-			continue;
-		if (pageblock_skip_persistent(page))
-			continue;
+		/* Update the migrate PFN */
+		if (__reset_isolation_pfn(zone, migrate_pfn, true, source_set) &&
+		    migrate_pfn < reset_migrate) {
+			source_set = true;
+			reset_migrate = migrate_pfn;
+			zone->compact_init_migrate_pfn = reset_migrate;
+			zone->compact_cached_migrate_pfn[0] = reset_migrate;
+			zone->compact_cached_migrate_pfn[1] = reset_migrate;
+		}
 
-		clear_pageblock_skip(page);
+		/* Update the free PFN */
+		if (__reset_isolation_pfn(zone, free_pfn, free_set, true) &&
+		    free_pfn > reset_free) {
+			free_set = true;
+			reset_free = free_pfn;
+			zone->compact_init_free_pfn = reset_free;
+			zone->compact_cached_free_pfn = reset_free;
+		}
 	}
 
-	reset_cached_positions(zone);
+	/* Leave no distance if no suitable block was reset */
+	if (reset_migrate >= reset_free) {
+		zone->compact_cached_migrate_pfn[0] = migrate_pfn;
+		zone->compact_cached_migrate_pfn[1] = migrate_pfn;
+		zone->compact_cached_free_pfn = free_pfn;
+	}
 }
 
 void reset_isolation_suitable(pg_data_t *pgdat)
@@ -1434,7 +1452,7 @@ static enum compact_result __compaction_suitable(struct zone *zone, int order,
 	if (is_via_compact_memory(order))
 		return COMPACT_CONTINUE;
 
-	watermark = zone->watermark[alloc_flags & ALLOC_WMARK_MASK];
+	watermark = wmark_pages(zone, alloc_flags & ALLOC_WMARK_MASK);
 	/*
 	 * If watermarks for high-order allocation are already met, there
 	 * should be no need for compaction at all.
@@ -1595,7 +1613,7 @@ static enum compact_result compact_zone(struct zone *zone, struct compact_contro
 			zone->compact_cached_migrate_pfn[1] = cc->migrate_pfn;
 		}
 
-		if (cc->migrate_pfn == start_pfn)
+		if (cc->migrate_pfn <= cc->zone->compact_init_migrate_pfn)
 			cc->whole_zone = true;
 	}
 

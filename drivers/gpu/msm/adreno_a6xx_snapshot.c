@@ -387,6 +387,12 @@ static const unsigned int a6xx_gmu_wrapper_registers[] = {
 	0x1f840, 0x1f840, 0x1f844, 0x1f845, 0x1f887, 0x1f889,
 	/* GMU AO*/
 	0x23b0C, 0x23b0E, 0x23b15, 0x23b15,
+	/* GPU CC */
+	0x24000, 0x24012, 0x24040, 0x24052, 0x24400, 0x24404, 0x24407, 0x2440B,
+	0x24415, 0x2441C, 0x2441E, 0x2442D, 0x2443C, 0x2443D, 0x2443F, 0x24440,
+	0x24442, 0x24449, 0x24458, 0x2445A, 0x24540, 0x2455E, 0x24800, 0x24802,
+	0x24C00, 0x24C02, 0x25400, 0x25402, 0x25800, 0x25802, 0x25C00, 0x25C02,
+	0x26000, 0x26002,
 };
 
 enum a6xx_debugbus_id {
@@ -600,6 +606,49 @@ static struct a6xx_shader_block a6xx_shader_blocks[] = {
 	{A6XX_SP_CB_LEGACY_DATA,          0x280,},
 	{A6XX_SP_UAV_DATA,                0x80,},
 	{A6XX_SP_INST_TAG,                0x80,},
+	{A6XX_SP_CB_BINDLESS_TAG,         0x80,},
+	{A6XX_SP_TMO_UMO_TAG,             0x80,},
+	{A6XX_SP_SMO_TAG,                 0x80},
+	{A6XX_SP_STATE_DATA,              0x3F},
+	{A6XX_HLSQ_CHUNK_CVS_RAM,         0x1C0},
+	{A6XX_HLSQ_CHUNK_CPS_RAM,         0x280},
+	{A6XX_HLSQ_CHUNK_CVS_RAM_TAG,     0x40,},
+	{A6XX_HLSQ_CHUNK_CPS_RAM_TAG,     0x40,},
+	{A6XX_HLSQ_ICB_CVS_CB_BASE_TAG,   0x4,},
+	{A6XX_HLSQ_ICB_CPS_CB_BASE_TAG,   0x4,},
+	{A6XX_HLSQ_CVS_MISC_RAM,          0x1C0},
+	{A6XX_HLSQ_CPS_MISC_RAM,          0x580},
+	{A6XX_HLSQ_INST_RAM,              0x800},
+	{A6XX_HLSQ_GFX_CVS_CONST_RAM,     0x800},
+	{A6XX_HLSQ_GFX_CPS_CONST_RAM,     0x800},
+	{A6XX_HLSQ_CVS_MISC_RAM_TAG,      0x8,},
+	{A6XX_HLSQ_CPS_MISC_RAM_TAG,      0x4,},
+	{A6XX_HLSQ_INST_RAM_TAG,          0x80,},
+	{A6XX_HLSQ_GFX_CVS_CONST_RAM_TAG, 0xC,},
+	{A6XX_HLSQ_GFX_CPS_CONST_RAM_TAG, 0x10},
+	{A6XX_HLSQ_PWR_REST_RAM,          0x28},
+	{A6XX_HLSQ_PWR_REST_TAG,          0x14},
+	{A6XX_HLSQ_DATAPATH_META,         0x40,},
+	{A6XX_HLSQ_FRONTEND_META,         0x40},
+	{A6XX_HLSQ_INDIRECT_META,         0x40,}
+};
+
+static struct a6xx_shader_block a615_shader_blocks[] = {
+	{A6XX_TP0_TMO_DATA,               0x200},
+	{A6XX_TP0_SMO_DATA,               0x80,},
+	{A6XX_TP0_MIPMAP_BASE_DATA,       0x3C0},
+	{A6XX_TP1_TMO_DATA,               0x200},
+	{A6XX_TP1_SMO_DATA,               0x80,},
+	{A6XX_TP1_MIPMAP_BASE_DATA,       0x3C0},
+	{A6XX_SP_LB_0_DATA,               0x800},
+	{A6XX_SP_LB_1_DATA,               0x800},
+	{A6XX_SP_LB_2_DATA,               0x800},
+	{A6XX_SP_LB_3_DATA,               0x800},
+	{A6XX_SP_LB_4_DATA,               0x800},
+	{A6XX_SP_LB_5_DATA,               0x200},
+	{A6XX_SP_CB_BINDLESS_DATA,        0x800},
+	{A6XX_SP_CB_LEGACY_DATA,          0x280,},
+	{A6XX_SP_UAV_DATA,                0x80,},
 	{A6XX_SP_CB_BINDLESS_TAG,         0x80,},
 	{A6XX_SP_TMO_UMO_TAG,             0x80,},
 	{A6XX_SP_SMO_TAG,                 0x80},
@@ -1819,11 +1868,12 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 		adreno_snapshot_registers(device, snapshot,
 			a6xx_rscc_snapshot_registers,
 			ARRAY_SIZE(a6xx_rscc_snapshot_registers) / 2);
-	} else if (adreno_is_a610(adreno_dev)) {
+	}
+
+	if (!gmu_core_isenabled(device))
 		adreno_snapshot_registers(device, snapshot,
 			a6xx_gmu_wrapper_registers,
 			ARRAY_SIZE(a6xx_gmu_wrapper_registers) / 2);
-	}
 
 	sptprac_on = gpudev->sptprac_is_on(adreno_dev);
 
@@ -2108,10 +2158,18 @@ void a6xx_crashdump_init(struct adreno_device *adreno_dev)
 	 * read the data) and then a block specific number of bytes to hold
 	 * the data
 	 */
-	for (i = 0; i < ARRAY_SIZE(a6xx_shader_blocks); i++) {
-		script_size += 32 * A6XX_NUM_SHADER_BANKS;
-		data_size += a6xx_shader_blocks[i].sz * sizeof(unsigned int) *
-			A6XX_NUM_SHADER_BANKS;
+	if (adreno_is_a615_family(adreno_dev)) {
+		for (i = 0; i < ARRAY_SIZE(a615_shader_blocks); i++) {
+			script_size += 32 * A6XX_NUM_SHADER_BANKS;
+			data_size += a615_shader_blocks[i].sz *
+				sizeof(unsigned int) * A6XX_NUM_SHADER_BANKS;
+		}
+	} else {
+		for (i = 0; i < ARRAY_SIZE(a6xx_shader_blocks); i++) {
+			script_size += 32 * A6XX_NUM_SHADER_BANKS;
+			data_size += a6xx_shader_blocks[i].sz *
+				sizeof(unsigned int) * A6XX_NUM_SHADER_BANKS;
+		}
 	}
 
 	/* Calculate the script and data size for MVC registers */
@@ -2217,9 +2275,16 @@ void a6xx_crashdump_init(struct adreno_device *adreno_dev)
 	}
 
 	/* Program each shader block */
-	for (i = 0; i < ARRAY_SIZE(a6xx_shader_blocks); i++) {
-		ptr += _a6xx_crashdump_init_shader(&a6xx_shader_blocks[i], ptr,
-							&offset);
+	if (adreno_is_a615_family(adreno_dev)) {
+		for (i = 0; i < ARRAY_SIZE(a615_shader_blocks); i++)
+			ptr += _a6xx_crashdump_init_shader(
+					&a615_shader_blocks[i], ptr,
+					&offset);
+	} else {
+		for (i = 0; i < ARRAY_SIZE(a6xx_shader_blocks); i++)
+			ptr += _a6xx_crashdump_init_shader(
+					&a6xx_shader_blocks[i], ptr,
+					&offset);
 	}
 
 	/* Program the capturescript for the MVC regsiters */

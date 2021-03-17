@@ -22,7 +22,6 @@
 #include <linux/sched.h>	/* for current && schedule_timeout */
 #include <linux/mutex.h>	/* for struct mutex */
 #include <linux/pm_runtime.h>	/* for runtime PM */
-#include <linux/android_kabi.h>
 
 struct usb_device;
 struct usb_driver;
@@ -258,11 +257,6 @@ struct usb_interface {
 	struct device dev;		/* interface specific device info */
 	struct device *usb_dev;
 	struct work_struct reset_ws;	/* for resets in atomic context */
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 #define	to_usb_interface(d) container_of(d, struct usb_interface, dev)
 
@@ -734,11 +728,6 @@ struct usb_device {
 	unsigned lpm_disable_count;
 
 	u16 hub_delay;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 #define	to_usb_device(d) container_of(d, struct usb_device, dev)
 
@@ -1248,11 +1237,6 @@ struct usb_driver {
 	unsigned int supports_autosuspend:1;
 	unsigned int disable_hub_initiated_lpm:1;
 	unsigned int soft_unbind:1;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 #define	to_usb_driver(d) container_of(d, struct usb_driver, drvwrap.driver)
 
@@ -1627,10 +1611,6 @@ struct urb {
 	usb_complete_t complete;	/* (in) completion routine */
 	struct usb_iso_packet_descriptor iso_frame_desc[0];
 					/* (in) ISO ONLY */
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 /* ----------------------------------------------------------------------- */

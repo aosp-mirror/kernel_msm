@@ -1466,6 +1466,12 @@ int ipa3_release_gsi_channel(u32 clnt_hdl)
 	if (!ep->keep_ipa_awake)
 		IPA_ACTIVE_CLIENTS_INC_EP(ipa3_get_client_mapping(clnt_hdl));
 
+	/* Set the disconnect in progress flag to avoid calling cb.*/
+	spin_lock(&ipa3_ctx->disconnect_lock);
+	atomic_set(&ep->disconnect_in_progress, 1);
+	spin_unlock(&ipa3_ctx->disconnect_lock);
+
+
 	gsi_res = gsi_dealloc_channel(ep->gsi_chan_hdl);
 	if (gsi_res != GSI_STATUS_SUCCESS) {
 		IPAERR("Error deallocating channel: %d\n", gsi_res);
@@ -1484,7 +1490,9 @@ int ipa3_release_gsi_channel(u32 clnt_hdl)
 	if (!ep->keep_ipa_awake)
 		IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 
+	spin_lock(&ipa3_ctx->disconnect_lock);
 	memset(&ipa3_ctx->ep[clnt_hdl], 0, sizeof(struct ipa3_ep_context));
+	spin_unlock(&ipa3_ctx->disconnect_lock);
 
 	IPADBG("exit\n");
 	return 0;
@@ -1792,9 +1800,7 @@ int ipa3_clear_endpoint_delay(u32 clnt_hdl)
 	/* Set disconnect in progress flag so further flow control events are
 	 * not honored.
 	 */
-	spin_lock(&ipa3_ctx->disconnect_lock);
-	ep->disconnect_in_progress = true;
-	spin_unlock(&ipa3_ctx->disconnect_lock);
+	atomic_set(&ep->disconnect_in_progress, 1);
 
 	/* If flow is disabled at this point, restore the ep state.*/
 	ep_ctrl.ipa_ep_delay = false;

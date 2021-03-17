@@ -30,6 +30,18 @@
 #define QMI_WLFW_MAC_READY_TIMEOUT_MS	50
 #define QMI_WLFW_MAC_READY_MAX_RETRY	200
 
+#ifdef CONFIG_CNSS2_DEBUG
+static bool ignore_qmi_failure;
+#define CNSS_QMI_ASSERT() CNSS_ASSERT(ignore_qmi_failure)
+void cnss_ignore_qmi_failure(bool ignore)
+{
+	ignore_qmi_failure = ignore;
+}
+#else
+#define CNSS_QMI_ASSERT() do { } while (0)
+void cnss_ignore_qmi_failure(bool ignore) { }
+#endif
+
 static char *cnss_qmi_mode_to_str(enum cnss_driver_mode mode)
 {
 	switch (mode) {
@@ -142,13 +154,25 @@ static int cnss_wlfw_ind_register_send_sync(struct cnss_plat_data *plat_priv)
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 
 qmi_registered:
 	kfree(req);
 	kfree(resp);
 	return ret;
 }
+
+#ifdef CONFIG_CNSS2_DEBUG
+static inline u32 cnss_get_host_build_type(void)
+{
+	return QMI_HOST_BUILD_TYPE_PRIMARY_V01;
+}
+#else
+static inline u32 cnss_get_host_build_type(void)
+{
+	return QMI_HOST_BUILD_TYPE_SECONDARY_V01;
+}
+#endif
 
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
@@ -209,6 +233,9 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 			    req->ddr_range[0].start, req->ddr_range[0].size);
 	}
 
+	req->host_build_type_valid = 1;
+	req->host_build_type = cnss_get_host_build_type();
+
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
 	if (ret < 0) {
@@ -247,7 +274,7 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -336,7 +363,7 @@ int cnss_wlfw_respond_mem_send_sync(struct cnss_plat_data *plat_priv)
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -448,7 +475,7 @@ int cnss_wlfw_tgt_cap_send_sync(struct cnss_plat_data *plat_priv)
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -538,7 +565,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 				     filename, sizeof(filename));
 	if (ret > 0) {
 		temp = DUMMY_BDF_FILE_NAME;
-		remaining = MAX_FIRMWARE_NAME_LEN;
+		remaining = strlen(DUMMY_BDF_FILE_NAME) + 1;
 		goto bypass_bdf;
 	} else if (ret < 0) {
 		goto err_req_fw;
@@ -628,7 +655,8 @@ err_send:
 		release_firmware(fw_entry);
 err_req_fw:
 	if (bdf_type != CNSS_BDF_REGDB)
-		CNSS_ASSERT(0);
+		CNSS_QMI_ASSERT();
+
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -705,7 +733,7 @@ int cnss_wlfw_m3_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -916,7 +944,7 @@ out:
 		cnss_pr_dbg("WLFW service is disconnected while sending mode off request\n");
 		ret = 0;
 	} else {
-		CNSS_ASSERT(0);
+		CNSS_QMI_ASSERT();
 	}
 	kfree(req);
 	kfree(resp);
@@ -1026,7 +1054,7 @@ int cnss_wlfw_wlan_cfg_send_sync(struct cnss_plat_data *plat_priv,
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 	kfree(req);
 	kfree(resp);
 	return ret;
@@ -2084,7 +2112,7 @@ static int cnss_wlfw_connect_to_server(struct cnss_plat_data *plat_priv,
 	return 0;
 
 out:
-	CNSS_ASSERT(0);
+	CNSS_QMI_ASSERT();
 	kfree(data);
 	return ret;
 }
@@ -2098,9 +2126,10 @@ int cnss_wlfw_server_arrive(struct cnss_plat_data *plat_priv, void *data)
 
 	if (test_bit(CNSS_QMI_WLFW_CONNECTED, &plat_priv->driver_state)) {
 		cnss_pr_err("Unexpected WLFW server arrive\n");
-		CNSS_ASSERT(0);
 		return -EINVAL;
 	}
+
+	cnss_ignore_qmi_failure(false);
 
 	ret = cnss_wlfw_connect_to_server(plat_priv, data);
 	if (ret < 0)
@@ -2125,6 +2154,8 @@ out:
 
 int cnss_wlfw_server_exit(struct cnss_plat_data *plat_priv)
 {
+	int ret;
+
 	if (!plat_priv)
 		return -ENODEV;
 
@@ -2133,6 +2164,15 @@ int cnss_wlfw_server_exit(struct cnss_plat_data *plat_priv)
 	cnss_pr_info("QMI WLFW service disconnected, state: 0x%lx\n",
 		     plat_priv->driver_state);
 
+	cnss_qmi_deinit(plat_priv);
+
+	clear_bit(CNSS_QMI_DEL_SERVER, &plat_priv->driver_state);
+
+	ret = cnss_qmi_init(plat_priv);
+	if (ret < 0) {
+		cnss_pr_err("QMI WLFW service registraton failed, ret\n", ret);
+		CNSS_ASSERT(0);
+	}
 	return 0;
 }
 
@@ -2142,6 +2182,13 @@ static int wlfw_new_server(struct qmi_handle *qmi_wlfw,
 	struct cnss_plat_data *plat_priv =
 		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
 	struct cnss_qmi_event_server_arrive_data *event_data;
+
+	if (plat_priv && test_bit(CNSS_QMI_DEL_SERVER,
+				  &plat_priv->driver_state)) {
+		cnss_pr_info("WLFW server delete in progress, Ignore server arrive, state: 0x%lx\n",
+			     plat_priv->driver_state);
+		return 0;
+	}
 
 	cnss_pr_dbg("WLFW server arriving: node %u port %u\n",
 		    service->node, service->port);
@@ -2165,7 +2212,19 @@ static void wlfw_del_server(struct qmi_handle *qmi_wlfw,
 	struct cnss_plat_data *plat_priv =
 		container_of(qmi_wlfw, struct cnss_plat_data, qmi_wlfw);
 
+	if (plat_priv && test_bit(CNSS_QMI_DEL_SERVER,
+				  &plat_priv->driver_state)) {
+		cnss_pr_info("WLFW server delete in progress, Ignore server delete, state: 0x%lx\n",
+			     plat_priv->driver_state);
+		return;
+	}
+
 	cnss_pr_dbg("WLFW server exiting\n");
+
+	if (plat_priv) {
+		cnss_ignore_qmi_failure(true);
+		set_bit(CNSS_QMI_DEL_SERVER, &plat_priv->driver_state);
+	}
 
 	cnss_driver_event_post(plat_priv, CNSS_DRIVER_EVENT_SERVER_EXIT,
 			       0, NULL);

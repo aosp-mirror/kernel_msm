@@ -26,6 +26,7 @@
 #include "kgsl_debugfs.h"
 #include "kgsl_device.h"
 #include "kgsl_mmu.h"
+#include "kgsl_reclaim.h"
 #include "kgsl_sync.h"
 #include "kgsl_trace.h"
 
@@ -516,6 +517,10 @@ static void kgsl_mem_entry_detach_process(struct kgsl_mem_entry *entry)
 	spin_unlock(&entry->priv->mem_lock);
 
 	kgsl_mmu_put_gpuaddr(&entry->memdesc);
+
+	atomic_sub(entry->memdesc.reclaimed_page_count,
+			&entry->priv->reclaimed_page_count);
+
 
 	kgsl_process_private_put(entry->priv);
 
@@ -1034,6 +1039,8 @@ static struct kgsl_process_private *kgsl_process_private_new(
 
 	idr_init(&private->mem_idr);
 	idr_init(&private->syncsource_idr);
+
+	kgsl_reclaim_proc_private_init(private);
 
 	/* Allocate a pagetable for the new process object */
 	private->pagetable = kgsl_mmu_getpagetable(&device->mmu,
@@ -1914,6 +1921,9 @@ long kgsl_ioctl_rb_issueibcmds(struct kgsl_device_private *dev_priv,
 	}
 
 	if (result == 0)
+		result = kgsl_reclaim_to_pinned_state(dev_priv->process_priv);
+
+	if (result == 0)
 		result = dev_priv->device->ftbl->queue_cmds(dev_priv, context,
 				&drawobj, 1, &param->timestamp);
 
@@ -2025,6 +2035,13 @@ long kgsl_ioctl_submit_commands(struct kgsl_device_private *dev_priv,
 		if (cmdobj->profiling_buf_entry == NULL)
 			DRAWOBJ(cmdobj)->flags &=
 				~(unsigned long)KGSL_DRAWOBJ_PROFILING;
+
+		if (type & CMDOBJ_TYPE) {
+			result = kgsl_reclaim_to_pinned_state(
+					dev_priv->process_priv);
+			if (result)
+				goto done;
+		}
 	}
 
 	result = device->ftbl->queue_cmds(dev_priv, context, drawobj,
@@ -2115,6 +2132,13 @@ long kgsl_ioctl_gpu_command(struct kgsl_device_private *dev_priv,
 		if (cmdobj->profiling_buf_entry == NULL)
 			DRAWOBJ(cmdobj)->flags &=
 				~(unsigned long)KGSL_DRAWOBJ_PROFILING;
+
+		if (type & CMDOBJ_TYPE) {
+			result = kgsl_reclaim_to_pinned_state(
+					dev_priv->process_priv);
+			if (result)
+				goto done;
+		}
 	}
 
 	result = device->ftbl->queue_cmds(dev_priv, context, drawobj,
@@ -3470,6 +3494,7 @@ struct kgsl_mem_entry *gpumem_alloc_entry(
 	struct kgsl_mem_entry *entry;
 	struct kgsl_mmu *mmu = &dev_priv->device->mmu;
 	unsigned int align;
+	u32 cachemode;
 
 	flags &= KGSL_MEMFLAGS_GPUREADONLY
 		| KGSL_CACHEMODE_MASK
@@ -3521,6 +3546,17 @@ struct kgsl_mem_entry *gpumem_alloc_entry(
 		kgsl_sharedmem_free(&entry->memdesc);
 		goto err;
 	}
+
+	cachemode = kgsl_memdesc_get_cachemode(&entry->memdesc);
+	/*
+	 * Secure buffers cannot be reclaimed. Avoid reclaim of cached buffers
+	 * as we could get request for cache operations on these buffers when
+	 * they are reclaimed.
+	 */
+	if (!(flags & KGSL_MEMFLAGS_SECURE) &&
+			!(cachemode == KGSL_CACHEMODE_WRITEBACK) &&
+			!(cachemode == KGSL_CACHEMODE_WRITETHROUGH))
+		entry->memdesc.priv |= KGSL_MEMDESC_CAN_RECLAIM;
 
 	kgsl_process_add_stats(private,
 			kgsl_memdesc_usermem_type(&entry->memdesc),
@@ -4931,7 +4967,17 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 
 	vma->vm_file = file;
 
+	entry->memdesc.vma = vma;
 	entry->memdesc.useraddr = vma->vm_start;
+
+	/*
+	 * kgsl gets the entry id or the gpu address through vm_pgoff.
+	 * It is used during mmap and never needed again. But this vm_pgoff
+	 * has different meaning at other parts of kernel. Not setting to
+	 * zero will let way for wrong assumption when tried to unmap a page
+	 * from this vma.
+	 */
+	vma->vm_pgoff = 0;
 
 	trace_kgsl_mem_mmap(entry);
 	return 0;
@@ -5162,7 +5208,11 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	dma_set_max_seg_size(device->dev, KGSL_DMA_BIT_MASK);
 
 	/* Initialize the memory pools */
-	kgsl_init_page_pools(device->pdev);
+	kgsl_init_page_pools(device);
+
+	status = kgsl_reclaim_init(device);
+	if (status)
+		goto error_close_mmu;
 
 	/*
 	 * The default request type PM_QOS_REQ_ALL_CORES is
@@ -5199,7 +5249,7 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	}
 
 	device->events_wq = alloc_workqueue("kgsl-events",
-		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
+		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI, 0);
 
 	/* Initialize the snapshot engine */
 	kgsl_device_snapshot_init(device);
@@ -5258,6 +5308,8 @@ void kgsl_core_exit(void)
 {
 	kgsl_events_exit();
 	kgsl_core_debugfs_close();
+
+	kgsl_reclaim_close();
 
 	/*
 	 * We call kgsl_sharedmem_uninit_sysfs() and device_unregister()

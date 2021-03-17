@@ -159,6 +159,7 @@
 #define ADC_GPIO6_PU1				0x37
 #define ADC_GPIO7_PU1				0x38
 #define ADC_SBUx_PU1				0x39
+#define ANA_IN					0x1d
 
 /* 100k pull-up2 */
 #define ADC_BAT_THERM_PU2			0x4a
@@ -240,6 +241,7 @@
 #define ADC_SCALE_HW_CALIB_BATT_THERM_30K	0xD
 #define ADC_SCALE_HW_CALIB_BATT_THERM_400K	0xE
 #define ADC_SCALE_HW_CALIB_PM5_SMB1398_TEMP	0xF
+#define ADC_SCALE_HW_CALIB_PM2250_S3_DIE_TEMP	0x10
 
 /* ADC channels for ADC for PMIC7 */
 

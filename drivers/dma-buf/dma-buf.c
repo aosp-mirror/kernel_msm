@@ -34,6 +34,8 @@
 #include <linux/poll.h>
 #include <linux/reservation.h>
 #include <linux/mm.h>
+#include <linux/kernel.h>
+#include <linux/atomic.h>
 #include <linux/sched/signal.h>
 #include <linux/fdtable.h>
 #include <linux/list_sort.h>
@@ -1306,7 +1308,7 @@ int dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags)
 
 	return ret;
 }
-EXPORT_SYMBOL(dma_buf_get_flags);
+EXPORT_SYMBOL_GPL(dma_buf_get_flags);
 
 int dma_buf_get_uuid(struct dma_buf *dmabuf, uuid_t *uuid)
 {

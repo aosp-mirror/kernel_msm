@@ -2136,7 +2136,7 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
  *
  * I_SYNC_QUEUED	Inode is queued in b_io or b_more_io writeback lists.
  *			Used to detect that mark_inode_dirty() should not move
- * 			inode between dirty lists.
+ *			inode between dirty lists.
  *
  * Q: What is the difference between I_WILL_FREE and I_FREEING?
  */

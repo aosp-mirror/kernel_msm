@@ -782,6 +782,12 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 	 * as soon as possible so we will release back the lock.
 	 */
 	spin_lock_irqsave(&dwc->lock, flags);
+	if (!dwc->pullups_connected) {
+		dev_err(mdwc->dev, "%s: No Pullup\n", __func__);
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		return -ESHUTDOWN;
+	}
+
 	if (!dep->endpoint.desc) {
 		dev_err(mdwc->dev,
 			"%s: trying to queue request %pK to disabled ep %s\n",
@@ -1575,6 +1581,11 @@ static int dwc3_msm_gsi_ep_op(struct usb_ep *ep,
 		ret = gsi_get_xfer_index(ep);
 		break;
 	case GSI_EP_OP_STORE_DBL_INFO:
+		if (!dwc->pullups_connected) {
+			dbg_log_string("No Pullup\n");
+			return -ESHUTDOWN;
+		}
+
 		request = (struct usb_gsi_request *)op_data;
 		gsi_store_ringbase_dbl_info(ep, request);
 		break;
@@ -2975,12 +2986,15 @@ static void dwc3_resume_work(struct work_struct *w)
 	/* Check speed and Type-C polarity values in order to configure PHY */
 	if (!eud_connected && edev && extcon_get_state(edev, extcon_id)) {
 		dwc->maximum_speed = dwc->max_hw_supp_speed;
+		dwc->gadget.max_speed = dwc->maximum_speed;
 
 		ret = extcon_get_property(edev, extcon_id,
 				EXTCON_PROP_USB_SS, &val);
 
-		if (!ret && val.intval == 0)
+		if (!ret && val.intval == 0) {
 			dwc->maximum_speed = USB_SPEED_HIGH;
+			dwc->gadget.max_speed = dwc->maximum_speed;
+		}
 
 		if (mdwc->override_usb_speed &&
 			mdwc->override_usb_speed <= dwc->maximum_speed) {
@@ -2988,6 +3002,7 @@ static void dwc3_resume_work(struct work_struct *w)
 			dwc->gadget.max_speed = dwc->maximum_speed;
 			dbg_event(0xFF, "override_speed",
 					mdwc->override_usb_speed);
+			mdwc->override_usb_speed = 0;
 		}
 
 		dbg_event(0xFF, "speed", dwc->maximum_speed);
@@ -3340,8 +3355,12 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 		mdwc->vbus_active = event;
 	}
 
+	/*
+	 * Drive a pulse on DP to ensure proper CDP detection
+	 * and only when the vbus connect event is a valid one.
+	 */
 	if (get_psy_type(mdwc) == POWER_SUPPLY_TYPE_USB_CDP &&
-			mdwc->vbus_active) {
+			mdwc->vbus_active && !mdwc->check_eud_state) {
 		dev_dbg(mdwc->dev, "Connected to CDP, pull DP up\n");
 		usb_phy_drive_dp_pulse(mdwc->hs_phy, DP_PULSE_WIDTH_MSEC);
 	}
