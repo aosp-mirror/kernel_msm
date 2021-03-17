@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1511,19 +1511,7 @@ static int32_t cam_cci_read(struct v4l2_subdev *sd,
 		cam_cci_flush_queue(cci_dev, master);
 		goto rel_mutex_q;
 	} else {
-		//If rd_done is complete with NACK wait until RESET_ACK
-		//is received.
 		rc = 0;
-		if (cci_dev->cci_master_info[master].status == -EINVAL) {
-			rc = wait_for_completion_timeout(
-			&cci_dev->cci_master_info[master].reset_complete,
-			CCI_TIMEOUT);
-			if (rc <= 0) {
-				CAM_ERR(CAM_CCI,
-					"wait_for_completion_timeout rc = %d, rc");
-			} else
-				rc = 0;
-		}
 	}
 
 	read_words = cam_io_r_mb(base +
@@ -1869,7 +1857,6 @@ static int32_t cam_cci_read_bytes(struct v4l2_subdev *sd,
 	 * we load the burst read cmd.
 	 */
 	reinit_completion(&cci_dev->cci_master_info[master].th_complete);
-	reinit_completion(&cci_dev->cci_master_info[master].reset_complete);
 
 	CAM_DBG(CAM_CCI, "Bytes to read %u", read_bytes);
 	do {
@@ -2081,12 +2068,7 @@ int32_t cam_cci_core_cam_ctrl(struct v4l2_subdev *sd,
 	CAM_DBG(CAM_CCI, "cmd %d", cmd->op_code);
 
 	if (cmd->handle_type != CAM_HANDLE_USER_POINTER) {
-<<<<<<< HEAD
 		CAM_ERR(CAM_CCI, "Invalid handle type: %d", cmd->handle_type);
-=======
-		CAM_ERR(CAM_CCI, "Invalid handle type: %d",
-				cmd->handle_type);
->>>>>>> partner/qcom-msm-4.14
 		return -EINVAL;
 	}
 
@@ -2100,13 +2082,8 @@ int32_t cam_cci_core_cam_ctrl(struct v4l2_subdev *sd,
 		struct  cam_sensor_query_cap sensor_cap;
 
 		sensor_cap.slot_info = cci_dev->soc_info.index;
-<<<<<<< HEAD
 		if (copy_to_user(u64_to_user_ptr(cmd->handle), &sensor_cap,
 				 sizeof(sensor_cap))) {
-=======
-		if (copy_to_user(u64_to_user_ptr(cmd->handle),
-			&sensor_cap, sizeof(sensor_cap))) {
->>>>>>> partner/qcom-msm-4.14
 			CAM_ERR(CAM_CCI, "Failed Copy to User");
 			rc = -EFAULT;
 		}

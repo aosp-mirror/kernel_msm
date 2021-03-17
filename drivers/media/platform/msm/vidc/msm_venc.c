@@ -1319,6 +1319,24 @@ static struct v4l2_ctrl *get_ctrl_from_cluster(int id,
 	return NULL;
 }
 
+static int update_heic_input_buffer_count(struct msm_vidc_inst *inst)
+{
+	struct hal_buffer_requirements *bufreq;
+
+	bufreq = get_buff_req_buffer(inst, HAL_BUFFER_INPUT);
+	if (!bufreq)
+		return -EINVAL;
+
+	bufreq->buffer_count_min = bufreq->buffer_count_min_host =
+		bufreq->buffer_count_actual = MIN_NUM_ENC_OUTPUT_BUFFERS;
+
+	dprintk(VIDC_DBG, "%s: %x : input min %d min_host %d actual %d\n",
+		__func__, hash32_ptr(inst->session),
+		bufreq->buffer_count_min, bufreq->buffer_count_min_host,
+		bufreq->buffer_count_actual);
+	return 0;
+}
+
 int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 {
 	int rc = 0;
@@ -1352,6 +1370,7 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	struct hal_nal_stream_format_select stream_format;
 	struct hal_heic_frame_quality frame_quality;
 	struct hal_heic_grid_enable grid_enable;
+	enum hal_flip flip = HAL_FLIP_NONE;
 
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
@@ -1522,6 +1541,19 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		grid_enable.grid_enable = ctrl->val;
 		inst->grid_enable = ctrl->val;
 		pdata = &grid_enable;
+
+		if (ctrl->val &&
+			inst->state < MSM_VIDC_LOAD_RESOURCES) {
+			dprintk(VIDC_DBG,
+				"Update HEIC input buffer count");
+			rc = update_heic_input_buffer_count(inst);
+			if (rc) {
+				dprintk(VIDC_ERR,
+				"Failed to update HEIC input buffer count: %d\n",
+				rc);
+				break;
+			}
+		}
 		break;
 	}
 	case V4L2_CID_MPEG_VIDEO_BITRATE:
@@ -1656,6 +1688,14 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDC_VIDEO_FLIP:
 	{
 		dprintk(VIDC_DBG, "Flip %d\n", ctrl->val);
+		if (inst->state >= MSM_VIDC_START_DONE &&
+			inst->state <= MSM_VIDC_STOP_DONE) {
+			property_id = HAL_CONFIG_VPE_FLIP;
+			flip = msm_comm_v4l2_to_hal(
+				V4L2_CID_MPEG_VIDC_VIDEO_FLIP,
+				ctrl->val);
+			pdata = &flip;
+		}
 		break;
 	}
 	case V4L2_CID_MPEG_VIDEO_MULTI_SLICE_MODE: {

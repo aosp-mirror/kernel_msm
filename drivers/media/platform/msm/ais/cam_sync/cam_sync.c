@@ -192,9 +192,8 @@ int cam_sync_signal(int32_t sync_obj, uint32_t status)
 	int rc = 0;
 
 	if (sync_obj >= CAM_SYNC_MAX_OBJS || sync_obj <= 0) {
-		CAM_ERR(CAM_SYNC,
-		"Error: Out of range sync obj (0 <= %d < %d) [%d]",
-		sync_obj, CAM_SYNC_MAX_OBJS, status);
+		CAM_ERR(CAM_SYNC, "Error: Out of range sync obj (0 <= %d < %d)",
+			sync_obj, CAM_SYNC_MAX_OBJS);
 		return -EINVAL;
 	}
 	row = sync_dev->sync_table + sync_obj;

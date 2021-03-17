@@ -1791,15 +1791,9 @@ err:
 }
 
 static int cam_ife_mgr_check_and_update_fe(
-<<<<<<< HEAD
 	struct cam_ife_hw_mgr_ctx *ife_ctx,
 	struct cam_isp_acquire_hw_info *acquire_hw_info,
 	uint32_t acquire_info_size)
-=======
-	struct cam_ife_hw_mgr_ctx         *ife_ctx,
-	struct cam_isp_acquire_hw_info    *acquire_hw_info,
-	uint32_t                           acquire_info_size)
->>>>>>> partner/qcom-msm-4.14
 {
 	int i;
 	struct cam_isp_in_port_info       *in_port = NULL;
@@ -1807,11 +1801,7 @@ static int cam_ife_mgr_check_and_update_fe(
 	uint32_t                           total_in_port_length = 0;
 
 	if (acquire_hw_info->input_info_offset >=
-<<<<<<< HEAD
 	    acquire_hw_info->input_info_size) {
-=======
-		acquire_hw_info->input_info_size) {
->>>>>>> partner/qcom-msm-4.14
 		CAM_ERR(CAM_ISP,
 			"Invalid size offset 0x%x is greater then size 0x%x",
 			acquire_hw_info->input_info_offset,
@@ -1825,14 +1815,6 @@ static int cam_ife_mgr_check_and_update_fe(
 	for (i = 0; i < acquire_hw_info->num_inputs; i++) {
 		if (((uint8_t *)in_port + sizeof(struct cam_isp_in_port_info)) >
 		    ((uint8_t *)acquire_hw_info + acquire_info_size)) {
-			CAM_ERR(CAM_ISP, "Invalid size");
-			return -EINVAL;
-		}
-
-		if (((uint8_t *)in_port +
-			sizeof(struct cam_isp_in_port_info)) >
-			((uint8_t *)acquire_hw_info +
-			acquire_info_size)) {
 			CAM_ERR(CAM_ISP, "Invalid size");
 			return -EINVAL;
 		}
@@ -2097,11 +2079,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 		(struct cam_isp_acquire_hw_info *)acquire_args->acquire_info;
 
 	rc = cam_ife_mgr_check_and_update_fe(ife_ctx, acquire_hw_info,
-<<<<<<< HEAD
 					     acquire_args->acquire_info_size);
-=======
-		acquire_args->acquire_info_size);
->>>>>>> partner/qcom-msm-4.14
 	if (rc) {
 		CAM_ERR(CAM_ISP, "buffer size is not enough");
 		goto free_cdm;
@@ -6356,10 +6334,9 @@ int cam_ife_hw_mgr_init(struct cam_hw_mgr_intf *hw_mgr_intf, int *iommu_hdl)
 		return -EINVAL;
 	}
 
-	rc = cam_smmu_ops(g_ife_hw_mgr.mgr_common.img_iommu_hdl,
-		CAM_SMMU_ATTACH);
-	if (rc && rc != -EALREADY) {
-		CAM_ERR(CAM_ISP, "Attach iommu handle failed %d", rc);
+	if (cam_smmu_ops(g_ife_hw_mgr.mgr_common.img_iommu_hdl,
+		CAM_SMMU_ATTACH)) {
+		CAM_ERR(CAM_ISP, "Attach iommu handle failed.");
 		goto attach_fail;
 	}
 

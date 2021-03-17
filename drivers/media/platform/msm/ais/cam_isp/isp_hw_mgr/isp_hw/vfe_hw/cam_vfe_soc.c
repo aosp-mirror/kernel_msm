@@ -232,13 +232,6 @@ int cam_vfe_enable_soc_resources(struct cam_hw_soc_info *soc_info)
 	}
 	soc_private = soc_info->soc_private;
 
-	rc = cam_soc_util_enable_platform_resource(soc_info, true,
-		CAM_TURBO_VOTE, true);
-	if (rc) {
-		CAM_ERR(CAM_ISP, "Error! enable platform failed rc=%d", rc);
-		goto end;
-	}
-
 	ahb_vote.type       = CAM_VOTE_ABSOLUTE;
 	ahb_vote.vote.level = CAM_SVS_VOTE;
 
@@ -250,7 +243,7 @@ int cam_vfe_enable_soc_resources(struct cam_hw_soc_info *soc_info)
 	if (rc) {
 		CAM_ERR(CAM_ISP, "Error! CPAS0 start failed rc=%d", rc);
 		rc = -EFAULT;
-		goto disable_platform_resource;
+		goto end;
 	}
 
 	if (!rc && soc_private->cpas_version == CAM_CPAS_TITAN_175_V120)
@@ -259,15 +252,22 @@ int cam_vfe_enable_soc_resources(struct cam_hw_soc_info *soc_info)
 		if (rc) {
 			CAM_ERR(CAM_ISP, "Error! CPAS1 start failed rc=%d", rc);
 			rc = -EFAULT;
-			goto disable_platform_resource;
+			goto end;
 		}
 
-	goto end;
+	rc = cam_soc_util_enable_platform_resource(soc_info, true,
+		CAM_TURBO_VOTE, true);
+	if (rc) {
+		CAM_ERR(CAM_ISP, "Error! enable platform failed rc=%d", rc);
+		goto stop_cpas;
+	}
 
-disable_platform_resource:
-	if (cam_soc_util_disable_platform_resource(soc_info, true, true))
-		CAM_ERR(CAM_ISP, "Disable platform resource failed");
+	return rc;
 
+stop_cpas:
+	cam_cpas_stop(soc_private->cpas_handle[0]);
+	if (soc_private->cpas_version == CAM_CPAS_TITAN_175_V120)
+		cam_cpas_stop(soc_private->cpas_handle[1]);
 end:
 	return rc;
 }

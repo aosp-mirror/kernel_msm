@@ -95,12 +95,7 @@ int32_t cam_camera_cci_i2c_read_seq(struct cam_sensor_cci_client *cci_client,
 	if (!rc) {
 		for (i = 0; i < num_byte; i++) {
 			data[i] = buf[i];
-<<<<<<< HEAD
 			CAM_DBG(CAM_SENSOR, "Byte %d: Data: 0x%x", i, data[i]);
-=======
-			CAM_DBG(CAM_SENSOR, "Byte %d: Data: 0x%x",
-				i, data[i]);
->>>>>>> partner/qcom-msm-4.14
 		}
 	}
 

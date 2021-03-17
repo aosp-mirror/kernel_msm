@@ -409,18 +409,11 @@ static uint32_t cam_smmu_find_closest_mapping(int idx, void *vaddr)
 end:
 	if (closest_mapping) {
 		buf_handle = GET_MEM_HANDLE(idx, closest_mapping->ion_fd);
-<<<<<<< HEAD
 		CAM_INFO(
 			CAM_SMMU,
 			"Closest map fd %d 0x%lx %llu-%llu 0x%lx-0x%lx buf=%pK mem %0x",
 			closest_mapping->ion_fd, current_addr, mapping->len,
 			closest_mapping->len,
-=======
-		CAM_INFO(CAM_SMMU,
-			"Closest map fd %d 0x%lx %llu-%llu 0x%lx-0x%lx buf=%pK mem %0x",
-			closest_mapping->ion_fd, current_addr,
-			mapping->len, closest_mapping->len,
->>>>>>> partner/qcom-msm-4.14
 			(unsigned long)closest_mapping->paddr,
 			(unsigned long)closest_mapping->paddr + mapping->len,
 			closest_mapping->buf, buf_handle);

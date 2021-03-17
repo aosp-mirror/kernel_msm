@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -73,12 +73,6 @@ int cam_jpeg_enc_init_hw(void *device_priv,
 		return 0;
 	}
 
-	rc = cam_jpeg_enc_enable_soc_resources(soc_info);
-	if (rc) {
-		CAM_ERR(CAM_JPEG, "soc enable is failed %d", rc);
-		goto cpas_failed;
-	}
-
 	ahb_vote.type = CAM_VOTE_ABSOLUTE;
 	ahb_vote.vote.level = CAM_SVS_VOTE;
 	axi_vote.compressed_bw = JPEG_VOTE;
@@ -89,9 +83,14 @@ int cam_jpeg_enc_init_hw(void *device_priv,
 		&ahb_vote, &axi_vote);
 	if (rc) {
 		CAM_ERR(CAM_JPEG, "cpass start failed: %d", rc);
-		goto disable_soc_resources;
+		goto cpas_failed;
 	}
 
+	rc = cam_jpeg_enc_enable_soc_resources(soc_info);
+	if (rc) {
+		CAM_ERR(CAM_JPEG, "soc enable is failed %d", rc);
+		goto soc_failed;
+	}
 	spin_lock(&jpeg_enc_dev->hw_lock);
 	jpeg_enc_dev->hw_state = CAM_HW_STATE_POWER_UP;
 	spin_unlock(&jpeg_enc_dev->hw_lock);
@@ -100,10 +99,8 @@ int cam_jpeg_enc_init_hw(void *device_priv,
 
 	return 0;
 
-disable_soc_resources:
-	if (cam_jpeg_enc_disable_soc_resources(soc_info))
-		CAM_ERR(CAM_JPEG, "Disable soc resource failed");
-
+soc_failed:
+	cam_cpas_stop(core_info->cpas_handle);
 cpas_failed:
 	--core_info->ref_count;
 	mutex_unlock(&core_info->core_mutex);
