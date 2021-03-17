@@ -325,12 +325,9 @@ static ssize_t resistance_left_right_show(struct device *dev,
 
 	mutex_lock(&amp_priv->lock);
 
-	scnprintf(resistance,
-		sizeof(resistance), "%d.%d,%d.%d",
-		amp_priv->imp_l/scale,
-		amp_priv->imp_l%scale,
-		amp_priv->imp_r/scale,
-		amp_priv->imp_r%scale);
+	scnprintf(resistance, sizeof(resistance), "%d.%05ld,%d.%05ld",
+		  amp_priv->imp_l / scale, amp_priv->imp_l % scale,
+		  amp_priv->imp_r / scale, amp_priv->imp_r % scale);
 
 	dev_info(dev, "%s: %s (%ld, %ld, %ld)\n",
 		__func__, resistance, amp_priv->imp_l, amp_priv->imp_r, scale);
