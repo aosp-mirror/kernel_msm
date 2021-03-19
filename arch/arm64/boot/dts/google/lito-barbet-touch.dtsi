@@ -125,6 +125,8 @@
 		st,force-pi-cfg-ver-map = <0x300>;
 		st,save-golden-ms-raw;
 		st,touch_offload_id = [30 30 62 39]; /* '0' '0' 'b' '9' */
+		st,grip_area = /bits/ 8 <15>; /* Left and right grip rejection
+						 area. Unit: pixels */
 		tbn,lpi2ap_gpio = <&tlmm 5 0>;
 		tbn,ap2lpi_gpio = <&tlmm 35 0>;
 
