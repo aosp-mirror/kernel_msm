@@ -745,6 +745,17 @@ static int ufs_qcom_link_startup_notify(struct ufs_hba *hba,
 	return err;
 }
 
+static int ufshcd_qcom_set_vreg_load(struct ufs_vreg *vreg, int ua)
+{
+	if (!vreg)
+		return 0;
+	else if (vreg->unused)
+		return 0;
+	else
+		return regulator_set_load(vreg->reg, ua);
+
+}
+
 static int ufs_qcom_config_vreg(struct device *dev,
 		struct ufs_vreg *vreg, bool on)
 {
@@ -838,6 +849,9 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		if (host->vddp_ref_clk && ufs_qcom_is_link_off(hba))
 			ret = ufs_qcom_disable_vreg(hba->dev,
 					host->vddp_ref_clk);
+		else if (host->vddp_ref_clk && ufs_qcom_is_link_hibern8(hba))
+			ret = ufshcd_qcom_set_vreg_load(host->vddp_ref_clk,
+						host->vddp_ref_clk->min_uA);
 
 		if (host->vccq_parent && !hba->auto_bkops_enabled)
 			ufs_qcom_config_vreg(hba->dev,
@@ -875,6 +889,10 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 				   hba->spm_lvl > UFS_PM_LVL_3))
 		ufs_qcom_enable_vreg(hba->dev,
 				      host->vddp_ref_clk);
+	else if (host->vddp_ref_clk && ufs_qcom_is_link_hibern8(hba))
+		ufshcd_qcom_set_vreg_load(host->vddp_ref_clk,
+					host->vddp_ref_clk->max_uA);
+
 	if (host->vccq_parent)
 		ufs_qcom_config_vreg(hba->dev, host->vccq_parent, true);
 
@@ -2033,6 +2051,10 @@ static int ufs_qcom_parse_reg_info(struct ufs_qcom_host *host, char *name,
 		goto out;
 	}
 
+	snprintf(prop_name, MAX_PROP_SIZE, "%s-min-microamp", name);
+	if (of_property_read_u32(np, prop_name, &vreg->min_uA))
+		vreg->min_uA = UFS_VREG_LPM_LOAD_UA;
+
 	vreg->reg = devm_regulator_get(dev, vreg->name);
 	if (IS_ERR(vreg->reg)) {
 		ret = PTR_ERR(vreg->reg);
@@ -2690,15 +2712,15 @@ static void ufs_qcom_dump_dbg_regs(struct ufs_hba *hba, bool no_sleep)
 		return;
 
 	/* sleep a bit intermittently as we are dumping too much data */
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_testbus_read(hba);
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_print_unipro_testbus(hba);
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_print_utp_hci_testbus(hba);
-	usleep_range(1000, 1100);
+	udelay(1000);
 	ufs_qcom_phy_dbg_register_dump(phy);
-	usleep_range(1000, 1100);
+	udelay(1000);
 }
 
 static u32 ufs_qcom_get_user_cap_mode(struct ufs_hba *hba)
