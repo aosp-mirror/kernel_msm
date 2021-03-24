@@ -1525,8 +1525,10 @@ static int rt5514_firmware_version_get(struct snd_kcontrol *kcontrol,
 	}
 
 	if (rt5514->dsp_enabled | rt5514->dsp_adc_enabled) {
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 1);
 		rt5514_spi_burst_read(rt5514->fw_addr[0] + 0x128,
 			(u8 *)&dsp_mem, sizeof(struct _dsp_mem_st));
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
 		dev_info(component->dev, "IRAM: %d DRAM: %d\n",
 			dsp_mem.iram, dsp_mem.dram);
 	}
@@ -1553,9 +1555,12 @@ static int rt5514_hotword_dsp_identifier_get(struct snd_kcontrol *kcontrol,
 
 	regmap_read(rt5514->i2c_regmap, 0x18002fd4, &identifier_addr);
 
-	if ((identifier_addr & 0xffe00000) == 0x4fe00000)
+	if ((identifier_addr & 0xffe00000) == 0x4fe00000) {
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 1);
 		rt5514_spi_burst_read(identifier_addr, (u8 *)&uuid,
 			DSP_IDENTIFIER_SIZE);
+		rt5514_spi_request_switch(SPI_SWITCH_MASK_CMD, 0);
+	}
 
 	if (copy_to_user(bytes, &uuid, DSP_IDENTIFIER_SIZE)) {
 		dev_warn(component->dev, "%s(), copy_to_user fail\n", __func__);
