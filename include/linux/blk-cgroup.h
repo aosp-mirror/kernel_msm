@@ -707,10 +707,14 @@ static inline bool blkcg_bio_issue_check(struct request_queue *q,
 	throtl = blk_throtl_bio(q, blkg, bio);
 
 	if (!throtl) {
+		spin_lock_irq(q->queue_lock);
 		blkg = blkg ?: q->root_blkg;
-		blkg_rwstat_add(&blkg->stat_bytes, bio->bi_opf,
-				bio->bi_iter.bi_size);
-		blkg_rwstat_add(&blkg->stat_ios, bio->bi_opf, 1);
+		if (blkg) {
+			blkg_rwstat_add(&blkg->stat_bytes, bio->bi_opf,
+					bio->bi_iter.bi_size);
+			blkg_rwstat_add(&blkg->stat_ios, bio->bi_opf, 1);
+		}
+		spin_unlock_irq(q->queue_lock);
 	}
 
 	rcu_read_unlock();
