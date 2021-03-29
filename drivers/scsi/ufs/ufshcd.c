@@ -2442,7 +2442,9 @@ start:
 		 * If the timer was active but the callback was not running
 		 * we have nothing to do, just change state and return.
 		 */
-		if (hrtimer_try_to_cancel(&hba->clk_gating.gate_hrtimer) == 1) {
+		if ((hrtimer_try_to_cancel(&hba->clk_gating.gate_hrtimer) == 1)
+			&& !(work_pending(&hba->clk_gating.gate_work))
+			&& !hba->clk_gating.gate_wk_in_process) {
 			hba->clk_gating.state = CLKS_ON;
 			trace_ufshcd_clk_gating(dev_name(hba->dev),
 						hba->clk_gating.state);
@@ -2494,7 +2496,9 @@ static void ufshcd_gate_work(struct work_struct *work)
 						clk_gating.gate_work);
 	unsigned long flags;
 
+	hba->clk_gating.gate_wk_in_process = true;
 	spin_lock_irqsave(hba->host->host_lock, flags);
+
 	if (hba->clk_gating.state == CLKS_OFF)
 		goto rel_lock;
 	/*
@@ -2570,6 +2574,7 @@ static void ufshcd_gate_work(struct work_struct *work)
 rel_lock:
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 out:
+	hba->clk_gating.gate_wk_in_process = false;
 	return;
 }
 
@@ -3283,13 +3288,13 @@ int ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 
 	hba->lrb[task_tag].issue_time_stamp = ktime_get();
 	hba->lrb[task_tag].compl_time_stamp = ktime_set(0, 0);
+	ufshcd_cond_add_cmd_trace(hba, task_tag,
+			hba->lrb[task_tag].cmd ? "scsi_send" : "dev_cmd_send");
 	ufshcd_clk_scaling_start_busy(hba);
 	__set_bit(task_tag, &hba->outstanding_reqs);
 	ufshcd_writel(hba, 1 << task_tag, REG_UTP_TRANSFER_REQ_DOOR_BELL);
 	/* Make sure that doorbell is committed immediately */
 	wmb();
-	ufshcd_cond_add_cmd_trace(hba, task_tag,
-			hba->lrb[task_tag].cmd ? "scsi_send" : "dev_cmd_send");
 	ufshcd_update_tag_stats(hba, task_tag);
 	update_io_stat(hba, task_tag, 1);
 	ufshcd_event_record(hba->lrb[task_tag].cmd, UFS_READ_SEND_CMD);
@@ -5891,9 +5896,10 @@ EXPORT_SYMBOL_GPL(ufshcd_config_pwr_mode);
  */
 static int ufshcd_complete_dev_init(struct ufs_hba *hba)
 {
-	int i;
+	int i = 0;
 	int err;
 	bool flag_res = 1;
+	ktime_t timeout;
 
 	err = ufshcd_query_flag_retry(hba, UPIU_QUERY_OPCODE_SET_FLAG,
 		QUERY_FLAG_IDN_FDEVICEINIT, NULL);
@@ -5904,10 +5910,30 @@ static int ufshcd_complete_dev_init(struct ufs_hba *hba)
 		goto out;
 	}
 
-	/* poll for max. 1000 iterations for fDeviceInit flag to clear */
-	for (i = 0; i < 1000 && !err && flag_res; i++)
+	/*
+	 * Some vendor devices are taking longer time to complete its internal
+	 * initialization, so set fDeviceInit flag poll time to 5 secs
+	 */
+	timeout = ktime_add_ms(ktime_get(), 5000);
+
+	/* poll for max. 5sec for fDeviceInit flag to clear */
+	while (1) {
+		bool timedout = ktime_after(ktime_get(), timeout);
 		err = ufshcd_query_flag_retry(hba, UPIU_QUERY_OPCODE_READ_FLAG,
-			QUERY_FLAG_IDN_FDEVICEINIT, &flag_res);
+					QUERY_FLAG_IDN_FDEVICEINIT, &flag_res);
+		if (err || !flag_res || timedout)
+			break;
+
+		/*
+		 * Poll for this flag in a tight loop for first 1000 iterations.
+		 * This is same as old logic which is working for most of the
+		 * devices, so continue using the same.
+		 */
+		if (i == 1000)
+			msleep(20);
+		else
+			i++;
+	}
 
 	if (err)
 		dev_err(hba->dev,

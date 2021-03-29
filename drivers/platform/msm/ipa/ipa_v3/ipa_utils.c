@@ -5295,8 +5295,8 @@ int ipa3_cfg_ep_holb(u32 clnt_hdl, const struct ipa_ep_cfg_holb *ep_holb)
 	ipa3_ctx->ep[clnt_hdl].holb.en = IPA_HOLB_TMR_EN;
 	ipahal_write_reg_n_fields(IPA_ENDP_INIT_HOL_BLOCK_EN_n,
 		clnt_hdl, ep_holb);
-	/* IPA4.5 issue requires HOLB_EN to be written twice */
-	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5)
+	/* For targets > IPA_4.0 issue requires HOLB_EN to be written twice */
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0)
 		ipahal_write_reg_n_fields(IPA_ENDP_INIT_HOL_BLOCK_EN_n,
 			clnt_hdl, ep_holb);
 
@@ -6893,6 +6893,15 @@ int ipa3_is_vlan_mode(enum ipa_vlan_ifaces iface, bool *res)
 	return 0;
 }
 
+/*
+ * ipa3_pm_is_used - check if PM support is present or not
+ * For IPAv3, PM is supported always
+ */
+static bool ipa3_pm_is_used(void)
+{
+	return true;
+}
+
 int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	struct ipa_api_controller *api_ctrl)
 {
@@ -7107,6 +7116,7 @@ int ipa3_bind_api_controller(enum ipa_hw_type ipa_hw_type,
 	api_ctrl->ipa_get_prot_id =
 		ipa3_get_prot_id;
 	api_ctrl->ipa_get_lan_rx_napi = ipa3_get_lan_rx_napi;
+	api_ctrl->ipa_pm_is_used = ipa3_pm_is_used;
 	return 0;
 }
 

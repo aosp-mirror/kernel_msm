@@ -842,6 +842,9 @@ static bool a6xx_gmu_cx_is_on(struct kgsl_device *device)
 {
 	unsigned int val;
 
+	if (ADRENO_QUIRK(ADRENO_DEVICE(device), ADRENO_QUIRK_CX_GDSC))
+		return regulator_is_enabled(KGSL_GMU_DEVICE(device)->cx_gdsc);
+
 	gmu_core_regread(device, A6XX_GPU_CC_CX_GDSCR, &val);
 	return (val & BIT(31));
 }
@@ -1208,11 +1211,12 @@ static int a6xx_gmu_load_firmware(struct kgsl_device *device)
 		offset += sizeof(*blk);
 
 		if (blk->type == GMU_BLK_TYPE_PREALLOC_REQ ||
-				blk->type == GMU_BLK_TYPE_PREALLOC_PERSIST_REQ)
+			blk->type == GMU_BLK_TYPE_PREALLOC_PERSIST_REQ) {
 			ret = gmu_prealloc_req(device, blk);
 
-		if (ret)
-			return ret;
+			if (ret)
+				return ret;
+		}
 	}
 
 	 /* Request any other cache ranges that might be required */

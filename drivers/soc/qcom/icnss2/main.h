@@ -23,6 +23,9 @@
 #define ADRASTEA_DEVICE_ID 0xabcd
 #define QMI_WLFW_MAX_NUM_MEM_SEG 32
 #define THERMAL_NAME_LENGTH 20
+#define ICNSS_SMEM_VALUE_MASK 0xFFFFFFFF
+#define ICNSS_SMEM_SEQ_NO_POS 16
+
 extern uint64_t dynamic_feature_mask;
 
 enum icnss_bdf_type {
@@ -52,6 +55,8 @@ enum icnss_driver_event_type {
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_REQ_MEM,
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_SAVE,
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_FREE,
+	ICNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ,
+	ICNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA,
 	ICNSS_DRIVER_EVENT_MAX,
 };
 
@@ -169,10 +174,12 @@ struct icnss_fw_mem {
 	unsigned long attrs;
 };
 
-enum icnss_power_save_mode {
-	ICNSS_POWER_SAVE_ENTER,
+enum icnss_smp2p_msg_id {
+	ICNSS_POWER_SAVE_ENTER = 1,
 	ICNSS_POWER_SAVE_EXIT,
+	ICNSS_TRIGGER_SSR,
 };
+
 struct icnss_stats {
 	struct {
 		uint32_t posted;
@@ -311,6 +318,12 @@ struct icnss_thermal_cdev {
 	struct thermal_cooling_device *tcdev;
 };
 
+struct smp2p_out_info {
+	unsigned short seq;
+	unsigned int smem_bit;
+	struct qcom_smem_state *smem_state;
+};
+
 struct icnss_priv {
 	uint32_t magic;
 	struct platform_device *pdev;
@@ -378,6 +391,11 @@ struct icnss_priv {
 	uint8_t *diag_reg_read_buf;
 	atomic_t pm_count;
 	struct ramdump_device *msa0_dump_dev;
+	struct ramdump_device *m3_dump_dev_seg1;
+	struct ramdump_device *m3_dump_dev_seg2;
+	struct ramdump_device *m3_dump_dev_seg3;
+	struct ramdump_device *m3_dump_dev_seg4;
+	struct ramdump_device *m3_dump_dev_seg5;
 	bool force_err_fatal;
 	bool allow_recursive_recovery;
 	bool early_crash_ind;
@@ -387,6 +405,7 @@ struct icnss_priv {
 	struct mutex dev_lock;
 	uint32_t fw_error_fatal_irq;
 	uint32_t fw_early_crash_irq;
+	struct smp2p_out_info smp2p_info;
 	struct completion unblock_shutdown;
 	struct adc_tm_param vph_monitor_params;
 	struct adc_tm_chip *adc_tm_dev;
@@ -409,6 +428,7 @@ struct icnss_priv {
 	void *hang_event_data;
 	struct list_head icnss_tcdev_list;
 	struct mutex tcdev_lock;
+	u32 hw_trc_override;
 };
 
 struct icnss_reg_info {

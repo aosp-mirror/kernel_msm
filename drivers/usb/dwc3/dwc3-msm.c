@@ -50,6 +50,7 @@
 #include "../pd/usbpd.h"
 
 #define SDP_CONNETION_CHECK_TIME 10000 /* in ms */
+#define EXTCON_SYNC_EVENT_TIMEOUT_MS 1500 /* in ms */
 
 /* time out to wait for USB cable status notification (in ms)*/
 #define SM_INIT_TIMEOUT 30000
@@ -977,7 +978,7 @@ static int gsi_startxfer_for_ep(struct usb_ep *ep)
 	memset(&params, 0, sizeof(params));
 	params.param0 = GSI_TRB_ADDR_BIT_53_MASK | GSI_TRB_ADDR_BIT_55_MASK;
 	params.param0 |= upper_32_bits(dwc3_trb_dma_offset(dep,
-						&dep->trb_pool[0]) & 0xffff);
+						&dep->trb_pool[0])) & 0xffff;
 	params.param0 |= (ep->ep_intr_num << 16);
 	params.param1 = lower_32_bits(dwc3_trb_dma_offset(dep,
 						&dep->trb_pool[0]));
@@ -1252,7 +1253,7 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 			/* Set up the Link TRB at the end */
 			if (i == (num_trbs - 1)) {
 				trb->bpl = lower_32_bits(trb0_dma);
-				trb->bph = upper_32_bits(trb0_dma & 0xffff);
+				trb->bph = upper_32_bits(trb0_dma) & 0xffff;
 				trb->bph |= (1 << 23) | (1 << 21)
 						| (ep->ep_intr_num << 16);
 				trb->size = 0;
@@ -1276,7 +1277,7 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 			} else if (i == (num_trbs - 1)) {
 				/* Set up the Link TRB at the end */
 				trb->bpl = lower_32_bits(trb0_dma);
-				trb->bph = upper_32_bits(trb0_dma & 0xffff);
+				trb->bph = upper_32_bits(trb0_dma) & 0xffff;
 				trb->bph |= (1 << 23) | (1 << 21)
 						| (ep->ep_intr_num << 16);
 				trb->ctrl = DWC3_TRBCTL_LINK_TRB
@@ -2302,13 +2303,13 @@ static void dwc3_msm_power_collapse_por(struct dwc3_msm *mdwc)
 
 }
 
-static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc, bool ignore_p3_state)
+static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc)
 {
 	unsigned long timeout;
 	u32 reg = 0;
 
-	if (!ignore_p3_state && ((mdwc->in_host_mode || mdwc->in_device_mode)
-			&& dwc3_msm_is_superspeed(mdwc) && !mdwc->in_restart)) {
+	if ((mdwc->in_host_mode || mdwc->in_device_mode)
+			&& dwc3_msm_is_superspeed(mdwc) && !mdwc->in_restart) {
 		if (!atomic_read(&mdwc->in_p3)) {
 			dev_err(mdwc->dev, "Not in P3,aborting LPM sequence\n");
 			return -EBUSY;
@@ -2507,7 +2508,7 @@ static int dwc3_msm_update_bus_bw(struct dwc3_msm *mdwc, enum bus_vote bv)
 	return ret;
 }
 
-static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool enable_wakeup)
 {
 	int ret;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
@@ -2569,7 +2570,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 		return -EBUSY;
 	}
 
-	ret = dwc3_msm_prepare_suspend(mdwc, force_power_collapse);
+	ret = dwc3_msm_prepare_suspend(mdwc);
 	if (ret) {
 		mutex_unlock(&mdwc->suspend_resume_mutex);
 		return ret;
@@ -2648,7 +2649,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 
 	/* Perform controller power collapse */
 	if (!(mdwc->in_host_mode || mdwc->in_device_mode) ||
-	      mdwc->in_restart || force_power_collapse) {
+	      mdwc->in_restart) {
 		mdwc->lpm_flags |= MDWC3_POWER_COLLAPSE;
 		dev_dbg(mdwc->dev, "%s: power collapse\n", __func__);
 		dwc3_msm_config_gdsc(mdwc, 0);
@@ -2681,7 +2682,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 	 * using HS_PHY_IRQ or SS_PHY_IRQ. Hence enable wakeup only in
 	 * case of host bus suspend and device bus suspend.
 	 */
-	if (mdwc->in_device_mode || mdwc->in_host_mode) {
+	if (!(mdwc->lpm_flags & MDWC3_POWER_COLLAPSE) && enable_wakeup) {
 		if (mdwc->use_pdc_interrupts) {
 			enable_usb_pdc_interrupt(mdwc, true);
 		} else {
@@ -3996,8 +3997,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		mdwc->pm_qos_latency = 0;
 	}
 
-	if (of_property_read_bool(node, "qcom,host-poweroff-in-pm-suspend")) {
-		dwc->host_poweroff_in_pm_suspend = true;
+	if (of_property_read_bool(node, "qcom,ignore-wakeup-src-in-hostmode")) {
+		dwc->ignore_wakeup_src_in_hostmode = true;
 		dev_dbg(mdwc->dev, "%s: Core power collapse on host PM suspend\n",
 								__func__);
 	}
@@ -4569,47 +4570,40 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 	return 0;
 }
 
+/**
+ * dwc3_usb_blocking_sync - Waits until event is completed or maximum upto 1.5
+ * secs.
+ *
+ * @host_enable_event: Event can be start usb host or stop usb host.
+ */
 static int dwc3_usb_blocking_sync(struct notifier_block *nb,
-				unsigned long event, void *ptr)
+				unsigned long host_enable_event, void *ptr)
 {
 	struct dwc3 *dwc;
 	struct extcon_dev *edev = ptr;
 	struct extcon_nb *enb = container_of(nb, struct extcon_nb,
 						blocking_sync_nb);
 	struct dwc3_msm *mdwc = enb->mdwc;
-	int ret = 0;
+	unsigned long timeout_ms = jiffies +
+			msecs_to_jiffies(EXTCON_SYNC_EVENT_TIMEOUT_MS);
 
 	if (!edev || !mdwc)
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
-
 	dbg_event(0xFF, "fw_blocksync", 0);
-	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
 
-	if (!mdwc->in_host_mode && !mdwc->in_device_mode) {
-		dbg_event(0xFF, "lpm_state", atomic_read(&dwc->in_lpm));
+	do {
+		if (mdwc->drd_state == (host_enable_event ? DRD_STATE_HOST
+					: DRD_STATE_IDLE))
+			break;
+		msleep(50);
+	} while (time_before(jiffies, timeout_ms));
 
-		/*
-		 * stop host mode functionality performs autosuspend with mdwc
-		 * device, and it may take sometime to call PM runtime suspend.
-		 * Hence call pm_runtime_suspend() API to invoke PM runtime
-		 * suspend immediately to put USB controller and PHYs into
-		 * suspend.
-		 */
-		ret = pm_runtime_suspend(mdwc->dev);
-		dbg_event(0xFF, "pm_runtime_sus", ret);
+	if (!time_before(jiffies, timeout_ms))
+		dev_err(mdwc->dev, "TIMEOUT when changing the state\n");
 
-		/*
-		 * If mdwc device is already suspended, pm_runtime_suspend() API
-		 * returns 1, which is not error. Overwrite with zero if it is.
-		 */
-		if (ret > 0)
-			ret = 0;
-	}
-
-	return ret;
+	return 0;
 }
 
 static int get_psy_type(struct dwc3_msm *mdwc)
@@ -4829,8 +4823,6 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			mdwc->vbus_retry_count = 0;
 			work = 1;
 		} else {
-			mdwc->drd_state = DRD_STATE_HOST;
-
 			ret = dwc3_otg_start_host(mdwc, 1);
 			if ((ret == -EPROBE_DEFER) &&
 						mdwc->vbus_retry_count < 3) {
@@ -4838,15 +4830,15 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 				 * Get regulator failed as regulator driver is
 				 * not up yet. Will try to start host after 1sec
 				 */
-				mdwc->drd_state = DRD_STATE_HOST_IDLE;
 				dev_dbg(mdwc->dev, "Unable to get vbus regulator. Retrying...\n");
 				delay = VBUS_REG_CHECK_DELAY;
 				work = 1;
 				mdwc->vbus_retry_count++;
 			} else if (ret) {
 				dev_err(mdwc->dev, "unable to start host\n");
-				mdwc->drd_state = DRD_STATE_HOST_IDLE;
 				goto ret;
+			} else {
+				mdwc->drd_state = DRD_STATE_HOST;
 			}
 		}
 		break;
@@ -4893,7 +4885,7 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	 * Check if pm_suspend can proceed irrespective of runtimePM state of
 	 * host.
 	 */
-	if (!dwc->host_poweroff_in_pm_suspend || !mdwc->in_host_mode) {
+	if (!dwc->ignore_wakeup_src_in_hostmode || !mdwc->in_host_mode) {
 		if (!atomic_read(&dwc->in_lpm)) {
 			dev_err(mdwc->dev, "Abort PM suspend!! (USB is outside LPM)\n");
 			return -EBUSY;
@@ -4904,20 +4896,7 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 		return 0;
 	}
 
-	/*
-	 * PHYs also need to be power collapsed, so call notify_disconnect
-	 * before suspend to ensure it.
-	 */
-	usb_phy_notify_disconnect(mdwc->hs_phy, USB_SPEED_HIGH);
-	mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
-	usb_phy_notify_disconnect(mdwc->ss_phy, USB_SPEED_SUPER);
-	mdwc->ss_phy->flags &= ~PHY_HOST_MODE;
-
-	/*
-	 * Power collapse the core. Hence call dwc3_msm_suspend with
-	 * 'force_power_collapse' set to 'true'.
-	 */
-	ret = dwc3_msm_suspend(mdwc, true);
+	ret = dwc3_msm_suspend(mdwc, false);
 	if (!ret)
 		atomic_set(&mdwc->pm_suspended, 1);
 
@@ -4934,7 +4913,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 
 	atomic_set(&mdwc->pm_suspended, 0);
 
-	if (!dwc->host_poweroff_in_pm_suspend || !mdwc->in_host_mode) {
+	if (!dwc->ignore_wakeup_src_in_hostmode || !mdwc->in_host_mode) {
 		/* kick in otg state machine */
 		queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
 
@@ -4946,15 +4925,6 @@ static int dwc3_msm_pm_resume(struct device *dev)
 	pm_runtime_disable(dev);
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
-
-	/* Restore PHY flags if hibernated in host mode */
-	mdwc->hs_phy->flags |= PHY_HOST_MODE;
-	usb_phy_notify_connect(mdwc->hs_phy, USB_SPEED_HIGH);
-	if (dwc->maximum_speed >= USB_SPEED_SUPER) {
-		mdwc->ss_phy->flags |= PHY_HOST_MODE;
-		usb_phy_notify_connect(mdwc->ss_phy,
-					USB_SPEED_SUPER);
-	}
 
 	/* kick in otg state machine */
 	queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
@@ -4983,7 +4953,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	dev_dbg(dev, "DWC3-msm runtime suspend\n");
 	dbg_event(0xFF, "RT Sus", 0);
 
-	return dwc3_msm_suspend(mdwc, false);
+	return dwc3_msm_suspend(mdwc, true);
 }
 
 static int dwc3_msm_runtime_resume(struct device *dev)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -474,6 +474,9 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 
 	chg->sw_jeita_enabled = of_property_read_bool(node,
 				"qcom,sw-jeita-enable");
+
+	chg->jeita_arb_enable = of_property_read_bool(node,
+				"qcom,jeita-arb-enable");
 
 	chg->pd_not_supported = chg->pd_not_supported ||
 			of_property_read_bool(node, "qcom,usb-pd-disable");
@@ -2278,16 +2281,13 @@ static int smb5_configure_typec(struct smb_charger *chg)
 	}
 
 	/*
-	 * Across reboot, standard typeC cables get detected as legacy cables
-	 * due to VBUS attachment prior to CC attach/dettach. To handle this,
-	 * "early_usb_attach" flag is used, which assumes that across reboot,
-	 * the cable connected can be standard typeC. However, its jurisdiction
-	 * is limited to PD capable designs only. Hence, for non-PD type designs
-	 * reset legacy cable detection by disabling/enabling typeC mode.
+	 * Across reboot, standard typeC cables get detected as legacy
+	 * cables due to VBUS attachment prior to CC attach/detach. Reset
+	 * the legacy detection logic by enabling/disabling the typeC mode.
 	 */
-	if (chg->pd_not_supported && (val & TYPEC_LEGACY_CABLE_STATUS_BIT)) {
+	if (val & TYPEC_LEGACY_CABLE_STATUS_BIT) {
 		pval.intval = POWER_SUPPLY_TYPEC_PR_NONE;
-		smblib_set_prop_typec_power_role(chg, &pval);
+		rc = smblib_set_prop_typec_power_role(chg, &pval);
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't disable TYPEC rc=%d\n", rc);
 			return rc;
@@ -2297,7 +2297,7 @@ static int smb5_configure_typec(struct smb_charger *chg)
 		msleep(50);
 
 		pval.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
-		smblib_set_prop_typec_power_role(chg, &pval);
+		rc = smblib_set_prop_typec_power_role(chg, &pval);
 		if (rc < 0) {
 			dev_err(chg->dev, "Couldn't enable TYPEC rc=%d\n", rc);
 			return rc;

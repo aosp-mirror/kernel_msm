@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/ipa_mhi.h>
@@ -145,8 +145,8 @@ do {\
 #define IPA_CLIENT_IS_CONS(x) \
 	(x < IPA_CLIENT_MAX && (x & 0x1) == 1)
 
-#define IPA_GSI_CHANNEL_STOP_SLEEP_MIN_USEC (1000)
-#define IPA_GSI_CHANNEL_STOP_SLEEP_MAX_USEC (2000)
+#define IPA_GSI_CHANNEL_STOP_SLEEP_MIN_USEC (3000)
+#define IPA_GSI_CHANNEL_STOP_SLEEP_MAX_USEC (5000)
 
 enum ipa_active_client_log_type {
 	EP,
@@ -431,6 +431,8 @@ int ipa_disable_wdi_pipes(int ipa_ep_idx_tx, int ipa_ep_idx_rx);
 
 const char *ipa_get_version_string(enum ipa_hw_type ver);
 int ipa_start_gsi_channel(u32 clnt_hdl);
+
+bool ipa_pm_is_used(void);
 
 int ipa_smmu_store_sgt(struct sg_table **out_ch_ptr,
 		struct sg_table *in_sgt_ptr);

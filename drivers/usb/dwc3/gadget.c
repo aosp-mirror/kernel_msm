@@ -831,7 +831,7 @@ static void dwc3_remove_requests(struct dwc3 *dwc, struct dwc3_ep *dep)
 	dbg_log_string("START for %s(%d)", dep->name, dep->number);
 	dwc3_stop_active_transfer(dwc, dep->number, true, false);
 
-	if (dep->number == 1 && dwc->ep0state != EP0_SETUP_PHASE) {
+	if (dep->number == 0) {
 		unsigned int dir;
 
 		dbg_log_string("CTRLPEND(%d)", dwc->ep0state);
@@ -1028,6 +1028,12 @@ static int dwc3_gadget_ep_enable(struct usb_ep *ep,
 					dep->name))
 		return 0;
 
+	if (pm_runtime_suspended(dwc->sysdev)) {
+		dev_err(dwc->dev, "fail ep_enable %s device is into LPM\n",
+					dep->name);
+		return -EINVAL;
+	}
+
 	spin_lock_irqsave(&dwc->lock, flags);
 	ret = __dwc3_gadget_ep_enable(dep, DWC3_DEPCFG_ACTION_INIT);
 	dbg_event(dep->number, "ENABLE", ret);
@@ -1056,10 +1062,13 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 					dep->name))
 		return 0;
 
+	pm_runtime_get_sync(dwc->sysdev);
 	spin_lock_irqsave(&dwc->lock, flags);
 	ret = __dwc3_gadget_ep_disable(dep);
 	dbg_event(dep->number, "DISABLE", ret);
 	spin_unlock_irqrestore(&dwc->lock, flags);
+	pm_runtime_mark_last_busy(dwc->sysdev);
+	pm_runtime_put_sync_autosuspend(dwc->sysdev);
 
 	return ret;
 }
@@ -1564,8 +1573,6 @@ static int __dwc3_gadget_kick_transfer(struct dwc3_ep *dep)
 
 	ret = dwc3_send_gadget_ep_cmd(dep, cmd, &params);
 	if (ret < 0) {
-		struct dwc3_request *tmp;
-
 		if ((ret == -EAGAIN) && starting &&
 				usb_endpoint_xfer_isoc(dep->endpoint.desc)) {
 			dbg_event(dep->number, "CMD_STS", ret);
@@ -1590,12 +1597,10 @@ static int __dwc3_gadget_kick_transfer(struct dwc3_ep *dep)
 			return ret;
 		}
 
-		if (ret == -EAGAIN)
-			return ret;
-
+		dbg_event(0xFF, "GADGET_EP_CMD Failure", ret);
 		dwc3_stop_active_transfer(dwc, dep->number, true, true);
 
-		list_for_each_entry_safe(req, tmp, &dep->started_list, list)
+		list_for_each_entry_safe(req, n, &dep->started_list, list)
 			dwc3_gadget_move_cancelled_request(req);
 
 		/* If ep isn't started, then there's no end transfer pending */
@@ -1699,7 +1704,9 @@ static int __dwc3_gadget_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 		}
 	}
 
-	return __dwc3_gadget_kick_transfer(dep);
+	__dwc3_gadget_kick_transfer(dep);
+
+	return 0;
 }
 
 static int dwc3_gadget_wakeup(struct usb_gadget *g)
@@ -3447,6 +3454,11 @@ int dwc3_stop_active_transfer_noioc(struct dwc3 *dwc, u32 epnum, bool force)
 
 	dbg_log_string("%s(%d): endxfer ret:%d)",
 			dep->name, dep->number, ret);
+
+	/* Clear DWC3_EP_TRANSFER_STARTED if endxfer fails */
+	if (ret)
+		dep->flags &= ~DWC3_EP_TRANSFER_STARTED;
+
 	return ret;
 }
 

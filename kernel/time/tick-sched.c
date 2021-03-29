@@ -1264,7 +1264,6 @@ void tick_irq_enter(void)
  * High resolution timer specific code
  */
 #ifdef CONFIG_HIGH_RES_TIMERS
-
 static void (*wake_callback)(void);
 
 void register_tick_sched_wakeup_callback(void (*cb)(void))
