@@ -51,6 +51,10 @@
 #define P9221_INT_ENABLE_REG			0x38
 #define P9221_COM_REG				0x4E
 
+#define TXID_TYPE_MASK			0xFF000000 /* bit[24-31] */
+#define TXID_TYPE_SHIFT			24
+#define TXID_DD_TYPE			0xE0
+
 enum p9221_align_mfg_chk_state {
 	ALIGN_MFG_FAILED = -1,
 	ALIGN_MFG_CHECKING,
