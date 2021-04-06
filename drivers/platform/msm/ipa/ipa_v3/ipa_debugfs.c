@@ -1931,7 +1931,7 @@ static void ipa3_read_pdn_table(void)
 		}
 
 		for (i = 0, pdn_entry = ipa3_ctx->nat_mem.pdn_mem.base;
-			 i < ipa3_get_max_pdn();
+			 i < IPA_MAX_PDN_NUM;
 			 ++i, pdn_entry += pdn_entry_size) {
 
 			result = ipahal_nat_is_entry_zeroed(
