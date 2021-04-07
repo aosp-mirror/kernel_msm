@@ -739,7 +739,8 @@ struct snd_soc_component *soc_find_component(
 		return NULL;
 	}
 
-	lockdep_assert_held(&client_mutex);
+	/* TODO: Remove. still discuss with Qualcomm
+	lockdep_assert_held(&client_mutex); */
 
 	list_for_each_entry(component, &component_list, list) {
 		if (of_node) {
