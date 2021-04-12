@@ -1223,6 +1223,10 @@ static void chg_update_charging_state(struct chg_drv *chg_drv,
 		pr_info("MSC_CHG disable_charging %d -> %d",
 			chg_drv->disable_charging, disable_charging);
 
+		GPSY_SET_PROP(chg_drv->chg_psy,
+			      POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE,
+			      !disable_charging);
+
 		/* voted but not applied since msc_interval_votable <= 0 */
 		vote(chg_drv->msc_fcc_votable,
 		     MSC_USER_CHG_LEVEL_VOTER,
