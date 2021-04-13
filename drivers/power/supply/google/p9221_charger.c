@@ -1508,8 +1508,7 @@ static int p9221_set_property(struct power_supply *psy,
 		ret = p9221_send_csp(charger, charger->last_capacity);
 		if (ret)
 			dev_err(&charger->client->dev,
-				"Couldn't send csp: %d\n", ret);
-		changed = true;
+				"Could not send csp: %d\n", ret);
 
 		threshold = (charger->mitigate_threshold > 0) ?
 			    charger->mitigate_threshold :
