@@ -986,7 +986,7 @@ void pm_system_irq_wakeup(unsigned int irq_number)
 			else if (desc->action && desc->action->name)
 				name = desc->action->name;
 
-			log_base_wakeup_reason(irq_number);
+			log_irq_wakeup_reason(irq_number);
 			pr_warn("%s: %d triggered %s\n", __func__,
 					irq_number, name);
 

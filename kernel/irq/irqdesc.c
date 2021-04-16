@@ -619,16 +619,10 @@ void irq_init_desc(unsigned int irq)
 int generic_handle_irq(unsigned int irq)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
-
 	if (!desc)
 		return -EINVAL;
-
-	if (unlikely(logging_wakeup_reasons()))
-		return log_possible_wakeup_reason(irq,
-				desc,
-				generic_handle_irq_desc);
-
-	return generic_handle_irq_desc(desc);
+	generic_handle_irq_desc(desc);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(generic_handle_irq);
 

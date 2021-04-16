@@ -349,7 +349,3 @@ config PM_GENERIC_DOMAINS_OF
 
 config CPU_PM
 	bool
-
-config DEDUCE_WAKEUP_REASONS
-	bool
-	default n
