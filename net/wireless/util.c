@@ -88,11 +88,9 @@ int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
 			return 5000 + chan * 5;
 		break;
 	case NL80211_BAND_6GHZ:
-		/* see 802.11ax D6.1 27.3.23.2 */
-		if (chan == 2)
-			return MHZ_TO_KHZ(5935);
+		/* see 802.11ax D4.1 27.3.22.2 */
 		if (chan <= 253)
-			return MHZ_TO_KHZ(5950 + chan * 5);
+			return MHZ_TO_KHZ(5940 + chan * 5);
 		break;
 	case NL80211_BAND_60GHZ:
 		if (chan < 5)
