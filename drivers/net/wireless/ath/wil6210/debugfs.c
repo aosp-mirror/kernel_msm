@@ -1598,7 +1598,7 @@ static int wil_freq_debugfs_show(struct seq_file *s, void *data)
 {
 	struct wil6210_priv *wil = s->private;
 	struct wireless_dev *wdev = wil->main_ndev->ieee80211_ptr;
-	u32 freq = wdev->chandef.chan ? wdev->chandef.chan->center_freq : 0;
+	u16 freq = wdev->chandef.chan ? wdev->chandef.chan->center_freq : 0;
 
 	seq_printf(s, "Freq = %d\n", freq);
 
