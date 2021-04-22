@@ -55,9 +55,9 @@
 #define MSC_ERROR_UPDATE_INTERVAL		5000
 #define MSC_DEFAULT_UPDATE_INTERVAL		30000
 
-/* qual time is 15 minutes of charge or 15% increase in SOC */
-#define DEFAULT_CHG_STATS_MIN_QUAL_TIME		(15 * 60)
-#define DEFAULT_CHG_STATS_MIN_DELTA_SOC		15
+/* qual time is 0 minutes of charge or 0% increase in SOC */
+#define DEFAULT_CHG_STATS_MIN_QUAL_TIME		0
+#define DEFAULT_CHG_STATS_MIN_DELTA_SOC		0
 
 /* Voters */
 #define MSC_LOGIC_VOTER	"msc_logic"
@@ -310,6 +310,8 @@ struct batt_drv {
 	struct mutex stats_lock;
 	struct gbms_charging_event ce_data;
 	struct gbms_charging_event ce_qual;
+	uint32_t chg_sts_qual_time;
+	uint32_t chg_sts_delta_soc;
 
 	/* time to full */
 	struct batt_ttf_stats ttf_stats;
@@ -1139,14 +1141,15 @@ static void batt_chg_stats_start(struct batt_drv *batt_drv)
 }
 
 /* call holding stats_lock */
-static bool batt_chg_stats_qual(const struct gbms_charging_event *ce_data)
+static bool batt_chg_stats_qual(const struct batt_drv *batt_drv)
 {
+	const struct gbms_charging_event *ce_data = &batt_drv->ce_data;
 	const long elap = ce_data->last_update - ce_data->first_update;
 	const long ssoc_delta = ce_data->charging_stats.ssoc_out -
 				ce_data->charging_stats.ssoc_in;
 
-	return elap >= ce_data->chg_sts_qual_time ||
-	    ssoc_delta >= ce_data->chg_sts_delta_soc;
+	return elap >= batt_drv->chg_sts_qual_time ||
+	    ssoc_delta >= batt_drv->chg_sts_delta_soc;
 }
 
 /* call holding stats_lock */
@@ -1466,7 +1469,7 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 				batt_chg_health_vti(&batt_drv->chg_health);
 
 	/* TODO: add a field to ce_data to qual weird charge sessions */
-	publish = force || batt_chg_stats_qual(&batt_drv->ce_data);
+	publish = force || batt_chg_stats_qual(batt_drv);
 	if (publish) {
 		struct gbms_charging_event *ce_qual = &batt_drv->ce_qual;
 
@@ -5371,15 +5374,15 @@ static void google_battery_init_work(struct work_struct *work)
 					DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD;
 	/* charge statistics */
 	ret = of_property_read_u32(node, "google,chg-stats-qual-time",
-				   &batt_drv->ce_data.chg_sts_qual_time);
+				   &batt_drv->chg_sts_qual_time);
 	if (ret < 0)
-		batt_drv->ce_data.chg_sts_qual_time =
+		batt_drv->chg_sts_qual_time =
 					DEFAULT_CHG_STATS_MIN_QUAL_TIME;
 
 	ret = of_property_read_u32(node, "google,chg-stats-delta-soc",
-				   &batt_drv->ce_data.chg_sts_delta_soc);
+				   &batt_drv->chg_sts_delta_soc);
 	if (ret < 0)
-		batt_drv->ce_data.chg_sts_delta_soc =
+		batt_drv->chg_sts_delta_soc =
 					DEFAULT_CHG_STATS_MIN_DELTA_SOC;
 
 	/* time to full */
