@@ -1419,12 +1419,16 @@
   kernel_read
   kernel_write
   kern_path
+  kobject_add
+  kobject_init
+  kobj_sysfs_ops
   __ll_sc___cmpxchg_case_rel_8
   lockref_get
   lock_rename
   lookup_one_len
   LZ4_decompress_safe
   match_int
+  match_strdup
   match_token
   memchr_inv
   noop_llseek
