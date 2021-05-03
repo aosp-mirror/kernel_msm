@@ -18,7 +18,6 @@
 
 /* ===== constants ===== */
 #define INCFS_NAME "incremental-fs"
-<<<<<<< HEAD
 
 /*
  * Magic number used in file header and in memory superblock
@@ -27,9 +26,6 @@
  */
 #define INCFS_MAGIC_NUMBER (0x5346434e49ul & ULONG_MAX)
 
-=======
-#define INCFS_MAGIC_NUMBER (0x5346434e49ul)
->>>>>>> fix_conflict
 #define INCFS_DATA_FILE_BLOCK_SIZE 4096
 #define INCFS_HEADER_VER 1
 
@@ -39,7 +35,6 @@
 #define INCFS_MAX_HASH_SIZE 32
 #define INCFS_MAX_FILE_ATTR_SIZE 512
 
-<<<<<<< HEAD
 #define INCFS_INDEX_NAME ".index"
 #define INCFS_INCOMPLETE_NAME ".incomplete"
 #define INCFS_PENDING_READS_FILENAME ".pending_reads"
@@ -49,13 +44,6 @@
 #define INCFS_XATTR_SIZE_NAME (XATTR_USER_PREFIX "incfs.size")
 #define INCFS_XATTR_METADATA_NAME (XATTR_USER_PREFIX "incfs.metadata")
 #define INCFS_XATTR_VERITY_NAME (XATTR_USER_PREFIX "incfs.verity")
-=======
-#define INCFS_PENDING_READS_FILENAME ".pending_reads"
-#define INCFS_LOG_FILENAME ".log"
-#define INCFS_XATTR_ID_NAME (XATTR_USER_PREFIX "incfs.id")
-#define INCFS_XATTR_SIZE_NAME (XATTR_USER_PREFIX "incfs.size")
-#define INCFS_XATTR_METADATA_NAME (XATTR_USER_PREFIX "incfs.metadata")
->>>>>>> partner/qcom-msm-4.14
 
 #define INCFS_MAX_SIGNATURE_SIZE 8096
 #define INCFS_SIGNATURE_VERSION 2
@@ -65,14 +53,10 @@
 
 /* ===== ioctl requests on the command dir ===== */
 
-<<<<<<< HEAD
 /*
  * Create a new file
  * May only be called on .pending_reads file
  */
-=======
-/* Create a new file */
->>>>>>> partner/qcom-msm-4.14
 #define INCFS_IOC_CREATE_FILE \
 	_IOWR(INCFS_IOCTL_BASE_CODE, 30, struct incfs_new_file_args)
 
@@ -122,7 +106,6 @@
 #define INCFS_IOC_GET_FILLED_BLOCKS                                            \
 	_IOR(INCFS_IOCTL_BASE_CODE, 34, struct incfs_get_filled_blocks_args)
 
-<<<<<<< HEAD
 /*
  * Creates a new mapped file
  * May only be called on .pending_reads file
@@ -190,11 +173,6 @@ enum incfs_compression_alg {
 	COMPRESSION_NONE = 0,
 	COMPRESSION_LZ4 = 1,
 	COMPRESSION_ZSTD = 2,
-=======
-enum incfs_compression_alg {
-	COMPRESSION_NONE = 0,
-	COMPRESSION_LZ4 = 1
->>>>>>> partner/qcom-msm-4.14
 };
 
 enum incfs_block_flags {
@@ -209,11 +187,8 @@ typedef struct {
 /*
  * Description of a pending read. A pending read - a read call by
  * a userspace program for which the filesystem currently doesn't have data.
-<<<<<<< HEAD
  *
  * Reads from .pending_reads and .log return an array of these structure
-=======
->>>>>>> partner/qcom-msm-4.14
  */
 struct incfs_pending_read_info {
 	/* Id of a file that is being read from. */
@@ -230,7 +205,6 @@ struct incfs_pending_read_info {
 };
 
 /*
-<<<<<<< HEAD
  * Description of a pending read. A pending read - a read call by
  * a userspace program for which the filesystem currently doesn't have data.
  *
@@ -257,8 +231,6 @@ struct incfs_pending_read_info2 {
 };
 
 /*
-=======
->>>>>>> partner/qcom-msm-4.14
  * Description of a data or hash block to add to a data file.
  */
 struct incfs_fill_block {
@@ -284,13 +256,10 @@ struct incfs_fill_block {
 	/* Values from enum incfs_block_flags */
 	__u8 flags;
 
-	/* Reserved - must be 0 */
 	__u16 reserved1;
 
-	/* Reserved - must be 0 */
 	__u32 reserved2;
 
-	/* Reserved - must be 0 */
 	__aligned_u64 reserved3;
 };
 
@@ -342,7 +311,6 @@ struct incfs_new_file_args {
 
 	__u16 reserved1;
 
-	/* Reserved - must be 0 */
 	__u32 reserved2;
 
 	/*
@@ -469,7 +437,6 @@ struct incfs_get_filled_blocks_args {
 	__u32 index_out;
 };
 
-<<<<<<< HEAD
 /*
  * Create a new mapped file
  * Argument for INCFS_IOC_CREATE_MAPPED_FILE
@@ -485,10 +452,8 @@ struct incfs_create_mapped_file_args {
 	 */
 	__u16 mode;
 
-	/* Reserved - must be 0 */
 	__u16 reserved1;
 
-	/* Reserved - must be 0 */
 	__u32 reserved2;
 
 	/*
@@ -622,6 +587,4 @@ struct incfs_get_last_read_error_args {
 	__u64	reserved2;
 };
 
-=======
->>>>>>> partner/qcom-msm-4.14
 #endif /* _UAPI_LINUX_INCREMENTALFS_H */

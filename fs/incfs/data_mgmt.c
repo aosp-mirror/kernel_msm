@@ -3,7 +3,6 @@
  * Copyright 2019 Google LLC
  */
 #include <linux/crc32.h>
-<<<<<<< HEAD
 #include <linux/delay.h>
 #include <linux/file.h>
 #include <linux/fsverity.h>
@@ -13,13 +12,6 @@
 #include <linux/lz4.h>
 #include <linux/mm.h>
 #include <linux/namei.h>
-=======
-#include <linux/file.h>
-#include <linux/gfp.h>
-#include <linux/ktime.h>
-#include <linux/lz4.h>
-#include <linux/mm.h>
->>>>>>> a1f1915339b9
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/types.h>
@@ -28,13 +20,10 @@
 #include "data_mgmt.h"
 #include "format.h"
 #include "integrity.h"
-<<<<<<< HEAD
 #include "sysfs.h"
 #include "verity.h"
 
 static int incfs_scan_metadata_chain(struct data_file *df);
-=======
->>>>>>> a1f1915339b9
 
 static void log_wake_up_all(struct work_struct *work)
 {
@@ -43,7 +32,6 @@ static void log_wake_up_all(struct work_struct *work)
 	wake_up_all(&rl->ml_notif_wq);
 }
 
-<<<<<<< HEAD
 static void zstd_free_workspace(struct work_struct *work)
 {
 	struct delayed_work *dw = container_of(work, struct delayed_work, work);
@@ -57,18 +45,13 @@ static void zstd_free_workspace(struct work_struct *work)
 	mutex_unlock(&mi->mi_zstd_workspace_mutex);
 }
 
-=======
->>>>>>> a1f1915339b9
 struct mount_info *incfs_alloc_mount_info(struct super_block *sb,
 					  struct mount_options *options,
 					  struct path *backing_dir_path)
 {
 	struct mount_info *mi = NULL;
 	int error = 0;
-<<<<<<< HEAD
 	struct incfs_sysfs_node *node;
-=======
->>>>>>> a1f1915339b9
 
 	mi = kzalloc(sizeof(*mi), GFP_NOFS);
 	if (!mi)
@@ -79,7 +62,6 @@ struct mount_info *incfs_alloc_mount_info(struct super_block *sb,
 	mi->mi_owner = get_current_cred();
 	path_get(&mi->mi_backing_dir_path);
 	mutex_init(&mi->mi_dir_struct_mutex);
-<<<<<<< HEAD
 	init_waitqueue_head(&mi->mi_pending_reads_notif_wq);
 	init_waitqueue_head(&mi->mi_log.ml_notif_wq);
 	init_waitqueue_head(&mi->mi_blocks_written_notif_wq);
@@ -99,14 +81,6 @@ struct mount_info *incfs_alloc_mount_info(struct super_block *sb,
 		goto err;
 	}
 	mi->mi_sysfs_node = node;
-=======
-	mutex_init(&mi->mi_pending_reads_mutex);
-	init_waitqueue_head(&mi->mi_pending_reads_notif_wq);
-	init_waitqueue_head(&mi->mi_log.ml_notif_wq);
-	INIT_DELAYED_WORK(&mi->mi_log.ml_wakeup_work, log_wake_up_all);
-	spin_lock_init(&mi->mi_log.rl_lock);
-	INIT_LIST_HEAD(&mi->mi_reads_list_head);
->>>>>>> a1f1915339b9
 
 	error = incfs_realloc_mount_info(mi, options);
 	if (error)
@@ -156,7 +130,6 @@ int incfs_realloc_mount_info(struct mount_info *mi,
 		kfree(old_buffer);
 	}
 
-<<<<<<< HEAD
 	if (options->sysfs_name && !mi->mi_sysfs_node)
 		mi->mi_sysfs_node = incfs_add_sysfs_node(options->sysfs_name,
 							 mi);
@@ -178,23 +151,17 @@ int incfs_realloc_mount_info(struct mount_info *mi,
 		return err;
 	}
 
-=======
->>>>>>> a1f1915339b9
 	mi->mi_options = *options;
 	return 0;
 }
 
 void incfs_free_mount_info(struct mount_info *mi)
 {
-<<<<<<< HEAD
 	int i;
-=======
->>>>>>> a1f1915339b9
 	if (!mi)
 		return;
 
 	flush_delayed_work(&mi->mi_log.ml_wakeup_work);
-<<<<<<< HEAD
 	flush_delayed_work(&mi->mi_zstd_cleanup_work);
 
 	dput(mi->mi_index_dir);
@@ -208,24 +175,12 @@ void incfs_free_mount_info(struct mount_info *mi)
 		kfree(mi->pseudo_file_xattr[i].data);
 	kfree(mi->mi_per_uid_read_timeouts);
 	incfs_free_sysfs_node(mi->mi_sysfs_node);
-=======
-
-	dput(mi->mi_index_dir);
-	path_put(&mi->mi_backing_dir_path);
-	mutex_destroy(&mi->mi_dir_struct_mutex);
-	mutex_destroy(&mi->mi_pending_reads_mutex);
-	put_cred(mi->mi_owner);
-	kfree(mi->mi_log.rl_ring_buf);
-	kfree(mi->log_xattr);
-	kfree(mi->pending_read_xattr);
->>>>>>> a1f1915339b9
 	kfree(mi);
 }
 
 static void data_file_segment_init(struct data_file_segment *segment)
 {
 	init_waitqueue_head(&segment->new_data_arrival_wq);
-<<<<<<< HEAD
 	init_rwsem(&segment->rwsem);
 	INIT_LIST_HEAD(&segment->reads_list_head);
 }
@@ -313,15 +268,6 @@ static struct data_file *handle_mapped_file(struct mount_info *mi,
 out:
 	dput(index_file_dentry);
 	return result;
-=======
-	mutex_init(&segment->blockmap_mutex);
-	INIT_LIST_HEAD(&segment->reads_list_head);
-}
-
-static void data_file_segment_destroy(struct data_file_segment *segment)
-{
-	mutex_destroy(&segment->blockmap_mutex);
->>>>>>> a1f1915339b9
 }
 
 struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf)
@@ -339,11 +285,7 @@ struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf)
 	if (!S_ISREG(bf->f_inode->i_mode))
 		return ERR_PTR(-EBADF);
 
-<<<<<<< HEAD
 	bfc = incfs_alloc_bfc(mi, bf);
-=======
-	bfc = incfs_alloc_bfc(bf);
->>>>>>> a1f1915339b9
 	if (IS_ERR(bfc))
 		return ERR_CAST(bfc);
 
@@ -353,27 +295,15 @@ struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf)
 		goto out;
 	}
 
-<<<<<<< HEAD
 	mutex_init(&df->df_enable_verity);
 
-=======
->>>>>>> a1f1915339b9
 	df->df_backing_file_context = bfc;
 	df->df_mount_info = mi;
 	for (i = 0; i < ARRAY_SIZE(df->df_segments); i++)
 		data_file_segment_init(&df->df_segments[i]);
 
-<<<<<<< HEAD
 	error = incfs_read_file_header(bfc, &df->df_metadata_off, &df->df_id,
 				       &size, &df->df_header_flags);
-=======
-	error = mutex_lock_interruptible(&bfc->bc_mutex);
-	if (error)
-		goto out;
-	error = incfs_read_file_header(bfc, &df->df_metadata_off, &df->df_id,
-				       &size, &df->df_header_flags);
-	mutex_unlock(&bfc->bc_mutex);
->>>>>>> a1f1915339b9
 
 	if (error)
 		goto out;
@@ -382,7 +312,6 @@ struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf)
 	if (size > 0)
 		df->df_data_block_count = get_blocks_count_for_size(size);
 
-<<<<<<< HEAD
 	if (df->df_header_flags & INCFS_FILE_MAPPED) {
 		struct data_file *mapped_df = handle_mapped_file(mi, df);
 
@@ -390,8 +319,6 @@ struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf)
 		return mapped_df;
 	}
 
-=======
->>>>>>> a1f1915339b9
 	md_records = incfs_scan_metadata_chain(df);
 	if (md_records < 0)
 		error = md_records;
@@ -409,16 +336,11 @@ out:
 
 void incfs_free_data_file(struct data_file *df)
 {
-<<<<<<< HEAD
 	u32 data_blocks_written, hash_blocks_written;
-=======
-	int i;
->>>>>>> a1f1915339b9
 
 	if (!df)
 		return;
 
-<<<<<<< HEAD
 	data_blocks_written = atomic_read(&df->df_data_blocks_written);
 	hash_blocks_written = atomic_read(&df->df_hash_blocks_written);
 
@@ -447,12 +369,6 @@ void incfs_free_data_file(struct data_file *df)
 	kfree(df->df_verity_file_digest.data);
 	kfree(df->df_verity_signature);
 	mutex_destroy(&df->df_enable_verity);
-=======
-	incfs_free_mtree(df->df_hash_tree);
-	for (i = 0; i < ARRAY_SIZE(df->df_segments); i++)
-		data_file_segment_destroy(&df->df_segments[i]);
-	incfs_free_bfc(df->df_backing_file_context);
->>>>>>> a1f1915339b9
 	kfree(df);
 }
 
@@ -505,7 +421,6 @@ void incfs_free_dir_file(struct dir_file *dir)
 	kfree(dir);
 }
 
-<<<<<<< HEAD
 static ssize_t zstd_decompress_safe(struct mount_info *mi,
 				    struct mem_range src, struct mem_range dst)
 {
@@ -573,18 +488,6 @@ static ssize_t decompress(struct mount_info *mi,
 	}
 }
 
-=======
-static ssize_t decompress(struct mem_range src, struct mem_range dst)
-{
-	int result = LZ4_decompress_safe(src.data, dst.data, src.len, dst.len);
-
-	if (result < 0)
-		return -EBADMSG;
-
-	return result;
-}
-
->>>>>>> a1f1915339b9
 static void log_read_one_record(struct read_log *rl, struct read_log_state *rs)
 {
 	union log_record *record =
@@ -599,7 +502,6 @@ static void log_read_one_record(struct read_log *rl, struct read_log_state *rs)
 
 	case SAME_FILE:
 		rs->base_record.block_index =
-<<<<<<< HEAD
 			record->same_file.block_index;
 		rs->base_record.absolute_ts_us +=
 			record->same_file.relative_ts_us;
@@ -621,12 +523,6 @@ static void log_read_one_record(struct read_log *rl, struct read_log_state *rs)
 		rs->base_record.absolute_ts_us +=
 		   record->same_file_close_block_short.relative_ts_tens_us * 10;
 		record_size = sizeof(record->same_file_close_block_short);
-=======
-			record->same_file_record.block_index;
-		rs->base_record.absolute_ts_us +=
-			record->same_file_record.relative_ts_us;
-		record_size = sizeof(record->same_file_record);
->>>>>>> a1f1915339b9
 		break;
 
 	case SAME_FILE_NEXT_BLOCK:
@@ -639,11 +535,7 @@ static void log_read_one_record(struct read_log *rl, struct read_log_state *rs)
 	case SAME_FILE_NEXT_BLOCK_SHORT:
 		++rs->base_record.block_index;
 		rs->base_record.absolute_ts_us +=
-<<<<<<< HEAD
 		    record->same_file_next_block_short.relative_ts_tens_us * 10;
-=======
-			record->same_file_next_block_short.relative_ts_us;
->>>>>>> a1f1915339b9
 		record_size = sizeof(record->same_file_next_block_short);
 		break;
 	}
@@ -665,14 +557,11 @@ static void log_block_read(struct mount_info *mi, incfs_uuid_t *id,
 	s64 relative_us;
 	union log_record record;
 	size_t record_size;
-<<<<<<< HEAD
 	uid_t uid = current_uid().val;
 	int block_delta;
 	bool same_file, same_uid;
 	bool next_block, close_block, very_close_block;
 	bool close_time, very_close_time, very_very_close_time;
-=======
->>>>>>> a1f1915339b9
 
 	/*
 	 * This may read the old value, but it's OK to delay the logging start
@@ -693,7 +582,6 @@ static void log_block_read(struct mount_info *mi, incfs_uuid_t *id,
 	tail = &log->rl_tail;
 	relative_us = now_us - head->base_record.absolute_ts_us;
 
-<<<<<<< HEAD
 	same_file = !memcmp(id, &head->base_record.file_id,
 			    sizeof(incfs_uuid_t));
 	same_uid = uid == head->base_record.uid;
@@ -745,46 +633,15 @@ static void log_block_read(struct mount_info *mi, incfs_uuid_t *id,
 		};
 		record_size = sizeof(struct same_file);
 	} else {
-=======
-	if (memcmp(id, &head->base_record.file_id, sizeof(incfs_uuid_t)) ||
-	    relative_us >= 1ll << 32) {
->>>>>>> a1f1915339b9
 		record.full_record = (struct full_record){
 			.type = FULL,
 			.block_index = block_index,
 			.file_id = *id,
 			.absolute_ts_us = now_us,
-<<<<<<< HEAD
 			.uid = uid,
 		};
 		head->base_record.file_id = *id;
 		record_size = sizeof(struct full_record);
-=======
-		};
-		head->base_record.file_id = *id;
-		record_size = sizeof(struct full_record);
-	} else if (block_index != head->base_record.block_index + 1 ||
-		   relative_us >= 1 << 30) {
-		record.same_file_record = (struct same_file_record){
-			.type = SAME_FILE,
-			.block_index = block_index,
-			.relative_ts_us = relative_us,
-		};
-		record_size = sizeof(struct same_file_record);
-	} else if (relative_us >= 1 << 14) {
-		record.same_file_next_block = (struct same_file_next_block){
-			.type = SAME_FILE_NEXT_BLOCK,
-			.relative_ts_us = relative_us,
-		};
-		record_size = sizeof(struct same_file_next_block);
-	} else {
-		record.same_file_next_block_short =
-			(struct same_file_next_block_short){
-				.type = SAME_FILE_NEXT_BLOCK_SHORT,
-				.relative_ts_us = relative_us,
-			};
-		record_size = sizeof(struct same_file_next_block_short);
->>>>>>> a1f1915339b9
 	}
 
 	head->base_record.block_index = block_index;
@@ -808,13 +665,8 @@ static void log_block_read(struct mount_info *mi, incfs_uuid_t *id,
 	schedule_delayed_work(&log->ml_wakeup_work, msecs_to_jiffies(16));
 }
 
-<<<<<<< HEAD
 static int validate_hash_tree(struct backing_file_context *bfc, struct file *f,
 			      int block_index, struct mem_range data, u8 *buf)
-=======
-static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
-			      struct mem_range data, u8 *buf)
->>>>>>> a1f1915339b9
 {
 	struct data_file *df = get_incfs_data_file(f);
 	u8 stored_digest[INCFS_MAX_HASH_SIZE] = {};
@@ -830,15 +682,11 @@ static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
 	int hash_per_block;
 	pgoff_t file_pages;
 
-<<<<<<< HEAD
 	/*
 	 * Memory barrier to make sure tree is fully present if added via enable
 	 * verity
 	 */
 	tree = smp_load_acquire(&df->df_hash_tree);
-=======
-	tree = df->df_hash_tree;
->>>>>>> a1f1915339b9
 	sig = df->df_signature;
 	if (!tree || !sig)
 		return 0;
@@ -879,11 +727,7 @@ static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
 		if (page)
 			put_page(page);
 
-<<<<<<< HEAD
 		res = incfs_kread(bfc, buf, INCFS_DATA_FILE_BLOCK_SIZE,
-=======
-		res = incfs_kread(bf, buf, INCFS_DATA_FILE_BLOCK_SIZE,
->>>>>>> a1f1915339b9
 				  hash_block_offset[lvl] + sig->hash_offset);
 		if (res < 0)
 			return res;
@@ -899,11 +743,7 @@ static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
 			int i;
 			bool zero = true;
 
-<<<<<<< HEAD
 			pr_warn("incfs: Hash mismatch lvl:%d blk:%d\n",
-=======
-			pr_debug("incfs: Hash mismatch lvl:%d blk:%d\n",
->>>>>>> a1f1915339b9
 				lvl, block_index);
 			for (i = 0; i < digest_size; i++)
 				if (stored_digest[i]) {
@@ -912,11 +752,7 @@ static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
 				}
 
 			if (zero)
-<<<<<<< HEAD
 				pr_debug("Note saved_digest all zero - did you forget to load the hashes?\n");
-=======
-				pr_debug("incfs: Note saved_digest all zero - did you forget to load the hashes?\n");
->>>>>>> a1f1915339b9
 			return -EBADMSG;
 		}
 
@@ -941,11 +777,7 @@ static int validate_hash_tree(struct file *bf, struct file *f, int block_index,
 		return res;
 
 	if (memcmp(stored_digest, calculated_digest, digest_size)) {
-<<<<<<< HEAD
 		pr_debug("Leaf hash mismatch blk:%d\n", block_index);
-=======
-		pr_debug("incfs: Leaf hash mismatch blk:%d\n", block_index);
->>>>>>> a1f1915339b9
 		return -EBADMSG;
 	}
 
@@ -977,13 +809,7 @@ static void convert_data_file_block(struct incfs_blockmap_entry *bme,
 	res_block->db_backing_file_data_offset |=
 		le32_to_cpu(bme->me_data_offset_lo);
 	res_block->db_stored_size = le16_to_cpu(bme->me_data_size);
-<<<<<<< HEAD
 	res_block->db_comp_alg = flags & INCFS_BLOCK_COMPRESSED_MASK;
-=======
-	res_block->db_comp_alg = (flags & INCFS_BLOCK_COMPRESSED_LZ4) ?
-					 COMPRESSION_LZ4 :
-					 COMPRESSION_NONE;
->>>>>>> a1f1915339b9
 }
 
 static int get_data_file_block(struct data_file *df, int index,
@@ -1026,53 +852,16 @@ static int copy_one_range(struct incfs_filled_range *range, void __user *buffer,
 		return error;
 
 	if (copy_to_user(((char __user *)buffer) + *size_out, range,
-<<<<<<< HEAD
 			 sizeof(*range)))
-=======
-				sizeof(*range)))
->>>>>>> a1f1915339b9
 		return -EFAULT;
 
 	*size_out += sizeof(*range);
 	return 0;
 }
 
-<<<<<<< HEAD
 #define READ_BLOCKMAP_ENTRIES 512
 int incfs_get_filled_blocks(struct data_file *df,
 			    struct incfs_file_data *fd,
-=======
-static int update_file_header_flags(struct data_file *df, u32 bits_to_reset,
-				    u32 bits_to_set)
-{
-	int result;
-	u32 new_flags;
-	struct backing_file_context *bfc;
-
-	if (!df)
-		return -EFAULT;
-	bfc = df->df_backing_file_context;
-	if (!bfc)
-		return -EFAULT;
-
-	result = mutex_lock_interruptible(&bfc->bc_mutex);
-	if (result)
-		return result;
-
-	new_flags = (df->df_header_flags & ~bits_to_reset) | bits_to_set;
-	if (new_flags != df->df_header_flags) {
-		df->df_header_flags = new_flags;
-		result = incfs_write_file_header_flags(bfc, new_flags);
-	}
-
-	mutex_unlock(&bfc->bc_mutex);
-
-	return result;
-}
-
-#define READ_BLOCKMAP_ENTRIES 512
-int incfs_get_filled_blocks(struct data_file *df,
->>>>>>> a1f1915339b9
 			    struct incfs_get_filled_blocks_args *arg)
 {
 	int error = 0;
@@ -1086,11 +875,8 @@ int incfs_get_filled_blocks(struct data_file *df,
 	int i = READ_BLOCKMAP_ENTRIES - 1;
 	int entries_read = 0;
 	struct incfs_blockmap_entry *bme;
-<<<<<<< HEAD
 	int data_blocks_filled = 0;
 	int hash_blocks_filled = 0;
-=======
->>>>>>> a1f1915339b9
 
 	*size_out = 0;
 	if (end_index > df->df_total_block_count)
@@ -1098,12 +884,8 @@ int incfs_get_filled_blocks(struct data_file *df,
 	arg->total_blocks_out = df->df_total_block_count;
 	arg->data_blocks_out = df->df_data_block_count;
 
-<<<<<<< HEAD
 	if (atomic_read(&df->df_data_blocks_written) ==
 	    df->df_data_block_count) {
-=======
-	if (df->df_header_flags & INCFS_FILE_COMPLETE) {
->>>>>>> a1f1915339b9
 		pr_debug("File marked full, fast get_filled_blocks");
 		if (arg->start_index > end_index) {
 			arg->index_out = arg->start_index;
@@ -1156,7 +938,6 @@ int incfs_get_filled_blocks(struct data_file *df,
 
 		convert_data_file_block(bme + i, &dfb);
 
-<<<<<<< HEAD
 		if (is_data_block_present(&dfb)) {
 			if (arg->index_out >= df->df_data_block_count)
 				++hash_blocks_filled;
@@ -1164,8 +945,6 @@ int incfs_get_filled_blocks(struct data_file *df,
 				++data_blocks_filled;
 		}
 
-=======
->>>>>>> a1f1915339b9
 		if (is_data_block_present(&dfb) == in_range)
 			continue;
 
@@ -1195,7 +974,6 @@ int incfs_get_filled_blocks(struct data_file *df,
 			arg->index_out = range.begin;
 	}
 
-<<<<<<< HEAD
 	if (arg->start_index == 0) {
 		fd->fd_get_block_pos = 0;
 		fd->fd_filled_data_blocks = 0;
@@ -1218,15 +996,6 @@ int incfs_get_filled_blocks(struct data_file *df,
 		   atomic_read(&df->df_hash_blocks_written))
 			atomic_set(&df->df_hash_blocks_written,
 				   fd->fd_filled_hash_blocks);
-=======
-	if (!error && in_range && arg->start_index == 0 &&
-	    end_index == df->df_total_block_count &&
-	    *size_out == sizeof(struct incfs_filled_range)) {
-		int result =
-			update_file_header_flags(df, 0, INCFS_FILE_COMPLETE);
-		/* Log failure only, since it's just a failed optimization */
-		pr_debug("Marked file full with result %d", result);
->>>>>>> a1f1915339b9
 	}
 
 	kfree(bme);
@@ -1264,34 +1033,22 @@ static struct pending_read *add_pending_read(struct data_file *df,
 	result->file_id = df->df_id;
 	result->block_index = block_index;
 	result->timestamp_us = ktime_to_us(ktime_get());
-<<<<<<< HEAD
 	result->uid = current_uid().val;
 
 	spin_lock(&mi->pending_read_lock);
-=======
-
-	mutex_lock(&mi->mi_pending_reads_mutex);
->>>>>>> a1f1915339b9
 
 	result->serial_number = ++mi->mi_last_pending_read_number;
 	mi->mi_pending_reads_count++;
 
-<<<<<<< HEAD
 	list_add_rcu(&result->mi_reads_list, &mi->mi_reads_list_head);
 	list_add_rcu(&result->segment_reads_list, &segment->reads_list_head);
 
 	spin_unlock(&mi->pending_read_lock);
-=======
-	list_add(&result->mi_reads_list, &mi->mi_reads_list_head);
-	list_add(&result->segment_reads_list, &segment->reads_list_head);
-	mutex_unlock(&mi->mi_pending_reads_mutex);
->>>>>>> a1f1915339b9
 
 	wake_up_all(&mi->mi_pending_reads_notif_wq);
 	return result;
 }
 
-<<<<<<< HEAD
 static void free_pending_read_entry(struct rcu_head *entry)
 {
 	struct pending_read *read;
@@ -1301,8 +1058,6 @@ static void free_pending_read_entry(struct rcu_head *entry)
 	kfree(read);
 }
 
-=======
->>>>>>> a1f1915339b9
 /* Notifies a given data file that pending read is completed. */
 static void remove_pending_read(struct data_file *df, struct pending_read *read)
 {
@@ -1316,7 +1071,6 @@ static void remove_pending_read(struct data_file *df, struct pending_read *read)
 
 	mi = df->df_mount_info;
 
-<<<<<<< HEAD
 	spin_lock(&mi->pending_read_lock);
 
 	list_del_rcu(&read->mi_reads_list);
@@ -1328,16 +1082,6 @@ static void remove_pending_read(struct data_file *df, struct pending_read *read)
 
 	/* Don't free. Wait for readers */
 	call_rcu(&read->rcu, free_pending_read_entry);
-=======
-	mutex_lock(&mi->mi_pending_reads_mutex);
-	list_del(&read->mi_reads_list);
-	list_del(&read->segment_reads_list);
-
-	mi->mi_pending_reads_count--;
-	mutex_unlock(&mi->mi_pending_reads_mutex);
-
-	kfree(read);
->>>>>>> a1f1915339b9
 }
 
 static void notify_pending_reads(struct mount_info *mi,
@@ -1347,18 +1091,12 @@ static void notify_pending_reads(struct mount_info *mi,
 	struct pending_read *entry = NULL;
 
 	/* Notify pending reads waiting for this block. */
-<<<<<<< HEAD
 	rcu_read_lock();
 	list_for_each_entry_rcu(entry, &segment->reads_list_head,
-=======
-	mutex_lock(&mi->mi_pending_reads_mutex);
-	list_for_each_entry(entry, &segment->reads_list_head,
->>>>>>> a1f1915339b9
 						segment_reads_list) {
 		if (entry->block_index == index)
 			set_read_done(entry);
 	}
-<<<<<<< HEAD
 	rcu_read_unlock();
 	wake_up_all(&segment->new_data_arrival_wq);
 
@@ -1385,29 +1123,15 @@ static int usleep_interruptible(u32 us)
 static int wait_for_data_block(struct data_file *df, int block_index,
 			       struct data_file_block *res_block,
 			       struct incfs_read_data_file_timeouts *timeouts)
-=======
-	mutex_unlock(&mi->mi_pending_reads_mutex);
-	wake_up_all(&segment->new_data_arrival_wq);
-}
-
-static int wait_for_data_block(struct data_file *df, int block_index,
-			       int timeout_ms,
-			       struct data_file_block *res_block)
->>>>>>> a1f1915339b9
 {
 	struct data_file_block block = {};
 	struct data_file_segment *segment = NULL;
 	struct pending_read *read = NULL;
 	struct mount_info *mi = NULL;
-<<<<<<< HEAD
 	int error;
 	int wait_res = 0;
 	unsigned int delayed_pending_us = 0, delayed_min_us = 0;
 	bool delayed_pending = false;
-=======
-	int error = 0;
-	int wait_res = 0;
->>>>>>> a1f1915339b9
 
 	if (!df || !res_block)
 		return -EFAULT;
@@ -1415,7 +1139,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 	if (block_index < 0 || block_index >= df->df_data_block_count)
 		return -EINVAL;
 
-<<<<<<< HEAD
 	if (df->df_blockmap_off <= 0 || !df->df_mount_info)
 		return -ENODATA;
 
@@ -1423,36 +1146,18 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 	segment = get_file_segment(df, block_index);
 
 	down_read(&segment->rwsem);
-=======
-	if (df->df_blockmap_off <= 0)
-		return -ENODATA;
-
-	segment = get_file_segment(df, block_index);
-	error = mutex_lock_interruptible(&segment->blockmap_mutex);
-	if (error)
-		return error;
->>>>>>> a1f1915339b9
 
 	/* Look up the given block */
 	error = get_data_file_block(df, block_index, &block);
 
-<<<<<<< HEAD
 	up_read(&segment->rwsem);
 
-=======
-	/* If it's not found, create a pending read */
-	if (!error && !is_data_block_present(&block) && timeout_ms != 0)
-		read = add_pending_read(df, block_index);
-
-	mutex_unlock(&segment->blockmap_mutex);
->>>>>>> a1f1915339b9
 	if (error)
 		return error;
 
 	/* If the block was found, just return it. No need to wait. */
 	if (is_data_block_present(&block)) {
 		*res_block = block;
-<<<<<<< HEAD
 		if (timeouts && timeouts->min_time_us) {
 			delayed_min_us = timeouts->min_time_us;
 			error = usleep_interruptible(delayed_min_us);
@@ -1485,30 +1190,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 
 	/* Woke up, the pending read is no longer needed. */
 	remove_pending_read(df, read);
-=======
-		return 0;
-	}
-
-	mi = df->df_mount_info;
-
-	if (timeout_ms == 0) {
-		log_block_read(mi, &df->df_id, block_index);
-		return -ETIME;
-	}
-
-	if (!read)
-		return -ENOMEM;
-
-	/* Wait for notifications about block's arrival */
-	wait_res =
-		wait_event_interruptible_timeout(segment->new_data_arrival_wq,
-						 (is_read_done(read)),
-						 msecs_to_jiffies(timeout_ms));
-
-	/* Woke up, the pending read is no longer needed. */
-	remove_pending_read(df, read);
-	read = NULL;
->>>>>>> a1f1915339b9
 
 	if (wait_res == 0) {
 		/* Wait has timed out */
@@ -1523,7 +1204,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 		return wait_res;
 	}
 
-<<<<<<< HEAD
 	delayed_pending = true;
 	delayed_pending_us = timeouts->max_pending_time_us -
 				jiffies_to_usecs(wait_res);
@@ -1539,14 +1219,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 
 	/*
 	 * Re-read blocks info now, it has just arrived and
-=======
-	error = mutex_lock_interruptible(&segment->blockmap_mutex);
-	if (error)
-		return error;
-
-	/*
-	 * Re-read block's info now, it has just arrived and
->>>>>>> a1f1915339b9
 	 * should be available.
 	 */
 	error = get_data_file_block(df, block_index, &block);
@@ -1555,7 +1227,6 @@ static int wait_for_data_block(struct data_file *df, int block_index,
 			*res_block = block;
 		else {
 			/*
-<<<<<<< HEAD
 			 * Somehow wait finished successfully but block still
 			 * can't be found. It's not normal.
 			 */
@@ -1608,74 +1279,38 @@ static int incfs_update_sysfs_error(struct file *file, int index, int result,
 ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
 			int index, struct mem_range tmp,
 			struct incfs_read_data_file_timeouts *timeouts)
-=======
-			 * Somehow wait finished successfully bug block still
-			 * can't be found. It's not normal.
-			 */
-			pr_warn("incfs:Wait succeeded, but block not found.\n");
-			error = -ENODATA;
-		}
-	}
-
-	mutex_unlock(&segment->blockmap_mutex);
-	return error;
-}
-
-ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
-				   int index, int timeout_ms,
-				   struct mem_range tmp)
->>>>>>> a1f1915339b9
 {
 	loff_t pos;
 	ssize_t result;
 	size_t bytes_to_read;
 	struct mount_info *mi = NULL;
-<<<<<<< HEAD
 	struct backing_file_context *bfc = NULL;
 	struct data_file_block block = {};
 	struct data_file *df = get_incfs_data_file(f);
 
 	if (!dst.data || !df || !tmp.data)
-=======
-	struct file *bf = NULL;
-	struct data_file_block block = {};
-	struct data_file *df = get_incfs_data_file(f);
-
-	if (!dst.data || !df)
->>>>>>> a1f1915339b9
 		return -EFAULT;
 
 	if (tmp.len < 2 * INCFS_DATA_FILE_BLOCK_SIZE)
 		return -ERANGE;
 
 	mi = df->df_mount_info;
-<<<<<<< HEAD
 	bfc = df->df_backing_file_context;
 
 	result = wait_for_data_block(df, index, &block, timeouts);
-=======
-	bf = df->df_backing_file_context->bc_file;
-
-	result = wait_for_data_block(df, index, timeout_ms, &block);
->>>>>>> a1f1915339b9
 	if (result < 0)
 		goto out;
 
 	pos = block.db_backing_file_data_offset;
 	if (block.db_comp_alg == COMPRESSION_NONE) {
 		bytes_to_read = min(dst.len, block.db_stored_size);
-<<<<<<< HEAD
 		result = incfs_kread(bfc, dst.data, bytes_to_read, pos);
-=======
-		result = incfs_kread(bf, dst.data, bytes_to_read, pos);
->>>>>>> a1f1915339b9
 
 		/* Some data was read, but not enough */
 		if (result >= 0 && result != bytes_to_read)
 			result = -EIO;
 	} else {
 		bytes_to_read = min(tmp.len, block.db_stored_size);
-<<<<<<< HEAD
 		result = incfs_kread(bfc, tmp.data, bytes_to_read, pos);
 		if (result == bytes_to_read) {
 			result =
@@ -1684,15 +1319,6 @@ ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
 			if (result < 0) {
 				const char *name =
 				    bfc->bc_file->f_path.dentry->d_name.name;
-=======
-		result = incfs_kread(bf, tmp.data, bytes_to_read, pos);
-		if (result == bytes_to_read) {
-			result =
-				decompress(range(tmp.data, bytes_to_read), dst);
-			if (result < 0) {
-				const char *name =
-					bf->f_path.dentry->d_name.name;
->>>>>>> a1f1915339b9
 
 				pr_warn_once("incfs: Decompression error. %s",
 					     name);
@@ -1704,11 +1330,7 @@ ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
 	}
 
 	if (result > 0) {
-<<<<<<< HEAD
 		int err = validate_hash_tree(bfc, f, index, dst, tmp.data);
-=======
-		int err = validate_hash_tree(bf, f, index, dst, tmp.data);
->>>>>>> a1f1915339b9
 
 		if (err < 0)
 			result = err;
@@ -1718,7 +1340,6 @@ ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
 		log_block_read(mi, &df->df_id, index);
 
 out:
-<<<<<<< HEAD
 	if (result == -ETIME)
 		mi->mi_reads_failed_timed_out++;
 	else if (result == -EBADMSG)
@@ -1753,11 +1374,6 @@ ssize_t incfs_read_merkle_tree_blocks(struct mem_range dst,
 	return incfs_kread(bfc, dst.data, to_read, sig->hash_offset + offset);
 }
 
-=======
-	return result;
-}
-
->>>>>>> a1f1915339b9
 int incfs_process_new_data_block(struct data_file *df,
 				 struct incfs_fill_block *block, u8 *data)
 {
@@ -1780,7 +1396,6 @@ int incfs_process_new_data_block(struct data_file *df,
 	segment = get_file_segment(df, block->block_index);
 	if (!segment)
 		return -EFAULT;
-<<<<<<< HEAD
 
 	if (block->compression == COMPRESSION_LZ4)
 		flags |= INCFS_BLOCK_COMPRESSED_LZ4;
@@ -1806,23 +1421,6 @@ int incfs_process_new_data_block(struct data_file *df,
 	if (error)
 		return error;
 
-=======
-	if (block->compression == COMPRESSION_LZ4)
-		flags |= INCFS_BLOCK_COMPRESSED_LZ4;
-
-	error = mutex_lock_interruptible(&segment->blockmap_mutex);
-	if (error)
-		return error;
-
-	error = get_data_file_block(df, block->block_index, &existing_block);
-	if (error)
-		goto unlock;
-	if (is_data_block_present(&existing_block)) {
-		/* Block is already present, nothing to do here */
-		goto unlock;
-	}
-
->>>>>>> a1f1915339b9
 	error = mutex_lock_interruptible(&bfc->bc_mutex);
 	if (!error) {
 		error = incfs_write_data_block_to_backing_file(
@@ -1830,7 +1428,6 @@ int incfs_process_new_data_block(struct data_file *df,
 			df->df_blockmap_off, flags);
 		mutex_unlock(&bfc->bc_mutex);
 	}
-<<<<<<< HEAD
 	if (!error) {
 		notify_pending_reads(mi, segment, block->block_index);
 		atomic_inc(&df->df_data_blocks_written);
@@ -1840,26 +1437,12 @@ int incfs_process_new_data_block(struct data_file *df,
 
 	if (error)
 		pr_debug("%d error: %d\n", block->block_index, error);
-=======
-	if (!error)
-		notify_pending_reads(mi, segment, block->block_index);
-
-unlock:
-	mutex_unlock(&segment->blockmap_mutex);
-	if (error)
-		pr_debug("incfs: %s %d error: %d\n", __func__,
-				block->block_index, error);
->>>>>>> a1f1915339b9
 	return error;
 }
 
 int incfs_read_file_signature(struct data_file *df, struct mem_range dst)
 {
-<<<<<<< HEAD
 	struct backing_file_context *bfc = df->df_backing_file_context;
-=======
-	struct file *bf = df->df_backing_file_context->bc_file;
->>>>>>> a1f1915339b9
 	struct incfs_df_signature *sig;
 	int read_res = 0;
 
@@ -1873,11 +1456,7 @@ int incfs_read_file_signature(struct data_file *df, struct mem_range dst)
 	if (dst.len < sig->sig_size)
 		return -E2BIG;
 
-<<<<<<< HEAD
 	read_res = incfs_kread(bfc, dst.data, sig->sig_size, sig->sig_offset);
-=======
-	read_res = incfs_kread(bf, dst.data, sig->sig_size, sig->sig_offset);
->>>>>>> a1f1915339b9
 
 	if (read_res < 0)
 		return read_res;
@@ -1931,12 +1510,9 @@ int incfs_process_new_hash_block(struct data_file *df,
 			hash_area_base, df->df_blockmap_off, df->df_size);
 		mutex_unlock(&bfc->bc_mutex);
 	}
-<<<<<<< HEAD
 	if (!error)
 		atomic_inc(&df->df_hash_blocks_written);
 
-=======
->>>>>>> a1f1915339b9
 	return error;
 }
 
@@ -1959,28 +1535,6 @@ static int process_blockmap_md(struct incfs_blockmap *bm,
 	return error;
 }
 
-<<<<<<< HEAD
-=======
-static int process_file_attr_md(struct incfs_file_attr *fa,
-				struct metadata_handler *handler)
-{
-	struct data_file *df = handler->context;
-	u16 attr_size = le16_to_cpu(fa->fa_size);
-
-	if (!df)
-		return -EFAULT;
-
-	if (attr_size > INCFS_MAX_FILE_ATTR_SIZE)
-		return -E2BIG;
-
-	df->n_attr.fa_value_offset = le64_to_cpu(fa->fa_offset);
-	df->n_attr.fa_value_size = attr_size;
-	df->n_attr.fa_crc = le32_to_cpu(fa->fa_crc);
-
-	return 0;
-}
-
->>>>>>> a1f1915339b9
 static int process_file_signature_md(struct incfs_file_signature *sg,
 				struct metadata_handler *handler)
 {
@@ -2012,11 +1566,7 @@ static int process_file_signature_md(struct incfs_file_signature *sg,
 		goto out;
 	}
 
-<<<<<<< HEAD
 	read = incfs_kread(df->df_backing_file_context, buf,
-=======
-	read = incfs_kread(df->df_backing_file_context->bc_file, buf,
->>>>>>> a1f1915339b9
 			   signature->sig_size, signature->sig_offset);
 	if (read < 0) {
 		error = read;
@@ -2060,7 +1610,6 @@ out:
 	return error;
 }
 
-<<<<<<< HEAD
 static int process_status_md(struct incfs_status *is,
 			     struct metadata_handler *handler)
 {
@@ -2106,19 +1655,13 @@ static int process_file_verity_signature_md(
 }
 
 static int incfs_scan_metadata_chain(struct data_file *df)
-=======
-int incfs_scan_metadata_chain(struct data_file *df)
->>>>>>> a1f1915339b9
 {
 	struct metadata_handler *handler = NULL;
 	int result = 0;
 	int records_count = 0;
 	int error = 0;
 	struct backing_file_context *bfc = NULL;
-<<<<<<< HEAD
 	int nondata_block_count;
-=======
->>>>>>> a1f1915339b9
 
 	if (!df || !df->df_backing_file_context)
 		return -EFAULT;
@@ -2129,7 +1672,6 @@ int incfs_scan_metadata_chain(struct data_file *df)
 	if (!handler)
 		return -ENOMEM;
 
-<<<<<<< HEAD
 	handler->md_record_offset = df->df_metadata_off;
 	handler->context = df;
 	handler->handle_blockmap = process_blockmap_md;
@@ -2137,22 +1679,6 @@ int incfs_scan_metadata_chain(struct data_file *df)
 	handler->handle_status = process_status_md;
 	handler->handle_verity_signature = process_file_verity_signature_md;
 
-=======
-	/* No writing to the backing file while it's being scanned. */
-	error = mutex_lock_interruptible(&bfc->bc_mutex);
-	if (error)
-		goto out;
-
-	/* Reading superblock */
-	handler->md_record_offset = df->df_metadata_off;
-	handler->context = df;
-	handler->handle_blockmap = process_blockmap_md;
-	handler->handle_file_attr = process_file_attr_md;
-	handler->handle_signature = process_file_signature_md;
-
-	pr_debug("incfs: Starting reading incfs-metadata records at offset %lld\n",
-		 handler->md_record_offset);
->>>>>>> a1f1915339b9
 	while (handler->md_record_offset > 0) {
 		error = incfs_read_next_metadata_record(bfc, handler);
 		if (error) {
@@ -2164,7 +1690,6 @@ int incfs_scan_metadata_chain(struct data_file *df)
 		records_count++;
 	}
 	if (error) {
-<<<<<<< HEAD
 		pr_warn("incfs: Error %d after reading %d incfs-metadata records.\n",
 			 -error, records_count);
 		result = error;
@@ -2173,23 +1698,10 @@ int incfs_scan_metadata_chain(struct data_file *df)
 
 	nondata_block_count = df->df_total_block_count -
 		df->df_data_block_count;
-=======
-		pr_debug("incfs: Error %d after reading %d incfs-metadata records.\n",
-			 -error, records_count);
-		result = error;
-	} else {
-		pr_debug("incfs: Finished reading %d incfs-metadata records.\n",
-			 records_count);
-		result = records_count;
-	}
-	mutex_unlock(&bfc->bc_mutex);
-
->>>>>>> a1f1915339b9
 	if (df->df_hash_tree) {
 		int hash_block_count = get_blocks_count_for_size(
 			df->df_hash_tree->hash_tree_area_size);
 
-<<<<<<< HEAD
 		/*
 		 * Files that were created with a hash tree have the hash tree
 		 * included in the block map, i.e. nondata_block_count ==
@@ -2204,15 +1716,6 @@ int incfs_scan_metadata_chain(struct data_file *df)
 		result = -EINVAL;
 	}
 
-=======
-		if (df->df_data_block_count + hash_block_count !=
-		    df->df_total_block_count)
-			result = -EINVAL;
-	} else if (df->df_data_block_count != df->df_total_block_count)
-		result = -EINVAL;
-
-out:
->>>>>>> a1f1915339b9
 	kfree(handler);
 	return result;
 }
@@ -2225,28 +1728,17 @@ bool incfs_fresh_pending_reads_exist(struct mount_info *mi, int last_number)
 {
 	bool result = false;
 
-<<<<<<< HEAD
 	spin_lock(&mi->pending_read_lock);
 	result = (mi->mi_last_pending_read_number > last_number) &&
 		(mi->mi_pending_reads_count > 0);
 	spin_unlock(&mi->pending_read_lock);
-=======
-	mutex_lock(&mi->mi_pending_reads_mutex);
-	result = (mi->mi_last_pending_read_number > last_number) &&
-		 (mi->mi_pending_reads_count > 0);
-	mutex_unlock(&mi->mi_pending_reads_mutex);
->>>>>>> a1f1915339b9
 	return result;
 }
 
 int incfs_collect_pending_reads(struct mount_info *mi, int sn_lowerbound,
 				struct incfs_pending_read_info *reads,
-<<<<<<< HEAD
 				struct incfs_pending_read_info2 *reads2,
 				int reads_size, int *new_max_sn)
-=======
-				int reads_size)
->>>>>>> a1f1915339b9
 {
 	int reported_reads = 0;
 	struct pending_read *entry = NULL;
@@ -2257,7 +1749,6 @@ int incfs_collect_pending_reads(struct mount_info *mi, int sn_lowerbound,
 	if (reads_size <= 0)
 		return 0;
 
-<<<<<<< HEAD
 	if (!incfs_fresh_pending_reads_exist(mi, sn_lowerbound))
 		return 0;
 
@@ -2288,35 +1779,13 @@ int incfs_collect_pending_reads(struct mount_info *mi, int sn_lowerbound,
 
 		if (entry->serial_number > *new_max_sn)
 			*new_max_sn = entry->serial_number;
-=======
-	mutex_lock(&mi->mi_pending_reads_mutex);
-
-	if (mi->mi_last_pending_read_number <= sn_lowerbound
-	    || mi->mi_pending_reads_count == 0)
-		goto unlock;
-
-	list_for_each_entry(entry, &mi->mi_reads_list_head, mi_reads_list) {
-		if (entry->serial_number <= sn_lowerbound)
-			continue;
-
-		reads[reported_reads].file_id = entry->file_id;
-		reads[reported_reads].block_index = entry->block_index;
-		reads[reported_reads].serial_number = entry->serial_number;
-		reads[reported_reads].timestamp_us = entry->timestamp_us;
-		/* reads[reported_reads].kind = INCFS_READ_KIND_PENDING; */
->>>>>>> a1f1915339b9
 
 		reported_reads++;
 		if (reported_reads >= reads_size)
 			break;
 	}
 
-<<<<<<< HEAD
 	rcu_read_unlock();
-=======
-unlock:
-	mutex_unlock(&mi->mi_pending_reads_mutex);
->>>>>>> a1f1915339b9
 
 	return reported_reads;
 }
@@ -2352,14 +1821,9 @@ int incfs_get_uncollected_logs_count(struct mount_info *mi,
 }
 
 int incfs_collect_logged_reads(struct mount_info *mi,
-<<<<<<< HEAD
 			       struct read_log_state *state,
 			       struct incfs_pending_read_info *reads,
 			       struct incfs_pending_read_info2 *reads2,
-=======
-			       struct read_log_state *reader_state,
-			       struct incfs_pending_read_info *reads,
->>>>>>> a1f1915339b9
 			       int reads_size)
 {
 	int dst_idx;
@@ -2370,24 +1834,15 @@ int incfs_collect_logged_reads(struct mount_info *mi,
 	head = &log->rl_head;
 	tail = &log->rl_tail;
 
-<<<<<<< HEAD
 	if (state->generation_id != head->generation_id) {
 		pr_debug("read ptr is wrong generation: %u/%u",
 			 state->generation_id, head->generation_id);
 
 		*state = (struct read_log_state){
-=======
-	if (reader_state->generation_id != head->generation_id) {
-		pr_debug("read ptr is wrong generation: %u/%u",
-			 reader_state->generation_id, head->generation_id);
-
-		*reader_state = (struct read_log_state){
->>>>>>> a1f1915339b9
 			.generation_id = head->generation_id,
 		};
 	}
 
-<<<<<<< HEAD
 	if (state->current_record_no < tail->current_record_no) {
 		pr_debug("read ptr is behind, moving: %u/%u -> %u/%u\n",
 			 (u32)state->next_offset,
@@ -2421,41 +1876,9 @@ int incfs_collect_logged_reads(struct mount_info *mi,
 					state->base_record.absolute_ts_us,
 				.uid = state->base_record.uid,
 			};
-=======
-	if (reader_state->current_record_no < tail->current_record_no) {
-		pr_debug("read ptr is behind, moving: %u/%u -> %u/%u\n",
-			 (u32)reader_state->next_offset,
-			 (u32)reader_state->current_pass_no,
-			 (u32)tail->next_offset, (u32)tail->current_pass_no);
-
-		*reader_state = *tail;
-	}
-
-	for (dst_idx = 0; dst_idx < reads_size; dst_idx++) {
-		if (reader_state->current_record_no == head->current_record_no)
-			break;
-
-		log_read_one_record(log, reader_state);
-
-		reads[dst_idx] = (struct incfs_pending_read_info){
-			.file_id = reader_state->base_record.file_id,
-			.block_index = reader_state->base_record.block_index,
-			.serial_number = reader_state->current_record_no,
-			.timestamp_us = reader_state->base_record.absolute_ts_us
-		};
->>>>>>> a1f1915339b9
 	}
 
 	spin_unlock(&log->rl_lock);
 	return dst_idx;
 }
 
-<<<<<<< HEAD
-=======
-bool incfs_equal_ranges(struct mem_range lhs, struct mem_range rhs)
-{
-	if (lhs.len != rhs.len)
-		return false;
-	return memcmp(lhs.data, rhs.data, lhs.len) == 0;
-}
->>>>>>> a1f1915339b9

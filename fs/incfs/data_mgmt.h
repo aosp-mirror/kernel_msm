@@ -10,43 +10,30 @@
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
-<<<<<<< HEAD
 #include <linux/rcupdate.h>
 #include <linux/completion.h>
 #include <linux/wait.h>
 #include <linux/zstd.h>
 #include <crypto/hash.h>
 #include <linux/rwsem.h>
-=======
-#include <linux/completion.h>
-#include <linux/wait.h>
-#include <crypto/hash.h>
->>>>>>> a1f1915339b9
 
 #include <uapi/linux/incrementalfs.h>
 
 #include "internal.h"
-<<<<<<< HEAD
 #include "pseudo_files.h"
-=======
->>>>>>> a1f1915339b9
 
 #define SEGMENTS_PER_FILE 3
 
 enum LOG_RECORD_TYPE {
 	FULL,
 	SAME_FILE,
-<<<<<<< HEAD
 	SAME_FILE_CLOSE_BLOCK,
 	SAME_FILE_CLOSE_BLOCK_SHORT,
-=======
->>>>>>> a1f1915339b9
 	SAME_FILE_NEXT_BLOCK,
 	SAME_FILE_NEXT_BLOCK_SHORT,
 };
 
 struct full_record {
-<<<<<<< HEAD
 	enum LOG_RECORD_TYPE type : 3; /* FULL */
 	u32 block_index : 29;
 	incfs_uuid_t file_id;
@@ -88,33 +75,6 @@ union log_record {
 	struct same_file same_file;
 	struct same_file_close_block same_file_close_block;
 	struct same_file_close_block_short same_file_close_block_short;
-=======
-	enum LOG_RECORD_TYPE type : 2; /* FULL */
-	u32 block_index : 30;
-	incfs_uuid_t file_id;
-	u64 absolute_ts_us;
-} __packed; /* 28 bytes */
-
-struct same_file_record {
-	enum LOG_RECORD_TYPE type : 2; /* SAME_FILE */
-	u32 block_index : 30;
-	u32 relative_ts_us; /* max 2^32 us ~= 1 hour (1:11:30) */
-} __packed; /* 12 bytes */
-
-struct same_file_next_block {
-	enum LOG_RECORD_TYPE type : 2; /* SAME_FILE_NEXT_BLOCK */
-	u32 relative_ts_us : 30; /* max 2^30 us ~= 15 min (17:50) */
-} __packed; /* 4 bytes */
-
-struct same_file_next_block_short {
-	enum LOG_RECORD_TYPE type : 2; /* SAME_FILE_NEXT_BLOCK_SHORT */
-	u16 relative_ts_us : 14; /* max 2^14 us ~= 16 ms */
-} __packed; /* 2 bytes */
-
-union log_record {
-	struct full_record full_record;
-	struct same_file_record same_file_record;
->>>>>>> a1f1915339b9
 	struct same_file_next_block same_file_next_block;
 	struct same_file_next_block_short same_file_next_block_short;
 };
@@ -161,13 +121,8 @@ struct mount_options {
 	unsigned int readahead_pages;
 	unsigned int read_log_pages;
 	unsigned int read_log_wakeup_count;
-<<<<<<< HEAD
 	bool report_uid;
 	char *sysfs_name;
-=======
-	bool no_backing_file_cache;
-	bool no_backing_file_readahead;
->>>>>>> a1f1915339b9
 };
 
 struct mount_info {
@@ -177,11 +132,8 @@ struct mount_info {
 
 	struct dentry *mi_index_dir;
 
-<<<<<<< HEAD
 	struct dentry *mi_incomplete_dir;
 
-=======
->>>>>>> a1f1915339b9
 	const struct cred *mi_owner;
 
 	struct mount_options mi_options;
@@ -195,21 +147,13 @@ struct mount_info {
 	wait_queue_head_t mi_pending_reads_notif_wq;
 
 	/*
-<<<<<<< HEAD
 	 * Protects - RCU safe:
-=======
-	 * Protects:
->>>>>>> a1f1915339b9
 	 *  - reads_list_head
 	 *  - mi_pending_reads_count
 	 *  - mi_last_pending_read_number
 	 *  - data_file_segment.reads_list_head
 	 */
-<<<<<<< HEAD
 	spinlock_t pending_read_lock;
-=======
-	struct mutex mi_pending_reads_mutex;
->>>>>>> a1f1915339b9
 
 	/* List of active pending_read objects */
 	struct list_head mi_reads_list_head;
@@ -226,7 +170,6 @@ struct mount_info {
 	/* Temporary buffer for read logger. */
 	struct read_log mi_log;
 
-<<<<<<< HEAD
 	/* SELinux needs special xattrs on our pseudo files */
 	struct mem_range pseudo_file_xattr[PSEUDO_FILE_COUNT];
 
@@ -288,13 +231,6 @@ struct mount_info {
 	 * time.
 	 */
 	u64 mi_reads_delayed_min_us;
-=======
-	void *log_xattr;
-	size_t log_xattr_size;
-
-	void *pending_read_xattr;
-	size_t pending_read_xattr_size;
->>>>>>> a1f1915339b9
 };
 
 struct data_file_block {
@@ -316,7 +252,6 @@ struct pending_read {
 
 	int serial_number;
 
-<<<<<<< HEAD
 	uid_t uid;
 
 	struct list_head mi_reads_list;
@@ -324,23 +259,13 @@ struct pending_read {
 	struct list_head segment_reads_list;
 
 	struct rcu_head rcu;
-=======
-	struct list_head mi_reads_list;
-
-	struct list_head segment_reads_list;
->>>>>>> a1f1915339b9
 };
 
 struct data_file_segment {
 	wait_queue_head_t new_data_arrival_wq;
 
 	/* Protects reads and writes from the blockmap */
-<<<<<<< HEAD
 	struct rw_semaphore rwsem;
-=======
-	/* Good candidate for read/write mutex */
-	struct mutex blockmap_mutex;
->>>>>>> a1f1915339b9
 
 	/* List of active pending_read objects belonging to this segment */
 	/* Protected by mount_info.pending_reads_mutex */
@@ -390,7 +315,6 @@ struct data_file {
 	/* Total number of blocks, data + hash */
 	int df_total_block_count;
 
-<<<<<<< HEAD
 	/* For mapped files, the offset into the actual file */
 	loff_t df_mapped_offset;
 
@@ -435,13 +359,6 @@ struct data_file {
 	struct mem_range df_verity_file_digest;
 
 	struct incfs_df_verity_signature *df_verity_signature;
-=======
-	struct file_attr n_attr;
-
-	struct mtree *df_hash_tree;
-
-	struct incfs_df_signature *df_signature;
->>>>>>> a1f1915339b9
 };
 
 struct dir_file {
@@ -464,7 +381,6 @@ struct dentry_info {
 	struct path backing_path;
 };
 
-<<<<<<< HEAD
 enum FILL_PERMISSION {
 	CANT_FILL = 0,
 	CAN_FILL = 1,
@@ -482,8 +398,6 @@ struct incfs_file_data {
 	int fd_filled_hash_blocks;
 };
 
-=======
->>>>>>> a1f1915339b9
 struct mount_info *incfs_alloc_mount_info(struct super_block *sb,
 					  struct mount_options *options,
 					  struct path *backing_dir_path);
@@ -493,7 +407,6 @@ int incfs_realloc_mount_info(struct mount_info *mi,
 
 void incfs_free_mount_info(struct mount_info *mi);
 
-<<<<<<< HEAD
 char *file_id_to_str(incfs_uuid_t id);
 struct dentry *incfs_lookup_dentry(struct dentry *parent, const char *name);
 struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf);
@@ -517,21 +430,6 @@ ssize_t incfs_read_merkle_tree_blocks(struct mem_range dst,
 
 int incfs_get_filled_blocks(struct data_file *df,
 			    struct incfs_file_data *fd,
-=======
-struct data_file *incfs_open_data_file(struct mount_info *mi, struct file *bf);
-void incfs_free_data_file(struct data_file *df);
-
-int incfs_scan_metadata_chain(struct data_file *df);
-
-struct dir_file *incfs_open_dir_file(struct mount_info *mi, struct file *bf);
-void incfs_free_dir_file(struct dir_file *dir);
-
-ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
-				   int index, int timeout_ms,
-				   struct mem_range tmp);
-
-int incfs_get_filled_blocks(struct data_file *df,
->>>>>>> a1f1915339b9
 			    struct incfs_get_filled_blocks_args *arg);
 
 int incfs_read_file_signature(struct data_file *df, struct mem_range dst);
@@ -551,20 +449,13 @@ bool incfs_fresh_pending_reads_exist(struct mount_info *mi, int last_number);
  */
 int incfs_collect_pending_reads(struct mount_info *mi, int sn_lowerbound,
 				struct incfs_pending_read_info *reads,
-<<<<<<< HEAD
 				struct incfs_pending_read_info2 *reads2,
 				int reads_size, int *new_max_sn);
-=======
-				int reads_size);
->>>>>>> a1f1915339b9
 
 int incfs_collect_logged_reads(struct mount_info *mi,
 			       struct read_log_state *start_state,
 			       struct incfs_pending_read_info *reads,
-<<<<<<< HEAD
 			       struct incfs_pending_read_info2 *reads2,
-=======
->>>>>>> a1f1915339b9
 			       int reads_size);
 struct read_log_state incfs_get_log_state(struct mount_info *mi);
 int incfs_get_uncollected_logs_count(struct mount_info *mi,
@@ -575,11 +466,7 @@ static inline struct inode_info *get_incfs_node(struct inode *inode)
 	if (!inode)
 		return NULL;
 
-<<<<<<< HEAD
 	if (inode->i_sb->s_magic != INCFS_MAGIC_NUMBER) {
-=======
-	if (inode->i_sb->s_magic != (long) INCFS_MAGIC_NUMBER) {
->>>>>>> a1f1915339b9
 		/* This inode doesn't belong to us. */
 		pr_warn_once("incfs: %s on an alien inode.", __func__);
 		return NULL;
@@ -653,9 +540,4 @@ static inline int get_blocks_count_for_size(u64 size)
 	return 1 + (size - 1) / INCFS_DATA_FILE_BLOCK_SIZE;
 }
 
-<<<<<<< HEAD
-=======
-bool incfs_equal_ranges(struct mem_range lhs, struct mem_range rhs);
-
->>>>>>> a1f1915339b9
 #endif /* _INCFS_DATA_MGMT_H */
