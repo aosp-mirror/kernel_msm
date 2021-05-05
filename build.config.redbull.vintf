@@ -9,7 +9,6 @@ KMI_SYMBOL_LIST_ADD_ONLY=1
 TRIM_NONLISTED_KMI=1
 KMI_SYMBOL_LIST_STRICT_MODE=1
 KMI_ENFORCED=1
-MODULES_BLOCKLIST=${KERNEL_DIR}/modules.blocklist.redbull.vintf
 
 function update_config() {
   # Disable debugfs
