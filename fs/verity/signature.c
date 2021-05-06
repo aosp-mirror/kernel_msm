@@ -61,7 +61,7 @@ int fsverity_verify_signature(const struct fsverity_info *vi,
  * Return: 0 on success (signature valid or not required); -errno on failure
  */
 int __fsverity_verify_signature(const struct inode *inode, const u8 *signature,
-				size_t sig_size, const u8 *file_digest,
+				u32 sig_size, const u8 *file_digest,
 				unsigned int digest_algorithm)
 {
 	struct fsverity_formatted_digest *d;
