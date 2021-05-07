@@ -41,6 +41,7 @@
   bus_for_each_dev
   bus_register
   bus_unregister
+  call_rcu
   cancel_delayed_work
   cancel_delayed_work_sync
   cancel_work_sync
@@ -107,8 +108,10 @@
   cpu_subsys
   crypto_alloc_shash
   crypto_destroy_tfm
+  crypto_register_alg
   crypto_shash_digest
   crypto_shash_setkey
+  crypto_unregister_alg
   _ctype
   delayed_work_timer_fn
   del_timer
@@ -504,6 +507,7 @@
   module_put
   __msecs_to_jiffies
   msleep
+  msleep_interruptible
   __mutex_init
   mutex_lock
   mutex_lock_interruptible
@@ -1349,25 +1353,34 @@
   i2c_put_dma_safe_msg_buf
 
 # required by incrementalfs.ko
+  __audit_inode_child
   __break_lease
   clear_inode
   __close_fd
-  crc32_le
   d_add
+  d_delete
   d_drop
   deactivate_locked_super
   dentry_open
   dget_parent
   d_instantiate
   d_make_root
+  down_read_killable
+  down_write_killable
   dput
+  filemap_fault
+  filemap_map_pages
+  filemap_page_mkwrite
   flush_dcache_page
   fs_kobj
+  fsnotify
+  __fsnotify_parent
   fsstack_copy_attr_all
+  __fsverity_verify_signature
   generic_file_llseek
-  generic_file_mmap
   generic_file_read_iter
   generic_file_splice_read
+  generic_fillattr
   generic_read_dir
   generic_shutdown_super
   get_zeroed_page
@@ -1375,32 +1388,40 @@
   ihold
   inode_init_once
   inode_init_owner
+  inode_set_flags
   iput
   iterate_dir
   kernel_read
   kernel_write
   kern_path
+  kobject_add
+  kobject_init
+  kobj_sysfs_ops
   __ll_sc___cmpxchg_case_rel_8
   lockref_get
   lock_rename
   lookup_one_len
   LZ4_decompress_safe
   match_int
+  match_strdup
   match_token
+  memchr_inv
   noop_llseek
   notify_change
+  override_creds
   pagecache_get_page
   path_get
   path_put
   __put_cred
   register_filesystem
+  revert_creds
   set_anon_super
   sget
-  simple_getattr
   simple_setattr
   simple_statfs
   strndup_user
   sync_filesystem
+  touch_atime
   truncate_inode_pages
   unlock_new_inode
   unlock_page
@@ -1409,6 +1430,7 @@
   user_path_at_empty
   vfs_create
   vfs_fallocate
+  vfs_fsync
   vfs_getattr
   vfs_getxattr
   vfs_link
@@ -1417,6 +1439,7 @@
   vfs_rename
   vfs_rmdir
   vfs_setxattr
+  vfs_truncate
   vfs_unlink
 
 # required by ion-alloc.ko
@@ -2072,10 +2095,8 @@
   crypto_init_queue
   crypto_register_aead
   crypto_register_ahash
-  crypto_register_alg
   crypto_unregister_aead
   crypto_unregister_ahash
-  crypto_unregister_alg
   des_ekey
   llist_add_batch
   scatterwalk_ffwd
@@ -2219,7 +2240,6 @@
 # required by sctp.ko
   __bitmap_shift_right
   __bitmap_weight
-  call_rcu
   compat_ip_getsockopt
   compat_ip_setsockopt
   compat_ipv6_getsockopt
@@ -2626,7 +2646,6 @@
   iommu_iova_to_phys
   irq_set_affinity_hint
   mac_pton
-  msleep_interruptible
   netif_tx_stop_all_queues
   netlink_broadcast
   __netlink_kernel_create
@@ -2683,17 +2702,20 @@
   xhci_run
   xhci_suspend
 
-# preserved by --additions-only
+# required by zstd.ko
   crypto_register_scomp
   crypto_unregister_scomp
-  down_read_killable
-  down_write_killable
+
+# preserved by --additions-only
+  crc32_le
+  generic_file_mmap
   regcache_drop_region
   regmap_async_complete
   regmap_multi_reg_write_bypassed
   regmap_raw_write
   regmap_raw_write_async
   regulator_bulk_enable
+  simple_getattr
   snd_compr_stop_error
   snd_pcm_format_physical_width
   snd_soc_component_disable_pin
@@ -2704,4 +2726,3 @@
   snd_soc_info_volsw_range
   snd_soc_put_enum_double
   snd_soc_put_volsw_range
-  vfs_fsync
