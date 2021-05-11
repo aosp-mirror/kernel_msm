@@ -4154,6 +4154,12 @@ static inline bool f2fs_may_encrypt(struct inode *dir, struct inode *inode)
 	return false;
 }
 
+static inline bool f2fs_inode_uses_fs_layer_crypto(struct inode *inode)
+{
+	return (f2fs_encrypted_file(inode) &&
+			!fscrypt_using_hardware_encryption(inode));
+}
+
 static inline bool f2fs_may_encrypt_bio(struct inode *inode,
 		struct f2fs_io_info *fio)
 {
@@ -4220,8 +4226,7 @@ static inline bool f2fs_force_buffered_io(struct inode *inode,
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	int rw = iov_iter_rw(iter);
 
-	if ((f2fs_encrypted_file(inode) &&
-			!fscrypt_using_hardware_encryption(inode)))
+	if (f2fs_inode_uses_fs_layer_crypto(inode))
 		return true;
 	if (f2fs_compressed_file(inode))
 		return true;
