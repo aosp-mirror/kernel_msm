@@ -129,5 +129,4 @@
 	qcom,typec-legacy-rp-icl;
 	qcom,otg-cl-ua = <1500000>;
 	ext-vbus-supply = <&ext_5v_boost>;
-	qcom,lpd-disable;
 };
