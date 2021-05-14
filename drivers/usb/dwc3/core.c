@@ -1006,8 +1006,15 @@ int dwc3_core_init(struct dwc3 *dwc)
 		if (dwc->dis_tx_ipgap_linecheck_quirk)
 			reg |= DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS;
 
-		if (dwc->parkmode_disable_ss_quirk)
+		/*
+		 * STAR: 9001415732: Host failure when Park mode is enabled:
+		 * Disable parkmode for Gen1 controllers to fix the stall
+		 * seen during host mode transfers on multiple endpoints.
+		 */
+		if (!dwc3_is_usb31(dwc)) {
 			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_SS;
+			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_FSLS;
+		}
 
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
 	}
@@ -1325,8 +1332,6 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 				"snps,dis-del-phy-power-chg-quirk");
 	dwc->dis_tx_ipgap_linecheck_quirk = device_property_read_bool(dev,
 				"snps,dis-tx-ipgap-linecheck-quirk");
-	dwc->parkmode_disable_ss_quirk = device_property_read_bool(dev,
-				"snps,parkmode-disable-ss-quirk");
 
 	dwc->tx_de_emphasis_quirk = device_property_read_bool(dev,
 				"snps,tx_de_emphasis_quirk");
@@ -1637,6 +1642,8 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	ipc_log_context_destroy(dwc->dwc_ipc_log_ctxt);
 	dwc->dwc_ipc_log_ctxt = NULL;
+	ipc_log_context_destroy(dwc->dwc_dma_ipc_log_ctxt);
+	dwc->dwc_dma_ipc_log_ctxt = NULL;
 	count--;
 	dwc3_instance[dwc->index] = NULL;
 
@@ -1776,7 +1783,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		if (PMSG_IS_AUTO(msg))
 			break;
 
-		ret = dwc3_core_init(dwc);
+		ret = dwc3_core_init_for_resume(dwc);
 		if (ret)
 			return ret;
 
@@ -1921,7 +1928,7 @@ static int dwc3_resume(struct device *dev)
 		 * which is now out of LPM. This allows runtime_suspend later.
 		 */
 		if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST &&
-		    dwc->host_poweroff_in_pm_suspend)
+		    dwc->ignore_wakeup_src_in_hostmode)
 			goto runtime_set_active;
 
 		return 0;

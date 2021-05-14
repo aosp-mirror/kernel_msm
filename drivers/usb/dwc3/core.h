@@ -267,6 +267,11 @@
 #define DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS	BIT(28)
 #define DWC3_GUCTL1_DEV_L1_EXIT_BY_HW	BIT(24)
 #define DWC3_GUCTL1_IP_GAP_ADD_ON(n)	(n << 21)
+
+#define DWC3_GUCTL1_PARKMODE_DISABLE_SS		BIT(17)
+#define DWC3_GUCTL1_PARKMODE_DISABLE_HS		BIT(16)
+#define DWC3_GUCTL1_PARKMODE_DISABLE_FSLS	BIT(15)
+
 #define DWC3_GUCTL1_L1_SUSP_THRLD_EN_FOR_HOST	BIT(8)
 
 /* Global Status Register */
@@ -298,6 +303,7 @@
 
 /* Global USB2 PHY Vendor Control Register */
 #define DWC3_GUSB2PHYACC_NEWREGREQ	BIT(25)
+#define DWC3_GUSB2PHYACC_DONE		BIT(24)
 #define DWC3_GUSB2PHYACC_BUSY		BIT(23)
 #define DWC3_GUSB2PHYACC_WRITE		BIT(22)
 #define DWC3_GUSB2PHYACC_ADDR(n)	(n << 16)
@@ -328,6 +334,10 @@
 #define DWC31_GTXFIFOSIZ_TXFDEF(n)	((n) & 0x7fff)	/* DWC_usb31 only */
 #define DWC3_GTXFIFOSIZ_TXFDEF(n)	((n) & 0xffff)
 #define DWC3_GTXFIFOSIZ_TXFSTADDR(n)	((n) & 0xffff0000)
+
+/* Global RX Fifo Size Register */
+#define DWC31_GRXFIFOSIZ_RXFDEP(n)	((n) & 0x7fff)	/* DWC_usb31 only */
+#define DWC3_GRXFIFOSIZ_RXFDEP(n)	((n) & 0xffff)
 
 /* Global Event Size Registers */
 #define DWC3_GEVNTSIZ_INTMASK		BIT(31)
@@ -824,6 +834,13 @@ enum dwc3_link_state {
 	DWC3_LINK_STATE_RESET		= 0x0e,
 	DWC3_LINK_STATE_RESUME		= 0x0f,
 	DWC3_LINK_STATE_MASK		= 0x0f,
+};
+
+enum gadget_state {
+	DWC3_GADGET_INACTIVE,
+	DWC3_GADGET_SOFT_CONN,
+	DWC3_GADGET_CABLE_CONN,
+	DWC3_GADGET_ACTIVE,
 };
 
 /* TRB Length, PCM and Status */
@@ -1347,6 +1364,7 @@ struct dwc3 {
 	unsigned int		irq_event_count[MAX_INTR_STATS];
 	unsigned int		irq_dbg_index;
 
+	enum gadget_state	gadget_state;
 	/* Indicate if the gadget was powered by the otg driver */
 	unsigned int		vbus_active:1;
 	/* Indicate if software connect was issued by the usb_gadget_driver */
@@ -1356,7 +1374,7 @@ struct dwc3 {
 	 * and core will power collapse. This also leads to reset-resume of
 	 * connected devices on PM resume.
 	 */
-	bool			host_poweroff_in_pm_suspend;
+	bool			ignore_wakeup_src_in_hostmode;
 	int			retries_on_error;
 	/*  If true, GDSC collapse will happen in HOST mode bus suspend */
 	bool			gdsc_collapse_in_host_suspend;

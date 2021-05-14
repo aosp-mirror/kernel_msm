@@ -191,6 +191,9 @@ config USB_RNDIS
 config USB_F_RNDIS
 	tristate
 
+config USB_F_QCRNDIS
+	tristate
+
 config USB_F_MASS_STORAGE
 	tristate
 
@@ -247,6 +250,9 @@ config USB_F_MTP
 
 config USB_F_PTP
 	tristate
+
+config USB_F_RMNET_BAM
+        tristate
 
 # this first set of drivers all depend on bulk-capable hardware.
 
@@ -305,6 +311,7 @@ config USB_CONFIGFS_NCM
 	depends on NET
 	select USB_U_ETHER
 	select USB_F_NCM
+	select CRC32
 	help
 	  NCM is an advanced protocol for Ethernet encapsulation, allows
 	  grouping of several ethernet frames into one USB transfer and
@@ -332,6 +339,15 @@ config USB_CONFIGFS_ECM_SUBSET
 	  On hardware that can't implement the full protocol,
 	  a simple CDC subset is used, placing fewer demands on USB.
 
+config USB_CONFIGFS_QCRNDIS
+	bool "QCRNDIS"
+	depends on USB_CONFIGFS
+	depends on NET
+	depends on RNDIS_IPA
+	select USB_U_ETHER
+	select USB_RNDIS
+	select USB_F_QCRNDIS
+
 config USB_CONFIGFS_RNDIS
 	bool "RNDIS"
 	depends on USB_CONFIGFS
@@ -349,12 +365,25 @@ config USB_CONFIGFS_RNDIS
 	   XP, you'll need to download drivers from Microsoft's website; a URL
 	   is given in comments found in that info file.
 
+config USB_CONFIGFS_RMNET_BAM
+	bool "RMNET_BAM"
+	depends on USB_CONFIGFS
+	select USB_F_RMNET_BAM
+	help
+	   RmNet interface is a new logical device in QMI framework for data
+	   services. RmNet in accordance with QMI architecture uses Data I/O
+	   channel for IP data transfer and control I/O channel for QMI
+	   messaging (functionality similar to AT commands).
+	   RmNet interface is an alternative to standard CDC-ECM and windows
+	   RNDIS.
+
 config USB_CONFIGFS_EEM
 	bool "Ethernet Emulation Model (EEM)"
 	depends on USB_CONFIGFS
 	depends on NET
 	select USB_U_ETHER
 	select USB_F_EEM
+	select CRC32
 	help
 	  CDC EEM is a newer USB standard that is somewhat simpler than CDC ECM
 	  and therefore can be supported by more hardware.  Technically ECM and

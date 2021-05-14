@@ -94,6 +94,9 @@ struct task_struct init_task
 #ifdef CONFIG_CGROUP_SCHED
 	.sched_task_group = &root_task_group,
 #endif
+#ifdef CONFIG_SCHED_TUNE
+	.stune_idx	= 0,
+#endif
 	.ptraced	= LIST_HEAD_INIT(init_task.ptraced),
 	.ptrace_entry	= LIST_HEAD_INIT(init_task.ptrace_entry),
 	.real_parent	= &init_task,
@@ -170,7 +173,8 @@ struct task_struct init_task
 	.lockdep_recursion = 0,
 #endif
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
-	.ret_stack	= NULL,
+	.ret_stack		= NULL,
+	.tracing_graph_pause	= ATOMIC_INIT(0),
 #endif
 #if defined(CONFIG_TRACING) && defined(CONFIG_PREEMPT)
 	.trace_recursion = 0,

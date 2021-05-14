@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2012,2017-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012,2017-2018,2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _LINUX_CORESIGHT_H

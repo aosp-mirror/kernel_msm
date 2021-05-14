@@ -176,6 +176,7 @@ struct npu_reg {
  */
 struct npu_pwrctrl {
 	int32_t pwr_vote_num;
+	int32_t pwr_vote_num_sysfs;
 
 	struct npu_pwrlevel pwrlevels[NPU_MAX_PWRLEVELS];
 	uint32_t active_pwrlevel;
@@ -287,6 +288,7 @@ struct npu_device {
 	struct llcc_slice_desc *sys_cache;
 	uint32_t execute_v2_flag;
 	bool cxlimit_registered;
+	bool npu_dsp_sid_mapped;
 
 	uint32_t hw_version;
 };

@@ -22,6 +22,8 @@
 #include "smblite-lib.h"
 #include "schgm-flashlite.h"
 
+static struct power_supply_desc usb_psy_desc;
+
 static struct smb_params smblite_params = {
 	.fcc			= {
 		.name   = "fast charge current",
@@ -382,6 +384,8 @@ static enum power_supply_property smblite_usb_props[] = {
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_CONNECTOR_TYPE,
 	POWER_SUPPLY_PROP_SCOPE,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 };
 
 static int smblite_usb_get_prop(struct power_supply *psy,
@@ -433,8 +437,11 @@ static int smblite_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SCOPE:
 		rc = smblite_lib_get_prop_scope(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_FLASH_TRIGGER:
-		rc = schgm_flashlite_get_vreg_ok(chg, &val->intval);
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = get_effective_result_locked(chg->usb_icl_votable);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = 5000000;
 		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
@@ -448,6 +455,20 @@ static int smblite_usb_get_prop(struct power_supply *psy,
 	}
 
 	return 0;
+}
+
+void smblite_update_usb_desc(struct smb_charger *chg)
+{
+	switch (chg->real_charger_type) {
+	case POWER_SUPPLY_TYPE_USB_CDP:
+	case POWER_SUPPLY_TYPE_USB_DCP:
+	case POWER_SUPPLY_TYPE_USB:
+		usb_psy_desc.type = chg->real_charger_type;
+		break;
+	default:
+		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB;
+		break;
+	}
 }
 
 #define MIN_THERMAL_VOTE_UA	500000
@@ -489,7 +510,7 @@ static int smblite_usb_prop_is_writeable(struct power_supply *psy,
 	return rc;
 }
 
-static const struct power_supply_desc usb_psy_desc = {
+static struct power_supply_desc usb_psy_desc = {
 	.name = "usb",
 	.type = POWER_SUPPLY_TYPE_USB,
 	.properties = smblite_usb_props,
@@ -530,6 +551,7 @@ static enum power_supply_property smblite_usb_main_props[] = {
 	POWER_SUPPLY_PROP_FCC_DELTA,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_FLASH_TRIGGER,
+	POWER_SUPPLY_PROP_FLASH_ACTIVE,
 };
 
 static int smblite_usb_main_get_prop(struct power_supply *psy,
@@ -564,6 +586,12 @@ static int smblite_usb_main_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblite_lib_get_icl_current(chg, &val->intval);
 		break;
+	case POWER_SUPPLY_PROP_FLASH_TRIGGER:
+		rc = schgm_flashlite_get_vreg_ok(chg, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_FLASH_ACTIVE:
+		val->intval = chg->flash_active;
+		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
 		rc = -EINVAL;
@@ -581,7 +609,8 @@ static int smblite_usb_main_set_prop(struct power_supply *psy,
 {
 	struct smblite *chip = power_supply_get_drvdata(psy);
 	struct smb_charger *chg = &chip->chg;
-	int rc = 0;
+	int rc = 0, icl_ua;
+	union power_supply_propval pval = {0, };
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
@@ -594,6 +623,37 @@ static int smblite_usb_main_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		rc = smblite_lib_set_icl_current(chg, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_FLASH_ACTIVE:
+		if (chg->flash_active != val->intval) {
+			chg->flash_active = val->intval;
+
+			rc = smblite_lib_get_prop_usb_present(chg, &pval);
+			if (rc < 0)
+				pr_err("Failed to get USB present status rc=%d\n",
+						rc);
+			if (!pval.intval) {
+				/* vote 100ma when usb is not present*/
+				vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER,
+							true, USBIN_100UA);
+			} else if (chg->flash_active) {
+				icl_ua = get_effective_result_locked(
+						chg->usb_icl_votable);
+				if (icl_ua >= USBIN_400UA) {
+					vote(chg->usb_icl_votable,
+						FLASH_ACTIVE_VOTER,
+						true, icl_ua - USBIN_300UA);
+				}
+			} else {
+				vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER,
+							false, 0);
+			}
+			pr_debug("flash_active=%d usb_present=%d icl=%d\n",
+				chg->flash_active, pval.intval,
+				get_effective_result_locked(
+				chg->usb_icl_votable));
+
+		}
 		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
@@ -676,6 +736,8 @@ static enum power_supply_property smblite_batt_props[] = {
 	POWER_SUPPLY_PROP_CYCLE_COUNT,
 	POWER_SUPPLY_PROP_RECHARGE_SOC,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_FORCE_RECHARGE,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMITED,
@@ -778,6 +840,14 @@ static int smblite_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		rc = smblite_lib_get_prop_from_bms(chg,
 				POWER_SUPPLY_PROP_CHARGE_FULL, val);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		rc = smblite_lib_get_prop_from_bms(chg,
+				POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN, val);
+		break;
+	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
+		rc = smblite_lib_get_prop_from_bms(chg,
+				POWER_SUPPLY_PROP_TIME_TO_FULL_NOW, val);
 		break;
 	case POWER_SUPPLY_PROP_FORCE_RECHARGE:
 		val->intval = 0;
@@ -972,7 +1042,8 @@ static int smblite_configure_typec(struct smb_charger *chg)
 	}
 
 	rc = smblite_lib_masked_write(chg, TYPE_C_MODE_CFG_REG,
-					EN_SNK_ONLY_BIT, 0);
+					EN_TRY_SNK_BIT | EN_SNK_ONLY_BIT,
+					EN_TRY_SNK_BIT);
 	if (rc < 0) {
 		dev_err(chg->dev,
 			"Couldn't configure TYPE_C_MODE_CFG_REG rc=%d\n",
@@ -1305,9 +1376,11 @@ static int smblite_init_hw(struct smblite *chip)
 	}
 
 	/* enable WD BARK and enable it on plugin */
-	val = WDOG_TIMER_EN_ON_PLUGIN_BIT | BARK_WDOG_INT_EN_BIT
+	mask = WDOG_TIMER_EN_ON_PLUGIN_BIT | BARK_WDOG_INT_EN_BIT
 		| BITE_WDOG_DISABLE_CHARGING_CFG_BIT | WDOG_TIMER_EN_BIT;
-	rc = smblite_lib_masked_write(chg, WD_CFG_REG, val, val);
+	val = WDOG_TIMER_EN_ON_PLUGIN_BIT | BARK_WDOG_INT_EN_BIT
+		| BITE_WDOG_DISABLE_CHARGING_CFG_BIT;
+	rc = smblite_lib_masked_write(chg, WD_CFG_REG, mask, val);
 	if (rc < 0) {
 		pr_err("Couldn't configue WD config rc=%d\n", rc);
 		return rc;
@@ -1389,6 +1462,8 @@ static int smblite_post_init(struct smblite *chip)
 			return rc;
 		}
 	}
+
+	rerun_election(chg->temp_change_irq_disable_votable);
 
 	return 0;
 }

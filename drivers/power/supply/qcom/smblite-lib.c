@@ -191,6 +191,7 @@ static void smblite_lib_notify_device_mode(struct smb_charger *chg, bool enable)
 	extcon_set_state_sync(chg->extcon, EXTCON_USB, enable);
 }
 
+#define VBOOST_5P00V	0x03
 static void smblite_lib_notify_usb_host(struct smb_charger *chg, bool enable)
 {
 	int rc = 0;
@@ -208,7 +209,13 @@ static void smblite_lib_notify_usb_host(struct smb_charger *chg, bool enable)
 				"Couldn't enable VBUS in OTG mode rc=%d\n", rc);
 			return;
 		}
-
+		rc = smblite_lib_masked_write(chg, DCDC_BST_VREG_SEL,
+					VBOOST_MASK, VBOOST_5P00V);
+		if (rc < 0) {
+			smblite_lib_err(chg,
+				"Couldn't write BST_VREG_SEL rc=%d\n", rc);
+			return;
+		}
 		smblite_lib_notify_extcon_props(chg, EXTCON_USB_HOST);
 	} else {
 		smblite_lib_dbg(chg, PR_OTG, "disabling VBUS in OTG mode\n");
@@ -371,6 +378,7 @@ static void smblite_lib_update_usb_type(struct smb_charger *chg,
 					enum power_supply_type type)
 {
 	chg->real_charger_type = type;
+	smblite_update_usb_desc(chg);
 }
 
 static int smblite_lib_notifier_call(struct notifier_block *nb,
@@ -432,7 +440,8 @@ static void smblite_lib_uusb_removal(struct smb_charger *chg)
 	vote(chg->pl_enable_votable_indirect, USBIN_I_VOTER, false, 0);
 	vote(chg->pl_enable_votable_indirect, USBIN_V_VOTER, false, 0);
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-			is_flashlite_active(chg) ? USBIN_500UA : USBIN_100UA);
+			is_flashlite_active(chg) ? USBIN_200UA : USBIN_100UA);
+	vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, false, 0);
 
 	/* Remove SW thermal regulation votes */
 	vote(chg->usb_icl_votable, SW_THERM_REGULATION_VOTER, false, 0);
@@ -459,8 +468,10 @@ void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
 	}
 	if (chg->suspend_input_on_debug_batt) {
 		vote(chg->usb_icl_votable, DEBUG_BOARD_VOTER, val.intval, 0);
-		if (val.intval)
+		if (val.intval) {
 			pr_info("Input suspended: Fake battery\n");
+			schgm_flashlite_config_usbin_collapse(chg, false);
+		}
 	} else {
 		vote(chg->chg_disable_votable, DEBUG_BOARD_VOTER,
 					val.intval, 0);
@@ -483,19 +494,18 @@ static int set_sdp_current(struct smb_charger *chg, int icl_ua)
 	case USBIN_500UA:
 		icl_options = USB51_MODE_BIT;
 		break;
-	/* USB900 mode is not present use ICL configuration register */
-	case USBIN_900UA:
+	default:
+		/* Use ICL configuration register for HC_MODE*/
 		icl_override = SW_OVERRIDE_HC_MODE;
 		icl_options = USBIN_MODE_CHG_BIT;
-		rc = smblite_lib_set_charge_param(chg, &chg->param.usb_icl,
-						USBIN_900UA);
-		if (rc < 0) {
-			smblite_lib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
-			return rc;
-		}
 		break;
-	default:
-		return -EINVAL;
+	}
+
+	rc = smblite_lib_set_charge_param(chg, &chg->param.usb_icl,
+						icl_ua);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't set HC ICL rc=%d\n", rc);
+		return rc;
 	}
 
 	rc = smblite_lib_masked_write(chg,
@@ -655,6 +665,30 @@ static int smblite_lib_icl_irq_disable_vote_callback(struct votable *votable,
 	}
 
 	chg->irq_info[USBIN_ICL_CHANGE_IRQ].enabled = !disable;
+
+	return 0;
+}
+
+static int smblite_lib_temp_change_irq_disable_vote_callback(
+		struct votable *votable, void *data,
+		int disable, const char *client)
+{
+	struct smb_charger *chg = data;
+
+	if (!chg->irq_info[TEMP_CHANGE_IRQ].irq)
+		return 0;
+
+	if (chg->irq_info[TEMP_CHANGE_IRQ].enabled && disable) {
+		if (chg->irq_info[TEMP_CHANGE_IRQ].wake)
+			disable_irq_wake(chg->irq_info[TEMP_CHANGE_IRQ].irq);
+		disable_irq_nosync(chg->irq_info[TEMP_CHANGE_IRQ].irq);
+	} else if (!chg->irq_info[TEMP_CHANGE_IRQ].enabled && !disable) {
+		enable_irq(chg->irq_info[TEMP_CHANGE_IRQ].irq);
+		if (chg->irq_info[TEMP_CHANGE_IRQ].wake)
+			enable_irq_wake(chg->irq_info[TEMP_CHANGE_IRQ].irq);
+	}
+
+	chg->irq_info[TEMP_CHANGE_IRQ].enabled = !disable;
 
 	return 0;
 }
@@ -1593,6 +1627,14 @@ int smblite_lib_set_prop_current_max(struct smb_charger *chg,
 	if (chg->real_charger_type != POWER_SUPPLY_TYPE_USB)
 		return 0;
 
+	if (is_flashlite_active(chg) && (val->intval >= USBIN_400UA)) {
+		/* For Uusb based SDP port */
+		vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, true,
+				val->intval - USBIN_300UA);
+		smblite_lib_dbg(chg, PR_MISC, "flash_active = 1, ICL set to  %d\n",
+						val->intval - USBIN_300UA);
+	}
+
 	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, val->intval);
 	if (rc < 0) {
 		pr_err("Couldn't vote ICL USB_PSY_VOTER rc=%d\n", rc);
@@ -1606,8 +1648,9 @@ int smblite_lib_set_prop_current_max(struct smb_charger *chg,
 	}
 
 	/* Update TypeC Rp based current */
-	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_TYPEC)
+	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_TYPEC) {
 		update_sw_icl_max(chg, chg->real_charger_type);
+	}
 
 	return 0;
 }
@@ -2072,14 +2115,116 @@ irqreturn_t smblite_icl_change_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int smblite_lib_role_switch_failure(struct smb_charger *chg)
+{
+	int rc = 0;
+	union power_supply_propval pval = {0, };
+
+	rc = smblite_lib_get_prop_usb_present(chg, &pval);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't get usb presence status rc=%d\n",
+					rc);
+		return rc;
+	}
+
+	/*
+	 * When role switch fails notify the
+	 * current charger state to usb driver.
+	 */
+	if (pval.intval) {
+		smblite_lib_dbg(chg, PR_MISC, "Role reversal failed, notifying device mode to usb driver.\n");
+		smblite_lib_notify_device_mode(chg, true);
+	}
+
+	return rc;
+}
+
+static int typec_partner_register(struct smb_charger *chg)
+{
+	int typec_mode, rc = 0;
+
+	mutex_lock(&chg->typec_lock);
+
+	if (!chg->typec_port || chg->pr_swap_in_progress)
+		goto unlock;
+
+	if (!chg->typec_partner) {
+		if (chg->sink_src_mode == AUDIO_ACCESS_MODE)
+			chg->typec_partner_desc.accessory =
+					TYPEC_ACCESSORY_AUDIO;
+		else
+			chg->typec_partner_desc.accessory =
+					TYPEC_ACCESSORY_NONE;
+
+		chg->typec_partner = typec_register_partner(chg->typec_port,
+				&chg->typec_partner_desc);
+		if (IS_ERR(chg->typec_partner)) {
+			rc = PTR_ERR(chg->typec_partner);
+			pr_err("Couldn't to register typec_partner rc=%d\n",
+								rc);
+			goto unlock;
+		}
+	}
+
+	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
+		goto unlock;
+
+	typec_mode = smblite_lib_get_prop_typec_mode(chg);
+
+	if (typec_mode >= POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
+			|| typec_mode == POWER_SUPPLY_TYPEC_NONE) {
+		if (chg->typec_role_swap_failed) {
+			rc = smblite_lib_role_switch_failure(chg);
+			if (rc < 0)
+				smblite_lib_err(chg, "Failed to role switch rc=%d\n",
+								rc);
+			chg->typec_role_swap_failed = false;
+		}
+
+		typec_set_data_role(chg->typec_port, TYPEC_DEVICE);
+		typec_set_pwr_role(chg->typec_port, TYPEC_SINK);
+	} else {
+		typec_set_data_role(chg->typec_port, TYPEC_HOST);
+		typec_set_pwr_role(chg->typec_port, TYPEC_SOURCE);
+	}
+
+unlock:
+	mutex_unlock(&chg->typec_lock);
+	return rc;
+}
+
+static void typec_partner_unregister(struct smb_charger *chg)
+{
+	mutex_lock(&chg->typec_lock);
+
+	if (!chg->typec_port)
+		goto unlock;
+
+	if (chg->typec_partner && !chg->pr_swap_in_progress) {
+		smblite_lib_dbg(chg, PR_MISC, "Un-registering typeC partner\n");
+		typec_unregister_partner(chg->typec_partner);
+		chg->typec_partner = NULL;
+	}
+
+unlock:
+	mutex_unlock(&chg->typec_lock);
+}
+
 static void smblite_lib_micro_usb_plugin(struct smb_charger *chg,
 					bool vbus_rising)
 {
+	int rc = 0;
+
 	if (vbus_rising) {
 		smblite_lib_notify_device_mode(chg, true);
+		rc = typec_partner_register(chg);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't register partner rc =%d\n",
+					rc);
 	} else {
 		smblite_lib_notify_device_mode(chg, false);
 		smblite_lib_uusb_removal(chg);
+		typec_partner_unregister(chg);
 	}
 }
 
@@ -2157,6 +2302,8 @@ void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
 		smblite_lib_micro_usb_plugin(chg, vbus_rising);
 
+	vote(chg->temp_change_irq_disable_votable, DEFAULT_VOTER,
+						!vbus_rising, 0);
 	power_supply_changed(chg->usb_psy);
 	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
 					vbus_rising ? "attached" : "detached");
@@ -2176,7 +2323,7 @@ static void update_sw_icl_max(struct smb_charger *chg,
 				enum power_supply_type type)
 {
 	int typec_mode;
-	int rp_ua;
+	int rp_ua, icl_ua;
 
 	if (chg->typec_mode == POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER) {
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, 500000);
@@ -2201,33 +2348,28 @@ static void update_sw_icl_max(struct smb_charger *chg,
 	/* rp-std or legacy, USB BC 1.2 */
 	switch (type) {
 	case POWER_SUPPLY_TYPE_USB:
-		/*
-		 * USB_PSY will vote to increase the current to 500/900mA once
-		 * enumeration is done.
-		 */
-		if (!is_client_vote_enabled(chg->usb_icl_votable,
-						USB_PSY_VOTER)) {
-			/* if flash is active force 500mA */
-			vote(chg->usb_icl_votable, USB_PSY_VOTER, true,
-					is_flashlite_active(chg) ?
-					USBIN_500UA : USBIN_100UA);
-		}
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
 		break;
 	case POWER_SUPPLY_TYPE_USB_CDP:
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-					CDP_CURRENT_UA);
+		icl_ua = CDP_CURRENT_UA;
 		break;
 	case POWER_SUPPLY_TYPE_USB_DCP:
-		rp_ua = get_rp_based_dcp_current(chg, typec_mode);
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
+		icl_ua = get_rp_based_dcp_current(chg, typec_mode);
 		break;
 	case POWER_SUPPLY_TYPE_UNKNOWN:
 	default:
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-					USBIN_100UA);
+		icl_ua = USBIN_100UA;
 		break;
 	}
+
+	if (is_flashlite_active(chg) && type != POWER_SUPPLY_TYPE_USB) {
+		vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, true,
+				icl_ua - USBIN_300UA);
+		smblite_lib_dbg(chg, PR_MISC, "flash_active = 1 ICL is set to %d\n",
+					icl_ua - USBIN_300UA);
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, icl_ua);
+	}
+
 }
 
 static void typec_sink_insertion(struct smb_charger *chg)
@@ -2261,52 +2403,6 @@ static void typec_ra_ra_insertion(struct smb_charger *chg)
 {
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, 500000);
 	vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
-}
-
-static int typec_partner_register(struct smb_charger *chg)
-{
-	int typec_mode, rc = 0;
-
-	if (!chg->typec_port)
-		return 0;
-
-	if (chg->typec_partner && chg->pr_swap_in_progress)
-		return 0;
-
-	if (chg->sink_src_mode == AUDIO_ACCESS_MODE)
-		chg->typec_partner_desc.accessory = TYPEC_ACCESSORY_AUDIO;
-	else
-		chg->typec_partner_desc.accessory = TYPEC_ACCESSORY_NONE;
-
-	chg->typec_partner = typec_register_partner(chg->typec_port,
-			&chg->typec_partner_desc);
-	if (IS_ERR(chg->typec_partner)) {
-		rc = PTR_ERR(chg->typec_partner);
-		pr_err("Couldn't to register typec_partner rc=%d\n", rc);
-		return rc;
-	}
-
-	typec_mode = smblite_lib_get_prop_typec_mode(chg);
-
-	if (typec_mode >= POWER_SUPPLY_TYPEC_SOURCE_DEFAULT
-			|| typec_mode == POWER_SUPPLY_TYPEC_NONE) {
-		typec_set_data_role(chg->typec_port, TYPEC_DEVICE);
-		typec_set_pwr_role(chg->typec_port, TYPEC_SINK);
-	} else {
-		typec_set_data_role(chg->typec_port, TYPEC_HOST);
-		typec_set_pwr_role(chg->typec_port, TYPEC_SOURCE);
-	}
-
-	return rc;
-}
-
-static void typec_partner_unregister(struct smb_charger *chg)
-{
-	if (chg->typec_partner && !chg->pr_swap_in_progress) {
-		smblite_lib_dbg(chg, PR_MISC, "Un-registering typeC partner\n");
-		typec_unregister_partner(chg->typec_partner);
-		chg->typec_partner = NULL;
-	}
 }
 
 static const char * const dr_mode_text[] = {
@@ -2401,30 +2497,6 @@ unlock:
 	return rc;
 }
 
-static int smblite_lib_role_switch_failure(struct smb_charger *chg, int mode)
-{
-	int rc = 0;
-	union power_supply_propval pval = {0, };
-
-	rc = smblite_lib_get_prop_usb_present(chg, &pval);
-	if (rc < 0) {
-		smblite_lib_err(chg, "Couldn't get usb presence status rc=%d\n",
-					rc);
-		return rc;
-	}
-
-	/*
-	 * When role switch fails notify the
-	 * current charger state to usb driver.
-	 */
-	if (pval.intval && mode == TYPEC_PORT_SRC) {
-		smblite_lib_dbg(chg, PR_MISC, "Role reversal failed, notifying device mode to usb driver.\n");
-		smblite_lib_notify_device_mode(chg, true);
-	}
-
-	return rc;
-}
-
 static void smblite_lib_typec_role_check_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -2460,15 +2532,12 @@ static void smblite_lib_typec_role_check_work(struct work_struct *work)
 			|| chg->typec_mode == POWER_SUPPLY_TYPEC_NONE) {
 			smblite_lib_dbg(chg, PR_MISC, "Role reversal not latched to DFP in %d msecs. Resetting to DRP mode\n",
 						ROLE_REVERSAL_DELAY_MS);
+			chg->pr_swap_in_progress = false;
+			chg->typec_role_swap_failed = true;
 			rc = smblite_lib_force_dr_mode(chg,
 							TYPEC_PORT_DRP);
 			if (rc < 0)
 				smblite_lib_err(chg, "Couldn't to set DRP mode, rc=%d\n",
-							rc);
-			rc = smblite_lib_role_switch_failure(chg,
-							TYPEC_PORT_SRC);
-			if (rc < 0)
-				smblite_lib_err(chg, "Couldn't to role switch rc=%d\n",
 							rc);
 		} else {
 			chg->power_role = POWER_SUPPLY_TYPEC_PR_SOURCE;
@@ -2491,8 +2560,6 @@ static void typec_sink_removal(struct smb_charger *chg)
 {
 	if (chg->otg_present)
 		smblite_lib_notify_usb_host(chg, false);
-
-	typec_partner_unregister(chg);
 }
 
 static void typec_src_removal(struct smb_charger *chg)
@@ -2515,7 +2582,8 @@ static void typec_src_removal(struct smb_charger *chg)
 
 	/* reset input current limit voters */
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-			is_flashlite_active(chg) ? USBIN_500UA : USBIN_100UA);
+			is_flashlite_active(chg) ? USBIN_200UA : USBIN_100UA);
+	vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, false, 0);
 	vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
 
 	/* reset parallel voters */
@@ -2530,7 +2598,6 @@ static void typec_src_removal(struct smb_charger *chg)
 
 	smblite_lib_notify_device_mode(chg, false);
 
-	typec_partner_unregister(chg);
 	chg->typec_legacy = false;
 }
 
@@ -2596,6 +2663,7 @@ irqreturn_t smblite_typec_state_change_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+#define TYPEC_DETACH_DETECT_DELAY_MS 2000
 irqreturn_t smblite_typec_attach_detach_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
@@ -2603,6 +2671,10 @@ irqreturn_t smblite_typec_attach_detach_irq_handler(int irq, void *data)
 	u8 stat;
 	bool attached = false;
 	int rc;
+
+	/* IRQ not expected to be executed for uUSB, return */
+	if (chg->connector_type == POWER_SUPPLY_CONNECTOR_MICRO_USB)
+		return IRQ_HANDLED;
 
 	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
 
@@ -2663,8 +2735,25 @@ irqreturn_t smblite_typec_attach_detach_irq_handler(int irq, void *data)
 		 * mode configuration is reset properly.
 		 */
 
-		if (chg->typec_port && !chg->pr_swap_in_progress)
+		if (chg->typec_port && !chg->pr_swap_in_progress) {
+			/*
+			 * Schedule the work to differentiate actual removal
+			 * of cable and detach interrupt during role swap,
+			 * unregister the partner only during actual cable
+			 * removal.
+			 */
+			cancel_delayed_work(&chg->pr_swap_detach_work);
+			vote(chg->awake_votable, DETACH_DETECT_VOTER, true, 0);
+			schedule_delayed_work(&chg->pr_swap_detach_work,
+				msecs_to_jiffies(TYPEC_DETACH_DETECT_DELAY_MS));
 			smblite_lib_force_dr_mode(chg, TYPEC_PORT_DRP);
+
+			/*
+			 * To handle cable removal during role
+			 * swap failure.
+			 */
+			chg->typec_role_swap_failed = false;
+		}
 	}
 
 	rc = smblite_lib_masked_write(chg, USB_CMD_PULLDOWN_REG,
@@ -2805,6 +2894,22 @@ irqreturn_t smblite_usb_id_irq_handler(int irq, void *data)
 
 	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, id_state=%d\n",
 					"usb-id-irq", id_state);
+	if (id_state) {
+		/*otg cable removed */
+		if (chg->otg_present) {
+			if (chg->typec_port) {
+				typec_set_data_role(chg->typec_port,
+							TYPEC_DEVICE);
+				typec_set_pwr_role(chg->typec_port, TYPEC_SINK);
+				typec_partner_unregister(chg);
+			}
+		}
+	} else if (chg->typec_port) {
+		/*otg cable inserted */
+		typec_partner_register(chg);
+		typec_set_data_role(chg->typec_port, TYPEC_HOST);
+		typec_set_pwr_role(chg->typec_port, TYPEC_SOURCE);
+	}
 
 	smblite_lib_notify_usb_host(chg, !id_state);
 
@@ -2814,6 +2919,28 @@ irqreturn_t smblite_usb_id_irq_handler(int irq, void *data)
 /***************
  * Work Queues *
  ***************/
+static void smblite_lib_pr_swap_detach_work(struct work_struct *work)
+{
+	struct smb_charger *chg = container_of(work, struct smb_charger,
+						pr_swap_detach_work.work);
+	int rc;
+	u8 stat;
+
+	rc = smblite_lib_read(chg, TYPE_C_STATE_MACHINE_STATUS_REG, &stat);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't read STATE_MACHINE_STS rc=%d\n",
+								rc);
+		goto out;
+	}
+	smblite_lib_dbg(chg, PR_REGISTER, "STATE_MACHINE_STS %#x\n", stat);
+
+	if (!(stat & TYPEC_ATTACH_DETACH_STATE_BIT))
+		typec_partner_unregister(chg);
+
+out:
+	vote(chg->awake_votable, DETACH_DETECT_VOTER, false, 0);
+}
+
 static void bms_update_work(struct work_struct *work)
 {
 	struct smb_charger *chg = container_of(work, struct smb_charger,
@@ -2906,9 +3033,6 @@ static void smblite_lib_thermal_regulation_work(struct work_struct *work)
 
 	/* check if DIE_TEMP is below LB */
 	if (!(stat & DIE_TEMP_MASK)) {
-		icl_ua += THERM_REGULATION_STEP_UA;
-		vote(chg->usb_icl_votable, SW_THERM_REGULATION_VOTER,
-				true, icl_ua);
 
 		/*
 		 * Check if we need further increments:
@@ -2917,8 +3041,12 @@ static void smblite_lib_thermal_regulation_work(struct work_struct *work)
 		 * ICL then remove vote and exit work.
 		 */
 		if (!strcmp(get_effective_client(chg->usb_icl_votable),
-				SW_THERM_REGULATION_VOTER))
+				SW_THERM_REGULATION_VOTER)) {
+			icl_ua += THERM_REGULATION_STEP_UA;
+			vote(chg->usb_icl_votable, SW_THERM_REGULATION_VOTER,
+					true, icl_ua);
 			goto reschedule;
+		}
 	}
 
 exit:
@@ -3178,6 +3306,15 @@ static int smblite_lib_create_votables(struct smb_charger *chg)
 		return rc;
 	}
 
+	chg->temp_change_irq_disable_votable = create_votable(
+			"TEMP_CHANGE_IRQ_DISABLE", VOTE_SET_ANY,
+			smblite_lib_temp_change_irq_disable_vote_callback, chg);
+	if (IS_ERR(chg->temp_change_irq_disable_votable)) {
+		rc = PTR_ERR(chg->temp_change_irq_disable_votable);
+		chg->temp_change_irq_disable_votable = NULL;
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -3212,6 +3349,8 @@ int smblite_lib_init(struct smb_charger *chg)
 					smblite_lib_thermal_regulation_work);
 	INIT_DELAYED_WORK(&chg->role_reversal_check,
 					smblite_lib_typec_role_check_work);
+	INIT_DELAYED_WORK(&chg->pr_swap_detach_work,
+					smblite_lib_pr_swap_detach_work);
 	chg->fake_capacity = -EINVAL;
 	chg->fake_batt_status = -EINVAL;
 	chg->sink_src_mode = UNATTACHED_MODE;
@@ -3270,6 +3409,7 @@ int smblite_lib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->bb_removal_work);
 		cancel_delayed_work_sync(&chg->thermal_regulation_work);
 		cancel_delayed_work_sync(&chg->role_reversal_check);
+		cancel_delayed_work_sync(&chg->pr_swap_detach_work);
 		power_supply_unreg_notifier(&chg->nb);
 		smblite_lib_destroy_votables(chg);
 		qcom_step_chg_deinit();

@@ -436,4 +436,6 @@ ssize_t ttf_dump_details(char *buf, int max_size,
 			 const struct batt_ttf_stats *ttf_stats,
 			 int last_soc);
 
+bool gbms_temp_defend_dry_run(bool update, bool dry_run);
+
 #endif  /* __GOOGLE_BMS_H_ */

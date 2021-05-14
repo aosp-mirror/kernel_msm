@@ -126,6 +126,7 @@
 		st,max-coords = <1079 2339>;
 		st,panel_map = <&dsi_sofef01_sdc_1080p_cmd 0>;
 		st,force-pi-cfg-ver-map = <1024>;	// 0x0400
+		st,touch_offload_id = [30 30 62 35]; /* '0 '0' 'b' '5' */
 		//st,disp-rate-gpio = <&tlmm 128 0>;
 //		st,regulator_dvdd = "vdd";
 //		st,regulator_avdd = "avdd";

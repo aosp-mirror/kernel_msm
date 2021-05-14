@@ -739,7 +739,8 @@ struct snd_soc_component *soc_find_component(
 		return NULL;
 	}
 
-	lockdep_assert_held(&client_mutex);
+	/* TODO: Remove. still discuss with Qualcomm
+	lockdep_assert_held(&client_mutex); */
 
 	list_for_each_entry(component, &component_list, list) {
 		if (of_node) {
@@ -753,6 +754,28 @@ struct snd_soc_component *soc_find_component(
 	return NULL;
 }
 EXPORT_SYMBOL(soc_find_component);
+
+/**
+ * soc_find_component_locked: soc_find_component with client lock acquired
+ *
+ * @of_node: of_node of the component to query.
+ * @name: name of the component to query.
+ *
+ * function to find out if a component is already registered with ASoC core.
+ *
+ * Returns component handle for success, else NULL error.
+ */
+struct snd_soc_component *soc_find_component_locked(
+	const struct device_node *of_node, const char *name)
+{
+	struct snd_soc_component *component = NULL;
+
+	mutex_lock(&client_mutex);
+	component = soc_find_component(of_node, name);
+	mutex_unlock(&client_mutex);
+	return component;
+}
+EXPORT_SYMBOL(soc_find_component_locked);
 
 /**
  * snd_soc_find_dai - Find a registered DAI

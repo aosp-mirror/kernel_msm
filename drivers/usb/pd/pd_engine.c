@@ -2392,12 +2392,12 @@ struct usbpd *usbpd_create(struct device *parent)
 	 */
 	ret = init_tcpc_dev(pd, parent);
 	if (ret < 0)
-		goto put_psy_wireless;
+		goto unreg_ext_vbus;
 	pd->tcpm_port = tcpm_register_port(&pd->dev, &pd->tcpc_dev);
 	if (IS_ERR(pd->tcpm_port)) {
 		dev_err(&pd->dev, "tcpm port register failed\n");
 		ret = PTR_ERR(pd->tcpm_port);
-		goto put_psy_wireless;
+		goto unreg_ext_vbus;
 	}
 
 	pd->psy_nb.notifier_call = psy_changed;
@@ -2427,8 +2427,9 @@ struct usbpd *usbpd_create(struct device *parent)
 
 unreg_tcpm:
 	tcpm_unregister_port(pd->tcpm_port);
-put_psy_wireless:
+unreg_ext_vbus:
 	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
+put_psy_wireless:
 	if (pd->wlc_supported)
 		power_supply_put(pd->wireless_psy);
 put_psy_usb:

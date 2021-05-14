@@ -380,6 +380,13 @@ int mmc_add_card(struct mmc_card *card)
 #endif
 	card->dev.of_node = mmc_of_find_child_device(card->host, 0);
 
+	if (mmc_card_sdio(card)) {
+		ret = device_init_wakeup(&card->dev, true);
+		if (ret)
+			pr_err("%s: %s: failed to init wakeup: %d\n",
+				mmc_hostname(card->host), __func__, ret);
+	}
+
 	device_enable_async_suspend(&card->dev);
 
 	ret = device_add(&card->dev);
@@ -387,7 +394,6 @@ int mmc_add_card(struct mmc_card *card)
 		return ret;
 
 	mmc_card_set_present(card);
-	device_enable_async_suspend(&card->dev);
 
 	return 0;
 }
@@ -404,11 +410,6 @@ void mmc_remove_card(struct mmc_card *card)
 	mmc_remove_card_debugfs(card);
 #endif
 
-	if (host->cqe_enabled) {
-		host->cqe_ops->cqe_disable(host);
-		host->cqe_enabled = false;
-	}
-
 	if (mmc_card_present(card)) {
 		if (mmc_host_is_spi(card->host)) {
 			pr_info("%s: SPI card removed\n",
@@ -423,6 +424,10 @@ void mmc_remove_card(struct mmc_card *card)
 	if (host->ops->exit_dbg_mode)
 		host->ops->exit_dbg_mode(host);
 
+	if (host->cqe_enabled) {
+		host->cqe_ops->cqe_disable(host);
+		host->cqe_enabled = false;
+	}
+
 	put_device(&card->dev);
 }
-

@@ -207,7 +207,7 @@ void usb_ep_autoconfig_reset (struct usb_gadget *gadget)
 EXPORT_SYMBOL_GPL(usb_ep_autoconfig_reset);
 
 /**
- * usb_ep_autoconfig_by_name - Used to pick the endpoint by name. eg ep1in-gsi
+ * usb_ep_autoconfig_by_name - Used to pick the endpoint by name. eg gsi-epin1
  * @gadget: The device to which the endpoint must belong.
  * @desc: Endpoint descriptor, with endpoint direction and transfer mode
  *	initialized.

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
  */
 
 #ifndef __SMB5_CHARGER_H
@@ -113,10 +113,9 @@ enum print_reason {
 #define USBIN_150MA     150000
 #define USBIN_500MA     500000
 #define USBIN_900MA     900000
+#define USBIN_1000MA	1000000
 
 #define USBIN_OFFSET	50000
-
-#define SUSPEND_ICL_MAX USBIN_25MA
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -534,6 +533,7 @@ struct smb_charger {
 	int			fake_batt_status;
 	bool			step_chg_enabled;
 	bool			sw_jeita_enabled;
+	bool			jeita_arb_enable;
 	bool			typec_legacy_use_rp_icl;
 	bool			is_hdc;
 	bool			chg_done;
@@ -825,6 +825,8 @@ int smblib_get_die_health(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_prop_smb_health(struct smb_charger *chg);
 int smblib_get_prop_connector_health(struct smb_charger *chg);
+int smblib_get_prop_input_current_max(struct smb_charger *chg,
+				  union power_supply_propval *val);
 int smblib_set_prop_thermal_overheat(struct smb_charger *chg,
 			       int therm_overheat);
 int smblib_get_skin_temp_status(struct smb_charger *chg);

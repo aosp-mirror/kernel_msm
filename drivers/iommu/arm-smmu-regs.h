@@ -259,6 +259,10 @@ enum arm_smmu_s2cr_privcfg {
 
 #define FSYNR0_WNR			(1 << 4)
 
+#define FSYNR1_BID			GENMASK(15, 13)
+#define FSYNR1_PID			GENMASK(12, 8)
+#define FSYNR1_MID			GENMASK(7, 0)
+
 #define IMPL_DEF1_MICRO_MMU_CTRL	0
 #define MICRO_MMU_CTRL_LOCAL_HALT_REQ	(1 << 2)
 #define MICRO_MMU_CTRL_IDLE		(1 << 3)

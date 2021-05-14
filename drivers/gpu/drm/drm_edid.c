@@ -2921,6 +2921,7 @@ add_detailed_modes(struct drm_connector *connector, struct edid *edid,
 #define VENDOR_SPECIFIC_VIDEO_DATA_BLOCK 0x01
 #define VSVDB_HDR10_PLUS_IEEE_CODE 0x90848b
 #define VSVDB_HDR10_PLUS_APP_VER_MASK 0x3
+#define HDR_STATIC_METADATA_EXTENDED_DATA_BLOCK 0x08
 #define COLORIMETRY_EXTENDED_DATA_BLOCK 0x05
 #define HDR_STATIC_METADATA_BLOCK	0x6
 #define USE_EXTENDED_TAG 0x07
@@ -4164,6 +4165,7 @@ drm_hdmi_extract_extended_blk_info(struct drm_connector *connector,
 				case VENDOR_SPECIFIC_VIDEO_DATA_BLOCK:
 					drm_extract_vsvdb_info(connector, db);
 					break;
+				case HDR_STATIC_METADATA_EXTENDED_DATA_BLOCK:
 				case HDR_STATIC_METADATA_BLOCK:
 					drm_extract_hdr_db(connector, db);
 					break;

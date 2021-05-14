@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -295,6 +295,12 @@ unconfig_vdd:
 	if (ret)
 		dev_err(phy->phy.dev, "Unable unconfig VDD:%d\n",
 								ret);
+	/* Return from here based on power_enabled. If it is not set
+	 * then return -EINVAL since either set_voltage or
+	 * regulator_enable failed
+	 */
+	if (!phy->power_enabled)
+		return -EINVAL;
 err_vdd:
 	phy->power_enabled = false;
 	dev_dbg(phy->phy.dev, "HSUSB PHY's regulators are turned OFF.\n");
@@ -485,17 +491,24 @@ static int msm_hsphy_set_suspend(struct usb_phy *uphy, int suspend)
 	}
 
 	if (suspend) { /* Bus suspend */
-		if (phy->cable_connected ||
-			(phy->phy.flags & PHY_HOST_MODE)) {
-			/* Enable auto-resume functionality by pulsing signal */
-			msm_usb_write_readback(phy->base,
-				USB2_PHY_USB_PHY_HS_PHY_CTRL2,
-				USB2_AUTO_RESUME, USB2_AUTO_RESUME);
-			usleep_range(500, 1000);
-			msm_usb_write_readback(phy->base,
-				USB2_PHY_USB_PHY_HS_PHY_CTRL2,
-				USB2_AUTO_RESUME, 0);
-
+		if (phy->cable_connected) {
+			/* Enable auto-resume functionality only during host
+			 * mode bus suspend with some peripheral connected.
+			 */
+			if ((phy->phy.flags & PHY_HOST_MODE) &&
+				((phy->phy.flags & PHY_HSFS_MODE) ||
+				(phy->phy.flags & PHY_LS_MODE))) {
+				/* Enable auto-resume functionality by pulsing
+				 * signal
+				 */
+				msm_usb_write_readback(phy->base,
+					USB2_PHY_USB_PHY_HS_PHY_CTRL2,
+					USB2_AUTO_RESUME, USB2_AUTO_RESUME);
+				usleep_range(500, 1000);
+				msm_usb_write_readback(phy->base,
+					USB2_PHY_USB_PHY_HS_PHY_CTRL2,
+					USB2_AUTO_RESUME, 0);
+			}
 			msm_hsphy_enable_clocks(phy, false);
 		} else {/* Cable disconnect */
 			mutex_lock(&phy->phy_lock);

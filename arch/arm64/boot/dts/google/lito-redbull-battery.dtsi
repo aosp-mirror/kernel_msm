@@ -145,9 +145,6 @@
 		google,cv-debounce-cnt = <3>;
 		google,cv-tier-ov-cnt = <1>;
 		google,cv-tier-switch-cnt = <3>;
-		/* charging stats */
-		google,chg-stats-qual-time = <900>;
-		google,chg-stats-delta-soc = <15>;
 		/* resistance estimation */
 		google,res-temp-hi = <390>;
 		google,res-temp-lo = <350>;
@@ -216,8 +213,6 @@
 		google,bd-recharge-soc = <79>;
 		/* Enable TEMP-DEFEND */
 		google,bd-temp-enable;
-		/* Set dry_run */
-		google,bd-temp-dry-run;
 	};
 
 	google_charger_pd_5v: google,charger_pd_5v {

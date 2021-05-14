@@ -857,7 +857,13 @@ static noinline struct btrfs_device *device_list_add(const char *path,
 			if (device->bdev != path_bdev) {
 				bdput(path_bdev);
 				mutex_unlock(&fs_devices->device_list_mutex);
-				btrfs_warn_in_rcu(device->fs_info,
+				/*
+				 * device->fs_info may not be reliable here, so
+				 * pass in a NULL instead. This avoids a
+				 * possible use-after-free when the fs_info and
+				 * fs_info->sb are already torn down.
+				 */
+				btrfs_warn_in_rcu(NULL,
 	"duplicate device %s devid %llu generation %llu scanned by %s (%d)",
 						  path, devid, found_transid,
 						  current->comm,
@@ -4004,6 +4010,8 @@ int btrfs_recover_balance(struct btrfs_fs_info *fs_info)
 	if (test_and_set_bit(BTRFS_FS_EXCL_OP, &fs_info->flags))
 		btrfs_warn(fs_info,
 	"balance: cannot set exclusive op status, resume manually");
+
+	btrfs_release_path(path);
 
 	mutex_lock(&fs_info->balance_mutex);
 	BUG_ON(fs_info->balance_ctl);

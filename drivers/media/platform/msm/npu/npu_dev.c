@@ -260,14 +260,32 @@ static ssize_t pwr_store(struct device *dev,
 					  const char *buf, size_t count)
 {
 	struct npu_device *npu_dev = dev_get_drvdata(dev);
+	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
 	bool pwr_on = false;
 
 	if (strtobool(buf, &pwr_on) < 0)
 		return -EINVAL;
 
+	mutex_lock(&npu_dev->dev_lock);
 	if (pwr_on) {
-		if (npu_enable_core_power(npu_dev))
+		pwr->pwr_vote_num_sysfs++;
+	} else {
+		if (!pwr->pwr_vote_num_sysfs) {
+			NPU_WARN("Invalid unvote from sysfs\n");
+			mutex_unlock(&npu_dev->dev_lock);
+			return -EINVAL;
+		}
+		pwr->pwr_vote_num_sysfs--;
+	}
+	mutex_unlock(&npu_dev->dev_lock);
+
+	if (pwr_on) {
+		if (npu_enable_core_power(npu_dev)) {
+			mutex_lock(&npu_dev->dev_lock);
+			pwr->pwr_vote_num_sysfs--;
+			mutex_unlock(&npu_dev->dev_lock);
 			return -EPERM;
+		}
 	} else {
 		npu_disable_core_power(npu_dev);
 	}
@@ -1643,6 +1661,8 @@ static int npu_get_property(struct npu_client *client,
 	case MSM_NPU_PROP_ID_DRV_FEATURE:
 		prop.prop_param[0] = MSM_NPU_FEATURE_MULTI_EXECUTE |
 			MSM_NPU_FEATURE_ASYNC_EXECUTE;
+		if (npu_dev->npu_dsp_sid_mapped)
+			prop.prop_param[0] |= MSM_NPU_FEATURE_DSP_SID_MAPPED;
 		break;
 	default:
 		ret = npu_host_get_fw_property(client->npu_dev, &prop);
@@ -1920,7 +1940,7 @@ int npu_set_bw(struct npu_device *npu_dev, int new_ib, int new_ab)
 static int npu_adjust_max_power_level(struct npu_device *npu_dev)
 {
 	struct npu_pwrctrl *pwr = &npu_dev->pwrctrl;
-	uint32_t fmax_reg_value, fmax, fmax_pwrlvl;
+	uint32_t fmax_reg_value, fmax, fmax_pwrlvl = pwr->max_pwrlevel;
 	struct npu_pwrlevel *level;
 	int i, j;
 
@@ -2419,6 +2439,10 @@ static int npu_hw_info_init(struct npu_device *npu_dev)
 	npu_dev->hw_version = REGR(npu_dev, NPU_HW_VERSION);
 	NPU_DBG("NPU_HW_VERSION 0x%x\n", npu_dev->hw_version);
 	npu_disable_core_power(npu_dev);
+
+	npu_dev->npu_dsp_sid_mapped =
+		of_property_read_bool(npu_dev->pdev->dev.of_node,
+		"qcom,npu-dsp-sid-mapped");
 
 	return rc;
 }

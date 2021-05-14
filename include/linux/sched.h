@@ -131,6 +131,7 @@ enum fps {
 	FPS60 = 60,
 	FPS90 = 90,
 	FPS120 = 120,
+	FPS144 = 144,
 };
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
@@ -869,9 +870,8 @@ struct task_struct {
 	const struct sched_class	*sched_class;
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
-
-	/* task boost vendor fields */
 	u64				last_sleep_ts;
+
 	int				boost;
 	u64				boost_period;
 	u64				boost_expires;
@@ -889,6 +889,8 @@ struct task_struct {
 	u64 cpu_cycles;
 	bool misfit;
 	u32 unfilter;
+	bool low_latency;
+	bool rtg_high_prio;
 #endif
 
 #ifdef CONFIG_CGROUP_SCHED
@@ -1483,12 +1485,30 @@ struct task_struct {
 	/* task is frozen/stopped (used by the cgroup freezer) */
 	ANDROID_KABI_USE(1, unsigned frozen:1);
 
-	ANDROID_KABI_RESERVE(2);
+	/* 095444fad7e3 ("futex: Replace PF_EXITPIDONE with a state") */
+	ANDROID_KABI_USE(2, unsigned int futex_state);
+
+	/*
+	 * f9b0c6c556db ("futex: Add mutex around futex exit")
+	 * A struct mutex takes 32 bytes, or 4 64bit entries, so pick off
+	 * 4 of the reserved members, and replace them with a struct mutex.
+	 * Do the GENKSYMS hack to work around the CRC issues
+	 */
+#ifdef __GENKSYMS__
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
 	ANDROID_KABI_RESERVE(5);
 	ANDROID_KABI_RESERVE(6);
+#else
+	struct mutex			futex_exit_mutex;
+#endif
+
+	/* bca62a0ae565 ("sched/tune: Fix improper accounting of tasks") */
+#ifdef CONFIG_SCHED_TUNE
+	ANDROID_KABI_USE(7, int stune_idx);
+#else
 	ANDROID_KABI_RESERVE(7);
+#endif
 	ANDROID_KABI_RESERVE(8);
 
 	/*
@@ -1667,7 +1687,6 @@ extern struct pid *cad_pid;
  */
 #define PF_IDLE			0x00000002	/* I am an IDLE thread */
 #define PF_EXITING		0x00000004	/* Getting shut down */
-#define PF_EXITPIDONE		0x00000008	/* PI exit done on shut down */
 #define PF_VCPU			0x00000010	/* I'm a virtual CPU */
 #define PF_WQ_WORKER		0x00000020	/* I'm a workqueue worker */
 #define PF_FORKNOEXEC		0x00000040	/* Forked but didn't exec */

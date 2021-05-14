@@ -35,6 +35,12 @@
 #include <linux/soc/qcom/smem_state.h>
 #include <linux/of_irq.h>
 #include <linux/ctype.h>
+#include <linux/sched.h>
+#include <asm/arch_timer.h>
+#include <linux/sched/clock.h>
+#include <linux/jiffies.h>
+#include <linux/delay.h>
+#include <linux/wait.h>
 
 #ifdef CONFIG_ARM64
 
@@ -58,8 +64,8 @@
 
 #define IPA_SUSPEND_BUSY_TIMEOUT (msecs_to_jiffies(10))
 
-#define DEFAULT_MPM_RING_SIZE_UL 6
-#define DEFAULT_MPM_RING_SIZE_DL 16
+#define DEFAULT_MPM_RING_SIZE_UL 64
+#define DEFAULT_MPM_RING_SIZE_DL 64
 #define DEFAULT_MPM_TETH_AGGR_SIZE 24
 #define DEFAULT_MPM_UC_THRESH_SIZE 4
 
@@ -3060,16 +3066,16 @@ static void ipa3_q6_avoid_holb(void)
 			 * setting HOLB on Q6 pipes, and from APPS perspective
 			 * they are not valid, therefore, the above function
 			 * will fail.
+			 * Also don't reset the HOLB timer to 0 for Q6 pipes.
 			 */
-			ipahal_write_reg_n_fields(
-				IPA_ENDP_INIT_HOL_BLOCK_TIMER_n,
-				ep_idx, &ep_holb);
 			ipahal_write_reg_n_fields(
 				IPA_ENDP_INIT_HOL_BLOCK_EN_n,
 				ep_idx, &ep_holb);
 
-			/* IPA4.5 issue requires HOLB_EN to be written twice */
-			if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_5)
+			/* For targets > IPA_4.0 issue requires HOLB_EN to be
+			 * written twice.
+			 */
+			if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0)
 				ipahal_write_reg_n_fields(
 					IPA_ENDP_INIT_HOL_BLOCK_EN_n,
 					ep_idx, &ep_holb);
@@ -3673,6 +3679,8 @@ void ipa3_update_ssr_state(bool is_ssr)
  */
 void ipa3_q6_pre_shutdown_cleanup(void)
 {
+	bool prod = false;
+
 	IPADBG_LOW("ENTER\n");
 
 	IPA_ACTIVE_CLIENTS_INC_SIMPLE();
@@ -3681,6 +3689,10 @@ void ipa3_q6_pre_shutdown_cleanup(void)
 	if (!ipa3_ctx->ipa_endp_delay_wa)
 		ipa3_q6_pipe_delay(true);
 	ipa3_q6_avoid_holb();
+	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0) {
+		prod = true;
+		ipa3_halt_q6_gsi_channels(prod);
+	}
 	if (ipa3_ctx->ipa_config_is_mhi)
 		ipa3_set_reset_client_cons_pipe_sus_holb(true,
 		IPA_CLIENT_MHI_CONS);
@@ -3738,8 +3750,6 @@ void ipa3_q6_post_shutdown_cleanup(void)
 
 	/* halt both prod and cons channels starting at IPAv4 */
 	if (ipa3_ctx->ipa_hw_type >= IPA_HW_v4_0) {
-		prod = true;
-		ipa3_halt_q6_gsi_channels(prod);
 		IPA_ACTIVE_CLIENTS_DEC_SIMPLE();
 		IPADBG("Exit without consumer check\n");
 		return;
@@ -4971,13 +4981,14 @@ static void ipa3_active_clients_log_mod(
 	}
 
 	if (id->type != SIMPLE) {
-		t = local_clock();
+		t = sched_clock();
 		nanosec_rem = do_div(t, 1000000000) / 1000;
 		snprintf(temp_str, IPA3_ACTIVE_CLIENTS_LOG_LINE_LEN,
-				inc ? "[%5lu.%06lu] ^ %s, %s: %d" :
-						"[%5lu.%06lu] v %s, %s: %d",
+				inc ? "[%5lu.%06lu] ^ %s, %s: %d cnt = %d" :
+					"[%5lu.%06lu] v %s, %s: %d cnt = %d",
 				(unsigned long)t, nanosec_rem,
-				id->id_string, id->file, id->line);
+				id->id_string, id->file, id->line,
+			atomic_read(&ipa3_ctx->ipa3_active_clients.cnt));
 		ipa3_active_clients_log_insert(temp_str);
 	}
 	spin_unlock_irqrestore(&ipa3_ctx->ipa3_active_clients_logging.lock,
@@ -6203,6 +6214,7 @@ static void ipa3_load_ipa_fw(struct work_struct *work)
 	if (result) {
 		IPAERR("IPA FW loading process has failed result=%d\n",
 			result);
+		ipa_assert();
 		return;
 	}
 	pr_info("IPA FW loaded successfully\n");

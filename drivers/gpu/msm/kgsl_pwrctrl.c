@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/msm-bus.h>
@@ -51,6 +51,7 @@ static const char * const clocks[] = {
 	"gmu_clk",
 	"ahb_clk",
 	"smmu_vote",
+	"apb_pclk",
 };
 
 static unsigned long ib_votes[KGSL_MAX_BUSLEVELS];
@@ -313,6 +314,22 @@ void kgsl_pwrctrl_buslevel_update(struct kgsl_device *device,
 EXPORT_SYMBOL(kgsl_pwrctrl_buslevel_update);
 
 #if IS_ENABLED(CONFIG_QCOM_CX_IPEAK)
+static int kgsl_pwr_cx_ipeak_freq_limit(void *ptr, unsigned int freq)
+{
+	struct kgsl_pwr_limit *cx_ipeak_pwr_limit = ptr;
+
+	if (IS_ERR_OR_NULL(cx_ipeak_pwr_limit))
+		return -EINVAL;
+
+	/* CX-ipeak safe interrupt to remove freq limit */
+	if (freq == 0) {
+		kgsl_pwr_limits_set_default(cx_ipeak_pwr_limit);
+		return 0;
+	}
+
+	return kgsl_pwr_limits_set_freq(cx_ipeak_pwr_limit, freq);
+}
+
 static int kgsl_pwrctrl_cx_ipeak_vote(struct kgsl_device *device,
 		u64 old_freq, u64 new_freq)
 {
@@ -423,6 +440,30 @@ static int kgsl_pwrctrl_cx_ipeak_init(struct kgsl_device *device)
 		}
 
 		++i;
+	}
+
+	/* cx_ipeak limits for GPU freq throttling */
+	pwr->cx_ipeak_pwr_limit = kgsl_pwr_limits_add(KGSL_DEVICE_3D0);
+	if (IS_ERR_OR_NULL(pwr->cx_ipeak_pwr_limit)) {
+		dev_err(device->dev,
+				"Failed to get cx_ipeak power limit\n");
+		ret = -EINVAL;
+		goto error;
+	}
+
+	cx_ipeak_client = &pwr->gpu_ipeak_client[0];
+	if (!IS_ERR_OR_NULL(cx_ipeak_client->client)) {
+		ret = cx_ipeak_victim_register(cx_ipeak_client->client,
+				kgsl_pwr_cx_ipeak_freq_limit,
+				pwr->cx_ipeak_pwr_limit);
+		if (ret) {
+			kgsl_pwr_limits_del(pwr->cx_ipeak_pwr_limit);
+			if (ret != -ENOENT) {
+				dev_err(device->dev,
+					"Failed to register GPU-CX-Ipeak victim\n");
+				goto error;
+			}
+		}
 	}
 
 	of_node_put(node);
@@ -629,11 +670,11 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	if (pwr->gpu_bimc_int_clk) {
 		if (pwr->active_pwrlevel == 0 &&
 				!pwr->gpu_bimc_interface_enabled) {
-			kgsl_pwrctrl_clk_set_rate(pwr->gpu_bimc_int_clk,
-					pwr->gpu_bimc_int_clk_freq,
-					"bimc_gpu_clk");
 			_bimc_clk_prepare_enable(device,
 					pwr->gpu_bimc_int_clk,
+					"bimc_gpu_clk");
+			kgsl_pwrctrl_clk_set_rate(pwr->gpu_bimc_int_clk,
+					pwr->gpu_bimc_int_clk_freq,
 					"bimc_gpu_clk");
 			pwr->gpu_bimc_interface_enabled = true;
 		} else if (pwr->previous_pwrlevel == 0
@@ -1483,23 +1524,29 @@ static ssize_t temp_show(struct device *dev,
 					char *buf)
 {
 	struct kgsl_device *device = dev_get_drvdata(dev);
-	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	struct device *_dev;
 	struct thermal_zone_device *thermal_dev;
-	int ret, temperature = 0;
+	int temperature = INT_MIN, max_temp = INT_MIN;
+	const char *name;
+	struct property *prop;
 
-	if (!pwr->tzone_name)
-		return 0;
+	_dev = &device->pdev->dev;
 
-	thermal_dev = thermal_zone_get_zone_by_name((char *)pwr->tzone_name);
-	if (thermal_dev == NULL)
-		return 0;
+	of_property_for_each_string(_dev->of_node,
+		"qcom,tzone-names", prop, name) {
+		thermal_dev = thermal_zone_get_zone_by_name(name);
 
-	ret = thermal_zone_get_temp(thermal_dev, &temperature);
-	if (ret)
-		return 0;
+		if (IS_ERR(thermal_dev))
+			continue;
+
+		if (thermal_zone_get_temp(thermal_dev, &temperature))
+			continue;
+
+		max_temp = max(temperature, max_temp);
+	}
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			temperature);
+			max_temp);
 }
 
 static ssize_t pwrscale_store(struct device *dev,
@@ -2226,13 +2273,6 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	if (pwr->grp_clks[0] == NULL)
 		pwr->grp_clks[0] = pwr->grp_clks[1];
 
-	/* Getting gfx-bimc-interface-clk frequency */
-	if (!of_property_read_u32(pdev->dev.of_node,
-			"qcom,gpu-bimc-interface-clk-freq",
-			&pwr->gpu_bimc_int_clk_freq))
-		pwr->gpu_bimc_int_clk = devm_clk_get(&pdev->dev,
-					"bimc_gpu_clk");
-
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,no-nap"))
 		device->pwrctrl.ctrl_flags |= BIT(KGSL_PWRFLAGS_NAP_OFF);
 
@@ -2379,6 +2419,9 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		}
 	}
 
+	INIT_LIST_HEAD(&pwr->limits);
+	spin_lock_init(&pwr->limits_lock);
+
 	result = kgsl_pwrctrl_cx_ipeak_init(device);
 	if (result)
 		goto error_cleanup_bus_ib;
@@ -2386,15 +2429,9 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	INIT_WORK(&pwr->thermal_cycle_ws, kgsl_thermal_cycle);
 	timer_setup(&pwr->thermal_timer, kgsl_thermal_timer, 0);
 
-	INIT_LIST_HEAD(&pwr->limits);
-	spin_lock_init(&pwr->limits_lock);
 	pwr->sysfs_pwr_limit = kgsl_pwr_limits_add(KGSL_DEVICE_3D0);
 
 	kgsl_pwrctrl_vbif_init(device);
-
-	/* temperature sensor name */
-	of_property_read_string(pdev->dev.of_node, "qcom,tzone-name",
-		&pwr->tzone_name);
 
 	return result;
 
@@ -2417,6 +2454,12 @@ void kgsl_pwrctrl_close(struct kgsl_device *device)
 {
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int i;
+
+	kgsl_pwr_limits_del(pwr->cx_ipeak_pwr_limit);
+	pwr->cx_ipeak_pwr_limit = NULL;
+
+	if (!IS_ERR_OR_NULL(pwr->gpu_ipeak_client[0].client))
+		cx_ipeak_victim_unregister(pwr->gpu_ipeak_client[0].client);
 
 	for (i = 0; i < ARRAY_SIZE(pwr->gpu_ipeak_client); i++) {
 		if (!IS_ERR_OR_NULL(pwr->gpu_ipeak_client[i].client)) {

@@ -488,8 +488,6 @@ struct usb_gadget_ops {
  * @connected: True if gadget is connected.
  * @lpm_capable: If the gadget max_speed is FULL or HIGH, this flag
  *	indicates that it supports LPM as per the LPM ECN & errata.
- * @remote_wakeup: Indicates if the host has enabled the remote_wakeup
- * feature.
  *
  * Gadgets have a mostly-portable "gadget driver" implementing device
  * functions, handling all usb configurations and interfaces.  Gadget
@@ -546,7 +544,16 @@ struct usb_gadget {
 	unsigned			lpm_capable:1;
 	unsigned			remote_wakeup:1;
 
+#ifdef __GENKSYMS__
 	ANDROID_KABI_RESERVE(1);
+#else
+	bool				bam2bam_func_enabled:1;
+	u32				extra_buf_alloc;
+	bool				l1_supported:1;
+	bool				is_chipidea:1;
+	bool				self_powered:1;
+#endif
+
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);

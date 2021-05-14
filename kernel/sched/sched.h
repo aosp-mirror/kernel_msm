@@ -109,6 +109,7 @@ struct walt_sched_stats {
 	int nr_big_tasks;
 	u64 cumulative_runnable_avg_scaled;
 	u64 pred_demands_sum_scaled;
+	unsigned int nr_rtg_high_prio_tasks;
 };
 
 struct group_cpu_time {
@@ -316,30 +317,6 @@ struct rt_bandwidth {
 
 void __dl_clear_params(struct task_struct *p);
 
-/*
- * To keep the bandwidth of -deadline tasks and groups under control
- * we need some place where:
- *  - store the maximum -deadline bandwidth of the system (the group);
- *  - cache the fraction of that bandwidth that is currently allocated.
- *
- * This is all done in the data structure below. It is similar to the
- * one used for RT-throttling (rt_bandwidth), with the main difference
- * that, since here we are only interested in admission control, we
- * do not decrease any runtime while the group "executes", neither we
- * need a timer to replenish it.
- *
- * With respect to SMP, the bandwidth is given on a per-CPU basis,
- * meaning that:
- *  - dl_bw (< 100%) is the bandwidth of the system (group) on each CPU;
- *  - dl_total_bw array contains, in the i-eth element, the currently
- *    allocated bandwidth on the i-eth CPU.
- * Moreover, groups consume bandwidth on each CPU, while tasks only
- * consume bandwidth on the CPU they're running on.
- * Finally, dl_total_bw_cpu is used to cache the index of dl_total_bw
- * that will be shown the next time the proc or cgroup controls will
- * be red. It on its turn can be changed by writing on its own
- * control.
- */
 struct dl_bandwidth {
 	raw_spinlock_t		dl_runtime_lock;
 	u64			dl_runtime;
@@ -351,6 +328,24 @@ static inline int dl_bandwidth_enabled(void)
 	return sysctl_sched_rt_runtime >= 0;
 }
 
+/*
+ * To keep the bandwidth of -deadline tasks under control
+ * we need some place where:
+ *  - store the maximum -deadline bandwidth of each cpu;
+ *  - cache the fraction of bandwidth that is currently allocated in
+ *    each root domain;
+ *
+ * This is all done in the data structure below. It is similar to the
+ * one used for RT-throttling (rt_bandwidth), with the main difference
+ * that, since here we are only interested in admission control, we
+ * do not decrease any runtime while the group "executes", neither we
+ * need a timer to replenish it.
+ *
+ * With respect to SMP, bandwidth is given on a per root domain basis,
+ * meaning that:
+ *  - bw (< 100%) is the deadline bandwidth of each CPU;
+ *  - total_bw is the currently allocated bandwidth in each root domain;
+ */
 struct dl_bw {
 	raw_spinlock_t		lock;
 	u64			bw;
@@ -2769,6 +2764,12 @@ enum sched_boost_policy {
 
 #ifdef CONFIG_SCHED_WALT
 
+#define WALT_MANY_WAKEUP_DEFAULT 1000
+static inline bool walt_want_remote_wakeup(void)
+{
+	return sysctl_sched_many_wakeup_threshold < WALT_MANY_WAKEUP_DEFAULT;
+}
+
 static inline int cluster_first_cpu(struct sched_cluster *cluster)
 {
 	return cpumask_first(&cluster->cpus);
@@ -2919,6 +2920,18 @@ struct related_thread_group *task_related_thread_group(struct task_struct *p)
 	return rcu_dereference(p->grp);
 }
 
+static inline bool task_rtg_high_prio(struct task_struct *p)
+{
+	return task_in_related_thread_group(p) &&
+		(p->prio <= sysctl_walt_rtg_cfs_boost_prio);
+}
+
+static inline bool walt_low_latency_task(struct task_struct *p)
+{
+	return p->low_latency &&
+		(task_util(p) < sysctl_walt_low_latency_task_threshold);
+}
+
 /* Is frequency of two cpus synchronized with each other? */
 static inline int same_freq_domain(int src_cpu, int dst_cpu)
 {
@@ -2967,15 +2980,14 @@ extern void clear_top_tasks_bitmap(unsigned long *bitmap);
 #if defined(CONFIG_SCHED_TUNE)
 extern bool task_sched_boost(struct task_struct *p);
 extern int sync_cgroup_colocation(struct task_struct *p, bool insert);
-extern bool same_schedtune(struct task_struct *tsk1, struct task_struct *tsk2);
+extern bool schedtune_task_colocated(struct task_struct *p);
 extern void update_cgroup_boost_settings(void);
 extern void restore_cgroup_boost_settings(void);
 
 #else
-static inline bool
-same_schedtune(struct task_struct *tsk1, struct task_struct *tsk2)
+static inline bool schedtune_task_colocated(struct task_struct *p)
 {
-	return true;
+	return false;
 }
 
 static inline bool task_sched_boost(struct task_struct *p)
@@ -3152,6 +3164,11 @@ struct related_thread_group *task_related_thread_group(struct task_struct *p)
 	return NULL;
 }
 
+static inline bool task_rtg_high_prio(struct task_struct *p)
+{
+	return false;
+}
+
 static inline u32 task_load(struct task_struct *p) { return 0; }
 static inline u32 task_pl(struct task_struct *p) { return 0; }
 
@@ -3203,6 +3220,10 @@ static inline bool early_detection_notify(struct rq *rq, u64 wallclock)
 }
 
 static inline void note_task_waking(struct task_struct *p, u64 wallclock) { }
+static inline bool walt_want_remote_wakeup(void)
+{
+	return false;
+}
 #endif	/* CONFIG_SCHED_WALT */
 
 struct sched_avg_stats {

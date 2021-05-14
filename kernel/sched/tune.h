@@ -23,7 +23,7 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu);
 
 #else /* CONFIG_SCHED_TUNE */
 
-#define schedtune_cpu_boost_with(cpu, p)  0
+#define schedtune_cpu_boost_with(cpu, p) 0
 #define schedtune_task_boost(tsk) 0
 
 #define schedtune_prefer_idle(tsk) 0

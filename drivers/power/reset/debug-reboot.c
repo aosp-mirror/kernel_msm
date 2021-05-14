@@ -25,6 +25,7 @@
 #define HANG_REBOOT_CMD "debug-reboot-hang"
 #define REBOOT_TIMER_TIMEOUT_MS 15000
 static struct timer_list reboot_timer;
+static DEFINE_SPINLOCK(timer_lock);
 
 #ifdef CONFIG_DEBUG_REBOOT_DEFAULT_ON
 static bool enable = 1;
@@ -91,11 +92,17 @@ static void reboot_timeout(struct timer_list *t)
 
 static void add_reboot_timer(void)
 {
+	unsigned long flags;
+
 	pr_info("debug-reboot: Create reboot monitor timer now\n");
 
-	reboot_timer.expires = jiffies +
-		msecs_to_jiffies(REBOOT_TIMER_TIMEOUT_MS);
-	add_timer(&reboot_timer);
+	spin_lock_irqsave(&timer_lock, flags);
+	if (!timer_pending(&reboot_timer)) {
+		reboot_timer.expires =
+			jiffies + msecs_to_jiffies(REBOOT_TIMER_TIMEOUT_MS);
+		add_timer(&reboot_timer);
+	}
+	spin_unlock_irqrestore(&timer_lock, flags);
 }
 
 static int debug_reboot_notify(struct notifier_block *nb,

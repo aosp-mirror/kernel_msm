@@ -64,16 +64,9 @@ static void sdhci_dump_state(struct sdhci_host *host)
 {
 	struct mmc_host *mmc = host->mmc;
 
-	#ifdef CONFIG_MMC_CLKGATE
-	pr_info("%s: clk: %d clk-gated: %d claimer: %s pwr: %d host->irq = %d\n",
-		mmc_hostname(mmc), host->clock, mmc->clk_gated,
-		mmc->claimer->task->comm, host->pwr,
-		(host->flags & SDHCI_HOST_IRQ_STATUS));
-	#else
 	pr_info("%s: clk: %d claimer: %s pwr: %d\n",
 		mmc_hostname(mmc), host->clock,
 		mmc->claimer->task->comm, host->pwr);
-	#endif
 	pr_info("%s: rpmstatus[pltfm](runtime-suspend:usage_count:disable_depth)(%d:%d:%d)\n",
 	mmc_hostname(mmc), mmc->parent->power.runtime_status,
 		atomic_read(&mmc->parent->power.usage_count),
@@ -892,12 +885,6 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd,
 	if (!data && !cmd->busy_timeout)
 		return 0xE;
 
-	/* During initialization, don't use max timeout as the clock is slow */
-	if ((host->quirks2 & SDHCI_QUIRK2_USE_RESERVED_MAX_TIMEOUT) &&
-		(host->clock > 400000)) {
-		return 0xF;
-	}
-
 	/* timeout in us */
 	target_timeout = sdhci_target_timeout(host, cmd, data);
 
@@ -927,9 +914,9 @@ static u8 sdhci_calc_timeout(struct sdhci_host *host, struct mmc_command *cmd,
 			break;
 	}
 
-	if (count >= 0xF) {
-		if (!(host->quirks2 & SDHCI_QUIRK2_DISABLE_HW_TIMEOUT) ||
-		    !(host->quirks2 & SDHCI_QUIRK2_USE_RESERVED_MAX_TIMEOUT))
+	if (count >= 0xF &&
+		!(host->quirks2 & SDHCI_QUIRK2_USE_RESERVED_MAX_TIMEOUT)) {
+		if (!(host->quirks2 & SDHCI_QUIRK2_DISABLE_HW_TIMEOUT))
 			DBG("Too large timeout 0x%x requested for CMD%d!\n",
 			    count, cmd->opcode);
 		count = 0xE;

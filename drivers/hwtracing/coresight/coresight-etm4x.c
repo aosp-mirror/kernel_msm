@@ -75,8 +75,9 @@ static void etm4_os_lock(struct etmv4_drvdata *drvdata)
 
 static bool etm4_arch_supported(u8 arch)
 {
-	switch (arch) {
-	case ETM_ARCH_MAJOR_V4:
+	/* Mask out the minor version number */
+	switch (arch & 0xf0) {
+	case ETM_ARCH_V4:
 		break;
 	default:
 		return false;
@@ -647,7 +648,7 @@ static void etm4_init_arch_data(void *info)
 	 * TRCARCHMIN, bits[7:4] architecture the minor version number
 	 * TRCARCHMAJ, bits[11:8] architecture major versin number
 	 */
-	drvdata->arch = BMVAL(etmidr1, 8, 11);
+	drvdata->arch = BMVAL(etmidr1, 4, 11);
 
 	/* maximum size of resources */
 	etmidr2 = readl_relaxed(drvdata->base + TRCIDR2);
@@ -693,8 +694,8 @@ static void etm4_init_arch_data(void *info)
 	else
 		drvdata->sysstall = false;
 
-	/* NUMPROC, bits[13:12, 30:28] the number of PEs available for trace */
-	drvdata->nr_pe = (BMVAL(etmidr3, 12, 13) << 3) | BMVAL(etmidr3, 28, 30);
+	/* NUMPROC, bits[30:28] the number of PEs available for tracing */
+	drvdata->nr_pe = BMVAL(etmidr3, 28, 30);
 
 	/* NOOVERFLOW, bit[31] is trace overflow prevention supported */
 	if (BMVAL(etmidr3, 31, 31))

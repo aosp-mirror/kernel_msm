@@ -60,3 +60,7 @@
 &dsi_sim_vid {
 	qcom,platform-reset-gpio = <&pm7250b_gpios 5 0>;
 };
+
+&dsi_sim_cmd {
+	qcom,platform-reset-gpio = <&pm7250b_gpios 5 0>;
+};

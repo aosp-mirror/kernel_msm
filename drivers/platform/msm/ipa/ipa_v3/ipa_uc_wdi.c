@@ -2195,6 +2195,7 @@ int ipa3_enable_gsi_wdi_pipe(u32 clnt_hdl)
 	struct ipa3_ep_context *ep;
 	struct ipa_ep_cfg_ctrl ep_cfg_ctrl;
 	int ipa_ep_idx;
+	struct ipa_ep_cfg_holb holb_cfg;
 
 	IPADBG("ep=%d\n", clnt_hdl);
 
@@ -2214,6 +2215,18 @@ int ipa3_enable_gsi_wdi_pipe(u32 clnt_hdl)
 
 	memset(&ep_cfg_ctrl, 0, sizeof(struct ipa_ep_cfg_ctrl));
 	ipa3_cfg_ep_ctrl(ipa_ep_idx, &ep_cfg_ctrl);
+
+	if (IPA_CLIENT_IS_CONS(ep->client)) {
+		memset(&holb_cfg, 0, sizeof(holb_cfg));
+		holb_cfg.en = IPA_HOLB_TMR_EN;
+		if (ipa3_ctx->ipa_hw_type < IPA_HW_v4_5)
+			holb_cfg.tmr_val = IPA_HOLB_TMR_VAL;
+		else
+			holb_cfg.tmr_val = IPA_HOLB_TMR_VAL_4_5;
+
+		result = ipa3_cfg_ep_holb(clnt_hdl, &holb_cfg);
+	}
+
 
 	IPA_ACTIVE_CLIENTS_DEC_EP(ipa3_get_client_mapping(clnt_hdl));
 	ep->gsi_offload_state |= IPA_WDI_ENABLED;
@@ -2619,23 +2632,25 @@ int ipa3_suspend_gsi_wdi_pipe(u32 clnt_hdl)
 	}
 	if (ep->valid) {
 		IPADBG("suspended pipe %d\n", ipa_ep_idx);
-		source_pipe_bitmask = 1 <<
-			ipa3_get_ep_mapping(ep->client);
-		res = ipa3_enable_force_clear(clnt_hdl,
-				false, source_pipe_bitmask);
-		if (res) {
-			/*
-			 * assuming here modem SSR, AP can remove
-			 * the delay in this case
-			 */
-			IPAERR("failed to force clear %d\n", res);
-			IPAERR("remove delay from SCND reg\n");
-			ep_ctrl_scnd.endp_delay = false;
-			ipahal_write_reg_n_fields(
+		if (IPA_CLIENT_IS_PROD(ep->client)) {
+			source_pipe_bitmask = 1 <<
+				ipa3_get_ep_mapping(ep->client);
+			res = ipa3_enable_force_clear(clnt_hdl,
+					false, source_pipe_bitmask);
+			if (res) {
+				/*
+				 * assuming here modem SSR, AP can remove
+				 * the delay in this case
+				 */
+				IPAERR("failed to force clear %d\n", res);
+				IPAERR("remove delay from SCND reg\n");
+				ep_ctrl_scnd.endp_delay = false;
+				ipahal_write_reg_n_fields(
 					IPA_ENDP_INIT_CTRL_SCND_n, clnt_hdl,
-					&ep_ctrl_scnd);
-		} else {
-			disable_force_clear = true;
+						&ep_ctrl_scnd);
+			} else {
+				disable_force_clear = true;
+			}
 		}
 retry_gsi_stop:
 		res = ipa3_stop_gsi_channel(ipa_ep_idx);

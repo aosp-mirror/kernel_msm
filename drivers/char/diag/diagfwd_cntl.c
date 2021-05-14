@@ -886,8 +886,11 @@ static void process_diagid(uint8_t *buf, uint32_t len,
 		diag_id++;
 		new_request = 1;
 		pd_val = diag_query_pd(process_name);
-		if (pd_val < 0)
+		if (pd_val < 0) {
+			pr_err("diag: diagid request string: %s does not exist in the database\n",
+			process_name);
 			return;
+		}
 		diag_add_diag_id_to_list(diag_id, process_name,
 			pd_val, peripheral);
 		if (diagid_v2_feature_mask) {
@@ -989,7 +992,8 @@ void diag_cntl_process_read_data(struct diagfwd_info *p_info, void *buf,
 
 	while (read_len + header_len < len) {
 		ctrl_pkt = (struct diag_ctrl_pkt_header_t *)ptr;
-		if ((read_len + header_len + ctrl_pkt->len) > len)
+		if (((size_t)read_len + (size_t)ctrl_pkt->len +
+			header_len) > len)
 			return;
 		switch (ctrl_pkt->pkt_id) {
 		case DIAG_CTRL_MSG_REG:

@@ -557,6 +557,15 @@ config ACCESS_RAMOOPS
 	help
 	  Say 'y' if ramoops is encrypted.
 
+config QPNP_MISC
+	tristate "QPNP Misc Peripheral"
+	depends on MFD_SPMI_PMIC
+	help
+	  Say 'y' here to include support for the QTI QPNP MISC
+	  peripheral. The MISC peripheral holds the USB ID interrupt
+	  and the driver provides an API to check if this interrupt
+	  is available on the current PMIC chip.
+
 config OKL4_USER_VIRQ
 	tristate "User space accessible OKL4 virtual interrupts"
 	depends on OKL4_GUEST

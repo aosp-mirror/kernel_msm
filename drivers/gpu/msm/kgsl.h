@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_H
 #define __KGSL_H
@@ -182,17 +182,21 @@ struct kgsl_memdesc_ops {
 #define KGSL_MEMDESC_UCODE BIT(9)
 /* For global buffers, randomly assign an address from the region */
 #define KGSL_MEMDESC_RANDOM BIT(10)
+/* The memdesc pages can be reclaimed */
+#define KGSL_MEMDESC_CAN_RECLAIM BIT(11)
+/* The memdesc pages were reclaimed */
+#define KGSL_MEMDESC_RECLAIMED BIT(12)
+/* Skip reclaim of the memdesc pages */
+#define KGSL_MEMDESC_SKIP_RECLAIM BIT(13)
 
 /**
  * struct kgsl_memdesc - GPU memory object descriptor
  * @pagetable: Pointer to the pagetable that the object is mapped in
  * @hostptr: Kernel virtual address
  * @hostptr_count: Number of threads using hostptr
- * @useraddr: User virtual address (if applicable)
  * @gpuaddr: GPU virtual address
  * @physaddr: Physical address of the memory object
  * @size: Size of the memory object
- * @mapsize: Size of memory mapped in userspace
  * @priv: Internal flags and settings
  * @sgt: Scatter gather table for allocated pages
  * @ops: Function hooks for the memdesc memory type
@@ -208,11 +212,9 @@ struct kgsl_memdesc {
 	struct kgsl_pagetable *pagetable;
 	void *hostptr;
 	unsigned int hostptr_count;
-	unsigned long useraddr;
 	uint64_t gpuaddr;
 	phys_addr_t physaddr;
 	uint64_t size;
-	atomic_long_t mapsize;
 	unsigned int priv;
 	struct sg_table *sgt;
 	struct kgsl_memdesc_ops *ops;
@@ -223,6 +225,19 @@ struct kgsl_memdesc {
 	unsigned int page_count;
 	unsigned int cur_bindings;
 	struct file *shmem_filp;
+	/**
+	 * @lock: Spinlock to protect the pages array
+	 */
+	spinlock_t lock;
+	/**
+	 * @reclaimed_page_count: Total number of pages reclaimed
+	 */
+	int reclaimed_page_count;
+	/*
+	 * @gpuaddr_lock: Spinlock to protect the gpuaddr from being accessed by
+	 * multiple entities trying to map the same SVM region at once
+	 */
+	spinlock_t gpuaddr_lock;
 };
 
 /*
@@ -271,6 +286,11 @@ struct kgsl_mem_entry {
 	struct work_struct work;
 	spinlock_t bind_lock;
 	struct rb_root bind_tree;
+	/**
+	 * @map_count: Count how many vmas this object is mapped in - used for
+	 * debugfs accounting
+	 */
+	atomic_t map_count;
 };
 
 struct kgsl_device_private;

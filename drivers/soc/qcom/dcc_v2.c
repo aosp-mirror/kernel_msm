@@ -16,6 +16,7 @@
 #include <linux/uaccess.h>
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/scm.h>
+#include <soc/qcom/minidump.h>
 #include <dt-bindings/soc/qcom,dcc_v2.h>
 
 #define TIMEOUT_US		(100)
@@ -719,7 +720,6 @@ static int dcc_enable(struct dcc_drvdata *drvdata)
 	int ret = 0;
 	int list;
 	uint32_t ram_cfg_base;
-	uint32_t hw_info;
 
 	mutex_lock(&drvdata->mutex);
 
@@ -754,10 +754,6 @@ static int dcc_enable(struct dcc_drvdata *drvdata)
 		dcc_writel(drvdata, drvdata->ram_start +
 				drvdata->ram_offset/4, DCC_FD_BASE(list));
 		dcc_writel(drvdata, 0xFFF, DCC_LL_TIMEOUT(list));
-
-		hw_info = dcc_readl(drvdata, DCC_HW_INFO);
-		if (hw_info & 0x80)
-			dcc_writel(drvdata, 0x3F, DCC_TRANS_TIMEOUT(list));
 
 		/* 4. Clears interrupt status register */
 		dcc_writel(drvdata, 0, DCC_LL_INT_ENABLE(list));
@@ -1114,7 +1110,8 @@ static int dcc_config_add(struct dcc_drvdata *drvdata, unsigned int addr,
 		pentry = list_last_entry(&drvdata->cfg_head[drvdata->curr_list],
 					 struct dcc_config_entry, list);
 
-		if (addr >= (pentry->base + pentry->offset) &&
+		if (pentry->desc_type == DCC_ADDR_TYPE &&
+		    addr >= (pentry->base + pentry->offset) &&
 		    addr <= (pentry->base + pentry->offset + MAX_DCC_OFFSET)) {
 
 			/* Re-use base address from last entry */
@@ -1580,7 +1577,8 @@ static ssize_t dcc_sram_read(struct file *file, char __user *data,
 	if (drvdata->ram_size <= *ppos)
 		return 0;
 
-	if ((*ppos + len) > drvdata->ram_size)
+	if ((*ppos + len) < len
+		|| (*ppos + len) > drvdata->ram_size)
 		len = (drvdata->ram_size - *ppos);
 
 	buf = kzalloc(len, GFP_KERNEL);
@@ -1797,6 +1795,7 @@ static int dcc_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct dcc_drvdata *drvdata;
 	struct resource *res;
+	struct md_region md_entry;
 
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
@@ -1888,6 +1887,14 @@ static int dcc_probe(struct platform_device *pdev)
 		goto err;
 
 	dcc_configure_list(drvdata, pdev->dev.of_node);
+
+	/* Add dcc info to minidump table */
+	strlcpy(md_entry.name, "KDCCDATA", sizeof(md_entry.name));
+	md_entry.virt_addr = (uintptr_t)drvdata->ram_base;
+	md_entry.phys_addr = res->start;
+	md_entry.size = drvdata->ram_size;
+	if (msm_minidump_add_region(&md_entry))
+		dev_err(drvdata->dev, "Failed to add DCC data in Minidump\n");
 
 	return 0;
 err:

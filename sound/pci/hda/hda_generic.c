@@ -1376,16 +1376,20 @@ static int try_assign_dacs(struct hda_codec *codec, int num_outs,
 		struct nid_path *path;
 		hda_nid_t pin = pins[i];
 
-		path = snd_hda_get_path_from_idx(codec, path_idx[i]);
-		if (path) {
-			badness += assign_out_path_ctls(codec, path);
-			continue;
+		if (!spec->obey_preferred_dacs) {
+			path = snd_hda_get_path_from_idx(codec, path_idx[i]);
+			if (path) {
+				badness += assign_out_path_ctls(codec, path);
+				continue;
+			}
 		}
 
 		dacs[i] = get_preferred_dac(codec, pin);
 		if (dacs[i]) {
 			if (is_dac_already_used(codec, dacs[i]))
 				badness += bad->shared_primary;
+		} else if (spec->obey_preferred_dacs) {
+			badness += BAD_NO_PRIMARY_DAC;
 		}
 
 		if (!dacs[i])
@@ -4025,7 +4029,7 @@ int snd_hda_gen_add_micmute_led(struct hda_codec *codec,
 
 	spec->micmute_led.led_mode = MICMUTE_LED_FOLLOW_MUTE;
 	spec->micmute_led.capture = 0;
-	spec->micmute_led.led_value = 0;
+	spec->micmute_led.led_value = -1;
 	spec->micmute_led.old_hook = spec->cap_sync_hook;
 	spec->micmute_led.update = hook;
 	spec->cap_sync_hook = update_micmute_led;

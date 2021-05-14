@@ -1380,6 +1380,7 @@ static int ep_create_wakeup_source(struct epitem *epi)
 	struct name_snapshot n;
 	struct wakeup_source *ws;
 
+
 	if (!epi->ep->ws) {
 		epi->ep->ws = wakeup_source_register(NULL, "eventpoll");
 		if (!epi->ep->ws)

@@ -179,11 +179,12 @@ static struct pll_vco fabia_vco[] = {
 /* 600MHz configuration */
 static const struct alpha_pll_config cam_cc_pll0_config = {
 	.l = 0x1F,
+	.cal_l = 0x22,
 	.alpha = 0x4000,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00002067,
 	.test_ctl_val = 0x40000000,
-	.test_ctl_hi_val = 0x00000000,
+	.test_ctl_hi_val = 0x00000002,
 	.user_ctl_val = 0x00000101,
 	.user_ctl_hi_val = 0x00004805,
 };
@@ -234,6 +235,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll0_out_even = {
 /* 808MHz configuration */
 static const struct alpha_pll_config cam_cc_pll1_config = {
 	.l = 0x2A,
+	.cal_l = 0x2C,
 	.alpha = 0x1555,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00002067,
@@ -357,13 +359,14 @@ static struct clk_alpha_pll_postdiv cam_cc_pll2_out_main = {
 /* 384MHz configuration */
 static const struct alpha_pll_config cam_cc_pll3_config = {
 	.l = 0x14,
+	.cal_l = 0x16,
 	.alpha = 0x0,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00002067,
 	.test_ctl_val = 0x40000000,
-	.test_ctl_hi_val = 0x00000000,
+	.test_ctl_hi_val = 0x00000002,
 	.user_ctl_val = 0x00000001,
-	.user_ctl_hi_val = 0x00004805,
+	.user_ctl_hi_val = 0x00014805,
 };
 
 static struct clk_alpha_pll cam_cc_pll3 = {

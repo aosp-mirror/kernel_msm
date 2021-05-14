@@ -69,6 +69,8 @@
 #include <linux/mount.h>
 #include <linux/pipe_fs_i.h>
 
+#include "../lib/kstrtox.h"
+
 #include <linux/uaccess.h>
 #include <asm/processor.h>
 
@@ -147,6 +149,15 @@ static int two_hundred_fifty_five = 255;
 const int sched_user_hint_max = 1000;
 static unsigned int ns_per_sec = NSEC_PER_SEC;
 static unsigned int one_hundred_thousand = 100000;
+/*
+ * CFS task prio range is [100 ... 139]
+ * 120 is the default prio.
+ * RTG boost range is [100 ... 119] because giving
+ * boost for [120 .. 139] does not make sense.
+ * 99 means disabled and it is the default value.
+ */
+static unsigned int min_cfs_boost_prio = 99;
+static unsigned int max_cfs_boost_prio = 119;
 #endif
 /* this is needed for the proc_doulongvec_minmax of vm_dirty_bytes */
 static unsigned long dirty_bytes_min = 2 * PAGE_SIZE;
@@ -558,7 +569,34 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler   = proc_dointvec_minmax,
 		.extra1		= &zero,
-		.extra2		= &two,
+		.extra2		= &four,
+	},
+	{
+		.procname	= "walt_rtg_cfs_boost_prio",
+		.data		= &sysctl_walt_rtg_cfs_boost_prio,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1		= &min_cfs_boost_prio,
+		.extra2		= &max_cfs_boost_prio,
+	},
+	{
+		.procname	= "walt_low_latency_task_threshold",
+		.data		= &sysctl_walt_low_latency_task_threshold,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one_thousand,
+	},
+	{
+		.procname	= "sched_force_lb_enable",
+		.data		= &sysctl_sched_force_lb_enable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &one,
 	},
 #endif
 #ifdef CONFIG_SCHED_DEBUG
@@ -2415,6 +2453,41 @@ static void proc_skip_char(char **buf, size_t *size, const char v)
 	}
 }
 
+/**
+ * strtoul_lenient - parse an ASCII formatted integer from a buffer and only
+ *                   fail on overflow
+ *
+ * @cp: kernel buffer containing the string to parse
+ * @endp: pointer to store the trailing characters
+ * @base: the base to use
+ * @res: where the parsed integer will be stored
+ *
+ * In case of success 0 is returned and @res will contain the parsed integer,
+ * @endp will hold any trailing characters.
+ * This function will fail the parse on overflow. If there wasn't an overflow
+ * the function will defer the decision what characters count as invalid to the
+ * caller.
+ */
+static int strtoul_lenient(const char *cp, char **endp, unsigned int base,
+			   unsigned long *res)
+{
+	unsigned long long result;
+	unsigned int rv;
+
+	cp = _parse_integer_fixup_radix(cp, &base);
+	rv = _parse_integer(cp, base, &result);
+	if ((rv & KSTRTOX_OVERFLOW) || (result != (unsigned long)result))
+		return -ERANGE;
+
+	cp += rv;
+
+	if (endp)
+		*endp = (char *)cp;
+
+	*res = (unsigned long)result;
+	return 0;
+}
+
 #define TMPBUFLEN 22
 /**
  * proc_get_long - reads an ASCII formatted integer from a user buffer
@@ -2458,7 +2531,8 @@ static int proc_get_long(char **buf, size_t *size,
 	if (!isdigit(*p))
 		return -EINVAL;
 
-	*val = simple_strtoul(p, &p, 0);
+	if (strtoul_lenient(p, &p, 0, val))
+		return -EINVAL;
 
 	len = p - tmp;
 

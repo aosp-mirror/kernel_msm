@@ -125,8 +125,15 @@ static int __init io_pgtable_init(void)
 	static const char pages_str[] __initconst = "pages";
 
 	io_pgtable_top = debugfs_create_dir(io_pgtable_str, iommu_debugfs_top);
-	debugfs_create_atomic_t(pages_str, 0600, io_pgtable_top,
-				&pages_allocated);
+	if (!io_pgtable_top)
+		return -ENODEV;
+
+	if (!debugfs_create_atomic_t(pages_str, 0600,
+				     io_pgtable_top, &pages_allocated)) {
+		debugfs_remove_recursive(io_pgtable_top);
+		return -ENODEV;
+	}
+
 	return 0;
 }
 

@@ -37,6 +37,9 @@
 	i2c0 = "/soc/i2c@984000";
 	i2c1 = "/soc/i2c@98c000";
 	i2c2 = "/soc/i2c@994000";
+	spi0 = "/soc/spi@880000";
+	spi1 = "/soc/spi@890000";
+	spi2 = "/soc/spi@980000";
 };
 
 &soc {
@@ -121,12 +124,6 @@
 		compatible = "access_ramoops";
 		label = "ramoops";
 		memory-region = <&alt_ramoops_mem>;
-	};
-
-	access_kregistry@2 {
-		compatible = "access_ramoops";
-		label = "kregistry";
-		memory-region = <&kregistry_mem>;
 	};
 
 	keydebug {

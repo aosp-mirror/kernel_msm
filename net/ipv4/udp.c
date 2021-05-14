@@ -1922,9 +1922,11 @@ static int __udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		int is_udplite = IS_UDPLITE(sk);
 
 		/* Note that an ENOMEM error is charged twice */
-		if (rc == -ENOMEM)
+		if (rc == -ENOMEM) {
 			UDP_INC_STATS(sock_net(sk), UDP_MIB_RCVBUFERRORS,
 					is_udplite);
+			trace_udpv4_fail_rcv_buf_errors(skb);
+		}
 		UDP_INC_STATS(sock_net(sk), UDP_MIB_INERRORS, is_udplite);
 		kfree_skb(skb);
 		trace_udp_fail_queue_rcv_skb(rc, sk);
@@ -2447,7 +2449,8 @@ int udp_v4_early_demux(struct sk_buff *skb)
 		 */
 		if (!inet_sk(sk)->inet_daddr && in_dev)
 			return ip_mc_validate_source(skb, iph->daddr,
-						     iph->saddr, iph->tos,
+						     iph->saddr,
+						     iph->tos & IPTOS_RT_MASK,
 						     skb->dev, in_dev, &itag);
 	}
 	return 0;
