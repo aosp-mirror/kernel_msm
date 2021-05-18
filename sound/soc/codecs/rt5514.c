@@ -225,6 +225,23 @@ static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 	}
 }
 
+static ssize_t i2c_reset_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", g_rt5514->pdata.i2c_reset);
+}
+
+static DEVICE_ATTR_RO(i2c_reset);
+
+static struct attribute *rt5514_fs_attrs[] = {
+	&dev_attr_i2c_reset.attr,
+	NULL,
+};
+
+static struct attribute_group rt5514_fs_attrs_group = {
+	.attrs = rt5514_fs_attrs,
+};
+
 static bool rt5514_volatile_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
@@ -713,6 +730,9 @@ reset:
 		dev_err(component->dev, "DSP run failure, reset DSP\n");
 
 		if (rt5514->gpiod_reset) {
+			rt5514->pdata.i2c_reset = true;
+			sysfs_notify(&component->dev->kobj, NULL,
+				dev_attr_i2c_reset.attr.name);
 			gpiod_set_value(rt5514->gpiod_reset, 0);
 			usleep_range(1000, 2000);
 			gpiod_set_value(rt5514->gpiod_reset, 1);
@@ -1035,7 +1055,8 @@ update_buffer_status:
 	} else {
 		g_rt5514->buffer_status = false;
 	}
-
+	/* clear i2c_reset when DSP enabled */
+	rt5514->pdata.i2c_reset = false;
 	return 0;
 }
 
@@ -1626,6 +1647,37 @@ static int rt5514_hotword_dsp_identifier_get(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+static int rt5514_i2c_reset_get(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	if (rt5514->pdata.i2c_reset == true)
+		ucontrol->value.integer.value[0] = 1;
+	else
+		ucontrol->value.integer.value[0] = 0;
+
+	return 0;
+}
+
+static int rt5514_i2c_reset_put(struct snd_kcontrol *kcontrol,
+		struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct rt5514_priv *rt5514 = snd_soc_component_get_drvdata(component);
+
+	if (ucontrol->value.integer.value[0] == 1) {
+		rt5514->pdata.i2c_reset = true;
+		sysfs_notify(&component->dev->kobj, NULL,
+			dev_attr_i2c_reset.attr.name);
+	} else {
+		rt5514->pdata.i2c_reset = false;
+	}
+
+	return 0;
+}
+
 static const char * const dmic_divider_rate_txt[] = {
 	"1.024K", "1.536K", "2.048K", "3.072K",
 };
@@ -1704,6 +1756,8 @@ static const struct snd_kcontrol_new rt5514_snd_controls[] = {
 			  rt5514_hotword_dsp_identifier_get, NULL),
 	SOC_SINGLE_EXT("ZLATENCY_DELAY", SND_SOC_NOPM, 0, 1000, 0,
 		       rt5514_dsp_zlatency_get, rt5514_dsp_zlatency_put),
+	SOC_SINGLE_EXT("I2C RESET", SND_SOC_NOPM, 0, 1, 0,
+				rt5514_i2c_reset_get, rt5514_i2c_reset_put),
 };
 
 /* ADC Mixer*/
@@ -2840,6 +2894,13 @@ static int rt5514_i2c_probe(struct i2c_client *i2c,
 				    ARRAY_SIZE(rt5514_patch));
 	if (ret != 0)
 		dev_warn(&i2c->dev, "Failed to apply regmap patch: %d\n", ret);
+
+	rt5514->pdata.i2c_reset = false;
+
+	ret = sysfs_create_group(&i2c->dev.kobj,
+		&rt5514_fs_attrs_group);
+	if (ret)
+		dev_err(&i2c->dev, "fs_attrs failed, ret=%d\n", ret);
 
 	rt5514->divider_param = DIVIDER_1_P536;
 

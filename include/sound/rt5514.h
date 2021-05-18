@@ -16,6 +16,7 @@ struct rt5514_platform_data {
 	unsigned int dmic_init_delay;
 	const char *dsp_calib_clk_name;
 	unsigned int dsp_calib_clk_rate;
+	bool i2c_reset;
 };
 
 #endif
