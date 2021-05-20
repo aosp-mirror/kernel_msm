@@ -777,7 +777,7 @@ static void bd_work(struct work_struct *work)
 			pr_info("MSC_BD_WORK: done time=%lld limit=%d, temp=%d limit=%d\n",
 				delta_time, bd_state->bd_resume_time,
 				temp, bd_state->bd_resume_temp);
-			bd_state->triggered = triggered;
+			bd_reset(bd_state);
 			goto bd_rerun;
 		}
 	}
