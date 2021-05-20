@@ -1605,7 +1605,7 @@ static void bd_work(struct work_struct *work)
 				delta_time, bd_state->bd_resume_time,
 				temp, bd_state->bd_resume_temp);
 
-			bd_state->triggered = triggered;
+			bd_reset(&chg_drv->bd_state);
 			goto bd_rerun;
 		}
 	}
