@@ -1452,6 +1452,7 @@ static inline int msm_vidc_power_save_mode_enable(struct msm_vidc_inst *inst,
 	struct hfi_device *hdev = NULL;
 	enum hal_perf_mode venc_mode;
 	u32 rc_mode = 0;
+	int complexity;
 
 	hdev = inst->core->device;
 	if (inst->session_type != MSM_VIDC_ENCODER) {
@@ -1472,7 +1473,10 @@ static inline int msm_vidc_power_save_mode_enable(struct msm_vidc_inst *inst,
 		V4L2_CID_MPEG_VIDEO_BITRATE_MODE);
 	if (rc_mode == V4L2_MPEG_VIDEO_BITRATE_MODE_CQ)
 		enable = false;
-
+	complexity = msm_comm_g_ctrl_for_id(inst,
+		V4L2_CID_MPEG_VIDC_VENC_COMPLEXITY);
+	if (!is_realtime_session(inst) && !complexity)
+		enable = true;
 	prop_id = HAL_CONFIG_VENC_PERF_MODE;
 	venc_mode = enable ? HAL_PERF_MODE_POWER_SAVE :
 		HAL_PERF_MODE_POWER_MAX_QUALITY;
@@ -1488,9 +1492,9 @@ static inline int msm_vidc_power_save_mode_enable(struct msm_vidc_inst *inst,
 	inst->flags = enable ?
 		inst->flags | VIDC_LOW_POWER :
 		inst->flags & ~VIDC_LOW_POWER;
-
 	dprintk(VIDC_PROF,
-		"Power Save Mode for inst: %pK Enable = %d\n", inst, enable);
+			"Power Save Mode for inst: %pK Enable = %d\n",
+			inst, enable);
 fail_power_mode_set:
 	return rc;
 }
