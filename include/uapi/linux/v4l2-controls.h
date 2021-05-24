@@ -1445,6 +1445,9 @@ enum v4l2_mpeg_vidc_video_h264_vui_timing_info {
 	V4L2_MPEG_VIDC_VIDEO_H264_VUI_TIMING_INFO_ENABLED = 1
 };
 
+#define V4L2_CID_MPEG_VIDC_VENC_COMPLEXITY \
+       (V4L2_CID_MPEG_MSM_VIDC_BASE + 167)
+
 /*  Camera class control IDs */
 
 #define V4L2_CID_CAMERA_CLASS_BASE 	(V4L2_CTRL_CLASS_CAMERA | 0x900)
