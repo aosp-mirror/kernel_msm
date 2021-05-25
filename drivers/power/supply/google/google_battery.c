@@ -786,6 +786,10 @@ void ssoc_change_curve(struct batt_ssoc_state *ssoc_state, qnum_t delta,
 		gdf -=  delta;
 	}
 
+	/* adjust gdf to update curve[1].real in ssoc_uicurve_splice() */
+	if (gdf > ssoc_point_full)
+		gdf = ssoc_point_full;
+
 	ssoc_change_curve_at_gdf(ssoc_state, gdf,
 				 ssoc_get_capacity_raw(ssoc_state), type);
 }
