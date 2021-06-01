@@ -147,6 +147,18 @@ Description:
 			      "Watchdog timer expire", "Safety timer expire",
 			      "Over current", "Warm", "Cool", "Hot"
 
+What:		/sys/class/power_supply/<supply_name>/health_safety_margin
+Date:		June 2021
+Contact:	hsiufangho@google.com
+Description:
+		This entry configures the time for adaptive charge pause.
+		It presents the time before adaptive charge deadline and
+		cooperate with time to full feature. Limit max time value
+		to 1 week because this feature related to alarm.
+
+		Access: Read, Write
+		Valid values: Time in seconds, from 0 to 604800 (1 week)
+
 What:		/sys/class/power_supply/<supply_name>/precharge_current
 Date:		June 2017
 Contact:	linux-pm@vger.kernel.org
