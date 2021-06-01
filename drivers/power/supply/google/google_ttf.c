@@ -132,6 +132,13 @@ static int ttf_pwr_health(const struct gbms_charging_event *ce_data,
 	       soc >= CHG_HEALTH_REST_SOC(&ce_data->ce_health);
 }
 
+static int ttf_pwr_health_pause(const struct gbms_charging_event *ce_data,
+			  int soc)
+{
+	return CHG_HEALTH_REST_IS_PAUSE(&ce_data->ce_health) &&
+	       soc >= CHG_HEALTH_REST_SOC(&ce_data->ce_health);
+}
+
 /*
  * equivalent icl: minimum between actual input current limit and battery
  * everage current _while_in_tier. actual_icl will be lower in high current
@@ -145,11 +152,18 @@ static int ttf_pwr_equiv_icl(const struct gbms_charging_event *ce_data,
 			   (profile->volt_limits[vbatt_idx] / 1000);
 	const struct gbms_ce_tier_stats *tier_stats;
 	const int efficiency = 95; /* TODO: use real efficiency */
+	const u32 capacity_ma = profile->capacity_ma;
+	const int rest_rate = ce_data->ce_health.rest_rate;
 	int equiv_icl, act_icl, act_ibatt, health_ibatt = -1;
 
 	/* Health collects in ce_data->health_stats vtier */
 	if (ttf_pwr_health(ce_data, soc)) {
 		health_ibatt = ce_data->ce_health.rest_cc_max / 1000;
+		tier_stats = &ce_data->health_stats;
+	} else if (ttf_pwr_health_pause(ce_data, soc)) {
+		/* use ACTIVE current in PAUSE stat for ttf calculation */
+		health_ibatt = (capacity_ma * rest_rate * 10) / 1000;
+		/* use ACTIVE tier in PAUSE stat for ttf calculation */
 		tier_stats = &ce_data->health_stats;
 	} else {
 		tier_stats = &ce_data->tier_stats[vbatt_idx];
