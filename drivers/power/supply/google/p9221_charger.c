@@ -88,6 +88,8 @@ DECLARE_CRC8_TABLE(p9221_crc8_table);
 
 static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
 static void p9221_icl_ramp_start(struct p9221_charger_data *charger);
+static bool p9221_has_dd(struct p9221_charger_data *charger);
+static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger);
 
 static const u32 p9221_ov_set_lut[] = {
 	17000000, 20000000, 15000000, 13000000,
@@ -888,6 +890,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	charger->alignment = -1;
 	charger->alignment_capable = ALIGN_MFG_FAILED;
 	charger->mfg = 0;
+	charger->tx_id = 0;
 	schedule_work(&charger->uevent_work);
 
 	/* use for ignore irq_det after Rx offline */
@@ -1043,14 +1046,21 @@ static void p9221_power_mitigation_work(struct work_struct *work)
 
 	if (!p9221_is_epp(charger)) {
 		charger->fod_cnt = 0;
-		dev_info(&charger->client->dev, "power_mitigate: already BPP\n");
+		dev_info(&charger->client->dev,
+			 "power_mitigate: already BPP\n");
 		return;
 	}
 
-	if (charger->mfg != WLC_MFG_GOOGLE)
-		return;
+	/* right now p9221_has_dd() implies charger->mfg==WLC_MFG_GOOGLE */
+	if (charger->mfg != WLC_MFG_GOOGLE || !p9221_has_dd(charger)) {
+		const char *txid = p9221_get_tx_id_str(charger);
 
-	/* only for D250 */
+		dev_info(&charger->client->dev,
+			 "power_mitigate: not DD mfg=%x, id=%s\n",
+			 charger->mfg, txid ? txid : "<>");
+		return;
+	}
+
 	if (charger->fod_cnt < P9221_FOD_MAX_TIMES) {
 		force_set_fod(charger);
 		charger->fod_cnt++;
@@ -1234,6 +1244,9 @@ static void p9221_align_work(struct work_struct *work)
 		charger->alignment_capable = ALIGN_MFG_PASSED;
 	}
 
+	if (!p9221_has_dd(charger))
+		return;
+
 	if (charger->pdata->alignment_scalar == 0)
 		goto no_scaling;
 
@@ -1270,7 +1283,6 @@ no_scaling:
 static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 {
 	int ret;
-	uint32_t tx_id = 0;
 	u16 tx_id_reg;
 
 	if (!p9221_is_online(charger))
@@ -1288,7 +1300,7 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 
 	if (p9221_is_epp(charger)) {
 		ret = p9221_reg_read_n(charger, tx_id_reg,
-				       &tx_id, sizeof(tx_id));
+				       &charger->tx_id, sizeof(charger->tx_id));
 		if (ret)
 			dev_err(&charger->client->dev,
 				"Failed to read txid %d\n", ret);
@@ -1300,14 +1312,31 @@ static const char *p9221_get_tx_id_str(struct p9221_charger_data *charger)
 		 * read this multiple times.)
 		 */
 		if (charger->pp_buf_valid &&
-		    sizeof(tx_id) <= P9221R5_MAX_PP_BUF_SIZE)
-			memcpy(&tx_id, &charger->pp_buf[1],
-			       sizeof(tx_id));
+		    sizeof(charger->tx_id) <= P9221R5_MAX_PP_BUF_SIZE)
+			memcpy(&charger->tx_id, &charger->pp_buf[1],
+			       sizeof(charger->tx_id));
 	}
 	scnprintf(charger->tx_id_str, sizeof(charger->tx_id_str),
-		  "%08x", tx_id);
+		  "%08x", charger->tx_id);
+
 	return charger->tx_id_str;
 }
+
+/* txid is available sometime after connect */
+static bool p9221_has_dd(struct p9221_charger_data *charger)
+{
+	u8 val;
+	bool ret = false;
+
+	if (p9221_get_tx_id_str(charger) != NULL) {
+		val = (charger->tx_id & TXID_TYPE_MASK) >> TXID_TYPE_SHIFT;
+		if (val == TXID_DD_TYPE)
+			ret = true;
+	}
+
+	return ret;
+}
+
 static const char *p9382_get_ptmc_id_str(struct p9221_charger_data *charger)
 {
 	int ret;
@@ -1485,9 +1514,6 @@ static int p9221_set_property(struct power_supply *psy,
 
 		if ((charger->last_capacity > threshold) &&
 		    !charger->trigger_power_mitigation) {
-			dev_info(&charger->client->dev,
-				 "trigger power mitigation, soc > %d\n",
-				 threshold);
 			charger->trigger_power_mitigation = true;
 			ret = delayed_work_pending(
 			      &charger->power_mitigation_work);
