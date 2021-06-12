@@ -4396,6 +4396,12 @@ static int qg_parse_cl_dt(struct qpnp_qg *chip)
 	else
 		chip->cl->dt.max_cap_limit = temp;
 
+	rc = of_property_read_u32(node, "google,cl-degrade", &temp);
+	if (rc < 0)
+		chip->cl->dt.cap_degrade = 0;
+	else
+		chip->cl->dt.cap_degrade = temp;
+
 	chip->cl->dt.min_delta_batt_soc = DEFAULT_CL_DELTA_BATT_SOC;
 	/* read from DT property and update, if value exists */
 	of_property_read_u32(node, "qcom,cl-min-delta-batt-soc",
