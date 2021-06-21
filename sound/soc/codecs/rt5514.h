@@ -275,6 +275,8 @@
 #define UNMUTE_TIMEOUT_MS	1000
 #define UNMUTE_SWITCH_MS	85
 
+#define RT5514_ENTRY_MAX_LEN 64
+
 /* System Clock Source */
 enum {
 	RT5514_SCLK_S_MCLK,

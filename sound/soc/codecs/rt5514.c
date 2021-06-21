@@ -228,7 +228,16 @@ static void rt5514_enable_dsp_prepare(struct rt5514_priv *rt5514)
 static ssize_t i2c_reset_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	return sysfs_emit(buf, "%d\n", g_rt5514->pdata.i2c_reset);
+	ssize_t ret;
+
+	if (g_rt5514->pdata.i2c_reset)
+		ret = scnprintf(buf, RT5514_ENTRY_MAX_LEN, "%u\n",
+			 (unsigned int)true);
+	else
+		ret = scnprintf(buf, RT5514_ENTRY_MAX_LEN, "%u\n",
+			 (unsigned int)false);
+
+	return ret;
 }
 
 static DEVICE_ATTR_RO(i2c_reset);
