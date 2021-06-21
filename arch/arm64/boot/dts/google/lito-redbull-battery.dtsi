@@ -204,7 +204,7 @@
 		google,bd-resume-temp = <290>;
 		google,bd-resume-soc = <50>;
 		google,bd-trigger-time = <21600>; /* 6 hours */
-		google,bd-trigger-temp = <320>;
+		google,bd-trigger-temp = <350>;
 		google,bd-trigger-voltage = <4320000>;
 		google,bd-recharge-voltage = <4300000>;
 		google,bd-drainto-soc = <80>;
