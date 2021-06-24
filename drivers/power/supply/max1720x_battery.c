@@ -1037,7 +1037,7 @@ static int max1720x_get_battery_health(struct max1720x_chip *chip)
 
 	if (chip->health_status & MAX1720X_STATUS_TMX) {
 		chip->health_status &= ~MAX1720X_STATUS_TMX;
-		return POWER_SUPPLY_HEALTH_OVERHEAT;
+		return POWER_SUPPLY_HEALTH_HOT;
 	}
 
 	return POWER_SUPPLY_HEALTH_GOOD;
