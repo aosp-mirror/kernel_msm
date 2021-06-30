@@ -21,6 +21,7 @@
 &pm8150b_pdphy {
 	google,ext_vbus-supported;
 	ext-vbus-supply = <&ext_5v_boost>;
+	goog,wlc-supported;
 
 	usb_con: connector {
 		compatible = "usb-c-connector";
