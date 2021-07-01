@@ -1309,7 +1309,9 @@ static void process_udata_work(struct work_struct *work)
 		} else if (input_present && cc_soc_delta > MAX_CC_SOC_DELTA) {
 			pr_info("cc_soc %d exceeds FULL, calibrate qg_soc\n",
 				chip->udata.param[QG_CC_SOC].data);
-			qg_trigger_good_ocv(chip);
+			rc = qg_trigger_good_ocv(chip);
+			if (rc == 0)
+				chip->cl->cl_skip = true;
 		} else {
 			chip->cc_soc = chip->udata.param[QG_CC_SOC].data;
 		}
@@ -4393,6 +4395,12 @@ static int qg_parse_cl_dt(struct qpnp_qg *chip)
 					DEFAULT_CL_MAX_LIM_DECIPERC;
 	else
 		chip->cl->dt.max_cap_limit = temp;
+
+	rc = of_property_read_u32(node, "google,cl-degrade", &temp);
+	if (rc < 0)
+		chip->cl->dt.cap_degrade = 0;
+	else
+		chip->cl->dt.cap_degrade = temp;
 
 	chip->cl->dt.min_delta_batt_soc = DEFAULT_CL_DELTA_BATT_SOC;
 	/* read from DT property and update, if value exists */

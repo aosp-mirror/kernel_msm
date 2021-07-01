@@ -12,6 +12,8 @@
 #include <linux/slab.h>
 #include <linux/sort.h>
 #include "fg-alg.h"
+#include "qg-sdam.h"
+#include "qg-reg.h"
 
 #define FULL_SOC_RAW		255
 #define CAPACITY_DELTA_DECIPCT	500
@@ -294,6 +296,22 @@ int cycle_count_init(struct cycle_counter *counter)
 	return 0;
 }
 
+static int read_cycle_count(void)
+{
+	u16 count[BUCKET_COUNT];
+	int id, rc;
+	int64_t temp = 0;
+
+	rc = qg_sdam_multibyte_read(QG_SDAM_CYCLE_COUNT_OFFSET, (u8 *)count,
+				    sizeof(count));
+	if (rc < 0)
+		return -EINVAL;
+	for (id = 0; id < BUCKET_COUNT; id++)
+		temp += count[id];
+
+	return (temp / 100);
+}
+
 /* Capacity learning algorithm APIs */
 
 /**
@@ -331,13 +349,29 @@ static void cap_learning_post_process(struct cap_learning *cl)
 	else
 		cl->learned_cap_uah = cl->final_cap_uah;
 
+	if (cl->dt.cap_degrade > 0) {
+		int count = read_cycle_count();
+
+		if (count >= 0) {
+			min_dec_val = (int64_t)cl->nom_cap_uah *
+				      (1000 - (cl->dt.cap_degrade *
+					       ((count / 100) + 1)));
+			min_dec_val = div64_u64(min_dec_val, 1000);
+			if (cl->learned_cap_uah < min_dec_val) {
+				pr_err("capacity %lld below degrade %lld\n",
+				       cl->learned_cap_uah, min_dec_val);
+				cl->learned_cap_uah = min_dec_val;
+			}
+		}
+	}
+
 	if (cl->dt.max_cap_limit >= 0) {
 		max_inc_val = (int64_t)cl->nom_cap_uah * (1000 +
 				cl->dt.max_cap_limit);
 		max_inc_val = div64_u64(max_inc_val, 1000);
-		if (cl->final_cap_uah > max_inc_val) {
+		if (cl->learned_cap_uah > max_inc_val) {
 			pr_debug("learning capacity %lld goes above max limit %lld\n",
-				cl->final_cap_uah, max_inc_val);
+				cl->learned_cap_uah, max_inc_val);
 			cl->learned_cap_uah = max_inc_val;
 		}
 	}
@@ -346,9 +380,9 @@ static void cap_learning_post_process(struct cap_learning *cl)
 		min_dec_val = (int64_t)cl->nom_cap_uah * (1000 -
 				cl->dt.min_cap_limit);
 		min_dec_val = div64_u64(min_dec_val, 1000);
-		if (cl->final_cap_uah < min_dec_val) {
+		if (cl->learned_cap_uah < min_dec_val) {
 			pr_debug("learning capacity %lld goes below min limit %lld\n",
-				cl->final_cap_uah, min_dec_val);
+				cl->learned_cap_uah, min_dec_val);
 			cl->learned_cap_uah = min_dec_val;
 		}
 	}
@@ -541,6 +575,9 @@ static int cap_learning_done(struct cap_learning *cl, int batt_soc_cp)
 {
 	int rc;
 
+	if (cl->cl_skip == true)
+		return -ENODATA;
+
 	rc = cap_learning_process_full_data(cl, batt_soc_cp);
 	if (rc < 0) {
 		pr_debug("Error in processing cap learning full data, rc=%d\n",
@@ -630,6 +667,8 @@ void cap_learning_update(struct cap_learning *cl, int batt_temp,
 		if (charge_status == POWER_SUPPLY_STATUS_CHARGING) {
 			rc = cap_learning_begin(cl, batt_soc_cp);
 			cl->active = (rc == 0);
+			if (cl->active)
+				cl->cl_skip = false;
 		} else {
 			if (charge_status == POWER_SUPPLY_STATUS_DISCHARGING ||
 				charge_done)

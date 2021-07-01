@@ -41,6 +41,7 @@ struct cl_params {
 	int	max_cap_dec;
 	int	max_cap_limit;
 	int	min_cap_limit;
+	int	cap_degrade;
 	int	skew_decipct;
 	int	min_delta_batt_soc;
 	int	ibat_flt_thr_ma;
@@ -59,6 +60,7 @@ struct cap_learning {
 	int64_t			learned_cap_uah;
 	int64_t			delta_cap_uah;
 	bool			active;
+	bool			cl_skip;
 	struct mutex		lock;
 	struct cl_params	dt;
 	bool (*ok_to_begin)(void *data);
