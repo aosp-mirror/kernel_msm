@@ -187,6 +187,7 @@ static int chg_therm_update_fcc(struct chg_drv *chg_drv);
 static void chg_reset_termination_data(struct chg_drv *chg_drv);
 static int chg_vote_input_suspend(struct chg_drv *chg_drv, char *voter,
 				  bool suspend);
+static int chg_work_read_soc(struct power_supply *bat_psy, int *soc);
 
 struct bd_data {
 	u32 bd_trigger_voltage;	/* also recharge upper bound */
@@ -269,6 +270,7 @@ struct chg_drv {
 	int egain_retries;
 	u32 snk_pdo[PDO_MAX_OBJECTS];
 	unsigned int nr_snk_pdo;
+	bool is_full;
 
 	/* retail & battery defender */
 	struct delayed_work bd_work;
@@ -568,6 +570,7 @@ static int chg_set_charger(struct power_supply *chg_psy, int fv_uv, int cc_max)
 static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 {
 	int rc = 0;
+	int chg_done = 0, soc = 0;
 	struct power_supply *chg_psy = chg_drv->chg_psy;
 
 	if (chg_drv->fv_uv != fv_uv || chg_drv->cc_max != cc_max) {
@@ -591,6 +594,25 @@ static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 
 			chg_drv->cc_max = cc_max;
 			chg_drv->fv_uv = fv_uv;
+
+			chg_done = GPSY_GET_PROP(chg_drv->chg_psy,
+						 POWER_SUPPLY_PROP_CHARGE_DONE);
+			rc = chg_work_read_soc(chg_drv->bat_psy, &soc);
+			/* reset charger if status full but soc < 100%,
+			 * except recharge */
+			if (chg_done == 1) {
+				if (soc == chg_drv->charge_stop_level) {
+					chg_drv->is_full = true;
+				} else if (!chg_drv->is_full) {
+					pr_info("MSC_RESET: charge full in unexpected soc. reset chg\n");
+					vote(chg_drv->msc_chg_disable_votable,
+					     MSC_CHG_FULL_VOTER, true, 0);
+					vote(chg_drv->msc_chg_disable_votable,
+					     MSC_CHG_FULL_VOTER, false, 0);
+				}
+			} else {
+				chg_drv->is_full = false;
+			}
 		}
 	}
 
