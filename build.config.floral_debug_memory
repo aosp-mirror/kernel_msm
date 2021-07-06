@@ -11,7 +11,6 @@ function update_debug_config() {
          -e CONFIG_BOOTPARAM_SOFTLOCKUP_PANIC \
          -e CONFIG_BOOTPARAM_HUNG_TASK_PANIC \
          -e CONFIG_WQ_WATCHDOG \
-         -e CONFIG_PANIC_ON_RT_THROTTLING \
          -e CONFIG_RCU_EQS_DEBUG \
          -e CONFIG_DEVMEM \
          -e CONFIG_DEBUG_OBJECTS \
