@@ -1151,9 +1151,11 @@ static void chg_work_adapter_details(union gbms_ce_adapter_details *ad,
 static int chg_work_roundtrip(struct chg_drv *chg_drv,
 			      union gbms_charger_state *chg_state)
 {
+	struct power_supply *chg_psy = chg_drv->chg_psy;
+	struct power_supply *wlc_psy = chg_drv->wlc_psy;
 	int fv_uv = -1, cc_max = -1, update_interval, rc;
 
-	rc = gbms_read_charger_state(chg_state, chg_drv->chg_psy);
+	rc = gbms_read_charger_state(chg_state, chg_psy, wlc_psy);
 	if (rc < 0)
 		return rc;
 
