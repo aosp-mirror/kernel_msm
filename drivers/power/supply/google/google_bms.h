@@ -373,7 +373,8 @@ int gbms_msc_round_fv_uv(const struct gbms_chg_profile *profile,
 uint8_t gbms_gen_chg_flags(int chg_status, int chg_type);
 /* newgen charging: read/gen charger state  */
 int gbms_read_charger_state(union gbms_charger_state *chg_state,
-			    struct power_supply *chg_psy);
+			    struct power_supply *chg_psy,
+			    struct power_supply *wlc_psy);
 
 /* debug/print */
 const char *gbms_chg_type_s(int chg_type);
