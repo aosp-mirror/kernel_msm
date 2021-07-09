@@ -342,9 +342,9 @@ static void cap_learning_post_process(struct cap_learning *cl)
 		max_inc_val = (int64_t)cl->nom_cap_uah * (1000 +
 				cl->dt.max_cap_limit);
 		max_inc_val = div64_u64(max_inc_val, 1000);
-		if (cl->final_cap_uah > max_inc_val) {
+		if (cl->learned_cap_uah > max_inc_val) {
 			pr_debug("learning capacity %lld goes above max limit %lld\n",
-				cl->final_cap_uah, max_inc_val);
+				cl->learned_cap_uah, max_inc_val);
 			cl->learned_cap_uah = max_inc_val;
 		}
 	}
@@ -353,9 +353,9 @@ static void cap_learning_post_process(struct cap_learning *cl)
 		min_dec_val = (int64_t)cl->nom_cap_uah * (1000 -
 				cl->dt.min_cap_limit);
 		min_dec_val = div64_u64(min_dec_val, 1000);
-		if (cl->final_cap_uah < min_dec_val) {
+		if (cl->learned_cap_uah < min_dec_val) {
 			pr_debug("learning capacity %lld goes below min limit %lld\n",
-				cl->final_cap_uah, min_dec_val);
+				cl->learned_cap_uah, min_dec_val);
 			cl->learned_cap_uah = min_dec_val;
 		}
 	}
