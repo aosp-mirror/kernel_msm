@@ -211,6 +211,16 @@ static void s2idle_begin(void)
 	s2idle_state = S2IDLE_STATE_NONE;
 }
 
+static void cpu_show_backtrace(void *unused)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	pr_info("Show CPU%d call trace:\n", smp_processor_id());
+	dump_stack();
+	local_irq_restore(flags);
+}
+
 static void s2idle_enter(void)
 {
 	trace_suspend_resume(TPS("machine_suspend"), PM_SUSPEND_TO_IDLE, true);
@@ -232,8 +242,12 @@ static void s2idle_enter(void)
 	/* Push all the CPUs into the idle loop. */
 	wake_up_all_idle_cpus();
 	/* Make the current CPU wait so it can enter the idle loop too. */
-	wait_event(s2idle_wait_head,
-		   s2idle_state == S2IDLE_STATE_WAKE);
+	while (!wait_event_timeout(s2idle_wait_head,
+			   s2idle_state == S2IDLE_STATE_WAKE,
+			   msecs_to_jiffies(2000))) {
+		pr_info("s2idle_wait_head timeout, dump cores\n");
+		smp_call_function(cpu_show_backtrace, NULL, 0);
+	}
 
 	cpuidle_pause();
 	put_online_cpus();
