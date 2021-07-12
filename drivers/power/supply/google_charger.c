@@ -823,6 +823,7 @@ static void chg_work(struct work_struct *work)
 	int disable_pwrsrc = 0;
 	int rc;
 	static bool cable_in;
+	bool plug_status_changed = false;
 
 	__pm_stay_awake(&chg_drv->chg_ws);
 	pr_debug("battery charging work item\n");
@@ -836,14 +837,17 @@ static void chg_work(struct work_struct *work)
 		int ret = 0;
 
 		/* only after boot */
-		if (chg_drv->plugged != -1) {
+		if (chg_drv->plugged != -1 &&
+		    strncmp(chg_drv->bat_psy_name, "bms", 3) != 0) {
 			ret = PSY_SET_PROP(bat_psy,
 					   POWER_SUPPLY_PROP_BATT_CE_CTRL,
 					   plugged);
 		}
 
-		if (ret == 0)
+		if (ret == 0) {
+			plug_status_changed = true;
 			chg_drv->plugged = plugged;
+		}
 	}
 
 	/* If no power source, disable charging and exit */
@@ -851,7 +855,7 @@ static void chg_work(struct work_struct *work)
 		const bool stop_charging = chg_drv->stop_charging != 1;
 		struct bd_data *bd_state = &chg_drv->bd_state;
 
-		if (stop_charging) {
+		if (stop_charging || plug_status_changed) {
 			pr_info("no power source detected, disabling charging\n");
 			if (!bd_state->triggered)
 				bd_reset(bd_state);
