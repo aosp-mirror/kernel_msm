@@ -1081,6 +1081,13 @@ static int sm7150_psy_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_RERUN_AICL:
 		(void)sm7150_rerun_aicl(bms);
 		break;
+	case POWER_SUPPLY_PROP_SAFETY_TIMER_ENABLE:
+		val = pval->intval ? FAST_CHARGE_SAFETY_TIMER_EN : 0;
+		rc = sm7150_masked_write(bms->pmic_regmap,
+					 CHGR_SAFETY_TIMER_ENABLE_CFG_REG,
+					 FAST_CHARGE_SAFETY_TIMER_EN, val);
+		pr_info("SAFETY_TIMER_ENABLE : val=%d (%d)\n", val, rc);
+		break;
 	default:
 		pr_err("setting unsupported property: %d\n", psp);
 		break;
