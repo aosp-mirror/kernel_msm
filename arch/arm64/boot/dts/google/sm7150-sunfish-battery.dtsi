@@ -259,6 +259,7 @@
 		google,bd-recharge-soc = <79>;
 		/* Enable TEMP-DEFEND */
 		google,bd-temp-enable;
+		google,bd-temp-dry-run;
 	};
 
 	google_overheat_mitigation: google,overheat_mitigation {
