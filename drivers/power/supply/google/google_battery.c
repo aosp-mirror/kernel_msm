@@ -2748,6 +2748,12 @@ static void ssoc_change_state(struct batt_ssoc_state *ssoc_state, bool ben)
 	ssoc_state->buck_enabled = ben;
 }
 
+static void bd_trickle_reset(struct batt_ssoc_state *ssoc_state)
+{
+	ssoc_state->bd_trickle_cnt = 0;
+	ssoc_state->disconnect_time = 0;
+}
+
 /* called holding chg_lock */
 static int batt_chg_logic(struct batt_drv *batt_drv)
 {
@@ -4135,6 +4141,26 @@ static ssize_t bd_trickle_reset_sec_store(struct device *dev,
 
 static DEVICE_ATTR_RW(bd_trickle_reset_sec);
 
+static ssize_t bd_clear_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int ret = 0, val = 0;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val)
+		bd_trickle_reset(&batt_drv->ssoc_state);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(bd_clear);
+
 static ssize_t health_safety_margin_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -4187,6 +4213,7 @@ static struct attribute *batt_attrs[] = {
 	&dev_attr_bd_trickle_recharge_soc.attr,
 	&dev_attr_bd_trickle_dry_run.attr,
 	&dev_attr_bd_trickle_reset_sec.attr,
+	&dev_attr_bd_clear.attr,
 	&dev_attr_health_safety_margin.attr,
 	NULL,
 };
