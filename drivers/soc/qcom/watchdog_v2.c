@@ -161,6 +161,9 @@ static int msm_watchdog_suspend(struct device *dev)
 		return 0;
 	__raw_writel(1, wdog_dd->base + WDT0_RST);
 	if (wdog_dd->wakeup_irq_enable) {
+		u64 timeout = (wdog_dd->bark_time * WDT_HZ)/1000;
+
+		__raw_writel(timeout - WDT_HZ, wdog_dd->base + WDT0_BITE_TIME);
 		/* Make sure register write is complete before proceeding */
 		mb();
 		wdog_dd->last_pet = sched_clock();
@@ -181,7 +184,11 @@ static int msm_watchdog_resume(struct device *dev)
 	if (!enable)
 		return 0;
 	if (wdog_dd->wakeup_irq_enable) {
+		u64 timeout = (wdog_dd->bark_time * WDT_HZ)/1000;
+
 		__raw_writel(1, wdog_dd->base + WDT0_RST);
+		__raw_writel(timeout + WDOG_BITE_OFFSET_IN_SECONDS*WDT_HZ,
+				wdog_dd->base + WDT0_BITE_TIME);
 		/* Make sure register write is complete before proceeding */
 		mb();
 		wdog_dd->last_pet = sched_clock();
