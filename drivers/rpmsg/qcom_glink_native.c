@@ -1695,7 +1695,6 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 					   struct qcom_glink_pipe *tx,
 					   bool intentless)
 {
-	int irq;
 	int ret;
 	struct qcom_glink *glink;
 
@@ -1740,6 +1739,17 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	}
 
 	scnprintf(glink->irqname, 32, "glink-native-%s", glink->name);
+
+	return glink;
+}
+EXPORT_SYMBOL_GPL(qcom_glink_native_probe);
+
+int qcom_glink_native_start(struct qcom_glink *glink)
+{
+	struct device *dev = glink->dev;
+	int irq;
+	int ret;
+
 	irq = of_irq_get(dev->of_node, 0);
 	ret = devm_request_irq(dev, irq,
 			       qcom_glink_native_intr,
@@ -1747,22 +1757,22 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 			       glink->irqname, glink);
 	if (ret) {
 		dev_err(dev, "failed to request IRQ\n");
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	glink->irq = irq;
 
 	ret = qcom_glink_send_version(glink);
 	if (ret)
-		return ERR_PTR(ret);
+		return ret;
 
 	ret = qcom_glink_create_chrdev(glink);
 	if (ret)
 		dev_err(glink->dev, "failed to register chrdev\n");
 
-	return glink;
+	return 0;
 }
-EXPORT_SYMBOL_GPL(qcom_glink_native_probe);
+EXPORT_SYMBOL_GPL(qcom_glink_native_start);
 
 static int qcom_glink_remove_device(struct device *dev, void *data)
 {
@@ -1795,6 +1805,10 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 	idr_destroy(&glink->lcids);
 	idr_destroy(&glink->rcids);
 
+	/*
+	 * Required for spss only. A cb is provided for this in spss driver. For
+	 * others, its done in prepare stage in smem driver. No cb is given.
+	 */
 	qcom_glink_pipe_reset(glink);
 	mbox_free_channel(glink->mbox_chan);
 }
