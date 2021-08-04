@@ -1106,6 +1106,7 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 	/* batt_chg_health_stats_close() will fix this */
 	cev_ts_init(&ce_data->health_stats, GBMS_STATS_AC_TI_INVALID);
 	cev_ts_init(&ce_data->health_pause_stats, GBMS_STATS_AC_TI_PAUSE);
+	cev_ts_init(&ce_data->health_dryrun_stats, GBMS_STATS_AC_TI_V2_PREDICT);
 
 	cev_ts_init(&ce_data->full_charge_stats, GBMS_STATS_AC_TI_FULL_CHARGE);
 	cev_ts_init(&ce_data->high_soc_stats, GBMS_STATS_AC_TI_HIGH_SOC);
@@ -1307,6 +1308,11 @@ static void batt_chg_stats_update(struct batt_drv *batt_drv, int temp_idx,
 					   elap, cc,
 					   &ce_data->high_soc_stats);
 
+	if (batt_drv->chg_health.dry_run_deadline > 0)
+		batt_chg_stats_update_tier(batt_drv, temp_idx, ibatt_ma, temp,
+					   elap, cc,
+					   &ce_data->health_dryrun_stats);
+
 	/* --- Log tiers in SERIES below --- */
 	if (batt_drv->batt_full) {
 
@@ -1457,12 +1463,13 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 				POWER_SUPPLY_PROP_VOLTAGE_NOW);
 	const int cc_out = GPSY_GET_PROP(batt_drv->fg_psy,
 				POWER_SUPPLY_PROP_CHARGE_COUNTER);
+	const time_t now = get_boot_sec();
+	const time_t dry_run_deadline = batt_drv->chg_health.dry_run_deadline;
 
 	/* book last period to the current tier
 	 * NOTE: vbatt_idx != -1 -> temp_idx != -1
 	 */
 	if (batt_drv->vbatt_idx != -1 && batt_drv->temp_idx != -1) {
-		const time_t now = get_boot_sec();
 		const time_t elap = now - batt_drv->ce_data.last_update;
 		const int tier_idx = batt_chg_vbat2tier(batt_drv->vbatt_idx);
 		const int ibatt = GPSY_GET_PROP(batt_drv->fg_psy,
@@ -1489,6 +1496,9 @@ static bool batt_chg_stats_close(struct batt_drv *batt_drv,
 	       sizeof(batt_drv->ce_data.ce_health));
 	batt_drv->ce_data.health_stats.vtier_idx =
 				batt_chg_health_vti(&batt_drv->chg_health);
+	batt_drv->ce_data.health_dryrun_stats.vtier_idx =
+		(now > dry_run_deadline) ? GBMS_STATS_AC_TI_V2_PREDICT_SUCCESS :
+						 GBMS_STATS_AC_TI_V2_PREDICT;
 
 	/* TODO: add a field to ce_data to qual weird charge sessions */
 	publish = force || batt_chg_stats_qual(batt_drv);
@@ -1784,6 +1794,11 @@ static int batt_chg_stats_cstr(char *buff, int size,
 					    soc_in, soc_next);
 		}
 	}
+	/* Does not currently check MSC_HEALTH */
+	if (ce_data->health_dryrun_stats.soc_in != -1)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->health_dryrun_stats,
+						verbose);
 
 	if (ce_data->full_charge_stats.soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
@@ -1949,6 +1964,8 @@ static inline void batt_reset_rest_state(struct batt_chg_health *chg_health)
 		chg_health->rest_state = CHG_HEALTH_INACTIVE;
 		chg_health->rest_deadline = 0;
 	}
+
+	chg_health->dry_run_deadline = 0;
 }
 
 /* should not reset rl state */
@@ -3889,6 +3906,31 @@ static ssize_t charge_deadline_store(struct device *dev,
 
 static DEVICE_ATTR_RW(charge_deadline);
 
+static ssize_t charge_deadline_dryrun_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =
+		(struct batt_drv *)power_supply_get_drvdata(psy);
+	long long deadline_s;
+
+	/* API works in seconds */
+	kstrtoll(buf, 10, &deadline_s);
+
+	mutex_lock(&batt_drv->chg_lock);
+	if (!batt_drv->ssoc_state.buck_enabled || deadline_s < 0) {
+		mutex_unlock(&batt_drv->chg_lock);
+		return -EINVAL;
+	}
+	batt_drv->chg_health.dry_run_deadline = get_boot_sec() + deadline_s;
+	mutex_unlock(&batt_drv->chg_lock);
+
+	return count;
+}
+
+static DEVICE_ATTR_WO(charge_deadline_dryrun);
+
 static ssize_t time_to_ac_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
 {
@@ -4200,6 +4242,7 @@ static struct attribute *batt_attrs[] = {
 	&dev_attr_charge_limit.attr,
 	&dev_attr_time_to_ac.attr,
 	&dev_attr_ac_soc.attr,
+	&dev_attr_charge_deadline_dryrun.attr,
 	&dev_attr_ttf_stats.attr,
 	&dev_attr_ttf_details.attr,
 	&dev_attr_bd_trickle_enable.attr,

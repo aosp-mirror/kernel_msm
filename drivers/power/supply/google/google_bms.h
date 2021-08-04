@@ -250,13 +250,15 @@ enum gbms_stats_tier_idx_t {
 
 	/* Regular charge tiers 0 -> 9 */
 	GBMS_STATS_AC_TI_VALID = 10,
-	GBMS_STATS_AC_TI_DISABLED,
-	GBMS_STATS_AC_TI_ENABLED,
-	GBMS_STATS_AC_TI_ACTIVE,
-	GBMS_STATS_AC_TI_ENABLED_AON,
-	GBMS_STATS_AC_TI_ACTIVE_AON,
-	GBMS_STATS_AC_TI_PAUSE,
-	GBMS_STATS_AC_TI_PAUSE_AON,
+	GBMS_STATS_AC_TI_DISABLED = 11,
+	GBMS_STATS_AC_TI_ENABLED = 12,
+	GBMS_STATS_AC_TI_ACTIVE = 13,
+	GBMS_STATS_AC_TI_ENABLED_AON = 14,
+	GBMS_STATS_AC_TI_ACTIVE_AON = 15,
+	GBMS_STATS_AC_TI_PAUSE = 16,
+	GBMS_STATS_AC_TI_PAUSE_AON = 17,
+	GBMS_STATS_AC_TI_V2_PREDICT = 18,
+	GBMS_STATS_AC_TI_V2_PREDICT_SUCCESS = 19,
 
 	/* TODO: rename, these are not really related to AC */
 	GBMS_STATS_AC_TI_FULL_CHARGE = 100,
@@ -274,6 +276,7 @@ struct batt_chg_health {
 	int always_on_soc;	/* entry criteria */
 
 	time_t rest_deadline;	/* full by this in seconds */
+	time_t dry_run_deadline; /* full by this in seconds (prediction) */
 	int rest_rate;		/* centirate once enter */
 
 	enum chg_health_state rest_state;
@@ -314,6 +317,8 @@ struct gbms_charging_event {
 	struct gbms_ce_tier_stats	health_stats;	/* updated in HC */
 	/* updated in HCP */
 	struct gbms_ce_tier_stats	health_pause_stats;
+	/* updated on sysfs */
+	struct gbms_ce_tier_stats health_dryrun_stats;
 
 	/* other stats */
 	struct gbms_ce_tier_stats full_charge_stats;
