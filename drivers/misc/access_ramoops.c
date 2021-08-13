@@ -71,19 +71,39 @@ ATTRIBUTE_GROUPS(access_ramoops);
 static ssize_t access_ramoops_read(struct file *filp, char __user *buf,
 				   size_t count, loff_t *ppos)
 {
+	void *kbuf;
+	ssize_t ret;
 	struct access_ramoops_info *info = filp->private_data;
 
-	return simple_read_from_buffer(buf, count, ppos,
-				       info->addr, info->size);
+	kbuf = vmalloc(info->size);
+	if (!kbuf)
+		return -ENOMEM;
+	memcpy_fromio(kbuf, info->addr, info->size);
+
+	ret = simple_read_from_buffer(buf, count, ppos,
+				       kbuf, info->size);
+	vfree(kbuf);
+	return ret;
 }
 
 static ssize_t access_ramoops_write(struct file *filp, const char __user *buf,
 				    size_t count, loff_t *ppos)
 {
+	void *kbuf;
+	ssize_t ret;
 	struct access_ramoops_info *info = filp->private_data;
 
-	return simple_write_to_buffer(info->addr, info->size,
+	kbuf = vmalloc(info->size);
+	if (!kbuf)
+		return -ENOMEM;
+	memcpy_fromio(kbuf, info->addr, info->size);
+
+	ret = simple_write_to_buffer(kbuf, info->size,
 				      ppos, buf, count);
+	if (ret > 0)
+		memcpy_toio(info->addr, kbuf, info->size);
+	vfree(kbuf);
+	return ret;
 }
 
 static int access_ramoops_open(struct inode *inode, struct file *filp)
