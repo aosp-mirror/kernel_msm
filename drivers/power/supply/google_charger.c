@@ -886,6 +886,10 @@ static void chg_work(struct work_struct *work)
 			__pm_relax(&chg_drv->bd_ws);
 
 		goto exit_chg_work;
+	} else if (chg_drv->stop_charging && plugged) {
+		mutex_lock(&chg_drv->bd_lock);
+		chg_drv->bd_state.disconnect_time = 0;
+		mutex_unlock(&chg_drv->bd_lock);
 	}
 
 	/* debug option  */
