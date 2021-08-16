@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "lito-barbet.dtsi"
+#include "lito-barbet-camera-sensor.dtsi"
+#include "lito-barbet-pac193x.dtsi"
+#include "lito-barbet-thermal-evt.dtsi"
+
+&dsi_sofef01_sdc_fhd_plus_cmd {
+	google,hbm-ranges {
+		hbm-range@1 {
+			/* Normal brightness mode covers ~2 to 500
+			 * nits, using panel brightness values up to
+			 * 0x3ff. HBM extends the range to 700 nits,
+			 * and remaps user brightness 1-1023 to cover
+			 * this extended range. In this extended range,
+			 * 500 nits / 0x3ff corresponds to user
+			 * brightness 731. Panel brightness is
+			 * adjustable in the 500-700 nit segment.
+			 */
+			google,dsi-hbm-range-brightness-threshold =
+				<731>;
+		};
+	};
+};

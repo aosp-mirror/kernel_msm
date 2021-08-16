@@ -1,0 +1,399 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_sofef01_sdc_fhd_plus_cmd: qcom,mdss_dsi_sofef01_sdc_fhd_plus_cmd {
+		compatible = "google,dsi_binned_lp";
+
+		qcom,mdss-dsi-panel-name =
+			"sofef01 fhd plus cmd mode dsi sdc panel";
+		google,mdss-dsi-panel-vendor = "SAMSUNG";
+		google,mdss-dsi-panel-sn-location = <0xA1 3 5>;
+		google,mdss-dsi-panel-vendor-extinfo-loc = <0xDA 0 1>,
+							   <0xDB 0 1>,
+							   <0xDC 0 1>;
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-physical-type = "oled";
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-traffic-mode = "burst_mode";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-reset-sequence = <0 10>, <1 10>;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+		qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-tx-eot-append;
+
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-panel-status-check-mode = "te_signal_check";
+		qcom,esd-check-enabled;
+
+		qcom,mdss-pan-physical-width-dimension = <66>;
+		qcom,mdss-pan-physical-height-dimension = <147>;
+
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <4>;
+		qcom,mdss-dsi-bl-max-level = <1023>; /* 10 bit */
+		/* param1 = DBV[9:8], param2 = DBV[7:0] */
+		google,dsi-bl-cmd-high-byte-offset = <8>;
+		qcom,mdss-brightness-max-level = <1023>;
+		google,dsi-panel-dimming-enable;
+
+		qcom,mdss-dsi-t-clk-post = <0x0e>;
+		qcom,mdss-dsi-t-clk-pre = <0x1e>;
+
+		qcom,mdss-dsi-bl-notifier-ranges = <117 199 279 801 1023>;
+
+		qcom,mdss-dsi-display-timings {
+			timing@0 {
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-mdp-transfer-time-us = <14000>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2400>;
+				qcom,mdss-dsi-h-front-porch = <32>;
+				qcom,mdss-dsi-h-back-porch = <98>;
+				qcom,mdss-dsi-h-pulse-width = <32>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <8>;
+				qcom,mdss-dsi-v-front-porch = <8>;
+				qcom,mdss-dsi-v-pulse-width = <1>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-on-command = [
+					/* Sleep Out, Wait 10 ms */
+					05 01 00 00 0A 00 01 11
+					39 01 00 00 00 00 03 F0 5A 5A
+					/* Set Dimming frames to 8 */
+					15 01 00 00 00 00 02 B0 07
+					15 01 00 00 00 00 02 B7 08
+					/* TE on */
+					15 01 00 00 00 00 02 35 00
+					/* MIC Setting */
+					39 01 00 00 00 00 08
+						EB 17 41 B0 0E 10 90 5A
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* CASET/PASET Setting */
+					39 01 00 00 00 00 05 2A 00 00 04 37
+					39 01 00 00 00 00 05 2B 00 00 09 5F
+					/* Brightness Setting */
+					15 01 00 00 6E 00 02 53 28
+					05 01 00 00 00 00 01 29
+				];
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 14 00 01 28
+					05 01 00 00 00 00 01 10
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 05
+					15 01 00 00 00 00 02 F4 01
+					39 01 00 00 78 00 03 F0 A5 A5
+				];
+				qcom,mdss-dsi-lp1-command = [
+					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 F0 5A 5A
+					/* HLPM on: 50nit */
+					15 01 00 00 01 00 02 53 22
+					39 01 00 00 11 00 03 F0 A5 A5
+				];
+				qcom,mdss-dsi-nolp-command = [
+					05 01 00 00 00 00 01 28
+					39 01 00 00 00 00 03 F0 5A 5A
+					/* HLPM off */
+					15 01 00 00 01 00 02 53 28
+					39 01 00 00 22 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+
+				qcom,mdss-dsi-panel-phy-timings = [
+					00 24 09 09 1A 24 09
+					09 09 02 04 00 1E 0E
+				];
+
+				qcom,display-topology = <1 0 1>;
+				qcom,default-topology-index = <0>;
+			};
+		};
+
+		google,lp-modes {
+			lp-mode@0 {
+				label = "off";
+				google,dsi-lp-brightness-threshold = <0>;
+				google,dsi-lp-command = [
+					/* blank */
+					05 01 00 00 00 00 01 28
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@1 {
+				label = "low";
+				google,dsi-lp-brightness-threshold = <40>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A
+					/* HLPM on: 10nit */
+					15 01 00 00 01 00 02 53 23
+					39 01 00 00 00 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+
+			lp-mode@2 {
+				label = "high";
+				google,dsi-lp-brightness-threshold = <1023>;
+				google,dsi-lp-command = [
+					39 01 00 00 00 00 03 F0 5A 5A
+					/* HLPM on: 50nit */
+					15 01 00 00 01 00 02 53 22
+					39 01 00 00 00 00 03 F0 A5 A5
+					05 01 00 00 00 00 01 29
+				];
+				google,dsi-lp-command-state = "dsi_lp_mode";
+			};
+		};
+
+		google,elvss-ranges {
+			/* This is for AOD/HBM mode */
+			google,dsi-elvss-range-off-command = [
+				/* Set ELVSS to default value */
+				39 01 00 00 00 00 03 F0 5A 5A
+				15 01 00 00 00 00 02 B0 06
+				15 01 00 00 00 00 02 B7 91
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-elvss-range-commands-state =
+				"dsi_lp_mode";
+
+			elvss-range@0 {
+				google,dsi-elvss-range-brightness-threshold =
+					<60>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x91 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 91
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@1 {
+				google,dsi-elvss-range-brightness-threshold =
+					<120>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x92 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 92
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@2 {
+				google,dsi-elvss-range-brightness-threshold =
+					<160>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x93 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 93
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@3 {
+				google,dsi-elvss-range-brightness-threshold =
+					<699>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x94 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 94
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@4 {
+				google,dsi-elvss-range-brightness-threshold =
+					<859>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x93 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 93
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@5 {
+				google,dsi-elvss-range-brightness-threshold =
+					<935>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x92 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 92
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			elvss-range@6 {
+				google,dsi-elvss-range-brightness-threshold =
+					<1023>;
+
+				google,dsi-elvss-range-update-command = [
+					/* Set ELVSS register to 0x91 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 06
+					15 01 00 00 00 00 02 B7 91
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-elvss-range-commands-state =
+					"dsi_lp_mode";
+			};
+		};
+
+		google,hbm-ranges {
+			google,dsi-hbm-exit-command = [
+				/* Set Dimming frames to 32 */
+				39 01 00 00 00 00 03 F0 5A 5A
+				15 01 00 00 00 00 02 B0 07
+				15 01 00 00 00 00 02 B7 20
+				39 01 00 00 00 00 03 F0 A5 A5
+				/* Disable high brightness */
+				15 01 00 00 00 00 02 53 28
+			];
+			google,dsi-hbm-exit-num-dimming-frames = <32>;
+			google,dsi-hbm-exit-dimming-stop-command = [
+				/* Set Dimming frames to 8 */
+				39 01 00 00 00 00 03 F0 5A 5A
+				15 01 00 00 00 00 02 B0 07
+				15 01 00 00 00 00 02 B7 08
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-hbm-commands-state = "dsi_lp_mode";
+			google,dsi-irc-addr = <0xBE>;
+			google,dsi-irc-bit-offset = <21>;
+			google,dsi-irc-unlock-command = [
+				39 01 00 00 00 00 03 F0 5A 5A
+			];
+			google,dsi-irc-unlock-commands-state = "dsi_lp_mode";
+			google,dsi-irc-lock-command = [
+				39 01 00 00 00 00 03 F0 A5 A5
+			];
+			google,dsi-irc-lock-commands-state = "dsi_lp_mode";
+
+			hbm-range@0 {
+				google,dsi-hbm-range-brightness-threshold = <1>;
+
+				google,dsi-hbm-range-bl-min-level = <0x4>;
+				google,dsi-hbm-range-bl-max-level = <0x3ff>;
+				google,dsi-hbm-range-entry-command = [
+					/* Set Dimming frames to 32 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 07
+					15 01 00 00 00 00 02 B7 20
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* Disable high brightness */
+					15 01 00 00 00 00 02 53 28
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 07
+					15 01 00 00 00 00 02 B7 08
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+
+			hbm-range@1 {
+				/* Normal brightness mode covers ~2 to 500
+				 * nits, using panel brightness values up to
+				 * 0x3ff. HBM extends the range to 800 nits,
+				 * and remaps user brightness 1-1023 to cover
+				 * this extended range. In this extended range,
+				 * 500 nits / 0x3ff corresponds to user
+				 * brightness 639. Panel brightness is
+				 * adjustable in the 500-800 nit segment.
+				 */
+				google,dsi-hbm-range-brightness-threshold =
+					<639>;
+
+				google,dsi-hbm-range-bl-min-level = <0x190>;
+				google,dsi-hbm-range-bl-max-level = <0x190>;
+
+				google,dsi-hbm-range-entry-command = [
+					/* Set Dimming frames to 32 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 07
+					15 01 00 00 00 00 02 B7 20
+					39 01 00 00 00 00 03 F0 A5 A5
+					/* Enable high brightness */
+					15 01 00 00 00 00 02 53 E8
+				];
+				google,dsi-hbm-range-num-dimming-frames = <32>;
+				google,dsi-hbm-range-dimming-stop-command = [
+					/* Set Dimming frames to 8 */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 B0 07
+					15 01 00 00 00 00 02 B7 08
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				google,dsi-hbm-range-commands-state =
+					"dsi_lp_mode";
+			};
+		};
+	};
+};

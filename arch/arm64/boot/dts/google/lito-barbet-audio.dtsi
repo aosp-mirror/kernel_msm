@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&lito_snd {
+	qcom,model = "sm7250-bolero-snd-card";
+
+	external-playback-dai-link@0 {
+		cpu-dai-name = "msm-dai-q6-tdm.36928";
+		codec {
+			sound-dai = <&tas256x 0>;
+		};
+	};
+
+	external-playback-ref-dai-link@0 {
+		cpu-dai-name = "msm-dai-q6-tdm.36929";
+		codec {
+			sound-dai = <&tas256x 0>;
+		};
+	};
+};
+
+&tdm_quin_rx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <1>;
+	qcom,msm-cpudai-tdm-data-delay = <1>;
+};
+
+&tdm_quin_tx {
+	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
+	qcom,msm-cpudai-tdm-sync-mode = <0>;
+	qcom,msm-cpudai-tdm-invert-sync = <1>;
+	qcom,msm-cpudai-tdm-data-delay = <1>;
+};
+
+&pm7250b_gpios {
+	/delete-node/ irq_pin_top_default;
+	/delete-node/ irq_pin_bottom_default;
+
+	irq_pin_top_default: irq_pin_top_default {
+		pins = "gpio5";
+		function = "normal";
+		bias-disable;
+		qcom,drive-strength = <2>;
+		power-source = <1>;
+	};
+
+	irq_pin_bottom_default: irq_pin_bottom_default {
+		pins = "gpio8";
+		function = "normal";
+		bias-disable;
+		qcom,drive-strength = <2>;
+		power-source = <1>;
+	};
+};
+
+&qupv3_se9_i2c {
+	status= "ok";
+	qcom,clk-freq-out = <400000>;
+
+	tas256x:tas256x@4c {
+		#sound-dai-cells = <1>;
+		compatible = "ti, tas2562";/*or "ti,tas2564" or "ti,tas256x" */
+		reg = <0x4c>;
+		ti,left-channel = <0x4c>;
+		ti,right-channel = <0x4d>;
+		ti,channels = <2>; /* channel number */
+		ti,reset-gpio = <&pm8150l_gpios 11 0>;
+		ti,reset-gpio2 = <&pm8150l_gpios 10 0>;
+		ti,irq-gpio = <&pm7250b_gpios 5 0>;
+		ti,irq-gpio2 = <&pm7250b_gpios 8 0>;
+		status = "ok";
+		ti,iv-width = <16>;
+		ti,vbat-mon = <1>;
+		/* frame start count on clk 0
+		RX delay 1 clk fetch on clk raising
+		TX delay 1 clk fetch on clk falling */
+		ti,frame-start = <0>;
+		ti,rx-offset = <1>;
+		ti,rx-edge = <0>;
+		ti,tx-offset = <1>;
+		ti,tx-edge = <1>;
+		ti,port_id = <0x9040>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&reset_pin_top_default
+					&reset_pin_bottom_default
+					&irq_pin_top_default
+					&irq_pin_bottom_default>;
+	};
+};
+
+&cs35l41_l {
+	status = "disabled";
+};
+
+&cs35l41_r {
+	status = "disabled";
+};

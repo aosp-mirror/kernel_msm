@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "dsi-panel-sofef01-1080p-cmd.dtsi"
+#include "dsi-panel-sofef01-fhd-plus-cmd.dtsi"
+
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_sofef01_sdc_fhd_plus_cmd>;
+};
+
+&dsi_sofef01_sdc_1080p_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_redbull>;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};
+
+&dsi_sofef01_sdc_fhd_plus_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_redbull>;
+	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+	qcom,platform-te-gpio = <&tlmm 10 0>;
+	qcom,platform-reset-gpio = <&pm8150l_gpios 8 0>;
+};

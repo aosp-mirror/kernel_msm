@@ -12,7 +12,6 @@ function update_debug_config() {
          -e CONFIG_DEBUG_PREEMPT \
          -e CONFIG_DEBUG_ATOMIC_SLEEP \
          -e CONFIG_LOCK_STAT \
-         -e CONFIG_PANIC_ON_WARN_DEFAULT_ENABLE \
          -d CFI \
          -d CFI_PERMISSIVE \
          -d CFI_CLANG \

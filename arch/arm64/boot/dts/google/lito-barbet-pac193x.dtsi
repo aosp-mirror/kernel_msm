@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+&qupv3_se9_i2c {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+	pac193x@10 {
+		compatible = "microchip,pac1934";
+		reg = <0x10>;
+		samp-rate = <8>;
+		status = "okay";
+		ch1: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PM7250_L3";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+		ch2: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PM7250_L8";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+		ch3: channel@2 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PM7250_L6";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+		ch4: channel@3 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "PM7250_L7";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+	};
+
+	pac193x@18 {
+		compatible = "microchip,pac1934";
+		reg = <0x18>;
+		samp-rate = <8>;
+		status = "okay";
+		ch5: channel@0 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "VPH_PWR_AMOLED";
+		     subsys-name = "Display";
+		     channel_enabled;
+		};
+		ch6: channel@1 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "VPH_PWR_PM7250_S7_S8";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+		ch7: channel@2 {
+		     uohms-shunt-res = <10000>;
+		     rail-name = "VPH_PWR_RF";
+		     subsys-name = "Cellular";
+		     channel_enabled;
+		};
+		ch8: channel@3 {
+		     rail-name = "NC";
+		};
+	};
+};

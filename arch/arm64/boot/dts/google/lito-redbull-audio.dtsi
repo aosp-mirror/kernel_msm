@@ -222,7 +222,7 @@
 		pinctrl-1 = <&lpi_i2s1_sck_sleep &lpi_i2s1_ws_sleep
 			     &lpi_i2s1_sd0_sleep &lpi_i2s1_sd1_sleep>;
 		qcom,lpi-gpios;
-        };
+	};
 };
 
 &wsa_swr_gpios {
@@ -510,14 +510,12 @@
 	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
 	qcom,msm-cpudai-tdm-sync-mode = <0>;
 	qcom,msm-cpudai-tdm-invert-sync = <0>;
-
 };
 
 &tdm_quin_tx {
 	qcom,msm-cpudai-tdm-clk-rate = <12288000>;
 	qcom,msm-cpudai-tdm-sync-mode = <0>;
 	qcom,msm-cpudai-tdm-invert-sync = <0>;
-
 };
 
 &pm7250b_gpios {

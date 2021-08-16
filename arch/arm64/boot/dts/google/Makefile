@@ -62,6 +62,33 @@ lito-v2-redfin-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-redfin-dvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 lito-v2-redfin-pvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
 
+
+dtbo-barbet += \
+	lito-v2-barbet-dev-overlay.dtbo \
+	lito-v2-barbet-evt-overlay.dtbo \
+	lito-v2-barbet-evt1_1-overlay.dtbo \
+	lito-v2-barbet-evt1_2-overlay.dtbo \
+	lito-v2-barbet-evt1_9-overlay.dtbo \
+	lito-v2-barbet-dvt-overlay.dtbo \
+	lito-v2-barbet-dvt1_1-overlay.dtbo \
+	lito-v2-barbet-dvt1_2-overlay.dtbo \
+	lito-v2-barbet-dvt1_3-overlay.dtbo \
+	lito-v2-barbet-pvt-overlay.dtbo \
+	lito-v2-barbet-mp-overlay.dtbo
+
+
+lito-v2-barbet-dev-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-evt-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-evt1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-evt1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-evt1_9-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-dvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-dvt1_1-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-dvt1_2-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-dvt1_3-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-pvt-overlay.dtbo-base := qcom-base/lito-v2.dtb
+lito-v2-barbet-mp-overlay.dtbo-base := qcom-base/lito-v2.dtb
+
 endif
 
 always          := $(dtb-y)

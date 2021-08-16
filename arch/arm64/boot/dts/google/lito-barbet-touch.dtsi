@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+&pm8150_l13 {
+	regulator-min-microvolt = <3304000>;
+	regulator-max-microvolt = <3304000>;
+	qcom,init-voltage = <3304000>;
+	qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
+	regulator-always-on;
+};
+
+
+// Keep interrupt pin active at all times
+&tlmm {
+	ts_mux {
+		ts_active_suspend: ts_active_suspend {
+			mux {
+				pins = "gpio9", "gpio5", "gpio35";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio9", "gpio5", "gpio35";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+
+		ts_bus_active: ts_bus_active {
+			mux {
+				pins = "gpio42", "gpio43", "gpio44", "gpio45";
+				function = "qup00";
+			};
+
+			config {
+				pins = "gpio42", "gpio43", "gpio44", "gpio45";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		//MOSI,MISO,SS pin: input pull down
+		ts_bus_sleep: ts_bus_sleep {
+			mux {
+				pins = "gpio43", "gpio44";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio43", "gpio44";
+				drive-strength = <8>;
+				input-enable;
+				bias-pull-down;
+			};
+		};
+
+		ts_bus_sleep_miso: ts_bus_sleep_miso {
+			mux {
+				pins = "gpio42";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio42";
+				drive-strength = <8>;
+				input-enable;
+				bias-disable;
+			};
+		};
+
+		//CS pin: input pull up
+		ts_bus_sleep_cs: ts_bus_sleep_cs {
+			mux {
+				pins = "gpio45";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio45";
+				drive-strength = <8>;
+				input-enable;
+				bias-pull-up;
+			};
+		};
+	};
+};
+
+&qupv3_se0_i2c {
+	status = "disabled";
+};
+
+&qupv3_se0_spi {
+	status = "ok";
+	pinctrl-0 = <>;
+	pinctrl-1 = <>;
+
+	touchscreen@0 {
+		status = "ok";
+		compatible = "st,fts";
+		spi-max-frequency = <10000000>;
+
+		reg = <0>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <9 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
+		pinctrl-0 = <&ts_active_suspend &ts_bus_active>;
+		pinctrl-1 = <&ts_active_suspend &ts_bus_sleep &ts_bus_sleep_miso
+			     &ts_bus_sleep_cs>;
+
+		st,irq-gpio = <&tlmm 9 0>;
+		st,reset-gpio = <&tlmm 8 0>;
+		st,max-coords = <1079 2399>;
+		st,panel_map = <&dsi_sofef01_sdc_fhd_plus_cmd 0>;
+		st,force-pi-cfg-ver-map = <0x300>;
+		st,save-golden-ms-raw;
+		st,touch_offload_id = [30 30 62 39]; /* '0' '0' 'b' '9' */
+		st,grip_area = /bits/ 8 <15>; /* Left and right grip rejection
+						 area. Unit: pixels */
+		tbn,lpi2ap_gpio = <&tlmm 5 0>;
+		tbn,ap2lpi_gpio = <&tlmm 35 0>;
+
+	};
+};

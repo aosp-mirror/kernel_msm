@@ -118,7 +118,6 @@
   del_timer
   del_timer_sync
   destroy_workqueue
-  _dev_crit
   dev_driver_string
   _dev_err
   devfreq_add_device
@@ -761,12 +760,9 @@
   regmap_bulk_write
   __regmap_init
   regmap_multi_reg_write
-  regmap_raw_read
-  regmap_raw_write
   regmap_read
   regmap_update_bits_base
   regmap_write
-  regulator_bulk_disable
   regulator_count_voltages
   regulator_disable
   regulator_enable
@@ -833,14 +829,11 @@
   skb_trim
   sk_free
   smp_call_function_single
-  snd_ctl_boolean_mono_info
   snd_hwdep_new
   snd_info_create_card_entry
   snd_info_create_subdir
   snd_info_free_entry
   snd_info_register
-  snd_pcm_format_width
-  snd_pcm_hw_constraint_list
   snd_pcm_period_elapsed
   snd_power_wait
   snd_soc_add_component_controls
@@ -1099,6 +1092,7 @@
   pci_device_group
   pci_for_each_dma_alias
   pci_request_acs
+  regulator_bulk_disable
   regulator_disable_deferred
   report_iommu_fault
   __tracepoint_smmu_init
@@ -1511,7 +1505,6 @@
 # required by machine_dlkm.ko
   devm_snd_soc_register_card
   snd_soc_card_change_online_state
-  snd_soc_component_set_sysclk
   snd_soc_dai_get_channel_map
   snd_soc_dai_set_channel_map
   snd_soc_dai_set_fmt
@@ -1574,6 +1567,7 @@
 # required by msm_adreno.ko
   bpf_trace_run10
   __clk_get_name
+  _dev_crit
   devfreq_cooling_unregister
   device_show_int
   device_store_int
@@ -2019,6 +2013,7 @@
   __ll_sc___cmpxchg_case_mb_8
   of_property_read_variable_u16_array
   snd_ctl_add
+  snd_ctl_boolean_mono_info
   snd_ctl_enum_info
   snd_ctl_new1
   snd_ctl_notify
@@ -2027,6 +2022,7 @@
   snd_pcm_add_usr_ctls
   snd_pcm_add_volume_ctls
   snd_pcm_hw_constraint_integer
+  snd_pcm_hw_constraint_list
   snd_pcm_hw_constraint_minmax
   snd_pcm_hw_constraint_step
   snd_pcm_lib_ioctl
@@ -2147,6 +2143,7 @@
   devm_input_allocate_device
 
 # required by qpnp-qgauge.ko
+  regmap_raw_read
   rtc_class_close
   rtc_class_open
   rtc_read_time
@@ -2268,6 +2265,9 @@
   devm_request_any_context_irq
   devm_rtc_device_register
   rtc_update_irq
+
+# required by rx_macro_dlkm.ko
+  snd_pcm_format_width
 
 # required by sctp.ko
   __bitmap_shift_right
@@ -2451,17 +2451,6 @@
   irq_domain_xlate_twocell
   irq_set_parent
 
-# required by snd-soc-cs35l41.ko
-  regcache_drop_region
-  regmap_multi_reg_write_bypassed
-  regulator_bulk_enable
-  snd_pcm_format_physical_width
-  snd_soc_get_enum_double
-  snd_soc_get_volsw_range
-  snd_soc_info_volsw_range
-  snd_soc_put_enum_double
-  snd_soc_put_volsw_range
-
 # required by snd-soc-rt5514-spi.ko
   _snd_pcm_lib_alloc_vmalloc_buffer
   snd_pcm_lib_free_vmalloc_buffer
@@ -2472,13 +2461,6 @@
   regmap_register_patch
   snd_soc_bytes_info_ext
   snd_soc_params_to_frame_size
-
-# required by snd-soc-wm-adsp.ko
-  regmap_async_complete
-  regmap_raw_write_async
-  snd_compr_stop_error
-  snd_soc_component_disable_pin
-  snd_soc_component_force_enable_pin
 
 # required by spi-geni-qcom.ko
   dma_release_channel
@@ -2759,11 +2741,26 @@
 
 # preserved by --additions-only
   crc32_le
+  crypto_register_scomp
+  crypto_unregister_scomp
   generic_file_mmap
   idr_alloc_u32
+  regcache_drop_region
+  regmap_async_complete
+  regmap_multi_reg_write_bypassed
+  regmap_raw_write
+  regmap_raw_write_async
+  regulator_bulk_enable
   simple_getattr
-  simple_strtoull
+  snd_compr_stop_error
+  snd_pcm_format_physical_width
+  snd_soc_component_disable_pin
+  snd_soc_component_force_enable_pin
+  snd_soc_component_set_sysclk
+  snd_soc_get_enum_double
+  snd_soc_get_volsw_range
+  snd_soc_info_volsw_range
+  snd_soc_put_enum_double
+  snd_soc_put_volsw_range
   soc_find_component
   vfs_statx
-  vm_map_ram
-  vm_unmap_ram

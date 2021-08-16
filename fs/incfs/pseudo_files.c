@@ -1106,15 +1106,15 @@ static ssize_t log_read(struct file *f, char __user *buf, size_t len,
 			min_t(ssize_t, reads_to_collect, reads_per_page));
 		if (reads_collected <= 0) {
 			result = total_reads_collected ?
-					total_reads_collected * record_size :
-					reads_collected;
+				       total_reads_collected * record_size :
+				       reads_collected;
 			goto out;
 		}
 		if (copy_to_user(buf, (void *)page,
 				 reads_collected * record_size)) {
 			result = total_reads_collected ?
-					total_reads_collected * record_size :
-					-EFAULT;
+				       total_reads_collected * record_size :
+				       -EFAULT;
 			goto out;
 		}
 

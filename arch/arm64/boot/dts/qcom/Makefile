@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-ifeq (,$(filter y, $(CONFIG_BOARD_BRAMBLE) $(CONFIG_BOARD_REDFIN)))
+ifeq (,$(filter y, $(CONFIG_BOARD_BRAMBLE) $(CONFIG_BOARD_REDFIN) $(CONFIG_BOARD_BARBET)))
 
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8096-db820c.dtb

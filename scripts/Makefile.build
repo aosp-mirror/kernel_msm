@@ -68,6 +68,9 @@ endif
 ifneq ($(dtbo-redfin),)
 include scripts/Makefile.dtbo
 endif
+ifneq ($(dtbo-barbet),)
+include scripts/Makefile.dtbo
+endif
 
 ifndef obj
 $(warning kbuild: Makefile.build is included improperly)

@@ -48,7 +48,7 @@
 #define ST21NFC_POWER_STATE_MAX 3
 #define WAKEUP_SRC_TIMEOUT		(2000)
 
-#define DRIVER_VERSION "2.0.15"
+#define DRIVER_VERSION "2.0.16"
 
 #define PROP_PWR_MON_RW_ON_NTF nci_opcode_pack(NCI_GID_PROPRIETARY, 5)
 #define PROP_PWR_MON_RW_OFF_NTF nci_opcode_pack(NCI_GID_PROPRIETARY, 6)
@@ -565,6 +565,8 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 						       struct st21nfc_device,
 						       st21nfc_device);
 
+	struct i2c_client *client = st21nfc_dev->client;
+	struct device *dev = &client->dev;
 	int ret = 0;
 
 	switch (cmd) {
@@ -618,6 +620,10 @@ static long st21nfc_dev_ioctl(struct file *filp, unsigned int cmd,
 			/* pulse low for 20 millisecs */
 			gpiod_set_value(st21nfc_dev->gpiod_reset, 0);
 			usleep_range(10000, 11000);
+			if (st21nfc_dev->irq_is_attached) {
+				devm_free_irq(dev, client->irq, st21nfc_dev);
+				st21nfc_dev->irq_is_attached = false;
+			}
 			/* During the reset, force IRQ OUT as */
 			/* DH output instead of input in normal usage */
 			ret = gpiod_direction_output(st21nfc_dev->gpiod_irq, 1);
