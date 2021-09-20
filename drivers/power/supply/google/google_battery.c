@@ -4866,7 +4866,7 @@ static int gbatt_get_status(struct batt_drv *batt_drv,
 	/* ->buck_enabled = 1, from here ownward device is connected */
 
 	if (batt_drv->batt_health == POWER_SUPPLY_HEALTH_OVERHEAT &&
-	    gbms_temp_defend_dry_run(false, false)) {
+	    !gbms_temp_defend_dry_run(false, false)) {
 		val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		return 0;
 	}
