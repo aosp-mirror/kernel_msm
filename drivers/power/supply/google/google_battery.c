@@ -1112,7 +1112,7 @@ static void cev_stats_init(struct gbms_charging_event *ce_data,
 	cev_ts_init(&ce_data->high_soc_stats, GBMS_STATS_AC_TI_HIGH_SOC);
 	cev_ts_init(&ce_data->overheat_stats, GBMS_STATS_BD_TI_OVERHEAT_TEMP);
 	cev_ts_init(&ce_data->cc_lvl_stats, GBMS_STATS_BD_TI_CUSTOM_LEVELS);
-
+	cev_ts_init(&ce_data->trickle_stats, GBMS_STATS_BD_TI_TRICKLE_CLEARED);
 }
 
 static void batt_chg_stats_start(struct batt_drv *batt_drv)
@@ -1818,6 +1818,14 @@ static int batt_chg_stats_cstr(char *buff, int size,
 	if (ce_data->cc_lvl_stats.soc_in != -1)
 		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
 						&ce_data->cc_lvl_stats,
+						verbose);
+
+	/* If bd_clear triggers, we need to know about it even if trickle hasn't
+	 * triggered
+	 */
+	if (ce_data->trickle_stats.soc_in != -1 || ce_data->bd_clear_trickle)
+		len += batt_chg_tier_stats_cstr(&buff[len], size - len,
+						&ce_data->trickle_stats,
 						verbose);
 
 	return len;
@@ -2758,10 +2766,14 @@ static void ssoc_change_state(struct batt_ssoc_state *ssoc_state, bool ben)
 	ssoc_state->buck_enabled = ben;
 }
 
-static void bd_trickle_reset(struct batt_ssoc_state *ssoc_state)
+static void bd_trickle_reset(struct batt_ssoc_state *ssoc_state,
+			     struct gbms_charging_event *ce_data)
 {
 	ssoc_state->bd_trickle_cnt = 0;
 	ssoc_state->disconnect_time = 0;
+
+	/* Set to false in cev_stats_init */
+	ce_data->bd_clear_trickle = true;
 }
 
 /* called holding chg_lock */
@@ -4189,7 +4201,7 @@ static ssize_t bd_clear_store(struct device *dev,
 		return ret;
 
 	if (val)
-		bd_trickle_reset(&batt_drv->ssoc_state);
+		bd_trickle_reset(&batt_drv->ssoc_state, &batt_drv->ce_data);
 
 	return count;
 }
