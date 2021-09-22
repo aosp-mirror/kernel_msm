@@ -432,9 +432,11 @@ static int gbms_gen_state(union gbms_charger_state *chg_state,
 
 /* read or generate charge state */
 int gbms_read_charger_state(union gbms_charger_state *chg_state,
-			    struct power_supply *chg_psy)
+			    struct power_supply *chg_psy,
+			    struct power_supply *wlc_psy)
 {
 	union power_supply_propval val;
+	int wlc_online = 0;
 	int ret = 0;
 
 	ret = power_supply_get_property(chg_psy,
@@ -460,6 +462,16 @@ int gbms_read_charger_state(union gbms_charger_state *chg_state,
 				chg_state->f.chg_status,
 				chg_state->f.vchrg,
 				ichg);
+	}
+
+	if (wlc_psy)
+		wlc_online = GPSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_ONLINE);
+	/* DREAM-DEFEND disconnect for a short time. keep NOT_CHARGING */
+	if (wlc_online &&
+	    chg_state->f.chg_status == POWER_SUPPLY_STATUS_DISCHARGING) {
+		chg_state->f.chg_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		chg_state->f.flags = gbms_gen_chg_flags(chg_state->f.chg_status,
+							chg_state->f.chg_type);
 	}
 
 	return 0;
