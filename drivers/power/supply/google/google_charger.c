@@ -1664,14 +1664,8 @@ static int chg_start_bd_work(struct chg_drv *chg_drv)
 
 	/* always track disconnect time */
 	if (!bd_state->disconnect_time) {
-		int ret;
-
-		ret = bd_batt_set_state(chg_drv, false, -1);
-		if (ret < 0) {
-			pr_err("MSC_BD set_batt_state (%d)\n", ret);
-			mutex_unlock(&chg_drv->bd_lock);
-			return ret;
-		}
+		gbms_temp_defend_dry_run(true,
+					 chg_drv->bd_state.bd_temp_dry_run);
 
 		bd_state->disconnect_time = get_boot_sec();
 	}
