@@ -860,7 +860,8 @@ static void chg_work(struct work_struct *work)
 				bd_reset(bd_state);
 			reset_chg_drv_state(chg_drv);
 			chg_drv->stop_charging = 1;
-			bd_batt_set_state(chg_drv, false, -1);
+			if (!bd_state->triggered)
+				bd_batt_set_state(chg_drv, false, -1);
 		}
 
 		mutex_lock(&chg_drv->bd_lock);
@@ -872,16 +873,8 @@ static void chg_work(struct work_struct *work)
 			 * Don not clear the defender state, will
 			 * re-evaluate on next connect.
 			 */
-			if (!bd_state->disconnect_time) {
-				rc = bd_batt_set_state(chg_drv, false, -1);
-				if (rc < 0) {
-					pr_err("MSC_BD set_batt_state (%d)\n",
-					rc);
-					mutex_unlock(&chg_drv->bd_lock);
-					goto error_rerun;
-				}
+			if (!bd_state->disconnect_time)
 				bd_state->disconnect_time = get_boot_sec();
-			}
 			if (bd_ena)
 				mod_delayed_work(system_wq,
 						 &chg_drv->bd_work, 0);
