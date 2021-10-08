@@ -243,78 +243,6 @@ static ssize_t iaxxx_firmware_timestamp_show(struct device *dev,
 }
 static DEVICE_ATTR(fw_timestamp, 0400, iaxxx_firmware_timestamp_show, NULL);
 
-/**
- * iaxxx_firmware_update_test_show - sys node show function for firmware test
- *
- * Trigger firmware update test work and return results
- *
- */
-static ssize_t iaxxx_firmware_update_test_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	long rc;
-	ssize_t count;
-
-	if (!priv)
-		return scnprintf(buf, PAGE_SIZE, "ERROR, invalid device\n");
-
-	mutex_lock(&priv->test_mutex);
-
-	cancel_work_sync(&priv->dev_fw_update_test_work);
-	init_completion(&priv->bootup_done);
-	schedule_work(&priv->dev_fw_update_test_work);
-
-	rc = wait_for_completion_interruptible_timeout(&priv->bootup_done,
-			msecs_to_jiffies(IAXXX_FW_DOWNLOAD_TIMEOUT));
-
-	if (rc > 0 && priv->test_result)
-		count = scnprintf(buf, PAGE_SIZE, "SUCCESS\n");
-	else
-		count = scnprintf(buf, PAGE_SIZE, "FAIL\n");
-
-	mutex_unlock(&priv->test_mutex);
-
-	return count;
-}
-static DEVICE_ATTR(fw_update_test, 0400, iaxxx_firmware_update_test_show,
-			NULL);
-
-/**
- * iaxxx_cmem_test_show - sys node show function for memory test
- *
- * Trigger firmware update test work and return results
- *
- */
-static ssize_t iaxxx_cmem_test_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct iaxxx_priv *priv = dev ? to_iaxxx_priv(dev) : NULL;
-	long rc;
-	ssize_t count;
-
-	if (!priv)
-		return -EINVAL;
-
-	mutex_lock(&priv->test_mutex);
-
-	cancel_work_sync(&priv->dev_cmem_test_work);
-	init_completion(&priv->cmem_done);
-	schedule_work(&priv->dev_cmem_test_work);
-
-	rc = wait_for_completion_interruptible_timeout(&priv->cmem_done,
-			msecs_to_jiffies(IAXXX_FW_DOWNLOAD_TIMEOUT));
-	if (rc > 0)
-		count = scnprintf(buf, PAGE_SIZE, "SUCCESS\n");
-	else
-		count = scnprintf(buf, PAGE_SIZE, "FAIL\n");
-
-	mutex_unlock(&priv->test_mutex);
-
-	return count;
-}
-static DEVICE_ATTR(cmem_test, 0400, iaxxx_cmem_test_show, NULL);
-
 /*
  * iaxxx_set_spi_speed
  */
@@ -659,8 +587,6 @@ static DEVICE_ATTR(osc_trim_period, 0200, NULL,
  * sysfs attr info
  */
 static struct attribute *iaxxx_attrs[] = {
-	&dev_attr_fw_update_test.attr,
-	&dev_attr_cmem_test.attr,
 	&dev_attr_fw_version.attr,
 	&dev_attr_host_version.attr,
 	&dev_attr_fw_timestamp.attr,
