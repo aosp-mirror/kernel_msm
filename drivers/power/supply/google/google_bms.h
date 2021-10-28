@@ -284,6 +284,7 @@ struct batt_chg_health {
 	enum chg_health_state rest_state;
 	int rest_cc_max;
 	int rest_fv_uv;
+	ktime_t active_time;
 };
 
 #define CHG_HEALTH_REST_IS_ACTIVE(rest) \
