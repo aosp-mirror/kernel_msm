@@ -2623,12 +2623,6 @@ err_resp:
 		case QSEOS_RESULT_CBACK_REQUEST:
 			pr_warn("get cback req app_id = %d, resp->data = %d\n",
 				data->client.app_id, resp->data);
-			resp->resp_type = SMCINVOKE_RESULT_INBOUND_REQ_NEEDED;
-			/* We are here because scm call sent to TZ has requested
-			 * for another callback request. This call has been a
-			 * success and hence setting result = 0
-			 */
-			resp->result = 0;
 			break;
 		default:
 			pr_err("fail:resp res= %d,app_id = %d,lstr = %d\n",
@@ -3710,8 +3704,8 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 				(uint32_t)(__qseecom_uvirt_to_kphys(
 				data, (uintptr_t)req->resp_buf));
 		} else {
-			send_data_req.req_ptr = (uint32_t)req->cmd_req_buf;
-			send_data_req.rsp_ptr = (uint32_t)req->resp_buf;
+			send_data_req.req_ptr = (uintptr_t)req->cmd_req_buf;
+			send_data_req.rsp_ptr = (uintptr_t)req->resp_buf;
 		}
 
 		send_data_req.req_len = req->cmd_req_len;
@@ -5372,8 +5366,8 @@ int qseecom_process_listener_from_smcinvoke(struct scm_desc *desc)
 		pr_err("Failed on cmd %d for lsnr %d session %d, ret = %d\n",
 			(int)desc->ret[0], (int)desc->ret[2],
 			(int)desc->ret[1], ret);
-	desc->ret[0] = resp.resp_type;
-	desc->ret[1] = resp.result;
+	desc->ret[0] = resp.result;
+	desc->ret[1] = resp.resp_type;
 	desc->ret[2] = resp.data;
 	return ret;
 }

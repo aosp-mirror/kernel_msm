@@ -299,6 +299,8 @@ static struct notifier_block restart_notifier = {
 static int in_global_reset;
 /* end subsystem restart */
 
+static int ssr_skipped_reconnect;
+
 #define bam_ch_is_open(x)						\
 	(bam_ch[(x)].status == (BAM_CH_LOCAL_OPEN | BAM_CH_REMOTE_OPEN))
 
@@ -1122,6 +1124,12 @@ int msm_bam_dmux_open(uint32_t id, void *priv,
 		kfree(hdr);
 		return -ENODEV;
 	}
+	if (in_global_reset) {
+		BAM_DMUX_LOG("%s: In SSR... ch_id[%d]\n", __func__, id);
+		spin_unlock_irqrestore(&bam_ch[id].lock, flags);
+		kfree(hdr);
+		return -ENODEV;
+	}
 
 	bam_ch[id].notify = notify;
 	bam_ch[id].priv = priv;
@@ -1197,6 +1205,12 @@ int msm_bam_dmux_close(uint32_t id)
 	if (bam_ch_is_in_reset(id)) {
 		read_unlock(&ul_wakeup_lock);
 		bam_ch[id].status &= ~BAM_CH_IN_RESET;
+		return 0;
+	}
+
+	if (in_global_reset) {
+		BAM_DMUX_LOG("%s: In SSR... ch_id[%d]\n", __func__, id);
+		read_unlock(&ul_wakeup_lock);
 		return 0;
 	}
 
@@ -1995,6 +2009,7 @@ static void reconnect_to_bam(void)
 	int i;
 
 	if (in_global_reset) {
+		ssr_skipped_reconnect = 1;
 		BAM_DMUX_LOG("%s: skipping due to SSR\n", __func__);
 		return;
 	}
@@ -2048,7 +2063,7 @@ static void disconnect_to_bam(void)
 	unsigned long flags;
 	unsigned long time_remaining;
 
-	if (!in_global_reset) {
+	if (!in_global_reset && !ssr_skipped_reconnect) {
 		time_remaining = wait_for_completion_timeout(
 				&shutdown_completion,
 				msecs_to_jiffies(SHUTDOWN_TIMEOUT_MS));
@@ -2103,6 +2118,7 @@ static void disconnect_to_bam(void)
 	mutex_unlock(&bam_rx_pool_mutexlock);
 	toggle_apps_ack();
 	verify_tx_queue_is_empty(__func__);
+	ssr_skipped_reconnect = 0;
 }
 
 static void vote_dfab(void)
@@ -2240,6 +2256,8 @@ static int restart_notifier_cb(struct notifier_block *this,
 	process_dynamic_mtu(false);
 	set_ul_mtu(0, true);
 	dynamic_mtu_enabled = false;
+	if (bam_connection_is_active)
+		ssr_skipped_reconnect = 1;
 
 	/* Cleanup Channel States */
 	mutex_lock(&bam_pdev_mutexlock);
@@ -2465,7 +2483,7 @@ static void toggle_apps_ack(void)
 {
 	static unsigned int clear_bit; /* 0 = set the bit, else clear bit */
 
-	if (in_global_reset) {
+	if (in_global_reset || ssr_skipped_reconnect) {
 		BAM_DMUX_LOG("%s: skipped due to SSR\n", __func__);
 		return;
 	}
