@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019, 2021 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -32,6 +32,8 @@
 #define FASTRPC_IOCTL_INVOKE_CRC _IOWR('R', 11, struct fastrpc_ioctl_invoke_crc)
 #define FASTRPC_IOCTL_CONTROL   _IOWR('R', 12, struct fastrpc_ioctl_control)
 #define FASTRPC_IOCTL_MUNMAP_FD _IOWR('R', 13, struct fastrpc_ioctl_munmap_fd)
+#define FASTRPC_IOCTL_GET_DSP_INFO \
+			_IOWR('R', 16, struct fastrpc_ioctl_dsp_capabilities)
 
 #define FASTRPC_GLINK_GUID "fastrpcglink-apps-dsp"
 #define FASTRPC_SMD_GUID "fastrpcsmd-apps-dsp"
@@ -241,23 +243,39 @@ struct fastrpc_ioctl_perf {			/* kernel performance data */
 	uintptr_t keys;
 };
 
-#define FASTRPC_CONTROL_LATENCY	(1)
+enum fastrpc_control_type {
+	FASTRPC_CONTROL_LATENCY		=	1,
+	FASTRPC_CONTROL_SMMU		=	2,
+	FASTRPC_CONTROL_KALLOC		=	3,
+	FASTRPC_CONTROL_WAKELOCK	=	4,
+};
+
 struct fastrpc_ctrl_latency {
 	uint32_t enable;	/* latency control enable */
 	uint32_t level;		/* level of control */
 };
 
-#define FASTRPC_CONTROL_KALLOC	(3)
 struct fastrpc_ctrl_kalloc {
 	uint32_t kalloc_support;  /* Remote memory allocation from kernel */
 };
-/* FASTRPC_CONTROL value 2 is reserved in user space */
+
+struct fastrpc_ctrl_wakelock {
+	uint32_t enable;	/* wakelock control enable */
+};
+
 struct fastrpc_ioctl_control {
 	uint32_t req;
 	union {
 		struct fastrpc_ctrl_latency lp;
 		struct fastrpc_ctrl_kalloc kalloc;
+		struct fastrpc_ctrl_wakelock wp;
 	};
+};
+
+#define FASTRPC_MAX_DSP_ATTRIBUTES            (7)
+struct fastrpc_ioctl_dsp_capabilities {
+	uint32_t domain;	//! DSP domain to query capabilities
+	uint32_t dsp_attributes[FASTRPC_MAX_DSP_ATTRIBUTES];
 };
 
 struct smq_null_invoke {

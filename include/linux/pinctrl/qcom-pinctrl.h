@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -11,16 +11,10 @@
  * GNU General Public License for more details.
  */
 
-/dts-v1/;
-/plugin/;
+#ifndef __LINUX_PINCTRL_MSM_H__
+#define __LINUX_PINCTRL_MSM_H__
 
-#include "trinket-iot-idp.dtsi"
-#include "trinket-audio-overlay.dtsi"
+/* API to write to mpm_wakeup registers */
+int msm_gpio_mpm_wake_set(unsigned int gpio, bool enable);
 
-/ {
-	model = "Qualcomm Technologies, Inc. TRINKET IOT IDP Overlay";
-	compatible = "qcom,trinket-iot";
-	qcom,msm-id = <467 0x10000>;
-	qcom,board-id = <34 0>;
-};
-
+#endif /* __LINUX_PINCTRL_MSM_H__ */
