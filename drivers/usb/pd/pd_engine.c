@@ -56,6 +56,7 @@
 #define OTG_ICL_VOTER "OTG_ICL_VOTER"
 #define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
 #define TCPM_DISABLE_CC_VOTER "TCPM_DISABLE_CC_VOTER"
+#define LIMIT_USB_VOTER "LIMIT_USB_VOTER"
 
 static char boot_mode_string[64];
 static char suzyq_enabled[15];
@@ -133,6 +134,8 @@ struct usbpd {
 	bool switch_based_on_maxpower;
 
 	bool fixed_pdo_5V3A;
+	bool limit_sink_enable;
+	unsigned int limit_sink_current;	/* uA */
 
 	bool in_explicit_contract;
 
@@ -2200,6 +2203,97 @@ static ssize_t pdo_store(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_RW(pdo);
 
+static ssize_t usb_limit_sink_enable_show(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+
+	return sysfs_emit(buf, "%u\n", pd->limit_sink_enable);
+}
+
+/*
+ * usb_limit_sink_current has to be set before usb_limit_sink_enable is
+ * invoked.
+ */
+static ssize_t usb_limit_sink_enable_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf,
+					   size_t count)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+	bool enable;
+	int ret;
+
+	if (kstrtobool(buf, &enable) < 0)
+		return -EINVAL;
+
+	logbuffer_log(pd->log, "usb_limit_sink_enable %u (%u uA)", enable,
+		      pd->limit_sink_current);
+
+	if (enable) {
+		ret = vote(pd->usb_icl_votable, "LIMIT_USB_VOTER", true,
+			   pd->limit_sink_current);
+		if (ret < 0) {
+			dev_err(&pd->dev, "Cannot set limit sink current, ret %d\n",
+				ret);
+			goto exit;
+		}
+	} else {
+		ret = vote(pd->usb_icl_votable, "LIMIT_USB_VOTER", false, 0);
+		if (ret < 0) {
+			dev_err(&pd->dev, "Cannot unvote for sink current, ret %d\n",
+				ret);
+			goto exit;
+		}
+	}
+
+	pd->limit_sink_enable = enable;
+exit:
+	return count;
+}
+static DEVICE_ATTR_RW(usb_limit_sink_enable);
+
+static ssize_t usb_limit_sink_current_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+
+	return sysfs_emit(buf, "%u\n", pd->limit_sink_current);
+}
+
+/*
+ * usb_icl will not be updated if limit_sink_enable is already enabled.
+ * unit uA
+ */
+static ssize_t usb_limit_sink_current_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t count)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+	unsigned int val;
+
+	if (kstrtouint(buf, 0, &val) < 0)
+		return -EINVAL;
+
+	/* Never accept current over 3A */
+	if (val > 3000000)
+		return -EINVAL;
+
+	pd->limit_sink_current = val;
+
+	return count;
+}
+static DEVICE_ATTR_RW(usb_limit_sink_current);
+
+static struct device_attribute *usbpd_device_attrs[] = {
+	&dev_attr_pdo,
+	&dev_attr_usb_limit_sink_enable,
+	&dev_attr_usb_limit_sink_current,
+	NULL
+};
+
 /**
  * usbpd_create - Create a new instance of USB PD protocol/policy engine
  * @parent - parent device to associate with
@@ -2214,7 +2308,7 @@ static DEVICE_ATTR_RW(pdo);
  */
 struct usbpd *usbpd_create(struct device *parent)
 {
-	int ret = 0;
+	int ret = 0, i;
 	struct usbpd *pd;
 	union power_supply_propval val = {0};
 
@@ -2382,6 +2476,7 @@ struct usbpd *usbpd_create(struct device *parent)
 	vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
 	vote(pd->apsd_disable_votable, OTG_DISABLE_APSD_VOTER, false, 0);
 	vote(pd->disable_power_role_switch, TCPM_DISABLE_CC_VOTER, false, 0);
+	vote(pd->usb_icl_votable, LIMIT_USB_VOTER, false, 0);
 
 	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
 	ext_vbus_register_notify(&pd->ext_vbus_nb);
@@ -2421,7 +2516,13 @@ struct usbpd *usbpd_create(struct device *parent)
 
 	pd->suspend_supported = true;
 
-	device_create_file(&pd->dev, &dev_attr_pdo);
+	for (i = 0; usbpd_device_attrs[i]; i++) {
+		ret = device_create_file(&pd->dev, usbpd_device_attrs[i]);
+		if (ret < 0)
+			dev_err(&pd->dev,
+				"Unable to create device attr[%d] ret:%d:",
+				i, ret);
+	}
 
 	return pd;
 
