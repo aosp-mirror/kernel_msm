@@ -57,6 +57,14 @@
 #define OTG_DISABLE_APSD_VOTER "OTG_DISABLE_APSD_VOTER"
 #define TCPM_DISABLE_CC_VOTER "TCPM_DISABLE_CC_VOTER"
 #define LIMIT_USB_VOTER "LIMIT_USB_VOTER"
+#define DEFAULT_SRC_CAP_VOTER "DEFAULT_SRC_CAP_VOTER"
+#define WIRELESS_SRC_CAP_VOTER "WIRLESS_SRC_CAP_VOTER"
+#define LIMIT_SRC_CAP_VOTER "LIMIT_SRC_CAP_VOTER"
+
+#define MAX_SRC_CUR_MA 900
+#define DEFAULT_SRC_CUR_MA MAX_SRC_CUR_MA
+#define WIRELESS_SRC_CUR_MA 500
+#define LIMIT_SRC_CUR_MA 0
 
 static char boot_mode_string[64];
 static char suzyq_enabled[15];
@@ -144,6 +152,8 @@ struct usbpd {
 	bool default_src_cap;
 	u32 src_pdo[PDO_MAX_OBJECTS];
 	unsigned int nr_src_pdo;
+	bool limit_src_cap_enable;
+	struct votable *src_cap_votable;
 
 	/* logging client */
 	struct logbuffer *log;
@@ -817,22 +827,54 @@ clear:
 static void update_src_caps(struct work_struct *work)
 {
 	struct usbpd *pd = container_of(work, struct usbpd, update_pdo_work);
-	u32 pdo[1];
 
 	if (pd->wireless_online && pd->default_src_cap) {
 		logbuffer_log(pd->log, "alternative src_cap");
-		pdo[0] = PDO_FIXED(5000, 500, PDO_FIXED_FLAGS);
-		tcpm_update_source_capabilities(pd->tcpm_port, pdo, 1);
+		vote(pd->src_cap_votable, WIRELESS_SRC_CAP_VOTER, true,
+		     WIRELESS_SRC_CUR_MA);
 		pd->default_src_cap = false;
 	} else if (!pd->wireless_online &&
 		   !pd->vbus_output  &&
 		   !pd->default_src_cap) {
 		logbuffer_log(pd->log, "default src_cap");
-		tcpm_update_source_capabilities(pd->tcpm_port,
-						pd->src_pdo,
-						pd->nr_src_pdo);
+		vote(pd->src_cap_votable, WIRELESS_SRC_CAP_VOTER, false, 0);
 		pd->default_src_cap = true;
 	}
+}
+
+static int pd_switch_src_cap_callback(struct votable *votable, void *data,
+				      int cur_ma,
+				      const char *client)
+{
+	struct usbpd *pd = data;
+	unsigned int nr_pdo;
+	u32 *pdo_array, pdo_limited;
+	int ret;
+
+	if (!pd->tcpm_port || cur_ma < 0)
+		return 0;
+
+	if (cur_ma > MAX_SRC_CUR_MA)
+		cur_ma = MAX_SRC_CUR_MA;
+
+	logbuffer_log(pd->log, "src_cap current set to %d mA", cur_ma);
+
+	if (cur_ma == DEFAULT_SRC_CUR_MA) {
+		pdo_array = pd->src_pdo;
+		nr_pdo = pd->nr_src_pdo;
+	} else {
+		pdo_array = &pdo_limited;
+		pdo_limited = pd->src_pdo[0];
+		pdo_limited &= ~(PDO_CURR_MASK << PDO_FIXED_CURR_SHIFT);
+		pdo_limited |= PDO_FIXED_CURR(cur_ma);
+		nr_pdo = 1;
+	}
+
+	ret = tcpm_update_source_capabilities(pd->tcpm_port, pdo_array, nr_pdo);
+	if (ret < 0)
+		logbuffer_log(pd->log, "Couldn't update src cap %d", ret);
+
+	return ret;
 }
 
 static void psy_changed_handler(struct work_struct *work)
@@ -2287,10 +2329,42 @@ static ssize_t usb_limit_sink_current_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(usb_limit_sink_current);
 
+static ssize_t usb_limit_source_enable_show(struct device *dev,
+					    struct device_attribute *attr,
+					    char *buf)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+
+	return sysfs_emit(buf, "%u\n", pd->limit_src_cap_enable);
+}
+
+static ssize_t usb_limit_source_enable_store(struct device *dev,
+					     struct device_attribute *attr,
+					     const char *buf, size_t count)
+{
+	struct usbpd *pd = container_of(dev, struct usbpd, dev);
+	bool enable;
+
+	if (kstrtobool(buf, &enable) < 0)
+		return -EINVAL;
+
+	if (enable)
+		vote(pd->src_cap_votable, LIMIT_SRC_CAP_VOTER, true,
+		     LIMIT_SRC_CUR_MA);
+	else
+		vote(pd->src_cap_votable, LIMIT_SRC_CAP_VOTER, false, 0);
+
+	pd->limit_src_cap_enable = enable;
+
+	return count;
+}
+static DEVICE_ATTR_RW(usb_limit_source_enable);
+
 static struct device_attribute *usbpd_device_attrs[] = {
 	&dev_attr_pdo,
 	&dev_attr_usb_limit_sink_enable,
 	&dev_attr_usb_limit_sink_current,
+	&dev_attr_usb_limit_source_enable,
 	NULL
 };
 
@@ -2472,11 +2546,25 @@ struct usbpd *usbpd_create(struct device *parent)
 		goto put_psy_wireless;
 	}
 
+	pd->src_cap_votable = create_votable("SWITCH_SRC_CAP", VOTE_MIN,
+					     pd_switch_src_cap_callback,
+					     pd);
+	if (IS_ERR(pd->src_cap_votable)) {
+		ret = PTR_ERR(pd->src_cap_votable);
+		dev_err(&pd->dev, "Couldn't create SWITCH_SRC_CAP votable (%d), deferring probe",
+			ret);
+		ret = -EPROBE_DEFER;
+		goto put_psy_wireless;
+	}
+
 	/* initialize votable */
 	vote(pd->usb_icl_votable, OTG_ICL_VOTER, false, 0);
 	vote(pd->apsd_disable_votable, OTG_DISABLE_APSD_VOTER, false, 0);
 	vote(pd->disable_power_role_switch, TCPM_DISABLE_CC_VOTER, false, 0);
 	vote(pd->usb_icl_votable, LIMIT_USB_VOTER, false, 0);
+	vote(pd->src_cap_votable, DEFAULT_SRC_CAP_VOTER, true, 900);
+	vote(pd->src_cap_votable, WIRELESS_SRC_CAP_VOTER, false, 0);
+	vote(pd->src_cap_votable, LIMIT_SRC_CAP_VOTER, false, 0);
 
 	pd->ext_vbus_nb.notifier_call = update_ext_vbus;
 	ext_vbus_register_notify(&pd->ext_vbus_nb);
@@ -2530,6 +2618,7 @@ unreg_tcpm:
 	tcpm_unregister_port(pd->tcpm_port);
 unreg_ext_vbus:
 	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
+	destroy_votable(pd->src_cap_votable);
 put_psy_wireless:
 	if (pd->wlc_supported)
 		power_supply_put(pd->wireless_psy);
@@ -2565,6 +2654,7 @@ void usbpd_destroy(struct usbpd *pd)
 	power_supply_unreg_notifier(&pd->psy_nb);
 	tcpm_unregister_port(pd->tcpm_port);
 	ext_vbus_unregister_notify(&pd->ext_vbus_nb);
+	destroy_votable(pd->src_cap_votable);
 	if (pd->wlc_supported)
 		power_supply_put(pd->wireless_psy);
 	power_supply_put(pd->usb_psy);
