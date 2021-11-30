@@ -35,6 +35,7 @@
 #include "google_bms.h"
 #include "google_psy.h"
 #include "logbuffer.h"
+#include "p9221_charger.h"
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -3717,9 +3718,14 @@ static int chg_set_dc_in_charge_cntl_limit(struct thermal_cooling_device *tcd,
 			(dc_icl != -1),
 			dc_icl);
 
-	if (ret < 0 || changed)
+	if (ret < 0 || changed) {
+		if (dc_icl == -1 && changed)
+			ret = vote(chg_drv->dc_icl_votable, P9221_DEFAULT_VOTER,
+				   false, 0);
+
 		pr_info("MSC_THERM_DC lvl=%d dc_icl=%d (%d)\n",
 			lvl, dc_icl, ret);
+	}
 
 	/* make sure that fcc is reset to max when charging from WLC*/
 	if (ret ==0)
