@@ -660,8 +660,6 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 	case SM8150_TAPER_CHARGE:
 		ret = POWER_SUPPLY_STATUS_CHARGING;
 		break;
-	/* pause on FCC=0, JEITA, USB/DC suspend or on INPUT UV/OV */
-	case SM8150_PAUSE_CHARGE:
 	case SM8150_INHIBIT_CHARGE:
 	case SM8150_TERMINATE_CHARGE:
 		/* flag full only at the correct voltage */
@@ -673,6 +671,8 @@ static int sm8150_get_chg_status(const struct bms_dev *bms,
 		else
 			ret = POWER_SUPPLY_STATUS_FULL;
 		break;
+	/* pause on JEITA, USB/DC suspend or on INPUT UV/OV */
+	case SM8150_PAUSE_CHARGE:
 	/* disabled disconnect */
 	case SM8150_DISABLE_CHARGE:
 		ret = POWER_SUPPLY_STATUS_NOT_CHARGING;
