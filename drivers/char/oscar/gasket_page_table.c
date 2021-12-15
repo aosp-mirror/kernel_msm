@@ -1529,6 +1529,7 @@ int gasket_alloc_coherent_memory(struct gasket_dev *gasket_dev, u64 size,
 	if (num_pages == 0)
 		return -EINVAL;
 
+	mutex_lock(&gasket_dev->page_table[index]->mutex);
 	mem = dma_alloc_coherent(gasket_dev->dma_dev, num_pages * PAGE_SIZE,
 				 &handle, GFP_KERNEL);
 	if (!mem)
@@ -1556,6 +1557,7 @@ int gasket_alloc_coherent_memory(struct gasket_dev *gasket_dev, u64 size,
 			(u64)mem + j * PAGE_SIZE;
 	}
 
+	mutex_unlock(&gasket_dev->page_table[index]->mutex);
 	return 0;
 
 nomem:
@@ -1570,6 +1572,7 @@ nomem:
 	kfree(gasket_dev->page_table[index]->coherent_pages);
 	gasket_dev->page_table[index]->coherent_pages = NULL;
 	gasket_dev->page_table[index]->num_coherent_pages = 0;
+	mutex_unlock(&gasket_dev->page_table[index]->mutex);
 	return -ENOMEM;
 }
 
@@ -1599,6 +1602,7 @@ void gasket_free_coherent_memory_all(
 	if (!gasket_dev->page_table[index])
 		return;
 
+	mutex_lock(&gasket_dev->page_table[index]->mutex);
 	if (gasket_dev->coherent_buffer.length_bytes) {
 		dma_free_coherent(gasket_dev->dma_dev,
 				  gasket_dev->coherent_buffer.length_bytes,
@@ -1612,6 +1616,7 @@ void gasket_free_coherent_memory_all(
 	kfree(gasket_dev->page_table[index]->coherent_pages);
 	gasket_dev->page_table[index]->coherent_pages = NULL;
 	gasket_dev->page_table[index]->num_coherent_pages = 0;
+	mutex_unlock(&gasket_dev->page_table[index]->mutex);
 }
 
 /*
