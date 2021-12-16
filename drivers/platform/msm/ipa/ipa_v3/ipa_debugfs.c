@@ -3433,18 +3433,22 @@ static int ipa3_collect_rt(
 	list_for_each_entry(tbl, &set->head_rt_tbl_list, link) {
 		i = 0;
 		list_for_each_entry(entry, &tbl->head_rt_rule_list, link) {
-			if (entry->proc_ctx) {
+			if (entry->proc_ctx && entry->proc_ctx->offset_entry) {
 				ofst = entry->proc_ctx->offset_entry->offset;
 				ofst_words =
 					(ofst +
 					ipa3_ctx->hdr_proc_ctx_tbl.start_offset)
 					>> 5;
 
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"tbl_idx:%d tbl_name:%s tbl_ref:%u\n",
-					entry->tbl->idx, entry->tbl->name,
-					entry->tbl->ref_cnt);
+				if (entry->tbl) {
+					nbytes += scnprintf(
+						msg_buff + nbytes,
+						max_buff_len - nbytes,
+						"tbl_idx:%d tbl_name:%s tbl_ref:%u\n",
+						entry->tbl->idx,
+						entry->tbl->name,
+						entry->tbl->ref_cnt);
+				}
 				nbytes += scnprintf(msg_buff + nbytes,
 					max_buff_len - nbytes,
 					"rule_idx:%d dst:%d ep:%d S:%u\n",
@@ -3472,16 +3476,20 @@ static int ipa3_collect_rt(
 					entry->rule.hashable,
 					entry->rule.retain_hdr);
 			} else {
-				if (entry->hdr)
+				if (entry->hdr && entry->hdr->offset_entry)
 					ofst = entry->hdr->offset_entry->offset;
 				else
 					ofst = 0;
 
-				nbytes += scnprintf(msg_buff + nbytes,
-					max_buff_len - nbytes,
-					"tbl_idx:%d tbl_name:%s tbl_ref:%u\n",
-					entry->tbl->idx, entry->tbl->name,
-					entry->tbl->ref_cnt);
+				if (entry->tbl) {
+					nbytes += scnprintf(
+						msg_buff + nbytes,
+						max_buff_len - nbytes,
+						"tbl_idx:%d tbl_name:%s tbl_ref:%u\n",
+						entry->tbl->idx,
+						entry->tbl->name,
+						entry->tbl->ref_cnt);
+				}
 				nbytes += scnprintf(msg_buff + nbytes,
 					max_buff_len - nbytes,
 					"rule_idx:%d dst:%d ep:%d S:%u\n",
