@@ -82,13 +82,22 @@ const char *gbms_chg_ev_adapter_s(int adapter)
  * NOTE: the call covert C rates to chanrge currents IN PLACE, ie you cannot
  * call this twice.
  */
-void gbms_init_chg_table(struct gbms_chg_profile *profile, u32 capacity_ma)
+void gbms_init_chg_table(struct gbms_chg_profile *profile,
+			 struct device_node *node, u32 capacity_ma)
 {
 	u32 ccm;
-	int vi, ti;
+	int vi, ti, ret;
 	const int fv_uv_step = profile->fv_uv_resolution;
+	u32 cccm_array_size = (profile->temp_nb_limits - 1)
+			       * profile->volt_nb_limits;
 
 	profile->capacity_ma = capacity_ma;
+
+	ret = of_property_read_u32_array(node, "google,chg-cc-limits",
+					 (u32 *)profile->cccm_limits,
+					 cccm_array_size);
+	if (ret < 0)
+		pr_warn("unable to get default cccm_limits.\n");
 
 	/* chg-battery-capacity is in mAh, chg-cc-limits relative to 100 */
 	for (ti = 0; ti < profile->temp_nb_limits - 1; ti++) {
@@ -159,6 +168,85 @@ static int gbms_read_cccm_limits(struct gbms_chg_profile *profile,
 	return 0;
 }
 
+static int gbms_read_aacr_limits(struct gbms_chg_profile *profile,
+				 struct device_node *node)
+{
+	int ret = 0, cycle_nb_limits = 0, fade10_nb_limits = 0;
+
+	ret = of_property_count_elems_of_size(node,
+					      "google,aacr-ref-cycles",
+					      sizeof(u32));
+	if (ret < 0)
+		goto no_data;
+
+	cycle_nb_limits = ret;
+
+	ret = of_property_count_elems_of_size(node,
+					      "google,aacr-ref-fade10",
+					      sizeof(u32));
+	if (ret < 0)
+		goto no_data;
+
+	fade10_nb_limits = ret;
+
+	if (cycle_nb_limits != fade10_nb_limits ||
+	    cycle_nb_limits > GBMS_AACR_DATA_MAX ||
+	    cycle_nb_limits == 0) {
+		gbms_warn(profile,
+			  "aacr not enable, cycle_nb:%d, fade10_nb:%d, max:%d",
+			  cycle_nb_limits, fade10_nb_limits,
+			  GBMS_AACR_DATA_MAX);
+		profile->aacr_nb_limits = 0;
+		return -ERANGE;
+	}
+
+	ret = of_property_read_u32_array(node, "google,aacr-ref-cycles",
+					 (u32 *)profile->reference_cycles,
+					 cycle_nb_limits);
+	if (ret < 0)
+		return ret;
+
+	ret = of_property_read_u32_array(node, "google,aacr-ref-fade10",
+					 (u32 *)profile->reference_fade10,
+					 fade10_nb_limits);
+	if (ret < 0)
+		return ret;
+
+	profile->aacr_nb_limits = cycle_nb_limits;
+
+	return 0;
+
+no_data:
+	profile->aacr_nb_limits = 0;
+	return ret;
+}
+
+/* return pct amount of capacity fade at cycles or negative if not enabled */
+int gbms_aacr_fade10(const struct gbms_chg_profile *profile, int cycles)
+{
+	int cycle_s = 0, fade_s = 0;
+	int idx, cycle_f, fade_f;
+
+	if (profile->aacr_nb_limits == 0 || cycles < 0)
+		return -EINVAL;
+
+	for (idx = 0; idx < profile->aacr_nb_limits; idx++)
+		if (cycles < profile->reference_cycles[idx])
+			break;
+
+	/* Interpolation */
+	cycle_f = profile->reference_cycles[idx];
+	fade_f = profile->reference_fade10[idx];
+	if (idx > 0) {
+		cycle_s = profile->reference_cycles[idx - 1];
+		fade_s = profile->reference_fade10[idx - 1];
+	}
+
+	return (cycles - cycle_s) * (fade_f - fade_s) / (cycle_f - cycle_s)
+		+ fade_s;
+}
+EXPORT_SYMBOL_GPL(gbms_aacr_fade10);
+
 int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 			  struct device_node *node,
 			  const char *owner_name)
@@ -171,6 +259,11 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 	ret = gbms_read_cccm_limits(profile, node);
 	if (ret < 0)
 		return ret;
+
+	/* TODO: dump the AACR table if supported */
+	ret = gbms_read_aacr_limits(profile, node);
+	if (ret == 0)
+		gbms_info(profile, "AACR: supported\n");
 
 	cccm_array_size = (profile->temp_nb_limits - 1)
 			  * profile->volt_nb_limits;
@@ -276,23 +369,22 @@ void gbms_free_chg_profile(struct gbms_chg_profile *profile)
 }
 
 /* NOTE: I should really pass the scale */
-void gbms_dump_raw_profile(const struct gbms_chg_profile *profile, int scale)
+void gbms_dump_raw_profile(char *buff, size_t len,
+			   const struct gbms_chg_profile *profile, int scale)
 {
 	const int tscale = (scale == 1) ? 1 : 10;
-	/* with scale == 1 voltage takes 7 bytes, add 7 bytes of temperature */
-	char buff[GBMS_CHG_VOLT_NB_LIMITS_MAX * 9 + 7];
-	int ti, vi, count, len = sizeof(buff);
+	int ti, vi, count = 0;
 
-	gbms_info(profile, "Profile constant charge limits:\n");
-	count = 0;
+	count += scnprintf(buff + count, len - count,
+			   "Profile constant charge limits:\n");
+	count += scnprintf(buff + count, len - count, "|T \\ V");
 	for (vi = 0; vi < profile->volt_nb_limits; vi++) {
 		count += scnprintf(buff + count, len - count, "  %4d",
 				   profile->volt_limits[vi] / scale);
 	}
-	gbms_info(profile, "|T \\ V%s\n", buff);
+	count += scnprintf(buff + count, len - count, "\n");
 
 	for (ti = 0; ti < profile->temp_nb_limits - 1; ti++) {
-		count = 0;
 		count += scnprintf(buff + count, len - count, "|%2d:%2d",
 				   profile->temp_limits[ti] / tscale,
 				   profile->temp_limits[ti + 1] / tscale);
@@ -301,7 +393,7 @@ void gbms_dump_raw_profile(const struct gbms_chg_profile *profile, int scale)
 					   GBMS_CCCM_LIMITS(profile, ti, vi)
 					   / scale);
 		}
-		gbms_info(profile, "%s\n", buff);
+		count += scnprintf(buff + count, len - count, "\n");
 	}
 }
 
