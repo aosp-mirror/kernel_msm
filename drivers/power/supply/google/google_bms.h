@@ -17,6 +17,7 @@
 #ifndef __GOOGLE_BMS_H_
 #define __GOOGLE_BMS_H_
 
+#include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/power_supply.h>
 #include "qmath.h"
@@ -26,6 +27,8 @@ struct device_node;
 
 #define GBMS_CHG_TEMP_NB_LIMITS_MAX 10
 #define GBMS_CHG_VOLT_NB_LIMITS_MAX 6
+#define GBMS_CHG_ALG_BUF 500
+#define GBMS_AACR_DATA_MAX 10
 
 struct gbms_chg_profile {
 	const char *owner_name;
@@ -54,6 +57,11 @@ struct gbms_chg_profile {
 	u32 fv_uv_resolution;
 	/* experimental */
 	u32 cv_otv_margin;
+
+	/* AACR feature */
+	u32 reference_cycles[GBMS_AACR_DATA_MAX];
+	u32 reference_fade10[GBMS_AACR_DATA_MAX];
+	u32 aacr_nb_limits;
 };
 
 #define WLC_BPP_THRESHOLD_UV	700000
@@ -361,12 +369,15 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 #define gbms_init_chg_profile(p, n) \
 	gbms_init_chg_profile_internal(p, n, KBUILD_MODNAME)
 
-void gbms_init_chg_table(struct gbms_chg_profile *profile, u32 capacity);
+void gbms_init_chg_table(struct gbms_chg_profile *profile,
+			 struct device_node *node, u32 capacity);
 
 void gbms_free_chg_profile(struct gbms_chg_profile *profile);
 
-void gbms_dump_raw_profile(const struct gbms_chg_profile *profile, int scale);
-#define gbms_dump_chg_profile(profile) gbms_dump_raw_profile(profile, 1000)
+void gbms_dump_raw_profile(char *buff, size_t len,
+			   const struct gbms_chg_profile *profile, int scale);
+#define gbms_dump_chg_profile(buff, len, profile) \
+	gbms_dump_raw_profile(buff, len, profile, 1000)
 
 /* newgen charging: charge profile */
 int gbms_msc_temp_idx(const struct gbms_chg_profile *profile, int temp);
@@ -380,6 +391,9 @@ uint8_t gbms_gen_chg_flags(int chg_status, int chg_type);
 int gbms_read_charger_state(union gbms_charger_state *chg_state,
 			    struct power_supply *chg_psy,
 			    struct power_supply *wlc_psy);
+
+/* calculate aacr reference capacity */
+int gbms_aacr_fade10(const struct gbms_chg_profile *profile, int cycles);
 
 /* debug/print */
 const char *gbms_chg_type_s(int chg_type);
