@@ -294,9 +294,15 @@ static int dsp_domr_notify_cb(struct notifier_block *n, unsigned long code,
 				&cur);
 		SLIM_INFO(dev, "reg-PD client:%s with service:%s\n",
 				reg->client_name, reg->service_name);
-		SLIM_INFO(dev, "reg-PD dom:%s instance:%d, cur:%d\n",
+		SLIM_INFO(dev, "reg-PD dom:%s instance:%d, cur:0x%x\n",
 				reg->domain_list->name,
 				reg->domain_list->instance_id, cur);
+
+		if (cur == SERVREG_NOTIF_SERVICE_STATE_UP_V01) {
+			atomic_set(&dev->ssr_in_progress, 0);
+			schedule_work(&dev->dsp.dom_up);
+		}
+
 		if (IS_ERR_OR_NULL(dev->dsp.domr))
 			ngd_reg_ssr(dev);
 		else
