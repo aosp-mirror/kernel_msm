@@ -150,6 +150,10 @@ static int iaxxx_btp_write_words(struct iaxxx_priv *priv, uint32_t phy_addr,
 	 * so calculate the offset and use it for first transaction
 	 */
 	addr_offset = phy_addr % IAXXX_MAC_WINDOW_SIZE;
+	if ((addr_offset >> 2) > btp_size) {
+		ret = -EINVAL;
+		goto exit;
+	}
 
 	while (words) {
 		/* Size of each transfer cannot exceed chunk size */
@@ -230,6 +234,10 @@ static int iaxxx_btp_read_words(struct iaxxx_priv *priv, uint32_t phy_addr,
 	 * so calculate the offset and use it for first transaction
 	 */
 	addr_offset = phy_addr % IAXXX_MAC_WINDOW_SIZE;
+	if ((addr_offset >> 2) > btp_size) {
+		ret = -EINVAL;
+		goto exit;
+	}
 
 	while (words) {
 		/* Size of each transfer cannot exceed chunk size */
