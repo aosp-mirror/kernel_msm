@@ -2010,11 +2010,10 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 {
 	struct smq_invoke_ctx *ctx = NULL;
 	struct fastrpc_ioctl_invoke *invoke = &inv->inv;
-	bool pm_awake_voted = false;
 	int err = 0, cid = -1, interrupted = 0;
 	struct timespec64 invoket = {0};
 	int64_t *perf_counter = NULL;
-	bool pm_awake_voted;
+	bool pm_awake_voted = false;
 
 	cid = fl->cid;
 	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
