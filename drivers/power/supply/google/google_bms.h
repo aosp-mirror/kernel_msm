@@ -242,6 +242,7 @@ enum chg_health_state {
 
 /* tier index used to log the session */
 enum gbms_stats_tier_idx_t {
+	GBMS_STATS_AC_TI_DISABLE_DIALOG = -6,
 	GBMS_STATS_AC_TI_DEFENDER = -5,
 	GBMS_STATS_AC_TI_DISABLE_SETTING_STOP = -4,
 	GBMS_STATS_AC_TI_DISABLE_MISC = -3,
