@@ -76,10 +76,16 @@
 #define HCC_WRITE_AGAIN	0xF0F0
 #define HCC_DEFAULT_DELTA_CYCLE_CNT	25
 
-/* Interval value used when health is settings disabled when not running */
-#define CHG_DEADLINE_SETTING -1
-/* Internal value used when health is settings disabled while running */
-#define CHG_DEADLINE_SETTING_STOP -2
+enum batt_health_ui {
+	/* Internal value used when health is cleared via dialog */
+	CHG_DEADLINE_DIALOG = -3,
+	/* Internal value used when health is settings disabled while running */
+	CHG_DEADLINE_SETTING_STOP = -2,
+	/* Internal value used when health is settings disabled */
+	CHG_DEADLINE_SETTING = -1,
+	/* Internal value used when health is cleared via alarms/re-plug */
+	CHG_DEADLINE_CLEARED = 0,
+};
 
 #define PREFIX_SERIALNO   "androidboot.serialno="
 #define DEV_SN_LENGTH         20
@@ -1414,6 +1420,8 @@ static int batt_chg_health_vti(const struct batt_chg_health *chg_health)
 			tier_idx = GBMS_STATS_AC_TI_DISABLE_SETTING;
 		else if (rest_deadline == CHG_DEADLINE_SETTING_STOP)
 			tier_idx = GBMS_STATS_AC_TI_DISABLE_SETTING_STOP;
+		else if (rest_deadline == CHG_DEADLINE_DIALOG)
+			tier_idx = GBMS_STATS_AC_TI_DISABLE_DIALOG;
 		else
 			tier_idx = GBMS_STATS_AC_TI_DISABLE_MISC;
 		break;
@@ -1965,8 +1973,12 @@ static inline void batt_reset_rest_state(struct batt_chg_health *chg_health)
 	chg_health->rest_cc_max = -1;
 	chg_health->rest_fv_uv = -1;
 
-	/* keep negative deadlines (they mean USER disabled) */
-	if (chg_health->rest_deadline < 0) {
+	/* Keep negative deadlines (they mean user has disabled via settings)
+	 * NOTE: CHG_DEADLINE_DIALOG needs to be applied only for the current
+	 * session. Therefore, it should be cleared on disconnect.
+	 */
+	if (chg_health->rest_deadline < 0 &&
+	    chg_health->rest_deadline != CHG_DEADLINE_DIALOG) {
 		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 	} else {
 		chg_health->rest_state = CHG_HEALTH_INACTIVE;
@@ -2299,7 +2311,12 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 		new_deadline = chg_health->rest_deadline != deadline_s;
 		chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 
-		if (chg_health->rest_deadline > 0) /* was active */
+		/* disabled with notification; assumes that the dialog exists
+		 * only if there is a >0 deadline.
+		 */
+		if (deadline_s == CHG_DEADLINE_DIALOG)
+			chg_health->rest_deadline = CHG_DEADLINE_DIALOG;
+		else if (chg_health->rest_deadline > 0) /* was active */
 			chg_health->rest_deadline = CHG_DEADLINE_SETTING_STOP;
 		else
 			chg_health->rest_deadline = CHG_DEADLINE_SETTING;
@@ -2313,8 +2330,7 @@ static bool batt_health_set_chg_deadline(struct batt_chg_health *chg_health,
 		if (chg_health->rest_state != CHG_HEALTH_DONE)
 			chg_health->rest_state = CHG_HEALTH_USER_DISABLED;
 
-	/* enabled from any previous state */
-	} else {
+	} else { /* enabled from any previous state */
 		const time_t rest_deadline = get_boot_sec() + deadline_s;
 
 		/* ->always_on SOC overrides the deadline */
