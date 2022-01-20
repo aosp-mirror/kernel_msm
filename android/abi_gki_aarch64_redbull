@@ -118,6 +118,7 @@
   del_timer
   del_timer_sync
   destroy_workqueue
+  _dev_crit
   dev_driver_string
   _dev_err
   devfreq_add_device
@@ -233,6 +234,7 @@
   dma_fence_release
   dma_fence_signal
   dma_fence_signal_locked
+  dma_fence_wait_timeout
   __dma_flush_area
   __dma_inv_area
   dmam_alloc_coherent
@@ -490,6 +492,7 @@
   media_device_unregister
   media_entity_pads_init
   memchr
+  memchr_inv
   memcmp
   memcpy
   __memcpy_fromio
@@ -760,9 +763,12 @@
   regmap_bulk_write
   __regmap_init
   regmap_multi_reg_write
+  regmap_raw_read
+  regmap_raw_write
   regmap_read
   regmap_update_bits_base
   regmap_write
+  regulator_bulk_disable
   regulator_count_voltages
   regulator_disable
   regulator_enable
@@ -830,11 +836,14 @@
   skb_trim
   sk_free
   smp_call_function_single
+  snd_ctl_boolean_mono_info
   snd_hwdep_new
   snd_info_create_card_entry
   snd_info_create_subdir
   snd_info_free_entry
   snd_info_register
+  snd_pcm_format_width
+  snd_pcm_hw_constraint_list
   snd_pcm_period_elapsed
   snd_power_wait
   snd_soc_add_component_controls
@@ -917,6 +926,7 @@
   sysfs_create_group
   sysfs_create_groups
   sysfs_create_link
+  sysfs_emit
   sysfs_notify
   sysfs_remove_bin_file
   sysfs_remove_file_ns
@@ -1093,7 +1103,6 @@
   pci_device_group
   pci_for_each_dma_alias
   pci_request_acs
-  regulator_bulk_disable
   regulator_disable_deferred
   report_iommu_fault
   __tracepoint_smmu_init
@@ -1149,6 +1158,10 @@
   of_clk_get_from_provider
   __release_region
   __request_region
+
+# required by cdsprm.ko
+  dev_pm_qos_add_request
+  dev_pm_qos_update_request
 
 # required by citadel-spi.ko
   nonseekable_open
@@ -1424,7 +1437,6 @@
   match_int
   match_strdup
   match_token
-  memchr_inv
   noop_llseek
   notify_change
   override_creds
@@ -1440,7 +1452,6 @@
   simple_statfs
   strndup_user
   sync_filesystem
-  sysfs_emit
   touch_atime
   truncate_inode_pages
   unlock_new_inode
@@ -1506,6 +1517,7 @@
 # required by machine_dlkm.ko
   devm_snd_soc_register_card
   snd_soc_card_change_online_state
+  snd_soc_component_set_sysclk
   snd_soc_dai_get_channel_map
   snd_soc_dai_set_channel_map
   snd_soc_dai_set_fmt
@@ -1568,7 +1580,6 @@
 # required by msm_adreno.ko
   bpf_trace_run10
   __clk_get_name
-  _dev_crit
   devfreq_cooling_unregister
   device_show_int
   device_store_int
@@ -1578,7 +1589,9 @@
   dev_pm_opp_unregister_notifier
   __dma_clean_area
   dma_fence_add_callback
+  dma_fence_array_create
   dma_fence_array_ops
+  dma_fence_free
   dma_fence_remove_callback
   getboottime64
   get_random_u32
@@ -1589,6 +1602,7 @@
   idr_for_each
   idr_replace
   init_uts_ns
+  irq_work_queue
   iterate_fd
   kern_addr_valid
   kernfs_create_link
@@ -1631,7 +1645,6 @@
   devm_clk_bulk_get
   devm_of_pwm_get
   devm_pwm_put
-  dma_fence_wait_timeout
   dma_release_declared_memory
   do_wait_intr
   drm_add_edid_modes
@@ -1938,6 +1951,8 @@
 
 # required by msm_npu.ko
   kmem_cache_create_usercopy
+  register_reboot_notifier
+  unregister_reboot_notifier
 
 # required by msm_pm.ko
   arm_cpuidle_suspend
@@ -2014,7 +2029,6 @@
   __ll_sc___cmpxchg_case_mb_8
   of_property_read_variable_u16_array
   snd_ctl_add
-  snd_ctl_boolean_mono_info
   snd_ctl_enum_info
   snd_ctl_new1
   snd_ctl_notify
@@ -2023,7 +2037,6 @@
   snd_pcm_add_usr_ctls
   snd_pcm_add_volume_ctls
   snd_pcm_hw_constraint_integer
-  snd_pcm_hw_constraint_list
   snd_pcm_hw_constraint_minmax
   snd_pcm_hw_constraint_step
   snd_pcm_lib_ioctl
@@ -2144,7 +2157,6 @@
   devm_input_allocate_device
 
 # required by qpnp-qgauge.ko
-  regmap_raw_read
   rtc_class_close
   rtc_class_open
   rtc_read_time
@@ -2266,9 +2278,6 @@
   devm_request_any_context_irq
   devm_rtc_device_register
   rtc_update_irq
-
-# required by rx_macro_dlkm.ko
-  snd_pcm_format_width
 
 # required by sctp.ko
   __bitmap_shift_right
@@ -2452,6 +2461,17 @@
   irq_domain_xlate_twocell
   irq_set_parent
 
+# required by snd-soc-cs35l41.ko
+  regcache_drop_region
+  regmap_multi_reg_write_bypassed
+  regulator_bulk_enable
+  snd_pcm_format_physical_width
+  snd_soc_get_enum_double
+  snd_soc_get_volsw_range
+  snd_soc_info_volsw_range
+  snd_soc_put_enum_double
+  snd_soc_put_volsw_range
+
 # required by snd-soc-rt5514-spi.ko
   _snd_pcm_lib_alloc_vmalloc_buffer
   snd_pcm_lib_free_vmalloc_buffer
@@ -2462,6 +2482,13 @@
   regmap_register_patch
   snd_soc_bytes_info_ext
   snd_soc_params_to_frame_size
+
+# required by snd-soc-wm-adsp.ko
+  regmap_async_complete
+  regmap_raw_write_async
+  snd_compr_stop_error
+  snd_soc_component_disable_pin
+  snd_soc_component_force_enable_pin
 
 # required by spi-geni-qcom.ko
   dma_release_channel
@@ -2749,22 +2776,6 @@
   crypto_unregister_scomp
   generic_file_mmap
   idr_alloc_u32
-  regcache_drop_region
-  regmap_async_complete
-  regmap_multi_reg_write_bypassed
-  regmap_raw_write
-  regmap_raw_write_async
-  regulator_bulk_enable
   simple_getattr
-  snd_compr_stop_error
-  snd_pcm_format_physical_width
-  snd_soc_component_disable_pin
-  snd_soc_component_force_enable_pin
-  snd_soc_component_set_sysclk
-  snd_soc_get_enum_double
-  snd_soc_get_volsw_range
-  snd_soc_info_volsw_range
-  snd_soc_put_enum_double
-  snd_soc_put_volsw_range
   soc_find_component
   vfs_statx
