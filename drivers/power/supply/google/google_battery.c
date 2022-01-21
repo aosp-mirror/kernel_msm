@@ -1784,12 +1784,13 @@ static int batt_chg_stats_cstr(char *buff, int size,
 				ce_data->adapter_details.ad_voltage * 100,
 				ce_data->adapter_details.ad_amperage * 100);
 
-	len += scnprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu",
+	len += scnprintf(&buff[len], size - len, "%s%hu,%hu, %hu,%hu %u",
 				(verbose) ?  "\nS: " : ", ",
 				ce_data->charging_stats.ssoc_in,
 				ce_data->charging_stats.voltage_in,
 				ce_data->charging_stats.ssoc_out,
-				ce_data->charging_stats.voltage_out);
+				ce_data->charging_stats.voltage_out,
+				ce_data->chg_profile->capacity_ma);
 
 
 	if (verbose) {
