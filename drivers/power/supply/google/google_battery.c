@@ -286,6 +286,8 @@ struct batt_drv {
 	struct gbatt_ccbin_data cc_data;
 	/* fg cycle count */
 	int cycle_count;
+	/* for testing */
+	int fake_aacr_cc;
 
 	/* props */
 	int soh;
@@ -2637,17 +2639,23 @@ static int aacr_get_capacity_at_cycle(const struct batt_drv *batt_drv,
 static u32 aacr_get_capacity(struct batt_drv *batt_drv)
 {
 	int capacity = batt_drv->battery_capacity;
+	int cycle_count;
+
+	if (batt_drv->fake_aacr_cc)
+		cycle_count = batt_drv->fake_aacr_cc;
+	else
+		cycle_count = batt_drv->cycle_count;
 
 	if (batt_drv->aacr_state == BATT_AACR_DISABLED)
 		goto exit_done;
 
-	if (batt_drv->cycle_count <= batt_drv->aacr_cycle_grace) {
+	if (cycle_count <= batt_drv->aacr_cycle_grace) {
 		batt_drv->aacr_state = BATT_AACR_UNDER_CYCLES;
 	} else {
 		int aacr_capacity;
 
 		aacr_capacity = aacr_get_capacity_at_cycle(batt_drv,
-						batt_drv->cycle_count);
+							   cycle_count);
 		if (aacr_capacity < 0) {
 			batt_drv->aacr_state = BATT_AACR_INVALID_CAP;
 		} else {
@@ -4645,6 +4653,9 @@ static int batt_init_fs(struct batt_drv *batt_drv)
 		/* defender */
 		debugfs_create_u32("fake_capacity", 0600, de,
 				    &batt_drv->fake_capacity);
+		/* aacr test */
+		debugfs_create_u32("fake_aacr_cc", 0600, de,
+				   &batt_drv->fake_aacr_cc);
 
 		/* health charging */
 		debugfs_create_file("chg_health_thr_soc", 0600, de,
