@@ -612,6 +612,15 @@ int msm_vdec_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 			inst->prop.height[CAPTURE_PORT] ==
 				f->fmt.pix_mp.height) {
 			dprintk(VIDC_DBG, "No change in CAPTURE port params\n");
+			if (msm_comm_get_stream_output_mode(inst) ==
+				HAL_VIDEO_DECODER_SECONDARY) {
+				dprintk(VIDC_DBG,
+					"Set opb color format %d\n",
+					f->fmt.pix_mp.pixelformat);
+				msm_comm_set_color_format(inst,
+					msm_comm_get_hal_output_buffer(inst),
+					f->fmt.pix_mp.pixelformat);
+			}
 			return 0;
 		}
 		memcpy(&inst->fmts[fmt->type], fmt,
