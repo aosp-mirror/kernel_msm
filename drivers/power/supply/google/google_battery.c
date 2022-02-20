@@ -244,6 +244,33 @@ enum batt_aacr_state {
 	BATT_AACR_MAX,
 };
 
+#define BATT_TEMP_RECORD_THR 3
+/* discharge saved after charge */
+#define SD_CHG_START 0
+#define SD_DISCHG_START BATT_TEMP_RECORD_THR
+#define BATT_SD_SAVE_SIZE (BATT_TEMP_RECORD_THR * 2)
+#define BATT_SD_MAX_HOURS 15120 // 90 weeks
+struct swelling_data {
+	/* Time in different temperature */
+	bool is_enable;
+	u32 temp_thr[BATT_TEMP_RECORD_THR];
+	u32 soc_thr[BATT_TEMP_RECORD_THR];
+	/*
+	 * cumulative time array format:
+	 * | saved  | 0                | 1                | 2                |
+	 * |--------| Charge           | Charge           | Charge           |
+	 * | Content| > 30degC & > 90% | > 35degC & > 90% | > 40degC & > 95% |
+	 *
+	 * | saved  | 3                | 4                | 5                |
+	 * |--------| Discharge        | Discharge        | Discharge        |
+	 * | Content| > 30degC & > 90% | > 35degC & > 90% | > 40degC & > 95% |
+	 */
+	u16 saved[BATT_SD_SAVE_SIZE];
+	ktime_t chg[BATT_TEMP_RECORD_THR];
+	ktime_t dischg[BATT_TEMP_RECORD_THR];
+	ktime_t last_update;
+};
+
 /* battery driver state */
 struct batt_drv {
 	struct device *device;
@@ -365,6 +392,8 @@ struct batt_drv {
 	enum batt_aacr_state aacr_state;
 	int aacr_cycle_grace;
 	int aacr_cycle_max;
+
+	struct swelling_data sd;
 };
 
 static int batt_chg_tier_stats_cstr(char *buff, int size,
@@ -4590,6 +4619,28 @@ static ssize_t aacr_cycle_max_store(struct device *dev,
 
 static DEVICE_ATTR_RW(aacr_cycle_max);
 
+static ssize_t swelling_data_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	struct swelling_data *sd = &batt_drv->sd;
+	int len = 0, i;
+
+	len += scnprintf(&buf[len], PAGE_SIZE - len,
+			 "temp/soc\tcharge(s)\tdischarge(s)\n");
+	for (i = 0; i < BATT_TEMP_RECORD_THR ; i++) {
+		len += scnprintf(&buf[len], PAGE_SIZE - len,
+				 "%d/%d\t%llu\t%llu\n",
+				 sd->temp_thr[i]/10, sd->soc_thr[i],
+				 sd->chg[i], sd->dischg[i]);
+	}
+
+	return len;
+}
+
+static DEVICE_ATTR_RO(swelling_data);
+
 static struct attribute *batt_attrs[] = {
 	&dev_attr_charge_stats.attr,
 	&dev_attr_charge_stats_actual.attr,
@@ -4613,6 +4664,7 @@ static struct attribute *batt_attrs[] = {
 	&dev_attr_aacr_state.attr,
 	&dev_attr_aacr_cycle_grace.attr,
 	&dev_attr_aacr_cycle_max.attr,
+	&dev_attr_swelling_data.attr,
 	NULL,
 };
 
@@ -5005,6 +5057,79 @@ static void batt_history_data_collect(struct batt_drv *batt_drv)
 	}
 }
 
+/* save data in hours */
+#define SAVE_UNIT 3600
+static void gbatt_save_sd(struct swelling_data *sd)
+{
+	u16 sd_saved[BATT_SD_SAVE_SIZE];
+	bool update_save_data = false;
+	int i, j, ret = 0;
+
+	/* Change seconds to hours */
+	for (i = 0; i < BATT_TEMP_RECORD_THR; i++) {
+		j = i + SD_DISCHG_START;
+
+		sd_saved[i] = sd->chg[i] / SAVE_UNIT < BATT_SD_MAX_HOURS ?
+			      sd->chg[i] / SAVE_UNIT : BATT_SD_MAX_HOURS;
+
+		sd_saved[j] = sd->dischg[i] / SAVE_UNIT < BATT_SD_MAX_HOURS ?
+			      sd->dischg[i] / SAVE_UNIT : BATT_SD_MAX_HOURS;
+
+		if (sd_saved[i] > sd->saved[i] ||
+		    sd_saved[j] > sd->saved[j]) {
+			sd->saved[i] = sd_saved[i];
+			sd->saved[j] = sd_saved[j];
+			update_save_data = true;
+		}
+	}
+
+	if (!update_save_data)
+		return;
+
+	ret = gbms_storage_write(GBMS_TAG_STRD, &sd->saved, sizeof(sd->saved));
+	if (ret < 0)
+		pr_warn("Failed to save swelling data, ret=%d\n", ret);
+}
+
+static void gbatt_record_over_temp(struct batt_drv *batt_drv)
+{
+	struct swelling_data *sd = &batt_drv->sd;
+	struct batt_ssoc_state *ssoc_state = &batt_drv->ssoc_state;
+	const bool charge = batt_drv->fg_status == POWER_SUPPLY_STATUS_CHARGING ||
+			    (batt_drv->fg_status == POWER_SUPPLY_STATUS_FULL &&
+			    !batt_drv->chg_done);
+	const int temp = batt_drv->batt_temp;
+	const int soc = ssoc_get_real(ssoc_state);
+	const ktime_t now = get_boot_sec();
+	const ktime_t elap = now - sd->last_update;
+	bool update_data = false;
+	int i;
+
+	for (i = 0; i < BATT_TEMP_RECORD_THR; i++) {
+		/*
+		 *  thresholds table:
+		 *  | i        | 0      | 1      | 2      |
+		 *  |----------|--------|--------|--------|
+		 *  | temp_thr | 30degC | 35degC | 40degC |
+		 *  | soc_thr  | 90%    | 90%    | 95%    |
+		 */
+		if (temp < sd->temp_thr[i] || soc < sd->soc_thr[i])
+			continue;
+
+		if (charge)
+			sd->chg[i] += elap;
+		else
+			sd->dischg[i] += elap;
+
+		update_data = true;
+	}
+
+	if (update_data)
+		gbatt_save_sd(&batt_drv->sd);
+
+	sd->last_update = now;
+}
+
 /*
  * poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
@@ -5109,6 +5234,9 @@ static void google_battery_work(struct work_struct *work)
 		    batt_drv->batt_update_high_temp_threshold)
 			notify_psy_changed = true;
 	}
+
+	if (batt_drv->sd.is_enable)
+		gbatt_record_over_temp(batt_drv);
 
 	mutex_unlock(&batt_drv->batt_lock);
 
@@ -5722,6 +5850,34 @@ static struct power_supply_desc gbatt_psy_desc = {
 
 /* ------------------------------------------------------------------------ */
 
+static int batt_init_sd(struct swelling_data *sd)
+{
+	int ret = 0, i, j;
+
+	if (!sd->is_enable)
+		return 0;
+
+	ret = gbms_storage_read(GBMS_TAG_STRD, &sd->saved,
+				sizeof(sd->saved));
+	if (ret < 0)
+		return ret;
+
+	if (sd->saved[SD_CHG_START] == 0xFFFF) {
+		/* Empty EEPROM, initialize sd_saved[] */
+		for (i = 0; i < BATT_SD_SAVE_SIZE; i++)
+			sd->saved[i] = 0;
+	} else {
+		/* Available data, restore */
+		for (i = 0; i < BATT_TEMP_RECORD_THR; i++) {
+			j = i + SD_DISCHG_START;
+			sd->chg[i] = sd->saved[i] * SAVE_UNIT;
+			sd->dischg[i] = sd->saved[j] * SAVE_UNIT;
+		}
+	}
+
+	return ret;
+}
+
 static void google_battery_init_work(struct work_struct *work)
 {
 	struct batt_drv *batt_drv = container_of(work, struct batt_drv,
@@ -5798,6 +5954,23 @@ static void google_battery_init_work(struct work_struct *work)
 	if (ret < 0)
 		batt_drv->health_safety_margin =
 					DEFAULT_HEALTH_SAFETY_MARGIN_SEC;
+
+	ret = of_property_read_u32_array(node, "google,temp-record-thr",
+					 batt_drv->sd.temp_thr,
+					 BATT_TEMP_RECORD_THR);
+	if (ret == 0) {
+		ret = of_property_read_u32_array(node, "google,soc-record-thr",
+						 batt_drv->sd.soc_thr,
+						 BATT_TEMP_RECORD_THR);
+		if (ret == 0)
+			batt_drv->sd.is_enable = true;
+	}
+
+	ret = batt_init_sd(&batt_drv->sd);
+	if (ret < 0) {
+		pr_err("Unable to read swelling data, ret=%d\n", ret);
+		batt_drv->sd.is_enable = false;
+	}
 
 	/* cycle count is cached, here since SSOC, chg_profile might use it */
 	batt_update_cycle_count(batt_drv);
