@@ -179,6 +179,9 @@
 		google,bd-trickle-recharge-soc = <80>;
 		/* Enable TRICKLE-DEFEND */
 		google,bd-trickle-enable;
+
+		google,temp-record-thr = <300 350 400>;
+		google,soc-record-thr = <90 90 95>;
 	};
 
 	google_charger: google,charger {
