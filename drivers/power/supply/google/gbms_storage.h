@@ -39,6 +39,8 @@
 #define GBMS_DINF_LEN	32
 /* Battery cycle count bin length */
 #define GBMS_CNTB_LEN	16
+/* Battery swelling data length */
+#define GBMS_STRD_LEN	12
 
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
@@ -59,6 +61,7 @@ enum gbms_tags {
 	GBMS_TAG_BGPN = 0x4247504e,
 	GBMS_TAG_CNTB = 0x434e5442,
 	GBMS_TAG_CELL = 0x43454c4c,
+	GBMS_TAG_STRD = 0x53545244,
 };
 
 /**
