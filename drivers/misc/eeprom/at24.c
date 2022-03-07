@@ -634,6 +634,8 @@ static unsigned int at24_get_offset_adj(u8 flags, unsigned int byte_len)
 #define BATT_EEPROM_TAG_CNTB_LEN	GBMS_CNTB_LEN
 #define BATT_EEPROM_TAG_STRD_OFFSET	0x50
 #define BATT_EEPROM_TAG_STRD_LEN	GBMS_STRD_LEN
+#define BATT_EEPROM_TAG_RSOC_OFFSET	0x5C
+#define BATT_EEPROM_TAG_RSOC_LEN	GBMS_RSOC_LEN
 #define BATT_EEPROM_TAG_HIST_OFFSET	0x60
 #define BATT_EEPROM_TAG_HIST_LEN	BATT_ONE_HIST_LEN
 #define BATT_EEPROM_TAG_BGPN_OFFSET	0x03
@@ -674,6 +676,10 @@ static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 		*addr = BATT_EEPROM_TAG_STRD_OFFSET;
 		*count = BATT_EEPROM_TAG_STRD_LEN;
 		break;
+	case GBMS_TAG_RSOC:
+		*addr = BATT_EEPROM_TAG_RSOC_OFFSET;
+		*count = BATT_EEPROM_TAG_RSOC_LEN;
+		break;
 	default:
 		ret = -ENOENT;
 		break;
@@ -684,8 +690,10 @@ static int at24_storage_info(gbms_tag_t tag, size_t *addr, size_t *count,
 
 static int at24_storage_iter(int index, gbms_tag_t *tag, void *ptr)
 {
-	static gbms_tag_t keys[] = { GBMS_TAG_BGPN, GBMS_TAG_MINF, GBMS_TAG_DINF,
-				     GBMS_TAG_HIST, GBMS_TAG_CNTB, GBMS_TAG_STRD };
+	static gbms_tag_t keys[] = { GBMS_TAG_BGPN, GBMS_TAG_MINF,
+				     GBMS_TAG_DINF, GBMS_TAG_HIST,
+				     GBMS_TAG_CNTB, GBMS_TAG_STRD,
+				     GBMS_TAG_RSOC };
 	const int count = ARRAY_SIZE(keys);
 
 	if (index >= 0 && index < count)
@@ -729,6 +737,7 @@ static int at24_storage_write(gbms_tag_t tag, const void *buff, size_t size,
 	case GBMS_TAG_CNTB:
 	case GBMS_TAG_DINF:
 	case GBMS_TAG_STRD:
+	case GBMS_TAG_RSOC:
 		ret = at24_storage_info(tag, &offset, &len, ptr);
 		break;
 	default:
