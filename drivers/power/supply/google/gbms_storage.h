@@ -39,6 +39,8 @@
 #define GBMS_DINF_LEN	32
 /* Battery cycle count bin length */
 #define GBMS_CNTB_LEN	16
+/* Battery consistent soc length */
+#define GBMS_RSOC_LEN	2
 
 /**
  * Tags are u32 constants: hardcoding as hex since characters constants of more
