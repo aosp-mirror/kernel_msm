@@ -22,6 +22,7 @@
 #include "diag_ipc_logging.h"
 
 #define PERI_RPMSG rpmsg_info->peripheral
+#define RX_LIST_MAX_PKT_CNT	10
 
 int register_as_rpmsg_driver(void);
 
@@ -719,8 +720,15 @@ err_handling:
 			spin_unlock_irqrestore(&read_work_struct->rx_lock,
 								flags);
 		} else {
+			rpmsg_info->list_pkt_cnt += 1;
+			if (rpmsg_info->list_pkt_cnt > RX_LIST_MAX_PKT_CNT)
+				list_del(&rx_item->list);
 			spin_unlock_irqrestore(&read_work_struct->rx_lock,
 								flags);
+			if (rpmsg_info->list_pkt_cnt > RX_LIST_MAX_PKT_CNT) {
+				kfree(rx_item->rpmsg_rx_buf);
+				kfree(rx_item);
+			}
 			goto end;
 		}
 
@@ -784,6 +792,9 @@ void rpmsg_mark_buffers_free(uint8_t peripheral, uint8_t type, int buf_num)
 		rpmsg_info->buf2 = NULL;
 		DIAG_LOG(DIAG_DEBUG_PERIPHERALS, "marked buf2 NULL");
 	}
+
+	if (rpmsg_info->list_pkt_cnt > 0)
+		rpmsg_info->list_pkt_cnt -= 1;
 }
 
 static void rpmsg_late_init(struct diag_rpmsg_info *rpmsg_info)
@@ -852,6 +863,7 @@ static void __diag_rpmsg_init(struct diag_rpmsg_info *rpmsg_info)
 	rpmsg_info->hdl = NULL;
 	rpmsg_info->fwd_ctxt = NULL;
 	rpmsg_info->probed = 0;
+	rpmsg_info->list_pkt_cnt = 0;
 	atomic_set(&rpmsg_info->opened, 0);
 	atomic_set(&rpmsg_info->diag_state, 0);
 	DIAG_LOG(DIAG_DEBUG_PERIPHERALS,

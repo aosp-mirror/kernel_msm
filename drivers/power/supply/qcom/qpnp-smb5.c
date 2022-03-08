@@ -622,6 +622,12 @@ static int smb5_parse_dt_misc(struct smb5 *chip, struct device_node *node)
 	if (chg->chg_param.hvdcp2_max_icl_ua <= 0)
 		chg->chg_param.hvdcp2_max_icl_ua = MICRO_3PA;
 
+	of_property_read_u32(node, "qcom,hvdcp2-12v-max-icl-ua",
+					&chg->chg_param.hvdcp2_12v_max_icl_ua);
+	if (chg->chg_param.hvdcp2_12v_max_icl_ua <= 0)
+		chg->chg_param.hvdcp2_12v_max_icl_ua =
+			chg->chg_param.hvdcp2_max_icl_ua;
+
 	chip->dt.batt_psy_is_bms = of_property_read_bool(node,
 					"google,batt_psy_is_bms");
 	chip->dt.batt_psy_disable = of_property_read_bool(node,

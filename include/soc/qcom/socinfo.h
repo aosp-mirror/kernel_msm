@@ -87,6 +87,8 @@
 	of_machine_is_compatible("qcom,bengal-iot")
 #define early_machine_is_bengalp_iot()	\
 	of_machine_is_compatible("qcom,bengalp-iot")
+#define early_machine_is_khaje()  \
+	of_machine_is_compatible("qcom,khaje")
 #define early_machine_is_msm8937()      \
         of_machine_is_compatible("qcom,msm8937")
 #define early_machine_is_msm8917()      \
@@ -124,6 +126,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,bengal")
 #define early_machine_is_bengalp()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,bengalp")
+#define early_machine_is_khaje()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,khaje")
 #define early_machine_is_lagoon()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,lagoon")
 #define early_machine_is_scuba()	\
@@ -189,6 +193,7 @@
 #define early_machine_is_orchid()	0
 #define early_machine_is_bengal()	0
 #define early_machine_is_bengalp()	0
+#define early_machine_is_khaje()	0
 #define early_machine_is_lagoon()	0
 #define early_machine_is_scuba()	0
 #define early_machine_is_scubaiot()	0
@@ -236,6 +241,7 @@ enum msm_cpu {
 	MSM_CPU_ORCHID,
 	MSM_CPU_BENGAL,
 	MSM_CPU_BENGALP,
+	MSM_CPU_KHAJE,
 	MSM_CPU_LAGOON,
 	MSM_CPU_SCUBA,
 	MSM_CPU_SCUBAIOT,

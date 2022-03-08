@@ -187,7 +187,7 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_gfx_tbu_clk",
 	"gcc_gfx_tcu_clk",
 	"gcc_gtcu_ahb_clk",
-	"gcc_bimc_clk",
+	"bimc_clk",
 	"gcc_smmu_cfg_clk",
 	"apss_cc_debug_mux",
 };
@@ -321,7 +321,7 @@ static int gcc_debug_mux_sels[] = {
 	0x52,		/* gcc_gfx_tbu_clk */
 	0x53,		/* gcc_gfx_tcu_clk */
 	0x58,		/* gcc_gtcu_ahb_clk */
-	0x15A,		/* gcc_bimc_clk */
+	0x15A,		/* bimc_clk */
 	0x5B,		/* gcc_smmu_cfg_clk */
 	0x16A,		/* apss_cc_debug_mux */
 };
@@ -367,6 +367,7 @@ static struct mux_regmap_names mux_list[] = {
 static const struct of_device_id clk_debug_match_table[] = {
 	{ .compatible = "qcom,sdm429w-debugcc" },
 	{ .compatible = "qcom,qm215-debugcc" },
+	{ .compatible = "qcom,sdm429-debugcc" },
 	{ }
 };
 
