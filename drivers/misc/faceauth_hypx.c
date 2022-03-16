@@ -494,6 +494,11 @@ static void hypx_create_blob_dmabuf(struct device *dev,
 		pr_err("data->hypx_blob is not PAGE aligned");
 		goto err5;
 	}
+
+	if (data->sg_table->nents >= HYPX_MEMSEGS_NUM) {
+		pr_err("the index of segments is greater than HYPX_MEMSEGS_NUM");
+		goto err5;
+	}
 	for_each_sg(data->sg_table->sgl, sg, data->sg_table->nents, i) {
 		WARN_ON(page_to_phys(sg_page(sg)) % PAGE_SIZE);
 		data->hypx_blob->segments[i].addr =
