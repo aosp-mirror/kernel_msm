@@ -910,7 +910,7 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 		ds_report = (struct dualsense_input_report *)&data[2];
 	} else {
 		hid_err(hdev, "Unhandled reportID=%d\n", report->id);
-		return -1;
+		return -EPERM;
 	}
 
 	input_report_abs(ds->gamepad, ABS_X,  ds_report->x);
