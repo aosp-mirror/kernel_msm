@@ -5891,9 +5891,6 @@ static void google_battery_init_work(struct work_struct *work)
 	dump_ssoc_state(&batt_drv->ssoc_state, batt_drv->ssoc_log);
 
 	ret = gbatt_restore_capacity(batt_drv);
-	if (ret == -EPROBE_DEFER) /* wait gbms_storage_init_done */
-		goto retry_init_work;
-
 	if (ret < 0)
 		pr_warn("unable to restore capacity, ret=%d\n", ret);
 	else
