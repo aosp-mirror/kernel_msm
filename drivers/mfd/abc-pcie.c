@@ -1895,6 +1895,9 @@ static int abc_pcie_enter_el2_handler(void *ctx)
 
 	dev_info(dev, "%s: enter\n", __func__);
 
+	if (!abc_dev)
+		return -ENOTCONN;
+
 	/*
 	 * If PCIe link is not enabled, this handler should not have been
 	 * called.
@@ -1935,6 +1938,9 @@ static int abc_pcie_exit_el2_handler(void *ctx)
 	int ret;
 
 	dev_info(dev, "%s: enter\n", __func__);
+
+	if (!abc_dev)
+		return -ENOTCONN;
 
 	/*
 	 * If PCIe link is not enabled, this handler should not have been
@@ -2003,6 +2009,9 @@ static int abc_pcie_ab_ready_handler(void *ctx)
 		"%s: ab_ready is high; PCIe link is enabled by host\n",
 		__func__);
 
+	if (!abc_dev)
+		return -ENOTCONN;
+
 	/*
 	 * Set link_state to active.
 	 * If PCIe link is already enabled, there is no need to broadcast a
@@ -2031,6 +2040,9 @@ static int abc_pcie_pre_disable_handler(void *ctx)
 	dev_dbg(dev,
 		"%s: PCIe link will be disabled by host\n",
 		__func__);
+
+	if (!abc_dev)
+		return -ENOTCONN;
 
 	/*
 	 * If PCIe link is already disabled, there is no need to broadcast a
@@ -2068,6 +2080,9 @@ static int abc_pcie_linkdown_handler(void *ctx)
 	dev_dbg(dev,
 		"%s: PCIe link unexpectedly went down\n",
 		__func__);
+
+	if (!abc_dev)
+		return -ENOTCONN;
 
 	/*
 	 * Unlike abc_pcie_pre_disable_handler, here link_state is set to
@@ -2661,7 +2676,9 @@ static void abc_pcie_remove(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 	pci_release_regions(pdev);
 	pci_disable_device(pdev);
+	ab_sm_unregister_mfd_ops();
 	kfree(abc_dev);
+	abc_dev = NULL;
 	kfree(abc);
 }
 
