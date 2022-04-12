@@ -405,6 +405,7 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 {
 	unsigned long flags;
 	struct paintbox_jqs_msg_transport *trans;
+	struct host_jqs_queue_waiter *waiter;
 
 	mutex_lock(&bus->transport_lock);
 
@@ -413,9 +414,13 @@ void ipu_core_jqs_msg_transport_shutdown(struct paintbox_bus *bus)
 		return;
 	}
 	trans = bus->jqs_msg_transport;
+	waiter = ipu_core_get_kernel_waiter(trans);
 
 	atomic_set(&trans->shutdown_initiated, 1);
 	down_write(&trans->active_reads_rwsem);
+
+	if (waiter->enabled)
+		complete_all(&waiter->completion);
 
 	spin_lock_irqsave(&bus->irq_lock, flags);
 	bus->jqs_msg_transport = NULL;
@@ -1033,6 +1038,7 @@ ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 	struct host_jqs_queue_waiter *waiter;
 	unsigned long timeout;
 	ssize_t ret;
+	unsigned long flags;
 
 	timeout = msecs_to_jiffies(IPU_JQS_KERNEL_QUEUE_WRITE_SYNC_TIMEOUT_MS);
 
@@ -1070,6 +1076,17 @@ ssize_t ipu_core_jqs_msg_transport_kernel_write_sync(struct paintbox_bus *bus,
 
 	/* Wait for the response */
 	timeout = wait_for_completion_timeout(&waiter->completion, timeout);
+
+	/* Catch case where transport is in the process of being freed */
+	spin_lock_irqsave(&bus->irq_lock, flags);
+
+	if (IS_ERR(ipu_core_get_jqs_transport(bus)) ||
+			atomic_read(&trans->shutdown_initiated))
+		ret = -ENOTCONN;
+
+	spin_unlock_irqrestore(&bus->irq_lock, flags);
+	if (ret < 0)
+		return ret;
 
 	/* A message error has higher priority than a timeout error. */
 	if (waiter->ret < 0)
