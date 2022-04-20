@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <soc/qcom/qmi_rmnet.h>
@@ -45,7 +46,8 @@ unsigned int rmnet_wq_frequency __read_mostly = 1000;
 #define PS_INTERVAL (((!rmnet_wq_frequency) ?                             \
 					1 : rmnet_wq_frequency/10) * (HZ/100))
 #define NO_DELAY (0x0000 * HZ)
-#define PS_INTERVAL_KT (ms_to_ktime(1000))
+#define PS_INTERVAL_MS (1000)
+#define PS_INTERVAL_KT (ms_to_ktime(PS_INTERVAL_MS))
 #define WATCHDOG_EXPIRE_JF (msecs_to_jiffies(50))
 
 #if IS_ENABLED(CONFIG_QCOM_QMI_DFC)
@@ -212,21 +214,6 @@ int qmi_rmnet_flow_control(struct net_device *dev, u32 mq_idx, int enable)
 	return 0;
 }
 
-static void qmi_rmnet_reset_txq(struct net_device *dev, unsigned int txq)
-{
-	struct Qdisc *qdisc;
-
-	if (unlikely(txq >= dev->num_tx_queues))
-		return;
-
-	qdisc = rtnl_dereference(netdev_get_tx_queue(dev, txq)->qdisc);
-	if (qdisc) {
-		spin_lock_bh(qdisc_lock(qdisc));
-		qdisc_reset(qdisc);
-		spin_unlock_bh(qdisc_lock(qdisc));
-	}
-}
-
 /**
  * qmi_rmnet_watchdog_fn - watchdog timer func
  */
@@ -352,15 +339,16 @@ static void __qmi_rmnet_bearer_put(struct net_device *dev,
 				continue;
 
 			mq->bearer = NULL;
-			if (reset) {
-				qmi_rmnet_reset_txq(dev, i);
-				qmi_rmnet_flow_control(dev, i, 1);
+			mq->drop_on_remove = reset;
+			/* Let other CPU's see this update so that packets are
+			 * dropped, instead of further processing packets
+			 */
+			smp_mb();
 
-				if (dfc_mode == DFC_MODE_SA) {
-					j = i + ACK_MQ_OFFSET;
-					qmi_rmnet_reset_txq(dev, j);
-					qmi_rmnet_flow_control(dev, j, 1);
-				}
+			qmi_rmnet_flow_control(dev, i, 1);
+			if (dfc_mode == DFC_MODE_SA) {
+				j = i + ACK_MQ_OFFSET;
+				qmi_rmnet_flow_control(dev, j, 1);
 			}
 		}
 
@@ -384,6 +372,11 @@ static void __qmi_rmnet_update_mq(struct net_device *dev,
 	mq = &qos_info->mq[itm->mq_idx];
 	if (!mq->bearer) {
 		mq->bearer = bearer;
+		mq->drop_on_remove = false;
+		/* Let other CPU's see this update so that packets are
+		 * dropped, instead of further processing packets
+		 */
+		smp_mb();
 
 		if (dfc_mode == DFC_MODE_SA) {
 			bearer->mq_idx = itm->mq_idx;
@@ -617,6 +610,7 @@ qmi_rmnet_setup_client(void *port, struct qmi_info *qmi, struct tcmsg *tcm)
 		if (!qmi)
 			return -ENOMEM;
 
+		qmi->ws = wakeup_source_register(NULL, "RMNET_DFC");
 		rmnet_init_qmi_pt(port, qmi);
 	}
 
@@ -665,6 +659,7 @@ __qmi_rmnet_delete_client(void *port, struct qmi_info *qmi, int idx)
 
 	if (!qmi_rmnet_has_client(qmi) && !qmi_rmnet_has_pending(qmi)) {
 		rmnet_reset_qmi_pt(port);
+		wakeup_source_unregister(qmi->ws);
 		kfree(qmi);
 		return 0;
 	}
@@ -733,6 +728,7 @@ void qmi_rmnet_change_link(struct net_device *dev, void *port, void *tcm_pt)
 			    !qmi_rmnet_has_client(qmi) &&
 			    !qmi_rmnet_has_pending(qmi)) {
 				rmnet_reset_qmi_pt(port);
+				wakeup_source_unregister(qmi->ws);
 				kfree(qmi);
 			}
 		} else if (tcm->tcm_ifindex & FLAG_POWERSAVE_MASK) {
@@ -857,6 +853,27 @@ bool qmi_rmnet_all_flows_enabled(struct net_device *dev)
 EXPORT_SYMBOL(qmi_rmnet_all_flows_enabled);
 
 #if IS_ENABLED(CONFIG_QCOM_QMI_DFC)
+bool qmi_rmnet_get_flow_state(struct net_device *dev, struct sk_buff *skb,
+			      bool *drop)
+{
+	struct qos_info *qos = rmnet_get_qos_pt(dev);
+	int txq = skb->queue_mapping;
+
+	if (txq > ACK_MQ_OFFSET)
+		txq -= ACK_MQ_OFFSET;
+
+	if (unlikely(!qos || txq >= MAX_MQ_NUM))
+		return false;
+
+	/* If the bearer is gone, packets may need to be dropped */
+	*drop = (txq != DEFAULT_MQ_NUM && !READ_ONCE(qos->mq[txq].bearer) &&
+		 READ_ONCE(qos->mq[txq].drop_on_remove));
+
+	return true;
+}
+EXPORT_SYMBOL(qmi_rmnet_get_flow_state);
+
+
 void qmi_rmnet_burst_fc_check(struct net_device *dev,
 			      int ip_type, u32 mark, unsigned int len)
 {
@@ -1146,6 +1163,22 @@ static enum alarmtimer_restart qmi_rmnet_work_alarm(struct alarm *atimer,
 	return ALARMTIMER_NORESTART;
 }
 
+static void dfc_wakelock_acquire(struct qmi_info *qmi)
+{
+	if (qmi && !qmi->wakelock_active) {
+		__pm_stay_awake(qmi->ws);
+		qmi->wakelock_active = true;
+	}
+}
+
+static void dfc_wakelock_release(struct qmi_info *qmi)
+{
+	if (qmi && qmi->wakelock_active) {
+		__pm_relax(qmi->ws);
+		qmi->wakelock_active = false;
+	}
+}
+
 static void qmi_rmnet_check_stats(struct work_struct *work)
 {
 	struct rmnet_powersave_work *real_work;
@@ -1164,6 +1197,17 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 	qmi = (struct qmi_info *)rmnet_get_qmi_pt(real_work->port);
 	if (unlikely(!qmi))
 		return;
+
+	dfc_wakelock_release(qmi);
+
+	rmnet_get_packets(real_work->port, &rx, &tx);
+	rxd = rx - real_work->old_rx_pkts;
+	txd = tx - real_work->old_tx_pkts;
+	real_work->old_rx_pkts = rx;
+	real_work->old_tx_pkts = tx;
+
+	dl_msg_active = qmi->dl_msg_active;
+	qmi->dl_msg_active = false;
 
 	if (qmi->ps_enabled) {
 
@@ -1184,15 +1228,6 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 
 		goto end;
 	}
-
-	rmnet_get_packets(real_work->port, &rx, &tx);
-	rxd = rx - real_work->old_rx_pkts;
-	txd = tx - real_work->old_tx_pkts;
-	real_work->old_rx_pkts = rx;
-	real_work->old_tx_pkts = tx;
-
-	dl_msg_active = qmi->dl_msg_active;
-	qmi->dl_msg_active = false;
 
 	if (!rxd && !txd) {
 		/* If no DL msg received and there is a flow disabled,
@@ -1227,12 +1262,19 @@ static void qmi_rmnet_check_stats(struct work_struct *work)
 end:
 	rcu_read_lock();
 	if (!rmnet_work_quit) {
-		if (use_alarm_timer)
+		if (use_alarm_timer) {
+			/* Suspend will fail and get delayed for 2s if
+			 * alarmtimer expires within 2s. Hold a wakelock
+			 * for the actual timer duration to prevent suspend
+			 */
+			if (PS_INTERVAL_MS < 2000)
+				dfc_wakelock_acquire(qmi);
 			alarm_start_relative(&real_work->atimer,
 					     PS_INTERVAL_KT);
-		else
+		} else {
 			queue_delayed_work(rmnet_ps_wq, &real_work->work,
 					   PS_INTERVAL);
+		}
 	}
 	rcu_read_unlock();
 }
@@ -1310,6 +1352,7 @@ void qmi_rmnet_work_exit(void *port)
 	rmnet_ps_wq = NULL;
 	kfree(rmnet_work);
 	rmnet_work = NULL;
+	dfc_wakelock_release((struct qmi_info *)rmnet_get_qmi_pt(port));
 }
 EXPORT_SYMBOL(qmi_rmnet_work_exit);
 

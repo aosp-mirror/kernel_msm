@@ -52,6 +52,9 @@
 /* Indicate backport support for key configuration for Beacon protection*/
 #define CFG80211_BIGTK_CONFIGURATION_SUPPORT 1
 
+/* Indicate backport support for OCV feature flag*/
+#define CFG80211_OCV_CONFIGURATION_SUPPORT 1
+
 /**
  * DOC: Introduction
  *
