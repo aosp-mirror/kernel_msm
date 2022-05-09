@@ -59,6 +59,10 @@
 	google,ttf-soc-table =  <37 77 82 89 92  96  98  100>;
 	google,ttf-elap-table = <38 42 61 78 103 155 201 336>;
 	google,ttf-tier-table = <0 67 81>;
+
+	google,aacr-disable;
+	google,aacr-ref-cycles = <300 400 500 600 700 800>;
+	google,aacr-ref-fade10 = <  2  14  26  36  45  54>;
 };
 
 &apps_rsc {
