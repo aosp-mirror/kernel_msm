@@ -3601,6 +3601,9 @@ static void p9382_txid_work(struct work_struct *work)
 	// TODO: write txid to bit(23, 0)
 	memset(&charger->tx_buf[1], 0x12, FAST_SERIAL_ID_SIZE - 1);
 
+	/* write phone type to bit(23, 17) */
+	charger->tx_buf[3] = charger->pdata->phone_type << 1;
+
 	// write accessory type to bit(31, 24)
 	charger->tx_buf[4] = TX_ACCESSORY_TYPE;
 
@@ -4298,6 +4301,10 @@ static int p9221_parse_dt(struct device *dev,
 	else
 		pdata->power_mitigate_threshold = data;
 
+	ret = of_property_read_u8(node,"idt,tx_id_phone_type",
+				  &pdata->phone_type);
+	if (ret < 0)
+		pdata->phone_type = 0;
 	return 0;
 }
 

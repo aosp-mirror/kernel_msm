@@ -110,6 +110,9 @@
 
 	google,power_mitigate_threshold = <90>;
 
+	/* TXID: Phone type */
+	idt,tx_id_phone_type = /bits/ 8 <1>;
+
 	google,panel_map = <&dsi_s6e3hc2_dsc_1080p_cmd 0>,
 			   <&dsi_s6e3hc2_evt_dsc_1080p_cmd 0>,
 			   <&dsi_s6e3hc2_dvt_dsc_1080p_cmd 0>;
