@@ -324,6 +324,8 @@ struct p9221_charger_platform_data {
 	struct drm_panel		*panel;
 	u32				initial_panel_index;
 	u32				power_mitigate_threshold;
+	/* phone type for tx_id*/
+	u8				phone_type;
 };
 
 struct p9221_charger_data {
