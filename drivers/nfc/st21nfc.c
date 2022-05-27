@@ -107,6 +107,7 @@ struct st21nfc_device {
 	wait_queue_head_t read_wq;
 	struct mutex read_mutex;
 	struct mutex pidle_mutex;
+	struct mutex polarity_mutex;
 	struct i2c_client *client;
 	struct miscdevice st21nfc_device;
 	uint8_t buffer[MAX_BUFFER_SIZE];
@@ -240,6 +241,7 @@ static int st21nfc_loc_set_polaritymode(struct st21nfc_device *st21nfc_dev,
 	unsigned int irq_type;
 	int ret;
 
+	mutex_lock(&st21nfc_dev->polarity_mutex);
 	st21nfc_dev->polarity_mode = mode;
 	/* setup irq_flags */
 	switch (mode) {
@@ -260,6 +262,7 @@ static int st21nfc_loc_set_polaritymode(struct st21nfc_device *st21nfc_dev,
 	ret = irq_set_irq_type(client->irq, irq_type);
 	if (ret) {
 		pr_err("%s : set_irq_type failed\n", __func__);
+		mutex_unlock(&st21nfc_dev->polarity_mutex);
 		return -ENODEV;
 	}
 	/* request irq.  the irq is set whenever the chip has data available
@@ -273,10 +276,12 @@ static int st21nfc_loc_set_polaritymode(struct st21nfc_device *st21nfc_dev,
 				client->name, st21nfc_dev);
 	if (ret) {
 		pr_err("%s : devm_request_irq failed\n", __func__);
+		mutex_unlock(&st21nfc_dev->polarity_mutex);
 		return -ENODEV;
 	}
 	st21nfc_dev->irq_is_attached = true;
 	st21nfc_disable_irq(st21nfc_dev);
+	mutex_unlock(&st21nfc_dev->polarity_mutex);
 
 	return ret;
 }
@@ -938,6 +943,7 @@ static int st21nfc_probe(struct i2c_client *client,
 	/* init mutex and queues */
 	init_waitqueue_head(&st21nfc_dev->read_wq);
 	mutex_init(&st21nfc_dev->read_mutex);
+	mutex_init(&st21nfc_dev->polarity_mutex);
 	spin_lock_init(&st21nfc_dev->irq_enabled_lock);
 	pr_debug("%s : debug irq_gpio = %d, client-irq =  %d\n",
 		 __func__, desc_to_gpio(st21nfc_dev->gpiod_irq), client->irq);
@@ -969,6 +975,7 @@ static int st21nfc_probe(struct i2c_client *client,
 
 err_misc_register:
 	mutex_destroy(&st21nfc_dev->read_mutex);
+	mutex_destroy(&st21nfc_dev->polarity_mutex);
 err_sysfs_power_stats:
 	if (!IS_ERR(st21nfc_dev->gpiod_pidle)) {
 		sysfs_remove_group(&client->dev.kobj,
@@ -995,6 +1002,7 @@ static int st21nfc_remove(struct i2c_client *client)
 	}
 	sysfs_remove_group(&client->dev.kobj, &st21nfc_attr_grp);
 	mutex_destroy(&st21nfc_dev->read_mutex);
+	mutex_destroy(&st21nfc_dev->polarity_mutex);
 	acpi_dev_remove_driver_gpios(ACPI_COMPANION(&client->dev));
 
 	return 0;
