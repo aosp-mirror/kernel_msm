@@ -2090,9 +2090,12 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 		int rc = wait_for_completion_timeout(&ctx->work,
 				msecs_to_jiffies(FASTRPC_TIMEOUT));
 		if (!rc) {
-			pr_err("wait for completion timeout and trigger ADSP SSR b/132430192\n");
-			/* b/132430192 WA to trigger adsp SSR */
-			subsystem_restart("adsp");
+			pr_err("command timeout from domain id:%d\n", cid);
+			if (cid == ADSP_DOMAIN_ID) {
+				pr_err("trigger ADSP SSR b/132430192\n");
+				/* b/132430192 WA to trigger adsp SSR */
+				subsystem_restart("adsp");
+			}
 			goto bail;
 		}
 	} else
