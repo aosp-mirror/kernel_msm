@@ -1251,7 +1251,7 @@ static int rt5514_dsp_mod_enable_put(struct snd_kcontrol *kcontrol,
 		break;
 	}
 
-	return 0;
+	return 1;
 }
 
 static int rt5514_dsp_mod_disable_put(struct snd_kcontrol *kcontrol,
