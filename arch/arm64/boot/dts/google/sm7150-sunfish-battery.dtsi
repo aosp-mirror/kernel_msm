@@ -206,6 +206,10 @@
 		google,ttf-elap-table = <35 45 50 59 80 121 152 284>;
 		google,ttf-tier-table = <0 69 83>;
 
+		google,aacr-disable;
+		google,aacr-ref-cycles = <300 400 500 600 700 800>;
+		google,aacr-ref-fade10 = <  8  18  26  34  41  48>;
+
 		/* soc smothing */
 		google,rl_delta-max-soc = <1>;
 		google,rl_delta-max-time = <12>;
