@@ -1330,7 +1330,7 @@ static bool p9221_has_dd(struct p9221_charger_data *charger)
 
 	if (p9221_get_tx_id_str(charger) != NULL) {
 		val = (charger->tx_id & TXID_TYPE_MASK) >> TXID_TYPE_SHIFT;
-		if (val == TXID_DD_TYPE)
+		if (val == TXID_DD_TYPE || val == TXID_DD_TYPE2)
 			ret = true;
 	}
 
