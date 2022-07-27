@@ -568,7 +568,7 @@ static int rt5514_fw_validate2(struct rt5514_priv *rt5514, int index, int addr)
 		}
 	}
 
-	return 0;
+	return 1;
 }
 
 static int rt5514_fw_validate(struct rt5514_priv *rt5514, int index, int addr)
