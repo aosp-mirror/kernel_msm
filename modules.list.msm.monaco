@@ -64,3 +64,9 @@ qcom-dload-mode.ko
 rpm-smd-regulator.ko
 proxy-consumer.ko
 debug-regulator.ko
+clk-smd-rpm.ko
+gcc-monaco.ko
+clk-dummy.ko
+clk-qcom.ko
+dispcc-monaco.ko
+gdsc-regulator.ko
