@@ -282,7 +282,7 @@ static struct platform_driver regulator_stub_driver = {
 	},
 };
 
-int __init regulator_stub_init(void)
+int regulator_stub_init(void)
 {
 	static int registered;
 
