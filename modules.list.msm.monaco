@@ -52,3 +52,10 @@ rpm-smd.ko
 rpm-smd-regulator.ko
 proxy-consumer.ko
 qti-fixed-regulator.ko
+clk-smd-rpm.ko
+gcc-monaco.ko
+clk-dummy.ko
+clk-qcom.ko
+gdsc-regulator.ko
+qcom-cpufreq-hw.ko
+dispcc-monaco.ko
