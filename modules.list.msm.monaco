@@ -62,3 +62,9 @@ qcom_smd.ko
 qcom_glink.ko
 qcom_ipc_logging.ko
 ns.ko
+clk-smd-rpm.ko
+gcc-monaco.ko
+clk-dummy.ko
+clk-qcom.ko
+gdsc-regulator.ko
+dispcc-monaco.ko
