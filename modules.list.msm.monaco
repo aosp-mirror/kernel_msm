@@ -43,3 +43,14 @@ sdhci-msm.ko
 cqhci.ko
 crm.ko
 bcl_pmic5.ko
+qcom_hwspinlock.ko
+smp2p.ko
+smem.ko
+qcom-apcs-ipc-mailbox.ko
+glink_probe.ko
+qcom_glink_rpm.ko
+qcom_glink_smem.ko
+qcom_smd.ko
+qcom_glink.ko
+qcom_ipc_logging.ko
+ns.ko
