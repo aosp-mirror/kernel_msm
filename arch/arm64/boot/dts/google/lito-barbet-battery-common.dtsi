@@ -57,4 +57,8 @@
 	google,ttf-soc-table =  <37 70 77 89 91 96  98  100>;
 	google,ttf-elap-table = <40 48 64 76 90 123 175 215 >;
 	google,ttf-tier-table = <0 50 77>;
+
+	google,aacr-disable;
+	google,aacr-ref-cycles = <100 200 300 400 500 600 700 800>;
+	google,aacr-ref-fade10 = <  4  19  31  41  52  61  69  77>;
 };

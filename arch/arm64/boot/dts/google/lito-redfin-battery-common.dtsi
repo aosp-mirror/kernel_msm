@@ -58,6 +58,7 @@
 	google,ttf-elap-table = <40 50 74 85 132 141 213 302>;
 	google,ttf-tier-table = <0 67 80>;
 
+	google,aacr-disable;
 	google,aacr-ref-cycles = <100 200 500 800>;
 	google,aacr-ref-fade10 = <  0   5  35  65>;
 };
