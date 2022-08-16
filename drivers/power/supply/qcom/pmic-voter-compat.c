@@ -21,6 +21,7 @@
 #include <linux/pmic-voter.h>
 
 #define V2EL(x) ((struct gvotable_election *)(v))
+#define MAX_NAME_LEN 16
 
 struct votable_data {
 	const char *name;
@@ -124,7 +125,12 @@ EXPORT_SYMBOL_GPL(get_effective_client);
  */
 struct votable *find_votable(const char *name)
 {
-	return (struct votable *)gvotable_election_get_handle(name);
+	char truncated_name[MAX_NAME_LEN];
+
+	if (!name)
+		return ERR_PTR(-EINVAL);
+	strlcpy(truncated_name, name, MAX_NAME_LEN);
+	return (struct votable *)gvotable_election_get_handle(truncated_name);
 }
 EXPORT_SYMBOL_GPL(find_votable);
 
@@ -176,17 +182,19 @@ struct votable *create_votable(const char *name,
 	struct gvotable_election *el;
 	struct votable_data *vd;
 	int ret;
+	char truncated_name[MAX_NAME_LEN];
 
 	if (!name)
 		return ERR_PTR(-EINVAL);
 
+	strlcpy(truncated_name, name, MAX_NAME_LEN);
 	/* create extra votable data */
 	vd = kzalloc_votable(vd, GFP_KERNEL);
 	if (!vd)
 		return ERR_PTR(-ENOMEM);
 	vd->callback_data = callback_data;
 	vd->callback = callback;
-	vd->name = name;
+	vd->name = truncated_name;
 
 	switch (votable_type) {
 	case VOTE_MIN:
