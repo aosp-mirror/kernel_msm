@@ -142,6 +142,10 @@ struct smb_dt_props {
 	int			disable_suspend_on_collapse;
 	bool			remote_fg;
 	enum float_options	float_option;
+	int			batt_psy_is_bms;
+	int			batt_psy_disable;
+	const char		*batt_psy_name;
+
 };
 
 struct smblite {
@@ -342,6 +346,13 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 		pr_err("qcom,float-option is out of range [0, 4]\n");
 		return -EINVAL;
 	}
+	chip->dt.batt_psy_is_bms = of_property_read_bool(node,
+					"google,batt_psy_is_bms");
+	chip->dt.batt_psy_disable = of_property_read_bool(node,
+					"google,batt_psy_disable");
+
+	(void)of_property_read_string(node, "google,batt_psy_name",
+				      &chip->dt.batt_psy_name);
 
 	if (of_find_property(node, "nvmem-cells", NULL)) {
 		chg->debug_mask_nvmem = devm_nvmem_cell_get(chg->dev, "charger_debug_mask");
@@ -832,7 +843,7 @@ static int smblite_batt_prop_is_writeable(struct power_supply *psy,
 	return rc;
 }
 
-static const struct power_supply_desc batt_psy_desc = {
+static struct power_supply_desc batt_psy_desc = {
 	.name = "battery",
 	.type = POWER_SUPPLY_TYPE_BATTERY,
 	.properties = smblite_batt_props,
@@ -848,8 +859,20 @@ static int smblite_init_batt_psy(struct smblite *chip)
 	struct smb_charger *chg = &chip->chg;
 	int rc = 0;
 
+	if (chip->dt.batt_psy_disable) {
+		pr_warn("Requested disable of battery power supply\n");
+		return 0;
+	}
+
 	batt_cfg.drv_data = chg;
 	batt_cfg.of_node = chg->dev->of_node;
+
+	if (chip->dt.batt_psy_is_bms)
+		batt_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
+	if (chip->dt.batt_psy_name)
+		batt_psy_desc.name = chip->dt.batt_psy_name;
+
+
 	chg->batt_psy = devm_power_supply_register(chg->dev,
 					   &batt_psy_desc,
 					   &batt_cfg);
@@ -1702,9 +1725,11 @@ static int smblite_request_interrupts(struct smblite *chip)
 	for_each_available_child_of_node(node, child) {
 		of_property_for_each_string(child, "interrupt-names",
 					    prop, name) {
-			rc = smblite_request_interrupt(chip, child, name);
-			if (rc < 0)
-				return rc;
+			if (name != NULL && *name != 0) {
+				rc = smblite_request_interrupt(chip, child, name);
+				if (rc < 0)
+					return rc;
+			}
 		}
 	}
 

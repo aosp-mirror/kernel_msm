@@ -1806,7 +1806,10 @@ static int qbg_iio_read_raw(struct iio_dev *indio_dev,
 		rc = qbg_get_battery_capacity(chip, val1);
 		break;
 	case PSY_IIO_REAL_CAPACITY:
-		rc = qbg_get_battery_capacity(chip, val1);
+		if (chip->sys_soc != INT_MIN)
+			*val1 = chip->sys_soc;
+		else
+			rc = qbg_get_battery_capacity(chip, val1);
 		break;
 	case PSY_IIO_TEMP:
 		rc = qbg_get_battery_temp(chip, val1);

@@ -2785,8 +2785,8 @@ irqreturn_t smblite_chg_state_change_irq_handler(int irq, void *data)
 			vote(chg->fcc_votable, FCC_STEPPER_VOTER, false, 0);
 		}
 	}
-
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 failure:
 	return IRQ_HANDLED;
@@ -3970,7 +3970,8 @@ irqreturn_t smblite_wdog_bark_irq_handler(int irq, void *data)
 	if (rc < 0)
 		smblite_lib_err(chg, "Couldn't pet the dog rc=%d\n", rc);
 
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 	return IRQ_HANDLED;
 }
@@ -4146,8 +4147,8 @@ static void smblite_lib_icl_change_work(struct work_struct *work)
 		smblite_lib_err(chg, "Couldn't get ICL status rc=%d\n", rc);
 		return;
 	}
-
-	power_supply_changed(chg->batt_psy);
+	if (chg->batt_psy)
+		power_supply_changed(chg->batt_psy);
 
 	smblite_lib_dbg(chg, PR_INTERRUPT, "icl_settled=%d\n", settled_ua);
 }
