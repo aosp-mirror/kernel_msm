@@ -59,3 +59,8 @@ clk-qcom.ko
 gdsc-regulator.ko
 qcom-cpufreq-hw.ko
 dispcc-monaco.ko
+icc-rpm.ko
+icc-debug.ko
+icc-test.ko
+qnoc-qos-rpm.ko
+qnoc-monaco.ko
