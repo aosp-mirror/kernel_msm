@@ -183,8 +183,8 @@ static void __cold process_random_ready_list(void)
 
 #define warn_unseeded_randomness() \
 	if (IS_ENABLED(CONFIG_WARN_ALL_UNSEEDED_RANDOM) && !crng_ready()) \
-		pr_notice("%s called from %pS with crng_init=%d\n", \
-			  __func__, (void *)_RET_IP_, crng_init)
+		printk_deferred(KERN_NOTICE "random: %s called from %pS with crng_init=%d\n", \
+				__func__, (void *)_RET_IP_, crng_init)
 
 
 /*********************************************************************
@@ -873,7 +873,8 @@ void add_hwgenerator_randomness(const char *buf, size_t len, size_t entropy)
 	 * Throttle writing to once every CRNG_RESEED_INTERVAL, unless
 	 * we're not yet initialized.
 	 */
-	if (!kthread_should_stop() && crng_ready())
+	if ((current->flags & PF_KTHREAD) &&
+	    !kthread_should_stop() && crng_ready())
 		schedule_timeout_interruptible(CRNG_RESEED_INTERVAL);
 }
 EXPORT_SYMBOL_GPL(add_hwgenerator_randomness);
