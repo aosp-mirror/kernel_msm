@@ -254,6 +254,7 @@ struct parallel_params {
 struct smb_iio {
 	struct iio_channel	*temp_chan;
 	struct iio_channel	*usbin_v_chan;
+	struct iio_channel	*usbin_i_chan;
 };
 
 enum pmic_type {
@@ -479,6 +480,8 @@ int smblite_lib_get_prop_usb_present(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 				union power_supply_propval *val);
+void smblite_lib_get_prop_usb_type(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblite_lib_get_usb_online(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblite_lib_get_prop_input_current_limited(struct smb_charger *chg,
@@ -497,6 +500,8 @@ int smblite_lib_get_prop_input_current_settled(struct smb_charger *chg,
 				int *val);
 int smblite_lib_get_prop_input_voltage_settled(struct smb_charger *chg,
 				int *val);
+int smblite_lib_get_prop_usbin_current(struct smb_charger *chg,
+				union power_supply_propval *val);
 int smblite_lib_get_prop_charger_temp(struct smb_charger *chg,
 				int *val);
 int smblite_lib_get_prop_die_health(struct smb_charger *chg);

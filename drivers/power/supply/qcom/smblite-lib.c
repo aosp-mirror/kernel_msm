@@ -1969,6 +1969,25 @@ exit:
 	return rc;
 }
 
+void smblite_lib_get_prop_usb_type(struct smb_charger *chg,
+		union power_supply_propval *val)
+{
+	switch (chg->real_charger_type) {
+	case POWER_SUPPLY_TYPE_USB_CDP:
+		val->intval = POWER_SUPPLY_USB_TYPE_CDP;
+		break;
+	case POWER_SUPPLY_TYPE_USB_DCP:
+		val->intval = POWER_SUPPLY_USB_TYPE_DCP;
+		break;
+	case POWER_SUPPLY_TYPE_USB:
+		val->intval = POWER_SUPPLY_USB_TYPE_SDP;
+		break;
+	default:
+		val->intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+		break;
+	}
+}
+
 static int smblite_lib_read_usbin_voltage_chan(struct smb_charger *chg,
 				     union power_supply_propval *val)
 {
@@ -2022,6 +2041,23 @@ int smblite_lib_get_prop_usb_voltage_now(struct smb_charger *chg,
 
 out:
 	return rc;
+}
+
+int smblite_lib_get_prop_usbin_current(struct smb_charger *chg,
+		union power_supply_propval *val)
+{
+	int rc;
+
+	if (!chg->iio.usbin_i_chan)
+		return -ENODATA;
+
+	rc = iio_read_channel_processed(chg->iio.usbin_i_chan, &val->intval);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't read USBIN current channel rc=%d\n", rc);
+		return rc;
+	}
+
+	return 0;
 }
 
 int smblite_lib_get_prop_charger_temp(struct smb_charger *chg,

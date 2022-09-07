@@ -410,6 +410,11 @@ static int smblite_parse_dt_adc_channels(struct smb_charger *chg)
 	if (rc < 0)
 		return rc;
 
+	rc = smblite_lib_get_iio_channel(chg, "usb_in_current",
+					&chg->iio.usbin_i_chan);
+	if (rc < 0)
+		return rc;
+
 	return 0;
 }
 
@@ -521,6 +526,8 @@ static enum power_supply_property smblite_usb_props[] = {
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+	POWER_SUPPLY_PROP_USB_TYPE,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 };
 
 static enum power_supply_usb_type smblite_usb_psy_supported_types[] = {
@@ -563,6 +570,12 @@ static int smblite_usb_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		/* USB uses this to set SDP current */
 		rc = smblite_lib_get_charge_current(chg, &val->intval);
+		break;
+	case POWER_SUPPLY_PROP_USB_TYPE:
+		smblite_lib_get_prop_usb_type(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		rc = smblite_lib_get_prop_usbin_current(chg, val);
 		break;
 	default:
 		pr_err("get prop %d is not supported in usb\n", psp);
