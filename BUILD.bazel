@@ -752,3 +752,7 @@ ddk_headers(
     ],
     visibility = ["//visibility:private"],
 )
+
+load(":consolidate.bzl", "define_consolidate")
+
+define_consolidate()
