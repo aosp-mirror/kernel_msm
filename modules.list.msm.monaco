@@ -21,7 +21,6 @@ qcom-scm.ko
 memory_dump_v2.ko
 dcc_v2.ko
 arm_smmu.ko
-iommu-logger.ko
 mem_buf_dev.ko
 mem_buf.ko
 msm_dma_iommu_mapping.ko
@@ -29,7 +28,6 @@ qcom_iommu_util.ko
 qcom_dma_heaps.ko
 qcom_hwspinlock.ko
 qti-regmap-debugfs.ko
-rpm-smd.ko
 secure_buffer.ko
 smem.ko
 socinfo.ko
@@ -48,10 +46,12 @@ qcom_logbuf_vh.ko
 qcom-pmu-lib.ko
 pmu_vendor.ko
 pmu_scmi.ko
-rpm-smd.ko
 rpm-smd-regulator.ko
 proxy-consumer.ko
 qti-fixed-regulator.ko
+icc-rpm.ko
+qnoc-qos-rpm.ko
+qnoc-monaco.ko
 clk-smd-rpm.ko
 gcc-monaco.ko
 clk-dummy.ko
@@ -59,8 +59,9 @@ clk-qcom.ko
 gdsc-regulator.ko
 qcom-cpufreq-hw.ko
 dispcc-monaco.ko
-icc-rpm.ko
-icc-debug.ko
-icc-test.ko
-qnoc-qos-rpm.ko
-qnoc-monaco.ko
+cqhci.ko
+sdhci-msm.ko
+qcom-spmi-pmic.ko
+spmi-pmic-arb.ko
+regmap-spmi.ko
+spmi.ko

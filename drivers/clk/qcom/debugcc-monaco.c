@@ -499,23 +499,16 @@ static int clk_debug_monaco_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Unable to get xo clock\n");
 		return PTR_ERR(clk);
 	}
-
 	debug_mux_priv.cxo = clk;
 
 	for (i = 0; i < ARRAY_SIZE(mux_list); i++) {
-		ret = map_debug_bases(pdev, mux_list[i].regmap_name,
-				      mux_list[i].mux);
-		if (ret == -EBADR)
-			continue;
-		else if (ret)
-			return ret;
-
-		clk = devm_clk_register(&pdev->dev, &mux_list[i].mux->hw);
-		if (IS_ERR(clk)) {
-			dev_err(&pdev->dev, "Unable to register %s, err:(%d)\n",
-				clk_hw_get_name(&mux_list[i].mux->hw),
-				PTR_ERR(clk));
-			return PTR_ERR(clk);
+		if (IS_ERR_OR_NULL(mux_list[i].mux->regmap)) {
+			ret = map_debug_bases(pdev,
+					      mux_list[i].regmap_name, mux_list[i].mux);
+			if (ret == -EBADR)
+				continue;
+			else if (ret)
+				return ret;
 		}
 	}
 
@@ -526,6 +519,16 @@ static int clk_debug_monaco_probe(struct platform_device *pdev)
 				clk_hw_get_name(debugcc_monaco_hws[i]),
 				PTR_ERR(clk));
 			return PTR_ERR(clk);
+		}
+	}
+
+	for (i = 0; i < ARRAY_SIZE(mux_list); i++) {
+		ret = devm_clk_register_debug_mux(&pdev->dev, mux_list[i].mux);
+		if (ret) {
+			dev_err(&pdev->dev, "Unable to register mux clk %s, err:(%d)\n",
+				qcom_clk_hw_get_name(&mux_list[i].mux->hw),
+				ret);
+			return ret;
 		}
 	}
 

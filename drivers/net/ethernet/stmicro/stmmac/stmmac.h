@@ -145,10 +145,14 @@ struct stmmac_tc_entry {
 		u8 im:1;
 		u8 nc:1;
 		u8 res1:4;
-		u8 frame_offset;
+		u8 frame_offset:6;
+		u8 res2:2;
 		u8 ok_index;
-		u8 dma_ch_no;
-		u32 res2;
+		u8 giv:1;
+		u8 gid:3;
+		u8 res3:4;
+		u16 dma_ch_no;
+		u16 res4;
 	} __packed val;
 };
 
@@ -324,6 +328,8 @@ struct stmmac_priv {
 	/* XDP BPF Program */
 	unsigned long *af_xdp_zc_qps;
 	struct bpf_prog *xdp_prog;
+
+	bool phy_irq_enabled;
 };
 
 enum stmmac_state {

@@ -17,7 +17,12 @@ enum minidump_entry_cmd {
 	MINIDUMP_NO_CMD
 };
 
+#if IS_ENABLED(CONFIG_ARCH_QTI_VM)
+#define MAX_NAME_LENGTH		9
+#else
 #define MAX_NAME_LENGTH		12
+#endif
+
 /* md_region -  Minidump table entry
  * @name:	Entry name, Minidump will dump binary with this name.
  * @id:		Entry ID, used only for SDI dumps.
@@ -27,7 +32,7 @@ enum minidump_entry_cmd {
  *		it should be 4 byte aligned.
  */
 struct md_region {
-	char	name[MAX_NAME_LENGTH];
+	char	name[MAX_NAME_LENGTH + 1];
 	u32	id;
 	u64	virt_addr;
 	u64	phys_addr;
@@ -40,7 +45,7 @@ struct md_pending_region {
 };
 
 struct md_rm_region {
-	char	name[MAX_NAME_LENGTH];
+	char	name[MAX_NAME_LENGTH + 1];
 	u32	slot_num;
 };
 
@@ -108,17 +113,17 @@ struct va_md_entry {
 
 #if IS_ENABLED(CONFIG_QCOM_VA_MINIDUMP)
 extern bool qcom_va_md_enabled(void);
-extern int qcom_va_md_register(char *name, struct notifier_block *nb);
-extern int qcom_va_md_unregister(char *name, struct notifier_block *nb);
+extern int qcom_va_md_register(const char *name, struct notifier_block *nb);
+extern int qcom_va_md_unregister(const char *name, struct notifier_block *nb);
 extern int qcom_va_md_add_region(struct va_md_entry *entry);
 #else
 static inline bool qcom_va_md_enabled(void) { return false; }
-static inline int qcom_va_md_register(char *name, struct notifier_block *nb)
+static inline int qcom_va_md_register(const char *name, struct notifier_block *nb)
 {
 	return -ENODEV;
 }
 
-static inline int qcom_va_md_unregister(char *name, struct notifier_block *nb)
+static inline int qcom_va_md_unregister(const char *name, struct notifier_block *nb)
 {
 	return -ENODEV;
 }

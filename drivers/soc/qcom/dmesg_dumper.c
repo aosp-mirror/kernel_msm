@@ -2,42 +2,25 @@
 /* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.*/
 
 #include <linux/io.h>
-#include <linux/sizes.h>
-#include <linux/of_device.h>
-#include <linux/of_address.h>
-#include <linux/module.h>
-#include <linux/platform_device.h>
-#include <linux/types.h>
-#include <linux/skbuff.h>
-#include <linux/gunyah/gh_rm_drv.h>
-#include <linux/gunyah/gh_dbl.h>
-#include <soc/qcom/secure_buffer.h>
 #include <linux/kmsg_dump.h>
+#include <linux/module.h>
+#include <linux/of_address.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/pm.h>
-#include <linux/suspend.h>
 #include <linux/proc_fs.h>
+#include <linux/skbuff.h>
+#include <linux/suspend.h>
+#include <linux/types.h>
+#include <linux/gunyah/gh_dbl.h>
+#include <linux/gunyah/gh_rm_drv.h>
+#include <soc/qcom/secure_buffer.h>
 
-#define DDUMP_DBL_MASK	0x1
-#define LOG_LINE_MAX	1024
-#define DDUMP_BUFFER_OFFSET	sizeof(size_t)
-#define DDUMP_PROFS_NAME	"vmkmsg"
+#include "dmesg_dumper_private.h"
+
+#define DDUMP_DBL_MASK				0x1
+#define DDUMP_PROFS_NAME			"vmkmsg"
 #define DDUMP_WAIT_WAKEIRQ_TIMEOUT	msecs_to_jiffies(1000)
-
-struct qcom_dmesg_dumper {
-	struct device *dev;
-	struct kmsg_dumper dump;
-	struct kmsg_dump_iter iter;
-	struct resource res;
-	void *base;
-	size_t size;
-	u32 label, peer_name, memparcel;
-	bool primary_vm;
-	struct notifier_block rm_nb;
-	void *tx_dbl;
-	void *rx_dbl;
-	struct completion ddump_completion;
-	struct wakeup_source *wakeup_source;
-};
 
 static void qcom_ddump_to_shm(struct kmsg_dumper *dumper,
 			  enum kmsg_dump_reason reason)
@@ -220,29 +203,6 @@ static int qcom_ddump_rm_cb(struct notifier_block *nb, unsigned long cmd,
 	return NOTIFY_DONE;
 }
 
-static bool qcom_ddump_alive_log_to_shm(struct kmsg_dumper *dumper, size_t count)
-{
-	struct qcom_dmesg_dumper *qdd = container_of(dumper,
-					struct qcom_dmesg_dumper, dump);
-	size_t line_len;
-	size_t total_len = 0;
-	size_t max_len = qdd->size - LOG_LINE_MAX - DDUMP_BUFFER_OFFSET;
-	char *shm_offset;
-	bool ret = false;
-
-	while ((total_len < max_len) && (total_len < count - LOG_LINE_MAX)) {
-		shm_offset = qdd->base + total_len + DDUMP_BUFFER_OFFSET;
-		if (kmsg_dump_get_line(&qdd->iter, true, shm_offset, LOG_LINE_MAX, &line_len)) {
-			total_len = total_len + line_len;
-		} else {
-			ret = true;
-			break;
-		}
-	}
-	memcpy(qdd->base, &total_len, sizeof(size_t));
-	return ret;
-}
-
 static inline int qcom_ddump_gh_kick(struct qcom_dmesg_dumper *qdd)
 {
 	gh_dbl_flags_t dbl_mask = DDUMP_DBL_MASK;
@@ -257,12 +217,13 @@ static inline int qcom_ddump_gh_kick(struct qcom_dmesg_dumper *qdd)
 
 static void qcom_ddump_gh_cb(int irq, void *data)
 {
-	struct qcom_dmesg_dumper *qdd;
 	gh_dbl_flags_t dbl_mask = DDUMP_DBL_MASK;
-	size_t count;
-	bool kmsg_end;
+	struct qcom_dmesg_dumper *qdd;
+	struct ddump_shm_hdr *hdr;
+	int ret;
 
 	qdd = data;
+	hdr = qdd->base;
 	gh_dbl_read_and_clean(qdd->rx_dbl, &dbl_mask, GH_DBL_NONBLOCK);
 
 	if (qdd->primary_vm) {
@@ -270,10 +231,12 @@ static void qcom_ddump_gh_cb(int irq, void *data)
 	} else {
 		/* avoid system enter suspend */
 		pm_wakeup_ws_event(qdd->wakeup_source, 2000, true);
-		memcpy(&count, qdd->base, sizeof(count));
-		kmsg_end = qcom_ddump_alive_log_to_shm(&qdd->dump, count);
+		ret = qcom_ddump_alive_log_to_shm(qdd, hdr->user_buf_len);
+		if (ret)
+			dev_err(qdd->dev, "dump alive log error %d\n", ret);
+
 		qcom_ddump_gh_kick(qdd);
-		if (kmsg_end)
+		if (hdr->svm_dump_len == 0)
 			pm_wakeup_ws_event(qdd->wakeup_source, 0, true);
 	}
 }
@@ -282,15 +245,23 @@ static ssize_t qcom_ddump_vmkmsg_read(struct file *file, char __user *buf,
 			 size_t count, loff_t *ppos)
 {
 	struct qcom_dmesg_dumper *qdd = PDE_DATA(file_inode(file));
+	struct ddump_shm_hdr *hdr = qdd->base;
 	int ret;
-	size_t len;
 
 	if (count < LOG_LINE_MAX) {
 		dev_err(qdd->dev, "user buffer size should greater than %d\n", LOG_LINE_MAX);
 		return -EINVAL;
 	}
 
-	memcpy(qdd->base, &count, sizeof(count));
+	/**
+	 * If SVM is in suspend mode and the log size more than 1k byte,
+	 * we think SVM has log need to be read. Otherwise, we think the
+	 * log is only suspend log that we need skip the unnecessary log.
+	 */
+	if (hdr->svm_is_suspend && hdr->svm_dump_len < 1024)
+		return 0;
+
+	hdr->user_buf_len = count;
 	qcom_ddump_gh_kick(qdd);
 	ret = wait_for_completion_timeout(&qdd->ddump_completion, DDUMP_WAIT_WAKEIRQ_TIMEOUT);
 	if (!ret) {
@@ -298,21 +269,18 @@ static ssize_t qcom_ddump_vmkmsg_read(struct file *file, char __user *buf,
 		return -ETIMEDOUT;
 	}
 
-	memcpy(&len, qdd->base, sizeof(len));
-	if (len > count) {
+	if (hdr->svm_dump_len > count) {
 		dev_err(qdd->dev, "can not read the correct length of svm kmsg\n");
 		return -EINVAL;
 	}
 
-	if (len == 0)
-		return 0;
-
-	if (copy_to_user(buf, qdd->base + DDUMP_BUFFER_OFFSET, len)) {
+	if (hdr->svm_dump_len &&
+		copy_to_user(buf, &hdr->data, hdr->svm_dump_len)) {
 		dev_err(qdd->dev, "copy_to_user fail\n");
 		return -EFAULT;
 	}
 
-	return len;
+	return hdr->svm_dump_len;
 }
 
 static const struct proc_ops ddump_proc_ops = {
@@ -322,14 +290,16 @@ static const struct proc_ops ddump_proc_ops = {
 
 static int qcom_ddump_alive_log_probe(struct qcom_dmesg_dumper *qdd)
 {
+	struct device_node *node = qdd->dev->of_node;
 	struct device *dev = qdd->dev;
 	struct proc_dir_entry *dent;
+	struct ddump_shm_hdr *hdr;
 	enum gh_dbl_label dbl_label;
 	struct resource *res;
 	size_t shm_min_size;
 	int ret;
 
-	shm_min_size = LOG_LINE_MAX + DDUMP_BUFFER_OFFSET;
+	shm_min_size = LOG_LINE_MAX + DDUMP_GET_SHM_HDR;
 	if (qdd->size < shm_min_size) {
 		dev_err(dev, "Shared memory size should greater than %d\n", shm_min_size);
 		return -EINVAL;
@@ -378,10 +348,19 @@ static int qcom_ddump_alive_log_probe(struct qcom_dmesg_dumper *qdd)
 			ret = -ENOMEM;
 			goto err_unregister_rx_dbl;
 		}
+
+		/* init shared memory header */
+		hdr = qdd->base;
+		hdr->svm_is_suspend = false;
+
+		ret = qcom_ddump_encrypt_init(node);
+		if (ret)
+			goto err_unregister_wakeup_source;
 	}
 
 	return 0;
-
+err_unregister_wakeup_source:
+	wakeup_source_unregister(qdd->wakeup_source);
 err_unregister_rx_dbl:
 	gh_dbl_rx_unregister(qdd->rx_dbl);
 err_unregister_tx_dbl:
@@ -468,10 +447,12 @@ static int qcom_ddump_remove(struct platform_device *pdev)
 	if (IS_ENABLED(CONFIG_QCOM_VM_ALIVE_LOG_DUMPER)) {
 		gh_dbl_tx_unregister(qdd->tx_dbl);
 		gh_dbl_rx_unregister(qdd->rx_dbl);
-		if (qdd->primary_vm)
+		if (qdd->primary_vm) {
 			remove_proc_entry(DDUMP_PROFS_NAME, NULL);
-		else
+		} else {
 			wakeup_source_unregister(qdd->wakeup_source);
+			qcom_ddump_encrypt_exit();
+		}
 	}
 
 	if (qdd->primary_vm) {
@@ -485,6 +466,37 @@ static int qcom_ddump_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_PM_SLEEP) && IS_ENABLED(CONFIG_ARCH_QTI_VM) && \
+	IS_ENABLED(CONFIG_QCOM_VM_ALIVE_LOG_DUMPER)
+static int qcom_ddump_suspend(struct device *pdev)
+{
+	struct qcom_dmesg_dumper *qdd = dev_get_drvdata(pdev);
+	struct ddump_shm_hdr *hdr = qdd->base;
+	u64 seq_backup;
+	int ret;
+
+	hdr->svm_is_suspend = true;
+	seq_backup = qdd->iter.cur_seq;
+	ret = qcom_ddump_alive_log_to_shm(qdd, qdd->size);
+	if (ret)
+		dev_err(qdd->dev, "dump alive log error %d\n", ret);
+
+	qdd->iter.cur_seq = seq_backup;
+	return 0;
+}
+
+static int qcom_ddump_resume(struct device *pdev)
+{
+	struct qcom_dmesg_dumper *qdd = dev_get_drvdata(pdev);
+	struct ddump_shm_hdr *hdr = qdd->base;
+
+	hdr->svm_is_suspend = false;
+	return 0;
+}
+
+static SIMPLE_DEV_PM_OPS(ddump_pm_ops, qcom_ddump_suspend, qcom_ddump_resume);
+#endif
+
 static const struct of_device_id ddump_match_table[] = {
 	{ .compatible = "qcom,dmesg-dump" },
 	{}
@@ -493,6 +505,10 @@ static const struct of_device_id ddump_match_table[] = {
 static struct platform_driver ddump_driver = {
 	.driver = {
 		.name = "qcom_dmesg_dumper",
+#if IS_ENABLED(CONFIG_PM_SLEEP) && IS_ENABLED(CONFIG_ARCH_QTI_VM) && \
+	IS_ENABLED(CONFIG_QCOM_VM_ALIVE_LOG_DUMPER)
+		.pm = &ddump_pm_ops,
+#endif
 		.of_match_table = ddump_match_table,
 	 },
 	.probe = qcom_ddump_probe,
@@ -504,7 +520,7 @@ static int __init qcom_ddump_init(void)
 	return platform_driver_register(&ddump_driver);
 }
 
-#ifdef CONFIG_ARCH_QTI_VM
+#if IS_ENABLED(CONFIG_ARCH_QTI_VM)
 arch_initcall(qcom_ddump_init);
 #else
 module_init(qcom_ddump_init);

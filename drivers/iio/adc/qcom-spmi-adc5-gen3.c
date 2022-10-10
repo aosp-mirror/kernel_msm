@@ -351,8 +351,13 @@ static int adc5_gen3_configure(struct adc5_chip *adc,
 {
 	int ret;
 	u8 conv_req = 0, buf[7];
+	u8 sdam_index = prop->sdam_index;
 
-	ret = adc5_read(adc, prop->sdam_index, ADC5_GEN3_SID, buf, sizeof(buf));
+	/* Reserve channel 0 of first SDAM for immediate conversions */
+	if (prop->adc_tm)
+		sdam_index = 0;
+
+	ret = adc5_read(adc, sdam_index, ADC5_GEN3_SID, buf, sizeof(buf));
 	if (ret < 0)
 		return ret;
 
@@ -383,12 +388,12 @@ static int adc5_gen3_configure(struct adc5_chip *adc,
 
 	reinit_completion(&adc->complete);
 
-	ret = adc5_write(adc, prop->sdam_index, ADC5_GEN3_SID, buf, sizeof(buf));
+	ret = adc5_write(adc, sdam_index, ADC5_GEN3_SID, buf, sizeof(buf));
 	if (ret < 0)
 		return ret;
 
 	conv_req = ADC5_GEN3_CONV_REQ_REQ;
-	ret = adc5_write(adc, prop->sdam_index, ADC5_GEN3_CONV_REQ, &conv_req, 1);
+	ret = adc5_write(adc, sdam_index, ADC5_GEN3_CONV_REQ, &conv_req, 1);
 
 	return ret;
 }
@@ -1768,10 +1773,47 @@ static int adc5_gen3_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static int adc5_gen3_freeze(struct device *dev)
+{
+	struct adc5_chip *adc = dev_get_drvdata(dev);
+	int i = 0;
+
+	mutex_lock(&adc->lock);
+
+	for (i = 0; i < adc->num_sdams; i++)
+		devm_free_irq(dev, adc->base[i].irq, adc);
+
+	mutex_unlock(&adc->lock);
+
+	return 0;
+}
+
+static int adc5_gen3_restore(struct device *dev)
+{
+	struct adc5_chip *adc = dev_get_drvdata(dev);
+	int i = 0;
+	int ret = 0;
+
+	for (i = 0; i < adc->num_sdams; i++) {
+		ret = devm_request_irq(dev, adc->base[i].irq, adc5_gen3_isr,
+				0, adc->base[i].irq_name, adc);
+		if (ret < 0)
+			return ret;
+	}
+
+	return ret;
+}
+
+static const struct dev_pm_ops adc5_gen3_pm_ops = {
+	.freeze = adc5_gen3_freeze,
+	.restore = adc5_gen3_restore,
+};
+
 static struct platform_driver adc5_gen3_driver = {
 	.driver = {
 		.name = "qcom-spmi-adc5-gen3",
 		.of_match_table = adc5_match_table,
+		.pm = &adc5_gen3_pm_ops,
 	},
 	.probe = adc5_gen3_probe,
 	.remove = adc5_gen3_exit,

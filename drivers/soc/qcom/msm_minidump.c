@@ -113,17 +113,6 @@ struct md_region md_get_region(char *name)
 
 
 	if (is_rm_minidump) {
-		if (!minidump_table)
-			goto out;
-		regno = num_regions;
-		for (i = 0; i < regno; i++) {
-			mdr = &minidump_table->entry[i];
-			if (!strcmp(mdr->name, name)) {
-				tmp = *mdr;
-				goto out;
-			}
-		}
-	} else {
 		if (!minidump_rm_table)
 			goto out;
 		regno = num_regions;
@@ -135,6 +124,17 @@ struct md_region md_get_region(char *name)
 				tmp.phys_addr = phdr->p_vaddr;
 				tmp.virt_addr = phdr->p_paddr;
 				tmp.size = phdr->p_filesz;
+				goto out;
+			}
+		}
+	} else {
+		if (!minidump_table)
+			goto out;
+		regno = num_regions;
+		for (i = 0; i < regno; i++) {
+			mdr = &minidump_table->entry[i];
+			if (!strcmp(mdr->name, name)) {
+				tmp = *mdr;
 				goto out;
 			}
 		}
@@ -366,12 +366,19 @@ static void md_rm_add_work(struct md_region *entry)
 	slot_num =
 		gh_rm_minidump_register_range(entry->phys_addr, entry->size,
 					      entry->name, strlen(entry->name));
+	spin_lock_irqsave(&mdt_lock, flags);
 	if (slot_num < 0) {
+		memmove(&minidump_rm_table->entry[entry_num],
+			&minidump_rm_table->entry[entry_num + 1],
+			((num_regions - entry_num - 1) *
+			 sizeof(struct md_rm_region)));
+		memset(&minidump_rm_table->entry[num_regions - 1], 0,
+		       sizeof(struct md_rm_region));
+		num_regions--;
 		pr_err("Failed to register minidump entry:%s ret:%d\n",
 		       entry->name, slot_num);
-		return;
+		goto out;
 	}
-	spin_lock_irqsave(&mdt_lock, flags);
 	if (strcmp(entry->name, minidump_rm_table->entry[entry_num].name)) {
 		printk_deferred(
 			"Add entry:%s failed, minidump table is corrupt\n",
@@ -777,6 +784,7 @@ static int md_remove_ss_toc(const struct md_region *entry)
 
 	minidump_table->md_ss_toc->ss_region_count--;
 	minidump_table->md_ss_toc->md_ss_toc_init = 1;
+	num_regions--;
 
 	return 0;
 }
@@ -844,14 +852,14 @@ static int msm_minidump_add_header(void)
 	if (is_rm_minidump) {
 		slot_num = gh_rm_minidump_register_range(
 			virt_to_phys(minidump_elfheader.ehdr), elfh_size,
-			"KELF_HEADER", strlen("KELF_HEADER"));
+			"KELF_HDR", strlen("KELF_HDR"));
 		if (slot_num < 0) {
 			pr_err("Failed to register elf_header minidump entry\n");
 			return -EBUSY;
 		}
 	} else {
 		mdreg = &minidump_table->md_regions[0];
-		strscpy(mdreg->name, "KELF_HEADER", sizeof(mdreg->name));
+		strscpy(mdreg->name, "KELF_HDR", sizeof(mdreg->name));
 		mdreg->region_base_address = virt_to_phys(minidump_elfheader.ehdr);
 		mdreg->region_size = elfh_size;
 	}

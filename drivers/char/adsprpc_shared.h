@@ -483,6 +483,7 @@ enum dsp_map_flags {
 
 enum fastrpc_control_type {
 	FASTRPC_CONTROL_LATENCY		=	1,
+	/* Share SMMU context bank */
 	FASTRPC_CONTROL_SMMU		=	2,
 	FASTRPC_CONTROL_KALLOC		=	3,
 	FASTRPC_CONTROL_WAKELOCK	=	4,
@@ -509,6 +510,10 @@ struct fastrpc_ctrl_pm {
 	uint32_t timeout;	/* timeout(in ms) for PM to keep system awake */
 };
 
+struct fastrpc_ctrl_smmu {
+	uint32_t sharedcb;  /* Set to SMMU share context bank */
+};
+
 struct fastrpc_ioctl_control {
 	uint32_t req;
 	union {
@@ -516,6 +521,7 @@ struct fastrpc_ioctl_control {
 		struct fastrpc_ctrl_kalloc kalloc;
 		struct fastrpc_ctrl_wakelock wp;
 		struct fastrpc_ctrl_pm pm;
+		struct fastrpc_ctrl_smmu smmu;
 	};
 };
 
@@ -572,6 +578,12 @@ enum fastrpc_response_flags {
 	COMPLETE_SIGNAL = 3,
 	STATUS_RESPONSE = 4,
 	POLL_MODE = 5,
+};
+
+enum fastrpc_process_create_state {
+	PROCESS_CREATE_DEFAULT = 0,			/* Process is not created */
+	PROCESS_CREATE_IS_INPROGRESS = 1,	/* Process creation is in progress */
+	PROCESS_CREATE_SUCCESS = 2,			/* Process creation is successful */
 };
 
 struct smq_invoke_rspv2 {
@@ -829,6 +841,15 @@ struct fastrpc_smmu {
 	int faults;
 	int secure;
 	int coherent;
+	int sharedcb;
+	/* gen pool for QRTR */
+	struct gen_pool *frpc_genpool;
+	/* fastrpc gen pool buffer */
+	struct fastrpc_buf *frpc_genpool_buf;
+	/* fastrpc gen pool buffer fixed IOVA */
+	unsigned long genpool_iova;
+	/* fastrpc gen pool buffer size */
+	size_t genpool_size;
 };
 
 struct fastrpc_session_ctx {
@@ -865,6 +886,7 @@ struct fastrpc_channel_ctx {
 	struct mutex smd_mutex;
 	uint64_t sesscount;
 	uint64_t ssrcount;
+	int in_hib;
 	void *handle;
 	uint64_t prevssrcount;
 	int issubsystemup;
@@ -942,9 +964,10 @@ struct fastrpc_mmap {
 	int refs;
 	uintptr_t raddr;
 	int secure;
-	/* Minidump unique index */
-	int frpc_md_index;
+	bool is_persistent;			/* the map is persistenet across sessions */
+	int frpc_md_index;			/* Minidump unique index */
 	uintptr_t attr;
+	bool in_use;				/* Indicates if persistent map is in use*/
 	struct timespec64 map_start_time;
 	struct timespec64 map_end_time;
 	/* Mapping for fastrpc shell */
@@ -1019,6 +1042,7 @@ struct fastrpc_file {
 	char *servloc_name;
 	int file_close;
 	int dsp_proc_init;
+	int sharedcb;
 	struct fastrpc_apps *apps;
 	struct dentry *debugfs_file;
 	struct dev_pm_qos_request *dev_pm_qos_req;
@@ -1055,7 +1079,7 @@ struct fastrpc_file {
 	/* Threads poll for specified timeout and fall back to glink wait */
 	uint32_t poll_timeout;
 	/* Flag to indicate dynamic process creation status*/
-	bool in_process_create;
+	enum fastrpc_process_create_state dsp_process_state;
 	bool is_unsigned_pd;
 	/* Flag to indicate 32 bit driver*/
 	bool is_compat;

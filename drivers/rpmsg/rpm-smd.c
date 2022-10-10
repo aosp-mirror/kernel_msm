@@ -30,6 +30,7 @@
 #include <linux/types.h>
 #include <soc/qcom/rpm-notifier.h>
 #include <soc/qcom/rpm-smd.h>
+#include <soc/qcom/mpm.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_rpm_smd.h>
@@ -1493,7 +1494,8 @@ static int msm_rpm_enter_sleep(void)
 		if (ret)
 			smd_mask_receive_interrupt(false, NULL);
 	}
-	return ret;
+
+	return msm_mpm_enter_sleep(&cpumask);
 }
 
 /**
@@ -1691,11 +1693,11 @@ int __init msm_rpm_driver_init(void)
 {
 	unsigned int ret = 0;
 
+	platform_driver_register(&rpm_driver);
+
 	ret = register_rpmsg_driver(&qcom_smd_rpm_driver);
 	if (ret)
 		pr_err("register_rpmsg_driver: failed with err %d\n", ret);
-
-	platform_driver_register(&rpm_driver);
 
 	return ret;
 }

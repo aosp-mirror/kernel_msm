@@ -310,6 +310,7 @@ struct geni_i3c_dev {
 	struct geni_i3c_ver_info ver_info;
 	struct msm_geni_i3c_rsc i3c_rsc;
 	struct device *wrapper_dev;
+	u32 maxdevs;
 };
 
 struct geni_i3c_i2c_dev_data {
@@ -562,17 +563,6 @@ static void set_new_addr_slot(unsigned long *addrslot, u8 addr)
 
 	ptr = addrslot + (addr / BITS_PER_LONG);
 	*ptr |= 1 << (addr % BITS_PER_LONG);
-}
-
-static void clear_new_addr_slot(unsigned long *addrslot, u8 addr)
-{
-	unsigned long *ptr;
-
-	if (addr > I3C_ADDR_MASK)
-		return;
-
-	ptr = addrslot + (addr / BITS_PER_LONG);
-	*ptr &= ~(1 << (addr % BITS_PER_LONG));
 }
 
 static bool is_new_addr_slot_set(unsigned long *addrslot, u8 addr)
@@ -1142,11 +1132,34 @@ static void geni_i3c_perform_daa(struct geni_i3c_dev *gi3c)
 		}
 
 		if (i3cboardinfo->init_dyn_addr &&
-			(i3cboardinfo->init_dyn_addr < I3C_MAX_ADDR)) {
+			(i3cboardinfo->init_dyn_addr < I3C_MAX_ADDR))
 			/* If DA is specified in DTSI, use it */
 			addr = init_dyn_addr = i3cboardinfo->init_dyn_addr;
+
+		/* Ask framework to get free address for us */
+		ret = i3c_master_get_free_addr(m, addr);
+		if (ret >= 0) {
+			addr = ret;
+			i3cboardinfo->init_dyn_addr = addr;
+			init_dyn_addr = addr;
+		} else {
+			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+					"%s: Asked addr:%d not free, ret:%d\n",
+					 __func__, addr, ret);
+			return;
 		}
-		addr = ret = i3c_master_get_free_addr(m, addr);
+
+		if (is_new_addr_slot_set(gi3c->newaddrslots, addr)) {
+			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+				"%s:slot addr:%d not free, try new addr:%d\n",
+				__func__, addr, addr + 1);
+			ret = i3c_master_get_free_addr(m, addr + 1);
+			if (ret >= 0) {
+				addr = ret;
+				i3cboardinfo->init_dyn_addr = addr;
+				init_dyn_addr = addr;
+			}
+		}
 
 		if (ret < 0) {
 			I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
@@ -1209,8 +1222,12 @@ static void geni_i3c_perform_daa(struct geni_i3c_dev *gi3c)
 				IBI_NACK_TBL_CTRL;
 
 		ret = i3c_geni_execute_write_command(gi3c, &xfer, tx_buf, 1);
-		if (ret)
+		if (ret) {
+			I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+					"%s: Failed:%d to assign DA:%d\n",
+					__func__, ret, tx_buf[0]);
 			break;
+		}
 	}
 daa_err:
 	return;
@@ -1323,6 +1340,7 @@ static int geni_i3c_master_priv_xfers
 	for (i = 0; i < nxfers; i++) {
 		bool stall = (i < (nxfers - 1));
 		struct i3c_xfer_params xfer = { GENI_SE_FIFO };
+		xfer.mode = xfers[i].len > 64 ? GENI_SE_DMA : GENI_SE_FIFO;
 
 		xfer.m_param  = (stall ? STOP_STRETCH : 0);
 		xfer.m_param |= ((dev->info.dyn_addr & I3C_ADDR_MASK)
@@ -1482,35 +1500,50 @@ static void geni_i3c_master_detach_i3c_dev(struct i3c_dev_desc *dev)
 	i3c_dev_set_master_data(dev, NULL);
 }
 
-static int geni_i3c_master_entdaa_locked(struct geni_i3c_dev *gi3c)
+static int geni_i3c_master_do_daa(struct i3c_master_controller *m)
 {
-	struct i3c_master_controller *m = &gi3c->ctrlr;
-	u8 addr;
-	int ret;
+	struct geni_i3c_dev *gi3c = to_geni_i3c_master(m);
+	u8 start_addr = 0;
+	int addr = 0, ret = 0, free_addr = 0;
+
+	/* Get ready with the DAA table */
+	for (addr = 0; addr < gi3c->maxdevs; addr++) {
+		free_addr = i3c_master_get_free_addr(m, start_addr + 1);
+		if (free_addr < 0)
+			return -ENOSPC;
+
+		start_addr = free_addr;
+		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
+				"%s: Got free_addr:%d\n",
+				 __func__, free_addr);
+		set_new_addr_slot(gi3c->newaddrslots, free_addr);
+	}
 
 	ret = i3c_master_entdaa_locked(m);
 	if (ret && ret != I3C_ERROR_M2)
 		return ret;
 
-	for (addr = 0; addr <= I3C_ADDR_MASK; addr++) {
+	for (addr = 0; addr < gi3c->maxdevs; addr++) {
 		if (is_new_addr_slot_set(gi3c->newaddrslots, addr)) {
-			clear_new_addr_slot(gi3c->newaddrslots, addr);
-			i3c_master_add_i3c_dev_locked(m, addr);
+			ret = i3c_master_add_i3c_dev_locked(m,
+						gi3c->newaddrslots[addr]);
+			if (ret < 0)
+				I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+					"%s: error:%d adding device addr:%d\n",
+					 __func__, ret, addr);
 		}
 	}
 
-	i3c_master_enec_locked(m, I3C_BROADCAST_ADDR,
+	ret = i3c_master_enec_locked(m, I3C_BROADCAST_ADDR,
 				      I3C_CCC_EVENT_MR |
 				      I3C_CCC_EVENT_HJ);
+	if (ret)
+		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
+				 "%s: error:%d with i3c_master_enec_locked\n",
+				__func__, ret);
 
+	/* For now can't make DAA failing with ret and impact DAA */
 	return 0;
-}
-
-static int geni_i3c_master_do_daa(struct i3c_master_controller *m)
-{
-	struct geni_i3c_dev *gi3c = to_geni_i3c_master(m);
-
-	return geni_i3c_master_entdaa_locked(gi3c);
 }
 
 static int geni_i3c_master_bus_init(struct i3c_master_controller *m)
@@ -2032,9 +2065,18 @@ static int i3c_geni_rsrcs_init(struct geni_i3c_dev *gi3c,
 		gi3c->clk_src_freq = 100000000;
 	}
 
+	ret = device_property_read_u32(&pdev->dev, "max_i3c_devs",
+		&gi3c->maxdevs);
+	if (ret) {
+		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
+			"max_i3c_devs is undefined, default to two\n");
+		gi3c->maxdevs = 1;
+	}
+
+	//1.GENI_TO_CORE  2.CPU_TO_GENI  3.GENI_TO_DDR
 	ret = geni_se_common_resources_init(&gi3c->se,
-			GENI_DEFAULT_BW, GENI_DEFAULT_BW,
-			Bps_to_icc(gi3c->clk_src_freq) * I3C_DDR_VOTE_FACTOR);
+			I3C_CORE2X_VOTE, APPS_PROC_TO_QUP_VOTE,
+			(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
 	if (ret) {
 		I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 				"geni_se_common_resources_init Failed:%d\n", ret);
@@ -2344,11 +2386,17 @@ static int geni_i3c_probe(struct platform_device *pdev)
 	ret = i3c_master_register(&gi3c->ctrlr, &pdev->dev,
 		&geni_i3c_master_ops, false);
 	if (ret) {
-		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
-			"I3C master registration failed=%d, continue\n", ret);
-
-		/* NOTE : This may fail on 7E NACK, but should return 0 */
-		ret = 0;
+		if (ret == -ENOTCONN) {
+			I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
+				"Pass I3C master register failure=%d\n", ret);
+			/* NOTE : This may fail on 7E NACK, but should return 0 */
+			ret = 0;
+		} else {
+			I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
+				 "I3C master registration failed=%d\n", ret);
+			/* Except NACK, rest of the errors should fail the Probe */
+			goto cleanup_icc_init;
+		}
 	}
 	I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
 		"I3C bus freq:%ld, I2C bus fres:%ld\n",

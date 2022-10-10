@@ -514,6 +514,39 @@ TRACE_EVENT(core_ctl_eval_need,
 		  __entry->updated, __entry->need_ts)
 );
 
+TRACE_EVENT(core_ctl_eval_need_32bit,
+
+	TP_PROTO(unsigned int cpu, unsigned int last_need,
+		unsigned int new_need, unsigned int active_cpus,
+		unsigned int adj_now, unsigned int adj_possible,
+		unsigned int updated, s64 need_ts),
+	TP_ARGS(cpu, last_need, new_need, active_cpus, adj_now, adj_possible, updated, need_ts),
+	TP_STRUCT__entry(
+		__field(u32, cpu)
+		__field(u32, last_need)
+		__field(u32, new_need)
+		__field(u32, active_cpus)
+		__field(u32, adj_now)
+		__field(u32, adj_possible)
+		__field(u32, updated)
+		__field(s64, need_ts)
+	),
+	TP_fast_assign(
+		__entry->cpu		= cpu;
+		__entry->last_need	= last_need;
+		__entry->new_need	= new_need;
+		__entry->active_cpus	= active_cpus;
+		__entry->adj_now	= adj_now;
+		__entry->adj_possible	= adj_possible;
+		__entry->updated	= updated;
+		__entry->need_ts	= need_ts;
+	),
+	TP_printk("cpu=%u last_need=%u new_need=%u active_cpus=%u adj_now=%u adj_possible=%u updated=%u need_ts=%llu",
+		  __entry->cpu,	__entry->last_need, __entry->new_need,
+		  __entry->active_cpus, __entry->adj_now, __entry->adj_possible,
+		  __entry->updated, __entry->need_ts)
+);
+
 TRACE_EVENT(core_ctl_set_busy,
 
 	TP_PROTO(unsigned int cpu, unsigned int busy,
@@ -1055,6 +1088,28 @@ TRACE_EVENT(sched_compute_energy,
 		__entry->cluster_first_cpu2, __entry->s2, __entry->m2, __entry->c2)
 )
 
+TRACE_EVENT(sched_select_task_rt,
+
+	TP_PROTO(struct task_struct *p, int fastpath),
+
+	TP_ARGS(p, fastpath),
+
+	TP_STRUCT__entry(
+		__field(int,		pid)
+		__array(char,		comm, TASK_COMM_LEN)
+		__field(int,		fastpath)
+	),
+
+	TP_fast_assign(
+		__entry->pid			= p->pid;
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->fastpath		= fastpath;
+	),
+
+	TP_printk("pid=%d comm=%s fastpath=%u",
+		__entry->pid, __entry->comm, __entry->fastpath)
+);
+
 TRACE_EVENT(sched_task_util,
 
 	TP_PROTO(struct task_struct *p, unsigned long candidates,
@@ -1441,14 +1496,15 @@ TRACE_EVENT(sched_task_handler,
 
 TRACE_EVENT(update_cpu_capacity,
 
-	TP_PROTO(int cpu, unsigned long rt_pressure, unsigned long capacity),
+	TP_PROTO(int cpu, unsigned long fmax_capacity,
+		unsigned long rq_cpu_capacity_orig),
 
-	TP_ARGS(cpu, rt_pressure, capacity),
+	TP_ARGS(cpu, fmax_capacity, rq_cpu_capacity_orig),
 
 	TP_STRUCT__entry(
 		__field(int, cpu)
-		__field(unsigned long, rt_pressure)
-		__field(unsigned long, capacity)
+		__field(unsigned long, fmax_capacity)
+		__field(unsigned long, rq_cpu_capacity_orig)
 		__field(unsigned long, arch_capacity)
 		__field(unsigned long, thermal_cap)
 		__field(unsigned long, max_possible_freq)
@@ -1459,8 +1515,8 @@ TRACE_EVENT(update_cpu_capacity,
 		struct walt_sched_cluster *cluster = cpu_cluster(cpu);
 
 		__entry->cpu = cpu;
-		__entry->rt_pressure = rt_pressure;
-		__entry->capacity = capacity;
+		__entry->fmax_capacity = fmax_capacity;
+		__entry->rq_cpu_capacity_orig = rq_cpu_capacity_orig;
 		__entry->arch_capacity = arch_scale_cpu_capacity(cpu);
 		__entry->thermal_cap = arch_scale_cpu_capacity(cpu) -
 					arch_scale_thermal_pressure(cpu);
@@ -1468,11 +1524,11 @@ TRACE_EVENT(update_cpu_capacity,
 		__entry->max_possible_freq = cluster->max_possible_freq;
 	),
 
-	TP_printk("cpu=%d arch_capacity=%lu thermal_cap=%lu rt_pressure=%lu max_freq=%lu max_possible_freq=%lu capacity=%lu",
+	TP_printk("cpu=%d arch_capacity=%lu thermal_cap=%lu fmax_capacity=%lu max_freq=%lu max_possible_freq=%lu rq_cpu_capacity_orig=%lu",
 			__entry->cpu, __entry->arch_capacity,
-			__entry->thermal_cap, __entry->rt_pressure,
+			__entry->thermal_cap, __entry->fmax_capacity,
 			__entry->max_freq, __entry->max_possible_freq,
-			__entry->capacity)
+			__entry->rq_cpu_capacity_orig)
 );
 
 #endif /* _TRACE_WALT_H */

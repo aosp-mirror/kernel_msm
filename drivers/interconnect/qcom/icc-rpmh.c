@@ -319,6 +319,33 @@ static void disable_qos_deps(struct qcom_icc_provider *qp)
 	}
 }
 
+int qcom_icc_rpmh_configure_qos(struct qcom_icc_provider *qp)
+{
+	struct qcom_icc_node *qnode;
+	size_t i;
+	int ret;
+
+	ret = enable_qos_deps(qp);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < qp->num_nodes; i++) {
+		qnode = qp->nodes[i];
+		if (!qnode)
+			continue;
+
+		if (qnode->qosbox) {
+			qnode->noc_ops->set_qos(qnode);
+			qnode->qosbox->initialized = true;
+		}
+	}
+
+	disable_qos_deps(qp);
+
+	return ret;
+}
+EXPORT_SYMBOL(qcom_icc_rpmh_configure_qos);
+
 static struct regmap *qcom_icc_rpmh_map(struct platform_device *pdev,
 					const struct qcom_icc_desc *desc)
 {
@@ -379,6 +406,8 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 
 	qp->dev = dev;
 	qp->bcms = desc->bcms;
+	qp->nodes = desc->nodes;
+	qp->num_nodes = desc->num_nodes;
 
 	if (!qp->stub) {
 		qp->num_bcms = desc->num_bcms;
@@ -412,12 +441,6 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 	for (i = 0; i < qp->num_bcms; i++)
 		qcom_icc_bcm_init(qp, qp->bcms[i], dev);
 
-	if (!qp->skip_qos) {
-		ret = enable_qos_deps(qp);
-		if (ret)
-			return ret;
-	}
-
 	for (i = 0; i < num_nodes; i++) {
 		qn = qnodes[i];
 		if (!qn)
@@ -431,11 +454,6 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 			goto err;
 		}
 
-		if (qn->qosbox && !qp->skip_qos) {
-			qn->noc_ops->set_qos(qn);
-			qn->qosbox->initialized = true;
-		}
-
 		node->name = qn->name;
 		node->data = qn;
 		icc_node_add(node, provider);
@@ -446,10 +464,14 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 		data->nodes[i] = node;
 	}
 
-	if (!qp->skip_qos)
-		disable_qos_deps(qp);
-
 	data->num_nodes = num_nodes;
+
+	if (!qp->skip_qos) {
+		ret = qcom_icc_rpmh_configure_qos(qp);
+		if (ret)
+			goto err;
+	}
+
 	platform_set_drvdata(pdev, qp);
 
 	if (!qp->stub) {
@@ -465,7 +487,6 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 
 	return 0;
 err:
-	clk_bulk_disable_unprepare(qp->num_clks, qp->clks);
 	clk_bulk_put_all(qp->num_clks, qp->clks);
 	icc_nodes_remove(provider);
 	icc_provider_del(provider);

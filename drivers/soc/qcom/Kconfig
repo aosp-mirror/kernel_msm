@@ -209,6 +209,24 @@ config QCOM_PDR_HELPERS
 	  crash/recover without disrupting the other PDs running on
 	  the same Q6 ADSP.
 
+config QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT
+	bool "Trigger kernel panic when PDR notification timeout expires"
+	help
+	  This is a debug feature where a kernel panic is triggered when
+	  pdr notification to the APPS client is taking too long. This scneario
+	  can happen if the one of notifier gets stuck and due to which subsystem
+	  did not get ack back from APPS in time and trigger timeout panic.
+	  So, trigger a kernel panic in APPS if PDR notifications is taking
+	  too long.
+
+config PDR_INDICATION_NOTIF_TIMEOUT
+	int "Pdr notifications timeout in ms"
+	default 3000
+	help
+	  The amount of time, in milliseconds, that should elapse between
+	  the start and end of notifications, before a warning
+	  is emitted.
+
 config MSM_BOOT_TIME_MARKER
 	bool "Use MSM boot time marker reporting"
 	depends on MSM_BOOT_STATS
@@ -223,6 +241,16 @@ config QCOM_QMI_HELPERS
 	depends on NET
 
 source "drivers/soc/qcom/memshare/Kconfig"
+
+config QCOM_QFPROM_SYS
+	tristate "Qualcomm Technologies, Inc. QFPROM_SYS driver "
+	depends on QCOM_QFPROM
+	help
+	  Qualcomm Technologies, Inc. QFPROM_SYS driver. The QFPROM SYS driver
+	  provides access to the child nodes of QFPROM to user space. The cell
+	  values are exported as sysfs entries.
+
+	  Say y here to enable QFPROM SYS support.
 
 config QCOM_RMTFS_MEM
 	tristate "Qualcomm Remote Filesystem memory driver"
@@ -375,7 +403,7 @@ config QCOM_GLINK
 
 config QCOM_GLINK_PKT
 	tristate "Enable device interface for GLINK packet channels"
-	depends on RPMSG_QCOM_GLINK_SMEM
+	depends on RPMSG_QCOM_GLINK_SMEM || RPMSG_QCOM_GLINK_SLATECOM
 	help
 	  G-link packet driver provides the interface for the userspace
 	  clients to communicate over G-Link via device nodes.
@@ -538,6 +566,14 @@ config QCOM_SOC_SLEEP_STATS
 	  the shared memory exported by the remote processor related to
 	  various SoC level low power modes statistics and export to debugfs
 	  interface.
+
+config QTI_RPM_STATS_LOG
+	tristate "Qualcomm Technologies, Inc. (QTI) RPM Stats Driver"
+	help
+	  This option enables a driver which reads RPM messages from a shared
+	  memory location. These messages provide statistical information about
+	  the low power modes that subsystem enters. The drivers outputs the
+	  message via a debugfs node.
 
 config QCOM_ADSP_SLEEPMON
 	tristate "ADSP sleep monitor"
@@ -838,6 +874,18 @@ config QTI_PMIC_PON_LOG
 	  some Qualcomm Technologies, Inc. PMIC devices.  This driver is useful
 	  when debugging unexpected power-off scenarios.
 
+config QTI_PMIC_LPM
+        tristate "QTI PMIC LPM support"
+        depends on MFD_SPMI_PMIC
+        help
+          Say Y here to enable the Qualcomm Technologies, Inc. low power mode
+          driver which reports the entry and exit of PMIC's low power modes
+          DeepSleep/Hibernate/TWM to a companion chip through the SDAM
+          interface.
+
+          To compile this driver as a module, choose M here: the
+          module will be called qti-pmic-lpm.
+
 config MSM_BOOT_STATS
 	tristate "Use MSM boot stats reporting"
 	help
@@ -910,7 +958,7 @@ config QCOM_PANEL_EVENT_NOTIFIER
 
 config QTI_CRYPTO_COMMON
 	tristate "Enable common crypto functionality used for FBE"
-	depends on SCSI_UFS_CRYPTO_QTI
+	depends on SCSI_UFS_CRYPTO_QTI || MMC_CRYPTO_QTI
 	help
 	 Say 'Y' to enable the common crypto implementation to be used by
 	 different storage layers such as UFS and EMMC for file based hardware
@@ -1121,11 +1169,20 @@ config QCOM_VM_DMESG_DUMPER
 config QCOM_VM_ALIVE_LOG_DUMPER
 	bool "Dump a VM's alive kmsg to a shared reserved memory Support"
 	depends on QCOM_VM_DMESG_DUMPER
-	default n
+	default y
 	help
 	  This enables to dump a VM's alive kmsg log buffer to the reserved
 	  memory section, triggered by Primary VM. This needs to be enabled on
 	  both Primary VM and the other VM whose kmsg is desired.
+
+config QCOM_VM_ALIVE_LOG_ENCRYPT
+	bool "Encrypt alive log Support"
+	depends on ARCH_QTI_VM && QCOM_VM_ALIVE_LOG_DUMPER && CRYPTO_GCM
+	default y
+	help
+	  This enables to encrypt alive log and use AES GCM mode for symmetric key
+	  wrapping. This needs to be enabled on both Primary VM and the other VM
+	  whose kmsg is desired.
 
 source "drivers/soc/qcom/mem_buf/Kconfig"
 source "drivers/soc/qcom/tmecom/Kconfig"
