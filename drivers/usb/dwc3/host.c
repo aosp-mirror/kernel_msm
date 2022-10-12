@@ -167,5 +167,6 @@ void dwc3_host_exit(struct dwc3 *dwc)
 	phy_remove_lookup(dwc->usb3_generic_phy, "usb3-phy",
 			  dev_name(dwc->dev));
 	platform_device_unregister(dwc->xhci);
+	dwc->xhci = NULL;
 }
 EXPORT_SYMBOL_GPL(dwc3_host_exit);
