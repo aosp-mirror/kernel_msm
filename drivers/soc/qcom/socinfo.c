@@ -324,6 +324,9 @@ static struct msm_soc_info cpu_of_id[] = {
 	[455] = {MSM_CPU_KONA, "KONA"},
 	[496] = {MSM_CPU_KONA, "KONA"},
 
+	/* kona-7230-iot ID */
+	[548] = {MSM_CPU_KONA_IOT, "KONA-7230-IOT"},
+
 	/* Lito ID */
 	[400] = {MSM_CPU_LITO, "LITO"},
 	[440] = {MSM_CPU_LITO, "LITO"},
@@ -337,6 +340,15 @@ static struct msm_soc_info cpu_of_id[] = {
 
 	/* Khaje ID */
 	[518] = {MSM_CPU_KHAJE, "KHAJE"},
+
+	/* Khajep ID */
+	[561] = {MSM_CPU_KHAJEP, "KHAJEP"},
+
+	/* Khajeq ID */
+	[562] = {MSM_CPU_KHAJEQ, "KHAJEQ"},
+
+	/* Khajeg ID */
+	[585] = {MSM_CPU_KHAJEG, "KAHJEG"},
 
 	/* Lagoon ID */
 	[434] = {MSM_CPU_LAGOON, "LAGOON"},
@@ -1268,6 +1280,18 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 518;
 		strlcpy(dummy_socinfo.build_id, "khaje - ",
 		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_khajep()) {
+		dummy_socinfo.id = 561;
+		strlcpy(dummy_socinfo.build_id, "khajep - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_khajeq()) {
+		dummy_socinfo.id = 562;
+		strlcpy(dummy_socinfo.build_id, "khajeq - ",
+		sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_khajeg()) {
+		dummy_socinfo.id = 585;
+		strlcpy(dummy_socinfo.build_id, "khajeg - ",
+		sizeof(dummy_socinfo.build_id));
 	} else if (early_machine_is_bengalp()) {
 		dummy_socinfo.id = 445;
 		strlcpy(dummy_socinfo.build_id, "bengalp - ",
@@ -1344,6 +1368,10 @@ static void * __init setup_dummy_socinfo(void)
 		dummy_socinfo.id = 338;
 		strlcpy(dummy_socinfo.build_id, "sdm450 - ",
 			sizeof(dummy_socinfo.build_id));
+	} else if (early_machine_is_kona_7230_iot()) {
+		dummy_socinfo.id = 548;
+		strlcpy(dummy_socinfo.build_id, "kona-7230-iot - ",
+		sizeof(dummy_socinfo.build_id));
 	} else
 		strlcat(dummy_socinfo.build_id, "Dummy socinfo",
 			sizeof(dummy_socinfo.build_id));

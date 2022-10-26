@@ -54,6 +54,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,sa8150")
 #define early_machine_is_kona()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,kona")
+#define early_machine_is_kona_7230_iot()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,kona-7230-iot")
 #define early_machine_is_lito()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,lito")
 #define early_machine_is_orchid()	\
@@ -64,6 +66,12 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,bengalp")
 #define early_machine_is_khaje()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,khaje")
+#define early_machine_is_khajep()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,khajep")
+#define early_machine_is_khajeq()	\
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,khajeq")
+#define early_machine_is_khajeg()       \
+	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,khajeg")
 #define early_machine_is_lagoon()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,lagoon")
 #define early_machine_is_scuba()	\
@@ -128,6 +136,9 @@
 #define early_machine_is_bengal()	0
 #define early_machine_is_bengalp()	0
 #define early_machine_is_khaje()	0
+#define early_machine_is_khajep()	0
+#define early_machine_is_khajeq()	0
+#define early_machine_is_khajeg()	0
 #define early_machine_is_lagoon()	0
 #define early_machine_is_scuba()	0
 #define early_machine_is_scubaiot()	0
@@ -171,11 +182,15 @@ enum msm_cpu {
 	MSM_CPU_SM8150,
 	MSM_CPU_SA8150,
 	MSM_CPU_KONA,
+	MSM_CPU_KONA_IOT,
 	MSM_CPU_LITO,
 	MSM_CPU_ORCHID,
 	MSM_CPU_BENGAL,
 	MSM_CPU_BENGALP,
 	MSM_CPU_KHAJE,
+	MSM_CPU_KHAJEP,
+	MSM_CPU_KHAJEQ,
+	MSM_CPU_KHAJEG,
 	MSM_CPU_LAGOON,
 	MSM_CPU_SCUBA,
 	MSM_CPU_SCUBAIOT,
