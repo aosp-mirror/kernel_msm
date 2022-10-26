@@ -64,8 +64,8 @@ struct gbms_chg_profile {
 	u32 aacr_nb_limits;
 };
 
-#define WLC_BPP_THRESHOLD_UV	700000
-#define WLC_EPP_THRESHOLD_UV	1100000
+#define WLC_BPP_THRESHOLD_UV	7000000
+#define WLC_EPP_THRESHOLD_UV	11000000
 
 #define FOREACH_CHG_EV_ADAPTER(S)		\
 	S(UNKNOWN), 	\
