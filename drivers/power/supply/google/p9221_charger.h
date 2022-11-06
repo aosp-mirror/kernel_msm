@@ -425,6 +425,7 @@ struct p9221_charger_data {
 	u32				fod_cnt;
 	bool				trigger_power_mitigation;
 	bool                            wait_for_online;
+	ktime_t				online_at;
 };
 
 struct p9221_prop_reg_map_entry {

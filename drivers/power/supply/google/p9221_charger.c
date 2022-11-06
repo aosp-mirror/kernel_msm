@@ -84,6 +84,8 @@
 
 #define P9221_CRC8_POLYNOMIAL		0x07	/* (x^8) + x^2 + x + 1 */
 
+#define get_boot_sec() div_u64(ktime_to_ns(ktime_get_boottime()), NSEC_PER_SEC)
+
 DECLARE_CRC8_TABLE(p9221_crc8_table);
 
 static void p9221_icl_ramp_reset(struct p9221_charger_data *charger);
@@ -872,6 +874,7 @@ static void p9221_set_offline(struct p9221_charger_data *charger)
 	logbuffer_log(charger->log, "offline\n");
 
 	charger->online = false;
+	charger->online_at = 0;
 	charger->force_bpp = false;
 	charger->chg_on_rtx = false;
 
@@ -1029,10 +1032,14 @@ static void force_set_fod(struct p9221_charger_data *charger)
 			P9221R5_FOD_REG + i);
 }
 
+#define DREAM_DEBOUNCE_TIME_S 400
+
 static void p9221_power_mitigation_work(struct work_struct *work)
 {
 	struct p9221_charger_data *charger = container_of(work,
 			struct p9221_charger_data, power_mitigation_work.work);
+
+	const ktime_t now = get_boot_sec();
 
 	charger->wait_for_online = false;
 
@@ -1058,6 +1065,16 @@ static void p9221_power_mitigation_work(struct work_struct *work)
 		dev_info(&charger->client->dev,
 			 "power_mitigate: not DD mfg=%x, id=%s\n",
 			 charger->mfg, txid ? txid : "<>");
+		return;
+	}
+
+	/* debounce for auth TODO: use charger->auth_delay */
+	if (charger->fod_cnt == 0 &&
+			(now - charger->online_at < DREAM_DEBOUNCE_TIME_S)) {
+		pr_debug("%s: now=%lld, online_at=%lld delta=%lld\n", __func__,
+			now, charger->online_at, now - charger->online_at);
+		schedule_delayed_work(&charger->power_mitigation_work,
+			msecs_to_jiffies(P9221_POWER_MITIGATE_DELAY_MS));
 		return;
 	}
 
@@ -1846,6 +1863,7 @@ static void p9221_set_online(struct p9221_charger_data *charger)
 	charger->tx_done = true;
 	charger->rx_done = false;
 	charger->last_capacity = -1;
+	charger->online_at = get_boot_sec();
 
 	ret = p9221_reg_read_8(charger, P9221_CUSTOMER_ID_REG, &cid);
 	if (ret)
