@@ -58,7 +58,7 @@
 
 
 /* AACR default slope is disabled by default */
-#define AACR_START_CYCLE_DEFAULT	100
+#define AACR_START_CYCLE_DEFAULT	400
 #define AACR_MAX_CYCLE_DEFAULT		0 /* disabled */
 
 /* qual time is 0 minutes of charge or 0% increase in SOC */

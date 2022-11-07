@@ -533,9 +533,9 @@ static int info_wlc_state(union gbms_ce_adapter_details *ad,
 		return -EINVAL;
 	}
 
-	if (amperage_max >= WLC_EPP_THRESHOLD_UV) {
+	if (voltage_max >= WLC_EPP_THRESHOLD_UV) {
 		ad->ad_type = CHG_EV_ADAPTER_TYPE_WLC_EPP;
-	} else if (amperage_max >= WLC_BPP_THRESHOLD_UV) {
+	} else if (voltage_max >= WLC_BPP_THRESHOLD_UV) {
 		ad->ad_type = CHG_EV_ADAPTER_TYPE_WLC_SPP;
 	}
 
