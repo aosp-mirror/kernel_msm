@@ -48,6 +48,8 @@
   capable
   cdev_add
   cdev_del
+  cdev_device_add
+  cdev_device_del
   cdev_init
   __cfi_slowpath
   __check_object_size
@@ -137,7 +139,6 @@
   device_add
   device_create
   device_create_file
-  device_del
   device_destroy
   device_find_child
   device_for_each_child
@@ -781,6 +782,7 @@
   regulator_set_mode
   regulator_set_voltage
   regulator_sync_state
+  regulator_unregister_notifier
   release_firmware
   release_sock
   remap_pfn_range
@@ -1603,7 +1605,6 @@
   idr_replace
   init_uts_ns
   irq_work_queue
-  iterate_fd
   kern_addr_valid
   kernfs_create_link
   ktime_get_real_seconds
@@ -2166,8 +2167,8 @@
   iio_channel_release
 
 # required by qpnp_pdphy.ko
+  device_del
   device_get_named_child_node
-  devm_regulator_register_notifier
   hrtimer_init_sleeper
 
 # required by qrtr.ko
@@ -2244,7 +2245,6 @@
   netdev_rx_handler_unregister
   netif_schedule_queue
   ___pskb_trim
-  qdisc_reset
   rtnl_link_register
   rtnl_link_unregister
   rtnl_trylock
@@ -2601,7 +2601,6 @@
   extcon_get_edev_name
   extcon_get_property
   pm_runtime_barrier
-  regulator_unregister_notifier
   usb_gadget_vbus_connect
   usb_gadget_vbus_disconnect
   usb_register_atomic_notify
@@ -2609,10 +2608,6 @@
   usb_speed_string
   usb_unregister_atomic_notify
   usb_unregister_notify
-
-# required by usb_f_cdev.ko
-  cdev_device_add
-  cdev_device_del
 
 # required by usb_f_diag.ko
   refcount_dec_and_lock
@@ -2774,8 +2769,11 @@
   crc32_le
   crypto_register_scomp
   crypto_unregister_scomp
+  devm_regulator_register_notifier
   generic_file_mmap
   idr_alloc_u32
+  iterate_fd
+  qdisc_reset
   simple_getattr
   soc_find_component
   vfs_statx
