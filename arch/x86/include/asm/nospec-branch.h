@@ -35,6 +35,7 @@
  * the optimal version — two calls, each with their own speculation
  * trap should their return address end up getting used, in a loop.
  */
+#ifdef CONFIG_X86_64
 #define __FILL_RETURN_BUFFER(reg, nr, sp)	\
 	mov	$(nr/2), reg;			\
 771:						\
@@ -52,7 +53,30 @@
 774:						\
 	dec	reg;				\
 	jnz	771b;				\
+	add	$(BITS_PER_LONG/8) * nr, sp;	\
+	/* barrier for jnz misprediction */	\
+	lfence;
+#else
+/*
+ * i386 doesn't unconditionally have LFENCE, as such it can't
+ * do a loop.
+ */
+#define __FILL_RETURN_BUFFER(reg, nr, sp)	\
+	.rept nr;				\
+	call	772f;				\
+	int3;					\
+772:;						\
+	.endr;					\
 	add	$(BITS_PER_LONG/8) * nr, sp;
+#endif
+
+/* Sequence to mitigate PBRSB on eIBRS CPUs */
+#define __ISSUE_UNBALANCED_RET_GUARD(sp)	\
+	call	881f;				\
+	int3;					\
+881:						\
+	add	$(BITS_PER_LONG/8), sp;		\
+	lfence;
 
 #ifdef __ASSEMBLY__
 
@@ -269,6 +293,13 @@ static inline void vmexit_fill_RSB(void)
 		      : "=r" (loops), ASM_CALL_CONSTRAINT
 		      : : "memory" );
 #endif
+	asm volatile (ANNOTATE_NOSPEC_ALTERNATIVE
+		      ALTERNATIVE("jmp 920f",
+				  __stringify(__ISSUE_UNBALANCED_RET_GUARD(%0)),
+				  X86_FEATURE_RSB_VMEXIT_LITE)
+		      "920:"
+		      : ASM_CALL_CONSTRAINT
+		      : : "memory" );
 }
 
 static __always_inline
