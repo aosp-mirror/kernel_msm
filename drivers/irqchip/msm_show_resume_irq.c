@@ -16,7 +16,7 @@
 #include <trace/hooks/cpuidle_psci.h>
 #include <trace/hooks/gic_v3.h>
 
-int msm_show_resume_irq_mask;
+int msm_show_resume_irq_mask = 1;
 module_param_named(debug_mask, msm_show_resume_irq_mask, int, 0664);
 
 static void msm_show_resume_irqs(void *data, struct gic_chip_data *gic_data)
