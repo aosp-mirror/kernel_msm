@@ -36,7 +36,7 @@ struct gic_chip_data_ds {
 };
 
 static struct gic_chip_data_ds gic_data_ds __read_mostly;
-int msm_show_resume_irq_mask;
+int msm_show_resume_irq_mask = 1;
 module_param_named(debug_mask, msm_show_resume_irq_mask, int, 0664);
 
 static void gic_suspend_ds(void *data, struct gic_chip_data *gic_data)
