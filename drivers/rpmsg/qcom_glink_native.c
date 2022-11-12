@@ -1309,7 +1309,7 @@ static int qcom_glink_native_rx(struct qcom_glink *glink, int iterations)
 		pr_info("%s: wakeup %s\n", __func__, glink->irqname);
 		glink_resume_pkt = true;
 		should_wake = false;
-		pm_system_wakeup();
+		pm_system_irq_wakeup(irq);
 	}
 
 	spin_lock_irqsave(&glink->irq_lock, flags);
