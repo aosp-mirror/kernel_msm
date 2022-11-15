@@ -34,7 +34,7 @@
 #include <trace/events/qcom_haptics.h>
 
 /* status register definitions in HAPTICS_CFG module */
-#define HAP_CFG_REVISION2_REG			0x01
+#define HAP_CFG_REVISION1_REG			0x00
 #define HAP_CFG_V1				0x1
 #define HAP_CFG_V2				0x2
 #define HAP_CFG_V3				0x3
@@ -69,6 +69,11 @@
 #define HPRW_RDY_FAULT_BIT			BIT(0)
 
 /* Only for HAP525_HV */
+#define HAP_CFG_HPWR_INTF_REG                   0x0B
+#define HPWR_INTF_STATUS_MASK                   GENMASK(1, 0)
+#define HPWR_DISABLED                           0
+#define HPWR_READY                              3
+
 #define HAP_CFG_REAL_TIME_LRA_IMPEDANCE_REG	0x0E
 #define LRA_IMPEDANCE_MOHMS_LSB			250
 
@@ -436,6 +441,7 @@ enum wa_flags {
 	SLEEP_CLK_32K_SCALE = BIT(2),
 	TOGGLE_EN_TO_FLUSH_FIFO = BIT(3),
 	RECOVER_SWR_SLAVE = BIT(4),
+	TOGGLE_MODULE_EN = BIT(5),
 };
 
 static const char * const src_str[] = {
@@ -599,6 +605,7 @@ struct haptics_chip {
 	struct regulator		*hpwr_vreg;
 	struct hrtimer			hbst_off_timer;
 	struct notifier_block		hboost_nb;
+	struct mutex			vmax_lock;
 	int				fifo_empty_irq;
 	u32				hpwr_voltage_mv;
 	u32				effects_count;
@@ -609,6 +616,7 @@ struct haptics_chip {
 	u32				clamped_vmax_mv;
 	u32				wa_flags;
 	u32				primitive_duration;
+	u8				cfg_rev1;
 	u8				cfg_revision;
 	u8				ptn_revision;
 	u8				hpwr_intf_ctl;
@@ -1185,11 +1193,76 @@ static int haptics_get_closeloop_lra_period(
 	return 0;
 }
 
+static int haptics_module_enable(struct haptics_chip *chip, bool enable)
+{
+	u8 val;
+	int rc;
+
+	val = enable ? HAPTICS_EN_BIT : 0;
+	rc = haptics_write(chip, chip->cfg_addr_base,
+		HAP_CFG_EN_CTL_REG, &val, 1);
+	if (rc < 0)
+		return rc;
+
+	dev_dbg(chip->dev, "haptics module %s\n",
+		enable ? "enabled" : "disabled");
+	return 0;
+}
+
+static int haptics_toggle_module_enable(struct haptics_chip *chip)
+{
+	int rc;
+
+	/*
+	 * Updating HAPTICS_EN would vote hBoost enable status. Add 100us
+	 * delay before updating HAPTICS_EN for hBoost to have enough time
+	 * to handle its power transition.
+	 */
+	usleep_range(100, 101);
+	rc = haptics_module_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
+	usleep_range(100, 101);
+	return haptics_module_enable(chip, true);
+}
+
+#define VMAX_SETTLE_COUNT	10
+static int haptics_check_hpwr_status(struct haptics_chip *chip)
+{
+	int i, rc = 0;
+	u8 val;
+
+	if (chip->hw_type != HAP525_HV)
+		return 0;
+
+	for (i = 0; i < VMAX_SETTLE_COUNT; i++) {
+		rc = haptics_read(chip, chip->cfg_addr_base, HAP_CFG_HPWR_INTF_REG, &val, 1);
+		if (rc < 0)
+			break;
+
+		val &= HPWR_INTF_STATUS_MASK;
+		if ((val == HPWR_DISABLED) || (val == HPWR_READY))
+			break;
+
+		usleep_range(1000, 1001);
+	}
+
+	if (!rc && i == VMAX_SETTLE_COUNT) {
+		haptics_toggle_module_enable(chip);
+		dev_err(chip->dev, "set Vmax failed, toggle HAPTICS_EN to restore HW status\n");
+		rc = -EBUSY;
+	}
+
+	return rc;
+}
+
 static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 {
 	int rc = 0;
 	u8 val, vmax_step;
 
+	mutex_lock(&chip->vmax_lock);
 	if (vmax_mv > chip->max_vmax_mv) {
 		dev_dbg(chip->dev, "vmax (%d) exceed the max value: %d\n",
 					vmax_mv, chip->max_vmax_mv);
@@ -1207,11 +1280,19 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 	val = vmax_mv / vmax_step;
 	rc = haptics_write(chip, chip->cfg_addr_base,
 			HAP_CFG_VMAX_REG, &val, 1);
-	if (rc < 0)
+	if (rc < 0) {
 		dev_err(chip->dev, "config VMAX failed, rc=%d\n", rc);
-	else
-		dev_dbg(chip->dev, "Set Vmax to %u mV\n", vmax_mv);
+		mutex_unlock(&chip->vmax_lock);
+		return rc;
+	}
 
+	dev_dbg(chip->dev, "Set Vmax to %u mV\n", vmax_mv);
+
+	rc = haptics_check_hpwr_status(chip);
+	if (rc < 0)
+		dev_err(chip->dev, "check hpwr_status failed, rc=%d\n", rc);
+
+	mutex_unlock(&chip->vmax_lock);
 	return rc;
 }
 
@@ -1547,40 +1628,6 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 	return 0;
 }
 
-static int haptics_module_enable(struct haptics_chip *chip, bool enable)
-{
-	u8 val;
-	int rc;
-
-	val = enable ? HAPTICS_EN_BIT : 0;
-	rc = haptics_write(chip, chip->cfg_addr_base,
-		HAP_CFG_EN_CTL_REG, &val, 1);
-	if (rc < 0)
-		return rc;
-
-	dev_dbg(chip->dev, "haptics module %s\n",
-		enable ? "enabled" : "disabled");
-	return 0;
-}
-
-static int haptics_toggle_module_enable(struct haptics_chip *chip)
-{
-	int rc;
-
-	/*
-	 * Updating HAPTICS_EN would vote hBoost enable status. Add 100us
-	 * delay before updating HAPTICS_EN for hBoost to have enough time
-	 * to handle its power transition.
-	 */
-	usleep_range(100, 101);
-	rc = haptics_module_enable(chip, false);
-	if (rc < 0)
-		return rc;
-
-	usleep_range(100, 101);
-	return haptics_module_enable(chip, true);
-}
-
 static int haptics_clear_fault(struct haptics_chip *chip)
 {
 	u8 val;
@@ -1640,6 +1687,9 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 					HRTIMER_MODE_REL);
 		}
 	}
+
+	if ((chip->wa_flags & TOGGLE_MODULE_EN) && !en)
+		rc = haptics_toggle_module_enable(chip);
 
 	trace_qcom_haptics_play(en);
 	return rc;
@@ -2679,6 +2729,7 @@ static void haptics_set_gain(struct input_dev *dev, u16 gain)
 	if (gain == 0)
 		return;
 
+	mutex_lock(&play->lock);
 	if (gain > 0x7fff)
 		gain = 0x7fff;
 
@@ -2692,6 +2743,7 @@ static void haptics_set_gain(struct input_dev *dev, u16 gain)
 
 		dev_dbg(chip->dev, "Set amplitude: %#x\n", amplitude);
 		haptics_set_direct_play(chip, (u8)amplitude);
+		mutex_unlock(&play->lock);
 		return;
 	}
 
@@ -2705,6 +2757,7 @@ static void haptics_set_gain(struct input_dev *dev, u16 gain)
 
 	play->vmax_mv = ((u32)(gain * vmax_mv)) / 0x7fff;
 	haptics_set_vmax_mv(chip, play->vmax_mv);
+	mutex_unlock(&play->lock);
 }
 
 static int haptics_store_cl_brake_settings(struct haptics_chip *chip)
@@ -3094,6 +3147,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 			TOGGLE_EN_TO_FLUSH_FIFO | RECOVER_SWR_SLAVE;
 		break;
 	case HAP520_MV:
+		if (!chip->cfg_rev1)
+			chip->wa_flags |= TOGGLE_MODULE_EN;
 		break;
 	case HAP525_HV:
 		if (chip->hbst_revision == HAP_BOOST_V0P1)
@@ -4363,11 +4418,12 @@ static int haptics_get_revision(struct haptics_chip *chip)
 	u8 val[2];
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
-			HAP_CFG_REVISION2_REG, val, 1);
+			HAP_CFG_REVISION1_REG, val, 2);
 	if (rc < 0)
 		return rc;
 
-	chip->cfg_revision = val[0];
+	chip->cfg_rev1 = val[0];
+	chip->cfg_revision = val[1];
 	rc = haptics_read(chip, chip->ptn_addr_base,
 			HAP_PTN_REVISION2_REG, val, 1);
 	if (rc < 0)
@@ -5441,6 +5497,8 @@ static int haptics_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	mutex_init(&chip->vmax_lock);
+
 	rc = haptics_hw_init(chip);
 	if (rc < 0) {
 		dev_err(chip->dev, "Initialize HW failed, rc = %d\n", rc);
@@ -5644,7 +5702,7 @@ static int haptics_suspend(struct device *dev)
 		return rc;
 
 #ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM)
+	if (pm_suspend_via_firmware())
 		haptics_ds_suspend_config(dev);
 #endif
 
@@ -5656,7 +5714,7 @@ static int haptics_resume(struct device *dev)
 	struct haptics_chip *chip = dev_get_drvdata(dev);
 
 #ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
+	if (pm_suspend_via_firmware()) {
 		int rc = 0;
 
 		rc = haptics_ds_resume_config(dev);

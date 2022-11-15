@@ -118,7 +118,7 @@ config POWER_RESET_LINKSTATION
 	  Say Y here if you have a Buffalo LinkStation LS421D/E.
 
 config POWER_RESET_MSM
-	bool "Qualcomm MSM power-off driver"
+	tristate "Qualcomm MSM power-off driver"
 	depends on ARCH_QCOM
 	help
 	  Power off and restart support for Qualcomm boards.
@@ -324,5 +324,14 @@ config NVMEM_REBOOT_MODE
 	  get reboot mode arguments and store it in a NVMEM cell,
 	  then the bootloader can read it and take different
 	  action according to the mode.
+
+config POWER_RESET_QCOM_VM
+	tristate "Qualcomm Technologies, Inc. MSM VM power-off driver"
+	depends on OF
+	help
+	 Power off and restart support for Qualcomm Technologies, Inc. virtual
+	 machine. This driver supports virtual machine power down and restart.
+	 Say Y here if you have a MSM virtual machine and wish to enable
+	 restart driver.
 
 endif

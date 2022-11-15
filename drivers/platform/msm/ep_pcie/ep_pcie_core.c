@@ -87,6 +87,12 @@ static struct ep_pcie_clk_info_t
 	{NULL, "pcie_pipe_clk_mux", 0, false},
 	{NULL, "pcie_pipe_clk_ext_src", 0, false},
 	{NULL, "pcie_0_ref_clk_src", 0, false},
+	{NULL, "snoc_pcie_sf_south_qx_clk", 0, false},
+	{NULL, "snoc_pcie_sf_center_qx_clk", 0, false},
+	{NULL, "snoc_cnoc_pcie_qx_clk", 0, false},
+	{NULL, "snoc_cnoc_gemnoc_pcie_south_qx_clk", 0, false},
+	{NULL, "snoc_cnoc_gemnoc_pcie_qx_clk", 0, false},
+	{NULL, "gemnoc_pcie_qx_clk", 0, false},
 };
 
 static struct ep_pcie_clk_info_t
@@ -608,6 +614,9 @@ static void ep_pcie_pipe_clk_deinit(struct ep_pcie_dev_t *dev)
 
 	EP_PCIE_DBG(dev, "PCIe V%d\n", dev->rev);
 
+	if (dev->rumi)
+		return;
+
 	for (i = 0; i < EP_PCIE_MAX_PIPE_CLK; i++)
 		if (dev->pipeclk[i].hdl)
 			clk_disable_unprepare(
@@ -718,6 +727,20 @@ static void ep_pcie_config_mmio(struct ep_pcie_dev_t *dev)
 	ep_pcie_write_reg(dev->mmio, PCIE20_BHI_VERSION_UPPER, 0x1);
 
 	dev->config_mmio_init = true;
+}
+
+static int ep_pcie_sriov_init(struct ep_pcie_dev_t *dev)
+{
+	void __iomem *dbi = ep_pcie_dev.dm_core;
+	u32 reg;
+
+	ep_pcie_dev.sriov_cap = ep_pcie_find_ext_capability(dev, PCI_EXT_CAP_ID_SRIOV);
+	if (ep_pcie_dev.sriov_cap) {
+		reg = readl_relaxed
+			(dbi + ep_pcie_dev.sriov_cap + PCIE20_TOTAL_VFS_INITIAL_VFS_REG);
+		ep_pcie_dev.num_vfs = (reg & 0xFFFF0000) >> 16;
+	}
+	return 0;
 }
 
 static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
@@ -1033,6 +1056,8 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 								BIT(0), 0);
 	}
 
+	ep_pcie_sriov_init(dev);
+
 	if (!configured) {
 		ep_pcie_config_mmio(dev);
 		ep_pcie_config_inbound_iatu(dev, PCIE_PHYSICAL_DEVICE);
@@ -1054,7 +1079,6 @@ static void ep_pcie_config_inbound_iatu(struct ep_pcie_dev_t *dev, u32 vf_id)
 {
 	struct resource *mmio = dev->res[EP_PCIE_RES_MMIO].resource;
 	u32 lower, limit, bar, size, vf_num;
-	int pos;
 
 	lower = mmio->start;
 	limit = mmio->end;
@@ -1078,8 +1102,7 @@ static void ep_pcie_config_inbound_iatu(struct ep_pcie_dev_t *dev, u32 vf_id)
 		lower = (lower + (vf_id * size));
 		limit = lower + size;
 		vf_num = vf_id - 1;
-		pos = ep_pcie_find_capability(dev, PCI_EXT_CAP_ID_SRIOV);
-		bar = readl_relaxed(dev->dm_core + pos + PCIE20_SRIOV_BAR(0));
+		bar = readl_relaxed(dev->dm_core + ep_pcie_dev.sriov_cap + PCIE20_SRIOV_BAR(0));
 		ep_pcie_write_reg(dev->parf, PCIE20_PARF_MHI_BASE_ADDR_VFn_LOWER(vf_num), lower);
 		ep_pcie_write_reg(dev->parf, PCIE20_PARF_MHI_BASE_ADDR_VFn_UPPER(vf_num), 0);
 
@@ -3575,6 +3598,32 @@ static struct notifier_block ep_pcie_core_panic_notifier = {
 	.notifier_call	= ep_pcie_core_panic_reboot_callback,
 };
 
+static int ep_pcie_core_get_cap(struct ep_pcie_cap *ep_cap)
+{
+	u32 ctrl_reg;
+	void __iomem *dbi = ep_pcie_dev.dm_core;
+
+	if (ep_pcie_dev.link_status == EP_PCIE_LINK_DISABLED) {
+		EP_PCIE_ERR(&ep_pcie_dev,
+			"PCIe V%d: PCIe link is currently disabled\n",
+			ep_pcie_dev.rev);
+		return EP_PCIE_ERROR;
+	}
+
+	if (ep_pcie_dev.msix_cap) {
+		ctrl_reg = readl_relaxed(dbi + ep_pcie_dev.msix_cap);
+		if (ctrl_reg & BIT(31))
+			ep_cap->msix_enabled = true;
+	}
+
+	if (ep_pcie_dev.sriov_cap) {
+		ep_cap->sriov_enabled = true;
+		ep_cap->num_vfs = ep_pcie_dev.num_vfs;
+	}
+
+	return 0;
+}
+
 struct ep_pcie_hw hw_drv = {
 	.register_event	= ep_pcie_core_register_event,
 	.deregister_event = ep_pcie_core_deregister_event,
@@ -3588,6 +3637,7 @@ struct ep_pcie_hw hw_drv = {
 	.disable_endpoint = ep_pcie_core_disable_endpoint,
 	.mask_irq_event = ep_pcie_core_mask_irq_event,
 	.configure_inactivity_timer = ep_pcie_core_config_inact_timer,
+	.get_capability = ep_pcie_core_get_cap,
 };
 
 static int ep_pcie_probe(struct platform_device *pdev)

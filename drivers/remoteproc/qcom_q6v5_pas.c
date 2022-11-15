@@ -31,6 +31,7 @@
 #include <linux/soc/qcom/qcom_aoss.h>
 #include <soc/qcom/secure_buffer.h>
 #include <trace/events/rproc_qcom.h>
+#include <soc/qcom/qcom_ramdump.h>
 
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
@@ -73,6 +74,7 @@ struct adsp_data {
 
 struct qcom_adsp {
 	struct device *dev;
+	struct device *minidump_dev;
 	struct rproc *rproc;
 
 	struct qcom_q6v5 q6v5;
@@ -162,7 +164,7 @@ static void adsp_minidump(struct rproc *rproc)
 	if (rproc->dump_conf == RPROC_COREDUMP_DISABLED)
 		goto exit;
 
-	qcom_minidump(rproc, adsp->minidump_id, adsp_segment_dump);
+	qcom_minidump(rproc, adsp->minidump_dev, adsp->minidump_id, adsp_segment_dump);
 
 exit:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_minidump", "exit");
@@ -973,6 +975,7 @@ static int adsp_probe(struct platform_device *pdev)
 	struct rproc *rproc;
 	const char *fw_name;
 	const struct rproc_ops *ops = &adsp_ops;
+	char md_dev_name[32];
 	int ret;
 	bool signal_aop;
 
@@ -1100,16 +1103,26 @@ static int adsp_probe(struct platform_device *pdev)
 		goto detach_proxy_pds;
 	}
 
+	qcom_sysmon_register_ssr_subdev(adsp->sysmon, &adsp->ssr_subdev.subdev);
 	ret = device_create_file(adsp->dev, &dev_attr_txn_id);
 	if (ret)
 		goto remove_subdevs;
 
+	snprintf(md_dev_name, ARRAY_SIZE(md_dev_name), "%s-md", pdev->dev.of_node->name);
+	adsp->minidump_dev = qcom_create_ramdump_device(md_dev_name, NULL);
+	if (!adsp->minidump_dev)
+		dev_err(&pdev->dev, "Unable to create %s minidump device.\n", md_dev_name);
+
 	ret = rproc_add(rproc);
 	if (ret)
-		goto remove_attr_txn_id;
+		goto destroy_minidump_dev;
 
 	return 0;
-remove_attr_txn_id:
+
+destroy_minidump_dev:
+	if (adsp->minidump_dev)
+		qcom_destroy_ramdump_device(adsp->minidump_dev);
+
 	device_remove_file(adsp->dev, &dev_attr_txn_id);
 remove_subdevs:
 	qcom_remove_sysmon_subdev(adsp->sysmon);
@@ -1130,6 +1143,8 @@ static int adsp_remove(struct platform_device *pdev)
 	struct qcom_adsp *adsp = platform_get_drvdata(pdev);
 
 	rproc_del(adsp->rproc);
+	if (adsp->minidump_dev)
+		qcom_destroy_ramdump_device(adsp->minidump_dev);
 	device_remove_file(adsp->dev, &dev_attr_txn_id);
 	qcom_remove_glink_subdev(adsp->rproc, &adsp->glink_subdev);
 	qcom_remove_sysmon_subdev(adsp->sysmon);
@@ -1421,7 +1436,9 @@ static const struct adsp_data kalama_mpss_resource = {
 static const struct adsp_data cinder_mpss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
 	.pas_id = 4,
+	.dtb_pas_id = 0x26,
 	.free_after_auth_reset = true,
 	.minidump_id = 3,
 	.uses_elf64 = true,
@@ -1431,6 +1448,7 @@ static const struct adsp_data cinder_mpss_resource = {
 	.sysmon_name = "modem",
 	.qmp_name = "modem",
 	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
 };
 
 static const struct adsp_data khaje_mpss_resource = {
@@ -1614,18 +1632,42 @@ static const struct adsp_data sdmshrike_cdsp_resource = {
 
 static const struct adsp_data scuba_auto_mpss_resource = {
 	.crash_reason_smem = 421,
+        .firmware_name = "modem.mdt",
+        .pas_id = 4,
+        .free_after_auth_reset = true,
+        .minidump_id = 3,
+        .uses_elf64 = true,
+        .has_aggre2_clk = false,
+        .auto_boot = false,
+        .ssr_name = "mpss",
+        .sysmon_name = "modem",
+        .qmp_name = "modem",
+        .ssctl_id = 0x12,
+};
+
+static const struct adsp_data monaco_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.uses_elf64 = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data monaco_modem_resource = {
+	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
 	.pas_id = 4,
 	.free_after_auth_reset = true,
 	.minidump_id = 3,
 	.uses_elf64 = true,
-	.has_aggre2_clk = false,
-	.auto_boot = false,
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
-	.qmp_name = "modem",
 	.ssctl_id = 0x12,
 };
+
 static const struct adsp_data scuba_auto_lpass_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -1640,6 +1682,7 @@ static const struct adsp_data scuba_auto_lpass_resource = {
 	.qmp_name = "adsp",
 	.ssctl_id = 0x14,
 };
+
 
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8974-adsp-pil", .data = &adsp_resource_init},
@@ -1684,6 +1727,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sdmshrike-cdsp-pas", .data = &sdmshrike_cdsp_resource},
 	{ .compatible = "qcom,scuba_auto-modem-pas", .data = &scuba_auto_mpss_resource},
 	{ .compatible = "qcom,scuba_auto-lpass-pas", .data = &scuba_auto_lpass_resource},
+	{ .compatible = "qcom,monaco-adsp-pas", .data = &monaco_adsp_resource},
+	{ .compatible = "qcom,monaco-modem-pas", .data = &monaco_modem_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

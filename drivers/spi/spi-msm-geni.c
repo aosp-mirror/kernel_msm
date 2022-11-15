@@ -20,6 +20,7 @@
 #include <linux/msm_gpi.h>
 #include <linux/spi/spi.h>
 #include <linux/pinctrl/consumer.h>
+#include <soc/qcom/boot_stats.h>
 
 #define SPI_NUM_CHIPSELECT	(4)
 #define SPI_XFER_TIMEOUT_MS	(250)
@@ -222,6 +223,7 @@ struct spi_geni_master {
 	bool slave_state;
 	bool use_fixed_timeout;
 	bool slave_cross_connected;
+	bool master_cross_connect;
 };
 
 /**
@@ -300,6 +302,7 @@ void geni_spi_se_dump_dbg_regs(struct geni_se *se, void __iomem *base,
 }
 
 static void spi_slv_setup(struct spi_geni_master *mas);
+static void spi_master_setup(struct spi_geni_master *mas);
 
 static ssize_t spi_slave_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -326,6 +329,17 @@ static ssize_t spi_slave_state_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(spi_slave_state);
+
+static void spi_master_setup(struct spi_geni_master *mas)
+{
+	geni_write_reg(OTHER_IO_OE | IO2_DATA_IN_SEL | RX_DATA_IN_SEL |
+		IO_MACRO_IO3_SEL | IO_MACRO_IO2_SEL | IO_MACRO_IO0_SEL_BIT,
+					mas->base, GENI_CFG_REG80);
+	geni_write_reg(START_TRIGGER, mas->base, SE_GENI_CFG_SEQ_START);
+
+	/* ensure data is written to hardware register */
+	wmb();
+}
 
 static void spi_slv_setup(struct spi_geni_master *mas)
 {
@@ -1294,6 +1308,9 @@ static int spi_geni_mas_setup(struct spi_master *spi)
 
 		if (spi->slave)
 			spi_slv_setup(mas);
+
+		if (mas->master_cross_connect)
+			spi_master_setup(mas);
 	}
 	geni_se_init(&mas->spi_rsc, 0x0, (mas->tx_fifo_depth - 2));
 	mas->tx_fifo_depth = geni_se_get_tx_fifo_depth(&mas->spi_rsc);
@@ -2041,13 +2058,25 @@ static int spi_geni_probe(struct platform_device *pdev)
 	bool rt_pri, slave_en;
 	struct device *dev = &pdev->dev;
 	struct geni_se *spi_rsc;
+	char boot_marker[40];
 
-	spi = spi_alloc_master(&pdev->dev, sizeof(struct spi_geni_master));
+	slave_en  = of_property_read_bool(pdev->dev.of_node,
+			 "qcom,slv-ctrl");
+
+	spi = __spi_alloc_controller(&pdev->dev, sizeof(struct spi_geni_master), slave_en);
 	if (!spi) {
 		ret = -ENOMEM;
 		dev_err(&pdev->dev, "Failed to alloc spi struct\n");
 		goto spi_geni_probe_err;
 	}
+
+	if (slave_en)
+		spi->slave_abort = spi_slv_abort;
+
+	snprintf(boot_marker, sizeof(boot_marker),
+			"M - DRIVER GENI_SPI Init");
+	place_marker(boot_marker);
+
 	platform_set_drvdata(pdev, spi);
 	geni_mas = spi_master_get_devdata(spi);
 	geni_mas->dev = dev;
@@ -2163,6 +2192,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 			goto spi_geni_probe_err;
 		}
 
+		irq_set_status_flags(geni_mas->irq, IRQ_NOAUTOEN);
 		ret = devm_request_irq(&pdev->dev, geni_mas->irq,
 			geni_spi_irq, IRQF_TRIGGER_HIGH, "spi_geni", geni_mas);
 		if (ret) {
@@ -2245,12 +2275,8 @@ static int spi_geni_probe(struct platform_device *pdev)
 	geni_mas->disable_dma = of_property_read_bool(pdev->dev.of_node,
 		"qcom,disable-dma");
 
-	slave_en  = of_property_read_bool(pdev->dev.of_node,
-			 "qcom,slv-ctrl");
-	if (slave_en) {
-		spi->slave = true;
-		spi->slave_abort = spi_slv_abort;
-	}
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,master-cross-connect"))
+		geni_mas->master_cross_connect = true;
 
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
@@ -2306,6 +2332,10 @@ static int spi_geni_probe(struct platform_device *pdev)
 			&dev_attr_spi_slave_state.attr);
 
 	dev_info(&pdev->dev, "%s: completed %d\n", __func__, ret);
+	snprintf(boot_marker, sizeof(boot_marker),
+			"M - DRIVER GENI_SPI_%d Ready", spi->bus_num);
+	place_marker(boot_marker);
+
 	return ret;
 spi_geni_probe_err:
 	dev_info(&pdev->dev, "%s: ret:%d\n", __func__, ret);

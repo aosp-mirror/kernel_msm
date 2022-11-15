@@ -492,6 +492,7 @@ struct ufs_qcom_host {
 	void __iomem *ice_hwkm_mmio;
 #endif
 
+	bool reset_in_progress;
 	u32 dev_ref_clk_en_mask;
 
 	/* Bitmask for enabling debug prints */
@@ -548,11 +549,13 @@ struct ufs_qcom_host {
 	struct device_node *np;
 	int chosen_algo;
 	struct ufs_clk_info *ref_clki;
+	struct ufs_clk_info *core_unipro_clki;
 	atomic_t hi_pri_en;
 	atomic_t therm_mitigation;
 	cpumask_t perf_mask;
 	cpumask_t def_mask;
 	u32 vccq_lpm_uV;
+	bool disable_wb_support;
 };
 
 static inline u32
