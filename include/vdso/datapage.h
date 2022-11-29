@@ -10,7 +10,6 @@
 #include <uapi/linux/types.h>
 #include <uapi/asm-generic/errno-base.h>
 
-#include <vdso/bits.h>
 #include <vdso/clocksource.h>
 #include <vdso/ktime.h>
 #include <vdso/limits.h>
@@ -20,14 +19,16 @@
 #include <vdso/time32.h>
 #include <vdso/time64.h>
 
+#define BIT_VDSO(nr)	(1UL << (nr))
+
 #define VDSO_BASES	(CLOCK_TAI + 1)
-#define VDSO_HRES	(BIT(CLOCK_REALTIME)		| \
-			 BIT(CLOCK_MONOTONIC)		| \
-			 BIT(CLOCK_BOOTTIME)		| \
-			 BIT(CLOCK_TAI))
-#define VDSO_COARSE	(BIT(CLOCK_REALTIME_COARSE)	| \
-			 BIT(CLOCK_MONOTONIC_COARSE))
-#define VDSO_RAW	(BIT(CLOCK_MONOTONIC_RAW))
+#define VDSO_HRES	(BIT_VDSO(CLOCK_REALTIME)		| \
+			 BIT_VDSO(CLOCK_MONOTONIC)		| \
+			 BIT_VDSO(CLOCK_BOOTTIME)		| \
+			 BIT_VDSO(CLOCK_TAI))
+#define VDSO_COARSE	(BIT_VDSO(CLOCK_REALTIME_COARSE)	| \
+			 BIT_VDSO(CLOCK_MONOTONIC_COARSE))
+#define VDSO_RAW	(BIT_VDSO(CLOCK_MONOTONIC_RAW))
 
 #define CS_HRES_COARSE	0
 #define CS_RAW		1
