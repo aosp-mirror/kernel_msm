@@ -104,7 +104,8 @@
 #define THERM_PD_VOLTAGE_MAX 4350
 
 #define usb_pd_is_high_volt(ad) \
-	((ad)->ad_type == CHG_EV_ADAPTER_TYPE_USB_PD && \
+	(((ad)->ad_type == CHG_EV_ADAPTER_TYPE_USB_PD || \
+	(ad)->ad_type == CHG_EV_ADAPTER_TYPE_USB_PD_PPS) && \
 	(ad)->ad_voltage * 100 > PD_SNK_MIN_MV)
 
 enum tcpm_psy_online_states {
