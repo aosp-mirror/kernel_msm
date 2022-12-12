@@ -2103,6 +2103,7 @@
 # required by qcom_glink_native.ko
   __irq_set_affinity
   sched_setaffinity
+  strscpy_pad
 
 # required by qcom_hwspinlock.ko
   devm_regmap_field_alloc
