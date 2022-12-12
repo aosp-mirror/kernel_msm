@@ -22,6 +22,14 @@
 
 static int table_temperatures[] = { -20, -10, 0, 10, 25, 40, 50 };
 
+static bool qbg_node_name_prefix(const struct device_node *np, const char *prefix)
+{
+	if (!np)
+		return false;
+
+	return strncmp(kbasename(np->full_name), prefix, strlen(prefix)) == 0;
+}
+
 static int qbg_battery_data_open(struct inode *inode, struct file *file)
 {
 	struct qbg_battery_data *battery = container_of(inode->i_cdev,
@@ -384,9 +392,9 @@ static int qbg_parse_battery_profile(struct qbg_battery_data *battery)
 	}
 
 	for_each_available_child_of_node(battery->profile_node, child) {
-		if (of_node_name_prefix(child, "qcom,bp-c-table"))
+		if (qbg_node_name_prefix(child, "qcom,bp-c-table"))
 			battery->num_ctables++;
-		else if (of_node_name_prefix(child, "qcom,bp-d-table"))
+		else if (qbg_node_name_prefix(child, "qcom,bp-d-table"))
 			battery->num_dtables++;
 	}
 
