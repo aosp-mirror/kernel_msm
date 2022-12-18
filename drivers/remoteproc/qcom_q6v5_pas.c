@@ -581,11 +581,7 @@ static int adsp_attach(struct rproc *rproc)
 		goto begin_attach;
 	}
 
-	ret = qcom_register_dump_segments(rproc, fw);
-	if (ret) {
-		dev_err(adsp->dev, "Failed to register dump segments\n");
-		dev_err(adsp->dev, "Dumps will not be available\n");
-	}
+	adsp_add_coredump_segments(adsp, fw);
 	release_firmware(fw);
 
 begin_attach:
@@ -707,7 +703,6 @@ static const struct rproc_ops adsp_minidump_ops = {
 	.start = adsp_start,
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
-	.parse_fw = qcom_register_dump_segments,
 	.load = adsp_load,
 	.panic = adsp_panic,
 	.coredump = adsp_minidump,
@@ -1094,7 +1089,6 @@ static int adsp_probe(struct platform_device *pdev)
 	timeout_disabled = qcom_pil_timeouts_disabled();
 	qcom_add_glink_subdev(rproc, &adsp->glink_subdev, desc->ssr_name);
 	qcom_add_smd_subdev(rproc, &adsp->smd_subdev);
-	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
 	adsp->sysmon = qcom_add_sysmon_subdev(rproc,
 					      desc->sysmon_name,
 					      desc->ssctl_id);
@@ -1103,7 +1097,7 @@ static int adsp_probe(struct platform_device *pdev)
 		goto detach_proxy_pds;
 	}
 
-	qcom_sysmon_register_ssr_subdev(adsp->sysmon, &adsp->ssr_subdev.subdev);
+	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
 	ret = device_create_file(adsp->dev, &dev_attr_txn_id);
 	if (ret)
 		goto remove_subdevs;
@@ -1683,6 +1677,70 @@ static const struct adsp_data scuba_auto_lpass_resource = {
 	.ssctl_id = 0x14,
 };
 
+static const struct adsp_data lemans_adsp_resource = {
+	.crash_reason_smem = 2,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.qmp_name = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data lemans_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.qmp_name = "cdsp",
+	.ssctl_id = 0x17,
+};
+
+static const struct adsp_data lemans_cdsp1_resource = {
+	.crash_reason_smem = 633,
+	.firmware_name = "cdsp1.mdt",
+	.pas_id = 30,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "cdsp1",
+	.sysmon_name = "cdsp1",
+	.qmp_name = "cdsp1",
+	.ssctl_id = 0x20,
+};
+
+static const struct adsp_data lemans_gpdsp0_resource = {
+	.crash_reason_smem = 640,
+	.firmware_name = "gpdsp0.mdt",
+	.pas_id = 39,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "gpdsp0",
+	.sysmon_name = "gpdsp0",
+	.qmp_name = "gpdsp0",
+	.ssctl_id = 0x21,
+};
+
+static const struct adsp_data lemans_gpdsp1_resource = {
+	.crash_reason_smem = 641,
+	.firmware_name = "gpdsp1.mdt",
+	.pas_id = 40,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "gpdsp1",
+	.sysmon_name = "gpdsp1",
+	.qmp_name = "gpdsp1",
+	.ssctl_id = 0x22,
+};
 
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8974-adsp-pil", .data = &adsp_resource_init},
@@ -1729,6 +1787,11 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,scuba_auto-lpass-pas", .data = &scuba_auto_lpass_resource},
 	{ .compatible = "qcom,monaco-adsp-pas", .data = &monaco_adsp_resource},
 	{ .compatible = "qcom,monaco-modem-pas", .data = &monaco_modem_resource},
+	{ .compatible = "qcom,lemans-adsp-pas", .data = &lemans_adsp_resource},
+	{ .compatible = "qcom,lemans-cdsp-pas", .data = &lemans_cdsp_resource},
+	{ .compatible = "qcom,lemans-cdsp1-pas", .data = &lemans_cdsp1_resource},
+	{ .compatible = "qcom,lemans-gpdsp0-pas", .data = &lemans_gpdsp0_resource},
+	{ .compatible = "qcom,lemans-gpdsp1-pas", .data = &lemans_gpdsp1_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

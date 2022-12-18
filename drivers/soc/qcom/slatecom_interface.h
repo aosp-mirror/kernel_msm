@@ -39,8 +39,13 @@ void set_slate_dsp_state(bool status);
  * Set slate bt state
  */
 void set_slate_bt_state(bool status);
-void slatecom_intf_notify_glink_channel_state(bool state);
-void slatecom_rx_msg(void *data, int len);
+
+struct subsys_state_ops {
+	void (*set_dsp_state)(bool status);
+	void (*set_bt_state)(bool status);
+};
+
+struct subsys_state_ops state_ops;
 
 /*
  * Message header type - generic header structure
@@ -151,6 +156,12 @@ static inline int send_wlan_state(enum WMSlateCtrlChnlOpcode type)
 {
 	return 0;
 }
+#endif
+
+#ifdef CONFIG_COMPAT
+long compat_slate_com_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+#else
+#define compat_slate_com_ioctl NULL
 #endif
 
 #endif /* SLATECOM_INTERFACE_H */
