@@ -1,4 +1,4 @@
-/* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2016-2019, 2022 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -682,7 +682,7 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 	if (rc) {
 		CAM_ERR(CAM_MEM,
 			"Ion Alloc failed, len=%llu, align=%llu, flags=0x%x, num_hdl=%d",
-			cmd->len, cmd->align, cmd->flags, cmd->num_hdl);
+			len, cmd->align, cmd->flags, cmd->num_hdl);
 		return rc;
 	}
 
@@ -745,7 +745,7 @@ int cam_mem_mgr_alloc_and_map(struct cam_mem_mgr_alloc_cmd *cmd)
 	tbl.bufq[idx].kmdvaddr = kvaddr;
 	tbl.bufq[idx].vaddr = hw_vaddr;
 	tbl.bufq[idx].dma_buf = dmabuf;
-	tbl.bufq[idx].len = cmd->len;
+	tbl.bufq[idx].len = len;
 	tbl.bufq[idx].num_hdl = cmd->num_hdl;
 	memcpy(tbl.bufq[idx].hdls, cmd->mmu_hdls,
 		sizeof(int32_t) * cmd->num_hdl);
