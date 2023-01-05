@@ -11,3 +11,21 @@ qcom-smb1355-charger-y += smb1355-charger.o pmic-voter.o
 obj-$(CONFIG_SMB23X_CHARGER)   += smb23x-charger.o
 obj-$(CONFIG_QTI_QBG)   += qti-qbg-main.o
 qti-qbg-main-y  += qti-qbg.o qbg-sdam.o qbg-battery-profile.o battery-profile-loader.o
+
+# This gives the drivers access to the logbuffer.h and gvotable.h header
+subdir-ccflags-y += -I$(KERNEL_SRC)/../google-modules/bms
+
+EXTRA_SYMBOLS += $(OUT_DIR)/../google-modules/bms/misc/Module.symvers
+
+KBUILD_OPTIONS += CONFIG_QPNP_SMBLITE=m
+KBUILD_OPTIONS += CONFIG_QTI_QBG=m
+
+modules modules_install clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
+	$(KBUILD_OPTIONS) EXTRA_CFLAGS="$(EXTRA_CFLAGS)" KBUILD_EXTRA_SYMBOLS="$(EXTRA_SYMBOLS)" $(@)
+
+print-%:
+	@echo $* = $($*)
+
+value-%:
+	@echo $($*)

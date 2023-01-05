@@ -113,7 +113,7 @@ int rerun_election(struct votable *votable)
 EXPORT_SYMBOL_GPL(rerun_election);
 
 const char * get_effective_client(struct votable *v) {
-	char client_str[GVOTABLE_MAX_REASON_LEN] = { 0 };
+	static char client_str[GVOTABLE_MAX_REASON_LEN] = { 0 };
 	gvotable_get_current_reason(V2EL(v), client_str, sizeof(client_str));
 	return client_str;
 
