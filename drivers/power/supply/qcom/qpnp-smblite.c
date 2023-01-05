@@ -299,7 +299,7 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 	chip->dt.auto_recharge_soc = -EINVAL;
 	rc = of_property_read_u32(node, "qcom,auto-recharge-soc",
 				&chip->dt.auto_recharge_soc);
-	if ((rc < 0) || (chip->dt.auto_recharge_soc < 0 ||
+	if ((rc >= 0) && (chip->dt.auto_recharge_soc < 0 ||
 			chip->dt.auto_recharge_soc > 100)) {
 		pr_err("qcom,auto-recharge-soc is incorrect\n");
 		return -EINVAL;
