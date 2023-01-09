@@ -616,8 +616,13 @@
   drm_bridge_chain_enable
   drm_bridge_chain_post_disable
   drm_bridge_chain_pre_enable
+  drm_client_buffer_vmap
+  drm_client_framebuffer_create
+  drm_client_framebuffer_delete
   drm_client_init
+  drm_client_modeset_commit
   drm_client_modeset_commit_locked
+  drm_client_modeset_probe
   drm_client_register
   drm_connector_list_update
   drm_crtc_vblank_reset
@@ -656,6 +661,7 @@
   drm_mode_convert_umode
   drm_mode_create_dp_colorspace_property
   drm_mode_create_tile_group
+  drm_mode_destroy
   drm_mode_is_420_only
   drm_mode_match
   drm_mode_prune_invalid
@@ -804,6 +810,9 @@
   get_unused_fd_flags
   get_user_ifreq
   get_zeroed_page
+  gic_cpu_init
+  gic_dist_init
+  gic_dist_wait_for_rwp
   gic_nonsecure_priorities
   gic_resume
   gic_v2_resume
@@ -2205,6 +2214,7 @@
   __traceiter_android_vh_ftrace_oops_exit
   __traceiter_android_vh_ftrace_size_check
   __traceiter_android_vh_gic_resume
+  __traceiter_android_vh_gic_suspend
   __traceiter_android_vh_gic_v2_resume
   __traceiter_android_vh_handle_tlb_conf
   __traceiter_android_vh_init_aes_encrypt
@@ -2323,6 +2333,7 @@
   __tracepoint_android_vh_ftrace_oops_exit
   __tracepoint_android_vh_ftrace_size_check
   __tracepoint_android_vh_gic_resume
+  __tracepoint_android_vh_gic_suspend
   __tracepoint_android_vh_gic_v2_resume
   __tracepoint_android_vh_handle_tlb_conf
   __tracepoint_android_vh_init_aes_encrypt
