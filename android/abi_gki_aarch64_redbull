@@ -493,7 +493,6 @@
   media_device_unregister
   media_entity_pads_init
   memchr
-  memchr_inv
   memcmp
   memcpy
   __memcpy_fromio
@@ -1439,6 +1438,7 @@
   match_int
   match_strdup
   match_token
+  memchr_inv
   noop_llseek
   notify_change
   override_creds
@@ -1581,6 +1581,7 @@
 
 # required by msm_adreno.ko
   bpf_trace_run10
+  check_zeroed_user
   __clk_get_name
   devfreq_cooling_unregister
   device_show_int
