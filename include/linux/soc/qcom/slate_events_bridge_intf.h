@@ -21,7 +21,7 @@ enum event_group_type {
 	GMI_SLATE_EVENT_MAX      = 0xff,
 };
 
-//#ifdef CONFIG_MSM_SEB
+#if IS_ENABLED(CONFIG_MSM_SEB)
 /* Use the seb_register_for_slate_event API to register for events for
  * a particular group type.
  * This API will return a handle that can be used to un-reg for events
@@ -39,7 +39,7 @@ int seb_unregister_for_slate_event(void *seb_handle,
  */
 int seb_send_event_to_slate(void *seb_handle, enum event_group_type event,
 					void *event_buf, uint32_t buf_size);
-/*#else
+#else
 static void *seb_register_for_slate_event(enum event_group_type event,
 						struct notifier_block *nb)
 {
@@ -57,6 +57,6 @@ static int seb_send_event_to_slate(void *seb_handle, enum event_group_type event
 {
 	return -ENODEV;
 }
-#endif*/
+#endif
 
 #endif /* SLATE_EVENTS_BRIDGE_INTF_H */
