@@ -24,9 +24,11 @@
 #include <linux/pm_domain.h>
 #include <linux/rbtree.h>
 #include <linux/rpmsg.h>
+#include <linux/suspend.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/syscore_ops.h>
 #include <linux/types.h>
 #include <soc/qcom/rpm-notifier.h>
 #include <soc/qcom/rpm-smd.h>
@@ -1531,6 +1533,27 @@ static int rpm_smd_power_cb(struct notifier_block *nb, unsigned long action, voi
 	return NOTIFY_OK;
 }
 
+static int qcom_smd_rpm_suspend(void)
+{
+	if (msm_rpm_waiting_for_ack())
+		return -EAGAIN;
+
+	if (msm_rpm_enter_sleep())
+		return -EAGAIN;
+
+	return 0;
+}
+
+static void qcom_smd_rpm_resume(void)
+{
+	msm_rpm_exit_sleep();
+}
+
+static struct syscore_ops rpm_syscore_ops = {
+	.suspend = qcom_smd_rpm_suspend,
+	.resume = qcom_smd_rpm_resume,
+};
+
 static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev, void *ptr,
 				int size, void *priv, u32 addr)
 {
@@ -1649,6 +1672,9 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 skip_init:
 	probe_status = of_platform_populate(p, NULL, NULL, &rpdev->dev);
 
+	if (!probe_status)
+		register_syscore_ops(&rpm_syscore_ops);
+
 	if (standalone)
 		pr_info("RPM running in standalone mode\n");
 fail:
@@ -1672,7 +1698,13 @@ static struct rpmsg_driver qcom_smd_rpm_driver = {
 
 static int rpm_driver_probe(struct platform_device *pdev)
 {
-	return 0;
+	int ret;
+
+	ret = register_rpmsg_driver(&qcom_smd_rpm_driver);
+	if (ret)
+		pr_err("register_rpmsg_driver: failed with err %d\n", ret);
+
+	return ret;
 }
 
 static const struct of_device_id rpm_of_match[] = {
@@ -1691,15 +1723,7 @@ struct platform_driver rpm_driver = {
 
 int __init msm_rpm_driver_init(void)
 {
-	unsigned int ret = 0;
-
-	platform_driver_register(&rpm_driver);
-
-	ret = register_rpmsg_driver(&qcom_smd_rpm_driver);
-	if (ret)
-		pr_err("register_rpmsg_driver: failed with err %d\n", ret);
-
-	return ret;
+	return platform_driver_register(&rpm_driver);
 }
 
 #ifdef MODULE

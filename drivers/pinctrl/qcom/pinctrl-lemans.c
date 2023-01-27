@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -272,10 +272,11 @@ static const struct pinctrl_pin_desc lemans_pins[] = {
 	PINCTRL_PIN(147, "GPIO_147"),
 	PINCTRL_PIN(148, "GPIO_148"),
 	PINCTRL_PIN(149, "UFS_RESET"),
-	PINCTRL_PIN(150, "SDC1_RCLK"),
-	PINCTRL_PIN(151, "SDC1_CLK"),
-	PINCTRL_PIN(152, "SDC1_CMD"),
-	PINCTRL_PIN(153, "SDC1_DATA"),
+	PINCTRL_PIN(150, "UFS1_RESET"),
+	PINCTRL_PIN(151, "SDC1_RCLK"),
+	PINCTRL_PIN(152, "SDC1_CLK"),
+	PINCTRL_PIN(153, "SDC1_CMD"),
+	PINCTRL_PIN(154, "SDC1_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -431,10 +432,11 @@ DECLARE_MSM_GPIO_PINS(147);
 DECLARE_MSM_GPIO_PINS(148);
 
 static const unsigned int ufs_reset_pins[] = { 149 };
-static const unsigned int sdc1_rclk_pins[] = { 150 };
-static const unsigned int sdc1_clk_pins[] = { 151 };
-static const unsigned int sdc1_cmd_pins[] = { 152 };
-static const unsigned int sdc1_data_pins[] = { 153 };
+static const unsigned int ufs1_reset_pins[] = { 150 };
+static const unsigned int sdc1_rclk_pins[] = { 151 };
+static const unsigned int sdc1_clk_pins[] = { 152 };
+static const unsigned int sdc1_cmd_pins[] = { 153 };
+static const unsigned int sdc1_data_pins[] = { 154 };
 
 enum lemans_functions {
 	msm_mux_gpio,
@@ -1683,16 +1685,32 @@ static const struct msm_pingroup lemans_groups[] = {
 	[147] = PINGROUP(147, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[148] = PINGROUP(148, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[149] = UFS_RESET(ufs_reset, 0x1a2000),
-	[150] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x199000, 15, 0),
-	[151] = SDC_QDSD_PINGROUP(sdc1_clk, 0x199000, 13, 6),
-	[152] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x199000, 11, 3),
-	[153] = SDC_QDSD_PINGROUP(sdc1_data, 0x199000, 9, 0),
+	[150] = UFS_RESET(ufs1_reset, 0x1a4000),
+	[151] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x199000, 15, 0),
+	[152] = SDC_QDSD_PINGROUP(sdc1_clk, 0x199000, 13, 6),
+	[153] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x199000, 11, 3),
+	[154] = SDC_QDSD_PINGROUP(sdc1_data, 0x199000, 9, 0),
 };
 static struct pinctrl_qup lemans_qup_regs[] = {
 	QUP_I3C(6, QUP_I3C_6_MODE_OFFSET),
 	QUP_I3C(7, QUP_I3C_7_MODE_OFFSET),
 	QUP_I3C(13, QUP_I3C_13_MODE_OFFSET),
 	QUP_I3C(14, QUP_I3C_14_MODE_OFFSET),
+};
+
+static const struct msm_gpio_wakeirq_map lemans_pdc_map[] = {
+	{ 0, 169 }, { 1, 174 }, { 2, 170 }, { 3, 175 }, { 4, 171 }, { 5, 173 },
+	{ 6, 172 }, { 7, 182 }, { 10, 220 }, { 11, 213 }, { 12, 221 }, { 16, 230 },
+	{ 19, 231 }, { 20, 232 }, { 23, 233 }, { 24, 234 }, { 26, 223 }, { 27, 235 },
+	{ 28, 209 }, { 29, 176 }, { 30, 200 }, { 31, 201 }, { 32, 212 }, { 35, 177 },
+	{ 36, 178 }, { 39, 184 }, { 40, 185 }, { 41, 227 }, { 42, 186 }, { 43, 228 },
+	{ 45, 187 }, { 47, 188 }, { 48, 194 }, { 51, 195 }, { 52, 196 }, { 55, 197 },
+	{ 56, 198 }, { 57, 236 }, { 58, 192 }, { 59, 193 }, { 72, 179 }, { 73, 180 },
+	{ 74, 181 }, { 75, 202 }, { 76, 183 }, { 77, 189 }, { 78, 190 }, { 79, 191 },
+	{ 80, 199 }, { 83, 204 }, { 84, 205 }, { 85, 229 }, { 86, 206 }, { 89, 207 },
+	{ 91, 208 }, { 94, 214 }, { 95, 215 }, { 96, 237 }, { 97, 216 }, { 98, 238 },
+	{ 99, 217 }, { 100, 239 }, { 105, 219 }, { 106, 210 }, { 107, 211 }, { 108, 222 },
+	{ 109, 203 }, { 145, 225 }, { 146, 226 },
 };
 
 static const struct msm_pinctrl_soc_data lemans_pinctrl = {
@@ -1702,9 +1720,11 @@ static const struct msm_pinctrl_soc_data lemans_pinctrl = {
 	.nfunctions = ARRAY_SIZE(lemans_functions),
 	.groups = lemans_groups,
 	.ngroups = ARRAY_SIZE(lemans_groups),
-	.ngpios = 150,
+	.ngpios = 151,
 	.qup_regs = lemans_qup_regs,
 	.nqup_regs = ARRAY_SIZE(lemans_qup_regs),
+	.wakeirq_map = lemans_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(lemans_pdc_map),
 };
 
 static int lemans_pinctrl_probe(struct platform_device *pdev)

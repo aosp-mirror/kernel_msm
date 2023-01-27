@@ -1082,7 +1082,10 @@ static u32 base_sel;
 static u32 wr_offset;
 static u32 wr_mask;
 static u32 wr_value;
+
+#ifdef CONFIG_DEBUG_FS
 static u32 corr_counter_limit = 5;
+#endif
 
 /* CRC8 table for BDF to SID translation */
 static u8 msm_pcie_crc8_table[CRC8_TABLE_SIZE];
@@ -1194,6 +1197,18 @@ msm_pcie_linkdown_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_LINKDOWN_RESET] = {
 	{
 		{NULL, "pcie_1_link_down_reset", false},
 		{NULL, "pcie_1_phy_nocsr_com_phy_reset", false},
+	},
+	{
+		{NULL, "pcie_2_link_down_reset", false},
+		{NULL, "pcie_2_phy_nocsr_com_phy_reset", false},
+	},
+	{
+		{NULL, "pcie_3_link_down_reset", false},
+		{NULL, "pcie_3_phy_nocsr_com_phy_reset", false},
+	},
+	{
+		{NULL, "pcie_4_link_down_reset", false},
+		{NULL, "pcie_4_phy_nocsr_com_phy_reset", false},
 	},
 };
 
@@ -3460,12 +3475,14 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 		return rc;
 	}
 
-	rc = regulator_enable(dev->gdsc_phy);
+	if (dev->gdsc_phy) {
+		rc = regulator_enable(dev->gdsc_phy);
 
-	if (rc) {
-		PCIE_ERR(dev, "PCIe: fail to enable GDSC-PHY for RC%d (%s)\n",
-			dev->rc_idx, dev->pdev->name);
-		return rc;
+		if (rc) {
+			PCIE_ERR(dev, "PCIe: fail to enable GDSC-PHY for RC%d (%s)\n",
+				dev->rc_idx, dev->pdev->name);
+			return rc;
+		}
 	}
 
 	/* switch pipe clock source after gdsc-core is turned on */
@@ -3532,7 +3549,8 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 		if (dev->pipe_clk_mux && dev->ref_clk_src)
 			clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 
-		regulator_disable(dev->gdsc_phy);
+		if (dev->gdsc_phy)
+			regulator_disable(dev->gdsc_phy);
 		regulator_disable(dev->gdsc_core);
 	}
 
@@ -3603,7 +3621,8 @@ static void msm_pcie_clk_deinit(struct msm_pcie_dev_t *dev)
 	if (dev->pipe_clk_mux && dev->ref_clk_src)
 		clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 
-	regulator_disable(dev->gdsc_phy);
+	if (dev->gdsc_phy)
+		regulator_disable(dev->gdsc_phy);
 	regulator_disable(dev->gdsc_core);
 
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
@@ -4102,10 +4121,11 @@ static int msm_pcie_get_vreg(struct msm_pcie_dev_t *pcie_dev)
 		PCIE_ERR(pcie_dev, "PCIe: RC%d: Failed to get %s GDSC-PHY:%ld\n",
 			 pcie_dev->rc_idx, pdev->name,
 			 PTR_ERR(pcie_dev->gdsc_phy));
-		if (PTR_ERR(pcie_dev->gdsc_phy) == -EPROBE_DEFER)
+		if (PTR_ERR(pcie_dev->gdsc_phy) == -EPROBE_DEFER) {
 			PCIE_DBG(pcie_dev, "PCIe: EPROBE_DEFER for %s GDSC-PHY\n",
 				pdev->name);
-		return PTR_ERR(pcie_dev->gdsc_phy);
+			return PTR_ERR(pcie_dev->gdsc_phy);
+		}
 	}
 
 	return 0;
@@ -5668,6 +5688,7 @@ static void msm_handle_error_source(struct pci_dev *dev,
 {
 	int aer = dev->aer_cap;
 	struct msm_pcie_dev_t *rdev = info->rdev;
+	u32 status, sev;
 
 	if (!rdev->aer_dump && !rdev->suspending &&
 		rdev->link_status == MSM_PCIE_LINK_ENABLED) {
@@ -5693,8 +5714,21 @@ static void msm_handle_error_source(struct pci_dev *dev,
 						   PCI_EXP_DEVSTA_CED |
 						   PCI_EXP_DEVSTA_NFED |
 						   PCI_EXP_DEVSTA_FED);
+	} else if (info->severity == AER_NONFATAL) {
+		if (aer) {
+			/* Clear status bits for ERR_NONFATAL errors only */
+			pci_read_config_dword(dev, aer + PCI_ERR_UNCOR_STATUS, &status);
+			pci_read_config_dword(dev, aer + PCI_ERR_UNCOR_SEVER, &sev);
+			status &= ~sev;
+			if (status)
+				pci_write_config_dword(dev, aer + PCI_ERR_UNCOR_STATUS, status);
+		}
+		pcie_capability_clear_and_set_word(dev, PCI_EXP_DEVSTA, 0,
+					PCI_EXP_DEVSTA_CED |
+					PCI_EXP_DEVSTA_NFED |
+					PCI_EXP_DEVSTA_FED);
 	} else {
-		/* AER_NONFATAL || AER_FATAL */
+		/* AER_FATAL */
 		panic("AER error severity %d\n", info->severity);
 	}
 

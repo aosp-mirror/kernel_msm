@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -31,7 +31,7 @@
 
 #define MHI_NET_DRIVER_NAME  "mhi_dev_net_drv"
 #define MHI_NET_DEV_NAME     "mhi_swip%d"
-#define MHI_NET_DEFAULT_MTU   8192
+#define MHI_NET_DEFAULT_MTU   16384
 #define MHI_NET_IPC_PAGES     (100)
 #define MHI_MAX_RX_REQ        (128)
 #define MHI_MAX_TX_REQ        (128)
@@ -47,7 +47,7 @@ enum mhi_dev_net_dbg_lvl {
 	MSG_NET_reserved = 0x80000000
 };
 
-static enum mhi_dev_net_dbg_lvl mhi_net_msg_lvl = MHI_CRITICAL;
+static enum mhi_dev_net_dbg_lvl mhi_net_msg_lvl = MHI_ERROR;
 static enum mhi_dev_net_dbg_lvl mhi_net_ipc_log_lvl = MHI_VERBOSE;
 static void *mhi_net_ipc_log;
 
@@ -148,6 +148,7 @@ struct mhi_dev_net_ctxt {
 	struct platform_device		*pdev;
 	void (*net_event_notifier)(struct mhi_dev_client_cb_reason *cb);
 	uint32_t num_mhi_instances;
+	uint32_t eth_iface_out_ch; /* outbound channel that uses eth interface */
 };
 
 static struct mhi_dev_net_ctxt mhi_net_ctxt;
@@ -172,9 +173,14 @@ static int mhi_dev_net_init_ch_attributes(struct mhi_dev_net_client *client,
 {
 	client->out_chan_attr = chan_attrib;
 	client->in_chan_attr = ++chan_attrib;
-	mhi_dev_net_log(MHI_INFO, "Write chan attributes dir %d chan_id %d\n",
-			client->out_chan_attr->dir, client->out_chan_attr->chan_id);
-	mhi_dev_net_log(MHI_INFO, "Read chan attributes dir %d chan_id %d\n",
+
+	if (mhi_net_ctxt.eth_iface_out_ch == client->out_chan_attr->chan_id)
+		client->eth_iface = true;
+
+	mhi_dev_net_log(MHI_INFO, "Write ch attributes dir %d ch_id %d, %s\n",
+			client->out_chan_attr->dir, client->out_chan_attr->chan_id,
+			client->eth_iface ? "Uses eth i/f":"");
+	mhi_dev_net_log(MHI_INFO, "Read ch attributes dir %d ch_id %d\n",
 			client->in_chan_attr->dir, client->in_chan_attr->chan_id);
 	return 0;
 }
@@ -189,7 +195,7 @@ static void mhi_dev_net_process_queue_packets(struct work_struct *work)
 	struct mhi_req *wreq = NULL;
 
 	if (mhi_dev_channel_isempty(client->in_handle)) {
-		mhi_dev_net_log(MHI_INFO, "%s stop network xmmit\n", __func__);
+		mhi_dev_net_log(MHI_INFO, "stop network xmmit\n");
 		netif_stop_queue(client->dev);
 		return;
 	}
@@ -222,8 +228,9 @@ static void mhi_dev_net_process_queue_packets(struct work_struct *work)
 		spin_unlock_irqrestore(&client->wrt_lock, flags);
 		xfer_data = mhi_dev_write_channel(wreq);
 		if (xfer_data <= 0) {
-			pr_err("%s(): Failed to write skb len %d\n",
-					__func__, skb->len);
+			mhi_dev_net_log(MHI_ERROR,
+					"Failed to write skb len %d\n",
+					 skb->len);
 			kfree_skb(skb);
 			return;
 		}
@@ -232,8 +239,7 @@ static void mhi_dev_net_process_queue_packets(struct work_struct *work)
 		/* Check if free buffers are available*/
 		if (mhi_dev_channel_isempty(client->in_handle)) {
 			mhi_dev_net_log(MHI_INFO,
-					"%s buffers are full stop xmit\n",
-					__func__);
+					"buffers are full stop xmit\n");
 			netif_stop_queue(client->dev);
 			break;
 		}
@@ -281,18 +287,16 @@ static void mhi_dev_net_read_completion_cb(void *req)
 	struct mhi_req *mreq = (struct mhi_req *)req;
 	struct mhi_dev_net_client *net_handle =
 			chan_to_net_client(mreq->vf_id, mreq->chan);
-
 	struct sk_buff *skb = mreq->context;
 	unsigned long   flags;
 
-	skb->len = mreq->transfer_len;
+	skb_put(skb, mreq->transfer_len);
 
 	if (net_handle->eth_iface)
 		skb->protocol = eth_type_trans(skb, net_handle->dev);
 	else
 		skb->protocol = mhi_dev_net_eth_type_trans(skb);
 
-	skb_put(skb, mreq->transfer_len);
 	net_handle->dev->stats.rx_packets++;
 	skb->dev = net_handle->dev;
 	netif_rx(skb);
@@ -328,7 +332,7 @@ static ssize_t mhi_dev_net_client_read(struct mhi_dev_net_client *mhi_handle)
 		spin_unlock_irqrestore(&mhi_handle->rd_lock, flags);
 		skb = alloc_skb(MHI_NET_DEFAULT_MTU, GFP_KERNEL);
 		if (skb == NULL) {
-			pr_err("%s(): skb alloc failed\n", __func__);
+			mhi_dev_net_log(MHI_ERROR, "skb alloc failed\n");
 			spin_lock_irqsave(&mhi_handle->rd_lock, flags);
 			list_add_tail(&req->list, &mhi_handle->rx_buffers);
 			spin_unlock_irqrestore(&mhi_handle->rd_lock, flags);
@@ -347,7 +351,8 @@ static ssize_t mhi_dev_net_client_read(struct mhi_dev_net_client *mhi_handle)
 		bytes_avail = mhi_dev_read_channel(req);
 
 		if (bytes_avail < 0) {
-			pr_err("Failed to read chan %d bytes_avail = %d\n",
+			mhi_dev_net_log(MHI_ERROR,
+					"Failed to read ch_id:%d bytes_avail = %d\n",
 					chan, bytes_avail);
 			spin_lock_irqsave(&mhi_handle->rd_lock, flags);
 			kfree_skb(skb);
@@ -499,6 +504,8 @@ static void mhi_dev_net_ether_setup(struct net_device *dev)
 {
 	dev->netdev_ops = &mhi_dev_net_ops_ip;
 	ether_setup(dev);
+	dev->min_mtu = ETH_MIN_MTU;
+	dev->max_mtu = ETH_MAX_MTU;
 	mhi_dev_net_log(MHI_INFO,
 			"mhi_dev_net Ethernet setup\n");
 }
@@ -531,7 +538,8 @@ static int mhi_dev_net_enable_iface(struct mhi_dev_net_client *mhi_dev_net_ptr)
 			mhi_dev_net_ether_setup :
 			mhi_dev_net_rawip_setup);
 	if (!netdev) {
-		pr_err("Failed to allocate netdev for mhi_dev_net\n");
+		mhi_dev_net_log(MHI_ERROR,
+			"Failed to allocate netdev for mhi_dev_net\n");
 		goto net_dev_alloc_fail;
 	}
 
@@ -546,7 +554,8 @@ static int mhi_dev_net_enable_iface(struct mhi_dev_net_client *mhi_dev_net_ptr)
 	*mhi_dev_net_ctxt = mhi_dev_net_ptr;
 	ret = register_netdev(mhi_dev_net_ptr->dev);
 	if (ret) {
-		pr_err("Failed to register mhi_dev_net device\n");
+		mhi_dev_net_log(MHI_ERROR,
+				"Failed to register mhi_dev_net device\n");
 		goto net_dev_reg_fail;
 	}
 	mhi_dev_net_log(MHI_INFO, "Successfully registred mhi_dev_net\n");
@@ -569,11 +578,11 @@ static int mhi_dev_net_open_chan_create_netif(struct mhi_dev_net_client *client)
 	struct mhi_req *mreq;
 	u32 vf_id = client->vf_id;
 
-	mhi_dev_net_log(MHI_DBG, "opening OUT %d IN %d channels\n",
+	mhi_dev_net_log(MHI_DBG, "opening OUT ch_id:%d IN ch_id:%d channels\n",
 			client->out_chan,
 			client->in_chan);
 	mhi_dev_net_log(MHI_DBG,
-			"Initializing inbound chan %d.\n",
+			"Initializing inbound ch_id:%d.\n",
 			client->in_chan);
 
 	rc = mhi_dev_vf_open_channel(vf_id,
@@ -582,7 +591,7 @@ static int mhi_dev_net_open_chan_create_netif(struct mhi_dev_net_client *client)
 				     mhi_net_ctxt.net_event_notifier);
 	if (rc < 0) {
 		mhi_dev_net_log(MHI_ERROR,
-				"Failed to open chan %d, ret 0x%x\n",
+				"Failed to open ch_id:%d, ret 0x%x\n",
 				client->out_chan, rc);
 		goto handle_not_rdy_err;
 	} else
@@ -594,13 +603,13 @@ static int mhi_dev_net_open_chan_create_netif(struct mhi_dev_net_client *client)
 				     mhi_net_ctxt.net_event_notifier);
 	if (rc < 0) {
 		mhi_dev_net_log(MHI_ERROR,
-				"Failed to open chan %d, ret 0x%x\n",
+				"Failed to open ch_id:%d, ret 0x%x\n",
 				client->in_chan, rc);
 		goto handle_in_err;
 	} else
 		atomic_set(&client->tx_enabled, 1);
 
-	mhi_dev_net_log(MHI_INFO, "IN %d, OUT %d channels are opened",
+	mhi_dev_net_log(MHI_INFO, "IN ch_id:%d, OUT ch_id:%d channels are opened",
 			client->in_chan, client->out_chan);
 
 	INIT_LIST_HEAD(&client->rx_buffers);
@@ -609,12 +618,14 @@ static int mhi_dev_net_open_chan_create_netif(struct mhi_dev_net_client *client)
 
 	ret = mhi_dev_net_alloc_read_reqs(client);
 	if (ret) {
-		pr_err("failed to allocate rx req buffers\n");
+		mhi_dev_net_log(MHI_ERROR,
+			"failed to allocate rx req buffers\n");
 		goto rx_req_failed;
 	}
 	ret = mhi_dev_net_alloc_write_reqs(client);
 	if (ret) {
-		pr_err("failed to allocate write req buffers\n");
+		mhi_dev_net_log(MHI_ERROR,
+			"failed to allocate write req buffers\n");
 		goto tx_req_failed;
 	}
 	if (atomic_read(&client->tx_enabled)) {
@@ -675,7 +686,8 @@ static int mhi_dev_net_rgstr_client(struct mhi_dev_net_client *client, int idx)
 	mutex_init(&client->out_chan_lock);
 	spin_lock_init(&client->wrt_lock);
 	spin_lock_init(&client->rd_lock);
-	mhi_dev_net_log(MHI_INFO, "Registering out %d, In %d channels\n",
+	mhi_dev_net_log(MHI_INFO, "Registering OUT ch_id:%d\t"
+			"IN ch_id:%d channels\n",
 			client->out_chan, client->in_chan);
 	return 0;
 }
@@ -718,7 +730,7 @@ static void mhi_dev_net_state_cb(struct mhi_dev_client_cb_data *cb_data)
 				     &info_in_ch);
 	if (ret) {
 		mhi_dev_net_log(MHI_ERROR,
-			"Failed to obtain in_channel %d state\n",
+			"Failed to obtain IN ch_id:%d state\n",
 			mhi_client->in_chan);
 		return;
 	}
@@ -727,13 +739,13 @@ static void mhi_dev_net_state_cb(struct mhi_dev_client_cb_data *cb_data)
 				     &info_out_ch);
 	if (ret) {
 		mhi_dev_net_log(MHI_ERROR,
-			"Failed to obtain out_channel %d state\n",
+			"Failed to obtain OUT ch_id:%d state\n",
 			mhi_client->out_chan);
 		return;
 	}
-	mhi_dev_net_log(MHI_MSG_VERBOSE, "in_channel :%d, state :%d\n",
+	mhi_dev_net_log(MHI_MSG_VERBOSE, "IN ch_id::%d, state :%d\n",
 			mhi_client->in_chan, info_in_ch);
-	mhi_dev_net_log(MHI_MSG_VERBOSE, "out_channel :%d, state :%d\n",
+	mhi_dev_net_log(MHI_MSG_VERBOSE, "OUT ch_id:%d, state :%d\n",
 			mhi_client->out_chan, info_out_ch);
 	if (info_in_ch == MHI_STATE_CONNECTED &&
 		info_out_ch == MHI_STATE_CONNECTED) {
@@ -814,15 +826,10 @@ int mhi_dev_net_interface_init(uint32_t vf_id, uint32_t num_vfs)
 		/* Store mhi instance id for future usage */
 		mhi_net_client[i]->vf_id = vf_id;
 
-		if (mhi_net_ctxt.pdev) {
-			mhi_net_ctxt.client_handles[i]->eth_iface =
-				of_property_read_bool
-				((&mhi_net_ctxt.pdev->dev)->of_node,
-					"qcom,mhi-ethernet-interface");
-		}
 		/*Process pending packet work queue*/
 		mhi_net_client[i]->pending_pckt_wq =
-			create_singlethread_workqueue("pending_xmit_pckt_wq");
+			alloc_ordered_workqueue("%s", __WQ_LEGACY |
+				WQ_MEM_RECLAIM | WQ_HIGHPRI, "pending_xmit_pckt_wq");
 		INIT_WORK(&mhi_net_client[i]->xmit_work,
 			mhi_dev_net_process_queue_packets);
 
@@ -916,10 +923,19 @@ EXPORT_SYMBOL(mhi_dev_net_exit);
 
 static int mhi_dev_net_probe(struct platform_device *pdev)
 {
+	int ret = 0;
+
 	if (pdev->dev.of_node) {
 		mhi_net_ctxt.pdev = pdev;
-		mhi_dev_net_log(MHI_INFO,
-				"MHI Network probe success");
+
+		ret = of_property_read_u32((&pdev->dev)->of_node,
+				 "qcom,mhi-ethernet-interface-channel",
+				 &mhi_net_ctxt.eth_iface_out_ch);
+		if (!ret)
+			mhi_dev_net_log(MHI_INFO,
+					"Channel %d uses ethernet interface\n",
+					mhi_net_ctxt.eth_iface_out_ch);
+		mhi_dev_net_log(MHI_INFO, "MHI Network probe success");
 	}
 
 	return 0;
