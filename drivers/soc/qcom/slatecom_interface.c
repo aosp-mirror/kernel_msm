@@ -1122,14 +1122,14 @@ static struct service_info service_data[3] = {
 	},
 	{
 		.name = "SSR_MODEM",
-		.ssr_domains = "modem",
+		.ssr_domains = "mpss",
 		.domain_id = SSR_DOMAIN_MODEM,
 		.nb = &ssr_modem_nb,
 		.handle = NULL,
 	},
 	{
 		.name = "SSR_ADSP",
-		.ssr_domains = "adsp",
+		.ssr_domains = "lpass",
 		.domain_id = SSR_DOMAIN_ADSP,
 		.nb = &ssr_adsp_nb,
 		.handle = NULL,
