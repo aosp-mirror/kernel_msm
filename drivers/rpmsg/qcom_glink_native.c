@@ -24,6 +24,8 @@
 #include <linux/mailbox_client.h>
 #include <linux/ipc_logging.h>
 #include <linux/suspend.h>
+#include <soc/qcom/rpm-smd.h>
+#include <soc/qcom/subsystem_notif.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
@@ -74,7 +76,12 @@ do {									\
 #define RPM_GLINK_CID_MAX	65536
 
 static int should_wake;
-static int glink_resume_pkt;
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+static int quickboot;
+atomic_t qb_comp;
+wait_queue_head_t quickboot_complete;
+#endif
+int glink_resume_pkt;
 
 struct glink_msg {
 	__le16 cmd;
@@ -1508,16 +1515,38 @@ static struct rpmsg_endpoint *qcom_glink_create_ept(struct rpmsg_device *rpdev,
 	struct qcom_glink *glink = parent->glink;
 	struct rpmsg_endpoint *ept;
 	const char *name = chinfo.name;
-	int cid;
+	int rcid;
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	struct glink_channel *local_channel;
+	int lcid, rcid_exist = 0, lcid_exist = 0;
+#endif
 	int ret;
 	unsigned long flags;
 
 	spin_lock_irqsave(&glink->idr_lock, flags);
-	idr_for_each_entry(&glink->rcids, channel, cid) {
-		if (!strcmp(channel->name, name))
+	idr_for_each_entry(&glink->rcids, channel, rcid) {
+		if (!strcmp(channel->name, name)) {
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+			rcid_exist = 1;
+#endif
 			break;
+		}
 	}
+
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	idr_for_each_entry(&glink->lcids, local_channel, lcid) {
+		if (!strcmp(local_channel->name, name)) {
+			lcid_exist = 1;
+			break;
+		}
+	}
+#endif
 	spin_unlock_irqrestore(&glink->idr_lock, flags);
+
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	if (rcid_exist && lcid_exist)
+		return &channel->ept;
+#endif
 
 	if (!channel) {
 		channel = qcom_glink_create_local(glink, name);
@@ -1953,6 +1982,16 @@ static int qcom_glink_rx_open(struct qcom_glink *glink, unsigned int rcid,
 		if (ret)
 			goto rcid_remove;
 
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+		ret = !strcmp(glink->name, "rpm-glink") &&
+				!strcmp(channel->name, "rpm_requests");
+		if (quickboot && ret) {
+			qcom_smd_rpm_quickboot(rpdev, 1);
+			quickboot = 0;
+			atomic_inc(&qb_comp);
+			wake_up(&quickboot_complete);
+		}
+#endif
 		channel->rpdev = rpdev;
 	}
 	CH_INFO(channel, "\n");
@@ -2243,6 +2282,13 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 	if (ret < 0)
 		glink->name = dev->of_node->name;
 
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	if (!strcmp(glink->name, "rpm-glink")) {
+		atomic_set(&qb_comp, 0);
+		init_waitqueue_head(&quickboot_complete);
+	}
+#endif
+
 	glink->mbox_client.dev = dev;
 	glink->mbox_client.knows_txdone = true;
 	glink->mbox_chan = mbox_request_channel(&glink->mbox_client, 0);
@@ -2388,9 +2434,23 @@ static int qcom_glink_suspend_no_irq(struct device *dev)
 
 static int qcom_glink_resume_no_irq(struct device *dev)
 {
+	int ret = 0;
 	should_wake = false;
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		quickboot = 1;
+		glink_rpm_resume_noirq(dev);
 
-	return 0;
+		ret = wait_event_timeout(quickboot_complete,
+					 atomic_read(&qb_comp), 10 * HZ);
+		if (!ret) {
+			pr_err("glink: channel open request from rpm timed out\n");
+			ret = -ETIMEDOUT;
+		}
+	}
+
+#endif
+	return ret;
 }
 
 const struct dev_pm_ops glink_native_pm_ops = {

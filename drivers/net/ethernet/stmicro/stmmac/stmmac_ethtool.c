@@ -314,8 +314,8 @@ static int stmmac_ethtool_get_link_ksettings(struct net_device *dev,
 	if (!netif_running(dev))
 		return -EBUSY;
 
-	if (priv->hw->pcs & STMMAC_PCS_RGMII ||
-	    priv->hw->pcs & STMMAC_PCS_SGMII) {
+	if (!priv->plat->has_gmac4 && (priv->hw->pcs & STMMAC_PCS_RGMII ||
+				       priv->hw->pcs & STMMAC_PCS_SGMII)) {
 		struct rgmii_adv adv;
 		u32 supported, advertising, lp_advertising;
 
@@ -410,8 +410,8 @@ stmmac_ethtool_set_link_ksettings(struct net_device *dev,
 		return -ENODEV;
 	}
 
-	if (priv->hw->pcs & STMMAC_PCS_RGMII ||
-	    priv->hw->pcs & STMMAC_PCS_SGMII) {
+	if  (!priv->plat->has_gmac4 && (priv->hw->pcs & STMMAC_PCS_RGMII ||
+					priv->hw->pcs & STMMAC_PCS_SGMII)) {
 		u32 mask = ADVERTISED_Autoneg | ADVERTISED_Pause;
 
 		/* Only support ANE */

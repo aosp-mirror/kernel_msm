@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(msg) "slatecom_dev:" msg
 
@@ -33,16 +33,14 @@
 #include "slatecom_rpmsg.h"
 
 #define SLATECOM "slate_com_dev"
-
 #define SLATEDAEMON_LDO09_LPM_VTG 0
 #define SLATEDAEMON_LDO09_NPM_VTG 10000
-
 #define SLATEDAEMON_LDO03_LPM_VTG 0
 #define SLATEDAEMON_LDO03_NPM_VTG 10000
-
 #define MPPS_DOWN_EVENT_TO_SLATE_TIMEOUT 3000
 #define ADSP_DOWN_EVENT_TO_SLATE_TIMEOUT 3000
 #define MAX_APP_NAME_SIZE 100
+#define COMPAT_PTR(val) ((void *)((uint64_t)val & 0xffffffffUL))
 
 /*pil_slate_intf.h*/
 #define RESULT_SUCCESS 0
@@ -129,16 +127,6 @@ struct service_info {
 	struct notifier_block           *nb;
 };
 
-struct ctrl_channel_ops ctrl_ops = {
-	.glink_channel_state = slatecom_intf_notify_glink_channel_state,
-	.rx_msg = slatecom_rx_msg,
-};
-
-struct subsys_state_ops state_ops = {
-	.set_dsp_state = set_slate_dsp_state,
-	.set_bt_state = set_slate_bt_state,
-};
-
 static struct slatedaemon_priv *dev;
 static unsigned int slatereset_gpio;
 static  DEFINE_MUTEX(slate_char_mutex);
@@ -157,20 +145,21 @@ static DECLARE_COMPLETION(slate_modem_down_wait);
 static DECLARE_COMPLETION(slate_adsp_down_wait);
 static struct srcu_notifier_head slatecom_notifier_chain;
 static struct platform_device *slate_pdev;
+struct kobject *kobj_ref;
 
 static ssize_t slate_bt_state_sysfs_read
-			(struct class *class, struct class_attribute *attr, char *buf)
+			(struct kobject *class, struct kobj_attribute *attr, char *buf)
 {
 	return scnprintf(buf, BUF_SIZE, btss_state);
 }
 
 static ssize_t slate_dsp_state_sysfs_read
-			(struct class *class, struct class_attribute *attr, char *buf)
+			(struct kobject *class, struct kobj_attribute *attr, char *buf)
 {
 	return	scnprintf(buf, BUF_SIZE, dspss_state);
 }
 
-struct class_attribute slatecom_attr[] = {
+struct kobj_attribute slatecom_attr[] = {
 	{
 		.attr = {
 			.name = "slate_bt_state",
@@ -185,9 +174,6 @@ struct class_attribute slatecom_attr[] = {
 		},
 		.show	= slate_dsp_state_sysfs_read,
 	},
-};
-struct class slatecom_intf_class = {
-	.name = "slatecom"
 };
 
 /**
@@ -543,13 +529,10 @@ static int send_time_sync(struct slate_ui_data *tui_obj_msg)
 {
 	int ret = 0;
 	void *write_buf;
+	size_t len;
 
-	write_buf = kmalloc_array(tui_obj_msg->num_of_words, sizeof(uint32_t),
-							GFP_KERNEL);
-	if (write_buf == NULL)
-		return -ENOMEM;
-	write_buf = memdup_user(tui_obj_msg->buffer,
-					tui_obj_msg->num_of_words * sizeof(uint32_t));
+	len = tui_obj_msg->num_of_words * sizeof(uint32_t);
+	write_buf = memdup_user((COMPAT_PTR(tui_obj_msg->buffer)), len);
 	if (IS_ERR(write_buf)) {
 		ret = PTR_ERR(write_buf);
 		kfree(write_buf);
@@ -560,6 +543,7 @@ static int send_time_sync(struct slate_ui_data *tui_obj_msg)
 		pr_err("send_time_data cmd failed\n");
 	else
 		pr_info("send_time_data cmd success\n");
+	kfree(write_buf);
 return ret;
 }
 
@@ -629,26 +613,26 @@ static long slate_com_ioctl(struct file *filp,
 		if (ret < 0)
 			pr_err("slatechar_write_cmd failed\n");
 		break;
-	case SET_SPI_FREE:
+	case SLATECOM_SET_SPI_FREE:
 		ret = slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		break;
-	case SET_SPI_BUSY:
+	case SLATECOM_SET_SPI_BUSY:
 		ret = slatecom_set_spi_state(SLATECOM_SPI_BUSY);
 		break;
-	case SLATE_SOFT_RESET:
+	case SLATECOM_SOFT_RESET:
 		ret = slate_soft_reset();
 		break;
-	case SLATE_MODEM_DOWN2_SLATE_DONE:
+	case SLATECOM_MODEM_DOWN2_SLATE:
 		ret = modem_down2_slate();
 		break;
-	case SLATE_ADSP_DOWN2_SLATE_DONE:
+	case SLATECOM_ADSP_DOWN2_SLATE:
 		ret = adsp_down2_slate();
 		break;
-	case SLATE_TWM_EXIT:
+	case SLATECOM_TWM_EXIT:
 		twm_exit = true;
 		ret = 0;
 		break;
-	case SLATE_APP_RUNNING:
+	case SLATECOM_SLATE_APP_RUNNING:
 		slate_app_running = true;
 		ret = 0;
 		break;
@@ -665,7 +649,7 @@ static long slate_com_ioctl(struct file *filp,
 		slatecom_fw_unload(dev);
 		ret = 0;
 		break;
-	case DEVICE_STATE_TRANSITION:
+	case SLATECOM_DEVICE_STATE_TRANSITION:
 		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
 			pr_err("driver not ready, glink is not open\n");
 			return -ENODEV;
@@ -679,7 +663,7 @@ static long slate_com_ioctl(struct file *filp,
 		if (ret < 0)
 			pr_err("device_state_transition cmd failed\n");
 		break;
-	case SEND_TIME_DATA:
+	case SLATE_SEND_TIME_DATA:
 		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
 			pr_err("%s: driver not ready, current state: %d\n",
 			__func__, dev->slatecom_current_state);
@@ -694,7 +678,7 @@ static long slate_com_ioctl(struct file *filp,
 		if (ret < 0)
 			pr_err("send_time_data cmd failed\n");
 		break;
-	case SEND_DEBUG_CONFIG:
+	case SLATECOM_SEND_DEBUG_CONFIG:
 		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
 			pr_err("%s: driver not ready, current state: %d\n",
 			__func__, dev->slatecom_current_state);
@@ -1138,14 +1122,14 @@ static struct service_info service_data[3] = {
 	},
 	{
 		.name = "SSR_MODEM",
-		.ssr_domains = "modem",
+		.ssr_domains = "mpss",
 		.domain_id = SSR_DOMAIN_MODEM,
 		.nb = &ssr_modem_nb,
 		.handle = NULL,
 	},
 	{
 		.name = "SSR_ADSP",
-		.ssr_domains = "adsp",
+		.ssr_domains = "lpass",
 		.domain_id = SSR_DOMAIN_ADSP,
 		.nb = &ssr_adsp_nb,
 		.handle = NULL,
@@ -1218,22 +1202,22 @@ static int __init init_slate_com_dev(void)
 		return PTR_ERR(dev_ret);
 	}
 
-	ret = class_register(&slatecom_intf_class);
-	if (ret < 0) {
-		pr_err("Failed to register slatecom_intf_class rc=%d\n", ret);
-		return ret;
-	}
-
 	for (i = 0; i < SLATECOM_INTF_N_FILES; i++) {
-		if (class_create_file(&slatecom_intf_class, &slatecom_attr[i]))
+		kobj_ref = kobject_create_and_add(slatecom_attr[i].attr.name, kernel_kobj);
+		/*Creating sysfs file for power_state*/
+		if (sysfs_create_file(kobj_ref, &slatecom_attr[i].attr)) {
 			pr_err("%s: failed to create slate-bt/dsp entry\n", __func__);
+			kobject_put(kobj_ref);
+			sysfs_remove_file(kernel_kobj, &slatecom_attr[i].attr);
+		}
 	}
 
 	if (platform_driver_register(&slate_daemon_driver))
 		pr_err("%s: failed to register slate-daemon register\n", __func__);
 
 	srcu_init_notifier_head(&slatecom_notifier_chain);
-
+	slatecom_state_init(&set_slate_dsp_state, &set_slate_bt_state);
+	slatecom_ctrl_channel_init(&slatecom_intf_notify_glink_channel_state, &slatecom_rx_msg);
 	return 0;
 }
 
@@ -1241,12 +1225,12 @@ static void __exit exit_slate_com_dev(void)
 {
 	int i = 0;
 
+	kobject_put(kobj_ref);
+	for (i = 0; i < SLATECOM_INTF_N_FILES; i++)
+		sysfs_remove_file(kernel_kobj, &slatecom_attr[i].attr);
+
 	device_destroy(slate_class, slate_dev);
 	class_destroy(slate_class);
-	for (i = 0; i < SLATECOM_INTF_N_FILES; i++)
-		class_remove_file(&slatecom_intf_class, &slatecom_attr[i]);
-
-	class_unregister(&slatecom_intf_class);
 	cdev_del(&slate_cdev);
 	unregister_chrdev_region(slate_dev, 1);
 	platform_driver_unregister(&slate_daemon_driver);

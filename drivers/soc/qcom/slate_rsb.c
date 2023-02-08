@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(msg) "slatersb: %s: " msg, __func__
 #include "slatersb.h"
+#include <linux/remoteproc/qcom_rproc.h>
 
 struct slatersb_priv {
 	void *handle;
@@ -26,7 +27,7 @@ struct slatersb_priv {
 	struct completion slate_lnikup_cmplt;
 	struct completion tx_done;
 	struct device *ldev;
-	struct wakeup_source slatersb_ws;
+	struct wakeup_source *slatersb_ws;
 	wait_queue_head_t link_state_wait;
 	uint32_t calbrtion_intrvl;
 	uint32_t calbrtion_cpi;
@@ -43,11 +44,6 @@ struct slatersb_priv {
 
 static void *slatersb_drv;
 static int slatersb_enable(struct slatersb_priv *dev, bool enable);
-
-struct rsb_channel_ops rsb_ops = {
-	.glink_channel_state = slatersb_notify_glink_channel_state,
-	.rx_msg = slatersb_rx_msg,
-};
 
 static void slatersb_slatedown_work(struct work_struct *work)
 {
@@ -76,8 +72,9 @@ static int slatersb_tx_msg(struct slatersb_priv *dev, void  *msg, size_t len)
 	int rc = 0;
 	uint8_t resp = 0;
 
-	__pm_stay_awake(&dev->slatersb_ws);
 	mutex_lock(&dev->glink_mutex);
+	__pm_stay_awake(dev->slatersb_ws);
+
 	if (!dev->rsb_rpmsg) {
 		pr_err("slatersb-rpmsg is not probed yet, waiting for it to be probed\n");
 		goto err_ret;
@@ -113,8 +110,8 @@ static int slatersb_tx_msg(struct slatersb_priv *dev, void  *msg, size_t len)
 	rc = 0;
 
 err_ret:
+	__pm_relax(dev->slatersb_ws);
 	mutex_unlock(&dev->glink_mutex);
-	__pm_relax(&dev->slatersb_ws);
 	return rc;
 }
 
@@ -212,12 +209,12 @@ static int ssr_slatersb_cb(struct notifier_block *this,
 				struct slatersb_priv, lhndl);
 
 	switch (opcode) {
-	case SUBSYS_BEFORE_SHUTDOWN:
+	case QCOM_SSR_BEFORE_SHUTDOWN:
 		if (dev->slatersb_current_state == SLATERSB_STATE_RSB_ENABLED)
 			dev->pending_enable = true;
 		queue_work(dev->slatersb_wq, &dev->slate_down_work);
 		break;
-	case SUBSYS_AFTER_POWERUP:
+	case QCOM_SSR_AFTER_POWERUP:
 		if (dev->slatersb_current_state == SLATERSB_STATE_INIT)
 			queue_work(dev->slatersb_wq, &dev->slate_up_work);
 		break;
@@ -248,7 +245,7 @@ static int slatersb_ssr_register(struct slatersb_priv *dev)
 
 	nb = &ssr_slate_nb;
 	dev->slate_subsys_handle =
-			subsys_notif_register_notifier(SLATERSB_SLATE_SUBSYS, nb);
+			qcom_register_ssr_notifier(SLATERSB_SLATE_SUBSYS, nb);
 
 	if (!dev->slate_subsys_handle) {
 		dev->slate_subsys_handle = NULL;
@@ -538,6 +535,8 @@ static int slatersb_init(struct slatersb_priv *dev)
 	INIT_WORK(&dev->rsb_calibration_work, slatersb_calibration);
 	INIT_WORK(&dev->bttn_configr_work, slatersb_buttn_configration);
 
+	slatersb_channel_init(&slatersb_notify_glink_channel_state, &slatersb_rx_msg);
+
 	return 0;
 }
 
@@ -552,7 +551,7 @@ static int slate_rsb_probe(struct platform_device *pdev)
 	if (!dev)
 		return -ENOMEM;
 	/* Add wake lock for PM suspend */
-	wakeup_source_add(&dev->slatersb_ws);
+	dev->slatersb_ws = wakeup_source_register(&pdev->dev, "slate_rsb");
 	dev->slatersb_current_state = SLATERSB_STATE_UNKNOWN;
 	rc = slatersb_init(dev);
 	if (rc)
@@ -576,7 +575,7 @@ static int slate_rsb_remove(struct platform_device *pdev)
 	struct slatersb_priv *dev = platform_get_drvdata(pdev);
 
 	destroy_workqueue(dev->slatersb_wq);
-	wakeup_source_trash(&dev->slatersb_ws);
+	wakeup_source_unregister(dev->slatersb_ws);
 	return 0;
 }
 

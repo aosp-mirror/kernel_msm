@@ -142,6 +142,21 @@ void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
 {
 	struct qcom_adsp *adsp = rproc->priv;
 	int total_offset;
+	void __iomem *base;
+	int len = strlen("md_dbg_buf");
+
+	if (strnlen(segment->priv, len + 1) == len &&
+		    !strcmp(segment->priv, "md_dbg_buf")) {
+		base = ioremap((unsigned long)le64_to_cpu(segment->da), size);
+		if (!base) {
+			pr_err("failed to map md_dbg_buf region\n");
+			return;
+		}
+
+		memcpy_fromio(dest, base, size);
+		iounmap(base);
+		return;
+	}
 
 	total_offset = segment->da + segment->offset + offset - adsp->mem_phys;
 	if (total_offset < 0 || total_offset + size > adsp->mem_size) {
@@ -337,7 +352,7 @@ static void disable_regulators(struct qcom_adsp *adsp)
 {
 	int i;
 
-	for (i = 0; i < adsp->reg_cnt; i++) {
+	for (i = (adsp->reg_cnt - 1); i >= 0; i--) {
 		regulator_set_voltage(adsp->regs[i].reg, 0, INT_MAX);
 		regulator_set_load(adsp->regs[i].reg, 0);
 		regulator_disable(adsp->regs[i].reg);
@@ -481,7 +496,7 @@ free_metadata:
 	qcom_mdt_free_metadata(adsp->dev, adsp->pas_id, adsp->mdata,
 					adsp->dma_phys_below_32b, ret);
 free_firmware:
-	if (!fw)
+	if (fw)
 		release_firmware(fw);
 
 free_metadata_dtb:
@@ -1692,7 +1707,7 @@ static const struct adsp_data lemans_adsp_resource = {
 
 static const struct adsp_data lemans_cdsp_resource = {
 	.crash_reason_smem = 601,
-	.firmware_name = "cdsp.mdt",
+	.firmware_name = "cdsp0.mdt",
 	.pas_id = 18,
 	.uses_elf64 = true,
 	.has_aggre2_clk = false,
