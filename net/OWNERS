@@ -1,0 +1,2 @@
+per-file qrtr/*.*=set noparent
+per-file qrtr/*.*=file:/OWNERS_pixelwatchbsp
