@@ -1,0 +1,10 @@
+per-file sched/walt/*.*=set noparent
+per-file sched/walt/*.*=file:/OWNERS_pixelwatchbsp
+per-file trace/ipc_logging.c=set noparent
+per-file trace/ipc_logging.c=file:/OWNERS_pixelwatchbsp
+per-file trace/ipc_logging_debug.c=set noparent
+per-file trace/ipc_logging_debug.c=file:/OWNERS_pixelwatchbsp
+per-file trace/ipc_logging_private.h=set noparent
+per-file trace/ipc_logging_private.h=file:/OWNERS_pixelwatchbsp
+per-file trace/msm_rtb.c=set noparent
+per-file trace/msm_rtb.c=file:/OWNERS_pixelwatchbsp
