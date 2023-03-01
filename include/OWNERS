@@ -1,5 +1,3 @@
-per-file OWNERS=set noparent
-per-file OWNERS=file:/OWNERS_pixelwatchbsp
 per-file dt-bindings/arm/msm/qcom_dma_heap_dt_constants.h=set noparent
 per-file dt-bindings/arm/msm/qcom_dma_heap_dt_constants.h=file:/OWNERS_pixelwatchbsp
 per-file dt-bindings/clock/qcom,*=set noparent
