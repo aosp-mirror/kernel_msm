@@ -1175,6 +1175,14 @@ static inline bool is_migration_disabled(struct task_struct *p)
 #endif
 }
 
+DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
+
+#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
+#define this_rq()		this_cpu_ptr(&runqueues)
+#define task_rq(p)		cpu_rq(task_cpu(p))
+#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
+#define raw_rq()		raw_cpu_ptr(&runqueues)
+
 struct sched_group;
 #ifdef CONFIG_SCHED_CORE
 static inline struct cpumask *sched_group_span(struct sched_group *sg);
@@ -1262,7 +1270,7 @@ static inline bool sched_group_cookie_match(struct rq *rq,
 		return true;
 
 	for_each_cpu_and(cpu, sched_group_span(group), p->cpus_ptr) {
-		if (sched_core_cookie_match(rq, p))
+		if (sched_core_cookie_match(cpu_rq(cpu), p))
 			return true;
 	}
 	return false;
@@ -1387,14 +1395,6 @@ static inline void update_idle_core(struct rq *rq)
 #else
 static inline void update_idle_core(struct rq *rq) { }
 #endif
-
-DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
-
-#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
-#define this_rq()		this_cpu_ptr(&runqueues)
-#define task_rq(p)		cpu_rq(task_cpu(p))
-#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
-#define raw_rq()		raw_cpu_ptr(&runqueues)
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 static inline struct task_struct *task_of(struct sched_entity *se)
@@ -1559,7 +1559,6 @@ struct rq_flags {
 	 */
 	unsigned int clock_update_flags;
 #endif
-
 };
 
 #ifdef CONFIG_SMP
@@ -1905,13 +1904,6 @@ static inline void dirty_sched_domain_sysctl(int cpu)
 
 extern int sched_update_scaling(void);
 
-static inline const struct cpumask *task_user_cpus(struct task_struct *p)
-{
-	if (!p->user_cpus_ptr)
-		return cpu_possible_mask; /* &init_task.cpus_mask */
-	return p->user_cpus_ptr;
-}
-
 extern void flush_smp_call_function_from_idle(void);
 
 #else /* !CONFIG_SMP: */
@@ -2168,12 +2160,6 @@ extern const u32		sched_prio_to_wmult[40];
 
 #define RETRY_TASK		((void *)-1UL)
 
-struct affinity_context {
-	const struct cpumask *new_mask;
-	struct cpumask *user_mask;
-	unsigned int flags;
-};
-
 struct sched_class {
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -2317,19 +2303,7 @@ extern void update_group_capacity(struct sched_domain *sd, int cpu);
 
 extern void trigger_load_balance(struct rq *rq);
 
-extern void set_cpus_allowed_dl(struct task_struct *p, struct affinity_context *ctx);
-extern void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx);
-
-static inline void set_cpus_allowed_common_cb(struct task_struct *p, const struct cpumask *new_mask, u32 flags)
-{
-	struct affinity_context ac = {
-		.new_mask  = new_mask,
-		.flags     = flags,
-	};
-
-	WARN_ONCE(1, "Unexpected use of sched_class::set_cpus_allowed()");
-	set_cpus_allowed_common(p, &ac);
-}
+extern void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask, u32 flags);
 
 static inline struct task_struct *get_push_task(struct rq *rq)
 {

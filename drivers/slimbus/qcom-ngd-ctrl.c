@@ -2134,7 +2134,7 @@ static int qcom_slim_ngd_ctrl_probe(struct platform_device *pdev)
 	if (IS_ERR(ctrl->pdr)) {
 		ret = PTR_ERR(ctrl->pdr);
 		dev_err(dev, "Failed to init PDR handle: %d\n", ret);
-		goto err_out;
+		goto err_pdr_alloc;
 	}
 
 	pds = pdr_add_lookup(ctrl->pdr, "avs/audio", "msm/adsp/audio_pd");
@@ -2156,7 +2156,7 @@ static int qcom_slim_ngd_ctrl_probe(struct platform_device *pdev)
 
 pdr_release:
 	pdr_handle_release(ctrl->pdr);
-err_out:
+err_pdr_alloc:
 	qcom_unregister_ssr_notifier(ctrl->notifier, &ctrl->nb);
 
 remove_ipc_sysfs:

@@ -883,7 +883,7 @@ nl80211_rekey_policy[NUM_NL80211_REKEY_DATA] = {
 	},
 	[NL80211_REKEY_DATA_KCK] = {
 		.type = NLA_BINARY,
-		.len = NL80211_KCK_EXT_LEN
+		.len = NL80211_KCK_EXT_LEN_32
 	},
 	[NL80211_REKEY_DATA_REPLAY_CTR] = NLA_POLICY_EXACT_LEN(NL80211_REPLAY_CTR_LEN),
 	[NL80211_REKEY_DATA_AKM] = { .type = NLA_U32 },
@@ -6530,6 +6530,22 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 	    nla_put(msg, NL80211_ATTR_IE, sinfo->assoc_req_ies_len,
 		    sinfo->assoc_req_ies))
 		goto nla_put_failure;
+
+	if (sinfo->assoc_resp_ies_len &&
+	    nla_put(msg, NL80211_ATTR_RESP_IE, sinfo->assoc_resp_ies_len,
+		    sinfo->assoc_resp_ies))
+		goto nla_put_failure;
+
+	if (sinfo->mlo_params_valid) {
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+			       sinfo->assoc_link_id))
+			goto nla_put_failure;
+
+		if (!is_zero_ether_addr(sinfo->mld_addr) &&
+		    nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN,
+			    sinfo->mld_addr))
+			goto nla_put_failure;
+	}
 
 	cfg80211_sinfo_release_content(sinfo);
 	genlmsg_end(msg, hdr);
@@ -13809,7 +13825,9 @@ static int nl80211_set_rekey_data(struct sk_buff *skb, struct genl_info *info)
 		return -ERANGE;
 	if (nla_len(tb[NL80211_REKEY_DATA_KCK]) != NL80211_KCK_LEN &&
 	    !(rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_EXT_KEK_KCK &&
-	      nla_len(tb[NL80211_REKEY_DATA_KEK]) == NL80211_KCK_EXT_LEN))
+	      nla_len(tb[NL80211_REKEY_DATA_KCK]) == NL80211_KCK_EXT_LEN) &&
+	     !(rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_EXT_KCK_32 &&
+	       nla_len(tb[NL80211_REKEY_DATA_KCK]) == NL80211_KCK_EXT_LEN_32))
 		return -ERANGE;
 
 	rekey_data.kek = nla_data(tb[NL80211_REKEY_DATA_KEK]);
@@ -19711,7 +19729,9 @@ int cfg80211_external_auth_request(struct net_device *dev,
 			params->action) ||
 	    nla_put(msg, NL80211_ATTR_BSSID, ETH_ALEN, params->bssid) ||
 	    nla_put(msg, NL80211_ATTR_SSID, params->ssid.ssid_len,
-		    params->ssid.ssid))
+		    params->ssid.ssid) ||
+	    (!is_zero_ether_addr(params->mld_addr) &&
+	     nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN, params->mld_addr)))
 		goto nla_put_failure;
 
 	genlmsg_end(msg, hdr);
@@ -19752,6 +19772,17 @@ void cfg80211_update_owe_info_event(struct net_device *netdev,
 	if (!owe_info->ie_len ||
 	    nla_put(msg, NL80211_ATTR_IE, owe_info->ie_len, owe_info->ie))
 		goto nla_put_failure;
+
+	if (owe_info->assoc_link_id != -1) {
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+			       owe_info->assoc_link_id))
+			goto nla_put_failure;
+
+		if (!is_zero_ether_addr(owe_info->peer_mld_addr) &&
+		    nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN,
+			    owe_info->peer_mld_addr))
+			goto nla_put_failure;
+	}
 
 	genlmsg_end(msg, hdr);
 
