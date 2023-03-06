@@ -288,6 +288,8 @@ struct sdhci_msm_host {
 	bool vqmmc_enabled;
 };
 
+static struct mmc_host *wifi_mmc_host;
+
 static const struct sdhci_msm_offset *sdhci_priv_msm_offset(struct sdhci_host *host)
 {
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
@@ -2783,6 +2785,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+	if (of_get_property(pdev->dev.of_node, "qcom,wifi-control-func", NULL)) {
+		dev_dbg(&pdev->dev, "qcom,wifi-control-func found\n");
+		wifi_mmc_host = msm_host->mmc;
+	}
+
 	return 0;
 
 pm_runtime_disable:
@@ -2880,6 +2887,12 @@ static struct platform_driver sdhci_msm_driver = {
 		   .probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
+
+struct mmc_host *msm_wifi_mmc_host_get(void)
+{
+	return wifi_mmc_host;
+}
+EXPORT_SYMBOL_GPL(msm_wifi_mmc_host_get);
 
 module_platform_driver(sdhci_msm_driver);
 
