@@ -538,6 +538,7 @@ struct sdhci_msm_host {
 };
 
 static struct sdhci_msm_host *sdhci_slot[2];
+static struct mmc_host *wifi_mmc_host;
 
 static int sdhci_msm_update_qos_constraints(struct qos_cpu_group *qcg,
 					enum constraint type);
@@ -5302,6 +5303,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (msm_host->mmc->card && mmc_card_sdio(msm_host->mmc->card))
 		register_trace_android_vh_mmc_sdio_pm_flag_set(sdhci_msm_set_sdio_pm_flag, NULL);
 
+	if (of_get_property(dev->of_node, "qcom,wifi-control-func", NULL)) {
+		dev_dbg(&pdev->dev, "qcom,wifi-control-func found\n");
+		wifi_mmc_host = msm_host->mmc;
+	}
+
 	return 0;
 
 pm_runtime_disable:
@@ -5492,6 +5498,13 @@ static struct platform_driver sdhci_msm_driver = {
 		   .pm = &sdhci_msm_pm_ops,
 	},
 };
+
+
+struct mmc_host *msm_wifi_mmc_host_get(void)
+{
+	return wifi_mmc_host;
+}
+EXPORT_SYMBOL_GPL(msm_wifi_mmc_host_get);
 
 module_platform_driver(sdhci_msm_driver);
 
