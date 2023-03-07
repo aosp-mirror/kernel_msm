@@ -11,7 +11,7 @@
 #include <linux/notifier.h>
 #include <soc/qcom/dcvs.h>
 
-#define NUM_MBPS_ZONES		10
+#define NUM_MBPS_ZONES		11
 #define UP_WAKE			1
 #define DOWN_WAKE		2
 #define MBYTE			(1ULL << 20)
