@@ -105,7 +105,7 @@ static ssize_t store_##name(struct kobject *kobj,			\
 	strlist = argv_split(GFP_KERNEL, buf, &numvals);		\
 	if (!strlist)							\
 		return -ENOMEM;						\
-	numvals = min(numvals, n - 1);					\
+	numvals = min(numvals, n);					\
 	for (i = 0; i < numvals; i++) {					\
 		ret = kstrtouint(strlist[i], 10, &val);			\
 		if (ret < 0)						\
@@ -117,7 +117,8 @@ static ssize_t store_##name(struct kobject *kobj,			\
 	ret = count;							\
 out:									\
 	argv_free(strlist);						\
-	node->name[i] = 0;						\
+	if (i < n)							\
+		node->name[i] = 0;					\
 	return ret;							\
 }									\
 
