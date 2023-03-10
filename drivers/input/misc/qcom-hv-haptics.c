@@ -350,6 +350,13 @@
 #define is_between(val, min, max)	\
 	(((min) <= (max)) && ((min) <= (val)) && ((val) <= (max)))
 
+#define SWEEP_MIN_FREQUENCY			50
+#define SWEEP_MAX_FREQUENCY			500
+#define DEFAULT_SWEEP_START_FREQUENCY		170
+#define DEFAULT_SWEEP_END_FREQUENCY		230
+#define DEFAULT_SWEEP_STEP_FREQUENCY		1
+#define DEFAULT_SWEEP_STEP_DURATION_MS		100
+#define DEFAULT_AMPLITUDE_FOR_SWEEP		0xFF
 enum hap_status_sel {
 	CAL_TLRA_CL_STS = 0x00,
 	T_WIND_STS,
@@ -635,6 +642,10 @@ struct haptics_chip {
 	bool				hpwr_vreg_enabled;
 	bool				is_hv_haptics;
 	bool				hboost_enabled;
+	u32				sweep_start_frequency;
+	u32				sweep_end_frequency;
+	u32				sweep_step_frequency;
+	u32				sweep_step_duration_ms;
 };
 
 struct haptics_reg_info {
@@ -1817,6 +1828,7 @@ static int haptics_set_pattern(struct haptics_chip *chip,
 	if (rc < 0)
 		return rc;
 
+	dev_dbg(chip->dev, "%s: adjusted lra period: %d us\n", __FUNCTION__, play_rate_us);
 	/* Configure T_LRA for this pattern */
 	tmp = play_rate_us / TLRA_STEP_US;
 	values[0] = (tmp >> 8) & TLRA_OL_MSB_MASK;
@@ -5389,6 +5401,254 @@ unlock:
 	return rc;
 }
 
+static ssize_t lra_period_us_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d us\n", chip->config.t_lra_us);
+}
+
+static ssize_t lra_period_us_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 lra_period_us;
+
+	if (kstrtouint(buf, 0, &lra_period_us))
+		return -EINVAL;
+
+	chip->config.t_lra_us = lra_period_us;
+
+	return count;
+}
+static CLASS_ATTR_RW(lra_period_us);
+
+static ssize_t sweep_start_frequency_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d HZ\n", chip->sweep_start_frequency);
+}
+
+static ssize_t sweep_start_frequency_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 sweep_start_frequency;
+
+	if (kstrtouint(buf, 0, &sweep_start_frequency))
+		return -EINVAL;
+
+	if (sweep_start_frequency > SWEEP_MAX_FREQUENCY ||
+		sweep_start_frequency < SWEEP_MIN_FREQUENCY) {
+		dev_err(chip->dev, "Invalid frequency. Valid range is %d-%d HZ\n",
+			SWEEP_MIN_FREQUENCY, SWEEP_MAX_FREQUENCY);
+		return -EINVAL;
+	} else if (sweep_start_frequency > chip->sweep_end_frequency) {
+		dev_warn(chip->dev, "Invalid frequency. Must be lower than end frequency: %d HZ\n",
+			chip->sweep_end_frequency);
+	}
+
+	chip->sweep_start_frequency = sweep_start_frequency;
+	return count;
+}
+static CLASS_ATTR_RW(sweep_start_frequency);
+
+static ssize_t sweep_end_frequency_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d HZ\n", chip->sweep_end_frequency);
+}
+
+static ssize_t sweep_end_frequency_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 sweep_end_frequency;
+
+	if (kstrtouint(buf, 0, &sweep_end_frequency))
+		return -EINVAL;
+
+	if (sweep_end_frequency > SWEEP_MAX_FREQUENCY ||
+		sweep_end_frequency < SWEEP_MIN_FREQUENCY) {
+		dev_err(chip->dev, "Invalid frequency. Valid range is %d-%d HZ\n",
+			SWEEP_MIN_FREQUENCY, SWEEP_MAX_FREQUENCY);
+		return -EINVAL;
+	} else if (sweep_end_frequency < chip->sweep_start_frequency) {
+		dev_warn(chip->dev, "Invalid frequency. Must be higher than start frequency: %d HZ\n",
+			chip->sweep_start_frequency);
+	}
+
+	chip->sweep_end_frequency = sweep_end_frequency;
+
+	return count;
+}
+static CLASS_ATTR_RW(sweep_end_frequency);
+
+static ssize_t sweep_step_frequency_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d HZ\n", chip->sweep_step_frequency);
+}
+
+static ssize_t sweep_step_frequency_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 sweep_step_frequency;
+
+	if (kstrtouint(buf, 0, &sweep_step_frequency))
+		return -EINVAL;
+
+	if (!sweep_step_frequency) {
+		dev_err(chip->dev, "Invalid frequency step. Must be higher than 0\n");
+		return -EINVAL;
+	}
+
+	chip->sweep_step_frequency = sweep_step_frequency;
+
+	return count;
+}
+static CLASS_ATTR_RW(sweep_step_frequency);
+
+static ssize_t sweep_step_duration_ms_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%d ms\n", chip->sweep_step_duration_ms);
+}
+
+static ssize_t sweep_step_duration_ms_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 sweep_step_duration_ms;
+
+	if (kstrtouint(buf, 0, &sweep_step_duration_ms))
+		return -EINVAL;
+
+	if (sweep_step_duration_ms < 20) {
+		dev_err(chip->dev, "Invalid duration. Must be higher than 20 ms\n");
+		return -EINVAL;
+	}
+
+	chip->sweep_step_duration_ms = sweep_step_duration_ms;
+
+	return count;
+}
+static CLASS_ATTR_RW(sweep_step_duration_ms);
+
+static ssize_t sweep_run_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 sweep_run;
+	u32 output_frequency;
+	u32 hdrm_mv, vmax_mv = chip->config.vmax_mv;
+	int rc;
+
+	if (kstrtouint(buf, 0, &sweep_run))
+		return -EINVAL;
+
+	if (!sweep_run)
+		return count;
+
+	if(chip->sweep_start_frequency == 0 ||
+		chip->sweep_step_frequency == 0 ||
+		chip->sweep_start_frequency > chip->sweep_end_frequency) {
+		dev_err(chip->dev, "Invalid frequency range (%d - %d) HZ\n",
+			chip->sweep_start_frequency, chip->sweep_end_frequency);
+		return -EINVAL;
+	}
+
+	dev_info(chip->dev, "Will drive LRA from %d to %d HZ w/ duration: %d ms\n",
+		chip->sweep_start_frequency, chip->sweep_end_frequency,
+		chip->sweep_step_duration_ms);
+	haptics_load_constant_effect(chip, DEFAULT_AMPLITUDE_FOR_SWEEP);
+	chip->play.pattern_src = DIRECT_PLAY;
+	chip->play.length_us = 1000000;
+	rc = haptics_enable_hpwr_vreg(chip, true);
+	if (rc < 0) {
+		dev_err(chip->dev, "enable hpwr_vreg failed, rc=%d\n", rc);
+		return rc;
+	}
+	haptics_wait_hboost_ready(chip);
+
+	/* Fix Vmax to (hpwr_vreg_mv - hdrm_mv) in non-HBOOST regulator case */
+	if (is_haptics_external_powered(chip)) {
+		rc = haptics_get_vmax_headroom_mv(chip, &hdrm_mv);
+		if (rc < 0)
+			return rc;
+
+		vmax_mv = chip->hpwr_voltage_mv - hdrm_mv;
+	}
+
+	/* configure VMAX in case it was changed in previous effect playing */
+	rc = haptics_set_vmax_mv(chip, vmax_mv);
+
+	haptics_set_direct_play(chip, DEFAULT_AMPLITUDE_FOR_SWEEP);
+
+	rc = haptics_enable_autores(chip, false);
+	if (rc < 0) {
+		dev_err(chip->dev, "Disable autores failed\n");
+		return rc;
+	}
+	for (output_frequency = chip->sweep_start_frequency;
+			output_frequency <= chip->sweep_end_frequency;
+			output_frequency += chip->sweep_step_frequency) {
+		rc = haptics_config_openloop_lra_period(chip, 1000000 / output_frequency);
+		if (rc < 0) {
+			dev_err(chip->dev, "Config openloop lra period failed\n");
+			return rc;
+		}
+
+		rc = haptics_enable_play(chip, true);
+		if (rc < 0) {
+			dev_err(chip->dev, "Enable play failed\n");
+			return rc;
+		}
+		dev_dbg(chip->dev, "Driving LRA w/ %d HZ\n", output_frequency);
+
+		msleep(chip->sweep_step_duration_ms);
+
+		rc = haptics_enable_play(chip, false);
+		if (rc < 0) {
+			dev_err(chip->dev, "Disable play failed\n");
+			return rc;
+		}
+	}
+	rc = haptics_enable_autores(chip, true);
+	if (rc < 0) {
+		dev_err(chip->dev, "Enable autores failed\n");
+		return rc;
+	}
+
+	rc = haptics_enable_hpwr_vreg(chip, false);
+	if (rc < 0)
+		dev_err(chip->dev, "disable hpwr_vreg failed, rc=%d\n");
+
+	return count;
+}
+static CLASS_ATTR_WO(sweep_run);
+
 static ssize_t lra_calibration_store(struct class *c,
 		struct class_attribute *attr, const char *buf, size_t count)
 {
@@ -5486,6 +5746,12 @@ static ssize_t primitive_duration_store(struct class *c,
 static CLASS_ATTR_RW(primitive_duration);
 
 static struct attribute *hap_class_attrs[] = {
+	&class_attr_lra_period_us.attr,
+	&class_attr_sweep_start_frequency.attr,
+	&class_attr_sweep_end_frequency.attr,
+	&class_attr_sweep_step_frequency.attr,
+	&class_attr_sweep_step_duration_ms.attr,
+	&class_attr_sweep_run.attr,
 	&class_attr_lra_calibration.attr,
 	&class_attr_lra_frequency_hz.attr,
 	&class_attr_lra_impedance.attr,
@@ -5561,6 +5827,10 @@ static int haptics_probe(struct platform_device *pdev)
 	input_dev = devm_input_allocate_device(&pdev->dev);
 	if (!input_dev)
 		return -ENOMEM;
+	chip->sweep_start_frequency = DEFAULT_SWEEP_START_FREQUENCY;
+	chip->sweep_end_frequency = DEFAULT_SWEEP_END_FREQUENCY;
+	chip->sweep_step_frequency = DEFAULT_SWEEP_STEP_FREQUENCY;
+	chip->sweep_step_duration_ms = DEFAULT_SWEEP_STEP_DURATION_MS;
 
 	chip->dev = &pdev->dev;
 	chip->regmap = dev_get_regmap(chip->dev->parent, NULL);
