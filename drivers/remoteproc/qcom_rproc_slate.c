@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)    "%s: " fmt, __func__
@@ -30,13 +30,18 @@
 
 #define SECURE_APP		"slateapp"
 #define INVALID_GPIO		-1
-#define NUM_GPIOS		4
+#define NUM_GPIOS		3
 
 #define RESULT_SUCCESS		0
 #define RESULT_FAILURE		-1
 
 /* Slate Ramdump Size 4 MB */
-#define SLATE_RAMDUMP_SZ SZ_4M
+#define SLATE_RAMDUMP_SZ SZ_8M
+#define SLATE_MINIRAMDUMP_SZ SZ_64K
+#define SLATE_RAMDUMP		3
+
+
+#define SLATE_CRASH_IN_TWM	-2
 
 #define segment_is_hash(flag) (((flag) & (0x7 << 24)) == (0x2 << 24))
 
@@ -53,8 +58,6 @@ enum slate_tz_commands {
 	SLATE_RPROC_SHUTDOWN,
 	SLATE_RPROC_DUMPINFO,
 	SLATE_RPROC_UP_INFO,
-	SLATE_RPROC_RESTART,
-	SLATE_RPROC_POWERDOWN,
 };
 
 /* tzapp bg request.*/
@@ -146,10 +149,27 @@ struct qcom_slate {
 	int status_irq;
 	struct workqueue_struct *slate_queue;
 	struct work_struct restart_work;
+
+	phys_addr_t mem_phys;
+	void *mem_region;
+	size_t mem_size;
 };
 
 static irqreturn_t slate_status_change(int irq, void *dev_id);
 struct mutex cmdsync_lock;
+
+static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr,
+				char *buf)
+{
+	struct platform_device *pdev = container_of(dev,
+						struct platform_device, dev);
+	struct qcom_slate *slate_data =
+			(struct qcom_slate *)platform_get_drvdata(pdev);
+
+	return sysfs_emit(buf, "%zu\n",
+			qcom_sysmon_get_txn_id(slate_data->sysmon));
+}
+static DEVICE_ATTR_RO(txn_id);
 
 /**
  * get_cmd_rsp_buffers() - Function sets cmd & rsp buffer pointers and
@@ -234,6 +254,7 @@ static long slate_tzapp_comm(struct qcom_slate *pbd,
 	slate_tz_req->size_fw = req->size_fw;
 	rc = qseecom_send_command(pbd->qseecom_handle,
 		(void *)slate_tz_req, req_len, (void *)slate_tz_rsp, rsp_len);
+
 	mutex_unlock(&cmdsync_lock);
 	pr_debug("SLATE PIL qseecom returned with value 0x%x and status 0x%x\n",
 		rc, slate_tz_rsp->status);
@@ -265,33 +286,17 @@ end:
 static void slate_restart_work(struct work_struct *work)
 {
 
-	struct qcom_slate *drvdata =
+	struct qcom_slate *slate_data =
 		container_of(work, struct qcom_slate, restart_work);
-	struct rproc *slate_rproc = drvdata->rproc;
-	bool recovery_status = slate_rproc->recovery_disabled;
+	struct rproc *slate_rproc = slate_data->rproc;
 
-	pr_debug("Handle restart\n");
+	/* Trigger  apps crash if recovery is disabled */
+	BUG_ON(slate_rproc->recovery_disabled);
 
-	/* Disable revoery to trigger shutdown sequence to power off Slate */
-	mutex_lock(&slate_rproc->lock);
-	if (slate_rproc->state == RPROC_CRASHED ||
-			slate_rproc->state == RPROC_OFFLINE) {
-		mutex_unlock(&slate_rproc->lock);
-		return;
-	}
-	slate_rproc->recovery_disabled = true;
-	mutex_unlock(&slate_rproc->lock);
+	/* If recovery is enabled, go for recovery path */
+	pr_debug("Slate is crashed! Starting recovery...\n");
+	rproc_report_crash(slate_rproc, RPROC_FATAL_ERROR);
 
-	/* Shutdown slate */
-	rproc_shutdown(slate_rproc);
-
-	/* Power up and load image again in slate */
-	rproc_boot(slate_rproc);
-
-	/*restore the recovery value */
-	mutex_lock(&slate_rproc->lock);
-	slate_rproc->recovery_disabled = recovery_status;
-	mutex_unlock(&slate_rproc->lock);
 }
 
 static irqreturn_t slate_status_change(int irq, void *dev_id)
@@ -465,6 +470,12 @@ static int slate_auth_and_xfer(struct qcom_slate *slate_data)
 	slate_tz_req.size_fw = slate_data->size_fw;
 
 	ret = slate_tzapp_comm(slate_data, &slate_tz_req);
+
+	if (slate_data->cmd_status == SLATE_CRASH_IN_TWM) {
+		slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_DLOAD_CONT;
+		ret = slate_tzapp_comm(slate_data, &slate_tz_req);
+	}
+
 	if (ret || slate_data->cmd_status) {
 		dev_err(slate_data->dev,
 				"%s: Firmware image authentication failed\n",
@@ -514,6 +525,8 @@ static int slate_start(struct rproc *rproc)
 			__func__);
 		return -EINVAL;
 	}
+	/* Enable err fetal irq */
+	enable_irq(slate_data->status_irq);
 
 	/* Enable err fetal irq */
 	enable_irq(slate_data->status_irq);
@@ -552,7 +565,7 @@ static int slate_start(struct rproc *rproc)
 
 /**
 * slate_coredump() - Called by SSR framework to save dump of SLATE internal
-* memory, SLATE PIL allocates region from dynamic memory and pass this
+* memory, SLATE PIL does allocate region from dynamic memory and pass this
 * region to tz to dump memory content of SLATE.
 * @rproc: remoteproc handle for slate.
 *
@@ -561,7 +574,97 @@ static int slate_start(struct rproc *rproc)
 
 static void slate_coredump(struct rproc *rproc)
 {
+	struct qcom_slate *slate_data = (struct qcom_slate *)rproc->priv;
+	struct tzapp_slate_req slate_tz_req;
+	uint32_t ns_vmids[] = {VMID_HLOS};
+	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
+	u64 shm_bridge_handle;
+	void *region;
+	phys_addr_t start_addr;
+	uint32_t dump_info;
+	unsigned long size = SLATE_RAMDUMP_SZ;
+	unsigned long attr = 0;
+	int ret = 0;
+
 	pr_err("Setup for Coredump.\n");
+
+	slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_DUMPINFO;
+	if (!slate_data->qseecom_handle) {
+		ret = load_slate_tzapp(slate_data);
+		if (ret) {
+			dev_err(slate_data->dev,
+				"%s: SLATE TZ app load failure\n",
+				__func__);
+			return;
+		}
+	}
+
+	ret = slate_tzapp_comm(slate_data, &slate_tz_req);
+	dump_info = slate_data->cmd_status;
+
+	if (dump_info == SLATE_RAMDUMP)
+		size = SLATE_RAMDUMP_SZ;
+	else {
+		dev_err(slate_data->dev,
+			"%s: SLATE RPROC ramdump collection failed\n",
+			__func__);
+		return;
+	}
+
+	region = dma_alloc_attrs(slate_data->dev, size,
+			&start_addr, GFP_KERNEL, attr);
+	if (region == NULL) {
+		dev_dbg(slate_data->dev,
+			"fail to allocate ramdump region of size %zx\n",
+			size);
+		return;
+	}
+
+	slate_data->mem_phys = start_addr;
+	slate_data->mem_size = size;
+	slate_data->mem_region = region;
+
+	ret = qtee_shmbridge_register(start_addr, size, ns_vmids,
+		ns_vm_perms, 1, PERM_READ | PERM_WRITE, &shm_bridge_handle);
+
+	if (ret) {
+		pr_err("Failed to create shm bridge. ret=[%d]\n",
+			__func__, ret);
+		goto dma_free;
+	}
+
+	slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_RAMDUMP;
+	slate_tz_req.address_fw = start_addr;
+	slate_tz_req.size_fw = size;
+	ret = slate_tzapp_comm(slate_data, &slate_tz_req);
+	if (ret != 0) {
+		dev_dbg(slate_data->dev,
+			"%s: SLATE RPROC ramdmp collection failed\n",
+			__func__);
+		return;
+	}
+
+	dma_sync_single_for_cpu(slate_data->dev, slate_data->mem_phys, size, DMA_FROM_DEVICE);
+
+	pr_debug("Add coredump segment!\n");
+	ret = rproc_coredump_add_custom_segment(rproc, start_addr, size,
+			NULL, NULL);
+
+	if (ret) {
+		dev_err(slate_data->dev, "failed to add rproc_segment: %d\n",
+			ret);
+		rproc_coredump_cleanup(slate_data->rproc);
+		goto shm_free;
+	}
+
+	/* Prepare coredump file */
+	rproc_coredump(rproc);
+
+shm_free:
+	qtee_shmbridge_deregister(shm_bridge_handle);
+dma_free:
+	dma_free_attrs(slate_data->dev, size, region,
+			start_addr, attr);
 }
 
 /**
@@ -808,15 +911,24 @@ static int slate_stop(struct rproc *rproc)
 		pr_debug("Slate pil shutdown failed\n");
 		return ret;
 	}
-
 	if (slate_data->is_ready) {
 		disable_irq(slate_data->status_irq);
 		slate_data->is_ready = false;
 	}
-
 	return ret;
 }
 
+static void *slate_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
+{
+	struct qcom_slate *slate_data = (struct qcom_slate *)rproc->priv;
+	int offset;
+
+	offset = da - slate_data->mem_phys;
+	if (offset < 0 || offset + len > slate_data->mem_size)
+		return NULL;
+
+	return slate_data->mem_region + offset;
+}
 
 static const struct rproc_ops slate_ops = {
 	.prepare = slate_prepare,
@@ -825,6 +937,7 @@ static const struct rproc_ops slate_ops = {
 	.start = slate_start,
 	.stop = slate_stop,
 	.coredump = slate_coredump,
+	.da_to_va = slate_da_to_va,
 };
 
 static int slate_app_reboot_notify(struct notifier_block *nb,
@@ -905,6 +1018,10 @@ static int rproc_slate_driver_probe(struct platform_device *pdev)
 		goto free_rproc;
 	}
 
+	ret = device_create_file(slate->dev, &dev_attr_txn_id);
+	if (ret)
+		goto remove_subdev;
+
 	/* Register callback for handling reboot */
 	slate->reboot_nb.notifier_call = slate_app_reboot_notify;
 	register_reboot_notifier(&slate->reboot_nb);
@@ -931,6 +1048,8 @@ destroy_wq:
 	destroy_workqueue(slate_reset_wq);
 unregister_notify:
 	unregister_reboot_notifier(&slate->reboot_nb);
+remove_subdev:
+	qcom_remove_sysmon_subdev(slate->sysmon);
 free_rproc:
 	rproc_free(rproc);
 	mutex_destroy(&cmdsync_lock);
@@ -944,6 +1063,10 @@ static int rproc_slate_driver_remove(struct platform_device *pdev)
 
 	if (slate_reset_wq)
 		destroy_workqueue(slate_reset_wq);
+	device_remove_file(slate->dev, &dev_attr_txn_id);
+	qcom_remove_glink_subdev(slate->rproc, &slate->glink_subdev);
+	qcom_remove_sysmon_subdev(slate->sysmon);
+	qcom_remove_ssr_subdev(slate->rproc, &slate->ssr_subdev);
 	unregister_reboot_notifier(&slate->reboot_nb);
 	rproc_del(slate->rproc);
 	rproc_free(slate->rproc);

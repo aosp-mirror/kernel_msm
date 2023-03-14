@@ -105,7 +105,7 @@ void __cpuidle default_idle_call(void)
 		 * last -- this is very similar to the entry code.
 		 */
 		trace_hardirqs_on_prepare();
-		lockdep_hardirqs_on_prepare(_THIS_IP_);
+		lockdep_hardirqs_on_prepare();
 		rcu_idle_enter();
 		lockdep_hardirqs_on(_THIS_IP_);
 
@@ -516,7 +516,7 @@ DEFINE_SCHED_CLASS(idle) = {
 	.balance		= balance_idle,
 	.pick_task		= pick_task_idle,
 	.select_task_rq		= select_task_rq_idle,
-	.set_cpus_allowed	= set_cpus_allowed_common_cb,
+	.set_cpus_allowed	= set_cpus_allowed_common,
 #endif
 
 	.task_tick		= task_tick_idle,

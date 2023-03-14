@@ -350,9 +350,8 @@ extern void __setparam_dl(struct task_struct *p, const struct sched_attr *attr);
 extern void __getparam_dl(struct task_struct *p, struct sched_attr *attr);
 extern bool __checkparam_dl(const struct sched_attr *attr);
 extern bool dl_param_changed(struct task_struct *p, const struct sched_attr *attr);
-extern int  dl_task_can_attach(struct task_struct *p, const struct cpumask *cs_cpus_allowed);
 extern int  dl_cpuset_cpumask_can_shrink(const struct cpumask *cur, const struct cpumask *trial);
-extern bool dl_cpu_busy(unsigned int cpu);
+extern int  dl_cpu_busy(int cpu, struct task_struct *p);
 
 #ifdef CONFIG_CGROUP_SCHED
 
@@ -625,8 +624,8 @@ struct cfs_rq {
 	s64			runtime_remaining;
 
 	u64			throttled_clock;
-	u64			throttled_clock_task;
-	u64			throttled_clock_task_time;
+	u64			throttled_clock_pelt;
+	u64			throttled_clock_pelt_time;
 	int			throttled;
 	int			throttle_count;
 	struct list_head	throttled_list;
@@ -1560,7 +1559,6 @@ struct rq_flags {
 	 */
 	unsigned int clock_update_flags;
 #endif
-
 };
 
 #ifdef CONFIG_SMP
@@ -1906,13 +1904,6 @@ static inline void dirty_sched_domain_sysctl(int cpu)
 
 extern int sched_update_scaling(void);
 
-static inline const struct cpumask *task_user_cpus(struct task_struct *p)
-{
-	if (!p->user_cpus_ptr)
-		return cpu_possible_mask; /* &init_task.cpus_mask */
-	return p->user_cpus_ptr;
-}
-
 extern void flush_smp_call_function_from_idle(void);
 
 #else /* !CONFIG_SMP: */
@@ -2104,7 +2095,6 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 
 #define WF_SYNC     0x10 /* Waker goes to sleep after wakeup */
 #define WF_MIGRATED 0x20 /* Internal use, task got migrated */
-#define WF_ON_CPU   0x40 /* Wakee is on_cpu */
 
 #define WF_ANDROID_VENDOR	0x1000 /* Vendor specific for Android */
 
@@ -2169,12 +2159,6 @@ extern const u32		sched_prio_to_wmult[40];
 #define ENQUEUE_WAKEUP_SYNC	0x80
 
 #define RETRY_TASK		((void *)-1UL)
-
-struct affinity_context {
-	const struct cpumask *new_mask;
-	struct cpumask *user_mask;
-	unsigned int flags;
-};
 
 struct sched_class {
 
@@ -2319,19 +2303,7 @@ extern void update_group_capacity(struct sched_domain *sd, int cpu);
 
 extern void trigger_load_balance(struct rq *rq);
 
-extern void set_cpus_allowed_dl(struct task_struct *p, struct affinity_context *ctx);
-extern void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx);
-
-static inline void set_cpus_allowed_common_cb(struct task_struct *p, const struct cpumask *new_mask, u32 flags)
-{
-	struct affinity_context ac = {
-		.new_mask  = new_mask,
-		.flags     = flags,
-	};
-
-	WARN_ONCE(1, "Unexpected use of sched_class::set_cpus_allowed()");
-	set_cpus_allowed_common(p, &ac);
-}
+extern void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask, u32 flags);
 
 static inline struct task_struct *get_push_task(struct rq *rq)
 {
@@ -2568,6 +2540,24 @@ unsigned long arch_scale_freq_capacity(int cpu)
 }
 #endif
 
+#ifdef CONFIG_SCHED_DEBUG
+/*
+ * In double_lock_balance()/double_rq_lock(), we use raw_spin_rq_lock() to
+ * acquire rq lock instead of rq_lock(). So at the end of these two functions
+ * we need to call double_rq_clock_clear_update() to clear RQCF_UPDATED of
+ * rq->clock_update_flags to avoid the WARN_DOUBLE_CLOCK warning.
+ */
+static inline void double_rq_clock_clear_update(struct rq *rq1, struct rq *rq2)
+{
+	rq1->clock_update_flags &= (RQCF_REQ_SKIP|RQCF_ACT_SKIP);
+	/* rq1 == rq2 for !CONFIG_SMP, so just clear RQCF_UPDATED once. */
+#ifdef CONFIG_SMP
+	rq2->clock_update_flags &= (RQCF_REQ_SKIP|RQCF_ACT_SKIP);
+#endif
+}
+#else
+static inline void double_rq_clock_clear_update(struct rq *rq1, struct rq *rq2) {}
+#endif
 
 #ifdef CONFIG_SMP
 
@@ -2633,14 +2623,15 @@ static inline int _double_lock_balance(struct rq *this_rq, struct rq *busiest)
 	__acquires(busiest->lock)
 	__acquires(this_rq->lock)
 {
-	if (__rq_lockp(this_rq) == __rq_lockp(busiest))
+	if (__rq_lockp(this_rq) == __rq_lockp(busiest) ||
+	    likely(raw_spin_rq_trylock(busiest))) {
+		double_rq_clock_clear_update(this_rq, busiest);
 		return 0;
-
-	if (likely(raw_spin_rq_trylock(busiest)))
-		return 0;
+	}
 
 	if (rq_order_less(this_rq, busiest)) {
 		raw_spin_rq_lock_nested(busiest, SINGLE_DEPTH_NESTING);
+		double_rq_clock_clear_update(this_rq, busiest);
 		return 0;
 	}
 
@@ -2734,6 +2725,7 @@ static inline void double_rq_lock(struct rq *rq1, struct rq *rq2)
 	BUG_ON(rq1 != rq2);
 	raw_spin_rq_lock(rq1);
 	__acquire(rq2->lock);	/* Fake it out ;) */
+	double_rq_clock_clear_update(rq1, rq2);
 }
 
 /*

@@ -572,8 +572,10 @@ static int qmp_cooling_devices_register(struct qmp *qmp)
 			continue;
 		ret = qmp_cooling_device_add(qmp, &qmp->cooling_devs[count++],
 					     child);
-		if (ret)
+		if (ret) {
+			of_node_put(child);
 			goto unroll;
+		}
 	}
 
 	if (!count)
@@ -800,6 +802,7 @@ static const struct of_device_id qmp_dt_match[] = {
 	{ .compatible = "qcom,cinder-aoss-qmp", },
 	{ .compatible = "qcom,sdxpinn-aoss-qmp", },
 	{ .compatible = "qcom,sdxbaagha-aoss-qmp", },
+	{ .compatible = "qcom,kona-aoss-qmp", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qmp_dt_match);

@@ -19,6 +19,10 @@
 #ifdef CONFIG_GH_VIRTIO_DEBUG
 #include <trace/events/gh_virtio_frontend.h>
 #endif
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_VIRTUALIZATION)
+#include <linux/keyslot-manager.h>
+#include "virtio_blk_qti_crypto.h"
+#endif
 
 #define PART_BITS 4
 #define VQ_NAME_LEN 16
@@ -32,6 +36,12 @@
 #define VIRTIO_BLK_F_ICE        23
 /* support ice virtualization with iv (initialization vector) */
 #define VIRTIO_BLK_F_ICE_IV     22
+#endif
+
+#ifdef CONFIG_ARCH_NO_SG_CHAIN
+#define VIRTIO_BLK_INLINE_SG_CNT	0
+#else
+#define VIRTIO_BLK_INLINE_SG_CNT	2
 #endif
 
 static int major;
@@ -94,12 +104,14 @@ struct virtio_blk_ice_info {
 	u64 data_unit_num;
 } __packed;
 #endif
+
 struct virtblk_req {
 	struct virtio_blk_outhdr out_hdr;
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_VIRTUALIZATION)
 	struct virtio_blk_ice_info ice_info;
 #endif
 	u8 status;
+	struct sg_table sg_table;
 	struct scatterlist sg[];
 };
 
@@ -121,23 +133,19 @@ static int virtblk_add_req(struct virtqueue *vq, struct virtblk_req *vbr,
 	struct scatterlist hdr, status, *sgs[3];
 	unsigned int num_out = 0, num_in = 0;
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_VIRTUALIZATION)
-	size_t hdr_size;
-
 	/* Backend (HOST) expects to receive encryption info via extended
 	 * structure when ICE negotiation is successful which will be used
 	 * by backend ufs/sdhci host controller to program the descriptors
-	 * as per JEDEC standard. To enable encryption on data, Need to pass
-	 * required encryption info instead of zeros.
+	 * as per spec standards to enable the encryption on read/write
+	 * of data from/to disk.
 	 */
-	memset(&(vbr->ice_info), 0, sizeof(vbr->ice_info));
-	hdr_size = virtio_has_feature(vq->vdev, VIRTIO_BLK_F_ICE_IV) ?
-						   sizeof(vbr->out_hdr) + sizeof(vbr->ice_info) :
-						   sizeof(vbr->out_hdr);
+	size_t const hdr_size = virtio_has_feature(vq->vdev, VIRTIO_BLK_F_ICE_IV) ?
+				sizeof(vbr->out_hdr) + sizeof(vbr->ice_info) :
+				sizeof(vbr->out_hdr);
 	sg_init_one(&hdr, &vbr->out_hdr, hdr_size);
 #else
 	sg_init_one(&hdr, &vbr->out_hdr, sizeof(vbr->out_hdr));
 #endif
-
 	sgs[num_out++] = &hdr;
 
 	if (have_data) {
@@ -201,12 +209,92 @@ static int virtblk_setup_discard_write_zeroes(struct request *req, bool unmap)
 	return 0;
 }
 
+static void virtblk_unmap_data(struct request *req, struct virtblk_req *vbr)
+{
+	if (blk_rq_nr_phys_segments(req))
+		sg_free_table_chained(&vbr->sg_table,
+				      VIRTIO_BLK_INLINE_SG_CNT);
+}
+
+static int virtblk_map_data(struct blk_mq_hw_ctx *hctx, struct request *req,
+		struct virtblk_req *vbr)
+{
+	int err;
+
+	if (!blk_rq_nr_phys_segments(req))
+		return 0;
+
+	vbr->sg_table.sgl = vbr->sg;
+	err = sg_alloc_table_chained(&vbr->sg_table,
+				     blk_rq_nr_phys_segments(req),
+				     vbr->sg_table.sgl,
+				     VIRTIO_BLK_INLINE_SG_CNT);
+	if (unlikely(err))
+		return -ENOMEM;
+
+	return blk_rq_map_sg(hctx->queue, req, vbr->sg_table.sgl);
+}
+
+static void virtblk_cleanup_cmd(struct request *req)
+{
+	if (req->rq_flags & RQF_SPECIAL_PAYLOAD)
+		kfree(bvec_virt(&req->special_vec));
+}
+
+static int virtblk_setup_cmd(struct virtio_device *vdev, struct request *req,
+		struct virtblk_req *vbr)
+{
+	bool unmap = false;
+	u32 type;
+
+	vbr->out_hdr.sector = 0;
+
+	switch (req_op(req)) {
+	case REQ_OP_READ:
+		type = VIRTIO_BLK_T_IN;
+		vbr->out_hdr.sector = cpu_to_virtio64(vdev,
+						      blk_rq_pos(req));
+		break;
+	case REQ_OP_WRITE:
+		type = VIRTIO_BLK_T_OUT;
+		vbr->out_hdr.sector = cpu_to_virtio64(vdev,
+						      blk_rq_pos(req));
+		break;
+	case REQ_OP_FLUSH:
+		type = VIRTIO_BLK_T_FLUSH;
+		break;
+	case REQ_OP_DISCARD:
+		type = VIRTIO_BLK_T_DISCARD;
+		break;
+	case REQ_OP_WRITE_ZEROES:
+		type = VIRTIO_BLK_T_WRITE_ZEROES;
+		unmap = !(req->cmd_flags & REQ_NOUNMAP);
+		break;
+	case REQ_OP_DRV_IN:
+		type = VIRTIO_BLK_T_GET_ID;
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return BLK_STS_IOERR;
+	}
+
+	vbr->out_hdr.type = cpu_to_virtio32(vdev, type);
+	vbr->out_hdr.ioprio = cpu_to_virtio32(vdev, req_get_ioprio(req));
+
+	if (type == VIRTIO_BLK_T_DISCARD || type == VIRTIO_BLK_T_WRITE_ZEROES) {
+		if (virtblk_setup_discard_write_zeroes(req, unmap))
+			return BLK_STS_RESOURCE;
+	}
+
+	return 0;
+}
+
 static inline void virtblk_request_done(struct request *req)
 {
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
 
-	if (req->rq_flags & RQF_SPECIAL_PAYLOAD)
-		kfree(bvec_virt(&req->special_vec));
+	virtblk_unmap_data(req, vbr);
+	virtblk_cleanup_cmd(req);
 	blk_mq_end_request(req, virtblk_result(vbr));
 }
 
@@ -256,6 +344,25 @@ static void virtio_commit_rqs(struct blk_mq_hw_ctx *hctx)
 		virtqueue_notify(vq->vq);
 }
 
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_VIRTUALIZATION)
+static void virtblk_get_ice_info(struct request *req)
+{
+	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
+
+	/* whether or not the request needs inline crypto operations*/
+	if (!req || !req->crypt_keyslot) {
+		/* ice is not activated */
+		vbr->ice_info.activate = false;
+	} else {
+		vbr->ice_info.ice_slot = blk_ksm_get_slot_idx(req->crypt_keyslot);
+		/* ice is activated - successful flow */
+		vbr->ice_info.activate = true;
+		/* data unit number i.e. iv value */
+		vbr->ice_info.data_unit_num = req->crypt_ctx->bc_dun[0];
+	}
+}
+#endif
+
 static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 			   const struct blk_mq_queue_data *bd)
 {
@@ -263,63 +370,29 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct request *req = bd->rq;
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
 	unsigned long flags;
-	unsigned int num;
+	int num;
 	int qid = hctx->queue_num;
 	int err;
 	bool notify = false;
-	bool unmap = false;
-	u32 type;
 
-	switch (req_op(req)) {
-	case REQ_OP_READ:
-	case REQ_OP_WRITE:
-		type = 0;
-		break;
-	case REQ_OP_FLUSH:
-		type = VIRTIO_BLK_T_FLUSH;
-		break;
-	case REQ_OP_DISCARD:
-		type = VIRTIO_BLK_T_DISCARD;
-		break;
-	case REQ_OP_WRITE_ZEROES:
-		type = VIRTIO_BLK_T_WRITE_ZEROES;
-		unmap = !(req->cmd_flags & REQ_NOUNMAP);
-		break;
-	case REQ_OP_DRV_IN:
-		type = VIRTIO_BLK_T_GET_ID;
-		break;
-	default:
-		WARN_ON_ONCE(1);
-		return BLK_STS_IOERR;
-	}
+	err = virtblk_setup_cmd(vblk->vdev, req, vbr);
+	if (unlikely(err))
+		return err;
 
-	BUG_ON(type != VIRTIO_BLK_T_DISCARD &&
-	       type != VIRTIO_BLK_T_WRITE_ZEROES &&
-	       (req->nr_phys_segments + 2 > vblk->sg_elems));
-
-	vbr->out_hdr.type = cpu_to_virtio32(vblk->vdev, type);
-	vbr->out_hdr.sector = type ?
-		0 : cpu_to_virtio64(vblk->vdev, blk_rq_pos(req));
-	vbr->out_hdr.ioprio = cpu_to_virtio32(vblk->vdev, req_get_ioprio(req));
-
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_VIRTUALIZATION)
+	if (virtio_has_feature(vblk->vdev, VIRTIO_BLK_F_ICE_IV))
+		virtblk_get_ice_info(req);
+#endif
 	blk_mq_start_request(req);
 
-	if (type == VIRTIO_BLK_T_DISCARD || type == VIRTIO_BLK_T_WRITE_ZEROES) {
-		err = virtblk_setup_discard_write_zeroes(req, unmap);
-		if (err)
-			return BLK_STS_RESOURCE;
-	}
-
-	num = blk_rq_map_sg(hctx->queue, req, vbr->sg);
-	if (num) {
-		if (rq_data_dir(req) == WRITE)
-			vbr->out_hdr.type |= cpu_to_virtio32(vblk->vdev, VIRTIO_BLK_T_OUT);
-		else
-			vbr->out_hdr.type |= cpu_to_virtio32(vblk->vdev, VIRTIO_BLK_T_IN);
+	num = virtblk_map_data(hctx, req, vbr);
+	if (unlikely(num < 0)) {
+		virtblk_cleanup_cmd(req);
+		return BLK_STS_RESOURCE;
 	}
 
 	spin_lock_irqsave(&vblk->vqs[qid].lock, flags);
-	err = virtblk_add_req(vblk->vqs[qid].vq, vbr, vbr->sg, num);
+	err = virtblk_add_req(vblk->vqs[qid].vq, vbr, vbr->sg_table.sgl, num);
 #ifdef CONFIG_GH_VIRTIO_DEBUG
 	trace_virtio_block_submit(vblk->vqs[qid].vq->vdev->index,
 		vbr->out_hdr.type, vbr->out_hdr.sector, vbr->out_hdr.ioprio, err, num);
@@ -332,6 +405,8 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 		if (err == -ENOSPC)
 			blk_mq_stop_hw_queue(hctx);
 		spin_unlock_irqrestore(&vblk->vqs[qid].lock, flags);
+		virtblk_unmap_data(req, vbr);
+		virtblk_cleanup_cmd(req);
 		switch (err) {
 		case -ENOSPC:
 			return BLK_STS_DEV_RESOURCE;
@@ -712,16 +787,6 @@ static const struct attribute_group *virtblk_attr_groups[] = {
 	NULL,
 };
 
-static int virtblk_init_request(struct blk_mq_tag_set *set, struct request *rq,
-		unsigned int hctx_idx, unsigned int numa_node)
-{
-	struct virtio_blk *vblk = set->driver_data;
-	struct virtblk_req *vbr = blk_mq_rq_to_pdu(rq);
-
-	sg_init_table(vbr->sg, vblk->sg_elems);
-	return 0;
-}
-
 static int virtblk_map_queues(struct blk_mq_tag_set *set)
 {
 	struct virtio_blk *vblk = set->driver_data;
@@ -734,7 +799,6 @@ static const struct blk_mq_ops virtio_mq_ops = {
 	.queue_rq	= virtio_queue_rq,
 	.commit_rqs	= virtio_commit_rqs,
 	.complete	= virtblk_request_done,
-	.init_request	= virtblk_init_request,
 	.map_queues	= virtblk_map_queues,
 };
 
@@ -814,7 +878,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	vblk->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
 	vblk->tag_set.cmd_size =
 		sizeof(struct virtblk_req) +
-		sizeof(struct scatterlist) * sg_elems;
+		sizeof(struct scatterlist) * VIRTIO_BLK_INLINE_SG_CNT;
 	vblk->tag_set.driver_data = vblk;
 	vblk->tag_set.nr_hw_queues = vblk->num_vqs;
 
@@ -907,11 +971,12 @@ static int virtblk_probe(struct virtio_device *vdev)
 		blk_queue_io_opt(q, blk_size * opt_io_size);
 
 	if (virtio_has_feature(vdev, VIRTIO_BLK_F_DISCARD)) {
-		q->limits.discard_granularity = blk_size;
-
 		virtio_cread(vdev, struct virtio_blk_config,
 			     discard_sector_alignment, &v);
-		q->limits.discard_alignment = v ? v << SECTOR_SHIFT : 0;
+		if (v)
+			q->limits.discard_granularity = v << SECTOR_SHIFT;
+		else
+			q->limits.discard_granularity = blk_size;
 
 		virtio_cread(vdev, struct virtio_blk_config,
 			     max_discard_sectors, &v);
@@ -939,8 +1004,17 @@ static int virtblk_probe(struct virtio_device *vdev)
 	}
 
 	virtblk_update_capacity(vblk, false);
-	virtio_device_ready(vdev);
 
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_VIRTUALIZATION)
+	if (virtio_has_feature(vblk->vdev, VIRTIO_BLK_F_ICE_IV)) {
+		dev_notice(&vdev->dev, "%s\n", vblk->disk->disk_name);
+		/* Initilaize supported crypto capabilities*/
+		err = virtblk_init_crypto_qti_spec(&vblk->vdev->dev);
+		if (!err)
+			virtblk_crypto_qti_setup_rq_keyslot_manager(vblk->disk->queue);
+	}
+#endif
+	virtio_device_ready(vdev);
 	err = device_add_disk(&vdev->dev, vblk->disk, virtblk_attr_groups);
 	if (err)
 		goto out_cleanup_disk;

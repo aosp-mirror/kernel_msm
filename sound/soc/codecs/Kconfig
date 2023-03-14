@@ -900,7 +900,6 @@ config SND_SOC_MAX98095
 
 config SND_SOC_MAX98357A
 	tristate "Maxim MAX98357A CODEC"
-	depends on GPIOLIB
 
 config SND_SOC_MAX98371
 	tristate
@@ -1149,7 +1148,6 @@ config SND_SOC_RT1015
 
 config SND_SOC_RT1015P
 	tristate
-	depends on GPIOLIB
 
 config SND_SOC_RT1019
 	tristate
@@ -1944,5 +1942,9 @@ config SND_SOC_LPASS_TX_MACRO
 	depends on COMMON_CLK
 	select REGMAP_MMIO
 	tristate "Qualcomm TX Macro in LPASS(Low Power Audio SubSystem)"
+
+config SND_SOC_TAS5805M
+	tristate "Texas Instruments TAS5805M audio amplifier"
+	depends on I2C
 
 endmenu

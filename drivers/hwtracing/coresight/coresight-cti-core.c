@@ -1084,11 +1084,12 @@ static int cti_probe(struct amba_device *adev, const struct amba_id *id)
 	drvdata->config.hw_powered = true;
 
 	/* set up device name - will depend if cpu bound or otherwise */
-	if (drvdata->ctidev.cpu >= 0)
-		cti_desc.name = devm_kasprintf(dev, GFP_KERNEL, "cti_cpu%d",
-					       drvdata->ctidev.cpu);
-	else
-		cti_desc.name = coresight_alloc_device_name(&cti_sys_devs, dev);
+	if (drvdata->ctidev.cpu >= 0) {
+		if (!cpu_active(drvdata->ctidev.cpu))
+			return -ENXIO;
+	}
+
+	cti_desc.name = coresight_alloc_device_name(&cti_sys_devs, dev);
 	if (!cti_desc.name)
 		return -ENOMEM;
 

@@ -77,7 +77,7 @@ static const char * const mhi_pm_state_str[] = {
 	[MHI_PM_STATE_LD_ERR_FATAL_DETECT] = "Linkdown or Error Fatal Detect",
 };
 
-const char *to_mhi_pm_state_str(enum mhi_pm_state state)
+const char *to_mhi_pm_state_str(u32 state)
 {
 	int index;
 
@@ -637,7 +637,7 @@ int mhi_init_chan_ctxt(struct mhi_controller *mhi_cntrl,
 
 	tre_ring->rp = tre_ring->wp = tre_ring->base;
 	buf_ring->rp = buf_ring->wp = buf_ring->base;
-	mhi_chan->db_cfg.db_mode = 1;
+	mhi_chan->db_cfg.db_mode = true;
 
 	/* Update to all cores */
 	smp_wmb();
