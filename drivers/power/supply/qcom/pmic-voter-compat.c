@@ -152,8 +152,10 @@ static int pmic_voter_compat_cb(struct gvotable_election *el,
 		effective_result = (uintptr_t)ptr;
 
 	ret = gvotable_get_current_reason(el, reason, sizeof(reason));
-	if (ret > 0)
+	if (ret > 0) {
 		effective_reason = reason;
+		ret = 0;
+	}
 
 	/* for SET_ANY voter, the value is always same as enabled. */
 	pr_debug("%s: name=%s result=%d reason=%s\n", __func__, vd->name,
