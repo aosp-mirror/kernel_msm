@@ -3875,6 +3875,9 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 			struct cfg80211_chan_def chandef = {};
 			int ret;
 
+			if (!link)
+				goto nla_put_failure;
+
 			if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id))
 				goto nla_put_failure;
 			if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN,
@@ -17966,7 +17969,8 @@ void nl80211_send_roamed(struct cfg80211_registered_device *rdev,
 }
 
 void nl80211_send_port_authorized(struct cfg80211_registered_device *rdev,
-				  struct net_device *netdev, const u8 *bssid)
+				  struct net_device *netdev, const u8 *bssid,
+				  const u8 *td_bitmap, u8 td_bitmap_len)
 {
 	struct sk_buff *msg;
 	void *hdr;
@@ -17985,6 +17989,11 @@ void nl80211_send_port_authorized(struct cfg80211_registered_device *rdev,
 	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, netdev->ifindex) ||
 	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, bssid))
 		goto nla_put_failure;
+
+	if ((td_bitmap_len > 0) && td_bitmap)
+		if (nla_put(msg, NL80211_ATTR_TD_BITMAP,
+			    td_bitmap_len, td_bitmap))
+			goto nla_put_failure;
 
 	genlmsg_end(msg, hdr);
 
@@ -19672,7 +19681,7 @@ void cfg80211_crit_proto_stopped(struct wireless_dev *wdev, gfp_t gfp)
 }
 EXPORT_SYMBOL(cfg80211_crit_proto_stopped);
 
-void nl80211_send_ap_stopped(struct wireless_dev *wdev)
+void nl80211_send_ap_stopped(struct wireless_dev *wdev, unsigned int link_id)
 {
 	struct wiphy *wiphy = wdev->wiphy;
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
@@ -19690,7 +19699,9 @@ void nl80211_send_ap_stopped(struct wireless_dev *wdev)
 	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
 	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, wdev->netdev->ifindex) ||
 	    nla_put_u64_64bit(msg, NL80211_ATTR_WDEV, wdev_id(wdev),
-			      NL80211_ATTR_PAD))
+			      NL80211_ATTR_PAD) ||
+	    (wdev->valid_links &&
+	     nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id)))
 		goto out;
 
 	genlmsg_end(msg, hdr);
