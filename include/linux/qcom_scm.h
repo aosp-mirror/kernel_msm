@@ -79,6 +79,14 @@ enum qcom_scm_ice_cipher {
 	QCOM_SCM_ICE_CIPHER_AES_256_CBC = 4,
 };
 
+enum qcom_scm_custom_reset_type {
+	QCOM_SCM_RST_NONE,
+	QCOM_SCM_RST_SHUTDOWN_TO_RTC_MODE = 0x80000005,
+	QCOM_SCM_RST_SHUTDOWN_TO_TWM_MODE,
+	QCOM_SCM_RST_MAX
+};
+extern enum qcom_scm_custom_reset_type qcom_scm_custom_reset_type;
+
 #define QCOM_SCM_VMID_HLOS       0x3
 #define QCOM_SCM_VMID_MSS_MSA    0xF
 #define QCOM_SCM_VMID_WLAN       0x18
@@ -278,5 +286,16 @@ extern int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
 			      u64 limit_node, u32 node_id, u64 version);
 extern int qcom_scm_lmh_profile_change(u32 profile_id);
 extern bool qcom_scm_lmh_dcvsh_available(void);
+
+static inline int qcom_scm_paravirt_smmu_attach(u64 sid, u64 asid, u64 ste_pa,
+			u64 ste_size, u64 cd_pa, u64 cd_size)
+		{ return -ENODEV; }
+
+static inline int qcom_scm_paravirt_smmu_detach(u64 sid)
+		{ return -ENODEV; }
+
+static inline int qcom_scm_paravirt_tlb_inv(u64 asid)
+		{ return -ENODEV; }
+
 
 #endif
