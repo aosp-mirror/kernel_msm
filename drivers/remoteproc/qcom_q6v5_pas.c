@@ -137,6 +137,28 @@ static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, ch
 }
 static DEVICE_ATTR_RO(txn_id);
 
+static ssize_t crash_reason_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
+	struct qcom_adsp *adsp = (struct qcom_adsp *)platform_get_drvdata(pdev);
+	int ret = snprintf(buf, PAGE_SIZE, "%s\n", adsp->q6v5.last_crash_reason);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(crash_reason);
+
+static ssize_t crash_timestamp_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
+	struct qcom_adsp *adsp = (struct qcom_adsp *)platform_get_drvdata(pdev);
+	int ret = snprintf(buf, PAGE_SIZE, "%s\n", adsp->q6v5.last_crash_timestamp);
+
+	return ret;
+}
+static DEVICE_ATTR_RO(crash_timestamp);
+
 void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
 		     void *dest, size_t offset, size_t size)
 {
@@ -1113,9 +1135,17 @@ static int adsp_probe(struct platform_device *pdev)
 	}
 
 	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
-	ret = device_create_file(adsp->dev, &dev_attr_txn_id);
+	ret = device_create_file(adsp->dev, &dev_attr_crash_reason);
 	if (ret)
 		goto remove_subdevs;
+
+	ret = device_create_file(adsp->dev, &dev_attr_crash_timestamp);
+	if (ret)
+		goto remove_crash_reason;
+
+	ret = device_create_file(adsp->dev, &dev_attr_txn_id);
+	if (ret)
+		goto remove_crash_timestamp;
 
 	snprintf(md_dev_name, ARRAY_SIZE(md_dev_name), "%s-md", pdev->dev.of_node->name);
 	adsp->minidump_dev = qcom_create_ramdump_device(md_dev_name, NULL);
@@ -1133,6 +1163,10 @@ destroy_minidump_dev:
 		qcom_destroy_ramdump_device(adsp->minidump_dev);
 
 	device_remove_file(adsp->dev, &dev_attr_txn_id);
+remove_crash_timestamp:
+	device_remove_file(adsp->dev, &dev_attr_crash_timestamp);
+remove_crash_reason:
+	device_remove_file(adsp->dev, &dev_attr_crash_reason);
 remove_subdevs:
 	qcom_remove_sysmon_subdev(adsp->sysmon);
 detach_proxy_pds:
@@ -1155,6 +1189,8 @@ static int adsp_remove(struct platform_device *pdev)
 	if (adsp->minidump_dev)
 		qcom_destroy_ramdump_device(adsp->minidump_dev);
 	device_remove_file(adsp->dev, &dev_attr_txn_id);
+	device_remove_file(adsp->dev, &dev_attr_crash_timestamp);
+	device_remove_file(adsp->dev, &dev_attr_crash_reason);
 	qcom_remove_glink_subdev(adsp->rproc, &adsp->glink_subdev);
 	qcom_remove_sysmon_subdev(adsp->sysmon);
 	qcom_remove_smd_subdev(adsp->rproc, &adsp->smd_subdev);

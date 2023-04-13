@@ -17,6 +17,7 @@
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
 #include <trace/events/rproc_qcom.h>
+#include <linux/rtc.h>
 
 #define Q6V5_PANIC_DELAY_MS	200
 
@@ -136,17 +137,32 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	struct qcom_q6v5 *q6v5 = data;
 	size_t len;
 	char *msg;
+	char *reason = q6v5->last_crash_reason;
+	char *timestamp = q6v5->last_crash_timestamp;
+	struct timespec64 ts;
+	struct rtc_time tm;
 
 	if (!q6v5->running) {
 		dev_info(q6v5->dev, "received fatal irq while q6 is offline\n");
 		return IRQ_HANDLED;
 	}
 
+	/* Record crash time */
+	ktime_get_real_ts64(&ts);
+	rtc_time64_to_tm(ts.tv_sec, &tm);
+	snprintf(timestamp, MAX_CRASH_TIMESTAMP_LEN,
+		"%d-%02d-%02d_%02d-%02d-%02d",
+		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		tm.tm_hour, tm.tm_min, tm.tm_sec);
+
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
-	if (!IS_ERR(msg) && len > 0 && msg[0])
+	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "fatal error received: %s\n", msg);
-	else
+		strscpy(reason, msg, (size_t)MAX_SSR_REASON_LEN);
+	} else {
 		dev_err(q6v5->dev, "fatal error without message\n");
+		strscpy(reason, "Unknown crash reason", (size_t)MAX_SSR_REASON_LEN);
+	}
 
 	q6v5->running = false;
 	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_fatal", msg);

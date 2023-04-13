@@ -19,6 +19,9 @@ struct rproc;
 struct qcom_smem_state;
 struct qcom_sysmon;
 
+#define MAX_SSR_REASON_LEN  256U
+#define MAX_CRASH_TIMESTAMP_LEN  30U
+
 struct qcom_q6v5 {
 	struct device *dev;
 	struct rproc *rproc;
@@ -44,6 +47,9 @@ struct qcom_q6v5 {
 	struct completion stop_done;
 
 	int crash_reason;
+
+	char last_crash_reason[MAX_SSR_REASON_LEN];
+	char last_crash_timestamp[MAX_CRASH_TIMESTAMP_LEN];
 
 	bool running;
 
