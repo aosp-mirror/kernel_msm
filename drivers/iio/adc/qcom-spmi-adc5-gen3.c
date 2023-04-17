@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -615,7 +615,9 @@ handler_end:
 static void tm_handler_work(struct work_struct *work)
 {
 	struct adc5_channel_prop *chan_prop;
-	u8 tm_status[2], buf[16], val;
+	u8 tm_status[2] = {0};
+	u8 buf[16] = {0};
+	u8 val;
 	int ret, i, sdam_index = -1;
 	struct adc5_chip *adc = container_of(work, struct adc5_chip,
 						tm_handler_work);
@@ -885,7 +887,7 @@ static int adc_tm5_gen3_set_trip_temp(void *data,
 					int low_temp, int high_temp)
 {
 	struct adc5_channel_prop *prop = data;
-	struct adc5_chip *adc = prop->chip;
+	struct adc5_chip *adc;
 	struct adc_tm_config tm_config;
 	int ret;
 
@@ -1236,7 +1238,7 @@ EXPORT_SYMBOL(adc_tm_channel_measure_gen3);
 int32_t adc_tm_disable_chan_meas_gen3(struct adc5_chip *chip,
 					struct adc_tm_param *param)
 {
-	int ret, i;
+	int ret = 0, i;
 	uint32_t dt_index = 0, v_channel;
 	struct adc_tm_client_info *client_info = NULL;
 
@@ -1836,6 +1838,30 @@ static int adc5_gen3_restore(struct device *dev)
 	return ret;
 }
 
+static void adc5_gen3_shutdown(struct platform_device *pdev)
+{
+	struct adc5_chip *adc = platform_get_drvdata(pdev);
+	u8 data = 0;
+	int i, sdam_index;
+
+	for (i = 0; i < adc->num_interrupts; i++)
+		devm_free_irq(adc->dev, adc->base[i].irq, adc);
+
+	/* Disable all available channels */
+	for (i = 0; i < adc->num_sdams * 8; i++) {
+		sdam_index = i / 8;
+		data = MEAS_INT_DISABLE;
+		adc5_write(adc, sdam_index, ADC5_GEN3_TIMER_SEL, &data, 1);
+
+		/* To indicate there is an actual conversion request */
+		data = ADC5_GEN3_CHAN_CONV_REQ | (i - (sdam_index*8));
+		adc5_write(adc, sdam_index, ADC5_GEN3_PERPH_CH, &data, 1);
+
+		data = ADC5_GEN3_CONV_REQ_REQ;
+		adc5_write(adc, sdam_index, ADC5_GEN3_CONV_REQ, &data, 1);
+	}
+}
+
 static const struct dev_pm_ops adc5_gen3_pm_ops = {
 	.freeze = adc5_gen3_freeze,
 	.restore = adc5_gen3_restore,
@@ -1848,6 +1874,7 @@ static struct platform_driver adc5_gen3_driver = {
 		.pm = &adc5_gen3_pm_ops,
 	},
 	.probe = adc5_gen3_probe,
+	.shutdown = adc5_gen3_shutdown,
 	.remove = adc5_gen3_exit,
 };
 module_platform_driver(adc5_gen3_driver);
