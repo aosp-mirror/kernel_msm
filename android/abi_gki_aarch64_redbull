@@ -111,6 +111,7 @@
   cpus_read_lock
   cpus_read_unlock
   cpu_subsys
+  cpu_topology
   crypto_alloc_shash
   crypto_destroy_tfm
   crypto_shash_digest
@@ -148,6 +149,7 @@
   device_property_read_u32_array
   device_register
   device_remove_file
+  device_set_wakeup_capable
   device_unregister
   _dev_info
   __dev_kfree_skb_any
@@ -1606,6 +1608,7 @@
   idr_replace
   init_uts_ns
   irq_work_queue
+  iterate_fd
   kern_addr_valid
   kernfs_create_link
   ktime_get_real_seconds
@@ -2504,9 +2507,6 @@
   spmi_controller_alloc
   spmi_controller_remove
 
-# required by st21nfc.ko
-  device_set_wakeup_capable
-
 # required by subsystem-restart.ko
   system_state
 
@@ -2692,7 +2692,6 @@
   cfg80211_vendor_cmd_reply
   complete_and_exit
   cpufreq_quick_get_max
-  cpu_topology
   crypto_aead_setauthsize
   crypto_aead_setkey
   crypto_alloc_aead
@@ -2753,7 +2752,6 @@
   snd_soc_component_exit_regmap
 
 # required by xhci-plat-hcd.ko
-  device_wakeup_enable
   usb_add_hcd
   __usb_create_hcd
   usb_disabled
@@ -2771,10 +2769,10 @@
   crc32_le
   crypto_register_scomp
   crypto_unregister_scomp
+  device_wakeup_enable
   devm_regulator_register_notifier
   generic_file_mmap
   idr_alloc_u32
-  iterate_fd
   qdisc_reset
   simple_getattr
   soc_find_component
