@@ -5488,6 +5488,7 @@ static struct platform_driver sdhci_msm_driver = {
 	.remove = sdhci_msm_remove,
 	.driver = {
 		   .name = "sdhci_msm",
+		   .probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		   .of_match_table = sdhci_msm_dt_match,
 		   .pm = &sdhci_msm_pm_ops,
 	},
