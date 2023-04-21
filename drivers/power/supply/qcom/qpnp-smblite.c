@@ -1227,9 +1227,9 @@ static int smblite_init_hw(struct smblite *chip)
 		return rc;
 	}
 
-	/* Enable HVDCP detection only for PM5100 targets */
+	/* Disable HVDCP detection only for PM5100 targets */
 	if (chg->subtype == PM5100)
-		smblite_lib_hvdcp_detect_enable(chg, true);
+		smblite_lib_hvdcp_detect_enable(chg, false);
 
 	rc = schgm_flashlite_init(chg);
 	if (rc < 0) {
