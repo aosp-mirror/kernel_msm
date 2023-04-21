@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cpu.h>
@@ -107,10 +106,8 @@ int create_cluster_sysfs_nodes(struct lpm_cluster *cluster)
 		struct qcom_cluster_node *d;
 
 		d = devm_kzalloc(cluster->dev, sizeof(*d), GFP_KERNEL);
-		if (!d) {
-			kobject_put(cluster->dev_kobj);
+		if (!d)
 			return -ENOMEM;
-		}
 
 		d->state_idx = i;
 		d->cluster = cluster;

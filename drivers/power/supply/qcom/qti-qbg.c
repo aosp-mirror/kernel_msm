@@ -946,31 +946,6 @@ static int qbg_init_esr(struct qti_qbg *chip)
 	return rc;
 }
 
-#define QBG_VBAT_EMPTY_STEP_THRES_UV 49920
-static void qbg_init_vbatt_empty_threshold(struct qti_qbg *chip)
-{
-	int rc = 0;
-	u8 val = 0;
-	u32 vbatt_in_uv = 0;
-
-	/* Check for Vbatt empty threshold limits -- Should be b/w 0 to 6V */
-	if (chip->vbatt_empty_threshold_mv == 0 || chip->vbatt_empty_threshold_mv > 6000) {
-		pr_info("Invalid Vbatt_empty threshold, value: %d\n",
-				chip->vbatt_empty_threshold_mv);
-		return;
-	}
-
-	vbatt_in_uv = chip->vbatt_empty_threshold_mv * 1000;
-
-	val = (u8) (vbatt_in_uv / QBG_VBAT_EMPTY_STEP_THRES_UV);
-
-	rc = qbg_write(chip, QBG_MAIN_VBAT_EMPTY_THRESH,
-			&val, 1);
-	if (rc < 0)
-		pr_err("Failed to write QBG VBATT EMPTY THRESHOLD offset, rc=%d\n", rc);
-
-}
-
 static int qbg_force_fast_char(struct qti_qbg *chip, bool force)
 {
 	int rc = 0;
@@ -1102,16 +1077,6 @@ done:
 	mutex_unlock(&chip->fifo_lock);
 	return IRQ_HANDLED;
 }
-
-static irqreturn_t qbg_vbatt_empty_irq_handler(int irq, void *_chip)
-{
-	struct qti_qbg *chip = _chip;
-
-	qbg_dbg(chip, QBG_DEBUG_IRQ, "Vbatt empty IRQ Triggered\n");
-
-	return IRQ_HANDLED;
-}
-
 
 static int qbg_notifier_cb(struct notifier_block *nb,
 			unsigned long event, void *data)
@@ -2433,23 +2398,6 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 		dev_err(chip->dev, "Failed to set IRQ(qbg-sdam) wake-able, rc=%d\n",
 			rc);
 
-	/* Register for Vbatt_empty INT only if valid value is defined in DT */
-	if (chip->vbatt_empty_threshold_mv != 0) {
-		rc = devm_request_threaded_irq(chip->dev, chip->vbatt_empty_irq, NULL,
-			qbg_vbatt_empty_irq_handler, IRQF_ONESHOT,
-			"qbg-vbatt-empty", chip);
-		if (rc < 0) {
-			dev_err(chip->dev, "Failed to request IRQ(qbg-vbatt-empty), rc=%d\n",
-				rc);
-			return rc;
-		}
-
-		rc = enable_irq_wake(chip->vbatt_empty_irq);
-		if (rc < 0)
-			dev_err(chip->dev, "Failed to set IRQ(qbg-vbatt-empty) wake-able, rc=%d\n",
-				rc);
-	}
-
 	return rc;
 }
 
@@ -2649,19 +2597,6 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 	if (!rc)
 		chip->rconn_mohm = val;
 
-	chip->vbatt_empty_threshold_mv = 0;
-	rc = of_property_read_u32(node, "qcom,vbatt-empty-threshold-mv",
-					&val);
-
-	if (!rc)
-		chip->vbatt_empty_threshold_mv = val;
-
-	chip->vbatt_empty_irq = of_irq_get_byname(node, "qbg-vbatt-empty");
-	if (chip->vbatt_empty_irq < 0) {
-		pr_err("Failed to get Vbatt_empty IRQ, rc=%d\n", chip->vbatt_empty_irq);
-		return -EINVAL;
-	}
-
 	if (of_find_property(node, "nvmem-cells", NULL)) {
 		chip->debug_mask_nvmem_low = devm_nvmem_cell_get(chip->dev, "qbg_debug_mask_low");
 		if (IS_ERR(chip->debug_mask_nvmem_low)) {
@@ -2846,8 +2781,6 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	qbg_init_vbatt_empty_threshold(chip);
-
 	rc = qbg_register_interrupts(chip);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "Failed to register QBG interrupts, rc=%d\n", rc);
@@ -2910,7 +2843,7 @@ static int qbg_restore(struct device *dev)
 static int qbg_suspend(struct device *dev)
 {
 #ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (mem_sleep_current == PM_SUSPEND_MEM)
 		return qbg_freeze(dev);
 #endif
 	return 0;
@@ -2919,7 +2852,7 @@ static int qbg_suspend(struct device *dev)
 static int qbg_resume(struct device *dev)
 {
 #ifdef CONFIG_DEEPSLEEP
-	if (pm_suspend_via_firmware())
+	if (mem_sleep_current == PM_SUSPEND_MEM)
 		return qbg_restore(dev);
 #endif
 	return 0;

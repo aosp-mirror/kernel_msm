@@ -114,7 +114,6 @@ struct ufs_qcom_phy {
 	enum phy_mode mode;
 	int submode;
 	struct reset_control *ufs_reset;
-	struct list_head regs_list_head;
 };
 
 /**
@@ -130,7 +129,6 @@ struct ufs_qcom_phy {
  * @ctrl_rx_linecfg: pointer to a function that controls the enable/disable of
  * Rx line config
  * @dbg_register_dump: pointer to a function that dumps phy registers for debug.
- * @dbg_register_save: pointer to a function that save phy registers to memory.
  */
 struct ufs_qcom_phy_specific_ops {
 	int (*calibrate)(struct ufs_qcom_phy *ufs_qcom_phy, bool is_rate_B,
@@ -141,7 +139,6 @@ struct ufs_qcom_phy_specific_ops {
 	void (*power_control)(struct ufs_qcom_phy *phy, bool val);
 	void (*ctrl_rx_linecfg)(struct ufs_qcom_phy *phy, bool ctrl);
 	void (*dbg_register_dump)(struct ufs_qcom_phy *phy);
-	void (*dbg_register_save)(struct ufs_qcom_phy *phy);
 };
 
 struct ufs_qcom_phy *get_ufs_qcom_phy(struct phy *generic_phy);
@@ -164,8 +161,5 @@ void ufs_qcom_phy_write_tbl(struct ufs_qcom_phy *ufs_qcom_phy,
 			struct ufs_qcom_phy_calibration *tbl,
 			int tbl_size);
 int ufs_qcom_phy_dump_regs(struct ufs_qcom_phy *phy,
-			    int offset, int len, char *prefix);
-
-int ufs_qcom_phy_save_regs(struct ufs_qcom_phy *phy,
 			    int offset, int len, char *prefix);
 #endif

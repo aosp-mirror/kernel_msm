@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -1554,7 +1554,6 @@ static int qnoc_probe(struct platform_device *pdev)
 	provider->set = qcom_icc_rpm_set;
 	provider->pre_aggregate = qcom_icc_rpm_pre_aggregate;
 	provider->aggregate = qcom_icc_rpm_aggregate;
-	provider->get_bw = qcom_icc_get_bw_stub;
 	provider->xlate = of_icc_xlate_onecell;
 	INIT_LIST_HEAD(&provider->nodes);
 	provider->data = data;
@@ -1703,14 +1702,11 @@ static void qnoc_sync_state(struct device *dev)
 				else
 					ret = clk_set_rate(qp->bus_clks[i].clk,
 						qp->bus_clk_cur_rate[i]);
-			} else {
-				ret = clk_set_rate(qp->bus_clks[i].clk,
-						qp->bus_clk_cur_rate[i]);
-			}
 
-			if (ret)
-				pr_err("%s clk_set_rate error: %d\n",
+				if (ret)
+					pr_err("%s clk_set_rate error: %d\n",
 						qp->bus_clks[i].id, ret);
+			}
 		}
 	}
 

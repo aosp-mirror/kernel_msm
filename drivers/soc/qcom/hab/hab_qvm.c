@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_qvm.h"
@@ -217,7 +217,8 @@ int habhyp_commdev_dealloc(void *commdev)
 	kfree(dev->os_data);
 	kfree(dev);
 
-	hab_pchan_put(pchan);
+	if (pchan)
+		hab_pchan_put(pchan);
 
 	return 0;
 }

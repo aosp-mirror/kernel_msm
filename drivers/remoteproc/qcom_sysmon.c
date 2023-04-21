@@ -761,7 +761,6 @@ static void sysmon_stop(struct rproc_subdev *subdev, bool crashed)
 	sysmon->timeout_data.timer.function = sysmon_shutdown_notif_timeout_handler;
 	timeout = jiffies + msecs_to_jiffies(SYSMON_NOTIF_TIMEOUT);
 	mod_timer(&sysmon->timeout_data.timer, timeout);
-
 	if (sysmon->ssctl_instance) {
 		if (!wait_for_completion_timeout(&sysmon->ssctl_comp, HZ / 2))
 			dev_err(sysmon->dev, "timeout waiting for ssctl service\n");
@@ -984,8 +983,8 @@ struct qcom_sysmon *qcom_add_sysmon_subdev(struct rproc *rproc,
 	init_completion(&sysmon->comp);
 	init_completion(&sysmon->ind_comp);
 	init_completion(&sysmon->shutdown_comp);
-	init_completion(&sysmon->ssctl_comp);
 	timer_setup(&sysmon->timeout_data.timer, sysmon_notif_timeout_handler, 0);
+	init_completion(&sysmon->ssctl_comp);
 	mutex_init(&sysmon->lock);
 	mutex_init(&sysmon->state_lock);
 

@@ -1499,8 +1499,7 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 	struct msm_pinctrl *pctrl = msm_pinctrl_data;
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 
-	if (event == PM_HIBERNATION_PREPARE || ((event == PM_SUSPEND_PREPARE)
-				&& pm_suspend_via_firmware())) {
+	if (event == PM_HIBERNATION_PREPARE) {
 		pctrl->gpio_regs = kcalloc(soc->ngroups,
 			sizeof(*pctrl->gpio_regs), GFP_KERNEL);
 		if (pctrl->gpio_regs == NULL)
@@ -1514,8 +1513,7 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 			}
 		}
 		pctrl->hibernation = true;
-	} else if (event == PM_POST_HIBERNATION || ((event == PM_POST_SUSPEND)
-				&& pm_suspend_via_firmware())) {
+	} else if (event == PM_POST_HIBERNATION) {
 		kfree(pctrl->gpio_regs);
 		kfree(pctrl->msm_tile_regs);
 		pctrl->gpio_regs = NULL;
@@ -1551,9 +1549,6 @@ static int msm_pinctrl_hibernation_suspend(void)
 
 	/* All normal gpios will have common registers, first save them */
 	for (i = 0; i < soc->ngpios; i++) {
-		if (msm_gpio_needs_valid_mask(pctrl) &&
-				!test_bit(i, pctrl->chip.valid_mask))
-			continue;
 		pgroup = &soc->groups[i];
 		pctrl->gpio_regs[i].ctl_reg =
 				msm_readl_ctl(pctrl, pgroup);
@@ -1585,7 +1580,7 @@ static void msm_pinctrl_hibernation_resume(void)
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 	void __iomem *tile_addr = NULL;
 
-	if (likely(!pctrl->hibernation) || !pctrl->gpio_regs)
+	if (likely(!pctrl->hibernation) || !pctrl->gpio_regs || !pctrl->msm_tile_regs)
 		return;
 
 	for (i = 0; i < soc->ntiles; i++) {
@@ -1598,9 +1593,6 @@ static void msm_pinctrl_hibernation_resume(void)
 
     /* Restore normal gpios */
 	for (i = 0; i < soc->ngpios; i++) {
-		if (msm_gpio_needs_valid_mask(pctrl) &&
-				!test_bit(i, pctrl->chip.valid_mask))
-			continue;
 		pgroup = &soc->groups[i];
 		msm_writel_ctl(pctrl->gpio_regs[i].ctl_reg, pctrl, pgroup);
 		msm_writel_io(pctrl->gpio_regs[i].io_reg, pctrl, pgroup);

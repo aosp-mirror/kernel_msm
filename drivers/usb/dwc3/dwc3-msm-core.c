@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -52,7 +52,6 @@
 #include "debug-ipc.h"
 
 #define NUM_LOG_PAGES   12
-#define DWC3_MINIDUMP	0x10000
 
 /* time out to wait for USB cable status notification (in ms)*/
 #define SM_INIT_TIMEOUT 30000
@@ -62,7 +61,6 @@
 #define DWC3_GUCTL1_L1_SUSP_THRLD_EN_FOR_HOST	BIT(8)
 #define DWC3_GUCTL3_USB20_RETRY_DISABLE	BIT(16)
 #define DWC3_GUSB3PIPECTL_DISRXDETU3	BIT(22)
-#define DWC3_GUCTL_SPRSCTRLTRANSEN	BIT(17)
 
 #define DWC3_LLUCTL	0xd024
 /* Force Gen1 speed on Gen2 link */
@@ -3872,7 +3870,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 
 	cancel_delayed_work_sync(&mdwc->perf_vote_work);
 	msm_dwc3_perf_vote_update(mdwc, false);
-	if (dwc != NULL) {
+	if (dwc) {
 		if (!mdwc->in_host_mode) {
 			evt = dwc->ev_buf;
 			if ((evt->flags & DWC3_EVENT_PENDING)) {
@@ -3923,7 +3921,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 	ret = dwc3_msm_prepare_suspend(mdwc, force_power_collapse);
 	if (ret) {
 		mutex_unlock(&mdwc->suspend_resume_mutex);
-		if (mdwc->in_host_mode && dwc)
+		if (mdwc->in_host_mode)
 			pm_request_resume(&dwc->xhci->dev);
 
 		return ret;
@@ -4830,7 +4828,7 @@ static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 	case USB_ROLE_HOST:
 		mdwc->vbus_active = false;
 		mdwc->id_state = DWC3_ID_GROUND;
-		dbg_log_string("refcnt:%d start host mode\n", mdwc->refcnt_dp_usb);
+		WARN_ON(mdwc->refcnt_dp_usb);
 		mdwc->refcnt_dp_usb++;
 		break;
 
@@ -5420,35 +5418,24 @@ EXPORT_SYMBOL(dwc3_msm_release_ss_lane);
 
 static int dwc3_msm_debug_init(struct dwc3_msm *mdwc)
 {
-	char ipc_log_name[40];
 	char ipc_log_ctx_name[40];
-	int itr = 0;
-
-	snprintf(ipc_log_name, sizeof(ipc_log_name),
-				"%s", dev_name(mdwc->dev));
-
-	while (ipc_log_name[itr] != '\0') {
-		if (ipc_log_name[itr] == '.')
-			ipc_log_name[itr] = '_';
-		itr++;
-	}
 
 	mdwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
-					ipc_log_name, DWC3_MINIDUMP);
+					dev_name(mdwc->dev), 0);
 	if (!mdwc->dwc_ipc_log_ctxt)
 		dev_err(mdwc->dev, "Error getting ipc_log_ctxt\n");
 
 	snprintf(ipc_log_ctx_name, sizeof(ipc_log_ctx_name),
-				"%s_ep_events", ipc_log_name);
+				"%s.ep_events", dev_name(mdwc->dev));
 	mdwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(2 * NUM_LOG_PAGES,
-					ipc_log_ctx_name, DWC3_MINIDUMP);
+					ipc_log_ctx_name, 0);
 	if (!mdwc->dwc_dma_ipc_log_ctxt)
 		dev_err(mdwc->dev, "Error getting ipc_log_ctxt for ep_events\n");
 
 	snprintf(ipc_log_ctx_name, sizeof(ipc_log_ctx_name),
-				"%s_trace", ipc_log_name);
+				"%s.trace", dev_name(mdwc->dev));
 	dwc_trace_ipc_log_ctxt = ipc_log_context_create(3 * NUM_LOG_PAGES,
-					ipc_log_ctx_name, DWC3_MINIDUMP);
+					ipc_log_ctx_name, 0);
 	if (!dwc_trace_ipc_log_ctxt)
 		dev_err(mdwc->dev, "Error getting trace_ipc_log_ctxt for ep_events\n");
 
@@ -5984,11 +5971,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 
 		dwc3_ext_event_notify(mdwc);
-		return 0;
 	}
-
-	if (of_property_read_bool(node, "qcom,msm-probe-core-init"))
-		dwc3_ext_event_notify(mdwc);
 
 	return 0;
 
@@ -6248,7 +6231,6 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 {
 	int ret = 0;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
-	u32 reg;
 
 	if (on) {
 		dev_dbg(mdwc->dev, "%s: turn on host\n", __func__);
@@ -6283,16 +6265,6 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 
 		if (mdwc->dis_sending_cm_l1_quirk)
 			mdwc3_dis_sending_cm_l1(mdwc);
-
-		/*
-		 * Some devices are slow in responding to control transfers. Scheduling multiple
-		 * transactions in one microframe/frame can cause these devices to misbehave.
-		 * Enable sparse control so that host controller schedules each phase of a Control
-		 * transfer in different microframes/frames.
-		 */
-		reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUCTL);
-		reg |= DWC3_GUCTL_SPRSCTRLTRANSEN;
-		dwc3_msm_write_reg(mdwc->base, DWC3_GUCTL, reg);
 
 		/*
 		 * Increase Inter-packet delay by 1 UTMI clock cycle (EL_23).

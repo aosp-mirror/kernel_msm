@@ -55,7 +55,6 @@ struct qcom_cpufreq_soc_data {
 	u8 lut_row_size;
 	u8 throttle_irq_bit;
 	bool accumulative_counter;
-	bool turbo_ind_support;
 };
 
 struct qcom_cpufreq_data {
@@ -218,7 +217,7 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 				    struct cpufreq_policy *policy)
 {
 	u32 data, src, lval, i, core_count, prev_freq = 0, freq;
-	u32 volt, max_cc = 0;
+	u32 volt;
 	struct cpufreq_frequency_table	*table;
 	struct dev_pm_opp *opp;
 	unsigned long rate;
@@ -257,9 +256,6 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 		lval = FIELD_GET(LUT_L_VAL, data);
 		core_count = FIELD_GET(LUT_CORE_COUNT, data);
 
-		if (i == 0)
-			max_cc = core_count;
-
 		data = readl_relaxed(drv_data->base + soc_data->reg_volt_lut +
 				      i * soc_data->lut_row_size);
 		volt = FIELD_GET(LUT_VOLT, data) * 1000;
@@ -269,19 +265,18 @@ static int qcom_cpufreq_hw_read_lut(struct device *cpu_dev,
 		else
 			freq = cpu_hw_rate / 1000;
 
-		if (core_count == LUT_TURBO_IND && soc_data->turbo_ind_support)
-			table[i].frequency = CPUFREQ_ENTRY_INVALID;
-		else if (freq != prev_freq) {
+		if (freq != prev_freq && core_count != LUT_TURBO_IND) {
 			if (!qcom_cpufreq_update_opp(cpu_dev, freq, volt)) {
 				table[i].frequency = freq;
-				if (core_count < max_cc)
-					table[i].flags = CPUFREQ_BOOST_FREQ;
 				dev_dbg(cpu_dev, "index=%d freq=%d, core_count %d\n", i,
 				freq, core_count);
 			} else {
 				dev_warn(cpu_dev, "failed to update OPP for freq=%d\n", freq);
 				table[i].frequency = CPUFREQ_ENTRY_INVALID;
 			}
+
+		} else if (core_count == LUT_TURBO_IND) {
+			table[i].frequency = CPUFREQ_ENTRY_INVALID;
 		}
 
 		/*
@@ -487,7 +482,6 @@ static const struct qcom_cpufreq_soc_data qcom_soc_data = {
 	.lut_row_size = 32,
 	.throttle_irq_bit = 1,
 	.accumulative_counter = false,
-	.turbo_ind_support = true,
 };
 
 static const struct qcom_cpufreq_soc_data epss_soc_data = {
@@ -502,7 +496,6 @@ static const struct qcom_cpufreq_soc_data epss_soc_data = {
 	.lut_row_size = 4,
 	.throttle_irq_bit = 2,
 	.accumulative_counter = true,
-	.turbo_ind_support = false,
 };
 
 static const struct of_device_id qcom_cpufreq_hw_match[] = {

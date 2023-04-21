@@ -221,7 +221,6 @@ static int aop_send_msg(unsigned long addr, bool online)
 	struct qmp_pkt pkt;
 	char mbox_msg[MAX_LEN];
 	unsigned long addr_low, addr_high;
-	int ret;
 
 	addr_low = addr & AOP_MSG_ADDR_MASK;
 	addr_high = (addr >> AOP_MSG_ADDR_HIGH_SHIFT) & AOP_MSG_ADDR_MASK;
@@ -232,8 +231,7 @@ static int aop_send_msg(unsigned long addr, bool online)
 
 	pkt.size = MAX_LEN;
 	pkt.data = mbox_msg;
-	ret = mbox_send_message(mailbox.mbox, &pkt);
-	return ret;
+	return (mbox_send_message(mailbox.mbox, &pkt) < 0);
 }
 
 static long get_memblk_bits(unsigned int seg_idx, unsigned long memblk_addr)
@@ -285,7 +283,7 @@ static int send_msg(struct memory_notify *mn, bool online, int count)
 		else
 			ret = aop_send_msg(__pfn_to_phys(start), online);
 
-		if (ret < 0) {
+		if (ret) {
 			pr_err("PASR: %s %s request addr:0x%llx failed, ret:%d\n",
 			       is_rpm_controller ? "RPM" : "AOP",
 			       online ? "online" : "offline",
@@ -314,9 +312,8 @@ undo:
 		else
 			ret = aop_send_msg(__pfn_to_phys(start), !online);
 
-		if (ret < 0)
-			panic("Failed to completely online/offline a hotpluggable segment. A quasi state of memblock can cause randomn system failures. ret:%d",
-				ret);
+		if (ret)
+			panic("Failed to completely online/offline a hotpluggable segment. A quasi state of memblock can cause randomn system failures.");
 		segment_size = segment_infos[seg_idx].seg_size;
 		addr += segment_size;
 		seg_idx = get_segment_addr_to_idx(addr);

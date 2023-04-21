@@ -32,14 +32,18 @@ static DECLARE_WAIT_QUEUE_HEAD(avb_class_b_msg_wq);
 
 static int strlcmp(const char *s, const char *t, size_t n)
 {
+	int ret;
+
 	while (n-- && *t != '\0') {
 		if (*s != *t) {
-			return ((unsigned char)*s - (unsigned char)*t);
+			ret = ((unsigned char)*s - (unsigned char)*t);
+			n = 0;
 		} else {
 			++s, ++t;
+			ret = (unsigned char)*s;
 		}
 	}
-	return (unsigned char)*s;
+	return ret;
 }
 
 static void align_target_time_reg(u32 ch, struct stmmac_priv *priv,

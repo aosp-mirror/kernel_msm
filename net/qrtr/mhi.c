@@ -83,13 +83,11 @@ free_skb:
 static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 {
 	int rc;
-	int retry = 5;
 
 	do {
 		rc = __qcom_mhi_qrtr_send(ep, skb);
-		if (rc == -EAGAIN)
-			usleep_range(1000, 2000);
-	} while (rc == -EAGAIN && --retry);
+		usleep_range(1000, 2000);
+	} while (rc == -EAGAIN);
 
 	return rc;
 }

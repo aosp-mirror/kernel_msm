@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/bitmap.h>
 #include <linux/delay.h>
@@ -22,8 +22,7 @@
 #include <linux/virtio_spmi.h>
 #include <linux/scatterlist.h>
 
-/* Virtio ID of SPMI : 0xC003 */
-#define VIRTIO_ID_SPMI			49155
+#define VIRTIO_ID_SPMI			33
 
 /* Mapping Table */
 #define PMIC_ARB_MAX_PPID		BIT(12) /* PPID is 12bit */
