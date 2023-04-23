@@ -9,6 +9,9 @@
 #define GLINK_FEATURE_INTENT_REUSE	BIT(0)
 #define GLINK_FEATURE_MIGRATION		BIT(1)
 #define GLINK_FEATURE_TRACER_PKT	BIT(2)
+#define GLINK_FEATURE_ZERO_COPY		BIT(3)
+#define GLINK_FEATURE_ZERO_COPY_POOLS	BIT(4)
+
 
 struct qcom_glink_pipe {
 	size_t length;
@@ -42,4 +45,7 @@ int qcom_glink_native_start(struct qcom_glink *glink);
 void qcom_glink_native_remove(struct qcom_glink *glink);
 
 void qcom_glink_native_unregister(struct qcom_glink *glink);
+
+void *qcom_glink_prepare_da_for_cpu(u64 da, size_t len);
+
 #endif
