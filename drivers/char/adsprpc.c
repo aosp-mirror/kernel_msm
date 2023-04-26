@@ -4256,8 +4256,8 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	hlist_add_head(&fl->hn, &me->drivers);
 	spin_unlock(&me->hlock);
 	mutex_init(&fl->perf_mutex);
-	init_completion(&fl->shutdown);
 	mutex_init(&fl->pm_qos_mutex);
+	init_completion(&fl->shutdown);
 	return 0;
 }
 
