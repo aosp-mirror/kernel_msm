@@ -258,6 +258,7 @@
   contig_page_data
   _copy_from_iter
   copy_from_kernel_nofault
+  copy_page
   __cpu_active_mask
   cpu_bit_bitmap
   cpufreq_cpu_get
@@ -320,6 +321,7 @@
   crypto_destroy_tfm
   crypto_enqueue_request
   crypto_has_alg
+  crypto_inc
   crypto_init_queue
   crypto_unregister_ahash
   crypto_unregister_skcipher
@@ -814,6 +816,7 @@
   get_unused_fd_flags
   get_user_ifreq
   get_zeroed_page
+  gf128mul_lle
   gic_cpu_init
   gic_dist_init
   gic_dist_wait_for_rwp
@@ -2150,6 +2153,7 @@
   task_may_not_preempt
   __task_pid_nr_ns
   __task_rq_lock
+  task_rq_lock
   tcp_hashinfo
   thermal_cooling_device_register
   thermal_cooling_device_unregister
@@ -2523,6 +2527,7 @@
   usb_control_msg_send
   usb_debug_root
   usb_decode_ctrl
+  usb_driver_set_configuration
   usb_ep_alloc_request
   usb_ep_autoconfig
   usb_ep_dequeue
