@@ -474,6 +474,16 @@ config QTI_ALTMODE_GLINK
 	  as Pin Assignment Notifications from the Type-C stack running on a
 	  remote subsystem (e.g. DSP) via the PMIC GLINK interface.
 
+config SPMI_QTI_GLINK_DEBUG
+	tristate "QTI Glink Debug SPMI Controller"
+	depends on QTI_PMIC_GLINK
+	help
+	  The Qualcomm Technologies, Inc. Glink debug SPMI controller driver
+	  provides an interface to read and write PMIC registers over PMIC
+	  Glink using a remote subsytem (e.g. DSP).  This allows for debugging
+	  PMIC peripherals that would typically only be accessible to the
+	  charger and fuel gauging firmware running on the remote subsystem.
+
 config QCOM_SECURE_BUFFER
 	tristate "Helper functions for secure buffers through TZ"
 	depends on QCOM_SCM
@@ -1339,5 +1349,15 @@ config QCOM_S2D_VENDOR_HOOK
 	  hibernation. Callbacks implemented here are called from the
           core kernel and help to do bootloader hibernation specific job.
 	  Enable this if bootloader hibernation is enabled.
+
+config QCOM_SECURE_HIBERNATION
+	tristate "Add security support to hibernation"
+	depends on HIBERNATION
+	help
+	  Secure the hibernation snapshot by encrypting
+	  the snapshot at kernel before saving to disk.
+	  This uses GCM-AES crypto algorithm to encrypt the
+	  pages at the kernel.
+	  If not sure, say N.
 
 endmenu

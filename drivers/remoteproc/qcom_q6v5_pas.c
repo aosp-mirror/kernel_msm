@@ -1218,6 +1218,8 @@ static const struct adsp_data sm8150_adsp_resource = {
 		.crash_reason_smem = 423,
 		.firmware_name = "adsp.mdt",
 		.pas_id = 1,
+		.minidump_id = 5,
+		.uses_elf64 = true,
 		.has_aggre2_clk = false,
 		.auto_boot = true,
 		.ssr_name = "lpass",
@@ -1744,7 +1746,7 @@ static const struct adsp_data scuba_auto_lpass_resource = {
 };
 
 static const struct adsp_data lemans_adsp_resource = {
-	.crash_reason_smem = 2,
+	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
 	.pas_id = 1,
 	.uses_elf64 = true,

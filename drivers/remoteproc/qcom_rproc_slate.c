@@ -577,9 +577,6 @@ static int slate_start(struct rproc *rproc)
 			return RESULT_FAILURE;
 	}
 
-	/* Enable err fetal irq */
-	enable_irq(slate_data->status_irq);
-
 	slate_data->address_fw = slate_data->region_start;
 	slate_data->size_fw = slate_data->region_end - slate_data->region_start;
 	pr_debug("SLATE PIL loads firmware blobs at 0x%x with size 0x%x\n",
@@ -636,6 +633,7 @@ static void slate_coredump(struct rproc *rproc)
 	int ret = 0;
 
 	pr_err("Setup for Coredump.\n");
+	rproc_coredump_cleanup(rproc);
 
 	slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_DUMPINFO;
 	if (!slate_data->qseecom_handle) {

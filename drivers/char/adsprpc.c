@@ -669,8 +669,8 @@ static void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
 		}
 		hlist_add_head(&buf->hn, &fl->cached_bufs);
 		fl->num_cached_buf++;
-		spin_unlock(&fl->hlock);
 		buf->type = -1;
+		spin_unlock(&fl->hlock);
 		return;
 	}
 skip_buf_cache:
@@ -2851,13 +2851,13 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 
 static void fastrpc_get_cdsp_status(struct fastrpc_apps *me)
 {
-	if (socinfo_get_part_info(PART_COMP)) {
-		me->remote_cdsp_status = 0;
+	if (socinfo_get_part_info(PART_NSP)) {
+		me->fastrpc_cdsp_status = 0;
 		ADSPRPC_ERR(
-			"cdsp part defective with status:%x\n", me->remote_cdsp_status);
+			"cdsp part defective with status:%x\n", me->fastrpc_cdsp_status);
 	} else {
-		me->remote_cdsp_status = 1;
-		ADSPRPC_INFO("cdsp available with status: %x\n", me->remote_cdsp_status);
+		me->fastrpc_cdsp_status = 1;
+		ADSPRPC_INFO("cdsp available with status: %x\n", me->fastrpc_cdsp_status);
 	}
 }
 
@@ -6204,6 +6204,10 @@ int fastrpc_internal_control(struct fastrpc_file *fl,
 
 		for (ii = 0; ii < silver_core_count; ii++) {
 			cpu = me->silvercores.coreno[ii];
+			if (!cpu_possible(cpu)) {
+				ADSPRPC_ERR("%s cpu id: %d is not possible\n",  __func__, cpu);
+				continue;
+			}
 			if (!fl->qos_request) {
 				err = dev_pm_qos_add_request(
 						get_cpu_device(cpu),
@@ -7805,7 +7809,7 @@ bail:
 }
 
 /*
- * remote_cdsp_status_show - Updates the buffer with remote cdsp status
+ * fastrpc_cdsp_status_show - Updates the buffer with remote cdsp status
  *                           by reading the fastrpc node.
  * @dev : pointer to device node.
  * @attr: pointer to device attribute.
@@ -7813,7 +7817,7 @@ bail:
  * Return : bytes written to buffer.
  */
 
-static ssize_t remote_cdsp_status_show(struct device *dev,
+static ssize_t fastrpc_cdsp_status_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct fastrpc_apps *me = &gfa;
@@ -7830,15 +7834,15 @@ static ssize_t remote_cdsp_status_show(struct device *dev,
 	}
 
 	return scnprintf(buf, PAGE_SIZE, "%d",
-			me->remote_cdsp_status);
+			me->fastrpc_cdsp_status);
 }
 
 /* Remote cdsp status attribute declaration as read only */
-static DEVICE_ATTR_RO(remote_cdsp_status);
+static DEVICE_ATTR_RO(fastrpc_cdsp_status);
 
 /* Declaring attribute for remote dsp */
 static struct attribute *msm_remote_dsp_attrs[] = {
-	&dev_attr_remote_cdsp_status.attr,
+	&dev_attr_fastrpc_cdsp_status.attr,
 	NULL
 };
 

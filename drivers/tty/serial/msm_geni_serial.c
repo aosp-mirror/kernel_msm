@@ -177,6 +177,9 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 #define UART_CONSOLE_RX_WM	(2)
 #define NUM_RX_BUF		4
 
+/*1.1 version specifies that is support both ioctl as well as sysfs*/
+#define HS_UART_DRIVER_VERSION	"1.1"
+
 #define CREATE_TRACE_POINTS
 #include "serial_trace.h"
 
@@ -383,7 +386,7 @@ struct msm_geni_serial_port {
 	struct ktermios *current_termios;
 	bool resuming_from_deep_sleep;
 	bool shutdown_in_progress;
-	bool compat_ioctl_support;
+	int hs_uart_operation;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -414,6 +417,8 @@ static int uart_line_id;
 static int msm_geni_serial_config_baud_rate(struct uart_port *uport,
 					    struct ktermios *termios,
 					    unsigned int baud);
+static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
+				 unsigned long arg);
 
 #define GET_DEV_PORT(uport) \
 	container_of(uport, struct msm_geni_serial_port, uport)
@@ -807,6 +812,101 @@ static ssize_t loopback_store(struct device *dev,
 
 static DEVICE_ATTR_RW(loopback);
 
+/*
+ * hs_uart_operation_show() - read last uart operation status value.
+ *
+ * @dev: pointer to device dev
+ * @attr: attributes associatd with dev
+ * @buf: output buffer
+ *
+ * Return: Size copied in the buffer
+ */
+static ssize_t hs_uart_operation_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", port->hs_uart_operation);
+}
+
+/*
+ * hs_uart_operation_store() - write command in sysfs which further forward it to ioctl function.
+ *
+ * @dev: pointer to device dev
+ * @attr: attributes associatd with dev
+ * @buf: input buffer
+ * @size: size of the buffer
+ *
+ * Return: Size copied in the buffer
+ */
+static ssize_t hs_uart_operation_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf,
+				       size_t size)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
+	u16 cmd = 0;
+	int ret = -ENOIOCTLCMD;
+
+	if (kstrtou16(buf, 16, &cmd)) {
+		UART_LOG_DBG(port->ipc_log_misc, port->uport.dev, "%s: Invalid input\n", __func__);
+		return -EINVAL;
+	}
+	UART_LOG_DBG(port->ipc_log_misc, port->uport.dev, "%s: cmd: %u\n", __func__, cmd);
+
+	ret = msm_geni_serial_ioctl(&port->uport, cmd, 0);
+
+	switch (cmd) {
+	case MSM_GENI_SERIAL_TIOCFAULT:
+	case MSM_GENI_SERIAL_TIOCPMACT:
+		/*
+		 * No need to check return value as it returns
+		 * status value and it can be non-zero as well
+		 */
+		break;
+
+	default:
+		if (ret) {
+			UART_LOG_DBG(port->ipc_log_misc, port->uport.dev,
+				     "%s: Can not perform operation cmd: 0x%x ret: %d\n",
+				     __func__, cmd, ret);
+			return -EINVAL;
+		}
+	}
+	port->hs_uart_operation = ret;
+	return size;
+}
+
+static DEVICE_ATTR_RW(hs_uart_operation);
+
+/*
+ * hs_uart_version_show() - read version of the driver which further defines driver
+ * compatibility of ioctl and/or sysfs.
+ *
+ * @dev: pointer to device dev
+ * @attr: attributes associatd with dev
+ * @buf: output buffer
+ *
+ * Return: Size copied in the buffer
+ */
+static ssize_t hs_uart_version_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
+
+	UART_LOG_DBG(port->ipc_log_misc, port->uport.dev, "%s: Version: %s\n",
+		     __func__, HS_UART_DRIVER_VERSION);
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", HS_UART_DRIVER_VERSION);
+}
+
+static DEVICE_ATTR_RO(hs_uart_version);
+
 static void dump_ipc(struct uart_port *uport, void *ipc_ctx, char *prefix,
 			char *string, u64 addr, int size)
 
@@ -995,40 +1095,6 @@ static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
 		break;
 	}
 	return ret;
-}
-
-/**
- * msm_geni_uart_tty_ioctl: tty ldisc ops IOCTL.
-
- * @tty: tty port pointer.
- * @file: file pointer for dev node.
- * @cmd: IOCTL command passed by client.
- * @arg: IOCTL argument passed by client.
- *
- * This function used as ldisc ops compat IOCTL and it
- * will call msm geni serial IOCTL.
- * For 32-bit user-space application and 64-bit kernel,
- * We required compat IOCTL implementation any IOCTL call
- * from user space.
- *
- * Return: 0 for success, Negative in error case.
- */
-static int msm_geni_uart_tty_ioctl(struct tty_struct *tty, struct file *file,
-				   unsigned int cmd, unsigned long arg)
-{
-	struct uart_state *state = tty->driver_data;
-	struct uart_port *uport;
-
-	if (!state) {
-		pr_err("%s: Invalid driver data buffer\n", __func__);
-		return -EINVAL;
-	}
-
-	uport = state->uart_port;
-	if (!uport)
-		return -EINVAL;
-
-	return msm_geni_serial_ioctl(uport, cmd, arg);
 }
 
 static void msm_geni_serial_break_ctl(struct uart_port *uport, int ctl)
@@ -1698,6 +1764,12 @@ static void msm_geni_uart_rx_queue_dma_tre(int index, struct uart_port *uport)
 	msm_port->gsi->rx_desc->callback_param = &msm_port->gsi->rx_cb;
 
 	rx_cookie = dmaengine_submit(msm_port->gsi->rx_desc);
+	if (dma_submit_error(rx_cookie)) {
+		pr_err("%s: dmaengine_submit failed (%d)\n", __func__, rx_cookie);
+		dmaengine_terminate_all(msm_port->gsi->rx_c);
+		return;
+	}
+
 	dma_async_issue_pending(msm_port->gsi->rx_c);
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: End\n", __func__);
@@ -1712,15 +1784,16 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 	unsigned int rx_bytes = rx_cb->length;
 	int ret;
 
-	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: Start\n", __func__);
 	ret = tty_insert_flip_string(tport,
 				     (unsigned char *)
 				     (msm_port->rx_gsi_buf[msm_port->count]),
 				      rx_bytes);
 	if (ret != rx_bytes)
-		dev_err(uport->dev, "%s: ret %d rx_bytes %d\n", __func__,
-			ret, rx_bytes);
+		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
+			     "%s: ret %d rx_bytes %d\n", __func__,
+			     ret, rx_bytes);
 
 	uport->icount.rx += ret;
 	tty_flip_buffer_push(tport);
@@ -1729,7 +1802,7 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 
 	msm_geni_uart_rx_queue_dma_tre(msm_port->count, uport);
 	msm_port->count = (msm_port->count + 1) % 4;
-	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: End\n", __func__);
 }
 
@@ -1885,6 +1958,11 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	msm_port->gsi->tx_desc->callback = msm_geni_uart_gsi_tx_cb;
 	msm_port->gsi->tx_desc->callback_param = &msm_port->gsi->tx_cb;
 	tx_cookie = dmaengine_submit(msm_port->gsi->tx_desc);
+	if (dma_submit_error(tx_cookie)) {
+		pr_err("%s: dmaengine_submit failed (%d)\n", __func__, tx_cookie);
+		dmaengine_terminate_all(msm_port->gsi->tx_c);
+		return;
+	}
 	reinit_completion(&msm_port->tx_xfer);
 	dma_async_issue_pending(msm_port->gsi->tx_c);
 
@@ -1925,7 +2003,8 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 			     "%s: gsi_rx not yet done\n", __func__);
 		return;
 	}
-	dmaengine_terminate_all(msm_port->gsi->rx_c);
+	if (msm_port->gsi->rx_c)
+		dmaengine_terminate_all(msm_port->gsi->rx_c);
 	complete(&msm_port->xfer);
 	msm_port->gsi_rx_done = false;
 	atomic_set(&msm_port->stop_rx_inprogress, 0);
@@ -2002,6 +2081,11 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	msm_port->gsi->rx_desc->callback = msm_geni_uart_gsi_rx_cb;
 	msm_port->gsi->rx_desc->callback_param = &msm_port->gsi->rx_cb;
 	rx_cookie = dmaengine_submit(msm_port->gsi->rx_desc);
+	if (dma_submit_error(rx_cookie)) {
+		pr_err("%s: dmaengine_submit failed (%d)\n", __func__, rx_cookie);
+		dmaengine_terminate_all(msm_port->gsi->rx_c);
+		return -EINVAL;
+	}
 	dma_async_issue_pending(msm_port->gsi->rx_c);
 	msm_port->gsi_rx_done = true;
 
@@ -2909,8 +2993,9 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 	ret = tty_insert_flip_string(tport, (unsigned char *)(msm_port->rx_buf),
 				     rx_bytes);
 	if (ret != rx_bytes) {
-		dev_err(uport->dev, "%s: ret %d rx_bytes %d\n", __func__,
-								ret, rx_bytes);
+		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
+			     "%s: ret %d rx_bytes %d\n",
+			     __func__, ret, rx_bytes);
 		msm_geni_update_uart_error_code(msm_port, UART_ERROR_RX_TTY_INSERT_FAIL);
 		WARN_ON_ONCE(1);
 	}
@@ -3388,7 +3473,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			 */
 			UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 					"%s: Stop Rx Engine\n", __func__);
-			dmaengine_terminate_all(msm_port->gsi->rx_c);
 			timeout = wait_for_completion_timeout
 				(&msm_port->xfer,
 				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
@@ -3545,7 +3629,6 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 {
 	int ret = 0;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
-	struct tty_struct *tty;
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "%s: Start %d\n", __func__, true);
 
@@ -3596,15 +3679,6 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 			goto exit_startup;
 		}
 	}
-
-	if (msm_port->compat_ioctl_support) {
-		tty = uport->state->port.tty;
-		if (tty && !tty->ldisc->ops->compat_ioctl) {
-			UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
-				     "%s: setting ldisc compat ioctl\n", __func__);
-			tty->ldisc->ops->compat_ioctl = msm_geni_uart_tty_ioctl;
-		}
-	}
 exit_startup:
 	if (likely(!uart_console(uport)))
 		msm_geni_serial_power_off(&msm_port->uport);
@@ -3618,6 +3692,8 @@ static void geni_serial_write_term_regs(struct uart_port *uport, u32 loopback,
 		u32 tx_trans_cfg, u32 tx_parity_cfg, u32 rx_trans_cfg,
 		u32 rx_parity_cfg, u32 bits_per_char, u32 stop_bit_len)
 {
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+
 	geni_write_reg(loopback, uport->membase, SE_UART_LOOPBACK_CFG);
 	geni_write_reg(tx_trans_cfg, uport->membase,
 							SE_UART_TX_TRANS_CFG);
@@ -3633,6 +3709,8 @@ static void geni_serial_write_term_regs(struct uart_port *uport, u32 loopback,
 							SE_UART_RX_WORD_LEN);
 	geni_write_reg(stop_bit_len, uport->membase,
 						SE_UART_TX_STOP_BIT_LEN);
+	geni_se_config_packing(&msm_port->se, bits_per_char, 4, false, true, false);
+	geni_se_config_packing(&msm_port->se, bits_per_char, 4, false, false, true);
 }
 
 static void msm_geni_serial_termios_cfg(struct uart_port *uport,
@@ -4618,10 +4696,10 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 				line = 0;
 		} else {
 			line = of_alias_get_id(pdev->dev.of_node, "hsuart");
-			/* for non alias hsuart use uart_line_id in get_port_from_line */
 			if (line < 0)
-				dev_dbg(&pdev->dev, "%s: non alias hsuart\n", __func__);
-			line = uart_line_id;
+				line = uart_line_id++;
+			else
+				uart_line_id++;
 		}
 	} else {
 		line = pdev->id;
@@ -4634,13 +4712,14 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	}
 	is_console = (drv->cons ? true : false);
 	dev_port = get_port_from_line(line, is_console);
+	dev_port->is_console = is_console;
 	if (IS_ERR_OR_NULL(dev_port)) {
 		ret = PTR_ERR(dev_port);
-		dev_err(&pdev->dev, "Invalid line ret:%d\n", ret);
+		dev_err(&pdev->dev, "Invalid line %d(%d)\n",
+					line, ret);
 		goto exit_geni_serial_probe;
 	}
 
-	dev_port->is_console = is_console;
 	if (drv->cons && !con_enabled) {
 		dev_err(&pdev->dev, "%s, Console Disabled\n", __func__);
 		ret = pinctrl_pm_select_sleep_state(&pdev->dev);
@@ -4664,9 +4743,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	ret = msm_geni_serial_read_dtsi(pdev, dev_port);
 	if (ret)
 		goto exit_geni_serial_probe;
-
-	if (!drv->cons)
-		uart_line_id++;
 
 	dev_port->tx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
 	dev_port->rx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
@@ -4693,10 +4769,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_port->pm_auto_suspend_disable =
 		of_property_read_bool(pdev->dev.of_node,
 		"qcom,auto-suspend-disable");
-
-	dev_port->compat_ioctl_support =
-		of_property_read_bool(pdev->dev.of_node,
-				      "qcom,compat-ioctl-support");
 
 	if (is_console) {
 		dev_port->handle_rx = handle_rx_console;
@@ -4732,6 +4804,9 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	device_create_file(uport->dev, &dev_attr_loopback);
 	device_create_file(uport->dev, &dev_attr_xfer_mode);
 	device_create_file(uport->dev, &dev_attr_ver_info);
+	device_create_file(uport->dev, &dev_attr_hs_uart_operation);
+	device_create_file(uport->dev, &dev_attr_hs_uart_version);
+
 	msm_geni_serial_debug_init(uport, is_console);
 	dev_port->port_setup = false;
 
@@ -4789,6 +4864,8 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 					port->rx_buf, DMA_RX_BUF_SIZE);
 		port->rx_dma = (dma_addr_t)NULL;
 	}
+	device_remove_file(port->uport.dev, &dev_attr_hs_uart_version);
+	device_remove_file(port->uport.dev, &dev_attr_hs_uart_operation);
 	return 0;
 }
 
