@@ -2182,6 +2182,9 @@ static int qbg_device_open(struct inode *inode, struct file *file)
 
 	qbg_dbg(chip, QBG_DEBUG_DEVICE, "QBG device opened!\n");
 
+	pr_info("battid resistance: %u, batt profile: %s\n",
+		chip->batt_id_ohm, qbg_get_battery_type(chip));
+
 	return 0;
 }
 
