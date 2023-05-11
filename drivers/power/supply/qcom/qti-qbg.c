@@ -1355,8 +1355,8 @@ static int qbg_load_battery_profile(struct qti_qbg *chip)
 		return -ENXIO;
 	}
 
-	profile_node = of_batterydata_get_best_profile(chip->batt_node,
-			chip->batt_id_ohm / 1000, NULL);
+	profile_node = of_batterydata_get_best_profile_and_id(chip->batt_node,
+			chip->batt_id_ohm / 1000, NULL, &chip->batt_profile_id);
 	if (IS_ERR_OR_NULL(profile_node)) {
 		rc = profile_node ? PTR_ERR(profile_node) : -EINVAL;
 		pr_err("Failed to detect valid QBG battery profile, rc=%d\n",
@@ -2269,6 +2269,12 @@ static long qbg_device_ioctl(struct file *file, unsigned int cmd,
 			config.sample_time_us[i] = chip->sample_time_us[i];
 			qbg_dbg(chip, QBG_DEBUG_DEVICE, "QBGIOCXCFG: sample_time_us[%d]:%u\n",
 					i, config.sample_time_us[i]);
+		}
+
+		if (config.batt_id != chip->batt_profile_id) {
+			pr_warn("QBGIOCXCFG: Returning ideal %u for battid instead of real %u",
+				chip->batt_profile_id, config.batt_id);
+			config.batt_id = chip->batt_profile_id;
 		}
 
 		if (copy_to_user(config_user, (void *)&config, sizeof(config))) {

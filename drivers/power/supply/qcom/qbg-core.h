@@ -202,6 +202,7 @@ struct qti_qbg {
 	u32			max_fifo_count;
 	u32			batt_id_ohm;
 	u32			sdam_batt_id;
+	u32			batt_profile_id;
 	u32			essential_param_revid;
 	u32			sample_time_us[QBG_STATE_MAX];
 	u32			*debug_mask;
