@@ -5,6 +5,8 @@
 obj-$(CONFIG_USB_PHY)			+= phy.o
 obj-$(CONFIG_OF)			+= of.o
 
+CFLAGS_phy-msm-snps-hs.o	+= -DDYNAMIC_DEBUG_MODULE
+
 # transceiver drivers, keep the list sorted
 
 obj-$(CONFIG_AB8500_USB)		+= phy-ab8500-usb.o
