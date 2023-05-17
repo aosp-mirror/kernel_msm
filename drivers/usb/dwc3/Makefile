@@ -2,6 +2,7 @@
 # define_trace.h needs to know how to find our header
 CFLAGS_trace.o				:= -I$(src)
 CFLAGS_dwc3-msm-core.o			:= -I$(srctree)/drivers/usb/host
+CFLAGS_dwc3-msm-core.o			+= -DDYNAMIC_DEBUG_MODULE
 
 obj-$(CONFIG_USB_DWC3)			+= dwc3.o
 
