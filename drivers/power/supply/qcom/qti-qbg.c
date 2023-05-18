@@ -603,7 +603,7 @@ static void process_udata_work(struct work_struct *work)
 
 	__pm_relax(chip->qbg_ws);
 
-	qbg_dbg(chip, QBG_DEBUG_STATUS, "udata update: batt_soc=%d sys_soc=%d soc=%d qbg_esr=%d\n",
+	dev_info(chip->dev, "udata update: batt_soc=%d sys_soc=%d soc=%d qbg_esr=%d\n",
 		(chip->batt_soc != INT_MIN) ? chip->batt_soc : -EINVAL,
 		(chip->sys_soc != INT_MIN) ? chip->sys_soc : -EINVAL,
 		chip->soc, chip->esr);
