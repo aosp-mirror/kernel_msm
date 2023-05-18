@@ -43,9 +43,9 @@ static int of_batterydata_read_batt_id_kohm(const struct device_node *np,
 	return 0;
 }
 
-struct device_node *of_batterydata_get_best_profile(
+struct device_node *of_batterydata_get_best_profile_and_id(
 		const struct device_node *batterydata_container_node,
-		int batt_id_kohm, const char *batt_type)
+		int batt_id_kohm, const char *batt_type, int *profile_id_kohm)
 {
 	struct batt_ids batt_ids;
 	struct device_node *node, *best_node = NULL;
@@ -124,7 +124,18 @@ struct device_node *of_batterydata_get_best_profile(
 	else
 		pr_info("%s found\n", best_node->name);
 
+	if (profile_id_kohm) {
+		*profile_id_kohm = best_id_kohm;
+	}
 	return best_node;
+}
+
+struct device_node *of_batterydata_get_best_profile(
+		const struct device_node *batterydata_container_node,
+		int batt_id_kohm, const char *batt_type)
+{
+	return of_batterydata_get_best_profile_and_id(batterydata_container_node,
+						batt_id_kohm, batt_type, NULL);
 }
 
 struct device_node *of_batterydata_get_best_aged_profile(
