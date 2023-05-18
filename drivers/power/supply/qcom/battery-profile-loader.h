@@ -46,6 +46,22 @@ struct device_node *of_batterydata_get_best_profile(
 		int batt_id_kohm, const char *batt_type);
 
 /**
+ * of_batterydata_get_best_profile_and_id() - Find matching battery data
+ * device node and ID
+ * @batterydata_container_node: pointer to the battery-data container device
+ *		node containing the profile nodes.
+ * @batt_id_kohm: Battery ID in KOhms for which we want to find the profile.
+ * @batt_type: Battery type which we want to force load the profile.
+ * @profile_id_kohm: Battery profile ID in KOhms closest to batt_id_kohm
+ *
+ * This routine returns a device_node pointer to the closest match battery data
+ * from device tree based on the battery id reading.
+ */
+struct device_node *of_batterydata_get_best_profile_and_id(
+		const struct device_node *batterydata_container_node,
+		int batt_id_kohm, const char *batt_type, int *profile_id_kohm);
+
+/**
  * of_batterydata_get_best_aged_profile() - Find best aged battery profile
  * @batterydata_container_node: pointer to the battery-data container device
  *		node containing the profile nodes.
