@@ -115,6 +115,7 @@ static int cti_enable_hw(struct cti_drvdata *drvdata)
 		return rc;
 	}
 
+	pm_runtime_get_sync(dev->parent);
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
 	/* no need to do anything if enabled or unpowered*/
@@ -175,6 +176,7 @@ cti_hp_not_enabled:
 static int cti_disable_hw(struct cti_drvdata *drvdata)
 {
 	struct cti_config *config = &drvdata->config;
+	struct device *dev = &drvdata->csdev->dev;
 	struct coresight_device *csdev = drvdata->csdev;
 	int ret = 0;
 
@@ -204,6 +206,7 @@ static int cti_disable_hw(struct cti_drvdata *drvdata)
 		coresight_disclaim_device_unlocked(csdev);
 	CS_LOCK(drvdata->base);
 	spin_unlock(&drvdata->spinlock);
+	pm_runtime_put(dev->parent);
 	return ret;
 
 	/* not disabled this call */
