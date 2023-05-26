@@ -254,5 +254,6 @@ struct qti_qbg {
 	bool			data_ready;
 	bool			in_fast_char;
 	bool			enable_fifo_depth_half;
+	bool			udata_updated;
 };
 #endif /* __QBG_CORE_H__ */
