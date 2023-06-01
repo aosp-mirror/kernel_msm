@@ -413,7 +413,7 @@ static int msm_geni_serial_runtime_suspend(struct device *dev);
 static int msm_geni_serial_get_ver_info(struct uart_port *uport);
 static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport);
 static void msm_geni_serial_allow_rx(struct msm_geni_serial_port *port);
-static int uart_line_id;
+static unsigned char uart_line_id;
 static int msm_geni_serial_config_baud_rate(struct uart_port *uport,
 					    struct ktermios *termios,
 					    unsigned int baud);
@@ -1998,11 +1998,7 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 		     "%s: Start\n", __func__);
-	if (!msm_port->gsi_rx_done) {
-		UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
-			     "%s: gsi_rx not yet done\n", __func__);
-		return;
-	}
+
 	if (msm_port->gsi->rx_c)
 		dmaengine_terminate_all(msm_port->gsi->rx_c);
 	complete(&msm_port->xfer);
@@ -2573,7 +2569,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	}
 
 	if (port->gsi_mode) {
-		if (!port->port_setup && !port->gsi_rx_done) {
+		if (!port->port_setup || !port->gsi_rx_done) {
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 				     "%s: Port setup not yet done\n", __func__);
 			atomic_set(&port->stop_rx_inprogress, 0);
@@ -3457,12 +3453,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 	} else {
 		msm_geni_serial_power_on(uport);
 
-		if (msm_port->wakeup_irq > 0 && msm_port->wakeup_enabled) {
-			irq_set_irq_wake(msm_port->wakeup_irq, 0);
-			disable_irq(msm_port->wakeup_irq);
-			msm_port->wakeup_enabled = false;
-		}
-
 		if (msm_port->xfer_mode == GENI_GPI_DMA) {
 			/* From the framework every time the stop
 			 * rx sequncer will be called before the closing
@@ -3536,12 +3526,13 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 
 		if (pm_runtime_enabled(uport->dev)) {
 			ret = pm_runtime_put_sync_suspend(uport->dev);
-			if (ret) {
+			if (ret)
 				UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
 					     "%s: Failed to suspend:%d\n",
 					     __func__, ret);
-			}
 		}
+
+		msm_port->edge_count = 0;
 
 		if (!IS_ERR_OR_NULL(msm_port->serial_rsc.geni_gpio_shutdown)) {
 			ret = pinctrl_select_state(
@@ -4539,6 +4530,7 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 	}
 
 	if (dev_port->wakeup_irq > 0) {
+		irq_set_status_flags(dev_port->wakeup_irq, IRQ_NOAUTOEN);
 		ret = devm_request_irq(uport->dev, dev_port->wakeup_irq,
 					msm_geni_wakeup_isr,
 					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
@@ -4548,7 +4540,7 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 								__func__, ret);
 			return ret;
 		}
-		dev_port->wakeup_enabled = true;
+		dev_port->wakeup_enabled = false;
 	}
 
 	return ret;
@@ -4672,7 +4664,7 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
-	int line;
+	int line, i = 0;
 	struct msm_geni_serial_port *dev_port;
 	struct uart_port *uport;
 	struct uart_driver *drv;
@@ -4695,11 +4687,29 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 			if (line < 0)
 				line = 0;
 		} else {
+			if (uart_line_id >= (1 << GENI_UART_NR_PORTS) - 1) {
+				dev_err(&pdev->dev,
+					"All UART ports already initialized\n");
+				return -ENODEV;
+			}
+
 			line = of_alias_get_id(pdev->dev.of_node, "hsuart");
-			if (line < 0)
-				line = uart_line_id++;
-			else
-				uart_line_id++;
+			if (line < 0) {
+				for (i = (GENI_UART_NR_PORTS - 1); i >= 0; i--) {
+					if ((uart_line_id  & (1 << i)) == 0) {
+						line = i;
+						break;
+					}
+				}
+			}
+
+			if (uart_line_id & (1 << line)) {
+				dev_err(&pdev->dev, "Already used line %d\n", line);
+				return -ENODEV;
+			}
+
+			if (line >= 0 && line < GENI_UART_NR_PORTS)
+				uart_line_id |= (1 << line) & 0xFF;
 		}
 	} else {
 		line = pdev->id;
@@ -4712,14 +4722,13 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	}
 	is_console = (drv->cons ? true : false);
 	dev_port = get_port_from_line(line, is_console);
-	dev_port->is_console = is_console;
 	if (IS_ERR_OR_NULL(dev_port)) {
 		ret = PTR_ERR(dev_port);
-		dev_err(&pdev->dev, "Invalid line %d(%d)\n",
-					line, ret);
+		dev_err(&pdev->dev, "Invalid line %d(%d)\n", line, ret);
 		goto exit_geni_serial_probe;
 	}
 
+	dev_port->is_console = is_console;
 	if (drv->cons && !con_enabled) {
 		dev_err(&pdev->dev, "%s, Console Disabled\n", __func__);
 		ret = pinctrl_pm_select_sleep_state(&pdev->dev);
@@ -4866,6 +4875,11 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	}
 	device_remove_file(port->uport.dev, &dev_attr_hs_uart_version);
 	device_remove_file(port->uport.dev, &dev_attr_hs_uart_operation);
+	device_remove_file(port->uport.dev, &dev_attr_loopback);
+	device_remove_file(port->uport.dev, &dev_attr_xfer_mode);
+	device_remove_file(port->uport.dev, &dev_attr_ver_info);
+	debugfs_remove(port->dbg);
+
 	return 0;
 }
 
@@ -4979,11 +4993,19 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 		goto exit_runtime_suspend;
 	}
 
-	/* Check if port is in open state before enabling wakeup_irq */
-	if (port->wakeup_irq > 0  && port->uport.state->port.tty) {
+	/*
+	 * If shutdown is not in progress, check if port
+	 * is in open state before enabling wakeup_irq
+	 */
+	if (!port->shutdown_in_progress &&
+	    port->wakeup_irq > 0  && port->uport.state->port.tty) {
 		port->edge_count = 0;
 		enable_irq(port->wakeup_irq);
 		port->wakeup_enabled = true;
+		ret = irq_set_irq_wake(port->wakeup_irq, 1);
+		if (unlikely(ret))
+			dev_err(dev, "%s:Failed to set IRQ wake:%d\n",
+				__func__, ret);
 	}
 	UART_LOG_DBG(port->ipc_log_pwr, dev, "%s: End %d\n", __func__, ret);
 	__pm_relax(port->geni_wake);
@@ -5008,7 +5030,12 @@ static int msm_geni_serial_runtime_resume(struct device *dev)
 	 * check for wakeup_enabled before disabling the wakeup_irq as
 	 * this might be disabled from shutdown as well.
 	 */
-	if (port->wakeup_irq > 0 && port->wakeup_enabled) {
+	if (port->wakeup_irq > 0 && port->wakeup_enabled &&
+	    port->uport.state->port.tty) {
+		ret = irq_set_irq_wake(port->wakeup_irq, 0);
+		if (unlikely(ret))
+			dev_err(dev, "%s:Failed to unset IRQ wake:%d\n",
+				__func__, ret);
 		disable_irq(port->wakeup_irq);
 		port->wakeup_enabled = false;
 	}
@@ -5248,8 +5275,9 @@ module_init(msm_geni_serial_init);
 static void __exit msm_geni_serial_exit(void)
 {
 	platform_driver_unregister(&msm_geni_serial_platform_driver);
+	if (con_enabled)
+		console_unregister(&msm_geni_console_driver);
 	uart_unregister_driver(&msm_geni_serial_hs_driver);
-	console_unregister(&msm_geni_console_driver);
 }
 module_exit(msm_geni_serial_exit);
 

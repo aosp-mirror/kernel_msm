@@ -353,7 +353,7 @@ struct smem_image_version {
 };
 #endif /* CONFIG_DEBUG_FS */
 
-#define MAX_SOCINFO_ATTRS 45
+#define MAX_SOCINFO_ATTRS 50
 /* sysfs attributes */
 #define ATTR_DEFINE(param)      \
 	static DEVICE_ATTR(param, (S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH ), \
@@ -369,10 +369,12 @@ struct smem_image_version {
 	{ \
 		u32 *part_info; \
 		int num_parts = 0; \
-		int str_pos = 0, i = 0; \
+		int str_pos = 0, i = 0, ret = 0; \
 		num_parts = socinfo_get_part_count(part_enum); \
 		part_info = kmalloc_array(num_parts, sizeof(*part_info), GFP_KERNEL); \
-		socinfo_get_subpart_info(part_enum, part_info, num_parts); \
+		ret = socinfo_get_subpart_info(part_enum, part_info, num_parts); \
+		if (ret < 0) \
+			return -EINVAL;  \
 		for (i = 0; i < num_parts; i++) { \
 			str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, "0x%x", \
 					part_info[i]); \
@@ -961,6 +963,9 @@ socinfo_get_subpart_info(enum subset_part_type part,
 	u32 i = 0, count = 0;
 	int part_count = 0;
 
+	if (!part_info)
+		return -EINVAL;
+
 	part_count = socinfo_get_part_count(part);
 	if (part_count <= 0)
 		return -EINVAL;
@@ -995,6 +1000,8 @@ CREATE_PART_FUNCTION(spss, PART_SPSS);
 CREATE_PART_FUNCTION(nav, PART_NAV);
 CREATE_PART_FUNCTION(comp1, PART_COMP1);
 CREATE_PART_FUNCTION(display1, PART_DISPLAY1);
+CREATE_PART_FUNCTION(nsp, PART_NSP);
+CREATE_PART_FUNCTION(eva, PART_EVA);
 
 /* Version 15 */
 static ssize_t
@@ -1201,10 +1208,15 @@ static const struct soc_id soc_id[] = {
 	{ 471, "QMP_SCUBA" },
 	{ 473, "QCM_SCUBA" },
 	{ 474, "QCS_SCUBA" },
+	{ 475, "YUPIK" },
 	{ 481, "KONA-IOT" },
 	{ 482, "WAIPIOP" },
 	{ 486, "MONACO" },
 	{ 496, "QRB5165N" },
+	{ 497, "YUPIK-IOT" },
+	{ 498, "YUPIKP-IOT" },
+	{ 499, "YUPIKP" },
+	{ 515, "YUPIK-LTE" },
 	{ 517, "MONACOP" },
 	{ 518, "KHAJE" },
 	{ 548, "KONA-7230-IOT" },
@@ -1537,6 +1549,8 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		msm_custom_socinfo_attrs[i++] = &dev_attr_nav.attr;
 		msm_custom_socinfo_attrs[i++] = &dev_attr_comp1.attr;
 		msm_custom_socinfo_attrs[i++] = &dev_attr_display1.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_nsp.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_eva.attr;
 	case SOCINFO_VERSION(0, 13):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_nproduct_id.attr;
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_id.attr;

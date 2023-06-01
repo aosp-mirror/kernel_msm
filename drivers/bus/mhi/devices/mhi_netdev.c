@@ -49,7 +49,7 @@
 				"", __func__, ##__VA_ARGS__); \
 } while (0)
 
-const char * const mhi_log_level_str[MHI_MSG_LVL_MAX] = {
+const char * const mhi_netdev_log_level_str[MHI_MSG_LVL_MAX] = {
 	[MHI_MSG_LVL_VERBOSE] = "Verbose",
 	[MHI_MSG_LVL_INFO] = "Info",
 	[MHI_MSG_LVL_ERROR] = "Error",
@@ -57,8 +57,8 @@ const char * const mhi_log_level_str[MHI_MSG_LVL_MAX] = {
 	[MHI_MSG_LVL_MASK_ALL] = "Mask all",
 };
 #define MHI_NETDEV_LOG_LEVEL_STR(level) ((level >= MHI_MSG_LVL_MAX || \
-					 !mhi_log_level_str[level]) ? \
-					 "Mask all" : mhi_log_level_str[level])
+					 !mhi_netdev_log_level_str[level]) ? \
+					 "Mask all" : mhi_netdev_log_level_str[level])
 
 struct mhi_net_chain {
 	struct sk_buff *head, *tail; /* chained skb */
@@ -1145,6 +1145,14 @@ static const struct mhi_netdev_driver_data hw0_308_data = {
 	.interface_name = "rmnet_mhi",
 };
 
+static const struct mhi_netdev_driver_data hw1_308_data = {
+	.mru = 0x4000,
+	.chain_skb = false,
+	.is_rsc_chan = false,
+	.has_rsc_child = false,
+	.interface_name = "mhi_swip",
+};
+
 static const struct mhi_netdev_driver_data hw0_rsc_308_data = {
 	.mru = 0x8000,
 	.chain_skb = true,
@@ -1156,6 +1164,7 @@ static const struct mhi_netdev_driver_data hw0_rsc_308_data = {
 static const struct mhi_device_id mhi_netdev_match_table[] = {
 	{ .chan = "IP_HW0", .driver_data = (kernel_ulong_t)&hw0_308_data },
 	{ .chan = "IP_HW0_RSC", .driver_data = (kernel_ulong_t)&hw0_rsc_308_data },
+	{ .chan = "IP_SW0", .driver_data = (kernel_ulong_t)&hw1_308_data },
 	{},
 };
 

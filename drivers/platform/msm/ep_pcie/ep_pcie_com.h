@@ -74,6 +74,11 @@
 #define PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE_EN	1
 #define PCIE20_PARF_CLKREQ_OE_OVERRIDE_ENABLE	BIT(0)
 
+#define PCIE20_PARF_DEBUG_CNT_IN_L0S (0xc10)
+#define PCIE20_PARF_DEBUG_CNT_IN_L1 (0xc0c)
+#define PCIE20_PARF_DEBUG_CNT_IN_L1SUB_L1 (0xc84)
+#define PCIE20_PARF_DEBUG_CNT_IN_L1SUB_L2 (0xc88)
+
 #define PCIE20_PARF_SLV_ADDR_MSB_CTRL  0x2C0
 #define PCIE20_PARF_DBI_BASE_ADDR      0x350
 #define PCIE20_PARF_DBI_BASE_ADDR_HI   0x354
@@ -170,6 +175,7 @@
 #define PCIE20_IATU_O_LTAR(n)          (PCIE20_IATU_BASE(n) + 0x14)
 #define PCIE20_IATU_O_UTAR(n)          (PCIE20_IATU_BASE(n) + 0x18)
 #define PCIE20_IATU_O_CTRL3(n)         (PCIE20_IATU_BASE(n) + 0x1C)
+#define PCIE20_IATU_O_ULAR(n)          (PCIE20_IATU_BASE(n) + 0x20)
 
 #define PCIE20_IATU_I_CTRL1(n)         (PCIE20_IATU_BASE(n) + 0x100)
 #define PCIE20_IATU_I_CTRL2(n)         (PCIE20_IATU_BASE(n) + 0x104)
@@ -178,6 +184,8 @@
 #define PCIE20_IATU_I_LAR(n)           (PCIE20_IATU_BASE(n) + 0x110)
 #define PCIE20_IATU_I_LTAR(n)          (PCIE20_IATU_BASE(n) + 0x114)
 #define PCIE20_IATU_I_UTAR(n)          (PCIE20_IATU_BASE(n) + 0x118)
+
+#define PCIE20_IATU_O_INCREASE_REGION_SIZE	0x2000
 
 #define PCIE20_MHICFG                  0x110
 #define PCIE20_BHI_EXECENV             0x228
@@ -223,7 +231,7 @@
 
 #define EP_PCIE_LOG_PAGES 50
 #define EP_PCIE_MAX_VREG 4
-#define EP_PCIE_MAX_CLK 16
+#define EP_PCIE_MAX_CLK 20
 #define EP_PCIE_MAX_PIPE_CLK 1
 #define EP_PCIE_MAX_RESET 2
 
@@ -482,6 +490,7 @@ struct ep_pcie_dev_t {
 	struct clk		     *ref_clk_src;
 
 	bool				override_disable_sriov;
+	bool				no_path_from_ipa_to_pcie;
 };
 
 extern struct ep_pcie_dev_t ep_pcie_dev;

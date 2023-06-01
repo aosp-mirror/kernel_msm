@@ -397,6 +397,15 @@ config QCOM_SMP2P_SLEEPSTATE
 	  notifications from the remote to prevent suspend on the local
 	  processor.
 
+config SENSORS_SSC
+	tristate "Enable Sensors Driver Support for SSC"
+	depends on REMOTEPROC
+	help
+	  Say y or m here to enable Snapdragon Sensor Core(SSC)
+	  support for Qualcomm Technologies, Inc SoCs. SSC is used for
+	  exercising sensor use-cases. This driver loads firmware files
+	  for SSC and also does time synchronization with DSP clock.
+
 config QSEE_IPC_IRQ_BRIDGE
 	tristate "QSEE IPC Interrupt Bridge"
 	help
@@ -473,15 +482,16 @@ config QTI_ALTMODE_GLINK
 	  as Pin Assignment Notifications from the Type-C stack running on a
 	  remote subsystem (e.g. DSP) via the PMIC GLINK interface.
 
-config SPMI_QTI_GLINK_DEBUG
-	tristate "QTI Glink Debug SPMI Controller"
+config QTI_PMIC_GLINK_DEBUG
+	tristate "QTI PMIC Glink Debug Device"
 	depends on QTI_PMIC_GLINK
 	help
-	  The Qualcomm Technologies, Inc. Glink debug SPMI controller driver
+	  The Qualcomm Technologies, Inc. PMIC Glink debug device driver
 	  provides an interface to read and write PMIC registers over PMIC
 	  Glink using a remote subsytem (e.g. DSP).  This allows for debugging
 	  PMIC peripherals that would typically only be accessible to the
 	  charger and fuel gauging firmware running on the remote subsystem.
+	  The PMIC peripherals' bus access can be either SPMI or I2C.
 
 config QCOM_SECURE_BUFFER
 	tristate "Helper functions for secure buffers through TZ"
@@ -588,7 +598,7 @@ config QTI_PLH_SCMI_CLIENT
 
 	  This driver deliver the PLH vendor protocol handle to interface
 	  driver, and interface driver will use this handle to communicate
-	  with RIMPS PLH.
+	  with CPUCP PLH.
 
 config MSM_JTAGV8
 	bool "Debug and ETM trace support across power collapse for ARMv8"
@@ -1149,6 +1159,16 @@ config MSM_PERFORMANCE
           when requested by the userspace by changing the cpufreq policy
           fmin and fmax. The user space can request  the cpu freq change by
           writing cpu#:freq values
+
+config QCOM_WCD_USBSS_I2C
+        tristate "WCD USBSS chip with I2C"
+        select REGMAP
+        depends on I2C
+        help
+          Support for the WCD939X USBSS IC switch chip controlled
+          using I2C. This driver provides common support
+          for accessing the device, switching between USB and Audio
+          modes, changing orientation.
 
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
