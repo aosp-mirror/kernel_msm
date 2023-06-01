@@ -3250,8 +3250,8 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 	vote(chg->temp_change_irq_disable_votable, DEFAULT_VOTER,
 						!vbus_rising, 0);
 	power_supply_changed(chg->usb_psy);
-	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: usbin-plugin %s\n",
-					vbus_rising ? "attached" : "detached");
+	pr_info("%s: %s: IRQ: usbin-plugin %s\n",
+		chg->name, __func__, vbus_rising ? "attached" : "detached");
 }
 
 irqreturn_t smblite_usb_plugin_irq_handler(int irq, void *data)
