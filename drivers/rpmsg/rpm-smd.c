@@ -1367,7 +1367,10 @@ int msm_rpm_wait_for_ack(uint32_t msg_id)
 	if (!elem)
 		return rc;
 
-	wait_for_completion(&elem->ack);
+	if (!wait_for_completion_timeout(&elem->ack, msecs_to_jiffies(5000))) {
+		pr_err("timeout set clk msg_id=%x", msg_id);
+		BUG();
+	}
 	trace_rpm_smd_ack_recvd(0, msg_id, 0xDEADFEED);
 
 	rc = elem->errno;
