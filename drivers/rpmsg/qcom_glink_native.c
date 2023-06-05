@@ -2511,9 +2511,6 @@ int qcom_glink_native_start(struct qcom_glink *glink)
 
 	glink->irq = irq;
 
-	BUG_ON(dev_get_drvdata(dev) != NULL);
-	dev_set_drvdata(dev, glink);
-
 	size = of_property_count_u32_elems(dev->of_node, "cpu-affinity");
 	if (size > 0) {
 		arr = kmalloc_array(size, sizeof(u32), GFP_KERNEL);
@@ -2602,12 +2599,7 @@ EXPORT_SYMBOL_GPL(qcom_glink_native_unregister);
 
 static int qcom_glink_suspend_no_irq(struct device *dev)
 {
-	struct qcom_glink *glink = dev_get_drvdata(dev);
-
 	should_wake = true;
-
-	if (glink)
-		enable_irq_wake(glink->irq);
 
 	return 0;
 }
@@ -2615,13 +2607,7 @@ static int qcom_glink_suspend_no_irq(struct device *dev)
 static int qcom_glink_resume_no_irq(struct device *dev)
 {
 	int ret = 0;
-	struct qcom_glink *glink = dev_get_drvdata(dev);
-
 	should_wake = false;
-
-	if (glink)
-		disable_irq_wake(glink->irq);
-
 #if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 	if (pm_suspend_via_firmware()) {
 		quickboot = 1;
