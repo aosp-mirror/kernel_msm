@@ -2312,11 +2312,11 @@
   inet6_add_protocol
   inet6_bind
   inet6_del_protocol
-  inet6_destroy_sock
   inet6_getname
   inet6_ioctl
   inet6_register_protosw
   inet6_release
+  inet6_sock_destruct
   inet6_unregister_protosw
   inet_accept
   inet_add_offload
@@ -2773,6 +2773,7 @@
   devm_regulator_register_notifier
   generic_file_mmap
   idr_alloc_u32
+  inet6_destroy_sock
   qdisc_reset
   simple_getattr
   soc_find_component
