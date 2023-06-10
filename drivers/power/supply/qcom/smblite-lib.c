@@ -2394,44 +2394,12 @@ int smblite_lib_set_prop_current_max(struct smb_charger *chg,
 			val->intval, chg->real_charger_type);
 
 	if (chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_FLOAT) {
-		if (val->intval == -ETIMEDOUT) {
-			if ((chg->float_cfg & FLOAT_OPTIONS_MASK)
-						== FORCE_FLOAT_SDP_CFG_BIT) {
-				/*
-				 * Confiugure USB500 mode if Float charger is
-				 * configured for SDP mode.
-				 */
-				rc = vote(chg->usb_icl_votable,
-					SW_ICL_MAX_VOTER, true, USBIN_500UA);
-				if (rc < 0)
-					smblite_lib_err(chg,
-						"Couldn't set SDP ICL rc=%d\n",
-						rc);
-				return rc;
-			}
-
-			/* Set ICL to 1.5A if its configured for DCP */
-			rc = vote(chg->usb_icl_votable,
-				  SW_ICL_MAX_VOTER, true, DCP_CURRENT_UA);
-			if (rc < 0)
-				return rc;
-		} else {
-			/*
-			 * FLOAT charger detected as SDP by USB driver,
-			 * charge with the requested current and update the
-			 * real_charger_type
-			 */
-			chg->real_charger_type = POWER_SUPPLY_TYPE_USB;
-
-			rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
-						true, val->intval);
-			if (rc < 0)
-				return rc;
-			rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER,
-							false, 0);
-			if (rc < 0)
-				return rc;
-		}
+		/*
+		 * We should not expect a current limit to come from the USB
+		 * driver while we are on a FLOAT charger. Log if this happens.
+		 */
+		pr_err("Unexpected current request %duA from USB driver for FLOAT charger\n",
+			val->intval);
 	} else if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB) {
 
 		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, val->intval);
@@ -3322,12 +3290,18 @@ static void update_sw_icl_max(struct smb_charger *chg,
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, rp_ua);
 		break;
 	case QTI_POWER_SUPPLY_TYPE_USB_FLOAT:
-		/*
-		 * limit ICL to 100mA, the USB driver will enumerate to check
-		 * if this is a SDP and appropriately set the current
-		 */
-		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
-						USBIN_100UA);
+		if ((chg->float_cfg & FLOAT_OPTIONS_MASK)
+			== FORCE_FLOAT_SDP_CFG_BIT) {
+			/*
+			 * Configure USB500 mode if float charger is
+			 * configured for SDP mode.
+			 */
+			vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, USBIN_500UA);
+			break;
+		}
+
+		/* Set ICL to 1.5A if its configured for DCP */
+		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, DCP_CURRENT_UA);
 		break;
 	case POWER_SUPPLY_TYPE_UNKNOWN:
 	default:
@@ -3420,10 +3394,10 @@ static void smblite_lib_handle_apsd_done(struct smb_charger *chg, bool rising)
 	switch (apsd_result->bit) {
 	case SDP_CHARGER_BIT:
 	case CDP_CHARGER_BIT:
-	case FLOAT_CHARGER_BIT:
 		if (chg->use_extcon)
 			smblite_lib_notify_device_mode(chg, true);
 		break;
+	case FLOAT_CHARGER_BIT:
 	case OCP_CHARGER_BIT:
 	case DCP_CHARGER_BIT:
 		break;
