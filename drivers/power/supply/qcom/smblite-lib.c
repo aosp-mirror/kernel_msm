@@ -503,8 +503,8 @@ static const struct apsd_result *smblite_lib_update_usb_type(struct smb_charger 
 
 	smblite_update_usb_desc(chg);
 
-	smblite_lib_dbg(chg, PR_MISC, "APSD=%s, real_charger_type =%d\n",
-			apsd_result->name, chg->real_charger_type);
+	pr_info("APSD=%s, real_charger_type =%d\n",
+		apsd_result->name, chg->real_charger_type);
 
 	return apsd_result;
 }
