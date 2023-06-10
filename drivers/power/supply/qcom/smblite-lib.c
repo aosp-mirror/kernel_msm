@@ -2390,7 +2390,7 @@ int smblite_lib_set_prop_current_max(struct smb_charger *chg,
 	int rc = 0;
 
 	smblite_lib_dbg(chg, PR_MISC,
-		"Current request from USB driver current=%dmA, charger_type=%d\n",
+		"Current request from USB driver current=%duA, charger_type=%d\n",
 			val->intval, chg->real_charger_type);
 
 	if (chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_FLOAT) {
