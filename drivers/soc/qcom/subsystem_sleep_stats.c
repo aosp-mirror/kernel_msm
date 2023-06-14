@@ -34,37 +34,37 @@
 #define DDR_STATS_DURATION_ADDR		0x8
 
 #define APSS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 0, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define MODEM_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 1, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define WPSS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 2, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define ADSP_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 3, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define ADSP_ISLAND_IOCTL	_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 4, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define CDSP_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 5, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define SLPI_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 6, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define GPU_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 7, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define DISPLAY_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 8, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 #define SLPI_ISLAND_IOCTL	_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 9, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 
 #define AOSD_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 10, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 
 #define CXSD_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 11, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 
 #define DDR_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 12, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 
 #define DDR_STATS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 13, \
-				     struct sleep_stats *)
+				     struct sleep_stats)
 
 struct sleep_stats {
 	u32 version;
@@ -403,6 +403,7 @@ static const struct file_operations stats_data_fops = {
 	.owner		=	THIS_MODULE,
 	.open		=	stats_data_open,
 	.unlocked_ioctl =	stats_data_ioctl,
+	.compat_ioctl	=	stats_data_ioctl,
 };
 
 static int subsystem_stats_probe(struct platform_device *pdev)
