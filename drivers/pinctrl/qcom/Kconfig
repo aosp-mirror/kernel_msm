@@ -322,6 +322,13 @@ config PINCTRL_MONACO
           Say Y here to compile statically, or M here to compile it as a module.
           If unsure, say N.
 
+config PINCTRL_MONACO_ACCESS_QUP02
+	bool "Allow access to qup02 pins on Qualcomm MONACO platform from pinctrl"
+	depends on PINCTRL_MONACO
+	help
+	  Say y here to unreserve the qup02 pins allocated by the monaco pinctrl
+	  driver. This allows these pins to be used for pin control.
+
 config PINCTRL_LPASS_LPI
 	tristate "Qualcomm Technologies Inc LPASS LPI pin controller driver"
 	select PINMUX
