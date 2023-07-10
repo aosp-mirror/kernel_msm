@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright 2023 Google LLC */
+
+#ifndef __SMBLITE_SHIM_H__
+#define __SMBLITE_SHIM_H__
+
+#include <linux/power_supply.h>
+#include "smblite-lib.h"
+
+struct smblite_shim {
+	struct smb_charger *chg;
+	struct power_supply *psy;
+};
+
+struct smblite_shim *smblite_shim_init(struct smb_charger *chg);
+
+int smblite_shim_on_usb_psy_created(struct smblite_shim *shim,
+				struct power_supply_desc *existing_usb_desc);
+
+void smblite_shim_on_usb_type_updated(struct smblite_shim *shim,
+				enum power_supply_type type);
+
+#endif
