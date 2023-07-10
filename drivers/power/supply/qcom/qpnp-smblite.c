@@ -21,6 +21,7 @@
 #include <linux/suspend.h>
 #include <linux/usb/typec.h>
 #include <linux/nvmem-consumer.h>
+#include "smblite-shim.h"
 #include "smblite-reg.h"
 #include "smblite-lib.h"
 #include "smb5-iio.h"
@@ -603,6 +604,8 @@ void smblite_update_usb_desc(struct smb_charger *chg)
 		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB;
 		break;
 	}
+
+	smblite_shim_on_usb_type_updated(chg->shim, usb_psy_desc.type);
 }
 
 #define MIN_THERMAL_VOTE_UA	500000
@@ -640,8 +643,13 @@ static int smblite_usb_prop_is_writeable(struct power_supply *psy,
 	return 0;
 }
 
+/* Notifies usb shim psy of qcom_usb power_supply_changed() events */
+static char *usb_psy_supplied_to[] = {
+	"usb",
+};
+
 static struct power_supply_desc usb_psy_desc = {
-	.name = "usb",
+	.name = "qcom_usb",
 	.type = POWER_SUPPLY_TYPE_USB,
 	.properties = smblite_usb_props,
 	.num_properties = ARRAY_SIZE(smblite_usb_props),
@@ -659,6 +667,8 @@ static int smblite_init_usb_psy(struct smblite *chip)
 
 	usb_cfg.drv_data = chip;
 	usb_cfg.of_node = chg->dev->of_node;
+	usb_cfg.supplied_to = usb_psy_supplied_to;
+	usb_cfg.num_supplicants = ARRAY_SIZE(usb_psy_supplied_to);
 	chg->usb_psy = devm_power_supply_register(chg->dev,
 						  &usb_psy_desc,
 						  &usb_cfg);
@@ -667,7 +677,7 @@ static int smblite_init_usb_psy(struct smblite *chip)
 		return PTR_ERR(chg->usb_psy);
 	}
 
-	return 0;
+	return smblite_shim_on_usb_psy_created(chg->shim, &usb_psy_desc);
 }
 
 /*************************
@@ -2203,6 +2213,12 @@ static int smblite_probe(struct platform_device *pdev)
 	if (rc < 0) {
 		pr_err("Smblib_init failed rc=%d\n", rc);
 		return rc;
+	}
+
+	chg->shim = smblite_shim_init(chg);
+	if (!chg->shim) {
+		pr_err("Could not initialize smblite_shim");
+		goto cleanup;
 	}
 
 	rc = smblite_extcon_init(chg);

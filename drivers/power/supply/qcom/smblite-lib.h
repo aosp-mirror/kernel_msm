@@ -18,6 +18,7 @@
 #include <linux/extcon-provider.h>
 #include <linux/usb/typec.h>
 #include <linux/qti_power_supply.h>
+#include "smblite-shim.h"
 #include "storm-watch.h"
 #include "battery.h"
 #include "smblite-remote-bms.h"
@@ -291,6 +292,7 @@ struct smb_charger {
 	enum smb_mode		mode;
 	u8			subtype;
 	int			weak_chg_icl_ua;
+	struct smblite_shim	*shim;
 
 	/* locks */
 	struct mutex		typec_lock;
