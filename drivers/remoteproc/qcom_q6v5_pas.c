@@ -884,6 +884,7 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 	}
 
 	ret = of_address_to_resource(node, 0, &r);
+	of_node_put(node);
 	if (ret)
 		return ret;
 
@@ -1142,6 +1143,7 @@ detach_active_pds:
 deinit_wakeup_source:
 	device_init_wakeup(adsp->dev, false);
 free_rproc:
+	device_init_wakeup(adsp->dev, false);
 	rproc_free(rproc);
 
 	return ret;
@@ -1159,6 +1161,7 @@ static int adsp_remove(struct platform_device *pdev)
 	qcom_remove_sysmon_subdev(adsp->sysmon);
 	qcom_remove_smd_subdev(adsp->rproc, &adsp->smd_subdev);
 	qcom_remove_ssr_subdev(adsp->rproc, &adsp->ssr_subdev);
+	adsp_pds_detach(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
 	device_init_wakeup(adsp->dev, false);
 	rproc_free(adsp->rproc);
 
@@ -1492,9 +1495,7 @@ static const struct adsp_data kalama_mpss_resource = {
 static const struct adsp_data crow_mpss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
-	.dtb_firmware_name = "modem_dtb.mdt",
 	.pas_id = 4,
-	.dtb_pas_id = 0x26,
 	.free_after_auth_reset = true,
 	.minidump_id = 3,
 	.uses_elf64 = true,
@@ -1870,6 +1871,42 @@ static const struct adsp_data crow_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data qcs405_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.has_aggre2_clk = false,
+	.auto_boot = true,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.qmp_name = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data qcs405_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.has_aggre2_clk = false,
+	.auto_boot = true,
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.qmp_name = "cdsp",
+	.ssctl_id = 0x17,
+};
+
+static const struct adsp_data qcs405_modem_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "wcnss.mdt",
+	.pas_id = 6,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "wcnss",
+	.sysmon_name = "wlan",
+	.qmp_name = "wlan",
+	.ssctl_id = 0x12,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8974-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8996-adsp-pil", .data = &adsp_resource_init},
@@ -1927,6 +1964,9 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,crow-adsp-pas", .data = &crow_adsp_resource},
 	{ .compatible = "qcom,crow-cdsp-pas", .data = &crow_cdsp_resource},
 	{ .compatible = "qcom,crow-modem-pas", .data = &crow_mpss_resource},
+	{ .compatible = "qcom,qcs405-adsp-pas", .data = &qcs405_adsp_resource},
+	{ .compatible = "qcom,qcs405-wlan-dsp", .data = &qcs405_modem_resource},
+	{ .compatible = "qcom,qcs405-cdsp-pas", .data = &qcs405_cdsp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

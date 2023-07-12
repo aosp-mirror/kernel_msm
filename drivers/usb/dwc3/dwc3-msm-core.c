@@ -366,6 +366,13 @@ enum msm_usb_irq {
 	USB_MAX_IRQ
 };
 
+enum icc_paths {
+	USB_DDR,
+	USB_IPA,
+	DDR_USB,
+	USB_MAX_PATH
+};
+
 enum bus_vote {
 	BUS_VOTE_NONE,
 	BUS_VOTE_NOMINAL,
@@ -378,7 +385,7 @@ static const char * const icc_path_names[] = {
 	"usb-ddr", "usb-ipa", "ddr-usb",
 };
 
-static const struct {
+static struct {
 	u32 avg, peak;
 } bus_vote_values[BUS_VOTE_MAX][3] = {
 	/* usb_ddr avg/peak, usb_ipa avg/peak, apps_usb avg/peak */
@@ -4376,7 +4383,7 @@ skip_update:
 	 * only in case of power event irq in lpm.
 	 */
 	if (mdwc->resume_pending) {
-		dwc3_msm_resume(mdwc);
+		pm_runtime_resume(mdwc->dev);
 		mdwc->resume_pending = false;
 	}
 
@@ -4655,7 +4662,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	dbg_event(0xFF, "extcon idx", enb->idx);
 	dev_dbg(mdwc->dev, "vbus:%ld event received\n", event);
 	edev_name = extcon_get_edev_name(edev);
-	dbg_log_string("edev:%s\n", edev_name);
+	dbg_log_string("edev:%s event:%ld\n", edev_name, event);
 
 	/* detect USB spoof disconnect/connect notification with EUD device */
 	eud_str = strnstr(edev_name, "eud", strlen(edev_name));
@@ -4709,9 +4716,9 @@ static int dwc3_msm_dp_notifier(struct notifier_block *nb, unsigned long event, 
 		extcon_get_property(edev, EXTCON_USB_HOST, EXTCON_PROP_USB_SS, &val);
 
 		if (val.intval)
-			dwc3_msm_set_dp_mode(mdwc->dev, true, 4);
-		else
 			dwc3_msm_set_dp_mode(mdwc->dev, true, 2);
+		else
+			dwc3_msm_set_dp_mode(mdwc->dev, true, 4);
 	} else {
 		dwc3_msm_set_dp_mode(mdwc->dev, false, 0);
 	}
@@ -5456,12 +5463,6 @@ exit:
 }
 EXPORT_SYMBOL(dwc3_msm_set_dp_mode);
 
-int dwc3_msm_release_ss_lane(struct device *dev)
-{
-	return dwc3_msm_set_dp_mode(dev, true, 4);
-}
-EXPORT_SYMBOL(dwc3_msm_release_ss_lane);
-
 static int dwc3_msm_debug_init(struct dwc3_msm *mdwc)
 {
 	char ipc_log_name[40];
@@ -5483,7 +5484,7 @@ static int dwc3_msm_debug_init(struct dwc3_msm *mdwc)
 		dev_err(mdwc->dev, "Error getting ipc_log_ctxt\n");
 
 	snprintf(ipc_log_ctx_name, sizeof(ipc_log_ctx_name),
-				"%s_ep_events", ipc_log_name);
+				"%s_reg_dumps", ipc_log_name);
 	mdwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(2 * NUM_LOG_PAGES,
 					ipc_log_ctx_name, DWC3_MINIDUMP);
 	if (!mdwc->dwc_dma_ipc_log_ctxt)
@@ -5619,6 +5620,7 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		goto depopulate;
 
 	dwc3_msm_override_pm_ops(dwc->dev, mdwc->dwc3_pm_ops, false);
+	dev_pm_syscore_device(dwc->dev, true);
 
 	mdwc->xhci_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
 	if (!mdwc->xhci_pm_ops)
@@ -5680,6 +5682,88 @@ static int dwc3_msm_parse_core_params(struct dwc3_msm *mdwc, struct device_node 
 	return ret;
 }
 
+static int dwc3_msm_smmu_fault_handler(struct iommu_domain *domain, struct device *dev,
+					unsigned long iova, int flags, void *data)
+{
+	struct dwc3_msm *mdwc = data;
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	const struct debugfs_reg32 *dwc3_regs = dwc->regset->regs;
+	int size = dwc->regset->nregs, i;
+
+	ipc_log_string(mdwc->dwc_dma_ipc_log_ctxt, "[Reg_Name: Offset\t Value]");
+	for (i = 0; i < size; i++)
+		dump_dwc3_regs(dwc3_regs[i].name, dwc3_regs[i].offset,
+			dwc3_msm_read_reg(mdwc->base, dwc3_regs[i].offset));
+       /*
+	* Let the iommu core know we're not really handling this fault;
+	* we just use it to dump the registers for debugging purposes.
+	*/
+	return -ENOSYS;
+
+}
+
+static int dwc3_msm_interconnect_vote_populate(struct dwc3_msm *mdwc)
+{
+	int ret_nom = 0, i = 0, j = 0, count = 0;
+	int ret_svs = 0, ret = 0;
+	u32 *vv_nom, *vv_svs;
+
+	count = of_property_count_strings(mdwc->dev->of_node,
+						"interconnect-names");
+	if (count < 0) {
+		dev_err(mdwc->dev, "No interconnects found.\n");
+		return -EINVAL;
+	}
+
+	/* 2 signifies the two types of values avg & peak */
+	vv_nom = kzalloc(count * 2 * sizeof(*vv_nom), GFP_KERNEL);
+	if (!vv_nom)
+		return -ENOMEM;
+
+	vv_svs = kzalloc(count * 2 * sizeof(*vv_svs), GFP_KERNEL);
+	if (!vv_svs)
+		return -ENOMEM;
+
+	/* of_property_read_u32_array returns 0 on success */
+	ret_nom = of_property_read_u32_array(mdwc->dev->of_node,
+				"qcom,interconnect-values-nom",
+					vv_nom, count * 2);
+	if (ret_nom) {
+		dev_err(mdwc->dev, "Nominal values not found.\n");
+		ret = ret_nom;
+		goto icc_err;
+	}
+
+	ret_svs = of_property_read_u32_array(mdwc->dev->of_node,
+				"qcom,interconnect-values-svs",
+					vv_svs, count * 2);
+	if (ret_svs) {
+		dev_err(mdwc->dev, "Svs values not found.\n");
+		ret = ret_svs;
+		goto icc_err;
+	}
+
+	for (i = USB_DDR; i < count && i < USB_MAX_PATH; i++) {
+		/* Updating votes NOMINAL */
+		bus_vote_values[BUS_VOTE_NOMINAL][i].avg
+						= vv_nom[j];
+		bus_vote_values[BUS_VOTE_NOMINAL][i].peak
+						= vv_nom[j+1];
+		/* Updating votes SVS */
+		bus_vote_values[BUS_VOTE_SVS][i].avg
+						= vv_svs[j];
+		bus_vote_values[BUS_VOTE_SVS][i].peak
+						= vv_svs[j+1];
+		j += 2;
+	}
+icc_err:
+	/* freeing the temporary resource */
+	kfree(vv_nom);
+	kfree(vv_svs);
+
+	return ret;
+}
+
 static int dwc3_msm_parse_params(struct dwc3_msm *mdwc, struct device_node *node)
 {
 	struct device_node *wcd_node;
@@ -5721,6 +5805,10 @@ static int dwc3_msm_parse_params(struct dwc3_msm *mdwc, struct device_node *node
 
 	mdwc->dis_sending_cm_l1_quirk = of_property_read_bool(node,
 				"qcom,dis-sending-cm-l1-quirk");
+
+	ret = dwc3_msm_interconnect_vote_populate(mdwc);
+	if (ret)
+		dev_err(dev, "Using default bus votes\n");
 
 	/* use default as nominal bus voting */
 	mdwc->default_bus_vote = BUS_VOTE_NOMINAL;
@@ -6618,13 +6706,13 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 
 		/*
 		 * DWC3 core runtime PM may return an error during the put sync
-		 * and nothing else can trigger idle after this point.  If EBUSY
-		 * is detected (i.e. dwc->connected == TRUE) then wait for the
-		 * connected flag to turn FALSE (set to false during disconnect
-		 * or pullup disable), and retry suspend again.
+		 * and nothing else can trigger idle after this point.  If any
+		 * error condition is detected then  wait for the connected flag
+		 * to turn FALSE (set to false during disconnect or pullup
+		 * disable), and retry suspend again.
 		 */
 		ret = pm_runtime_put_sync(&mdwc->dwc3->dev);
-		if (ret == -EBUSY) {
+		if (ret < 0) {
 			while (--timeout && dwc->connected)
 				msleep(20);
 			dbg_event(0xFF, "StopGdgt connected", dwc->connected);
@@ -6652,10 +6740,28 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
  *
  * NOTE: After any change in drd_state, we must reschdule the state machine.
  */
+
+static void dwc3_msm_iommu_get_domain(struct dwc3_msm *mdwc,
+				struct iommu_domain *dwc3_msm_domain)
+{
+	dwc3_msm_domain = iommu_get_domain_for_dev(&mdwc->dwc3->dev);
+
+	if (dwc3_msm_domain) {
+		iommu_set_fault_handler(dwc3_msm_domain,
+				dwc3_msm_smmu_fault_handler, mdwc);
+		dev_info(mdwc->dev,
+			"dwc3 msm iommu fault handler registered\n");
+	} else {
+		dev_err(mdwc->dev,
+			"dwc3 msm iommu domain not available\n");
+	}
+}
+
 static void dwc3_otg_sm_work(struct work_struct *w)
 {
 	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm, sm_work);
 	struct dwc3 *dwc = NULL;
+	struct iommu_domain *dwc3_msm_domain = NULL;
 	bool work = false;
 	int ret = 0;
 	const char *state;
@@ -6698,6 +6804,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		}
 
 		mdwc->drd_state = DRD_STATE_IDLE;
+		dwc3_msm_iommu_get_domain(mdwc, dwc3_msm_domain);
 
 		/* put controller and phy in suspend if no cable connected */
 		if (test_bit(ID, &mdwc->inputs) &&

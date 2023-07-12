@@ -52,6 +52,7 @@
 #define __QAPI_VERSION_MAJOR_MASK (0xff000000)
 #define __QAPI_VERSION_MINOR_MASK (0x00ff0000)
 #define __QAPI_VERSION_NIT_MASK (0x0000ffff)
+#define SCOM_GLINK_INTENT_SIZE 308
 
 /*pil_slate_intf.h*/
 #define RESULT_SUCCESS 0
@@ -119,9 +120,10 @@ struct slatedaemon_priv {
 	struct device *platform_dev;
 	bool slatecom_rpmsg;
 	bool slate_resp_cmplt;
+	bool slate_unload;
 	void *lhndl;
 	wait_queue_head_t link_state_wait;
-	char rx_buf[308];
+	char rx_buf[SCOM_GLINK_INTENT_SIZE];
 	struct work_struct slatecom_up_work;
 	struct work_struct slatecom_down_work;
 	struct mutex glink_mutex;
@@ -226,6 +228,10 @@ void slatecom_rx_msg(void *data, int len)
 	struct slatedaemon_priv *dev =
 		container_of(slatecom_intf_drv, struct slatedaemon_priv, lhndl);
 
+	if (len > SCOM_GLINK_INTENT_SIZE) {
+		pr_err("Invalid slatecom_intf glink intent size\n");
+		return;
+	}
 	dev->slate_resp_cmplt = true;
 	wake_up(&dev->link_state_wait);
 	memcpy(dev->rx_buf, data, len);
@@ -475,10 +481,9 @@ static int slatecom_fw_load(struct slatedaemon_priv *priv)
 			goto fail;
 		}
 		slate_boot_status = 1;
+		pr_info("%s: SLATE image is loaded\n", __func__);
+		return 0;
 	}
-	pr_info("%s: SLATE image is loaded\n", __func__);
-	return 0;
-
 fail:
 	pr_err("%s: SLATE image loading failed\n", __func__);
 	return -EFAULT;
@@ -492,7 +497,9 @@ static void slatecom_fw_unload(struct slatedaemon_priv *priv)
 	}
 	if (priv->pil_h) {
 		pr_err("%s: calling subsystem put\n", __func__);
+		priv->slate_unload = true;
 		rproc_shutdown(priv->pil_h);
+		priv->slate_unload = false;
 		priv->pil_h = NULL;
 		slate_boot_status = 0;
 	}
@@ -770,6 +777,15 @@ int get_slate_boot_mode(void)
 	return mode;
 }
 EXPORT_SYMBOL(get_slate_boot_mode);
+
+bool is_slate_unload_only(void)
+{
+	struct slatedaemon_priv *dev =
+		container_of(slatecom_intf_drv, struct slatedaemon_priv, lhndl);
+
+	return dev->slate_unload;
+}
+EXPORT_SYMBOL(is_slate_unload_only);
 
 static int send_get_fw_version(struct slate_ui_data *ui_obj_msg)
 {

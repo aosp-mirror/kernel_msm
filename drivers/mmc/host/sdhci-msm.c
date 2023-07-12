@@ -38,6 +38,7 @@
 #include "../core/core.h"
 #include <linux/qtee_shmbridge.h>
 #include <linux/crypto-qti-common.h>
+#include <linux/suspend.h>
 
 #if IS_ENABLED(CONFIG_MMC_SDHCI_MSM_SCALING)
 #include "sdhci-msm-scaling.h"
@@ -3729,8 +3730,16 @@ static void sdhci_msm_bus_voting(struct sdhci_host *host, bool enable)
 
 static void sdhci_msm_reset(struct sdhci_host *host, u8 mask)
 {
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
 	if ((host->mmc->caps2 & MMC_CAP2_CQE) && (mask & SDHCI_RESET_ALL))
 		cqhci_deactivate(host->mmc);
+
+	if (msm_host->rst_n_disable && host->mmc && host->mmc->card &&
+		host->mmc->card->ext_csd.rst_n_function != EXT_CSD_RST_N_ENABLED)
+		host->mmc->card->ext_csd.rst_n_function = true;
+
 	sdhci_reset(host, mask);
 }
 
@@ -4019,11 +4028,10 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 
 	msm_host->reg_store = true;
 	sdhci_msm_registers_save(host);
-	if (host->mmc->caps2 & MMC_CAP2_CQE) {
+	if ((host->mmc->caps2 & MMC_CAP2_CQE) && !pm_suspend_via_firmware()) {
 		host->mmc->cqe_ops->cqe_disable(host->mmc);
 		host->mmc->cqe_enabled = false;
 	}
-
 
 	sdhci_msm_gcc_reset(&pdev->dev, host);
 	sdhci_msm_registers_restore(host);
@@ -4031,7 +4039,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 
 	sdhci_msm_log_str(msm_host, "HW reset done\n");
 #if defined(CONFIG_SDC_QTI)
-	if (host->mmc->card)
+	if (host->mmc->card && !pm_suspend_via_firmware())
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
 	return;
@@ -4935,6 +4943,15 @@ static int mmc_can_sleep(struct mmc_card *card)
 static void partial_init(void *unused, struct mmc_host *host, bool *partial_init)
 {
 	int err;
+	bool deepsleep = pm_suspend_via_firmware();
+
+	if (deepsleep) {
+		host->ops->hw_reset(host);
+		*partial_init = false;
+		pr_debug("%s: %s: deepsleep %d\n", mmc_hostname(host),
+		 __func__, deepsleep);
+		return;
+	}
 
 	if (mmc_can_sleep(host->card)) {
 		err = mmc_sleepawake(host);
@@ -5295,6 +5312,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		ret = sdhci_add_host(host);
 	if (ret)
 		goto pm_runtime_disable;
+
+	if (of_property_read_bool(node, "mmc-rst-n-disable"))
+		msm_host->rst_n_disable = true;
+	else
+		msm_host->rst_n_disable = false;
 
 	/* For SDHC v5.0.0 onwards, ICE 3.0 specific registers are added
 	 * in CQ register space, due to which few CQ registers are
