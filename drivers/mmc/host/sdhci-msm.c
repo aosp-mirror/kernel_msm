@@ -4012,6 +4012,12 @@ static int sdhci_msm_gcc_reset(struct device *dev, struct sdhci_host *host)
 
 	return ret;
 }
+static void sdhci_msm_hwkm_program_keys(struct sdhci_host *host)
+{
+	struct mmc_host *mmc = (host->mmc);
+	if (mmc->caps2 & MMC_CAP2_CRYPTO)
+		blk_ksm_reprogram_all_keys(&mmc->ksm);
+}
 
 static void sdhci_msm_hw_reset(struct sdhci_host *host)
 {
@@ -4042,6 +4048,9 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	if (host->mmc->card && !pm_suspend_via_firmware())
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
+	if (pm_suspend_via_firmware()) {
+		sdhci_msm_hwkm_program_keys(host);
+	}
 	return;
 }
 
