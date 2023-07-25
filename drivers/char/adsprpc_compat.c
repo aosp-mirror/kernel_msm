@@ -354,8 +354,10 @@ static int compat_fastrpc_ioctl_invoke(struct file *filp,
 		return -EFAULT;
 	VERIFY(err, 0 == compat_get_fastrpc_ioctl_invoke(inv32,
 						inv, cmd, sc));
-	if (err)
+	if (err) {
+		kfree(inv);
 		return err;
+	}
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
 						fl->mode, USER_MSG, inv)));
 
@@ -411,8 +413,10 @@ static int compat_get_fastrpc_ioctl_invoke2(
 			lasync32_old = compat_ptr(pparam);
 			VERIFY(err, 0 == compat_get_fastrpc_ioctl_invoke(lasync32,
 					asyncinv_user, COMPAT_FASTRPC_IOCTL_INVOKE_CRC, sc));
-			if (err)
+			if (err) {
+				kfree(inv2_user);
 				goto bail;
+			}
 
 			asyncinv_user->job = NULL;
 			err |= get_user(p, &lasync32_old->job);
@@ -423,13 +427,13 @@ static int compat_get_fastrpc_ioctl_invoke2(
 			VERIFY(err, 0 == compat_get_fastrpc_ioctl_invoke(lasync32,
 							asyncinv_user, req, sc));
 		}
-		if (err)
+		if (err) {
+			kfree(inv2_user);
 			goto bail;
+		}
 		memcpy(&inv2_user->req, &req, sizeof(req));
 		inv2_user->invparam = (uintptr_t)asyncinv_user;
 		inv2_user->size = sizeof(*asyncinv_user);
-		if (err)
-			goto bail;
 		break;
 	}
 	case FASTRPC_INVOKE2_ASYNC_RESPONSE:
@@ -469,8 +473,6 @@ static int compat_get_fastrpc_ioctl_invoke2(
 		memcpy(&inv2_user->req, &req, sizeof(req));
 		memcpy(&inv2_user->invparam, &pparam, sizeof(pparam));
 		memcpy(&inv2_user->size, &size, sizeof(size));
-		if (err)
-			goto bail;
 		break;
 	}
 	default:
@@ -486,7 +488,7 @@ static int compat_fastrpc_ioctl_invoke2(struct file *filp,
 		unsigned int cmd, unsigned long arg)
 {
 	struct compat_fastrpc_ioctl_invoke2 __user *inv32;
-	struct fastrpc_ioctl_invoke2 *inv;
+	struct fastrpc_ioctl_invoke2 *inv = NULL;
 	int err = 0;
 	struct fastrpc_file *fl = (struct fastrpc_file *)filp->private_data;
 
@@ -497,6 +499,7 @@ static int compat_fastrpc_ioctl_invoke2(struct file *filp,
 		return err;
 
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke2(fl, inv)));
+	kfree(inv);
 	return err;
 }
 
@@ -783,18 +786,25 @@ static int compat_fastrpc_control(struct fastrpc_file *fl,
 		return -EFAULT;
 	VERIFY(err, 0 == compat_get_fastrpc_ioctl_control(ctrl32,
 						ctrl));
-	if (err)
+	if (err) {
+		kfree(ctrl);
 		return err;
+	}
 	VERIFY(err, 0 == (err = fastrpc_internal_control(fl, ctrl)));
-	if (err)
+	if (err) {
+		kfree(ctrl);
 		return err;
+	}
 	err = get_user(p, &ctrl32->req);
-	if (err)
+	if (err) {
+		kfree(ctrl);
 		return err;
+	}
 	if (p == FASTRPC_CONTROL_KALLOC) {
 		memcpy(&p, &ctrl->kalloc.kalloc_support, sizeof(ctrl->kalloc.kalloc_support));
 		err |= put_user(p, &ctrl32->kalloc.kalloc_support);
 	}
+	kfree(ctrl);
 	return err;
 }
 
@@ -813,21 +823,28 @@ static int compat_fastrpc_get_dsp_info(struct fastrpc_file *fl,
 		return -EFAULT;
 
 	err = get_user(u, &info32->domain);
-	if (err)
+	if (err) {
+		kfree(info);
 		return err;
+	}
 	memcpy(&info->domain, &u, sizeof(info->domain));
 
 	err = get_user(u, &info32->attribute_ID);
-	if (err)
+	if (err) {
+		kfree(info);
 		return err;
+	}
 	memcpy(&info->attribute_ID, &u, sizeof(info->attribute_ID));
 
 	err = fastrpc_get_info_from_kernel(info, fl);
-	if (err)
+	if (err) {
+		kfree(info);
 		return err;
+	}
 
 	err = compat_put_fastrpc_ioctl_get_dsp_info(info32, info);
 
+	kfree(info);
 	return err;
 }
 
@@ -849,14 +866,19 @@ static inline long compat_fastrpc_mmap_device_ioctl(struct fastrpc_file *fl,
 			return -EFAULT;
 
 		err = compat_get_fastrpc_ioctl_mem_map(map32, map);
-		if (err)
+		if (err) {
+			kfree(map);
 			return err;
+		}
 
 		VERIFY(err, 0 == (err = fastrpc_internal_mem_map(fl,
 						map)));
-		if (err)
+		if (err) {
+			kfree(map);
 			return err;
+		}
 		VERIFY(err, 0 == compat_put_fastrpc_ioctl_mem_map(map32, map));
+		kfree(map);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_MEM_UNMAP:
@@ -870,11 +892,14 @@ static inline long compat_fastrpc_mmap_device_ioctl(struct fastrpc_file *fl,
 			return -EFAULT;
 
 		err = compat_get_fastrpc_ioctl_mem_unmap(unmap32, unmap);
-		if (err)
+		if (err) {
+			kfree(unmap);
 			return err;
+		}
 
 		VERIFY(err, 0 == (err = fastrpc_internal_mem_unmap(fl,
 						unmap)));
+		kfree(unmap);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_MMAP:
@@ -888,12 +913,15 @@ static inline long compat_fastrpc_mmap_device_ioctl(struct fastrpc_file *fl,
 		if (err)
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_mmap(map32, map));
-		if (err)
+		if (err) {
+			kfree(map);
 			return err;
+		}
 
 		VERIFY(err, 0 == (err = fastrpc_internal_mmap(fl, map)));
 
 		VERIFY(err, 0 == compat_put_fastrpc_ioctl_mmap(map32, map));
+		kfree(map);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_MMAP_64:
@@ -907,10 +935,13 @@ static inline long compat_fastrpc_mmap_device_ioctl(struct fastrpc_file *fl,
 		if (err)
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_mmap_64(map32, map));
-		if (err)
+		if (err) {
+			kfree(map);
 			return err;
+		}
 		VERIFY(err, 0 == (err = fastrpc_internal_mmap(fl, map)));
 		VERIFY(err, 0 == compat_put_fastrpc_ioctl_mmap_64(map32, map));
+		kfree(map);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_MUNMAP:
@@ -925,10 +956,13 @@ static inline long compat_fastrpc_mmap_device_ioctl(struct fastrpc_file *fl,
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_munmap(unmap32,
 							unmap));
-		if (err)
+		if (err) {
+			kfree(unmap);
 			return err;
+		}
 		VERIFY(err, 0 == (err = fastrpc_internal_munmap(fl,
 							unmap)));
+		kfree(unmap);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_MUNMAP_FD:
@@ -1049,11 +1083,14 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_munmap_64(unmap32,
 							unmap));
-		if (err)
+		if (err) {
+			kfree(unmap);
 			return err;
+		}
 
 		VERIFY(err, 0 == (err = fastrpc_internal_munmap(fl,
 							unmap)));
+		kfree(unmap);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_INIT:
@@ -1070,10 +1107,13 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_init(init32,
 							init, cmd));
-		if (err)
+		if (err) {
+			kfree(init);
 			return err;
+		}
 		VERIFY(err, 0 == (err = fastrpc_init_process(fl, init)));
 
+		kfree(init);
 		return err;
 
 	}
@@ -1090,11 +1130,14 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		err = get_user(u, info32);
 		memcpy(info, &u, sizeof(u));
-		if (err)
+		if (err) {
+			kfree(info);
 			return err;
+		}
 		VERIFY(err, 0 == (err = fastrpc_get_info(fl, info)));
 		memcpy(&u, info, sizeof(*info));
 		err |= put_user(u, info32);
+		kfree(info);
 		return err;
 	}
 	case FASTRPC_IOCTL_SETMODE:
