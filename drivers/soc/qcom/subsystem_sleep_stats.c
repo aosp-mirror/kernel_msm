@@ -488,7 +488,13 @@ static int subsystem_stats_probe(struct platform_device *pdev)
 
 	for (i = 0; i < config->num_records; i++) {
 		stats_data->config[i] = config;
-		offset = (i * sizeof(struct sleep_stats));
+
+		if (config->appended_stats_avail) {
+			offset = i * (sizeof(struct sleep_stats) + sizeof(struct appended_stats));
+		} else {
+			offset = (i * sizeof(struct sleep_stats));
+		}
+
 		stats_data->reg[i] = stats_data->reg_base + offset;
 	}
 
@@ -637,11 +643,13 @@ static const struct stats_config rpmh_data = {
 	.offset_addr = 0x4,
 	.ddr_offset_addr = 0x1c,
 	.num_records = 3,
+	.appended_stats_avail = false,
 };
 
 static const struct stats_config rpm_data = {
 	.offset_addr = 0x14,
 	.num_records = 2,
+	.appended_stats_avail = true,
 };
 
 static const struct of_device_id subsystem_stats_table[] = {
