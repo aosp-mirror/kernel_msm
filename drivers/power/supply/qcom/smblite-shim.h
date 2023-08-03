@@ -10,6 +10,8 @@
 struct smblite_shim {
 	struct smb_charger *chg;
 	struct power_supply *psy;
+	unsigned int sdp_icl_req_ignored;
+	unsigned int real_sdp_icl;
 };
 
 struct smblite_shim *smblite_shim_init(struct smb_charger *chg);
@@ -19,5 +21,7 @@ int smblite_shim_on_usb_psy_created(struct smblite_shim *shim,
 
 void smblite_shim_on_usb_type_updated(struct smblite_shim *shim,
 				enum power_supply_type type);
+
+int smblite_shim_update_sw_icl_max(struct smblite_shim *shim, int type);
 
 #endif

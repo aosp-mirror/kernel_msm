@@ -3245,6 +3245,10 @@ static void update_sw_icl_max(struct smb_charger *chg,
 	int typec_mode;
 	int rp_ua, icl_ua;
 
+	if (smblite_shim_update_sw_icl_max(chg->shim, type) == 0) {
+		return;
+	}
+
 	if (chg->typec_mode == QTI_POWER_SUPPLY_TYPEC_SINK_AUDIO_ADAPTER) {
 		vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, 500000);
 		return;
