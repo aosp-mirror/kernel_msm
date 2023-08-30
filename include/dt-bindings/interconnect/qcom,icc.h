@@ -23,4 +23,10 @@
 #define QCOM_ICC_TAG_ALWAYS		(QCOM_ICC_TAG_AMC | QCOM_ICC_TAG_WAKE |\
 					 QCOM_ICC_TAG_SLEEP)
 
+/*
+ * PERF_MODE indicates that each node in the requested path should use
+ * performance-optimized settings if supported by the node.
+ */
+#define QCOM_ICC_TAG_PERF_MODE		(1 << 3)
+
 #endif

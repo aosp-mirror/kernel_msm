@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright 2015 Linaro Limited
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_MSM_RPMCC_H
@@ -159,5 +160,13 @@
 #define RPM_SMD_SNOC_PERIPH_A_CLK		113
 #define RPM_SMD_SNOC_LPASS_CLK			114
 #define RPM_SMD_SNOC_LPASS_A_CLK		115
+#define RPM_SMD_RF_CLK5				116
+#define RPM_SMD_RF_CLK5_A			117
+#define RPM_SMD_HWKM_CLK			118
+#define RPM_SMD_HWKM_A_CLK			119
+#define RPM_SMD_PKA_CLK				120
+#define RPM_SMD_PKA_A_CLK			121
+#define RPM_SMD_CPUSS_GNOC_CLK			122
+#define RPM_SMD_CPUSS_GNOC_A_CLK		123
 
 #endif
