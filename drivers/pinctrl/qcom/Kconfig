@@ -311,6 +311,17 @@ config PINCTRL_SM8350
 	  Qualcomm Technologies Inc TLMM block found on the Qualcomm
 	  Technologies Inc SM8350 platform.
 
+config PINCTRL_MONACO
+	tristate "Qualcomm Technologies, Inc MONACO pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+        help
+          This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+          Qualcomm Technologies Inc Top Level Mode Multiplexer block (TLMM)
+          block found on the Qualcomm Technologies Inc MONACO platform.
+          Say Y here to compile statically, or M here to compile it as a module.
+          If unsure, say N.
+
 config PINCTRL_LPASS_LPI
 	tristate "Qualcomm Technologies Inc LPASS LPI pin controller driver"
 	select PINMUX
