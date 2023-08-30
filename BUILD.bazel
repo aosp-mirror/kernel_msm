@@ -280,6 +280,10 @@ _DB845C_WATCHDOG_MODULE_OUTS = [
     "drivers/watchdog/qcom-wdt.ko",
 ]
 
+load(":msm_platforms.bzl", "define_msm_platforms")
+
+define_msm_platforms()
+
 kernel_build(
     name = "db845c_no_kgdb",
     outs = [
