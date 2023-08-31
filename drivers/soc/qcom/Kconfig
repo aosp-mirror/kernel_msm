@@ -184,6 +184,14 @@ config QCOM_SMSM
 	  Say yes here to support the Qualcomm Shared Memory State Machine.
 	  The state machine is represented by bits in shared memory.
 
+config QCOM_MEM_HOOKS
+	tristate "Memory trace hook callbacks"
+	help
+	  A helper driver for loading various memory-related vendor
+	  hooks, which are used to control the behavior of the core.
+	  If unsure, say 'M' here to ensure that the hooks are compiled
+	  in.
+
 config QCOM_SOCINFO
 	tristate "Qualcomm socinfo driver"
 	depends on QCOM_SMEM
