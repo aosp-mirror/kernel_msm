@@ -217,6 +217,27 @@ config QCOM_SCM_DOWNLOAD_MODE_DEFAULT
 
 	  Say Y here to enable "download mode" by default.
 
+config QCOM_SCM_HAB
+	tristate "To enable QCOM SCM HAB for QCPE-TZ virtualization"
+	depends on QCOM_SCM && MSM_HAB
+	help
+	  QCOM SCM HAB serves the scm with HAB channel with Secure Channel
+	  Mananger(SCM) support for SoC in virtualized Linux,
+	  where SCM backend is QCPE (QCOM Protected environment). The SCM
+	  channel will use QCOM HAB interface for front-end to back-end
+	  communication.
+
+config QTEE_SHM_BRIDGE
+	bool "QTI TEE shared memory bridge"
+	depends on QCOM_SCM
+	default y if QCOM_SCM
+	help
+	  QTEE shared memory bridge driver provides kernel APIs to share
+	  memory between trustzone & other VMs through shared memory bridge.
+	  It allows kernel clients to create bridge, delete bridge, and do
+	  memory sub-allocation and free from the default kernel bridge
+	  created by bridge driver.
+
 config SYSFB
 	bool
 	default y

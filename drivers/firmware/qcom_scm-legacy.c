@@ -17,16 +17,6 @@
 
 static DEFINE_MUTEX(qcom_scm_lock);
 
-
-/**
- * struct arm_smccc_args
- * @args:	The array of values used in registers in smc instruction
- */
-struct arm_smccc_args {
-	unsigned long args[8];
-};
-
-
 /**
  * struct scm_legacy_command - one SCM command buffer
  * @len: total available memory for command and response
@@ -159,6 +149,9 @@ int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 		arg_buf[i] = cpu_to_le32(desc->args[i]);
 
 	rsp = scm_legacy_command_to_response(cmd);
+
+	if (!dev)
+		return -EPROBE_DEFER;
 
 	cmd_phys = dma_map_single(dev, cmd, alloc_len, DMA_TO_DEVICE);
 	if (dma_mapping_error(dev, cmd_phys)) {
