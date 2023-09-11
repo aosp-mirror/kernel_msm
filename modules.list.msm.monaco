@@ -25,6 +25,7 @@ memory_dump_v2.ko
 mdt_loader.ko
 mem-hooks.ko
 socinfo.ko
+stub-regulator.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
 qti-regmap-debugfs.ko
@@ -60,3 +61,6 @@ qcom_ipc_logging.ko
 ns.ko
 qcom-reboot-reason.ko
 qcom-dload-mode.ko
+rpm-smd-regulator.ko
+proxy-consumer.ko
+debug-regulator.ko
