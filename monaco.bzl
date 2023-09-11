@@ -55,10 +55,7 @@ def define_monaco():
 
     _monaco_consolidate_in_tree_modules = _monaco_in_tree_modules + [
         # keep sorted
-        "drivers/cpuidle/governors/qcom_simple_lpm.ko",
-        "drivers/hwtracing/coresight/coresight-etm4x.ko",
         "drivers/misc/lkdtm/lkdtm.ko",
-        "drivers/usb/misc/lvstest.ko",
         "kernel/locking/locktorture.ko",
         "kernel/rcu/rcutorture.ko",
         "kernel/torture.ko",
