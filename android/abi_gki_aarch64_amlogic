@@ -162,6 +162,7 @@
   clk_register
   clk_register_composite
   clk_round_rate
+  clk_set_min_rate
   clk_set_parent
   clk_set_rate
   clk_unprepare
@@ -471,6 +472,7 @@
   dma_heap_get_dev
   dma_heap_get_drvdata
   dma_heap_get_name
+  dma_heap_put
   d_make_root
   dmam_alloc_attrs
   dma_map_page_attrs
@@ -798,6 +800,7 @@
   get_cpu_iowait_time_us
   get_device
   get_device_system_crosststamp
+  get_each_dmabuf
   __get_free_pages
   get_kernel_pages
   get_net_ns_by_fd
@@ -1302,6 +1305,7 @@
   of_prop_next_u32
   of_pwm_xlate_with_flags
   of_reserved_mem_device_init_by_idx
+  of_reserved_mem_device_init_by_name
   of_reserved_mem_device_release
   of_reserved_mem_lookup
   of_reset_control_array_get
@@ -1328,6 +1332,7 @@
   panic
   panic_notifier_list
   param_array_ops
+  param_get_bool
   param_get_charp
   param_get_hexint
   param_get_int
@@ -1915,6 +1920,7 @@
   __tasklet_schedule
   tasklet_setup
   tasklet_unlock_wait
+  tasklist_lock
   task_may_not_preempt
   thermal_cooling_device_unregister
   thermal_of_cooling_device_register
@@ -1951,6 +1957,7 @@
   __traceiter_android_vh_dump_throttled_rt_tasks
   __traceiter_android_vh_ftrace_format_check
   __traceiter_android_vh_iommu_iovad_free_iova
+  __traceiter_android_vh_ipi_stop
   __traceiter_android_vh_mem_cgroup_alloc
   __traceiter_android_vh_rmqueue
   __traceiter_android_vh_sched_show_task
@@ -1981,6 +1988,7 @@
   __tracepoint_android_vh_dump_throttled_rt_tasks
   __tracepoint_android_vh_ftrace_format_check
   __tracepoint_android_vh_iommu_iovad_free_iova
+  __tracepoint_android_vh_ipi_stop
   __tracepoint_android_vh_mem_cgroup_alloc
   __tracepoint_android_vh_rmqueue
   __tracepoint_android_vh_sched_show_task
