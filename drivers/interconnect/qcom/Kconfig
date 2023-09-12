@@ -149,5 +149,8 @@ config INTERCONNECT_QCOM_SM8350
 	  This is a driver for the Qualcomm Network-on-Chip on SM8350-based
 	  platforms.
 
+config INTERCONNECT_QCOM_RPM
+	tristate
+
 config INTERCONNECT_QCOM_SMD_RPM
 	tristate
