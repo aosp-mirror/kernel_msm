@@ -84,6 +84,7 @@ def define_monaco():
 	"drivers/spmi/spmi-pmic-arb.ko",
         "drivers/thermal/qcom/qcom-spmi-temp-alarm.ko",
         "drivers/thermal/qcom/qcom_tsens.ko",
+        "drivers/tty/serial/msm_geni_serial.ko",
         "drivers/usb/misc/ehset.ko",
         "drivers/usb/phy/phy-generic.ko",
         "kernel/msm_sysstats.ko",
