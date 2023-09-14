@@ -605,5 +605,7 @@ config USB_BAM
 	  Peripheral-to-Peripheral transfers between the USB and other
 	  peripheral.
 
+source "drivers/soc/qcom/dcvs/Kconfig"
+
 endmenu
 
