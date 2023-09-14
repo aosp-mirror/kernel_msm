@@ -2649,7 +2649,19 @@ exit_rt_resume:
 
 static int spi_geni_resume(struct device *dev)
 {
-	return 0;
+	int ret = 0;
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	ret = spi_master_resume(spi);
+	if (ret) {
+		GENI_SE_ERR(geni_mas->ipc, true, dev,
+			":%s: master resume failed, ret=%d\n", __func__, ret);
+	}
+
+	GENI_SE_DBG(geni_mas->ipc, false, dev, "%s: ret: %d\n", __func__, ret);
+
+	return ret;
 }
 
 static int spi_geni_suspend(struct device *dev)
@@ -2688,6 +2700,13 @@ static int spi_geni_suspend(struct device *dev)
 		if (list_empty(&spi->queue) && !spi->cur_msg) {
 			SPI_LOG_ERR(geni_mas->ipc, true, geni_mas->dev,
 					"%s: Force suspend", __func__);
+			ret = spi_master_suspend(spi);
+			if (ret) {
+				GENI_SE_ERR(geni_mas->ipc, true, dev,
+					"%s: Failed:%d\n", __func__, ret);
+				return -EBUSY;
+			}
+
 			ret = spi_geni_runtime_suspend(dev);
 			if (ret) {
 				SPI_LOG_ERR(geni_mas->ipc, true, geni_mas->dev,
