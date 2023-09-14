@@ -501,7 +501,7 @@ static struct qcom_icc_qosbox qxm_ipa_qos = {
 	.num_ports = 1,
 	.offsets = { 0x39000 },
 	.config = &(struct qos_config) {
-		.prio = 0,
+		.prio = 1,
 		.urg_fwd = 0,
 		.prio_fwd_disable = 1,
 	},
@@ -1208,7 +1208,6 @@ static struct qcom_icc_bcm bcm_mc0 = {
 static struct qcom_icc_bcm bcm_qp0 = {
 	.name = "QP0",
 	.voter_idx = 0,
-	.keepalive_early = true,
 	.num_nodes = 1,
 	.nodes = { &qpic_core_slave },
 };

@@ -323,10 +323,30 @@ static struct notifier_block hab_reboot_notifier = {
 	.notifier_call = hab_power_down_callback,
 };
 
+static void reclaim_cleanup(struct work_struct *reclaim_work)
+{
+	struct export_desc *exp = NULL, *exp_tmp = NULL;
+	struct export_desc_super *exp_super = NULL;
+
+	pr_debug("reclaim worker called\n");
+	spin_lock(&hab_driver.reclaim_lock);
+	list_for_each_entry_safe(exp, exp_tmp, &hab_driver.reclaim_list, node) {
+		exp_super = container_of(exp, struct export_desc_super, exp);
+		if (exp_super->remote_imported == 0) {
+			list_del(&exp->node);
+			pr_info("cleanup exp id %d\n", exp->export_id);
+			habmem_export_put(exp_super);
+		}
+	}
+	spin_unlock(&hab_driver.reclaim_lock);
+}
+
 static int __init hab_init(void)
 {
 	int result;
 	dev_t dev;
+
+	pr_info("init start, ver %X\n", HAB_API_VER);
 
 	result = alloc_chrdev_region(&hab_driver.major, 0, 1, "hab");
 
@@ -369,33 +389,41 @@ static int __init hab_init(void)
 	if (result)
 		pr_err("failed to register reboot notifier %d\n", result);
 
+	INIT_WORK(&hab_driver.reclaim_work, reclaim_cleanup);
+
 	/* read in hab config, then configure pchans */
 	result = do_hab_parse();
 
-	if (!result) {
-		hab_driver.kctx = hab_ctx_alloc(1);
-		if (!hab_driver.kctx) {
-			pr_err("hab_ctx_alloc failed\n");
-			result = -ENOMEM;
-			hab_hypervisor_unregister();
-			goto err;
-		} else {
-			/* First, try to configure system dma_ops */
-			result = dma_coerce_mask_and_coherent(
-					hab_driver.dev,
-					DMA_BIT_MASK(64));
+	if (result)
+		goto err;
 
-			/* System dma_ops failed, fallback to dma_ops of hab */
-			if (result) {
-				pr_warn("config system dma_ops failed %d, fallback to hab\n",
-						result);
-				hab_driver.dev->bus = NULL;
-				set_dma_ops(hab_driver.dev, &hab_dma_ops);
-			}
-		}
+	hab_driver.kctx = hab_ctx_alloc(1);
+	if (!hab_driver.kctx) {
+		pr_err("hab_ctx_alloc failed\n");
+		result = -ENOMEM;
+		hab_hypervisor_unregister();
+		goto err;
 	}
+	/* First, try to configure system dma_ops */
+	result = dma_coerce_mask_and_coherent(
+			hab_driver.dev,
+			DMA_BIT_MASK(64));
+
+	/* System dma_ops failed, fallback to dma_ops of hab */
+	if (result) {
+		pr_warn("config system dma_ops failed %d, fallback to hab\n",
+				result);
+		hab_driver.dev->bus = NULL;
+		set_dma_ops(hab_driver.dev, &hab_dma_ops);
+	}
+	hab_hypervisor_register_post();
 	hab_stat_init(&hab_driver);
-	return result;
+
+	WRITE_ONCE(hab_driver.hab_init_success, 1);
+
+	pr_info("succeeds\n");
+
+	return 0;
 
 err:
 	if (!IS_ERR_OR_NULL(hab_driver.dev))

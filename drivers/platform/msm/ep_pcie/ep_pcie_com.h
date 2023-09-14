@@ -231,7 +231,7 @@
 
 #define EP_PCIE_LOG_PAGES 50
 #define EP_PCIE_MAX_VREG 4
-#define EP_PCIE_MAX_CLK 20
+#define EP_PCIE_MAX_CLK 22
 #define EP_PCIE_MAX_PIPE_CLK 1
 #define EP_PCIE_MAX_RESET 2
 
@@ -272,6 +272,13 @@
 #define EP_PCIE_DUMP(dev, fmt, arg...) do {			\
 	ipc_log_string((dev)->ipc_log_dump, \
 		"DUMP:%s: " fmt, __func__, arg); \
+	if (ep_pcie_get_debug_mask())   \
+		pr_alert("%s: " fmt, __func__, arg); \
+	} while (0)
+
+#define EP_PCIE_EOM(lane, dev, fmt, arg...) do {			\
+	ipc_log_string((dev)->ipc_log_eom, \
+		"" fmt, arg); \
 	if (ep_pcie_get_debug_mask())   \
 		pr_alert("%s: " fmt, __func__, arg); \
 	} while (0)
@@ -419,6 +426,7 @@ struct ep_pcie_dev_t {
 	bool			     mhi_soc_reset_en;
 	bool			     aoss_rst_clear;
 	bool			     avoid_reboot_in_d3hot;
+	bool			     dma_wake;
 	u32                          dbi_base_reg;
 	u32                          slv_space_reg;
 	u32                          phy_status_reg;
@@ -442,6 +450,7 @@ struct ep_pcie_dev_t {
 	void                         *ipc_log_sel;
 	void                         *ipc_log_ful;
 	void                         *ipc_log_dump;
+	void                         *ipc_log_eom;
 	struct mutex                 setup_mtx;
 	struct mutex                 ext_mtx;
 	spinlock_t                   ext_lock;
@@ -496,6 +505,7 @@ struct ep_pcie_dev_t {
 	u32				tcsr_reset_separation_offset;
 	u32				tcsr_perst_enable_offset;
 	u32				perst_raw_rst_status_mask;
+	u32				pcie_disconnect_req_reg_mask;
 };
 
 extern struct ep_pcie_dev_t ep_pcie_dev;

@@ -136,6 +136,8 @@ int mhi_dma_provide_ops(const struct mhi_dma_ops *ops)
 		return -EINVAL;
 	}
 
+	mhi_log(MHI_DEV_PHY_FUN, MHI_MSG_VERBOSE, "Received MHI DMA fun ops\n");
+
 	memcpy(&mhi_hw_ctx->mhi_dma_fun_ops, ops, sizeof(struct mhi_dma_ops));
 	mhi_dma_fun_ops = &mhi_hw_ctx->mhi_dma_fun_ops;
 
@@ -787,8 +789,7 @@ static int mhi_dev_flush_transfer_completion_events(struct mhi_dev *mhi,
 		struct mhi_dev_channel *ch, u32 snd_cmpl_num)
 {
 	int rc = 0;
-	unsigned long flags = 0;
-	struct event_req *flush_ereq;
+	struct event_req *flush_ereq = NULL;
 	struct event_req *itr, *tmp;
 
 	do {
@@ -826,14 +827,17 @@ static int mhi_dev_flush_transfer_completion_events(struct mhi_dev *mhi,
 		if (mhi->use_edma) {
 			list_for_each_entry_safe(itr, tmp, &ch->flush_event_req_buffers, list) {
 				flush_ereq = itr;
-				if (flush_ereq->snd_cmpl == snd_cmpl_num)
+				if (flush_ereq && flush_ereq->snd_cmpl == snd_cmpl_num)
 					break;
 			}
 
-			if (flush_ereq->snd_cmpl != snd_cmpl_num) {
-				spin_unlock_irqrestore(&mhi->lock, flags);
+			if (flush_ereq && (flush_ereq->snd_cmpl != snd_cmpl_num))
 				break;
-			}
+		}
+
+		if (!flush_ereq) {
+			mhi_log(mhi->vf_id, MHI_MSG_ERROR, "failed to assign flush_ereq\n");
+			return -EINVAL;
 		}
 
 		list_del_init(&flush_ereq->list);
@@ -1798,7 +1802,7 @@ static int mhi_hwc_chcmd(struct mhi_dev *mhi, uint chid,
 	switch (type) {
 	case MHI_DEV_RING_EL_RESET:
 	case MHI_DEV_RING_EL_STOP:
-		if ((chid-(mhi->mhi_chan_hw_base)) > NUM_HW_CHANNELS) {
+		if ((chid-(mhi->mhi_chan_hw_base)) >= NUM_HW_CHANNELS) {
 			mhi_log(mhi->vf_id, MHI_MSG_ERROR,
 				"Invalid HW ch_id:%d\n", chid);
 			return -EINVAL;
@@ -1821,7 +1825,7 @@ static int mhi_hwc_chcmd(struct mhi_dev *mhi, uint chid,
 			return -EINVAL;
 		}
 
-		if ((chid-(mhi->mhi_chan_hw_base)) > NUM_HW_CHANNELS) {
+		if ((chid-(mhi->mhi_chan_hw_base)) >= NUM_HW_CHANNELS) {
 			mhi_log(mhi->vf_id, MHI_MSG_ERROR,
 				"Invalid HW ch_id:%d\n", chid);
 			return -EINVAL;
@@ -2056,6 +2060,11 @@ static void mhi_dev_trigger_cb(uint32_t vf_id, enum mhi_client_channel ch_id)
 	/* Currently no clients register for HW channel notification */
 	if (ch_id >= MHI_MAX_SOFTWARE_CHANNELS)
 		return;
+
+	if (!mhi_ctx) {
+		mhi_log(vf_id, MHI_MSG_ERROR, "mhi_ctx is NULL\n");
+		return;
+	}
 
 	list_for_each_entry(info, &mhi_ctx->client_cb_list, list)
 		if (info->cb && info->cb_data.channel == ch_id) {
@@ -4418,6 +4427,11 @@ int mhi_ctrl_state_info(uint32_t ch_id, uint32_t *info)
 {
 	struct mhi_dev *mhi = mhi_get_dev_ctx(mhi_hw_ctx, MHI_DEV_PHY_FUN);
 
+	if (!mhi) {
+		mhi_log(MHI_DEV_PHY_FUN, MHI_MSG_ERROR, "MHI is NULL, defering\n");
+		return -EINVAL;
+	}
+
 	return __mhi_ctrl_state_info(mhi, mhi->vf_id, ch_id, info);
 }
 EXPORT_SYMBOL(mhi_ctrl_state_info);
@@ -4425,6 +4439,11 @@ EXPORT_SYMBOL(mhi_ctrl_state_info);
 int mhi_vf_ctrl_state_info(uint32_t vf_id, uint32_t ch_id, uint32_t *info)
 {
 	struct mhi_dev *mhi = mhi_get_dev_ctx(mhi_hw_ctx, vf_id);
+
+	if (!mhi) {
+		mhi_log(vf_id, MHI_MSG_ERROR, "MHI is NULL, defering\n");
+		return -EINVAL;
+	}
 
 	return __mhi_ctrl_state_info(mhi, vf_id, ch_id, info);
 }
@@ -4548,6 +4567,17 @@ static int mhi_get_device_tree_data(struct mhi_dev_ctx *mhictx, int vf_id)
 
 	mhi->no_m0_timeout = of_property_read_bool((&pdev->dev)->of_node,
 		"qcom,no-m0-timeout");
+
+	rc = of_property_read_u32((&pdev->dev)->of_node, "qcom,mhi-num-ipc-pages-dev-fac",
+					&mhi->mhi_num_ipc_pages_dev_fac);
+	if (rc) {
+		dev_err(&pdev->dev, "qcom,mhi-num-ipc-pages-dev-fac does not exist\n");
+		mhi->mhi_num_ipc_pages_dev_fac = 1;
+	}
+	if (mhi->mhi_num_ipc_pages_dev_fac < 1 || mhi->mhi_num_ipc_pages_dev_fac > 5) {
+		dev_err(&pdev->dev, "Invalid value received for mhi->mhi_num_ipc_pages_dev_fac\n");
+		mhi->mhi_num_ipc_pages_dev_fac = 1;
+	}
 
 	return 0;
 err:
@@ -5043,11 +5073,44 @@ void mhi_dev_resume_init_with_link_up(struct ep_pcie_notify *notify)
 static void mhi_dev_pcie_handle_event(struct work_struct *work)
 {
 	int rc = 0;
+	enum ep_pcie_link_status link_state;
 	struct mhi_dev *mhi = container_of(work, struct mhi_dev, pcie_event);
 
 	if (!mhi_dma_fun_ops && !mhi->use_edma) {
+		/*
+		 * Register for linkup event if it is not registered in
+		 * mhi_dev_probe, to get linkup event after host wake
+		 * as part of mhi_dma_provide_ops.
+		 */
+		if (!(mhi_hw_ctx->event_reg.events & EP_PCIE_EVENT_LINKUP)) {
+			mhi_log(mhi->vf_id, MHI_MSG_VERBOSE,
+				"Register for Link up event if not registered in mhi_dev_probe\n");
+			mhi_hw_ctx->event_reg.events = EP_PCIE_EVENT_LINKUP;
+			mhi_hw_ctx->event_reg.user = mhi_hw_ctx;
+			mhi_hw_ctx->event_reg.mode = EP_PCIE_TRIGGER_CALLBACK;
+			mhi_hw_ctx->event_reg.callback = mhi_dev_resume_init_with_link_up;
+			mhi_hw_ctx->event_reg.options = MHI_INIT;
+			rc = ep_pcie_register_event(mhi_hw_ctx->phandle, &mhi_hw_ctx->event_reg);
+			if (rc)
+				mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
+						"Failed to register for events from PCIe\n");
+		}
 		mhi_log(mhi->vf_id, MHI_MSG_ERROR, "MHI DMA fun ops missing, defering\n");
 		return;
+	}
+
+	mhi_hw_ctx->phandle = ep_pcie_get_phandle(mhi_hw_ctx->ifc_id);
+	if (mhi_hw_ctx->phandle) {
+		link_state = ep_pcie_get_linkstatus(mhi_hw_ctx->phandle);
+		if (link_state != EP_PCIE_LINK_ENABLED) {
+			mhi_log(mhi->vf_id, MHI_MSG_VERBOSE,
+					"Link disabled, link state = %d\n", link_state);
+			/* Wake host if the link is not enabled in mhi_dma_provide_ops call. */
+			rc = ep_pcie_wakeup_host(mhi_hw_ctx->phandle, EP_PCIE_EVENT_INVALID);
+			if (rc)
+				mhi_log(mhi->vf_id, MHI_MSG_ERROR, "Failed to wake up Host\n");
+			return;
+		}
 	}
 
 	/* Get EP PCIe capabilities to check if it supports SRIOV capability */
@@ -5085,7 +5148,7 @@ static void mhi_dev_setup_virt_device(struct mhi_dev_ctx *mhictx)
 {
 	struct platform_device *pdev = mhictx->pdev;
 	struct mhi_dev *mhi_vf;
-	u32 i, rc;
+	u32 i, rc, dev_fac;
 	char mhi_vf_ipc_name[11] = "mhi-vf-nn";
 
 	for (i = 1; i <= mhictx->ep_cap.num_vfs; i++) {
@@ -5100,18 +5163,19 @@ static void mhi_dev_setup_virt_device(struct mhi_dev_ctx *mhictx)
 				return;
 			}
 			snprintf(mhi_vf_ipc_name, sizeof(mhi_vf_ipc_name), "mhi-vf-%d", i);
-			mhi_ipc_vf_log[i] = ipc_log_context_create(MHI_IPC_LOG_PAGES,
-									mhi_vf_ipc_name, 0);
-			if (mhi_ipc_vf_log[i] == NULL) {
-				dev_err(&pdev->dev,
-					"Failed to create IPC logging context for mhi vf = %d\n",
-						i);
-			}
 			mhictx->mhi_dev[i] = mhi_vf;
 			rc = mhi_get_device_tree_data(mhictx, i);
 			if (rc == 0)
 				mhi_dev_basic_init(mhictx, i);
 			mhi_vf->mhi_hw_ctx = mhictx;
+			dev_fac = mhi_vf->mhi_num_ipc_pages_dev_fac;
+			mhi_ipc_vf_log[i] = ipc_log_context_create(MHI_IPC_LOG_PAGES/dev_fac,
+								mhi_vf_ipc_name, 0);
+			if (mhi_ipc_vf_log[i] == NULL) {
+				dev_err(&pdev->dev,
+					"Failed to create IPC logging context for mhi vf = %d\n",
+						i);
+			}
 			INIT_LIST_HEAD(&mhi_vf->client_cb_list);
 			mutex_init(&mhi_vf->mhi_lock);
 		}
@@ -5171,7 +5235,7 @@ int mhi_edma_init(struct device *dev)
 static int mhi_dev_probe(struct platform_device *pdev)
 {
 	struct mhi_dev *mhi_pf = NULL;
-	int rc = 0;
+	int rc = 0, devfac = 0;
 
 	if (pdev->dev.of_node) {
 		rc = mhi_get_device_info(pdev);
@@ -5179,29 +5243,37 @@ static int mhi_dev_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "Error reading MHI Dev DT\n");
 			return rc;
 		}
-		mhi_ipc_vf_log[MHI_DEV_PHY_FUN] = ipc_log_context_create(MHI_IPC_LOG_PAGES,
+
+		mhi_pf = mhi_get_dev_ctx(mhi_hw_ctx, MHI_DEV_PHY_FUN);
+
+		if (!mhi_pf) {
+			mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
+					"mhi_pf is NULL, defering\n");
+			return -EINVAL;
+		}
+
+		devfac = mhi_pf->mhi_num_ipc_pages_dev_fac;
+		mhi_ipc_vf_log[MHI_DEV_PHY_FUN] = ipc_log_context_create(MHI_IPC_LOG_PAGES/devfac,
 								"mhi-pf-0", 0);
 		if (mhi_ipc_vf_log[MHI_DEV_PHY_FUN] == NULL) {
 			dev_err(&pdev->dev,
 				"Failed to create IPC logging context for mhi pf = 0\n");
 		}
 
-		mhi_ipc_err_log = ipc_log_context_create(MHI_IPC_ERR_LOG_PAGES,
+		mhi_ipc_err_log = ipc_log_context_create(MHI_IPC_ERR_LOG_PAGES/devfac,
 								"mhi_err", 0);
 		if (mhi_ipc_err_log == NULL) {
 			dev_err(&pdev->dev,
 				"Failed to create IPC ERR logging context\n");
 		}
 
-		mhi_ipc_default_err_log = ipc_log_context_create(MHI_IPC_ERR_LOG_PAGES,
+		mhi_ipc_default_err_log = ipc_log_context_create(MHI_IPC_ERR_LOG_PAGES/devfac,
 								"mhi_default_err", 0);
 
 		if (mhi_ipc_default_err_log == NULL) {
 			dev_err(&pdev->dev,
 				"Failed to create IPC DEFAULT ERR logging context\n");
 		}
-
-		mhi_pf = mhi_get_dev_ctx(mhi_hw_ctx, MHI_DEV_PHY_FUN);
 		/*
 		 * The below list and mutex should be initialized
 		 * before calling mhi_uci_init to avoid crash in
@@ -5225,6 +5297,13 @@ static int mhi_dev_probe(struct platform_device *pdev)
 		 * completion to make sure VF's are initialized in mission
 		 * mode directly, if not host assumes it in PBL state.
 		 */
+
+		if (!mhi_pf) {
+			mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
+					"mhi_pf is NULL, defering\n");
+			return -EINVAL;
+		}
+
 		mhi_dev_setup_virt_device(mhi_hw_ctx);
 		queue_work(mhi_pf->pcie_event_wq, &mhi_pf->pcie_event);
 	} else {

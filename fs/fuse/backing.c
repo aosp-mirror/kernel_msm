@@ -295,44 +295,19 @@ void *fuse_create_open_finalize(
 }
 
 int fuse_release_initialize(struct fuse_bpf_args *fa, struct fuse_release_in *fri,
-			    struct inode *inode, struct file *file)
+			    struct inode *inode, struct fuse_file *ff)
 {
-	struct fuse_file *fuse_file = file->private_data;
-
 	/* Always put backing file whatever bpf/userspace says */
-	fput(fuse_file->backing_file);
+	fput(ff->backing_file);
 
 	*fri = (struct fuse_release_in) {
-		.fh = ((struct fuse_file *)(file->private_data))->fh,
+		.fh = ff->fh,
 	};
 
 	*fa = (struct fuse_bpf_args) {
 		.nodeid = get_fuse_inode(inode)->nodeid,
-		.opcode = FUSE_RELEASE,
-		.in_numargs = 1,
-		.in_args[0].size = sizeof(*fri),
-		.in_args[0].value = fri,
-	};
-
-	return 0;
-}
-
-int fuse_releasedir_initialize(struct fuse_bpf_args *fa,
-			struct fuse_release_in *fri,
-			struct inode *inode, struct file *file)
-{
-	struct fuse_file *fuse_file = file->private_data;
-
-	/* Always put backing file whatever bpf/userspace says */
-	fput(fuse_file->backing_file);
-
-	*fri = (struct fuse_release_in) {
-		.fh = ((struct fuse_file *)(file->private_data))->fh,
-	};
-
-	*fa = (struct fuse_bpf_args) {
-		.nodeid = get_fuse_inode(inode)->nodeid,
-		.opcode = FUSE_RELEASEDIR,
+		.opcode = S_ISDIR(inode->i_mode) ? FUSE_RELEASEDIR
+						 : FUSE_RELEASE,
 		.in_numargs = 1,
 		.in_args[0].size = sizeof(*fri),
 		.in_args[0].value = fri,
@@ -342,15 +317,14 @@ int fuse_releasedir_initialize(struct fuse_bpf_args *fa,
 }
 
 int fuse_release_backing(struct fuse_bpf_args *fa,
-			 struct inode *inode, struct file *file)
+			 struct inode *inode, struct fuse_file *ff)
 {
 	return 0;
 }
 
 void *fuse_release_finalize(struct fuse_bpf_args *fa,
-			    struct inode *inode, struct file *file)
+			    struct inode *inode, struct fuse_file *ff)
 {
-	fuse_file_free(file->private_data);
 	return NULL;
 }
 
@@ -1185,39 +1159,36 @@ int fuse_handle_backing(struct fuse_entry_bpf *feb, struct inode **backing_inode
 int fuse_handle_bpf_prog(struct fuse_entry_bpf *feb, struct inode *parent,
 			 struct bpf_prog **bpf)
 {
-	struct bpf_prog *new_bpf;
-
-	/* Parent isn't presented, but we want to keep
-	 * Don't touch bpf program at all in this case
-	 */
-	if (feb->out.bpf_action == FUSE_ACTION_KEEP && !parent)
-		return 0;
+	struct bpf_prog *new_bpf = NULL;
 
 	switch (feb->out.bpf_action) {
 	case FUSE_ACTION_KEEP: {
-		struct fuse_inode *pi = get_fuse_inode(parent);
+		/* Parent isn't presented, but we want to keep
+		 * Don't touch bpf program at all in this case
+		 */
+		if (!parent)
+			return 0;
 
-		new_bpf = pi->bpf;
+		new_bpf = get_fuse_inode(parent)->bpf;
 		if (new_bpf)
 			bpf_prog_inc(new_bpf);
 		break;
 	}
 
 	case FUSE_ACTION_REMOVE:
-		new_bpf = NULL;
 		break;
 
 	case FUSE_ACTION_REPLACE: {
 		struct file *bpf_file = feb->bpf_file;
-		struct bpf_prog *bpf_prog = ERR_PTR(-EINVAL);
 
-		if (bpf_file && !IS_ERR(bpf_file))
-			bpf_prog = fuse_get_bpf_prog(bpf_file);
+		if (!bpf_file)
+			return -EINVAL;
+		if (IS_ERR(bpf_file))
+			return PTR_ERR(bpf_file);
 
-		if (IS_ERR(bpf_prog))
-			return PTR_ERR(bpf_prog);
-
-		new_bpf = bpf_prog;
+		new_bpf = fuse_get_bpf_prog(bpf_file);
+		if (IS_ERR(new_bpf))
+			return PTR_ERR(new_bpf);
 		break;
 	}
 
@@ -1227,7 +1198,8 @@ int fuse_handle_bpf_prog(struct fuse_entry_bpf *feb, struct inode *parent,
 
 	/* Cannot change existing program */
 	if (*bpf) {
-		bpf_prog_put(new_bpf);
+		if (new_bpf)
+			bpf_prog_put(new_bpf);
 		return new_bpf == *bpf ? 0 : -EINVAL;
 	}
 
