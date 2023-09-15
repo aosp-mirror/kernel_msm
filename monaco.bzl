@@ -23,6 +23,7 @@ def define_monaco():
         "drivers/dma/qcom/bam_dma.ko",
         "drivers/firmware/qcom-scm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
+        "drivers/i2c/busses/i2c-msm-geni.ko",
         "drivers/i2c/busses/i2c-qcom-geni.ko",
         "drivers/iio/adc/qcom-spmi-adc5.ko",
         "drivers/iio/adc/qcom-vadc-common.ko",
