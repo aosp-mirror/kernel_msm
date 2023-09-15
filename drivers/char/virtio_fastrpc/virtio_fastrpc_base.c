@@ -18,6 +18,7 @@
 #include "virtio_fastrpc_core.h"
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
+#include "virtio_fastrpc_trace.h"
 
 /* Virtio ID of FASTRPC : 0xC004 */
 #define VIRTIO_ID_FASTRPC				49156
@@ -37,7 +38,6 @@
 /* indicates fastrpc_mmap/fastrpc_munmap is supported */
 #define VIRTIO_FASTRPC_F_MEM_MAP			8
 
-#define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
 #define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
 
 #define INIT_FILELEN_MAX		(2*1024*1024)
@@ -53,12 +53,12 @@
  * cannot work properly. It increases when fundamental protocol is
  * changed between FE and BE.
  */
-#define FE_MAJOR_VER 0x5
+#define FE_MAJOR_VER 0x6
 /* FE_MINOR_VER is used to track patches in this driver. It does not
  * need to be matched with BE_MINOR_VER. And it will return to 0 when
  * FE_MAJOR_VER is increased.
  */
-#define FE_MINOR_VER 0x4
+#define FE_MINOR_VER 0x2
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
 #define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
 
@@ -321,7 +321,6 @@ static int vfastrpc_mmap_ioctl(struct vfastrpc_file *vfl,
 static int vfastrpc_setmode_ioctl(unsigned long ioctl_param,
 		struct vfastrpc_file *vfl)
 {
-	struct vfastrpc_apps *me = vfl->apps;
 	struct fastrpc_file *fl = to_fastrpc_file(vfl);
 	int err = 0;
 
@@ -331,8 +330,14 @@ static int vfastrpc_setmode_ioctl(unsigned long ioctl_param,
 		fl->mode = (uint32_t)ioctl_param;
 		break;
 	case FASTRPC_MODE_SESSION:
-		err = -ENOTTY;
-		dev_err(me->dev, "session mode is not supported\n");
+		if (fl->untrusted_process) {
+			err = -EPERM;
+		ADSPRPC_ERR(
+			"multiple sessions not allowed for untrusted apps\n");
+		break;
+		}
+		fl->sessionid = 1;
+		fl->tgid |= (1 << SESSION_ID_INDEX);
 		break;
 	case FASTRPC_MODE_PROFILE:
 		fl->profile = (uint32_t)ioctl_param;
@@ -469,6 +474,14 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 	struct vfastrpc_file *vfl = to_vfastrpc_file(fl);
 
 	return vfastrpc_internal_mmap(vfl, ud);
+}
+
+int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
+		struct fastrpc_ioctl_munmap_fd *ud)
+{
+	struct vfastrpc_file *vfl = to_vfastrpc_file(fl);
+
+	return vfastrpc_internal_munmap_fd(vfl, ud);
 }
 
 int fastrpc_init_process(struct fastrpc_file *fl,
@@ -723,6 +736,9 @@ static int recv_single(struct virt_msg_hdr *rsp, unsigned int len)
 	else
 		complete(&msg->work);
 
+	if (msg->ctx)
+		trace_recv_single_end(msg->ctx);
+
 	return 0;
 }
 
@@ -735,6 +751,7 @@ static void recv_done(struct virtqueue *rvq)
 	int err;
 	unsigned long flags;
 
+	trace_recv_done_start(0);
 	spin_lock_irqsave(&me->rvq.vq_lock, flags);
 	rsp = virtqueue_get_buf(rvq, &len);
 	if (!rsp) {

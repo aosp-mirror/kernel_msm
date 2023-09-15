@@ -56,7 +56,7 @@
 				##__VA_ARGS__); \
 } while (0)
 
-const char * const mhi_log_level_str[MHI_MSG_LVL_MAX] = {
+const char * const mhi_satellite_log_level_str[MHI_MSG_LVL_MAX] = {
 	[MHI_MSG_LVL_VERBOSE] = "Verbose",
 	[MHI_MSG_LVL_INFO] = "Info",
 	[MHI_MSG_LVL_ERROR] = "Error",
@@ -64,8 +64,8 @@ const char * const mhi_log_level_str[MHI_MSG_LVL_MAX] = {
 	[MHI_MSG_LVL_MASK_ALL] = "Mask all",
 };
 #define MSG_LOG_LEVEL_STR(level) ((level >= MHI_MSG_LVL_MAX || \
-				      !mhi_log_level_str[level]) ? \
-				      "Mask all" : mhi_log_level_str[level])
+				      !mhi_satellite_log_level_str[level]) ? \
+				      "Mask all" : mhi_satellite_log_level_str[level])
 
 /* mhi sys error command */
 #define MHI_TRE_CMD_SYS_ERR_PTR (0)
@@ -358,7 +358,8 @@ static struct mhi_sat_device *find_sat_dev_by_id(
 static bool mhi_sat_isvalid_header(struct sat_header *hdr, int len)
 {
 	/* validate payload size */
-	if (len >= sizeof(*hdr) && (len != hdr->payload_size + sizeof(*hdr)))
+	if ((len < sizeof(*hdr)) ||
+		(len >= sizeof(*hdr) && (len != hdr->payload_size + sizeof(*hdr))))
 		return false;
 
 	/* validate SAT IPC version */

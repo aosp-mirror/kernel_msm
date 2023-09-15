@@ -294,7 +294,7 @@ err_regulator_get:
 	return ret;
 }
 
-void clk_regulator_uninit(const struct qcom_cc_desc *desc)
+void clk_regulator_deinit(const struct qcom_cc_desc *desc)
 {
 	struct clk_vdd_class *vdd_class;
 	size_t array_size;

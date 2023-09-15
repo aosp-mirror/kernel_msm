@@ -378,18 +378,39 @@ static ssize_t rtc_us_val_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	int rc;
-	u8 value[NUM_8_BIT_RTC_REGS], value_ms[2];
+	u8 value[NUM_8_BIT_RTC_REGS], value_ms1[2], value_ms2[2];
 	unsigned long long secs = 0, mticks = 0, usecs = 0, rtc_us_total = 0;
 	unsigned int reg;
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev->parent);
 	const struct pm8xxx_rtc_regs *regs = rtc_dd->regs;
 
+reread:
 	rc = regmap_bulk_read(rtc_dd->regmap, regs->read, value, sizeof(value));
 	if (rc) {
 		dev_err(dev, "RTC read data register failed\n");
 		return rc;
 	}
 
+	/* Read milli-second value */
+	rc = regmap_bulk_read(rtc_dd->regmap, regs->read_ms, value_ms1, sizeof(value_ms1));
+	if (rc) {
+		dev_err(dev, "RTC read data register failed\n");
+		return rc;
+	}
+
+	/* Read milli-second value again*/
+	rc = regmap_bulk_read(rtc_dd->regmap, regs->read_ms, value_ms2, sizeof(value_ms2));
+	if (rc) {
+		dev_err(dev, "RTC read data register failed\n");
+		return rc;
+	}
+	/* check for rollover in ms value like from 1023 to 0 */
+	if (value_ms1[1] != value_ms2[1])
+		goto reread;
+
+	mticks = value_ms2[0] | (value_ms2[1] << 8);
+	if (mticks == 1023 || mticks == 0)
+		goto reread;
 	/*
 	 * Read the LSB again and check if there has been a carry over.
 	 * If there is, redo the read operation.
@@ -411,15 +432,6 @@ static ssize_t rtc_us_val_show(struct device *dev,
 
 	secs = value[0] | (value[1] << 8) | (value[2] << 16) |
 	       ((unsigned long long)value[3] << 24);
-
-	/* Read milli-second value */
-	rc = regmap_bulk_read(rtc_dd->regmap, regs->read_ms, value_ms, sizeof(value_ms));
-	if (rc) {
-		dev_err(dev, "RTC read data register failed\n");
-		return rc;
-	}
-
-	mticks = value_ms[0] | (value_ms[1] << 8);
 
 	/* Mapping 1023 ticks to 999 milli-seconds */
 	usecs = RTC_MSTICKS_TO_US(mticks);
@@ -738,6 +750,10 @@ static int pm8xxx_rtc_resume(struct device *dev)
 {
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
 
+#ifdef CONFIG_DEEPSLEEP
+	if (pm_suspend_via_firmware())
+		return pm8xxx_rtc_restore(dev);
+#endif
 	if (device_may_wakeup(dev))
 		disable_irq_wake(rtc_dd->rtc_alarm_irq);
 
@@ -748,6 +764,10 @@ static int pm8xxx_rtc_suspend(struct device *dev)
 {
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
 
+#ifdef CONFIG_DEEPSLEEP
+	if (pm_suspend_via_firmware())
+		return pm8xxx_rtc_freeze(dev);
+#endif
 	if (device_may_wakeup(dev))
 		enable_irq_wake(rtc_dd->rtc_alarm_irq);
 

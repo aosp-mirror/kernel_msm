@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2013-2014, 2017-2021, The Linux Foundation.
  * All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/export.h>
@@ -328,7 +328,7 @@ int qcom_cc_really_probe(struct platform_device *pdev,
 
 	ret = clk_vdd_proxy_vote(&pdev->dev, desc);
 	if (ret)
-		goto uninit_clk_regulator;
+		goto deinit_clk_regulator;
 
 	if (desc->num_resets) {
 		ret = devm_reset_controller_register(dev, &reset->rcdev);
@@ -398,8 +398,8 @@ int qcom_cc_really_probe(struct platform_device *pdev,
 
 proxy_unvote:
 	clk_vdd_proxy_unvote(dev, desc);
-uninit_clk_regulator:
-	clk_regulator_uninit(desc);
+deinit_clk_regulator:
+	clk_regulator_deinit(desc);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_cc_really_probe);
@@ -510,7 +510,7 @@ int qcom_cc_runtime_init(struct platform_device *pdev,
 		if (PTR_ERR(desc->path) != -EPROBE_DEFER)
 			dev_err(dev, "error getting path\n");
 		ret = PTR_ERR(desc->path);
-		goto uninit_clk_regulator;
+		goto deinit_clk_regulator;
 	}
 
 	platform_set_drvdata(pdev, desc);
@@ -534,8 +534,8 @@ destroy_pm_clk:
 disable_pm_runtime:
 	pm_runtime_disable(dev);
 	icc_put(desc->path);
-uninit_clk_regulator:
-	clk_regulator_uninit(desc);
+deinit_clk_regulator:
+	clk_regulator_deinit(desc);
 
 	return ret;
 }

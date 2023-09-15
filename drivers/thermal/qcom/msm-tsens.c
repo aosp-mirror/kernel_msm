@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -130,6 +130,10 @@ static const struct of_device_id tsens_table[] = {
 	{	.compatible = "qcom,tsens26xx",
 		.data = &data_tsens26xx,
 	},
+	{
+		.compatible = "qcom,qcs405-tsens",
+		.data = &data_tsens14xx_405,
+	},
 	{}
 };
 MODULE_DEVICE_TABLE(of, tsens_table);
@@ -245,6 +249,7 @@ static int tsens_thermal_zone_register(struct tsens_device *tmdev)
 	for (i = 0; i < TSENS_MAX_SENSORS; i++) {
 		tmdev->sensor[i].tmdev = tmdev;
 		tmdev->sensor[i].hw_id = i;
+		tmdev->sensor[i].cached_temp = INT_MIN;
 		if (tmdev->ops->sensor_en(tmdev, i)) {
 			tmdev->sensor[i].tzd =
 				devm_thermal_zone_of_sensor_register(
@@ -295,6 +300,7 @@ static void tsens_therm_fwk_notify(struct work_struct *work)
 
 	TSENS_DBG(tmdev, "Controller %pK\n", &tmdev->phys_addr_tm);
 	for (i = 0; i < TSENS_MAX_SENSORS; i++) {
+		tmdev->sensor[i].cached_temp = INT_MIN;
 		if (tmdev->ops->sensor_en(tmdev, i)) {
 			rc = tsens_get_temp(&tmdev->sensor[i], &temp);
 			if (rc) {

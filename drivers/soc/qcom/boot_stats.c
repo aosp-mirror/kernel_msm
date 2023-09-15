@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2019, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -51,6 +51,7 @@ struct boot_stats {
 static void __iomem *mpm_counter_base;
 static uint32_t mpm_counter_freq;
 static struct boot_stats __iomem *boot_stats;
+static void __iomem *mpm_hr_counter_base;
 
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
 
@@ -155,6 +156,26 @@ unsigned long long msm_timer_get_sclk_ticks(void)
 	}
 	return t1;
 }
+EXPORT_SYMBOL(msm_timer_get_sclk_ticks);
+
+unsigned long long msm_hr_timer_get_sclk_ticks(void)
+{
+	unsigned long long tl, th;
+	void __iomem *sclk_tick_high;
+	void __iomem *sclk_tick_low;
+
+	if (!mpm_hr_counter_base)
+		return -EINVAL;
+
+	sclk_tick_high = mpm_hr_counter_base + 0xc;
+	sclk_tick_low = mpm_hr_counter_base + 0x8;
+
+	tl = readl_relaxed(sclk_tick_low);
+	th = readl_relaxed(sclk_tick_high);
+
+	return (th << 32) | tl;
+}
+EXPORT_SYMBOL(msm_hr_timer_get_sclk_ticks);
 
 static void _destroy_boot_marker(const char *name)
 {
@@ -318,7 +339,7 @@ static ssize_t bootkpi_reader(struct file *fp, struct kobject *obj,
 		size_t count)
 {
 	struct boot_marker *marker;
-	unsigned long ts_whole_num, ts_precision;
+	unsigned long long ts_whole_num, ts_precision;
 	static char *kpi_buf;
 	static int temp;
 	int ret = 0;
@@ -473,7 +494,7 @@ static void exit_bootkpi(void)
 
 static int mpm_parse_dt(void)
 {
-	struct device_node *np_imem, *np_mpm2;
+	struct device_node *np_imem, *np_mpm2, *np_mpm_hr;
 
 	np_imem = of_find_compatible_node(NULL, NULL,
 				"qcom,msm-imem-boot_stats");
@@ -506,8 +527,24 @@ static int mpm_parse_dt(void)
 	} else
 		goto err2;
 
-	return 0;
+	/* qcom,mpm-hr-counter is not mandatory */
+	np_mpm_hr = of_find_compatible_node(NULL, NULL,
+				"qcom,mpm-hr-counter");
+	if (!np_mpm_hr) {
+		pr_info("mpm_hr_counter: can't find DT node\n");
+		return 0;
+	}
 
+	if (of_get_address(np_mpm_hr, 0, NULL, NULL)) {
+		mpm_hr_counter_base = of_iomap(np_mpm_hr, 0);
+		if (!mpm_hr_counter_base) {
+			pr_err("mpm_hr_counter: cant map counter base\n");
+			of_node_put(np_mpm_hr);
+		}
+	} else
+		of_node_put(np_mpm_hr);
+
+	return 0;
 err2:
 	of_node_put(np_mpm2);
 err1:
@@ -551,6 +588,8 @@ static int __init boot_stats_init(void)
 	} else {
 		iounmap(boot_stats);
 		iounmap(mpm_counter_base);
+		if (mpm_hr_counter_base)
+			iounmap(mpm_hr_counter_base);
 	}
 
 	return 0;
@@ -563,6 +602,8 @@ static void __exit boot_stats_exit(void)
 		exit_bootkpi();
 		iounmap(boot_stats);
 		iounmap(mpm_counter_base);
+		if (mpm_hr_counter_base)
+			iounmap(mpm_hr_counter_base);
 	}
 }
 module_exit(boot_stats_exit)

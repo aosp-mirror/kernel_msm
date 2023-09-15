@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/sched.h>
@@ -21,6 +21,7 @@ static int one_hundred = 100;
 static int one_thousand = 1000;
 static int one_thousand_twenty_four = 1024;
 static int two_thousand = 2000;
+static int walt_max_cpus = WALT_NR_CPUS;
 
 /*
  * CFS task prio range is [100 ... 139]
@@ -50,6 +51,7 @@ unsigned int sysctl_input_boost_freq[8];
 unsigned int sysctl_sched_boost_on_input;
 unsigned int sysctl_sched_early_up[MAX_MARGIN_LEVELS];
 unsigned int sysctl_sched_early_down[MAX_MARGIN_LEVELS];
+int sysctl_cluster_arr[3][15];
 
 /* sysctl nodes accesed by other files */
 unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns;
@@ -80,6 +82,8 @@ unsigned int sysctl_sched_cluster_util_thres_pct;
 unsigned int sysctl_ed_boost_pct;
 unsigned int sysctl_em_inflate_pct = 100;
 unsigned int sysctl_em_inflate_thres = 1024;
+unsigned int sysctl_sched_heavy_nr;
+struct cluster_freq_relation cluster_arr[3][6];
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -213,6 +217,8 @@ static int sched_task_handler(struct ctl_table *table, int write,
 	int pid_and_val[2] = {-1, -1};
 	int val;
 	struct walt_task_struct *wts;
+	struct rq *rq;
+	struct rq_flags rf;
 
 	struct ctl_table tmp = {
 		.data	= &pid_and_val,
@@ -330,10 +336,24 @@ static int sched_task_handler(struct ctl_table *table, int write,
 			wts->low_latency &= ~WALT_LOW_LATENCY_PROCFS;
 		break;
 	case PIPELINE:
-		if (val)
+		rq = task_rq_lock(task, &rf);
+		if (READ_ONCE(task->__state) == TASK_DEAD) {
+			ret = -EINVAL;
+			task_rq_unlock(rq, task, &rf);
+			goto put_task;
+		}
+		if (val) {
+			ret = add_pipeline(wts);
+			if (ret < 0) {
+				task_rq_unlock(rq, task, &rf);
+				goto put_task;
+			}
 			wts->low_latency |= WALT_LOW_LATENCY_PIPELINE;
-		else
+		} else {
 			wts->low_latency &= ~WALT_LOW_LATENCY_PIPELINE;
+			remove_pipeline(wts);
+		}
+		task_rq_unlock(rq, task, &rf);
 		break;
 	case LOAD_BOOST:
 		if (pid_and_val[1] < -90 || pid_and_val[1] > 90) {
@@ -1031,6 +1051,42 @@ struct ctl_table walt_table[] = {
 		.proc_handler	= proc_douintvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_thousand_twenty_four,
+	},
+	{
+		.procname	= "sched_heavy_nr",
+		.data		= &sysctl_sched_heavy_nr,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &walt_max_cpus,
+	},
+	{
+		.procname	= "cluster0_rel",
+		.data		= sysctl_cluster_arr[0],
+		.maxlen		= sizeof(int) * 15,
+		.mode		= 0644,
+		.proc_handler	= sched_ignore_cluster_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "cluster1_rel",
+		.data		= sysctl_cluster_arr[1],
+		.maxlen		= sizeof(int) * 15,
+		.mode		= 0644,
+		.proc_handler	= sched_ignore_cluster_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "cluster2_rel",
+		.data		= sysctl_cluster_arr[2],
+		.maxlen		= sizeof(int) * 15,
+		.mode		= 0644,
+		.proc_handler	= sched_ignore_cluster_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
 	},
 	{ }
 };

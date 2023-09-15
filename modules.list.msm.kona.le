@@ -1,3 +1,6 @@
+qcom_ipcc.ko
+qcom_aoss.ko
+msm_qmp.ko
 dcc_v2.ko
 llcc-qcom.ko
 memory_dump_v2.ko
@@ -42,6 +45,9 @@ phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4.ko
 phy-qcom-ufs-qmp-v4-kona.ko
 ufshcd-crypto-qti.ko
+crypto-qti-common.ko
+crypto-qti-tz.ko
+qseecom_proxy.ko
 camcc-sm8250.ko
 videocc-sm8250.ko
 dispcc-sm8250.ko

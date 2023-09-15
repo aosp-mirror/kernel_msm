@@ -63,7 +63,7 @@
 
 #define WR_BUF_SIZE_IN_BYTES_FOR_USE	(WR_BUF_SIZE_IN_WORDS_FOR_USE * sizeof(uint32_t))
 #define SLATE_RESUME_IRQ_TIMEOUT 100
-#define SLATE_SPI_AUTOSUSPEND_TIMEOUT 5000
+#define SLATE_SPI_AUTOSUSPEND_TIMEOUT 500
 #define MIN_SLEEP_TIME	5
 
 /* Master_Command[27] */
@@ -433,18 +433,23 @@ void slatecom_slatedown_handler(void)
 }
 EXPORT_SYMBOL(slatecom_slatedown_handler);
 
-static void parse_fifo(uint8_t *data, union slatecom_event_data_type *event_data)
+static void parse_fifo(uint8_t *data, uint16_t data_len, union slatecom_event_data_type *event_data)
 {
 	uint16_t p_len;
 	uint16_t event_id;
 	void *evnt_data;
 
 	while (*data != '\0') {
-
+		if (data_len < HED_EVENT_ID_LEN)
+			break;
 		event_id = *((uint16_t *) data);
 		data = data + HED_EVENT_ID_LEN;
+		data_len = data_len - HED_EVENT_ID_LEN;
+		if (data_len < HED_EVENT_SIZE_LEN)
+			break;
 		p_len = *((uint16_t *) data);
 		data = data + HED_EVENT_SIZE_LEN;
+		data_len = data_len - HED_EVENT_SIZE_LEN;
 
 		if (event_id == 0x0001) {
 			evnt_data = kmalloc(p_len, GFP_KERNEL);
@@ -458,10 +463,12 @@ static void parse_fifo(uint8_t *data, union slatecom_event_data_type *event_data
 			}
 		} else if (event_id == 0xc8) {
 			data = data + 12;
+			data_len = data_len - 12;
 			pr_err("Packet Received = 0x%X, len = %u\n", event_id, p_len);
 		}
 
 		data = data + p_len;
+		data_len = data_len - p_len;
 	}
 	if (!list_empty(&pr_lst_hd))
 		queue_work(wq, &input_work);
@@ -575,7 +582,8 @@ static void send_back_notification(uint32_t slav_status_reg,
 			if (!ret) {
 				augmnt_fifo((uint8_t *)ptr,
 					master_fifo_used*SLATE_SPI_WORD_SIZE);
-				parse_fifo((uint8_t *)ptr, &event_data);
+				parse_fifo((uint8_t *)ptr,
+					master_fifo_used*SLATE_SPI_WORD_SIZE, &event_data);
 			}
 			kfree(ptr);
 		}
@@ -1634,8 +1642,13 @@ static int slatecom_pm_prepare(struct device *dev)
 	else
 		cmnd_reg |= SLATE_OK_SLP_RBSC;
 
-	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_get_sync(&s_dev->dev)
-			: SLATECOM_INFO("spi is already active, skip get_sync...\n");
+	if (!atomic_read(&slate_is_spi_active)) {
+		SLATECOM_INFO("spi is already inactive, get_sync.\n");
+		pm_runtime_get_sync(&s_dev->dev);
+		usleep_range(5000, 10000);
+	} else {
+		SLATECOM_INFO("spi is already active, skip get_sync.\n");
+	}
 
 	atomic_set(&ok_to_sleep, 1);
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg, true);
@@ -1682,15 +1695,21 @@ static int slatecom_pm_suspend(struct device *dev)
 		return -ECANCELED;
 	}
 
-	atomic_set(&state, SLATECOM_STATE_SUSPEND);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
 	free_irq(slate_irq, slate_spi);
 	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr_during_suspend,
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
-	SLATECOM_ERR("suspended\n");
-	return (atomic_read(&slate_is_spi_active)) ? -ECANCELED : 0;
+	if (atomic_read(&slate_is_spi_active)) {
+		SLATECOM_ERR("Slate interrupted, abort suspend\n");
+		return -ECANCELED;
+	}
+
+	SLATECOM_INFO("suspended\n");
+
+	atomic_set(&state, SLATECOM_STATE_SUSPEND);
+	return 0;
 }
 
 static int slatecom_pm_resume(struct device *dev)

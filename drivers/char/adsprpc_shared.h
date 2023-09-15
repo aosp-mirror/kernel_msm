@@ -92,6 +92,9 @@
 /* Set FastRPC session ID to 1 */
 #define FASTRPC_MODE_SESSION     4
 
+/* Retrieves method index from the scalars parameter */
+#define REMOTE_SCALARS_METHOD(sc)        (((sc) >> 24) & 0x1f)
+
 /* Retrives number of input buffers from the scalars parameter */
 #define REMOTE_SCALARS_INBUFS(sc)        (((sc) >> 16) & 0x0ff)
 
@@ -105,13 +108,16 @@
 #define REMOTE_SCALARS_OUTHANDLES(sc)    ((sc) & 0x0f)
 
 /* Remote domains ID */
-#define ADSP_DOMAIN_ID	(0)
-#define MDSP_DOMAIN_ID	(1)
-#define SDSP_DOMAIN_ID	(2)
-#define CDSP_DOMAIN_ID	(3)
-#define MAX_DOMAIN_ID	CDSP_DOMAIN_ID
+#define ADSP_DOMAIN_ID		(0)
+#define MDSP_DOMAIN_ID		(1)
+#define SDSP_DOMAIN_ID		(2)
+#define CDSP_DOMAIN_ID		(3)
+#define CDSP1_DOMAIN_ID		(4)
+#define GPDSP_DOMAIN_ID		(5)
+#define GPDSP1_DOMAIN_ID	(6)
+#define MAX_DOMAIN_ID	GPDSP1_DOMAIN_ID
 
-#define NUM_CHANNELS	4	/* adsp, mdsp, slpi, cdsp*/
+#define NUM_CHANNELS	(MAX_DOMAIN_ID + 1)	/* adsp, mdsp, slpi, cdsp, cdsp1, gpdsp, gpdsp1*/
 #define NUM_SESSIONS	13	/* max 12 compute, 1 cpz */
 
 #define VALID_FASTRPC_CID(cid) \
@@ -699,11 +705,6 @@ struct gid_list {
 	unsigned int gidcount;
 };
 
-struct qos_cores {
-	int *coreno;
-	int corecount;
-};
-
 struct fastrpc_file;
 
 struct fastrpc_buf {
@@ -940,13 +941,16 @@ struct fastrpc_apps {
 	/* Non-secure subsystem like CDSP will use regular client */
 	struct wakeup_source *wake_source;
 	uint32_t duplicate_rsp_err_cnt;
-	struct qos_cores silvercores;
 	uint32_t max_size_limit;
 	struct hlist_head frpc_devices;
 	struct hlist_head frpc_drivers;
 	struct mutex mut_uid;
 	/* Indicates cdsp device status */
 	int fastrpc_cdsp_status;
+	/* Number of lowest capacity cores for given platform */
+	unsigned int lowest_capacity_core_count;
+	/* Flag to check if PM QoS vote needs to be done for only one core */
+	bool single_core_latency_vote;
 };
 
 struct fastrpc_mmap {
@@ -975,6 +979,7 @@ struct fastrpc_mmap {
 	/* Mapping for fastrpc shell */
 	bool is_filemap;
 	char *servloc_name;			/* Indicate which daemon mapped this */
+	unsigned int ctx_refs; /* Indicates reference count for context map */
 };
 
 enum fastrpc_perfkeys {
@@ -1095,6 +1100,8 @@ struct fastrpc_file {
 	spinlock_t dspsignals_lock;
 	struct mutex signal_create_mutex;
 	struct completion shutdown;
+	/* Flag to indicate Notif feature to be enabled or no */
+	bool init_notif;
 	/* Flag to indicate notif thread exit requested*/
 	bool exit_notif;
 	/* Flag to indicate async thread exit requested*/
@@ -1138,7 +1145,10 @@ int fastrpc_internal_mem_unmap(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_mem_unmap *ud);
 
 int fastrpc_internal_mmap(struct fastrpc_file *fl,
-				 struct fastrpc_ioctl_mmap *ud);
+		struct fastrpc_ioctl_mmap *ud);
+
+int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
+				struct fastrpc_ioctl_munmap_fd *ud);
 
 int fastrpc_init_process(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_init_attrs *uproc);

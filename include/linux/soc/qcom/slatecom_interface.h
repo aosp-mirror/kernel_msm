@@ -60,12 +60,26 @@ int set_slate_boot_mode(uint32_t boot_mode);
 int get_slate_boot_mode(void);
 
 /*
+ * To get current state of slate shutdown_only
+ * Return true if it unload only or else return false
+ */
+bool is_slate_unload_only(void);
+
+/*
  * Message header type - generic header structure
  */
 struct msg_header_t {
 	uint32_t opcode;
 	uint32_t payload_size;
 };
+
+struct wear_firmware_info {
+	uint32_t response_status;
+	uint32_t qapi_version;
+	char crm_build_number[100];
+	char dsp_image_ver[100];
+	char bt_image_ver[100];
+} __packed;
 
 /**
  * Opcodes to be received on slate-control channel.
@@ -143,6 +157,12 @@ enum WMSlateCtrlChnlOpcode {
 	GMI_WLAN_5G_CONNECT = 18,
 
 	GMI_WLAN_5G_DISCONNECT  = 19,
+
+	/*
+	* Get slate firmware info.
+	* Slate will return wear_firmware_info_t piggy-backing with the response code.
+	*/
+	GMI_WEAR_MGR_GET_FIRMWARE_DETAILS = 20,
 
 	/*
 	 * DEBUG Opcodes

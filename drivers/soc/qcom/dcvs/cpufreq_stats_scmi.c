@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/scmi_protocol.h>
@@ -197,7 +197,7 @@ static int scmi_cpufreq_stats_create_fs_entries(struct device *dev)
 	// create the debugfs directory
 	dir = debugfs_create_dir(SCMI_CPUFREQ_STATS_DIR_STRING, 0);
 	if (!dir) {
-		dev_err(dev, "Debugfs directory creation failed\n");
+		pr_err("Debugfs directory creation failed\n");
 		return -ENOENT;
 	}
 
@@ -207,8 +207,7 @@ static int scmi_cpufreq_stats_create_fs_entries(struct device *dev)
 		// create per-core dirs
 		clkdom_dir = debugfs_create_dir(clkdom_name, dir);
 		if (!clkdom_dir) {
-			dev_err(dev,
-				"Debugfs directory creation for %s failed\n",
+			pr_err("Debugfs directory creation for %s failed\n",
 				clkdom_name);
 			return -ENOENT;
 		}
@@ -231,23 +230,21 @@ static int qcom_cpufreq_stats_init(struct scmi_handle *handle)
 	u32 stats_signature;
 	u16 num_clkdom = 0, revision, num_lvl = 0;
 	int i, j, ret;
-	struct cpufreq_stats_prot_attr prot_attr;
+	struct cpufreq_stats_prot_attr prot_attr = {0};
 
 	ret = ops->cpufreq_stats_info_get(ph, &prot_attr);
 	if (ret) {
 		pr_err("SCMI CPUFREQ Stats CPUFREQSTATS_GET_MEM_INFO error: %d\n", ret);
 		return ret;
 	}
-	if (prot_attr.statistics_len) {
+	if (prot_attr.statistics_len && prot_attr.statistics_address_low) {
 		pinfo = kcalloc(1, sizeof(struct stats_info), GFP_KERNEL);
 		if (!pinfo)
 			return -ENOMEM;
-		pinfo->stats_iomem = devm_ioremap(
-			handle->dev,
-			prot_attr.statistics_address_low |
-				(u64)prot_attr.statistics_address_high << 32,
-			prot_attr.statistics_len);
-		if (IS_ERR(pinfo->stats_iomem)) {
+		pinfo->stats_iomem = ioremap(prot_attr.statistics_address_low |
+						(u64)prot_attr.statistics_address_high << 32,
+						 prot_attr.statistics_len);
+		if (!pinfo->stats_iomem) {
 			kfree(pinfo);
 			return -ENOMEM;
 		}
@@ -261,30 +258,33 @@ static int qcom_cpufreq_stats_init(struct scmi_handle *handle)
 					   offsetof(struct scmi_stats,
 						    num_domains)) & 0xFF;
 		if (stats_signature != 0x50455246) {
-			dev_err(handle->dev,
-				"SCMI stats mem signature check failed\n");
+			pr_err("SCMI stats mem signature check failed\n");
+			iounmap(pinfo->stats_iomem);
 			kfree(pinfo);
 			return -EPERM;
 		}
 		if (revision != 1) {
 			pr_err("SCMI stats revision not supported\n");
+			iounmap(pinfo->stats_iomem);
 			kfree(pinfo);
 			return -EPERM;
 		}
 		if (!num_clkdom) {
 			pr_err("SCMI cpufreq stats number of clock domains are zero\n");
+			iounmap(pinfo->stats_iomem);
 			kfree(pinfo);
 			return -EPERM;
 		}
 		pinfo->num_clkdom = num_clkdom;
 	} else {
-		pr_err("SCMI cpufreq stats length is zero\n");
+		pr_err("SCMI cpufreq stats length or base address is zero\n");
 		return -EPERM;
 	}
 	// allocate structures for each clkdom/entry pair
 	pinfo->entries = kcalloc(num_clkdom * ENTRY_MAX,
 				 sizeof(struct clkdom_entry), GFP_KERNEL);
 	if (!pinfo->entries) {
+		iounmap(pinfo->stats_iomem);
 		kfree(pinfo);
 		return -ENOMEM;
 	}
@@ -300,6 +300,7 @@ static int qcom_cpufreq_stats_init(struct scmi_handle *handle)
 	if (scmi_cpufreq_stats_create_fs_entries(handle->dev)) {
 		pr_err("Failed to create debugfs entries\n");
 		kfree(pinfo->entries);
+		iounmap(pinfo->stats_iomem);
 		kfree(pinfo);
 		return -ENOENT;
 	}
@@ -313,6 +314,7 @@ static int qcom_cpufreq_stats_init(struct scmi_handle *handle)
 	if (!pinfo->freq_info) {
 		pr_err("Failed to allocate memory for freq entries\n");
 		kfree(pinfo->entries);
+		iounmap(pinfo->stats_iomem);
 		kfree(pinfo);
 		return -ENOMEM;
 	}

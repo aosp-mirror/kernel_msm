@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "hgsl_memory.h"
@@ -132,21 +132,23 @@ static int hgsl_mem_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 
 	vma->vm_flags |= VM_DONTDUMP | VM_DONTEXPAND | VM_DONTCOPY;
 	vma->vm_private_data = mem_node;
-	cache_mode = mem_node->flags & GSL_MEMFLAGS_CACHEMODE_MASK;
-	switch (cache_mode) {
-	case GSL_MEMFLAGS_WRITECOMBINE:
-	case GSL_MEMFLAGS_UNCACHED:
-		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-		break;
-	case GSL_MEMFLAGS_WRITETHROUGH:
-		vma->vm_page_prot = pgprot_writethroughcache(vma->vm_page_prot);
-		break;
-	case GSL_MEMFLAGS_WRITEBACK:
-		vma->vm_page_prot = pgprot_writebackcache(vma->vm_page_prot);
-		break;
-	default:
-		LOGE("invalid cache mode");
-		return -EINVAL;
+	if (!mem_node->default_iocoherency) {
+		cache_mode = mem_node->flags & GSL_MEMFLAGS_CACHEMODE_MASK;
+		switch (cache_mode) {
+		case GSL_MEMFLAGS_WRITECOMBINE:
+		case GSL_MEMFLAGS_UNCACHED:
+			vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+			break;
+		case GSL_MEMFLAGS_WRITETHROUGH:
+			vma->vm_page_prot = pgprot_writethroughcache(vma->vm_page_prot);
+			break;
+		case GSL_MEMFLAGS_WRITEBACK:
+			vma->vm_page_prot = pgprot_writebackcache(vma->vm_page_prot);
+			break;
+		default:
+			LOGE("invalid cache mode");
+			return -EINVAL;
+		}
 	}
 
 	for (i = 0; i < page_count; i++) {
@@ -250,16 +252,20 @@ static void hgsl_mem_dma_buf_release(struct dma_buf *dmabuf)
 static int hgsl_mem_dma_buf_vmap(struct dma_buf *dmabuf, struct dma_buf_map *map)
 {
 	struct hgsl_mem_node *mem_node = dmabuf->priv;
+	pgprot_t prot = PAGE_KERNEL;
 
 	if (mem_node->flags & GSL_MEMFLAGS_PROTECTED)
 		return -EINVAL;
 
 	mutex_lock(&hgsl_map_global_lock);
+	if (!mem_node->default_iocoherency)
+		prot = pgprot_writecombine(prot);
+
 	if (IS_ERR_OR_NULL(mem_node->vmapping))
 		mem_node->vmapping = vmap(mem_node->pages,
 			    mem_node->page_count,
 			    VM_IOREMAP,
-			    pgprot_writecombine(PAGE_KERNEL));
+			    prot);
 
 	if (!IS_ERR_OR_NULL(mem_node->vmapping))
 		mem_node->vmap_count++;
@@ -506,9 +512,8 @@ static int hgsl_alloc_pages(struct device *dev, uint32_t requested_pcount,
 	return pcount;
 }
 
-static int hgsl_export_dma_buf_fd(struct hgsl_mem_node *mem_node)
+static int hgsl_export_dma_buf(struct hgsl_mem_node *mem_node)
 {
-	int fd = -1;
 	struct dma_buf *dma_buf = NULL;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 
@@ -523,14 +528,6 @@ static int hgsl_export_dma_buf_fd(struct hgsl_mem_node *mem_node)
 		return -ENOMEM;
 	}
 	mem_node->dma_buf = dma_buf;
-
-	fd = dma_buf_fd(dma_buf, O_CLOEXEC);
-	if (fd < 0) {
-		LOGE("dma buf to fd failed");
-		return -EINVAL;
-	}
-	get_dma_buf(dma_buf);
-	mem_node->fd = fd;
 
 	return 0;
 }
@@ -569,6 +566,7 @@ int hgsl_sharedmem_alloc(struct device *dev, uint32_t sizebytes,
 	mem_node->sg_nents = nents;
 	mem_node->memtype = GSL_USER_MEM_TYPE_ASHMEM;
 	mem_node->memdesc.size = requested_size;
+	mem_node->fd = -1;
 
 	if (requested_pcount != 0)
 		return -ENOMEM;
@@ -579,7 +577,7 @@ int hgsl_sharedmem_alloc(struct device *dev, uint32_t sizebytes,
 			return ret;
 	}
 
-	return hgsl_export_dma_buf_fd(mem_node);
+	return hgsl_export_dma_buf(mem_node);
 }
 
 void hgsl_sharedmem_free(struct hgsl_mem_node *mem_node)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
@@ -16,6 +16,8 @@
 #include <linux/thermal.h>
 #include <linux/workqueue.h>
 
+#define MAX_RETRY_CNT 20
+#define RETRY_DELAY msecs_to_jiffies(1000)
 #define CPUFREQ_CDEV_NAME "cpu%d"
 #define CPUFREQ_CDEV "qcom-cpufreq-cdev"
 
@@ -26,10 +28,11 @@ struct cpufreq_cdev_device {
 	unsigned long cur_state;
 	unsigned long max_state;
 	unsigned int *freq_table;
+	int retry_cnt;
 	struct freq_qos_request qos_max_freq_req;
 	char cdev_name[THERMAL_NAME_LENGTH];
 	struct cpufreq_policy *policy;
-	struct work_struct reg_work;
+	struct delayed_work register_work;
 };
 
 static DEFINE_MUTEX(qti_cpufreq_cdev_lock);
@@ -98,13 +101,19 @@ static struct thermal_cooling_device_ops cpufreq_cdev_ops = {
 static void cpufreq_cdev_register(struct work_struct *work)
 {
 	struct cpufreq_cdev_device *cdev_data = container_of(work,
-			struct cpufreq_cdev_device, reg_work);
+			struct cpufreq_cdev_device, register_work.work);
 	struct cpufreq_policy *policy = NULL;
 	int freq_count = 0, i;
 
 	policy = cpufreq_cpu_get(cdev_data->cpu);
 	if (!policy) {
-		pr_err("No policy for CPU:%d\n", cdev_data->cpu);
+		if (--cdev_data->retry_cnt)
+			queue_delayed_work(system_highpri_wq,
+						&cdev_data->register_work,
+						RETRY_DELAY);
+		else
+			pr_err("No policy for CPU:%d\n", cdev_data->cpu);
+
 		return;
 	}
 	freq_count = cpufreq_table_count_valid_entries(policy);
@@ -165,7 +174,7 @@ static int cpufreq_cdev_hp_online(unsigned int online_cpu)
 	list_for_each_entry(cdev_data, &qti_cpufreq_cdev_list, node) {
 		if (cdev_data->cpu != online_cpu || cdev_data->cdev)
 			continue;
-		queue_work(system_highpri_wq, &cdev_data->reg_work);
+		queue_delayed_work(system_highpri_wq, &cdev_data->register_work, 0);
 	}
 	mutex_unlock(&qti_cpufreq_cdev_lock);
 	return 0;
@@ -175,34 +184,40 @@ static int cpufreq_cdev_probe(struct platform_device *pdev)
 {
 	struct cpufreq_cdev_device *cdev_data;
 	struct device_node *np = pdev->dev.of_node, *cpu_phandle = NULL;
+	struct device_node *subsys_np = NULL;
 	struct device *dev = &pdev->dev;
 	struct device *cpu_dev;
 	int cpu = 0, ret = 0;
+	int cpu_count;
 	struct of_phandle_iterator it;
 
 	mutex_lock(&qti_cpufreq_cdev_lock);
-	of_phandle_iterator_init(&it, np, "qcom,cpus", NULL, 0);
-	while (of_phandle_iterator_next(&it) == 0) {
+	for_each_available_child_of_node(np, subsys_np) {
+		of_phandle_iterator_init(&it, subsys_np, "qcom,cpus", NULL, 0);
+		cpu_count = 0;
+		while (of_phandle_iterator_next(&it) == 0) {
+			cpu_phandle = it.node;
+			for_each_possible_cpu(cpu) {
+			cpu_dev = get_cpu_device(cpu);
+			if (cpu_dev && cpu_dev->of_node == cpu_phandle) {
+					cpu_count++;
+					break;
+				}
+			}
+			if (cpu_count)
+				break;
+		}
+		if (!cpu_count)
+			continue;
 		cdev_data = devm_kzalloc(dev, sizeof(*cdev_data), GFP_KERNEL);
 		if (!cdev_data) {
 			mutex_unlock(&qti_cpufreq_cdev_lock);
 			return -ENOMEM;
 		}
-		cpu_phandle = it.node;
-		cdev_data->cpu = -1;
-		for_each_possible_cpu(cpu) {
-			cpu_dev = get_cpu_device(cpu);
-			if (cpu_dev && cpu_dev->of_node == cpu_phandle) {
-				cdev_data->cpu = cpu;
-				break;
-			}
-		}
-		if (cdev_data->cpu == -1)
-			continue;
+		cdev_data->cpu = cpu;
 		snprintf(cdev_data->cdev_name, THERMAL_NAME_LENGTH,
-				CPUFREQ_CDEV_NAME, cpu);
-		INIT_WORK(&cdev_data->reg_work,
-				cpufreq_cdev_register);
+				subsys_np->name);
+		INIT_DEFERRABLE_WORK(&cdev_data->register_work, cpufreq_cdev_register);
 		list_add(&cdev_data->node, &qti_cpufreq_cdev_list);
 	}
 	mutex_unlock(&qti_cpufreq_cdev_lock);
