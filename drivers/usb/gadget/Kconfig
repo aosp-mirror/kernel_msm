@@ -228,6 +228,9 @@ config USB_F_CDEV
 config USB_F_GSI
 	tristate
 
+config USB_F_QDSS
+	tristate
+
 # this first set of drivers all depend on bulk-capable hardware.
 
 config USB_CONFIGFS
@@ -544,6 +547,16 @@ config USB_CONFIGFS_F_GSI
 	  over GSI. This driver provides USB RMNET/RNDIS/ECM/MBIM/DPL
 	  related functionalities using GSI hardware accelerated data
 	  path and control path.
+
+config USB_CONFIGFS_F_QDSS
+	tristate "USB QDSS function"
+	select USB_F_QDSS
+	depends on USB_CONFIGFS
+	help
+	  USB QDSS function driver to get hwtracing related data over
+	  USB. USB QDSS function driver which allows communication
+	  between USB BAM and QDSS BAM for QDSS debug functionality
+	  over USB.
 
 source "drivers/usb/gadget/legacy/Kconfig"
 
