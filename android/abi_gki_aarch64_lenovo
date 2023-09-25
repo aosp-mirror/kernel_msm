@@ -557,6 +557,7 @@
   idr_alloc
   idr_find
   idr_remove
+  iio_get_channel_type
   init_net
   init_pid_ns
   __init_rwsem
@@ -704,6 +705,7 @@
   memset
   memstart_addr
   mfd_remove_devices_late
+  migrate_swap
   mipi_dsi_attach
   mipi_dsi_create_packet
   mipi_dsi_dcs_write_buffer
