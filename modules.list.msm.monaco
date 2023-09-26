@@ -72,3 +72,4 @@ clk-qcom.ko
 gdsc-regulator.ko
 dispcc-monaco.ko
 phy-msm-snps-hs.ko
+dwc3-msm.ko
