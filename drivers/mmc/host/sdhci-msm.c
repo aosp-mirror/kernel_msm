@@ -4768,7 +4768,8 @@ static int sdhci_qcom_read_boot_config(struct platform_device *pdev)
 
 static void sdhci_msm_set_sdio_pm_flag(void *unused, struct mmc_host *host)
 {
-	host->pm_flags &= ~MMC_PM_WAKE_SDIO_IRQ;
+	if (host->card && mmc_card_sdio(host->card))
+		host->pm_flags &= ~MMC_PM_WAKE_SDIO_IRQ;
 }
 static int mmc_sleep_busy_cb(void *cb_data, bool *busy)
 {
@@ -4937,17 +4938,18 @@ out:
 
 static void mmc_cache_card(void *unused, struct mmc_host *mmc)
 {
+	if (mmc->caps & MMC_CAP_NONREMOVABLE) {
+		struct sdhci_host *host = mmc_priv(mmc);
+		struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+		struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 
-	struct sdhci_host *host = mmc_priv(mmc);
-	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
-	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
-
-	memcpy(&msm_host->cached_ios, &mmc->ios, sizeof(msm_host->cached_ios));
-	mmc_cache_card_ext_csd(mmc);
+		memcpy(&msm_host->cached_ios, &mmc->ios, sizeof(msm_host->cached_ios));
+		mmc_cache_card_ext_csd(mmc);
 
 #if IS_ENABLED(CONFIG_MMC_SDHCI_MSM_SCALING)
-	sdhci_msm_disable_scaling(mmc);
+		sdhci_msm_disable_scaling(mmc);
 #endif
+	}
 }
 
 static int mmc_can_sleep(struct mmc_card *card)
@@ -4959,6 +4961,9 @@ static void partial_init(void *unused, struct mmc_host *host, bool *partial_init
 {
 	int err;
 	bool deepsleep = pm_suspend_via_firmware();
+
+	if (*partial_init || !(host->caps & MMC_CAP_NONREMOVABLE))
+		return;
 
 	if (deepsleep) {
 		host->ops->hw_reset(host);
