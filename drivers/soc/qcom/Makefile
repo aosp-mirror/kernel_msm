@@ -30,6 +30,7 @@ obj-$(CONFIG_QCOM_RPMHPD) += rpmhpd.o
 obj-$(CONFIG_QCOM_RPMPD) += rpmpd.o
 obj-$(CONFIG_QCOM_KRYO_L2_ACCESSORS) +=	kryo-l2-accessors.o
 obj-$(CONFIG_QCOM_PANEL_EVENT_NOTIFIER) += panel_event_notifier.o
+obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_QCOM_WDT_CORE) += qcom_wdt_core.o
 obj-$(CONFIG_QCOM_SOC_WATCHDOG) += qcom_soc_wdt.o
 obj-$(CONFIG_QCOM_EUD) += eud.o
