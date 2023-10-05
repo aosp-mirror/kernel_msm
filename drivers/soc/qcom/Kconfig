@@ -390,6 +390,7 @@ config QCOM_EUD
           This module enables support for Qualcomm Technologies, Inc.
           Embedded USB Debugger (EUD).
           If unsure, say N.
+
 config MSM_BOOT_STATS
 	tristate "Use MSM boot stats reporting"
 	help
@@ -496,6 +497,25 @@ config QPNP_PBS
 	  RAM on Qualcomm Technologies, Inc. QPNP PMICs. This module provides
 	  the APIs to the client drivers that wants to send the PBS trigger
 	  event to the PBS RAM.
+
+config QCOM_LOGBUF_VENDOR_HOOKS
+	tristate "QTI Logbuf Vendor Hooks Support"
+	depends on ARCH_QCOM
+	help
+	  This enables to dump kernel log_buf through
+	  minidump. It can help in debugging issues
+	  which are manifestation of failure during
+	  device running.
+
+config QCOM_LOGBUF_BOOTLOG
+	bool "QTI Boot Log Support"
+	depends on QCOM_LOGBUF_VENDOR_HOOKS
+	default y
+	help
+	  This enables to keep copy of initial log_buf
+	  of minimum 512KB from bootup. It can help in
+	  debugging issues which are manifestation
+	  of failure during initial bootup.
 
 endmenu
 

@@ -37,6 +37,8 @@ obj-$(CONFIG_QCOM_SOC_WATCHDOG) += qcom_soc_wdt.o
 obj-$(CONFIG_QCOM_EUD) += eud.o
 obj-$(CONFIG_QCOM_MEMORY_DUMP_V2) += memory_dump_v2.o
 obj-$(CONFIG_MSM_CORE_HANG_DETECT) += core_hang_detect.o
+qcom_logbuf_vh-y := qcom_logbuf_vendor_hooks.o
+qcom_logbuf_vh-$(CONFIG_QCOM_LOGBUF_BOOTLOG) += qcom_logbuf_boot_log.o
 ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD)   +=  rpm-smd-debug.o
 endif
