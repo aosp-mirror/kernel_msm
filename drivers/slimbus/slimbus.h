@@ -420,6 +420,7 @@ struct slim_controller {
 	int		(*enable_stream)(struct slim_stream_runtime *rt);
 	int		(*disable_stream)(struct slim_stream_runtime *rt);
 	int			(*wakeup)(struct slim_controller *ctrl);
+	int			(*suspend_slimbus)(struct slim_controller *ctrl);
 };
 
 int slim_device_report_present(struct slim_controller *ctrl,
