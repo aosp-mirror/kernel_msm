@@ -65,3 +65,7 @@ minidump-$(CONFIG_QCOM_MINIDUMP_PANIC_DUMP) += minidump_memory.o
 obj-$(CONFIG_QPNP_PBS) += qpnp-pbs.o
 obj-$(CONFIG_USB_BAM) += usb_bam.o
 obj-$(CONFIG_QCOM_DCVS) += dcvs/
+obj-$(CONFIG_QTI_CRYPTO_COMMON) += crypto-qti-common.o
+obj-$(CONFIG_QTI_CRYPTO_TZ) += crypto-qti-tz.o
+obj-$(CONFIG_QTI_HW_KEY_MANAGER) += hwkm.o crypto-qti-hwkm.o
+obj-$(CONFIG_QTI_HW_KEY_MANAGER_V1) += hwkm_v1.o crypto-qti-hwkm.o
