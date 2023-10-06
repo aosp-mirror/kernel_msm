@@ -95,6 +95,12 @@
 /* send status config 2 */
 #define CQHCI_SSC2			0x44
 
+/*
+ * Value n means CQE would send CMD13 during the transfer of data block
+ * BLOCK_CNT-n
+ */
+#define SEND_QSR_INTERVAL 0x70001
+
 /* response for dcmd */
 #define CQHCI_CRDCT			0x48
 
@@ -116,6 +122,14 @@
 
 /* command response argument */
 #define CQHCI_CRA			0x5C
+
+/*
+ * Add new macro for updated CQ vendor specific
+ * register address for SDHC v5.0 onwards.
+ */
+#define CQE_V5_VENDOR_CFG		0x900
+#define CQHCI_VENDOR_CFG		0x100
+#define CMDQ_SEND_STATUS_TRIGGER (1 << 31)
 
 /* crypto capabilities */
 #define CQHCI_CCAP			0x100
@@ -244,6 +258,7 @@ struct cqhci_host {
 	bool activated;
 	bool waiting_for_idle;
 	bool recovery_halt;
+	bool offset_changed;
 
 	size_t desc_size;
 	size_t data_size;
@@ -298,6 +313,7 @@ struct cqhci_host_ops {
 	int (*program_key)(struct cqhci_host *cq_host,
 			   const union cqhci_crypto_cfg_entry *cfg, int slot);
 #endif
+	void (*enhanced_strobe_mask)(struct mmc_host *mmc, bool set);
 };
 
 static inline void cqhci_writel(struct cqhci_host *host, u32 val, int reg)
