@@ -107,6 +107,7 @@ struct qcom_glink {
 	struct qcom_glink_pipe *tx_pipe;
 
 	int irq;
+	char irqname[GLINK_NAME_SIZE];
 
 	struct work_struct rx_work;
 	spinlock_t rx_lock;
@@ -303,6 +304,15 @@ static void qcom_glink_tx_write(struct qcom_glink *glink,
 				const void *data, size_t dlen)
 {
 	glink->tx_pipe->write(glink->tx_pipe, hdr, hlen, data, dlen);
+}
+
+static void qcom_glink_pipe_reset(struct qcom_glink *glink)
+{
+	if (glink->tx_pipe->reset)
+		glink->tx_pipe->reset(glink->tx_pipe);
+
+	if (glink->rx_pipe->reset)
+		glink->rx_pipe->reset(glink->rx_pipe);
 }
 
 static void qcom_glink_send_read_notify(struct qcom_glink *glink)
@@ -1729,11 +1739,12 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 		return ERR_CAST(glink->mbox_chan);
 	}
 
+	scnprintf(glink->irqname, 32, "glink-native-%s", glink->name);
 	irq = of_irq_get(dev->of_node, 0);
 	ret = devm_request_irq(dev, irq,
 			       qcom_glink_native_intr,
 			       IRQF_NO_SUSPEND | IRQF_SHARED,
-			       "glink-native", glink);
+			       glink->irqname, glink);
 	if (ret) {
 		dev_err(dev, "failed to request IRQ\n");
 		return ERR_PTR(ret);
@@ -1783,6 +1794,8 @@ void qcom_glink_native_remove(struct qcom_glink *glink)
 
 	idr_destroy(&glink->lcids);
 	idr_destroy(&glink->rcids);
+
+	qcom_glink_pipe_reset(glink);
 	mbox_free_channel(glink->mbox_chan);
 }
 EXPORT_SYMBOL_GPL(qcom_glink_native_remove);
