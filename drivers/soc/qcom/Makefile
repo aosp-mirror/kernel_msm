@@ -22,6 +22,7 @@ obj-$(CONFIG_QCOM_SMSM)	+= smsm.o
 obj-$(CONFIG_QCOM_MEM_HOOKS) += mem-hooks.o
 obj-$(CONFIG_QCOM_SECURE_BUFFER) += secure_buffer.o
 obj-$(CONFIG_QCOM_SOCINFO)	+= socinfo.o
+obj-$(CONFIG_QCOM_SYSMON_SUBSYSTEM_STATS) += sysmon_subsystem_stats.o
 obj-$(CONFIG_QCOM_WCNSS_CTRL) += wcnss_ctrl.o
 obj-$(CONFIG_QCOM_APR) += apr.o
 obj-$(CONFIG_QCOM_LLCC) += llcc-qcom.o
@@ -36,3 +37,14 @@ obj-$(CONFIG_QCOM_SOC_WATCHDOG) += qcom_soc_wdt.o
 ifdef CONFIG_DEBUG_FS
 obj-$(CONFIG_MSM_RPM_SMD)   +=  rpm-smd-debug.o
 endif
+obj-$(CONFIG_QCOM_MICRODUMP) += microdump_collector.o
+obj-$(CONFIG_QCOM_RPMHPD) += rpmhpd.o
+obj-$(CONFIG_QCOM_RPMPD) += rpmpd.o
+obj-$(CONFIG_QCOM_KRYO_L2_ACCESSORS) +=	kryo-l2-accessors.o
+obj-$(CONFIG_QCOM_RAMDUMP) += qcom_ramdump.o
+obj-$(CONFIG_QCOM_MINIDUMP) += minidump.o
+minidump-y   += msm_minidump.o minidump_log.o
+minidump-$(CONFIG_QCOM_MINIDUMP_RM) += minidump_rm.o
+minidump-$(CONFIG_QCOM_MINIDUMP_SMEM) += minidump_smem.o
+minidump-$(CONFIG_QCOM_MINIDUMP_MMIO) += minidump_mmio.o
+minidump-$(CONFIG_QCOM_MINIDUMP_PANIC_DUMP) += minidump_memory.o
