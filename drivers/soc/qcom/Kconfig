@@ -331,6 +331,14 @@ config QCOM_WCNSS_CTRL
 	  Client driver for the WCNSS_CTRL SMD channel, used to download nv
 	  firmware to a newly booted WCNSS chip.
 
+config QCOM_SYSMON_SUBSYSTEM_STATS
+	tristate "Qualcomm Technologies SysMon DSP subsystem stats"
+	depends on QCOM_SMEM
+	help
+	  sysMon subsystem stats driver exposes API to query DSP
+	  subsystem's load, power, DDR and Sleep statistics stored in
+	  SMEM region for each DSP subsystem which is updated periodically
+	  by the respective subsystems.
 config QCOM_APR
 	tristate "Qualcomm APR Bus (Asynchronous Packet Router)"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -355,4 +363,102 @@ config QCOM_EUD
           This module enables support for Qualcomm Technologies, Inc.
           Embedded USB Debugger (EUD).
           If unsure, say N.
+config MSM_BOOT_STATS
+	tristate "Use MSM boot stats reporting"
+	help
+	  Use this to report msm boot stats such as bootloader throughput,
+	  display init, total boot time.
+	  This figures are reported in mpm sleep clock cycles and have a
+	  resolution of 31 bits as 1 bit is used as an overflow check.
+config QCOM_RAMDUMP
+	tristate "Qualcomm Technologies, Inc. Ramdump driver"
+	default n
+	help
+	  This option enables the QTI ramdump driver. The ramdump driver
+	  provides APIs to collect ramdumps which can be extracted from
+	  userspace. Say 'Y' here to enable this driver. It's safe to say
+	  'N' here if you don't plan on collecting ramdumps.
+
+config QCOM_MINIDUMP
+	tristate "QCOM Minidump Support"
+	depends on QCOM_SMEM || GUNYAH_DRIVERS
+	help
+	  This enables minidump feature. It allows various clients to
+	  register to dump their state at system bad state (panic/WDT,etc.,).
+	  Minidump would dump all registered entries, only when DLOAD mode
+	  is enabled.
+
+config QCOM_MINIDUMP_SMEM
+	bool "QCOM Minidump SMEM Support"
+	depends on QCOM_MINIDUMP && QCOM_SMEM
+	default y
+	help
+	  This enables minidump smem transport layer.
+	  If minidump and smem are enabled,
+	  this config option shall be enabled by
+	  default.
+
+config QCOM_MINIDUMP_RM
+	bool "QCOM Minidump RM Support"
+	depends on QCOM_MINIDUMP && GUNYAH_DRIVERS
+	help
+	  This enables minidump rm on gunyah platform transport layer.
+	  If minidump and gunyah are enabled,
+	  say yes to enable minidump feature.
+	  If unsure, say no.
+
+config QCOM_MINIDUMP_MMIO
+	tristate "QTI Minidump MMIO Support"
+	depends on QCOM_MINIDUMP && VIRTIO_MMIO
+	help
+	  This enables MMIO minidump transport layer.
+	  If the target emulates minidump smem as shadow registers, say yes to
+	  enable minidump feature.
+	  If unsure, say no.
+
+config QCOM_VA_MINIDUMP
+	tristate "QCOM VA Minidump Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables minidump feature for registering dynamic
+	  data structures. It supports VA based registration
+	  with minidump, which is made into an ELF. The region
+	  for ELF is registered with legacy minidump.
+
+config QCOM_DYN_MINIDUMP_STACK
+	bool "QTI Dynamic Minidump Stack Registration Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables minidump dynamic current stack registration feature.
+	  It allows current task stack to be available in minidump, for cases
+	  where CPU is unable to register it from IPI_CPU_STOP. The stack data
+	  can be used to unwind stack frames.
+
+config QCOM_MINIDUMP_FTRACE
+	bool "QCOM Minidump Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables ftrace buffer registration in minidump table.
+	  On oops, ftrace content will be copied to that buffer.
+	  This way ftrace buffer content becomes a part of minidump dump
+	  collection.
+
+config QCOM_MINIDUMP_PANIC_DUMP
+	bool "QCOM Minidump Panic dumps Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables collection of debug information like runqueue
+	  statistics etc. on panic in minidump. It dumps current, CFS,
+	  and RT runqueue tasks running on each cpu. This help in
+	  knowing the tasks running, pending, hogging on cpu during
+	  panic.
+
+config MINIDUMP_MAX_ENTRIES
+	int "Minidump Maximum num of entries"
+	default 200
+	depends on QCOM_MINIDUMP
+	help
+	  This defines maximum number of entries to be allocated for application
+	  subsytem in Minidump table.
 endmenu
+
