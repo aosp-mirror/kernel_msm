@@ -73,3 +73,5 @@ gdsc-regulator.ko
 dispcc-monaco.ko
 phy-msm-snps-hs.ko
 dwc3-msm.ko
+qcom-reboot-reason.ko
+qcom-dload-mode.ko
