@@ -305,9 +305,13 @@ static int glink_rpm_probe(struct platform_device *pdev)
 	if (IS_ERR(glink))
 		return PTR_ERR(glink);
 
+	ret = qcom_glink_native_start(glink);
+	if (ret)
+		pr_err("Failed to register glink as chrdev\n");
+
 	platform_set_drvdata(pdev, glink);
 
-	return 0;
+	return ret;
 }
 
 static int glink_rpm_remove(struct platform_device *pdev)
