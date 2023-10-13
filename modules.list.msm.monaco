@@ -1,3 +1,4 @@
+rproc_qcom_common.ko
 qcom_wdt_core.ko
 qcom_soc_wdt.ko
 qcom-mpm.ko
@@ -23,6 +24,7 @@ sched-walt.ko
 sched-walt-debug.ko
 cpu_hotplug.ko
 dcc_v2.ko
+mdt_loader.ko
 minidump.ko
 memory_dump_v2.ko
 mdt_loader.ko
