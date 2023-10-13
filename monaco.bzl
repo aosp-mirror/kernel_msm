@@ -21,6 +21,7 @@ def define_monaco():
         "drivers/cpufreq/qcom-cpufreq-hw-debug.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/dma/qcom/bam_dma.ko",
+        "drivers/dma/qcom/msm_gpi.ko",
         "drivers/firmware/qcom-scm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/i2c/busses/i2c-qcom-geni.ko",
