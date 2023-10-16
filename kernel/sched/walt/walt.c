@@ -282,6 +282,7 @@ void walt_rq_dump(int cpu)
 	walt_task_dump(tsk);
 	SCHED_PRINT(sched_capacity_margin_up[cpu]);
 	SCHED_PRINT(sched_capacity_margin_down[cpu]);
+	put_task_struct(tsk);
 }
 
 void walt_dump(void)
