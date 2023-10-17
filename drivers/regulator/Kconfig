@@ -1433,6 +1433,17 @@ config REGULATOR_RPM_SMD
 	  supplied by some Qualcomm Technologies Inc. PMICs. The RPM SMD regulator driver should
 	  be used on systems which contain an RPM which communicates with the
 	  application processor over SMD.
+
+config REGULATOR_STUB
+	tristate "Stub Regulator"
+	help
+	  This driver adds stub regulator support. It allows for consumers to
+	  request their regulator devices and to use all of the standard
+	  regulator functions. It is useful for bringing up new platforms when
+	  the real hardware based regulator implementation is not yet available.
+	  Consumers can use stub regulator device with proper constraint
+	  checking while the real regulator driver is being developed.
+
 endif
 
 
