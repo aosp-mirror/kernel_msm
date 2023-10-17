@@ -13,6 +13,7 @@ mem_buf_msgq.ko
 mem_buf.ko
 qcom-scm.ko
 pinctrl-msm.ko
+secure_buffer.ko
 smem.ko
 pinctrl-monaco.ko
 sched-walt.ko
@@ -22,6 +23,7 @@ dcc_v2.ko
 minidump.ko
 memory_dump_v2.ko
 mdt_loader.ko
+mem-hooks.ko
 socinfo.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
