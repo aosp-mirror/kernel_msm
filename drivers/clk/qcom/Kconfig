@@ -98,6 +98,15 @@ config QCOM_CLK_RPMH
 	 Say Y if you want to support the clocks exposed by RPMh on
 	 platforms such as SDM845.
 
+config QCOM_GDSC_REGULATOR
+	tristate "GDSC regulator driver"
+	depends on COMMON_CLK_QCOM
+	help
+	 This driver supports globally distributed switch controller (GDSC)
+	 devices in regulator framework.
+	 Say Y if you want to support clients using regulator framework APIs
+	 to control GDSCs.
+
 config APQ_GCC_8084
 	tristate "APQ8084 Global Clock Controller"
 	select QCOM_GDSC
