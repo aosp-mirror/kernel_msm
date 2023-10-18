@@ -41,3 +41,12 @@ config QCOM_LMH
 	  input from temperature and current sensors.  On many newer Qualcomm SoCs
 	  LMh is configured in the firmware and this feature need not be enabled.
 	  However, on certain SoCs like sdm845 LMh has to be configured from kernel.
+
+config QTI_CPUFREQ_CDEV
+	tristate "QTI CPU frequency cooling device"
+	depends on CPU_FREQ && THERMAL && PM_OPP
+	help
+	   This enables the QTI cpufreq cooling device, which
+	   will help register the cpu freq devices with thermal
+	   framework and allow limiting the cpu frequency by
+	   userspace.
