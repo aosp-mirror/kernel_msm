@@ -8,3 +8,4 @@ obj-$(CONFIG_QCOM_SPMI_TEMP_ALARM)	+= qcom-spmi-temp-alarm.o
 obj-$(CONFIG_QCOM_LMH)		+= lmh.o
 obj-$(CONFIG_QTI_CPUFREQ_CDEV) += qti_cpufreq_cdev.o
 obj-$(CONFIG_QTI_DEVFREQ_CDEV) += qti_devfreq_cdev.o
+obj-$(CONFIG_QTI_CPU_HOTPLUG_COOLING_DEVICE) += cpu_hotplug.o
