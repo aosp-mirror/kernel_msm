@@ -136,3 +136,11 @@ config THERMAL_TSENS_LEGACY
 	  to set threshold temperature for both warm and cool and update
 	  thermal userspace client when a threshold is reached. Warm/Cool
 	  temperature thresholds can be set independently for each sensor.
+
+config QTI_BCL_OFF_COOLING_DEVICE
+	tristate "QTI Ibat threshold update cooling devices"
+	depends on SPMI && THERMAL
+	help
+	   This enables the bcl off cooling devices.
+	   These cooling devices will be used to disable bcl
+	   whenever RF calibration is performed.
