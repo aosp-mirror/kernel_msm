@@ -7,6 +7,7 @@ target_name = "monaco"
 def define_monaco():
     _monaco_in_tree_modules = [
         # keep sorted
+        "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/cpufreq/cpufreq_ondemand.ko",
         "drivers/cpufreq/cpufreq_userspace.ko",
