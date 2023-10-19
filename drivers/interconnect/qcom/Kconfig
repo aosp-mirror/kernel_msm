@@ -8,6 +8,9 @@ config INTERCONNECT_QCOM
 config INTERCONNECT_QCOM_BCM_VOTER
 	tristate
 
+config INTERCONNECT_QCOM_QOS_RPM
+	tristate
+
 config INTERCONNECT_QCOM_MSM8916
 	tristate "Qualcomm MSM8916 interconnect driver"
 	depends on INTERCONNECT_QCOM
@@ -145,6 +148,9 @@ config INTERCONNECT_QCOM_SM8350
 	help
 	  This is a driver for the Qualcomm Network-on-Chip on SM8350-based
 	  platforms.
+
+config INTERCONNECT_QCOM_RPM
+	tristate
 
 config INTERCONNECT_QCOM_SMD_RPM
 	tristate

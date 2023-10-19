@@ -1,4 +1,7 @@
 qcom_wdt_core.ko
+qcom_soc_wdt.ko
+qcom-mpm.ko
+rpm-smd.ko
 qcom_cpu_vendor_hooks.ko
 qcom_iommu_util.ko
 iommu-logger.ko
@@ -10,6 +13,7 @@ mem_buf_msgq.ko
 mem_buf.ko
 qcom-scm.ko
 pinctrl-msm.ko
+smem.ko
 pinctrl-monaco.ko
 sched-walt.ko
 sched-walt-debug.ko
