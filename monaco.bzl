@@ -13,6 +13,7 @@ def define_monaco():
         "drivers/clk/qcom/debugcc-monaco.ko",
         "drivers/clk/qcom/dispcc-monaco.ko",
         "drivers/clk/qcom/gcc-monaco.ko",
+        "drivers/clk/qcom/gdsc-regulator.ko",
         "drivers/clk/qcom/gpucc-monaco.ko",
         "drivers/cpufreq/cpufreq_ondemand.ko",
         "drivers/cpufreq/cpufreq_userspace.ko",
