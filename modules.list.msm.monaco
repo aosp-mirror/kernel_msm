@@ -58,3 +58,5 @@ qcom_smd.ko
 qcom_glink.ko
 qcom_ipc_logging.ko
 ns.ko
+qcom-reboot-reason.ko
+qcom-dload-mode.ko

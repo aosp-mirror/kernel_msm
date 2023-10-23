@@ -31,6 +31,8 @@ def define_monaco():
         "drivers/phy/phy-xgene.ko",
         "drivers/pinctrl/qcom/pinctrl-monaco.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
+        "drivers/power/reset/qcom-dload-mode.ko",
+        "drivers/power/reset/qcom-reboot-reason.ko",
         "drivers/remoteproc/qcom_common.ko",
         "drivers/remoteproc/qcom_pil_info.ko",
         "drivers/remoteproc/qcom_q6v5.ko",
