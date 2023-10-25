@@ -92,6 +92,15 @@ config QCOM_PDR_HELPERS
 	tristate
 	select QCOM_QMI_HELPERS
 
+config MSM_BOOT_TIME_MARKER
+	bool "Use MSM boot time marker reporting"
+	depends on MSM_BOOT_STATS
+	help
+	  Use this to mark msm boot kpi for measurement.
+	  An instrumentation for boot time measurement.
+	  To create an entry, call "place_marker" function.
+	  At userspace, write marker name to "/sys/kernel/boot_kpi/kpi_values"
+
 config QCOM_QMI_HELPERS
 	tristate
 	depends on NET
@@ -322,6 +331,14 @@ config QCOM_WATCHDOG_USERSPACE_PET
 	  This feature requires userspace to pet the watchdog every in an
 	  interval that matches the time set in the pet-time config.
 	  The feature is supported through device sysfs files.
+
+config MSM_BOOT_STATS
+	tristate "Use MSM boot stats reporting"
+	help
+	  Use this to report msm boot stats such as bootloader throughput,
+	  display init, total boot time.
+	  This figures are reported in mpm sleep clock cycles and have a
+	  resolution of 31 bits as 1 bit is used as an overflow check.
 
 config QCOM_WCNSS_CTRL
 	tristate "Qualcomm WCNSS control driver"
