@@ -2535,6 +2535,7 @@ static int smblite_lib_update_jeita(struct smb_charger *chg, u32 *thresholds,
 	return 0;
 }
 
+#ifndef GOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING
 static int smblite_lib_charge_inhibit_en(struct smb_charger *chg, bool enable)
 {
 	int rc;
@@ -2544,6 +2545,7 @@ static int smblite_lib_charge_inhibit_en(struct smb_charger *chg, bool enable)
 					enable ? CHGR_INHIBIT_BIT : 0);
 	return rc;
 }
+#endif /* GOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING */
 
 static int smblite_lib_soft_jeita_arb_wa(struct smb_charger *chg)
 {
@@ -2581,10 +2583,19 @@ static int smblite_lib_soft_jeita_arb_wa(struct smb_charger *chg)
 	if (!chg->jeita_arb_flag && soft_jeita) {
 		vote(chg->chg_disable_votable, JEITA_ARB_VOTER, true, 0);
 
+#ifndef GOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING
+		/* b/299892310
+		 * This will prevent a device from charging if it boots within JEITA
+		 * WARM thresholds, while vbatt is above the default charge inhibit
+		 * threshold of 4.2V.  The charge inhibit feature should be explicitly
+		 * enabled via qcom,chg-inhibit-threshold-mv, and the code in this
+		 * file will enable/disable the feature without checking the property.
+		*/
 		rc = smblite_lib_charge_inhibit_en(chg, true);
 		if (rc < 0)
 			smblite_lib_err(chg, "Couldn't enable charge inhibit rc=%d\n",
 					rc);
+#endif /* GOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING */
 
 		rc = smblite_lib_update_jeita(chg, chg->jeita_soft_hys_thlds,
 					JEITA_SOFT);
@@ -2612,10 +2623,17 @@ static int smblite_lib_soft_jeita_arb_wa(struct smb_charger *chg)
 
 		vote(chg->chg_disable_votable, JEITA_ARB_VOTER, true, 0);
 
+#ifndef GOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING
+		/* b/299892310
+		 * The charge inhibit feature should be explicitly
+		 * enabled via qcom,chg-inhibit-threshold-mv, and the code in this
+		 * file will enable/disable the feature without checking the property.
+		*/
 		rc = smblite_lib_charge_inhibit_en(chg, false);
 		if (rc < 0)
 			smblite_lib_err(chg, "Couldn't disable charge inhibit rc=%d\n",
 					rc);
+#endif /* GOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING */
 
 		rc = smblite_lib_update_jeita(chg, chg->jeita_soft_thlds,
 							JEITA_SOFT);

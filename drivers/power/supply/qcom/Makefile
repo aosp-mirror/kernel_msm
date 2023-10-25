@@ -19,6 +19,7 @@ EXTRA_SYMBOLS += $(OUT_DIR)/../google-modules/bms/misc/Module.symvers
 
 KBUILD_OPTIONS += CONFIG_QPNP_SMBLITE=m
 KBUILD_OPTIONS += CONFIG_QTI_QBG=m
+EXTRA_CFLAGS += -DGOOGLE_DISABLE_SOFT_JEITA_INHIBIT_CHARGING
 
 modules modules_install clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M) \
