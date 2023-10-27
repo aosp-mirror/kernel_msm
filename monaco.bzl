@@ -75,6 +75,7 @@ def define_monaco():
         "drivers/soc/qcom/mem-hooks.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
+        "drivers/soc/qcom/panel_event_notifier.ko",
         "drivers/soc/qcom/pdr_interface.ko",
         "drivers/soc/qcom/qcom_aoss.ko",
         "drivers/soc/qcom/qcom_soc_wdt.ko",
