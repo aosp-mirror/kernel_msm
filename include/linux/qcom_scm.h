@@ -289,6 +289,20 @@ extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 extern int qcom_scm_ddrbw_profiler(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size);
 
+extern int qcom_scm_get_tz_log_feat_id(u64 *version);
+extern int qcom_scm_query_encrypted_log_feature(u64 *enabled);
+extern int qcom_scm_request_encrypted_log(phys_addr_t buf, size_t len,
+		uint32_t log_id, bool is_full_encrypted_tz_logs_supported,
+		bool is_full_encrypted_tz_logs_enabled);
+extern int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
+		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data);
+extern int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
+		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data);
+extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
+		size_t out_buf_size, int32_t *result, u64 *response_type,
+		unsigned int *data);
 extern int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
 			      u64 limit_node, u32 node_id, u64 version);
 extern int qcom_scm_lmh_profile_change(u32 profile_id);
