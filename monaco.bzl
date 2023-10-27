@@ -74,6 +74,7 @@ def define_monaco():
         "drivers/usb/misc/ehset.ko",
         "drivers/usb/phy/phy-generic.ko",
         "kernel/msm_sysstats.ko",
+        "kernel/trace/qcom_ipc_logging.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-smd.ko",
         "net/wireless/cfg80211.ko",
