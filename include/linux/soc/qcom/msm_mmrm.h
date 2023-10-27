@@ -185,6 +185,7 @@ bool mmrm_client_check_scaling_supported(enum mmrm_client_type client_type,
 	u32 client_domain);
 
 /**
+ * mmrm_client_register - register an mmrm client
  * This call not configure any rate, use set rate to configure desired rate.
  * @desc: Client description
  *
