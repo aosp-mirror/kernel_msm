@@ -92,6 +92,7 @@ per-file power/reset/qcom*=set noparent
 per-file power/reset/qcom*=file:/OWNERS_pixelwatchbsp
 per-file power/supply/qcom/*.*=set noparent
 per-file power/supply/qcom/*.*=file:/OWNERS_pixelwatchbsp
+per-file power/supply/qcom/Makefile=file:/OWNERS_pixelwatchbsp  # not in ACK
 per-file power/supply/qti_battery_charger.c=set noparent
 per-file power/supply/qti_battery_charger.c=file:/OWNERS_pixelwatchbsp
 per-file pwm/pwm-qti-lpg.c=set noparent
