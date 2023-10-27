@@ -51,3 +51,4 @@ minidump-$(CONFIG_QCOM_MINIDUMP_RM) += minidump_rm.o
 minidump-$(CONFIG_QCOM_MINIDUMP_SMEM) += minidump_smem.o
 minidump-$(CONFIG_QCOM_MINIDUMP_MMIO) += minidump_mmio.o
 minidump-$(CONFIG_QCOM_MINIDUMP_PANIC_DUMP) += minidump_memory.o
+obj-$(CONFIG_QPNP_PBS) += qpnp-pbs.o
