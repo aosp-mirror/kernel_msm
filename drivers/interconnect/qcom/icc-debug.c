@@ -142,7 +142,7 @@ int qcom_icc_debug_unregister(struct icc_provider *provider)
 
 	return 0;
 }
-EXPORT_SYMBOLGPL(qcom_icc_debug_unregister);
+EXPORT_SYMBOL_GPL(qcom_icc_debug_unregister);
 
 static int __init qcom_icc_debug_init(void)
 {
