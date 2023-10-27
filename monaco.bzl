@@ -8,6 +8,7 @@ def define_monaco():
     _monaco_in_tree_modules = [
         # keep sorted
         "drivers/base/regmap/qti-regmap-debugfs.ko",
+        "drivers/char/frpc-adsprpc.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/clk/qcom/clk-smd-rpm.ko",
