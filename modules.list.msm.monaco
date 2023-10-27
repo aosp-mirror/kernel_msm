@@ -71,3 +71,4 @@ clk-dummy.ko
 clk-qcom.ko
 gdsc-regulator.ko
 dispcc-monaco.ko
+phy-msm-snps-hs.ko
