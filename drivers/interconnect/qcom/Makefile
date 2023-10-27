@@ -41,3 +41,4 @@ obj-$(CONFIG_INTERCONNECT_QCOM_SM8350) += qnoc-sm8350.o
 obj-$(CONFIG_INTERCONNECT_QCOM_RPM) += icc-rpm.o
 obj-$(CONFIG_INTERCONNECT_QCOM_SMD_RPM) += icc-smd-rpm.o
 obj-$(CONFIG_INTERCONNECT_QCOM_QOS_RPM) += qnoc-qos-rpm.o
+obj-$(CONFIG_INTERCONNECT_QCOM_DEBUG) += icc-debug.o
