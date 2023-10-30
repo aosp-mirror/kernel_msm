@@ -130,6 +130,25 @@ config IPC_LOG_MINIDUMP_BUFFERS
           This option is used to configure maximum number of ipc log
           buffers that can be dumped by minidump.
 
+config QCOM_RTB
+        tristate "Register tracing"
+        depends on TRACE_MMIO_ACCESS
+        help
+          The RTB is used to log discrete events in the system in an uncached
+          buffer that can be post processed from RAM dumps. This is designed
+          to aid in debugging reset cases where the caches may not be flushed
+          before the target resets.
+
+config QCOM_RTB_SEPARATE_CPUS
+        bool "Separate entries for each cpu"
+        depends on QCOM_RTB
+        depends on SMP
+        help
+          Under some circumstances, it may be beneficial to give dedicated space
+          for each cpu to log accesses. Selecting this option will log each cpu
+          separately. This will guarantee that the last acesses for each cpu
+          will be logged but there will be fewer entries per cpu.
+
 # All tracer options should select GENERIC_TRACER. For those options that are
 # enabled by all tracers (context switch and event tracer) they select TRACING.
 # This allows those options to appear when no other tracer is selected. But the
