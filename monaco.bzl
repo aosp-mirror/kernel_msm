@@ -58,7 +58,6 @@ def define_monaco():
 	    "drivers/regulator/stub-regulator.ko",
         "drivers/power/reset/qcom-dload-mode.ko",
         "drivers/power/reset/qcom-reboot-reason.ko",
-        "drivers/remoteproc/qcom_common.ko",
         "drivers/remoteproc/qcom_pil_info.ko",
         "drivers/remoteproc/qcom_q6v5.ko",
         "drivers/remoteproc/qcom_q6v5_pas.ko",
