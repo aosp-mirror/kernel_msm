@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021,2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -10,6 +11,9 @@
 #include <linux/workqueue.h>
 
 #include "pdr_internal.h"
+#include "../../remoteproc/qcom_common.h"
+
+#define PDR_IND_NOTIF_TIMEOUT CONFIG_PDR_INDICATION_NOTIF_TIMEOUT
 
 struct pdr_service {
 	char service_name[SERVREG_NAME_LENGTH + 1];
@@ -26,6 +30,7 @@ struct pdr_service {
 	bool need_notifier_register;
 	bool need_notifier_remove;
 	bool need_locator_lookup;
+	bool need_service_lookup;
 	bool service_connected;
 
 	struct list_head node;
@@ -67,7 +72,11 @@ struct pdr_list_node {
 	u16 transaction_id;
 	struct pdr_service *pds;
 	struct list_head node;
+	struct timer_list timer;
 };
+
+static const char * const ind_notif_timeout_msg =
+	"PDR: Indication notifier %s, state: 0x%x, trans-id: %d\n taking too long";
 
 static int pdr_locator_new_server(struct qmi_handle *qmi,
 				  struct qmi_service *svc)
@@ -270,23 +279,45 @@ static int pdr_send_indack_msg(struct pdr_handle *pdr, struct pdr_service *pds,
 	return ret;
 }
 
+static void ind_notif_timeout_handler(struct timer_list *t)
+{
+	struct pdr_list_node *ind = from_timer(ind, t, timer);
+	struct pdr_service *pds = ind->pds;
+
+	if (IS_ENABLED(CONFIG_QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT) &&
+	    system_state != SYSTEM_RESTART &&
+	    system_state != SYSTEM_POWER_OFF &&
+	    system_state != SYSTEM_HALT &&
+	    !qcom_device_shutdown_in_progress)
+		panic(ind_notif_timeout_msg, pds->service_path, pds->state, ind->transaction_id);
+	else
+		WARN(1, ind_notif_timeout_msg, pds->service_path, pds->state, ind->transaction_id);
+}
+
 static void pdr_indack_work(struct work_struct *work)
 {
 	struct pdr_handle *pdr = container_of(work, struct pdr_handle,
 					      indack_work);
 	struct pdr_list_node *ind, *tmp;
 	struct pdr_service *pds;
+	unsigned long timeout;
 
 	list_for_each_entry_safe(ind, tmp, &pdr->indack_list, node) {
 		pds = ind->pds;
 
 		mutex_lock(&pdr->status_lock);
 		pds->state = ind->curr_state;
+		timeout = jiffies + msecs_to_jiffies(PDR_IND_NOTIF_TIMEOUT);
+		mod_timer(&ind->timer, timeout);
 		pdr->status(pds->state, pds->service_path, pdr->priv);
+		del_timer_sync(&ind->timer);
 		mutex_unlock(&pdr->status_lock);
 
 		/* Ack the indication after clients release the PD resources */
 		pdr_send_indack_msg(pdr, pds, ind->transaction_id);
+
+		pr_info("PDR: Indication ack sent to %s, state: 0x%x, trans-id: %d\n",
+			pds->service_path, pds->state, ind->transaction_id);
 
 		mutex_lock(&pdr->list_lock);
 		list_del(&ind->node);
@@ -336,6 +367,7 @@ static void pdr_indication_cb(struct qmi_handle *qmi,
 	ind->curr_state = ind_msg->curr_state;
 	ind->pds = pds;
 
+	timer_setup(&ind->timer, ind_notif_timeout_handler, 0);
 	mutex_lock(&pdr->list_lock);
 	list_add_tail(&ind->node, &pdr->indack_list);
 	mutex_unlock(&pdr->list_lock);
@@ -426,6 +458,16 @@ static int pdr_locate_service(struct pdr_handle *pdr, struct pdr_service *pds)
 				pds->service_data_valid = entry->service_data_valid;
 				pds->service_data = entry->service_data;
 				pds->instance = entry->instance;
+				/*
+				 * Since, pdr client can also be interested in knowing
+				 * the status of service instead of PD status itself,
+				 * let's honour that and convert the relative service
+				 * path to its absolute service path by concatenating
+				 * it with service name.
+				 */
+				if (pds->need_service_lookup)
+					scnprintf(pds->service_path, sizeof(pds->service_path),
+					  "%s/%s", pds->service_path, pds->service_name);
 				goto out;
 			}
 		}
@@ -448,8 +490,8 @@ static void pdr_notify_lookup_failure(struct pdr_handle *pdr,
 				      struct pdr_service *pds,
 				      int err)
 {
-	pr_err("PDR: service lookup for %s failed: %d\n",
-	       pds->service_name, err);
+	pr_err("PDR: service lookup for %s:%s failed: %d\n",
+		pds->service_path, pds->service_name, err);
 
 	if (err == -ENXIO)
 		return;
@@ -501,18 +543,7 @@ static void pdr_locator_work(struct work_struct *work)
 	mutex_unlock(&pdr->list_lock);
 }
 
-/**
- * pdr_add_lookup() - register a tracking request for a PD
- * @pdr:		PDR client handle
- * @service_name:	service name of the tracking request
- * @service_path:	service path of the tracking request
- *
- * Registering a pdr lookup allows for tracking the life cycle of the PD.
- *
- * Return: pdr_service object on success, ERR_PTR on failure. -EALREADY is
- * returned if a lookup is already in progress for the given service path.
- */
-struct pdr_service *pdr_add_lookup(struct pdr_handle *pdr,
+static struct pdr_service *pdr_lookup_common(struct pdr_handle *pdr,
 				   const char *service_name,
 				   const char *service_path)
 {
@@ -534,6 +565,7 @@ struct pdr_service *pdr_add_lookup(struct pdr_handle *pdr,
 	strcpy(pds->service_name, service_name);
 	strcpy(pds->service_path, service_path);
 	pds->need_locator_lookup = true;
+	pds->need_service_lookup = false;
 
 	mutex_lock(&pdr->list_lock);
 	list_for_each_entry(tmp, &pdr->lookups, node) {
@@ -548,14 +580,65 @@ struct pdr_service *pdr_add_lookup(struct pdr_handle *pdr,
 	list_add(&pds->node, &pdr->lookups);
 	mutex_unlock(&pdr->list_lock);
 
-	schedule_work(&pdr->locator_work);
-
 	return pds;
 err:
 	kfree(pds);
 	return ERR_PTR(ret);
 }
+
+/**
+ * pdr_add_lookup() - register a tracking request for a PD
+ * @pdr:		PDR client handle
+ * @service_name:	service name of the tracking request
+ * @service_path:	service path of the tracking request
+ *
+ * Registering a pdr lookup allows for tracking the life cycle of the PD.
+ *
+ * Return: pdr_service object on success, ERR_PTR on failure. -EALREADY is
+ * returned if a lookup is already in progress for the given service path.
+ */
+struct pdr_service *pdr_add_lookup(struct pdr_handle *pdr,
+				   const char *service_name,
+				   const char *service_path)
+{
+	struct pdr_service *pds;
+
+	pds = pdr_lookup_common(pdr, service_name, service_path);
+	if (!IS_ERR_OR_NULL(pds))
+		schedule_work(&pdr->locator_work);
+
+	return pds;
+}
 EXPORT_SYMBOL(pdr_add_lookup);
+
+/**
+ * pdr_add_service_lookup() - register a tracking request for a service running
+ *                            under pd.
+ * @pdr:		PDR client handle
+ * @service_name:	service name of the tracking request
+ * @service_path:	service path of the tracking request
+ *
+ * Registering a pdr lookup for service allows for tracking the life cycle
+ * service running under PD.
+ *
+ * Return: pdr_service object on success, ERR_PTR on failure. -EALREADY is
+ * returned if a lookup is already in progress for the given service path.
+ */
+struct pdr_service *pdr_add_service_lookup(struct pdr_handle *pdr,
+				   const char *service_name,
+				   const char *service_path)
+{
+	struct pdr_service *pds;
+
+	pds = pdr_lookup_common(pdr, service_name, service_path);
+	if (!IS_ERR_OR_NULL(pds)) {
+		pds->need_service_lookup = true;
+		schedule_work(&pdr->locator_work);
+	}
+
+	return pds;
+}
+EXPORT_SYMBOL_GPL(pdr_add_service_lookup);
 
 /**
  * pdr_restart_pd() - restart PD
@@ -576,6 +659,13 @@ int pdr_restart_pd(struct pdr_handle *pdr, struct pdr_service *pds)
 	int ret;
 
 	if (IS_ERR_OR_NULL(pdr) || IS_ERR_OR_NULL(pds))
+		return -EINVAL;
+
+	/*
+	 * Client does not do service restart instead it does
+	 * PD restart request.
+	 */
+	if (pds->need_service_lookup)
 		return -EINVAL;
 
 	mutex_lock(&pdr->list_lock);
