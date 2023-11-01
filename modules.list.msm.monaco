@@ -2,6 +2,9 @@ qcom_wdt_core.ko
 qcom_soc_wdt.ko
 qcom-mpm.ko
 rpm-smd.ko
+icc-rpm.ko
+qnoc-qos-rpm.ko
+qnoc-monaco.ko
 qcom_cpu_vendor_hooks.ko
 qcom_iommu_util.ko
 iommu-logger.ko
