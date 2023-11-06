@@ -1312,7 +1312,7 @@ static int haptics_set_vmax_mv(struct haptics_chip *chip, u32 vmax_mv)
 		return rc;
 	}
 
-	dev_dbg(chip->dev, "Set Vmax to %u mV\n", vmax_mv);
+	dev_info(chip->dev, "Set Vmax to %u mV\n", vmax_mv);
 
 	rc = haptics_check_hpwr_status(chip);
 	if (rc < 0)
