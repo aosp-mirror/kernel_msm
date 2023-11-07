@@ -1510,6 +1510,7 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 	int cnt = 0, rc = 0, prev_vbus;
 	bool boost_en;
 
+	smblite_shim_notify_hvdcp_req(chg->shim);
 	if (!chg->hvdcp3_negotiation_en)
 		return 0;
 
