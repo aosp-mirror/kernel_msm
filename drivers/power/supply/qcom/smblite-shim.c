@@ -4,6 +4,7 @@
 #define pr_fmt(fmt) "smblite-shim:%s: " fmt, __func__
 
 #include <linux/jiffies.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/pmic-voter.h>
 #include <linux/power_supply.h>
@@ -283,6 +284,7 @@ struct smblite_shim *smblite_shim_init(struct smb_charger *chg)
 	if (!shim)
 		return NULL;
 
+	mutex_init(&shim->lock);
 	shim->chg = chg;
 
 	shim->sdp_icl_req_ignored =
@@ -298,6 +300,7 @@ struct smblite_shim *smblite_shim_init(struct smb_charger *chg)
 					vote_cb_notify_psy_changed,
 					shim);
 
+	BLOCKING_INIT_NOTIFIER_HEAD(&shim->hvdcp_req_nh);
 
 	return shim;
 }
@@ -356,3 +359,22 @@ int smblite_shim_update_sw_icl_max(struct smblite_shim *shim, int type)
 
 	return -ENOSYS;
 }
+
+void smblite_shim_notify_hvdcp_req(struct smblite_shim *shim)
+{
+	blocking_notifier_call_chain(&shim->hvdcp_req_nh, 0, shim);
+}
+
+int smblite_shim_hvdcp_req_register_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&shim->hvdcp_req_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_hvdcp_req_register_notifier);
+
+int smblite_shim_hvdcp_req_unregister_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&shim->hvdcp_req_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_hvdcp_req_unregister_notifier);
