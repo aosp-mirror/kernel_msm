@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2011-2017, The Linux Foundation
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -304,6 +305,23 @@ int slim_unregister_controller(struct slim_controller *ctrl)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(slim_unregister_controller);
+
+/*
+ * slim_vote_for_suspend : initiate immediate suspend.
+ * @sb: client handle requesting the address.
+ *
+ * return zero in case of suspended success.
+ */
+int slim_vote_for_suspend(struct slim_device *sbdev)
+{
+	struct slim_controller *ctrl = sbdev->ctrl;
+
+	if (!ctrl)
+		return -EINVAL;
+
+	return ctrl->suspend_slimbus(ctrl);
+}
+EXPORT_SYMBOL_GPL(slim_vote_for_suspend);
 
 /**
  * slim_report_absent() - Controller calls this function when a device
