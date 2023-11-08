@@ -24,6 +24,16 @@ config MMC_ARMMMCI
 
 	  If unsure, say N.
 
+config MMC_CRYPTO_QTI
+	tristate "Vendor specific CQHCI Crypto Engine Support"
+	depends on MMC_CRYPTO
+	help
+	  Enable Vendor Crypto Engine Support in CQHCI
+	  Enabling this allows kernel to use CQHCI crypto
+	  operations defined and implemented by QTI.
+
+	  If unsure, say N.
+
 config MMC_QCOM_DML
 	bool "Qualcomm Data Mover for SD Card Controller"
 	depends on MMC_ARMMMCI && QCOM_BAM_DMA
