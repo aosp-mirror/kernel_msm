@@ -456,6 +456,18 @@ config QCOM_APR
 	  used by audio driver to configure QDSP6
 	  ASM, ADM and AFE modules.
 
+config QTI_PMIC_LPM
+	tristate "QTI PMIC LPM support"
+	depends on MFD_SPMI_PMIC
+	help
+	 Say Y here to enable the Qualcomm Technologies, Inc. low power mode
+	 driver which reports the entry and exit of PMIC's low power modes
+	 DeepSleep/Hibernate/TWM to a companion chip through the SDAM
+	 interface.
+
+	 To compile this driver as a module, choose M here: the
+	 module will be called qti-pmic-lpm.
+
 config QCOM_PANEL_EVENT_NOTIFIER
 	tristate "panel event notifier"
 	depends on DRM
