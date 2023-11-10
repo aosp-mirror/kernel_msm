@@ -2,7 +2,7 @@
 /*
  * QTI hardware key manager driver.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/types.h>
@@ -189,7 +189,7 @@ static int qti_hwkm_check_bist_status(const struct ice_mmio_data *mmio_data)
 
 bool qti_hwkm_init_required(const struct ice_mmio_data *mmio_data)
 {
-        u32 val = 0;
+	u32 val = 0;
 
 	val = ice_readl(mmio_data->ice_base_mmio, ICE_REGS_CONTROL);
 	val = val & 0x1;

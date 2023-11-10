@@ -85,7 +85,7 @@ bool qti_hwkm_init_required(const struct ice_mmio_data *mmio_data)
 
 	val = qti_hwkm_readl(mmio_data,
 			QTI_HWKM_ICE_RG_TZ_KM_CTL, ICEMEM_SLAVE);
-		val = (val >> ICE_LEGACY_MODE_EN_OTP) & 0x1;
+	val = (val >> ICE_LEGACY_MODE_EN_OTP) & 0x1;
 	return (val == 1);
 }
 EXPORT_SYMBOL(qti_hwkm_init_required);

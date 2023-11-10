@@ -246,7 +246,7 @@ static bool dcc_ready(struct dcc_drvdata *drvdata)
 	uint32_t val;
 
 	/* poll until DCC ready */
-	if (!readl_poll_timeout((drvdata->base + DCC_STATUS), val,
+	if (!readl_poll_timeout((drvdata->base + dcc_offset_conv(drvdata, DCC_STATUS)), val,
 				(BMVAL(val, 0, 1) == 0), 1, TIMEOUT_US))
 		return true;
 
@@ -2053,7 +2053,7 @@ static int dcc_probe(struct platform_device *pdev)
 			return -EINVAL;
 	}
 
-	if (BVAL(dcc_readl(drvdata, DCC_HW_INFO), 9)) {
+	if (dcc_readl(drvdata, DCC_HW_INFO) & 0x300) {
 		drvdata->mem_map_ver = DCC_MEM_MAP_VER3;
 		drvdata->nr_link_list = dcc_readl(drvdata, DCC_LL_NUM_INFO);
 		if (drvdata->nr_link_list == 0)

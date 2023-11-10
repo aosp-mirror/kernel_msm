@@ -35,10 +35,10 @@
 #include <linux/platform_device.h>
 #include <linux/qcom_scm.h>
 #include <linux/amba/bus.h>
+#include <linux/qcom-iommu-util.h>
 
-/* Convert between AArch64 (CPU) TCR format and SMMU CD format */
-#define ARM_SMMU_TCR2CD(tcr, fld)	FIELD_PREP(CTXDESC_CD_0_TCR_##fld, \
-					FIELD_GET(ARM64_TCR_##fld, tcr))
+#define MSI_IOVA_BASE                     0x8000000
+#define MSI_IOVA_LENGTH                   0x100000
 
 /*
  * Stream table.
@@ -280,28 +280,12 @@ out_free_asid:
 	return ret;
 }
 
-static u64 arm_smmu_cpu_tcr_to_cd(u64 tcr)
-{
-	u64 val = 0;
-
-	val |= ARM_SMMU_TCR2CD(tcr, T0SZ);
-	val |= ARM_SMMU_TCR2CD(tcr, TG0);
-	val |= ARM_SMMU_TCR2CD(tcr, IRGN0);
-	val |= ARM_SMMU_TCR2CD(tcr, ORGN0);
-	val |= ARM_SMMU_TCR2CD(tcr, SH0);
-	val |= ARM_SMMU_TCR2CD(tcr, EPD0);
-	val |= ARM_SMMU_TCR2CD(tcr, EPD1);
-	val |= ARM_SMMU_TCR2CD(tcr, IPS);
-
-	return val;
-}
-
 static void virt_arm_smmu_write_ctx_desc(struct virt_arm_smmu_device *smmu,
 				    struct arm_smmu_s1_cfg *cfg)
 {
 	u64 val;
 
-	val = arm_smmu_cpu_tcr_to_cd(cfg->cd.tcr) |
+	val = cfg->cd.tcr |
 #ifdef __BIG_ENDIAN
 	      CTXDESC_CD_0_ENDI |
 #endif
@@ -380,11 +364,24 @@ static struct virt_arm_smmu_device *virt_arm_smmu_get_by_fwnode(struct fwnode_ha
 static void virt_arm_smmu_put_resv_regions(struct device *dev,
 				      struct list_head *head)
 {
-
+	generic_iommu_put_resv_regions(dev, head);
 }
 static void virt_arm_smmu_get_resv_regions(struct device *dev,
 				      struct list_head *head)
 {
+	struct iommu_resv_region *region;
+	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
+
+	region = iommu_alloc_resv_region(MSI_IOVA_BASE, MSI_IOVA_LENGTH,
+						prot, IOMMU_RESV_SW_MSI);
+	if (!region)
+		return;
+
+	list_add_tail(&region->list, head);
+
+	iommu_dma_get_resv_regions(dev, head);
+
+	qcom_iommu_generate_resv_regions(dev, head);
 
 }
 
@@ -505,18 +502,39 @@ static phys_addr_t virt_arm_smmu_iova_to_phys(struct iommu_domain *domain, dma_a
 	return ops->iova_to_phys(ops, iova);
 }
 
+static unsigned long get_sid_from_smmu_domain(struct virt_arm_smmu_domain *smmu_domain)
+{
+	struct virt_arm_smmu_master *master;
+	unsigned long flags;
+	u64 sid;
+	u16 i;
+
+	spin_lock_irqsave(&smmu_domain->devices_lock, flags);
+	list_for_each_entry(master, &smmu_domain->devices, domain_head) {
+		for (i = 0; i < master->num_sids; i++) {
+			if (master->domain == smmu_domain)
+				sid = master->ste_cfg->sid;
+		}
+	}
+	spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
+
+	return sid;
+}
+
 static void virt_arm_smmu_tlb_inv_sync(unsigned long iova, size_t size,
 				   size_t granule, bool leaf,
 				   struct virt_arm_smmu_domain *smmu_domain)
 {
 	u32 asid;
+	u64 sid;
 
 	if (!size)
 		return;
 	asid = smmu_domain->s1_cfg.cd.asid;
+	sid = get_sid_from_smmu_domain(smmu_domain);
 
-	if (qcom_scm_paravirt_tlb_inv(asid))
-		pr_err("SCM called failed for TLB inv: asid:0x%x\n", asid);
+	if (qcom_scm_paravirt_tlb_inv(asid,sid))
+		pr_err("SCM called failed for TLB inv: asid:0x%x and sid is 0x%x\n", asid, sid);
 }
 
 
@@ -524,9 +542,11 @@ static void virt_arm_smmu_tlb_inv_context(void *cookie)
 {
 	struct virt_arm_smmu_domain *smmu_domain = cookie;
 	u32 asid = smmu_domain->s1_cfg.cd.asid;
+	u64 sid;
 
-	if (qcom_scm_paravirt_tlb_inv(asid))
-		pr_err("SCM called failed for TLB inv: asid:0x%x\n", asid);
+	sid = get_sid_from_smmu_domain(smmu_domain);
+	if (qcom_scm_paravirt_tlb_inv(asid,sid))
+		pr_err("SCM called failed for TLB inv: asid:0x%x and sid is 0x%x\n", asid, sid);
 }
 
 static void virt_arm_smmu_iotlb_sync(struct iommu_domain *domain,
@@ -581,6 +601,8 @@ static int virt_arm_smmu_write_strtab_ent(struct virt_arm_smmu_master *master,
 		smmu_domain = master->domain;
 		smmu = master->smmu;
 	}
+	if (!smmu_domain)
+		return -EINVAL;
 
 	s1_cfg = &smmu_domain->s1_cfg;
 	val = STRTAB_STE_0_V;
@@ -774,6 +796,12 @@ static bool virt_arm_smmu_capable(enum iommu_cap cap)
 		return false;
 	}
 }
+
+static int virt_arm_smmu_def_domain_type(struct device *dev)
+{
+	return IOMMU_DOMAIN_DMA;
+}
+
 #define MAX_MAP_SG_BATCH_SIZE (SZ_4M)
 
 static struct iommu_ops  virt_arm_smmu_ops = {
@@ -794,6 +822,8 @@ static struct iommu_ops  virt_arm_smmu_ops = {
 		.flush_iotlb_all        = virt_arm_smmu_flush_iotlb_all,
 		.iotlb_sync             = virt_arm_smmu_iotlb_sync,
 		.iova_to_phys           = virt_arm_smmu_iova_to_phys,
+		.def_domain_type        = virt_arm_smmu_def_domain_type,
+		.owner                  = THIS_MODULE,
 };
 
 static int virt_arm_smmu_set_bus_ops(struct iommu_ops *ops)
@@ -838,8 +868,6 @@ static int virt_arm_smmu_device_probe(struct platform_device *pdev)
 				     "virt-smmuv3");
 	if (ret)
 		return ret;
-
-	iommu_set_default_translated(false);
 
 	ret = iommu_device_register(&smmu->iommu, &virt_arm_smmu_ops, dev);
 	if (ret) {

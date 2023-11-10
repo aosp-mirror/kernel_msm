@@ -337,7 +337,7 @@ static int compat_fastrpc_ioctl_invoke(struct file *filp,
 		unsigned int cmd, unsigned long arg)
 {
 	struct compat_fastrpc_ioctl_invoke_async __user *inv32;
-	struct fastrpc_ioctl_invoke_async *inv;
+	struct fastrpc_ioctl_invoke_async *inv = NULL;
 	compat_uint_t sc = 0;
 	int err = 0, len = 0;
 	struct fastrpc_file *fl = (struct fastrpc_file *)filp->private_data;

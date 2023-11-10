@@ -37,8 +37,8 @@
 #define RESULT_SUCCESS		0
 #define RESULT_FAILURE		-1
 
-/* Slate Ramdump Size 4 MB */
-#define SLATE_RAMDUMP_SZ SZ_8M
+/* Slate Ramdump Size 8MB + 3MB (ITCM) */
+#define SLATE_RAMDUMP_SZ 0XB00000
 #define SLATE_MINIDUMP_SZ (0x400*40)
 #define SLATE_RAMDUMP		3
 #define SLATE_MINIDUMP		4
@@ -645,9 +645,7 @@ static void slate_coredump(struct rproc *rproc)
 	int ret = 0;
 
 	pr_err("Setup for Coredump.\n");
-	rproc_coredump_cleanup(rproc);
 
-	slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_DUMPINFO;
 	if (!slate_data->qseecom_handle) {
 		ret = load_slate_tzapp(slate_data);
 		if (ret) {
@@ -658,6 +656,57 @@ static void slate_coredump(struct rproc *rproc)
 		}
 	}
 
+	/*
+	 * This check is added here to make slate dump collection
+	 * decision in RTOS/TWM mode exit. Only way for kernel to know slate state
+	 * info(crashed/running)in RTOS/TWM exit is by reading S2A irq line.
+	 * When S2A is pulled LOW, it is interpreted as slate crashed state and
+	 * slate dump needs to be collected. Once dumps are collected TZ will
+	 * automatically send SLATE_RESET CMD.
+	 * When S2A is pulled HIGH, it is interpreted as slate running state and
+	 * dump should not be collected. At this point it is necessary
+	 * to send SLATE_RESET CMD to bring slate out of RTOS slate.
+	 * This check does not disturb SSR/system dump collection.
+	 */
+
+	if (is_twm_exit()) {
+		enable_irq(slate_data->status_irq);
+		slate_data->is_ready = true;
+		if (!gpio_get_value(slate_data->gpios[0])) {
+			pr_err("TWM Exit: Collect Dump, slate is CRASHED..!!\n");
+			/* We are assuming that Slate TZapp has started
+			 * subsystem_ramdump service.
+			 * Introducing delay here for subsystem_ramdump
+			 * service to start.
+			 */
+			msleep(5000);
+		} else {
+			pr_err("TWM Exit: Skip dump collection, slate is RUNNING ..!!\n");
+			/* Send RESET CMD to bring slate out of RTOS state */
+			slate_data->cmd_status = 0;
+			slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_RESET;
+			ret = slate_tzapp_comm(slate_data, &slate_tz_req);
+			if (ret || slate_data->cmd_status) {
+				dev_err(slate_data->dev,
+					"%s: Failed to send reset signal to tzapp\n",
+					__func__);
+				goto rtos_out;
+			}
+			/* By this time if S2A is not pulled then wait for it to go LOW */
+			if (gpio_get_value(slate_data->gpios[0])) {
+				ret = wait_for_err_ready(slate_data);
+				if (ret) {
+					dev_err(slate_data->dev,
+						"[%s:%d]: Timed out waiting for error ready: %s!\n",
+						current->comm, current->pid, slate_data->firmware_name);
+				}
+			}
+			goto rtos_out;
+		}
+	}
+	rproc_coredump_cleanup(rproc);
+
+	slate_tz_req.tzapp_slate_cmd = SLATE_RPROC_DUMPINFO;
 	ret = slate_tzapp_comm(slate_data, &slate_tz_req);
 	dump_info = slate_data->cmd_status;
 
@@ -725,6 +774,11 @@ shm_free:
 dma_free:
 	dma_free_attrs(slate_data->dev, size, region,
 			start_addr, attr);
+	return;
+rtos_out:
+	disable_irq(slate_data->status_irq);
+	slate_data->is_ready = false;
+	return;
 }
 
 /**
@@ -743,7 +797,6 @@ static int slate_prepare(struct rproc *rproc)
 			__func__);
 		return -EINVAL;
 	}
-	init_completion(&slate_data->err_ready);
 	if (slate_data->app_status != RESULT_SUCCESS) {
 		ret = load_slate_tzapp(slate_data);
 		if (ret) {
@@ -1166,6 +1219,7 @@ static int rproc_slate_driver_probe(struct platform_device *pdev)
 	if (ret)
 		goto destroy_wq;
 
+	init_completion(&slate->err_ready);
 	pr_debug("Slate probe is completed\n");
 	return 0;
 
