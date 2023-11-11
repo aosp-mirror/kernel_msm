@@ -550,5 +550,6 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable);
 bool is_concurrent_mode_supported(struct smb_charger *chg);
 void smblite_lib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 int smblite_lib_rerun_apsd_if_required(struct smb_charger *chg);
-
+int smblite_lib_dp_pulse(struct smb_charger *chg);
+int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val);
 #endif /* __SMBLITE_LIB_H */
