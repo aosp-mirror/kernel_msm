@@ -3267,6 +3267,8 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 
 	vote(chg->temp_change_irq_disable_votable, DEFAULT_VOTER,
 						!vbus_rising, 0);
+	smblite_shim_notify_plugin(chg->shim,
+		vbus_rising ? SMBLITE_SHIM_PLUGGED_IN : SMBLITE_SHIM_UNPLUGGED);
 	power_supply_changed(chg->usb_psy);
 	pr_info("%s: %s: IRQ: usbin-plugin %s\n",
 		chg->name, __func__, vbus_rising ? "attached" : "detached");
