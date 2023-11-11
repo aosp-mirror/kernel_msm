@@ -554,4 +554,5 @@ int smblite_lib_rerun_apsd_if_required(struct smb_charger *chg);
 int smblite_lib_dm_pulse(struct smb_charger *chg);
 int smblite_lib_dp_pulse(struct smb_charger *chg);
 int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val);
+bool smblite_lib_is_boost_en(struct smb_charger *chg);
 #endif /* __SMBLITE_LIB_H */
