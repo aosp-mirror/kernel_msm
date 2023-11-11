@@ -382,6 +382,11 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 	if (chg->hvdcp_num_pulse_max > PM5100_MAX_HVDCP3_PULSES)
 		chg->hvdcp_num_pulse_max = PM5100_MAX_HVDCP3_PULSES;
 
+	chg->hvdcp3_detect_en = of_property_read_bool(node,
+						"google,hvdcp3-detect-en");
+	chg->hvdcp3_negotiation_en
+		= of_property_read_bool(node, "google,hvdcp3-negotiation-en");
+
 	return 0;
 }
 
@@ -1261,8 +1266,7 @@ static int smblite_init_hw(struct smblite *chip)
 
 	/* Optionally enable HVDCP detection only for PM5100 targets */
 	if (chg->subtype == PM5100)
-		smblite_lib_hvdcp_detect_enable(chg,
-			(chg->hvdcp_num_pulse_max != 0));
+		smblite_lib_hvdcp_detect_enable(chg, chg->hvdcp3_detect_en);
 
 	rc = schgm_flashlite_init(chg);
 	if (rc < 0) {
