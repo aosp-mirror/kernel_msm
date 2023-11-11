@@ -282,6 +282,7 @@ int smblite_lib_get_charge_param(struct smb_charger *chg,
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_charge_param);
 
 #define INPUT_NOT_PRESENT	0
 #define INPUT_PRESENT_USB	BIT(1)
@@ -1481,8 +1482,9 @@ static int smblite_lib_dp_pulse(struct smb_charger *chg)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_dp_pulse);
 
-static int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
+int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
 {
 	int rc;
 
@@ -1493,6 +1495,7 @@ static int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_force_vbus_voltage);
 
 static bool is_boost_en(struct smb_charger *chg)
 {
@@ -1897,6 +1900,7 @@ int smblite_lib_get_prop_usb_present(struct smb_charger *chg,
 	val->intval = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_prop_usb_present);
 
 int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 			       union power_supply_propval *val)
@@ -2046,6 +2050,7 @@ int smblite_lib_get_prop_usb_voltage_now(struct smb_charger *chg,
 out:
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_prop_usb_voltage_now);
 
 int smblite_lib_get_prop_usbin_current(struct smb_charger *chg,
 		union power_supply_propval *val)
@@ -2063,6 +2068,7 @@ int smblite_lib_get_prop_usbin_current(struct smb_charger *chg,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_prop_usbin_current);
 
 int smblite_lib_get_prop_charger_temp(struct smb_charger *chg,
 				 int *val)
