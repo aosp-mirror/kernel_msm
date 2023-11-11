@@ -1469,7 +1469,22 @@ int smblite_lib_set_prop_system_temp_level(struct smb_charger *chg,
 	return 0;
 }
 
-static int smblite_lib_dp_pulse(struct smb_charger *chg)
+int smblite_lib_dm_pulse(struct smb_charger *chg)
+{
+	int rc;
+
+	/* QC 3.0 decrement */
+	rc = smblite_lib_masked_write(chg, CMD_HVDCP_REG(chg->base), SINGLE_DECREMENT_BIT,
+			SINGLE_DECREMENT_BIT);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't write to CMD_HVDCP_REG rc=%d\n",
+				rc);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(smblite_lib_dm_pulse);
+
+int smblite_lib_dp_pulse(struct smb_charger *chg)
 {
 	int rc;
 
