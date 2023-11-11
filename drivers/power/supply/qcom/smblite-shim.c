@@ -210,6 +210,12 @@ static int smblite_shim_usb_get_prop(struct power_supply *psy,
 			return 0;
 		}
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = gvotable_get_current_int_vote(shim->vmax_votable);
+		if (val->intval > 0) {
+			return 0;
+		}
+		break;
 	default:
 		break;
 	}
@@ -286,6 +292,12 @@ struct smblite_shim *smblite_shim_init(struct smb_charger *chg)
 		gvotable_create_bool_election("SHIM_FAKE_OLN",
 					vote_cb_notify_psy_changed,
 					shim);
+	shim->vmax_votable =
+		gvotable_create_int_election("SHIM_VMAX",
+					gvotable_comparator_uint_min,
+					vote_cb_notify_psy_changed,
+					shim);
+
 
 	return shim;
 }
