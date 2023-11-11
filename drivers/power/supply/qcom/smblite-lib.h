@@ -386,6 +386,8 @@ struct smb_charger {
 	bool			uusb_apsd_rerun_done;
 	bool			dpdm_enabled;
 	bool			hvdcp3_detected;
+	bool			hvdcp3_detect_en;
+	bool			hvdcp3_negotiation_en;
 	bool			concurrent_mode_supported;
 	bool			concurrent_mode_status;
 	u8			float_cfg;
