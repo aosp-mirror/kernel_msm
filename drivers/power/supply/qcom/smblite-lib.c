@@ -1512,7 +1512,7 @@ int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
 }
 EXPORT_SYMBOL_GPL(smblite_lib_force_vbus_voltage);
 
-static bool is_boost_en(struct smb_charger *chg)
+bool smblite_lib_is_boost_en(struct smb_charger *chg)
 {
 	int rc;
 	u8 stat = 0;
@@ -1527,6 +1527,7 @@ static bool is_boost_en(struct smb_charger *chg)
 
 	return (stat & DCIN_BST_EN_BIT);
 }
+EXPORT_SYMBOL_GPL(smblite_lib_is_boost_en);
 
 #define HVDCP3_QUALIFICATION_UV 300000
 static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
@@ -1541,7 +1542,7 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 
 	mutex_lock(&chg->dpdm_pulse_lock);
 
-	boost_en = is_boost_en(chg);
+	boost_en = smblite_lib_is_boost_en(chg);
 
 	if (boost_en || chg->hvdcp3_detected) {
 		smblite_lib_dbg(chg, PR_MISC,
@@ -1581,7 +1582,7 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 		msleep(100);
 	}
 
-	if (is_boost_en(chg)) {
+	if (smblite_lib_is_boost_en(chg)) {
 		smblite_lib_dbg(chg, PR_MISC,
 				"HVDCP3 : Failed to increase vbus due to boost_en\n");
 		goto failure;
@@ -1709,7 +1710,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 	int rc = 0, icl_ua = 0, fixed_icl_ua = 0, usb_present = 0;
 	union power_supply_propval pval = {0, };
 	u8 apsd_status = 0;
-	bool boost_enabled = is_boost_en(chg);
+	bool boost_enabled = smblite_lib_is_boost_en(chg);
 
 	if (!is_concurrent_mode_supported(chg)) {
 		smblite_lib_dbg(chg, PR_MISC, "concurrency-mode: support disabled\n");
@@ -1817,7 +1818,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 				 * Disable concurrency mode to move back the switcher to
 				 * BOOST-mode and wait for SS_DONE for BOOST to settle.
 				 */
-				boost_enabled = is_boost_en(chg);
+				boost_enabled = smblite_lib_is_boost_en(chg);
 				smblite_lib_dbg(chg, PR_MISC,
 					"Concurrency failed, Disabling concurrency BOOST_EN=%s - going back to BOOST mode\n",
 					(boost_enabled ? "True" : "False"));
@@ -1932,7 +1933,7 @@ int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 	 * while the charger is inserted.
 	 */
 	smblite_lib_is_input_present(chg, &input_present);
-	if (is_boost_en(chg) && input_present) {
+	if (smblite_lib_is_boost_en(chg) && input_present) {
 		val->intval = true;
 		smblite_lib_dbg(chg, PR_MISC,
 			"USB_ONLINE set due to boost_en and input_present\n");
@@ -3466,7 +3467,7 @@ static void smblite_lib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 	int rc = 0;
 
 	/* Stay at 5V if BOOST is enabled */
-	if (is_boost_en(chg)) {
+	if (smblite_lib_is_boost_en(chg)) {
 		smblite_lib_dbg(chg, PR_INTERRUPT,
 			"Ignoring HVDCP3 detect as boost is enabled\n");
 		return;
@@ -4105,7 +4106,7 @@ irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data)
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
 	union power_supply_propval pval = {0, };
-	bool is_qc = false, boost_enabled = is_boost_en(chg);
+	bool is_qc = false, boost_enabled = smblite_lib_is_boost_en(chg);
 	u8 apsd_status = 0;
 	int rc = 0;
 
