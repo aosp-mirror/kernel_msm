@@ -302,6 +302,7 @@ struct smblite_shim *smblite_shim_init(struct smb_charger *chg)
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&shim->hvdcp_req_nh);
 	BLOCKING_INIT_NOTIFIER_HEAD(&shim->usbin_plugin_nh);
+	BLOCKING_INIT_NOTIFIER_HEAD(&shim->boost_nh);
 
 	return shim;
 }
@@ -372,6 +373,12 @@ void smblite_shim_notify_plugin(struct smblite_shim *shim,
 	blocking_notifier_call_chain(&shim->usbin_plugin_nh, plugged, shim);
 }
 
+void smblite_shim_notify_boost_sw(struct smblite_shim *shim,
+				enum smblite_shim_boost_sts boost)
+{
+	blocking_notifier_call_chain(&shim->boost_nh, boost, shim);
+}
+
 int smblite_shim_hvdcp_req_register_notifier(struct smblite_shim *shim,
 					struct notifier_block *nb)
 {
@@ -400,3 +407,18 @@ int smblite_shim_plugin_unregister_notifier(struct smblite_shim *shim,
 
 }
 EXPORT_SYMBOL_GPL(smblite_shim_plugin_unregister_notifier);
+
+int smblite_shim_boost_register_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&shim->boost_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_boost_register_notifier);
+
+int smblite_shim_boost_unregister_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&shim->boost_nh, nb);
+
+}
+EXPORT_SYMBOL_GPL(smblite_shim_boost_unregister_notifier);
