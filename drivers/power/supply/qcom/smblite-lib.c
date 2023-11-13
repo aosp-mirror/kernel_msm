@@ -4109,6 +4109,9 @@ irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data)
 	u8 apsd_status = 0;
 	int rc = 0;
 
+	smblite_shim_notify_boost_sw(chg->shim,
+		boost_enabled ? SMBLITE_SHIM_BOOST_EN : SMBLITE_SHIM_BOOST_DIS);
+
 	rc = smblite_lib_get_prop_usb_present(chg, &pval);
 	if (rc < 0)
 		smblite_lib_dbg(chg, PR_MISC,
