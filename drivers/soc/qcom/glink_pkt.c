@@ -22,7 +22,7 @@
 #include <linux/string.h>
 
 /* Define IPC Logging Macros */
-#define GLINK_PKT_IPC_LOG_PAGE_CNT 2
+#define GLINK_PKT_IPC_LOG_PAGE_CNT 32
 static void *glink_pkt_ilctxt;
 
 #define GLINK_PKT_INFO(x, ...)						     \
@@ -63,20 +63,25 @@ static DEFINE_IDA(glink_pkt_minor_ida);
  * struct glink_pkt - driver context, relates rpdev to cdev
  * @dev:	glink pkt device
  * @cdev:	cdev for the glink pkt device
- * @drv:	rpmsg driver for registering to rpmsg bus
  * @lock:	synchronization of @rpdev and @open_tout modifications
  * @ch_open:	wait object for opening the glink channel
  * @refcount:	count how many userspace clients have handles
  * @rpdev:	underlaying rpmsg device
+ * @rx_done:	cache whether rpdev can support external rx done
  * @queue_lock:	synchronization of @queue operations
  * @queue:	incoming message queue
  * @readq:	wait object for incoming queue
  * @sig_change:	flag to indicate serial signal change
  * @fragmented_read: set from dt node for partial read
+ * @enable_ch_close: set from dt node for unregister driver on close syscall
+ * @drv_lock:	lock to protect rpmsg driver variable
+ * @drv:	rpmsg driver for registering to rpmsg bus
+ * @drv_registered: status of rpmsg driver
  * @dev_name:	/dev/@dev_name for glink_pkt device
  * @ch_name:	glink channel to match to
  * @edge:	glink edge to match to
  * @open_tout:	timeout for open syscall, configurable in sysfs
+ * @rskb_read_lock: Lock to protect rskb during read syscalls
  * @rskb:       current skb being read
  * @rdata:      data pointer in current skb
  * @rdata_len:  remaining data to be read from skb
@@ -84,12 +89,12 @@ static DEFINE_IDA(glink_pkt_minor_ida);
 struct glink_pkt_device {
 	struct device dev;
 	struct cdev cdev;
-	struct rpmsg_driver drv;
 
 	struct mutex lock;
 	struct completion ch_open;
 	refcount_t refcount;
 	struct rpmsg_device *rpdev;
+	bool rx_done;
 
 	spinlock_t queue_lock;
 	struct sk_buff_head queue;
@@ -98,11 +103,17 @@ struct glink_pkt_device {
 	int sig_change;
 	bool fragmented_read;
 	bool enable_ch_close;
-	int drv_registered;
+
+	struct mutex drv_lock;
+	struct rpmsg_driver drv;
+	bool drv_registered;
+
 	const char *dev_name;
 	const char *ch_name;
 	const char *edge;
 	int open_tout;
+
+	struct mutex rskb_read_lock;
 	struct sk_buff *rskb;
 	unsigned char *rdata;
 	size_t rdata_len;
@@ -157,12 +168,54 @@ static int glink_pkt_rpdev_probe(struct rpmsg_device *rpdev)
 
 	mutex_lock(&gpdev->lock);
 	gpdev->rpdev = rpdev;
+	gpdev->rx_done = (rpdev->ept->rx_done) ? true : false;
 	mutex_unlock(&gpdev->lock);
 
 	dev_set_drvdata(&rpdev->dev, gpdev);
 	complete_all(&gpdev->ch_open);
 
 	return 0;
+}
+
+static void glink_pkt_kfree_skb(struct glink_pkt_device *gpdev, struct sk_buff *skb)
+{
+	int ret;
+
+	if (gpdev->rx_done) {
+		GLINK_PKT_INFO("channel:%s\n", gpdev->ch_name);
+		ret = rpmsg_rx_done(gpdev->rpdev->ept, skb->data);
+		if (ret < 0)
+			GLINK_PKT_INFO("Failed channel:%s ret:%d\n", gpdev->ch_name, ret);
+		/*
+		 * Data memory is freed by rpmsg_rx_done(), reset the
+		 * skb data pointers so kfree_skb() does not try to free
+		 * a second time and originally allocated buffer is freed
+		 * correctly.
+		 */
+		skb->data = skb->head;
+	}
+	kfree_skb(skb);
+}
+
+static void glink_pkt_clear_queues(struct glink_pkt_device *gpdev)
+{
+	struct sk_buff *skb;
+	unsigned long flags;
+
+	spin_lock_irqsave(&gpdev->queue_lock, flags);
+	if (gpdev->rskb) {
+		glink_pkt_kfree_skb(gpdev, gpdev->rskb);
+		gpdev->rskb = NULL;
+		gpdev->rdata = NULL;
+		gpdev->rdata_len = 0;
+	}
+
+	while ((skb = skb_dequeue(&gpdev->queue)))
+		glink_pkt_kfree_skb(gpdev, skb);
+	while ((skb = skb_dequeue(&gpdev->pending)))
+		glink_pkt_kfree_skb(gpdev, skb);
+
+	spin_unlock_irqrestore(&gpdev->queue_lock, flags);
 }
 
 static int glink_pkt_rpdev_no_copy_cb(struct rpmsg_device *rpdev, void *buf,
@@ -172,15 +225,18 @@ static int glink_pkt_rpdev_no_copy_cb(struct rpmsg_device *rpdev, void *buf,
 	unsigned long flags;
 	struct sk_buff *skb;
 
-	skb = alloc_skb(0, GFP_ATOMIC);
-	if (!skb)
-		return -ENOMEM;
+	GLINK_PKT_INFO("Data received on:%s len:%d\n", gpdev->ch_name, len);
 
-	skb->head = buf;
+	skb = alloc_skb(0, GFP_ATOMIC);
+	if (!skb) {
+		GLINK_PKT_ERR("skb failed for channel:%s len:%d\n", gpdev->ch_name, len);
+		return -ENOMEM;
+	}
+
 	skb->data = buf;
 	skb_reset_tail_pointer(skb);
-	skb_set_end_offset(skb, len);
-	skb_put(skb, len);
+	/* For external buffer, skb->tail and skb->len calculation does not match */
+	skb->len += len;
 
 	spin_lock_irqsave(&gpdev->queue_lock, flags);
 	skb_queue_tail(&gpdev->queue, skb);
@@ -188,6 +244,8 @@ static int glink_pkt_rpdev_no_copy_cb(struct rpmsg_device *rpdev, void *buf,
 
 	/* wake up any blocking processes, waiting for new data */
 	wake_up_interruptible(&gpdev->readq);
+
+	GLINK_PKT_INFO("Data queued on:%s len:%d\n", gpdev->ch_name, len);
 
 	return RPMSG_DEFER;
 }
@@ -204,9 +262,12 @@ static int glink_pkt_rpdev_copy_cb(struct rpmsg_device *rpdev, void *buf,
 		return -ENETRESET;
 	}
 
+	GLINK_PKT_INFO("Data received on:%s len:%d\n", gpdev->ch_name, len);
 	skb = alloc_skb(len, GFP_ATOMIC);
-	if (!skb)
+	if (!skb) {
+		GLINK_PKT_ERR("skb failed for channel:%s len:%d\n", gpdev->ch_name, len);
 		return -ENOMEM;
+	}
 
 	skb_put_data(skb, buf, len);
 
@@ -216,6 +277,8 @@ static int glink_pkt_rpdev_copy_cb(struct rpmsg_device *rpdev, void *buf,
 
 	/* wake up any blocking processes, waiting for new data */
 	wake_up_interruptible(&gpdev->readq);
+
+	GLINK_PKT_INFO("Data queued on:%s len:%d\n", gpdev->ch_name, len);
 
 	return 0;
 }
@@ -238,6 +301,9 @@ static int glink_pkt_rpdev_sigs(struct rpmsg_device *rpdev, void *priv,
 	struct glink_pkt_device *gpdev = rpdrv_to_gpdev(rpdrv);
 	unsigned long flags;
 
+	GLINK_PKT_INFO("Received signal new:0x%x old:0x%x on channel:%s\n",
+			new, old, gpdev->ch_name);
+
 	spin_lock_irqsave(&gpdev->queue_lock, flags);
 	gpdev->sig_change = true;
 	spin_unlock_irqrestore(&gpdev->queue_lock, flags);
@@ -255,6 +321,7 @@ static void glink_pkt_rpdev_remove(struct rpmsg_device *rpdev)
 	struct glink_pkt_device *gpdev = rpdrv_to_gpdev(rpdrv);
 
 	mutex_lock(&gpdev->lock);
+	glink_pkt_clear_queues(gpdev);
 	gpdev->rpdev = NULL;
 	mutex_unlock(&gpdev->lock);
 
@@ -263,6 +330,31 @@ static void glink_pkt_rpdev_remove(struct rpmsg_device *rpdev)
 	/* wake up any blocked readers */
 	reinit_completion(&gpdev->ch_open);
 	wake_up_interruptible(&gpdev->readq);
+}
+
+static int glink_pkt_drv_try_register(struct glink_pkt_device *gpdev)
+{
+	int ret = 0;
+
+	mutex_lock(&gpdev->drv_lock);
+	if (!gpdev->drv_registered) {
+		ret = register_rpmsg_driver(&gpdev->drv);
+		if (!ret)
+			gpdev->drv_registered = true;
+	}
+	mutex_unlock(&gpdev->drv_lock);
+
+	return ret;
+}
+
+static void glink_pkt_drv_try_unregister(struct glink_pkt_device *gpdev)
+{
+	mutex_lock(&gpdev->drv_lock);
+	if (gpdev->drv_registered) {
+		unregister_rpmsg_driver(&gpdev->drv);
+		gpdev->drv_registered = false;
+	}
+	mutex_unlock(&gpdev->drv_lock);
 }
 
 /**
@@ -288,17 +380,14 @@ static int glink_pkt_open(struct inode *inode, struct file *file)
 		       gpdev->ch_name, current->comm,
 		       task_pid_nr(current), refcount_read(&gpdev->refcount));
 
-	if (!gpdev->drv_registered && gpdev->enable_ch_close) {
-		register_rpmsg_driver(&gpdev->drv);
-		gpdev->drv_registered = 1;
-	}
+	if (gpdev->enable_ch_close)
+		glink_pkt_drv_try_register(gpdev);
 
 	ret = wait_for_completion_interruptible_timeout(&gpdev->ch_open, tout);
 	if (ret <= 0) {
-		if (gpdev->drv_registered && gpdev->enable_ch_close) {
-			unregister_rpmsg_driver(&gpdev->drv);
-			gpdev->drv_registered = 0;
-		}
+		if (gpdev->enable_ch_close)
+			glink_pkt_drv_try_unregister(gpdev);
+
 		refcount_dec(&gpdev->refcount);
 		put_device(dev);
 		GLINK_PKT_INFO("timeout for %s by %s:%d\n", gpdev->ch_name,
@@ -327,7 +416,6 @@ static int glink_pkt_release(struct inode *inode, struct file *file)
 {
 	struct glink_pkt_device *gpdev = cdev_to_gpdev(inode->i_cdev);
 	struct device *dev = &gpdev->dev;
-	struct sk_buff *skb;
 	unsigned long flags;
 
 	GLINK_PKT_INFO("for %s by %s:%d ref_cnt[%d]\n",
@@ -336,40 +424,15 @@ static int glink_pkt_release(struct inode *inode, struct file *file)
 
 	refcount_dec(&gpdev->refcount);
 	if (refcount_read(&gpdev->refcount) == 1) {
+		glink_pkt_clear_queues(gpdev);
 		spin_lock_irqsave(&gpdev->queue_lock, flags);
 
-		if (gpdev->rskb) {
-			kfree_skb(gpdev->rskb);
-			gpdev->rskb = NULL;
-			gpdev->rdata = NULL;
-			gpdev->rdata_len = 0;
-		}
-
-		/* Discard all SKBs */
-		while (!skb_queue_empty(&gpdev->queue)) {
-			skb = skb_dequeue(&gpdev->queue);
-
-			if (gpdev->rpdev->ept->rx_done) {
-				rpmsg_rx_done(gpdev->rpdev->ept, skb->data);
-				skb->head = NULL;
-				skb->data = NULL;
-			}
-
-			kfree_skb(skb);
-		}
-		wake_up_interruptible(&gpdev->readq);
 		gpdev->sig_change = false;
+		wake_up_interruptible(&gpdev->readq);
 		spin_unlock_irqrestore(&gpdev->queue_lock, flags);
 
-		if (gpdev->drv_registered && gpdev->enable_ch_close) {
-			unregister_rpmsg_driver(&gpdev->drv);
-			gpdev->drv_registered = 0;
-		}
-	}
-
-	if (gpdev->drv_registered && gpdev->enable_ch_close) {
-		unregister_rpmsg_driver(&gpdev->drv);
-		gpdev->drv_registered = 0;
+		if (gpdev->enable_ch_close)
+			glink_pkt_drv_try_unregister(gpdev);
 	}
 	put_device(dev);
 
@@ -392,7 +455,6 @@ static ssize_t glink_pkt_read(struct file *file,
 {
 	struct glink_pkt_device *gpdev = file->private_data;
 	struct sk_buff *skb = NULL;
-	unsigned long flags;
 	int ret = 0;
 	int use;
 
@@ -411,44 +473,47 @@ static ssize_t glink_pkt_read(struct file *file,
 		       task_pid_nr(current), refcount_read(&gpdev->refcount),
 			   gpdev->rdata_len, count);
 
-	spin_lock_irqsave(&gpdev->queue_lock, flags);
 	/* Wait for data in the queue */
+	spin_lock_irq(&gpdev->queue_lock);
 	if (skb_queue_empty(&gpdev->queue) && !gpdev->rskb) {
-		spin_unlock_irqrestore(&gpdev->queue_lock, flags);
-
-		if (file->f_flags & O_NONBLOCK)
+		if (file->f_flags & O_NONBLOCK) {
+			spin_unlock_irq(&gpdev->queue_lock);
 			return -EAGAIN;
+		}
 
 		/* Wait until we get data or the endpoint goes away */
-		if (wait_event_interruptible(gpdev->readq,
-					     !skb_queue_empty(&gpdev->queue) ||
-					     !completion_done(&gpdev->ch_open)))
-			return -ERESTARTSYS;
-
-		/* We lost the endpoint while waiting */
-		if (!completion_done(&gpdev->ch_open))
-			return -ENETRESET;
-
-		spin_lock_irqsave(&gpdev->queue_lock, flags);
+		ret = wait_event_interruptible_lock_irq(gpdev->readq,
+							!skb_queue_empty(&gpdev->queue) ||
+							!completion_done(&gpdev->ch_open),
+							gpdev->queue_lock);
 	}
+	spin_unlock_irq(&gpdev->queue_lock);
 
+	if (ret)
+		return -ERESTARTSYS;
+	if (!completion_done(&gpdev->ch_open))
+		return -ENETRESET;
+
+	mutex_lock(&gpdev->rskb_read_lock);
+	spin_lock_irq(&gpdev->queue_lock);
 	if (!gpdev->rskb) {
 		gpdev->rskb = skb_dequeue(&gpdev->queue);
 		if (!gpdev->rskb) {
-			spin_unlock_irqrestore(&gpdev->queue_lock, flags);
-			return -EFAULT;
+			spin_unlock_irq(&gpdev->queue_lock);
+			mutex_unlock(&gpdev->rskb_read_lock);
+			return 0;
 		}
 		gpdev->rdata = gpdev->rskb->data;
 		gpdev->rdata_len = gpdev->rskb->len;
 	}
-	spin_unlock_irqrestore(&gpdev->queue_lock, flags);
+	spin_unlock_irq(&gpdev->queue_lock);
 
 	use = min_t(size_t, count, gpdev->rdata_len);
 
 	if (copy_to_user(buf, gpdev->rdata, use))
 		ret = -EFAULT;
 
-	spin_lock_irqsave(&gpdev->queue_lock, flags);
+	spin_lock_irq(&gpdev->queue_lock);
 	gpdev->rdata += use;
 	gpdev->rdata_len -= use;
 
@@ -459,21 +524,11 @@ static ssize_t glink_pkt_read(struct file *file,
 		gpdev->rdata = NULL;
 		gpdev->rdata_len = 0;
 	}
-	spin_unlock_irqrestore(&gpdev->queue_lock, flags);
+	spin_unlock_irq(&gpdev->queue_lock);
 
-	if (skb) {
-		if (gpdev->rpdev->ept->rx_done) {
-			rpmsg_rx_done(gpdev->rpdev->ept, skb->data);
-			/*
-			 * Data memory is freed by rpmsg_rx_done(), reset the
-			 * skb data pointers so kfree_skb() does not try to free
-			 * a second time.
-			 */
-			skb->head = NULL;
-			skb->data = NULL;
-		}
-		kfree_skb(skb);
-	}
+	if (skb)
+		glink_pkt_kfree_skb(gpdev, skb);
+	mutex_unlock(&gpdev->rskb_read_lock);
 
 	ret = (ret < 0) ? ret : use;
 	GLINK_PKT_INFO("end for %s by %s:%d ret[%d], remaining[%d]\n", gpdev->ch_name,
@@ -560,6 +615,7 @@ static __poll_t glink_pkt_poll(struct file *file, poll_table *wait)
 		return POLLHUP | POLLPRI;
 	}
 
+	GLINK_PKT_INFO("Wait for pkt on channel:%s\n", gpdev->ch_name);
 	poll_wait(file, &gpdev->readq, wait);
 
 	mutex_lock(&gpdev->lock);
@@ -581,6 +637,8 @@ static __poll_t glink_pkt_poll(struct file *file, poll_table *wait)
 	mask |= rpmsg_poll(gpdev->rpdev->ept, file, wait);
 
 	mutex_unlock(&gpdev->lock);
+
+	GLINK_PKT_INFO("Exit channel:%s\n", gpdev->ch_name);
 
 	return mask;
 }
@@ -660,7 +718,7 @@ static int glink_pkt_zerocopy_done(struct glink_pkt_device *gpdev,
 	if (!PAGE_ALIGNED(address) || address != zc->address)
 		return -EINVAL;
 
-	if (!gpdev->rpdev->ept->rx_done)
+	if (!gpdev->rx_done)
 		return -EINVAL;
 
 	mmap_read_lock(current->mm);
@@ -689,18 +747,11 @@ static int glink_pkt_zerocopy_done(struct glink_pkt_device *gpdev,
 	if (!skb)
 		return -EINVAL;
 
-	rpmsg_rx_done(gpdev->rpdev->ept, skb->data);
 	if (cb->trailing_page)
 		free_page(cb->trailing_page);
 	if (cb->leading_page)
 		free_page(cb->leading_page);
-	/*
-	 * Data memory is freed by rpmsg_rx_done(), reset the skb data
-	 * pointers so kfree_skb() does not try to free a second time.
-	 */
-	skb->head = NULL;
-	skb->data = NULL;
-	kfree_skb(skb);
+	glink_pkt_kfree_skb(gpdev, skb);
 
 	return 0;
 }
@@ -732,7 +783,7 @@ static int glink_pkt_zerocopy_receive(struct glink_pkt_device *gpdev,
 	if (!PAGE_ALIGNED(address) || address != zc->address)
 		return -EINVAL;
 
-	if (!gpdev->rpdev->ept->rx_done)
+	if (!gpdev->rx_done)
 		return -EINVAL;
 
 	zc->offset = 0;
@@ -1083,9 +1134,7 @@ static int glink_pkt_init_rpmsg(struct glink_pkt_device *gpdev)
 	rpdrv->id_table = match;
 	rpdrv->drv.name = drv_name;
 
-	register_rpmsg_driver(rpdrv);
-
-	return 0;
+	return glink_pkt_drv_try_register(gpdev);
 }
 
 /**
@@ -1124,12 +1173,15 @@ static int glink_pkt_create_device(struct device *parent,
 	}
 
 	mutex_init(&gpdev->lock);
+	mutex_init(&gpdev->drv_lock);
+	mutex_init(&gpdev->rskb_read_lock);
 	refcount_set(&gpdev->refcount, 1);
 	init_completion(&gpdev->ch_open);
 
 	/* Default open timeout for open is 120 sec */
 	gpdev->open_tout = 120;
 	gpdev->sig_change = false;
+	gpdev->rx_done = false;
 
 	spin_lock_init(&gpdev->queue_lock);
 
@@ -1174,10 +1226,9 @@ static int glink_pkt_create_device(struct device *parent,
 		GLINK_PKT_ERR("device_create_file failed for %s\n",
 			      gpdev->dev_name);
 
-	if (glink_pkt_init_rpmsg(gpdev)) {
-		gpdev->drv_registered = 1;
+	ret = glink_pkt_init_rpmsg(gpdev);
+	if (ret)
 		goto free_dev;
-	}
 
 	return 0;
 
