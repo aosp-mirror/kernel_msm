@@ -55,6 +55,8 @@ def define_monaco():
         "drivers/pinctrl/qcom/pinctrl-spmi-mpp.ko",
         "drivers/power/reset/qcom-dload-mode.ko",
         "drivers/power/reset/qcom-reboot-reason.ko",
+        "drivers/power/supply/qcom/qpnp-smblite-main.ko",
+        "drivers/power/supply/qcom/qti-qbg-main.ko",
         "drivers/regulator/debug-regulator.ko",
         "drivers/regulator/proxy-consumer.ko",
         "drivers/regulator/rpm-smd-regulator.ko",
