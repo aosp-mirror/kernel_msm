@@ -491,7 +491,7 @@ int slim_stream_unprepare_disconnect_port(struct slim_stream_runtime *stream,
 
 	return 0;
 }
-EXPORT_SYMBOL(slim_stream_unprepare_disconnect_port);
+EXPORT_SYMBOL_GPL(slim_stream_unprepare_disconnect_port);
 
 /**
  * slim_stream_free() - Free a SLIMbus Stream

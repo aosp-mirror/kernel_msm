@@ -258,7 +258,7 @@ static phys_addr_t iopte_to_paddr(arm_lpae_iopte pte,
 	return (paddr | (paddr << (48 - 12))) & (ARM_LPAE_PTE_ADDR_MASK << 4);
 }
 
-static bool selftest_running = false;
+static bool selftest_running;
 
 static dma_addr_t __arm_lpae_dma_addr(void *pages)
 {

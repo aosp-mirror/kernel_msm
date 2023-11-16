@@ -41,3 +41,88 @@ config QCOM_LMH
 	  input from temperature and current sensors.  On many newer Qualcomm SoCs
 	  LMh is configured in the firmware and this feature need not be enabled.
 	  However, on certain SoCs like sdm845 LMh has to be configured from kernel.
+
+config QTI_CPUFREQ_CDEV
+	tristate "QTI CPU frequency cooling device"
+	depends on CPU_FREQ && THERMAL && PM_OPP
+	help
+	   This enables the QTI cpufreq cooling device, which
+	   will help register the cpu freq devices with thermal
+	   framework and allow limiting the cpu frequency by
+	   userspace.
+
+config QTI_DEVFREQ_CDEV
+	tristate "QTI Devfreq cooling device"
+	depends on PM_DEVFREQ && THERMAL && PM_OPP
+	help
+	   This enables the QTI devfreq cooling device, which will help
+	   register the devfreq cooling devices with thermal framework and
+	   allow limiting the devfreq frequency.
+
+config QTI_CPU_HOTPLUG_COOLING_DEVICE
+	tristate "QTI CPU Hotplug cooling devices"
+	depends on THERMAL && HOTPLUG_CPU
+	help
+	   This enables the QTI CPU Hotplug cooling devices. These cooling
+	   devices will be used by QTI chipset to hotplug a CPU to achieve
+	   thermal cooling. CPU Hotplug will be done after core isolation,
+	   to prevent any process from waking the mitigated CPU.
+
+config QTI_CPU_PAUSE_COOLING_DEVICE
+	tristate "QTI CPU Pause cooling devices"
+	depends on THERMAL_OF && HOTPLUG_CPU
+	depends on ARCH_QCOM || COMPILE_TEST
+	help
+	   This enables the QTI CPU Pause cooling device. These cooling
+	   devices will be used by QTI chipset to pause a CPU from being
+	   scheduled and hence will let the CPU to power collapse. Pausing
+	   a CPU will be used when the CPU frequency mitigation
+	   is not good enough to achieve the necessary cooling.
+
+config QTI_QMI_COOLING_DEVICE
+	tristate "QTI QMI cooling devices"
+	depends on QCOM_QMI_HELPERS && THERMAL
+	help
+	   This enables the QTI remote subsystem cooling devices. These cooling
+	   devices will be used by QTI chipset to place various remote
+	   subsystem mitigations like remote processor passive mitigation,
+	   remote subsystem voltage restriction at low temperatures etc.
+	   The QMI cooling device will interface with remote subsystem
+	   using QTI QMI interface.
+
+config QTI_QMI_SENSOR
+	tristate "QTI QMI sensor driver"
+	depends on QCOM_QMI_HELPERS && THERMAL
+	help
+	   This enables to list the QTI remote subsystem temperature sensors.
+	   This driver can read the temperature of the remote sensor.
+	   These sensors can take thresholds and notify the thermal
+	   framework when the threshold is reached.
+
+config QTI_THERMAL_LIMITS_DCVS
+	tristate "QTI LMH DCVS Driver"
+	depends on THERMAL && CPU_THERMAL
+	help
+	  This enables the driver for Limits Management Hardware - DCVS block
+	  for the application processors. The h/w block that is available for
+	  each cluster can be used to perform quick thermal mitigations by
+	  tracking temperatures of the CPUs and taking thermal action in the
+	  hardware without s/w intervention.
+
+config REGULATOR_COOLING_DEVICE
+	tristate "Regulator voltage floor cooling device"
+	depends on REGULATOR && THERMAL_OF
+	help
+	  This implements a mitigation device to place a minimum voltage floor
+	  on a particular regulator. This mitigation device will be used by low
+	  temperature reliability rules to mitigate a regulator at nominal
+	  voltage.
+
+config QTI_LMH_CPU_VDD_COOLING_DEVICE
+	tristate "QTI CPU LMH VDD Voltage cooling devices"
+	depends on THERMAL && THERMAL_OF
+	help
+	   This enables the QTI limits hardware CPU VDD cooling devices.
+	   These cooling devices will be used by QTI chipset to place a
+	   request to limits hardware for a minimum CPU railway voltage
+	   corner at cold temperature condition.
