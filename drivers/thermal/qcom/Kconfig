@@ -144,3 +144,13 @@ config QTI_BCL_OFF_COOLING_DEVICE
 	   This enables the bcl off cooling devices.
 	   These cooling devices will be used to disable bcl
 	   whenever RF calibration is performed.
+
+config QTI_THERMAL_MINIDUMP
+	tristate "Qualcomm Technologies Inc. Thermal minidump driver"
+	depends on THERMAL && QCOM_MINIDUMP
+	help
+	   This will enable the Thermal minidump function, the sensor
+	   temperature data of the adc driver and the tsensor driver will
+	   be saved to the minidump in real time. When the system crashes,
+	   the saved temperature data will help analyze the reason for the
+	   system crash.
