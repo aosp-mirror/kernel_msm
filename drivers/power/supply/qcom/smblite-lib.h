@@ -24,6 +24,7 @@
 #include "smblite-remote-bms.h"
 
 enum print_reason {
+	PR_ALWAYS	= 0,
 	PR_INTERRUPT	= BIT(0),
 	PR_REGISTER	= BIT(1),
 	PR_MISC		= BIT(2),
