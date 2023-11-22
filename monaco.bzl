@@ -75,6 +75,7 @@ def define_monaco():
         "drivers/soc/qcom/dcvs/memlat.ko",
         "drivers/soc/qcom/dcvs/qcom-dcvs.ko",
         "drivers/soc/qcom/dcvs/qcom-pmu-lib.ko",
+        "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/mdt_loader.ko",
         "drivers/soc/qcom/mem-hooks.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
