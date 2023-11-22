@@ -35,7 +35,8 @@
 
 #define smblite_lib_dbg(chg, reason, fmt, ...)			\
 	do {							\
-		if (*chg->debug_mask & (reason))		\
+		if ((*chg->debug_mask & (reason))		\
+			|| (reason == PR_ALWAYS))		\
 			pr_info("%s: %s: " fmt, chg->name,	\
 				__func__, ##__VA_ARGS__);	\
 		else						\
@@ -3233,6 +3234,8 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 		vote(chg->awake_votable, PL_DELAY_VOTER, true, 0);
 		schedule_delayed_work(&chg->pl_enable_work,
 					msecs_to_jiffies(PL_DELAY_MS));
+		smblite_lib_dbg(chg, PR_ALWAYS, "BOOST_EN=%s at plugin\n",
+				smblite_lib_is_boost_en(chg) ? "True" : "False");
 	} else {
 		smblite_lib_update_usb_type(chg, POWER_SUPPLY_TYPE_UNKNOWN);
 		if (chg->wa_flags & BOOST_BACK_WA) {
@@ -4123,6 +4126,7 @@ irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data)
 	bool is_qc = false, boost_enabled = smblite_lib_is_boost_en(chg);
 	u8 apsd_status = 0;
 	int rc = 0;
+	enum print_reason pr = PR_INTERRUPT;
 
 	smblite_shim_notify_boost_sw(chg->shim,
 		boost_enabled ? SMBLITE_SHIM_BOOST_EN : SMBLITE_SHIM_BOOST_DIS);
@@ -4148,7 +4152,10 @@ irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data)
 		}
 	}
 
-	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, BOOST_EN=%s, usb_present=%d, qc_adapter=%s\n",
+	if (pval.intval)
+		pr = PR_ALWAYS;
+
+	smblite_lib_dbg(chg, pr, "IRQ: %s, BOOST_EN=%s, usb_present=%d, qc_adapter=%s\n",
 			irq_data->name,
 			(boost_enabled ? "True" : "False"),
 			pval.intval,
