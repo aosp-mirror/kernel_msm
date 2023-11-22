@@ -29,6 +29,10 @@
 	pr_err("%s: %s: " fmt, chg->name,	\
 		__func__, ##__VA_ARGS__)	\
 
+#define smblite_lib_err_ratelimited(chg, fmt, ...)		\
+	pr_err_ratelimited("%s: %s: " fmt, chg->name,		\
+			__func__, ##__VA_ARGS__)		\
+
 #define smblite_lib_dbg(chg, reason, fmt, ...)			\
 	do {							\
 		if (*chg->debug_mask & (reason))		\
@@ -2974,6 +2978,18 @@ irqreturn_t smblite_icl_change_irq_handler(int irq, void *data)
 						msecs_to_jiffies(delay));
 	}
 
+	return IRQ_HANDLED;
+}
+
+irqreturn_t smblite_aicl_fail_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+	/* When VBUS is low enough for it to be at the boundary where AICL fails
+	 * due to variations in the readings and in VBUS, AICL may switch
+	 * between starting and failing. Ratelimit to reduce some of this noise.
+	 */
+	smblite_lib_err_ratelimited(chg, "AICL failed!\n");
 	return IRQ_HANDLED;
 }
 

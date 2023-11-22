@@ -1640,6 +1640,7 @@ static struct smb_irq_info smblite_irqs[] = {
 	},
 	[AICL_FAIL_IRQ] = {
 		.name		= "aicl-fail",
+		.handler	= smblite_aicl_fail_irq_handler,
 	},
 	[AICL_DONE_IRQ] = {
 		.name		= "aicl-done",
