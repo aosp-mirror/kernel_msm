@@ -28,6 +28,7 @@ def define_monaco():
         "drivers/i2c/busses/i2c-msm-geni.ko",
         "drivers/i2c/busses/i2c-qcom-geni.ko",
         "drivers/iio/adc/qcom-spmi-adc5.ko",
+        "drivers/iio/adc/qcom-spmi-adc5-gen3.ko",
         "drivers/iio/adc/qcom-vadc-common.ko",
         "drivers/input/misc/qpnp-power-on.ko",
         "drivers/interconnect/icc-test.ko",
