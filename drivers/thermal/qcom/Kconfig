@@ -126,3 +126,31 @@ config QTI_LMH_CPU_VDD_COOLING_DEVICE
 	   These cooling devices will be used by QTI chipset to place a
 	   request to limits hardware for a minimum CPU railway voltage
 	   corner at cold temperature condition.
+
+config THERMAL_TSENS_LEGACY
+	tristate "Qualcomm Technologies Inc. TSENS Temperature driver"
+	depends on THERMAL
+	help
+	  This enables the thermal sysfs driver for the TSENS device. It shows
+	  up in Sysfs as a thermal zone with multiple trip points. Also able
+	  to set threshold temperature for both warm and cool and update
+	  thermal userspace client when a threshold is reached. Warm/Cool
+	  temperature thresholds can be set independently for each sensor.
+
+config QTI_BCL_OFF_COOLING_DEVICE
+	tristate "QTI Ibat threshold update cooling devices"
+	depends on SPMI && THERMAL
+	help
+	   This enables the bcl off cooling devices.
+	   These cooling devices will be used to disable bcl
+	   whenever RF calibration is performed.
+
+config QTI_THERMAL_MINIDUMP
+	tristate "Qualcomm Technologies Inc. Thermal minidump driver"
+	depends on THERMAL && QCOM_MINIDUMP
+	help
+	   This will enable the Thermal minidump function, the sensor
+	   temperature data of the adc driver and the tsensor driver will
+	   be saved to the minidump in real time. When the system crashes,
+	   the saved temperature data will help analyze the reason for the
+	   system crash.
