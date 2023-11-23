@@ -21,3 +21,4 @@ obj-$(CONFIG_THERMAL_TSENS_LEGACY)	+= msm-tsens-driver.o
 msm-tsens-driver-y			+= msm-tsens.o tsens2xxx.o tsens-dbg.o tsens-calib.o tsens1xxx.o
 obj-$(CONFIG_QTI_BCL_OFF_COOLING_DEVICE) += bcl_off_cdev.o
 obj-$(CONFIG_QTI_THERMAL_MINIDUMP) += thermal_minidump.o
+obj-$(CONFIG_QTI_BCL_PMIC5) += bcl_pmic5.o
