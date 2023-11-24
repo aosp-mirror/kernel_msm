@@ -121,6 +121,7 @@ def define_monaco():
         "drivers/soc/qcom/slatersb_rpmsg.ko",
         "drivers/soc/qcom/smem.ko",
         "drivers/soc/qcom/smp2p.ko",
+        "drivers/soc/qcom/smp2p_sleepstate.ko",
         "drivers/soc/qcom/socinfo.ko",
         "drivers/soc/qcom/usb_bam.ko",
         "drivers/spi/spi-geni-qcom.ko",
