@@ -163,6 +163,7 @@ def define_monaco():
         "kernel/locking/locktorture.ko",
         "kernel/rcu/rcutorture.ko",
         "kernel/torture.ko",
+        "kernel/trace/msm_rtb.ko",
         "lib/atomic64_test.ko",
         "lib/test_user_copy.ko",
     ]
