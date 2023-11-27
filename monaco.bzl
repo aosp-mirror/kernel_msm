@@ -126,6 +126,8 @@ def define_monaco():
         "drivers/spi/spi-msm-geni.ko",
         "drivers/spmi/spmi-pmic-arb.ko",
         "drivers/thermal/qcom/bcl_off_cdev.ko",
+        "drivers/thermal/qcom/bcl_pmic5.ko",
+        "drivers/thermal/qcom/bcl_soc.ko",
         "drivers/thermal/qcom/cpu_hotplug.ko",
         "drivers/thermal/qcom/lmh_cpu_vdd_cdev.ko",
         "drivers/thermal/qcom/msm-tsens-driver.ko",
