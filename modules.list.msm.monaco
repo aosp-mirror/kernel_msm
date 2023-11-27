@@ -23,6 +23,7 @@ sched-walt.ko
 sched-walt-debug.ko
 cpu_hotplug.ko
 dcc_v2.ko
+mdt_loader.ko
 minidump.ko
 memory_dump_v2.ko
 mdt_loader.ko
@@ -36,6 +37,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 qcom-reboot-reason.ko
 pmic-pon-log.ko
+rproc_qcom_common.ko
 qrtr.ko
 qcom_aoss.ko
 msm_qmp.ko
