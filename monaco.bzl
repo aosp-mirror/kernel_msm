@@ -87,6 +87,7 @@ def define_monaco():
         "drivers/rpmsg/qcom_glink_rpm.ko",
         "drivers/rpmsg/qcom_glink_slatecom.ko",
         "drivers/rpmsg/qcom_glink_smem.ko",
+        "drivers/rpmsg/qcom_glink_spss.ko",
         "drivers/rpmsg/qcom_smd.ko",
         "drivers/rpmsg/rpm-smd.ko",
         "drivers/rtc/rtc-pm8xxx.ko",
