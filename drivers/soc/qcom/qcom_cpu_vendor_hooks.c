@@ -92,7 +92,7 @@ void show_regs_min(struct pt_regs *regs)
 	int i = 29;
 
 	pr_emerg("pc : %016llx\n", regs->pc);
-	pr_emerg("lr : %016llx\n", regs->lr);
+	pr_emerg("lr : %016llx\n", regs->regs[30]);
 	pr_emerg("sp : %016llx\n", regs->sp);
 
 	while (i >= 0) {
