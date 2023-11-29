@@ -74,3 +74,4 @@ clk-qcom.ko
 dispcc-monaco.ko
 gdsc-regulator.ko
 sdhci-msm-scaling.ko
+qcom_cpu_vendor_hooks.ko
