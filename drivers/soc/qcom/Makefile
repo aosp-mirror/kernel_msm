@@ -59,6 +59,7 @@ obj-$(CONFIG_QCOM_MICRODUMP) += microdump_collector.o
 obj-$(CONFIG_QCOM_RPMHPD) += rpmhpd.o
 obj-$(CONFIG_QCOM_RPMPD) += rpmpd.o
 obj-$(CONFIG_QCOM_KRYO_L2_ACCESSORS) +=	kryo-l2-accessors.o
+obj-$(CONFIG_SPS) += sps/
 obj-$(CONFIG_QCOM_RAMDUMP) += qcom_ramdump.o
 obj-$(CONFIG_QCOM_MINIDUMP) += minidump.o
 minidump-y   += msm_minidump.o minidump_log.o
