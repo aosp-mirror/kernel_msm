@@ -7,6 +7,7 @@ target_name = "monaco"
 def define_monaco():
     _monaco_in_tree_modules = [
         # keep sorted
+        "drivers/base/regmap/qti-regmap-debugfs.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/clk/qcom/clk-smd-rpm.ko",
@@ -45,6 +46,7 @@ def define_monaco():
         "drivers/iio/adc/qcom-spmi-adc5.ko",
         "drivers/iio/adc/qcom-spmi-adc5-gen3.ko",
         "drivers/iio/adc/qcom-vadc-common.ko",
+        "drivers/input/misc/qcom-hv-haptics.ko",
         "drivers/input/misc/qpnp-power-on.ko",
         "drivers/interconnect/icc-test.ko",
         "drivers/interconnect/qcom/icc-debug.ko",
@@ -112,6 +114,7 @@ def define_monaco():
         "drivers/soc/qcom/qcom_soc_wdt.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
+        "drivers/soc/qcom/qti-pmic-lpm.ko",
         "drivers/soc/qcom/rpm-smd-debug.ko",
         "drivers/soc/qcom/secure_buffer.ko",
         "drivers/soc/qcom/slate_events_bridge.ko",
