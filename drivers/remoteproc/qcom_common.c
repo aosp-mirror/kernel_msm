@@ -353,9 +353,9 @@ EXPORT_SYMBOL_GPL(qcom_minidump);
 static int glink_early_ssr_notifier_event(struct notifier_block *this,
 					   unsigned long code, void *data)
 {
-	//struct qcom_rproc_glink *glink = container_of(this, struct qcom_rproc_glink, nb);
+	struct qcom_rproc_glink *glink = container_of(this, struct qcom_rproc_glink, nb);
 
-	//qcom_glink_early_ssr_notify(glink->edge);
+	qcom_glink_early_ssr_notify(glink->edge);
 	return NOTIFY_DONE;
 }
 
