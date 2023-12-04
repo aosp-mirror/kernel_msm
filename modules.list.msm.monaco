@@ -28,7 +28,6 @@ mdt_loader.ko
 minidump.ko
 memory_dump_v2.ko
 mdt_loader.ko
-mem-hooks.ko
 socinfo.ko
 stub-regulator.ko
 spmi-pmic-arb.ko
