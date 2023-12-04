@@ -101,7 +101,6 @@ def define_monaco():
         "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/glink_pkt.ko",
         "drivers/soc/qcom/mdt_loader.ko",
-        "drivers/soc/qcom/mem-hooks.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
         "drivers/soc/qcom/memory_dump_v2.ko",
