@@ -84,6 +84,7 @@ def define_monaco():
         "drivers/remoteproc/qcom_pil_info.ko",
         "drivers/remoteproc/qcom_q6v5.ko",
         "drivers/remoteproc/qcom_q6v5_pas.ko",
+        "drivers/remoteproc/qcom_rproc_slate.ko",
         "drivers/remoteproc/qcom_sysmon.ko",
         "drivers/remoteproc/rproc_qcom_common.ko",
         "drivers/rpmsg/qcom_glink.ko",
