@@ -222,6 +222,14 @@ config QCOM_RPMPD
 	  value to RPM which then translates it into corresponding voltage
 	  for the voltage rail.
 
+config QCOM_RUN_QUEUE_STATS
+       tristate "Enable collection and exporting of QTI Run Queue stats to userspace"
+       help
+        This option enables the driver to periodically collecting the statistics
+        of kernel run queue information and calculate the load of the system.
+        This information is exported to usespace via sysfs entries and userspace
+        algorithms uses info and decide when to turn on/off the cpu cores.
+
 config QCOM_SMEM
 	tristate "Qualcomm Shared Memory Manager (SMEM)"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -476,6 +484,23 @@ config QCOM_WCNSS_CTRL
 	help
 	  Client driver for the WCNSS_CTRL SMD channel, used to download nv
 	  firmware to a newly booted WCNSS chip.
+
+config QCOM_DCC_V2
+       tristate "Qualcomm Technologies Data Capture and Compare enigne support for V2"
+       help
+         This option enables driver for Data Capture and Compare engine. DCC
+         driver provides interface to configure DCC block and read back
+         captured data from DCC's internal SRAM.
+
+config QCOM_SUBSYSTEM_SLEEP_STATS
+	tristate "Qualcomm Technologies, Inc. Subsystem sleep stats driver"
+	depends on QCOM_SMEM
+	help
+	  This driver is IOCTL implementation to get the subsystem stats data
+	  from SMEM. Stats information such as sleep count, last entered at,
+	  last exited at and accumulated duration can be read from
+	  userspace with ioctl.
+
 config MSM_SEB
         tristate "Provide APIs to send and receive events from Slate chipset"
         help
@@ -671,6 +696,25 @@ config QCOM_MINIDUMP_PANIC_DUMP
 	  knowing the tasks running, pending, hogging on cpu during
 	  panic.
 
+config QCOM_MINIDUMP_PANIC_CPU_CONTEXT
+	bool "QCOM Minidump Panic dumps Support"
+	depends on ARM64 && QCOM_MINIDUMP_PANIC_DUMP
+	help
+	  This enables cpu context collection in minidump table,
+	  on panic and dump a block of kernel memory from around
+	  the given address and stores data into KCNTXT during
+	  panic.
+
+config QCOM_MINIDUMP_PSTORE
+	bool "QCOM Minidump Pstore dumps Support"
+	depends on ARM64 && QCOM_MINIDUMP
+	help
+	  This enables pstore registration in minidump table.
+	  Here, pstore framework dump logs like pmsg, dmesg,
+	  console ftrace etc. in the given carve-out memory
+	  (non-volatile memory) and during warm reboot these
+	  dump will be copied outside the system on panic.
+
 config MINIDUMP_MAX_ENTRIES
 	int "Minidump Maximum num of entries"
 	default 200
@@ -687,6 +731,15 @@ config QPNP_PBS
 	  RAM on Qualcomm Technologies, Inc. QPNP PMICs. This module provides
 	  the APIs to the client drivers that wants to send the PBS trigger
 	  event to the PBS RAM.
+
+config QCOM_IRQ_STAT
+	bool "QCOM IRQ stats"
+	depends on QCOM_WDT_CORE
+	help
+	  This give irq stats for top hitter at
+	  watchdog pet, watchdog bark and kernel panics.
+	  This provides additional debug information
+	  for irq counts on cpu and ipi counts.
 
 config QCOM_LOGBUF_VENDOR_HOOKS
 	tristate "QTI Logbuf Vendor Hooks Support"
