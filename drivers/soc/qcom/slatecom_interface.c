@@ -954,10 +954,15 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 	unsigned char qcli_cmnd;
 	uint32_t opcode;
 	int ret = 0;
-	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+	struct slatedaemon_priv *dev = NULL;
+
+	if (!slatecom_intf_drv) {
+		pr_err("Invalid use-case, slatecom driver is not ready\n");
+		return -EINVAL;
+	}
+	dev = container_of(slatecom_intf_drv,
 					struct slatedaemon_priv,
 					lhndl);
-
 	if (copy_from_user(&qcli_cmnd, buf, sizeof(unsigned char)))
 		return -EFAULT;
 
