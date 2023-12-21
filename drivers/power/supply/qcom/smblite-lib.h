@@ -386,6 +386,8 @@ struct smb_charger {
 	bool			uusb_apsd_rerun_done;
 	bool			dpdm_enabled;
 	bool			hvdcp3_detected;
+	bool			hvdcp3_detect_en;
+	bool			hvdcp3_negotiation_en;
 	bool			concurrent_mode_supported;
 	bool			concurrent_mode_status;
 	u8			float_cfg;
@@ -548,5 +550,8 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable);
 bool is_concurrent_mode_supported(struct smb_charger *chg);
 void smblite_lib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 int smblite_lib_rerun_apsd_if_required(struct smb_charger *chg);
-
+int smblite_lib_dm_pulse(struct smb_charger *chg);
+int smblite_lib_dp_pulse(struct smb_charger *chg);
+int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val);
+bool smblite_lib_is_boost_en(struct smb_charger *chg);
 #endif /* __SMBLITE_LIB_H */

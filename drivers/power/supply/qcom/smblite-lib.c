@@ -275,6 +275,7 @@ int smblite_lib_get_charge_param(struct smb_charger *chg,
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_charge_param);
 
 #define INPUT_NOT_PRESENT	0
 #define INPUT_PRESENT_USB	BIT(1)
@@ -1461,7 +1462,22 @@ int smblite_lib_set_prop_system_temp_level(struct smb_charger *chg,
 	return 0;
 }
 
-static int smblite_lib_dp_pulse(struct smb_charger *chg)
+int smblite_lib_dm_pulse(struct smb_charger *chg)
+{
+	int rc;
+
+	/* QC 3.0 decrement */
+	rc = smblite_lib_masked_write(chg, CMD_HVDCP_REG(chg->base), SINGLE_DECREMENT_BIT,
+			SINGLE_DECREMENT_BIT);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't write to CMD_HVDCP_REG rc=%d\n",
+				rc);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(smblite_lib_dm_pulse);
+
+int smblite_lib_dp_pulse(struct smb_charger *chg)
 {
 	int rc;
 
@@ -1474,8 +1490,9 @@ static int smblite_lib_dp_pulse(struct smb_charger *chg)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_dp_pulse);
 
-static int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
+int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
 {
 	int rc;
 
@@ -1486,8 +1503,9 @@ static int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_force_vbus_voltage);
 
-static bool is_boost_en(struct smb_charger *chg)
+bool smblite_lib_is_boost_en(struct smb_charger *chg)
 {
 	int rc;
 	u8 stat = 0;
@@ -1502,6 +1520,7 @@ static bool is_boost_en(struct smb_charger *chg)
 
 	return (stat & DCIN_BST_EN_BIT);
 }
+EXPORT_SYMBOL_GPL(smblite_lib_is_boost_en);
 
 #define HVDCP3_QUALIFICATION_UV 300000
 static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
@@ -1510,9 +1529,13 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 	int cnt = 0, rc = 0, prev_vbus;
 	bool boost_en;
 
+	smblite_shim_notify_hvdcp_req(chg->shim);
+	if (!chg->hvdcp3_negotiation_en)
+		return 0;
+
 	mutex_lock(&chg->dpdm_pulse_lock);
 
-	boost_en = is_boost_en(chg);
+	boost_en = smblite_lib_is_boost_en(chg);
 
 	if (boost_en || chg->hvdcp3_detected) {
 		smblite_lib_dbg(chg, PR_MISC,
@@ -1552,7 +1575,7 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 		msleep(100);
 	}
 
-	if (is_boost_en(chg)) {
+	if (smblite_lib_is_boost_en(chg)) {
 		smblite_lib_dbg(chg, PR_MISC,
 				"HVDCP3 : Failed to increase vbus due to boost_en\n");
 		goto failure;
@@ -1680,7 +1703,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 	int rc = 0, icl_ua = 0, fixed_icl_ua = 0, usb_present = 0;
 	union power_supply_propval pval = {0, };
 	u8 apsd_status = 0;
-	bool boost_enabled = is_boost_en(chg);
+	bool boost_enabled = smblite_lib_is_boost_en(chg);
 
 	if (!is_concurrent_mode_supported(chg)) {
 		smblite_lib_dbg(chg, PR_MISC, "concurrency-mode: support disabled\n");
@@ -1788,7 +1811,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 				 * Disable concurrency mode to move back the switcher to
 				 * BOOST-mode and wait for SS_DONE for BOOST to settle.
 				 */
-				boost_enabled = is_boost_en(chg);
+				boost_enabled = smblite_lib_is_boost_en(chg);
 				smblite_lib_dbg(chg, PR_MISC,
 					"Concurrency failed, Disabling concurrency BOOST_EN=%s - going back to BOOST mode\n",
 					(boost_enabled ? "True" : "False"));
@@ -1888,6 +1911,7 @@ int smblite_lib_get_prop_usb_present(struct smb_charger *chg,
 	val->intval = (bool)(stat & USBIN_PLUGIN_RT_STS_BIT);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_prop_usb_present);
 
 int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 			       union power_supply_propval *val)
@@ -1902,7 +1926,7 @@ int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 	 * while the charger is inserted.
 	 */
 	smblite_lib_is_input_present(chg, &input_present);
-	if (is_boost_en(chg) && input_present) {
+	if (smblite_lib_is_boost_en(chg) && input_present) {
 		val->intval = true;
 		smblite_lib_dbg(chg, PR_MISC,
 			"USB_ONLINE set due to boost_en and input_present\n");
@@ -2037,6 +2061,7 @@ int smblite_lib_get_prop_usb_voltage_now(struct smb_charger *chg,
 out:
 	return rc;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_prop_usb_voltage_now);
 
 int smblite_lib_get_prop_usbin_current(struct smb_charger *chg,
 		union power_supply_propval *val)
@@ -2054,6 +2079,7 @@ int smblite_lib_get_prop_usbin_current(struct smb_charger *chg,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(smblite_lib_get_prop_usbin_current);
 
 int smblite_lib_get_prop_charger_temp(struct smb_charger *chg,
 				 int *val)
@@ -3237,6 +3263,8 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 
 	vote(chg->temp_change_irq_disable_votable, DEFAULT_VOTER,
 						!vbus_rising, 0);
+	smblite_shim_notify_plugin(chg->shim,
+		vbus_rising ? SMBLITE_SHIM_PLUGGED_IN : SMBLITE_SHIM_UNPLUGGED);
 	power_supply_changed(chg->usb_psy);
 	pr_info("%s: %s: IRQ: usbin-plugin %s\n",
 		chg->name, __func__, vbus_rising ? "attached" : "detached");
@@ -3432,7 +3460,7 @@ static void smblite_lib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 	int rc = 0;
 
 	/* Stay at 5V if BOOST is enabled */
-	if (is_boost_en(chg)) {
+	if (smblite_lib_is_boost_en(chg)) {
 		smblite_lib_dbg(chg, PR_INTERRUPT,
 			"Ignoring HVDCP3 detect as boost is enabled\n");
 		return;
@@ -4071,9 +4099,12 @@ irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data)
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
 	union power_supply_propval pval = {0, };
-	bool is_qc = false, boost_enabled = is_boost_en(chg);
+	bool is_qc = false, boost_enabled = smblite_lib_is_boost_en(chg);
 	u8 apsd_status = 0;
 	int rc = 0;
+
+	smblite_shim_notify_boost_sw(chg->shim,
+		boost_enabled ? SMBLITE_SHIM_BOOST_EN : SMBLITE_SHIM_BOOST_DIS);
 
 	rc = smblite_lib_get_prop_usb_present(chg, &pval);
 	if (rc < 0)
