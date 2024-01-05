@@ -446,6 +446,12 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 	int max_retries = 5;
 	s64 ts;
 	struct cma_alloc_info cma_info = {0};
+	bool bypass = false;
+
+	trace_android_vh_cma_alloc_bypass(cma, count, align, gfp_mask,
+				&page, &bypass);
+	if (bypass)
+		return page;
 
 	trace_android_vh_cma_alloc_start(&ts);
 
@@ -480,8 +486,10 @@ struct page *cma_alloc(struct cma *cma, unsigned long count,
 				spin_unlock_irq(&cma->lock);
 
 				if (fatal_signal_pending(current) ||
-				    (gfp_mask & __GFP_NORETRY))
+				    (gfp_mask & __GFP_NORETRY)) {
+					ret = -EINTR;
 					break;
+				}
 
 				/*
 				 * Page may be momentarily pinned by some other

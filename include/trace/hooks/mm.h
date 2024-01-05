@@ -83,6 +83,24 @@ DECLARE_HOOK(android_vh_cma_drain_all_pages_bypass,
 DECLARE_HOOK(android_vh_pcplist_add_cma_pages_bypass,
 	TP_PROTO(int migratetype, bool *bypass),
 	TP_ARGS(migratetype, bypass));
+DECLARE_HOOK(android_vh_free_unref_page_bypass,
+	TP_PROTO(struct page *page, int order, int migratetype, bool *bypass),
+	TP_ARGS(page, order, migratetype, bypass));
+DECLARE_HOOK(android_vh_kvmalloc_node_use_vmalloc,
+	TP_PROTO(size_t size, gfp_t *kmalloc_flags, bool *use_vmalloc),
+	TP_ARGS(size, kmalloc_flags, use_vmalloc));
+DECLARE_HOOK(android_vh_should_alloc_pages_retry,
+	TP_PROTO(gfp_t gfp_mask, int order, int *alloc_flags,
+	int migratetype, struct zone *preferred_zone, struct page **page, bool *should_alloc_retry),
+	TP_ARGS(gfp_mask, order, alloc_flags,
+		migratetype, preferred_zone, page, should_alloc_retry));
+DECLARE_HOOK(android_vh_unreserve_highatomic_bypass,
+	TP_PROTO(bool force, struct zone *zone, bool *skip_unreserve_highatomic),
+	TP_ARGS(force, zone, skip_unreserve_highatomic));
+DECLARE_HOOK(android_vh_rmqueue_bulk_bypass,
+	TP_PROTO(unsigned int order, struct per_cpu_pages *pcp, int migratetype,
+		struct list_head *list),
+	TP_ARGS(order, pcp, migratetype, list));
 DECLARE_HOOK(android_vh_mmap_region,
 	TP_PROTO(struct vm_area_struct *vma, unsigned long addr),
 	TP_ARGS(vma, addr));
@@ -142,6 +160,20 @@ DECLARE_HOOK(android_vh_mem_cgroup_css_offline,
 DECLARE_HOOK(android_vh_si_meminfo,
 	TP_PROTO(struct sysinfo *val),
 	TP_ARGS(val));
+DECLARE_HOOK(android_vh_cma_alloc_bypass,
+	TP_PROTO(struct cma *cma, unsigned long count, unsigned int align,
+		gfp_t gfp_mask, struct page **page, bool *bypass),
+	TP_ARGS(cma, count, align, gfp_mask, page, bypass));
+DECLARE_HOOK(android_vh_alloc_pages_entry,
+	TP_PROTO(gfp_t *gfp, unsigned int order, int preferred_nid,
+		nodemask_t *nodemask),
+	TP_ARGS(gfp, order, preferred_nid, nodemask));
+DECLARE_HOOK(android_vh_isolate_freepages,
+	TP_PROTO(struct compact_control *cc, struct page *page, bool *bypass),
+	TP_ARGS(cc, page, bypass));
+DECLARE_HOOK(android_vh_ptep_clear_flush_young,
+	TP_PROTO(bool *skip),
+	TP_ARGS(skip));
 #endif /* _TRACE_HOOK_MM_H */
 
 /* This part must be outside protection */
