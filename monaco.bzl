@@ -21,6 +21,7 @@ def define_monaco():
         "drivers/cpufreq/cpufreq_userspace.ko",
         "drivers/cpufreq/qcom-cpufreq-hw.ko",
         "drivers/cpufreq/qcom-cpufreq-hw-debug.ko",
+        "drivers/cpuidle/governors/qcom_lpm.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/dma/qcom/bam_dma.ko",
         "drivers/dma/qcom/msm_gpi.ko",
