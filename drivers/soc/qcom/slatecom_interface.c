@@ -1275,6 +1275,7 @@ static int ssr_slate_cb(struct notifier_block *this,
 		break;
 	case QCOM_SSR_AFTER_POWERUP:
 		pr_debug("Slate after powerup\n");
+		twm_exit = false;
 		slatee.e_type = SLATE_AFTER_POWER_UP;
 		slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		send_uevent(&slatee);
@@ -1388,7 +1389,6 @@ static int ssr_adsp_cb(struct notifier_block *this,
 bool is_twm_exit(void)
 {
 	if (twm_exit) {
-		twm_exit = false;
 		return true;
 	}
 	return false;
