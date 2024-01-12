@@ -78,3 +78,6 @@ sdhci-msm-scaling.ko
 qcom_logbuf_vh.ko
 msm_rtb.ko
 minidump.ko
+crypto-qti-common.ko
+crypto-qti-hwkm.ko
+hwkm_v1.ko
