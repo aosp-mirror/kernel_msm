@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(msg) "slatecom: %s: " msg, __func__
@@ -44,7 +44,7 @@
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 #define CMA_BFFR_POOL_SIZE (128*1024)
 #define TX_AHB_BUF_SIZE 1024
-
+#define SLATE_HEALTH_CHECK     BIT(23)
 #define SLATE_OK_SLP_RBSC      BIT(24)
 #define SLATE_OK_SLP_S2R       BIT(25)
 #define SLATE_OK_SLP_S2D      (BIT(25) | BIT(24))
@@ -761,6 +761,7 @@ static int slatecom_resume_l(void *handle)
 	uint32_t slav_status_auto_clear_reg = 0;
 	int retry = 0;
 	int ret = 0;
+	uint32_t cmnd_reg = 0;
 
 	if (handle == NULL) {
 		SLATECOM_ERR("slatecom handle null\n");
@@ -821,6 +822,18 @@ static int slatecom_resume_l(void *handle)
 		retry++;
 	} while (retry < MAX_RETRY);
 
+	reinit_completion(&slate_resume_wait);
+	cmnd_reg |= SLATE_HEALTH_CHECK;
+	ret = slatecom_reg_write_cmd(cntx,
+	SLATE_CMND_REG, 1, &cmnd_reg, false);
+	if (ret < 0)
+		pr_err("SLATE_HEALTH_CHECK write command failed\n");
+	ret = wait_for_completion_timeout(&slate_resume_wait,
+	msecs_to_jiffies(SLATE_RESUME_IRQ_TIMEOUT));
+	pr_debug("slate health check ret = %d\n", ret);
+
+	if (atomic_read(&ok_to_sleep) == 0)
+		goto complete;
 	if (retry == MAX_RETRY) {
 		mutex_unlock(&slate_resume_mutex);
 		/* SLATE failed to resume. Trigger watchdog. */
