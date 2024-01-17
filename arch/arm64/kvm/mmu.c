@@ -701,7 +701,7 @@ static int get_user_mapping_size(struct kvm *kvm, u64 addr)
 
 static bool stage2_force_pte_cb(u64 addr, u64 end, enum kvm_pgtable_prot prot)
 {
-	return true;
+	return false;
 }
 
 static bool stage2_pte_is_counted(kvm_pte_t pte, u32 level)
@@ -1388,7 +1388,7 @@ static int pkvm_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		 * prevent try_to_unmap() from succeeding.
 		 */
 		ret = -EIO;
-		goto dec_account;
+		goto unpin;
 	}
 
 	write_lock(&kvm->mmu_lock);
@@ -1397,7 +1397,7 @@ static int pkvm_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	if (ret) {
 		if (ret == -EAGAIN)
 			ret = 0;
-		goto unpin;
+		goto unlock;
 	}
 
 	ppage->page = page;
@@ -1407,8 +1407,9 @@ static int pkvm_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	return 0;
 
-unpin:
+unlock:
 	write_unlock(&kvm->mmu_lock);
+unpin:
 	unpin_user_pages(&page, 1);
 dec_account:
 	account_locked_vm(mm, 1, false);
