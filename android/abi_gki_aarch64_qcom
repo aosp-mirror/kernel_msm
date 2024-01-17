@@ -2810,3 +2810,6 @@
   xsk_tx_release
   xsk_uses_need_wakeup
   zap_vma_ptes
+  __traceiter_android_rvh_update_thermal_stats
+  __tracepoint_android_rvh_update_thermal_stats
+  __balance_callbacks
