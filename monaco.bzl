@@ -9,6 +9,7 @@ def define_monaco():
         # keep sorted
         "drivers/base/regmap/qti-regmap-debugfs.ko",
         "drivers/char/frpc-adsprpc.ko",
+        "drivers/char/rdbg.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
         "drivers/clk/qcom/clk-smd-rpm.ko",
