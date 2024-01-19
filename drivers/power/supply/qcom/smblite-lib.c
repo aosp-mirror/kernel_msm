@@ -3177,6 +3177,25 @@ static int smblite_lib_request_dpdm(struct smb_charger *chg, bool enable)
 		}
 	}
 	mutex_lock(&chg->dpdm_lock);
+
+	/*
+	 * Keep the dpdm "regulator" disabled if APSD has been disabled.
+	 * This "regulator" is provided by drivers/usb/phy/phy-msm-snps-hs.c
+	 * and is one way to turn on the USB PHY's power/clocks. However, the
+	 * "regulator" initialization puts the PHY data lines into non-driving
+	 * mode so that APSD can work properly. This becomes problematic if
+	 * we've decoupled USB data from VBUS, as enabling this "regulator" will
+	 * thus render the data lines inoperable, severing the data connection.
+	 * Note: From experimenting, APSD _may_ continue to work without the
+	 * "regulator", but QC3.0 will not. At best, the charger voltage goes
+	 * back down to the base voltage, but it has also been observed to
+	 * decrease, presumably because the data lines don't remain consistent
+	 * and get into a combination observed by the charger as a "reduce
+	 * voltage" QC3.0 command.
+	 */
+	if (!smblite_lib_is_apsd_enabled(chg))
+		enable = false;
+
 	if (enable) {
 		if (chg->dpdm_reg && !chg->dpdm_enabled) {
 			smblite_lib_dbg(chg, PR_MISC, "enabling DPDM regulator\n");
@@ -3203,6 +3222,37 @@ static int smblite_lib_request_dpdm(struct smb_charger *chg, bool enable)
 	mutex_unlock(&chg->dpdm_lock);
 
 	return rc;
+}
+
+bool smblite_lib_is_apsd_enabled(struct smb_charger *chg)
+{
+	int ret;
+	u8 val;
+
+	ret = smblite_lib_read(chg, USBIN_APSD_EN_REG(chg->base), &val);
+	if (ret != 0) {
+		smblite_lib_err(chg, "Couldn't read USBIN_APSD_EN (ret=%d)\n",
+				ret);
+		val = BC1P2_SRC_DETECT_BIT;
+	}
+
+	return !!(val & BC1P2_SRC_DETECT_BIT);
+}
+
+int smblite_lib_enable_apsd(struct smb_charger *chg, bool enable)
+{
+	int ret;
+	mutex_lock(&chg->dpdm_lock);
+	ret = smblite_lib_masked_write(chg, USBIN_APSD_EN_REG(chg->base),
+				BC1P2_SRC_DETECT_BIT,
+				enable ? BC1P2_SRC_DETECT_BIT : 0);
+	if (ret != 0)
+		smblite_lib_err(chg, "Couldn't %s APSD (ret=%d)\n",
+				enable ? "enable" : "disable");
+
+	mutex_unlock(&chg->dpdm_lock);
+
+	return ret;
 }
 
 #define PL_DELAY_MS	30000
@@ -3238,6 +3288,11 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 					msecs_to_jiffies(PL_DELAY_MS));
 		smblite_lib_dbg(chg, PR_ALWAYS, "BOOST_EN=%s at plugin\n",
 				smblite_lib_is_boost_en(chg) ? "True" : "False");
+		if (!smblite_lib_is_apsd_enabled(chg)) {
+			vote(chg->usb_icl_votable, USB_PSY_VOTER, false, 0);
+			/* Default to 500mA SDP if APSD is disabled */
+			vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true, SDP_CURRENT_UA);
+		}
 	} else {
 		smblite_lib_update_usb_type(chg, POWER_SUPPLY_TYPE_UNKNOWN);
 		if (chg->wa_flags & BOOST_BACK_WA) {
@@ -3527,12 +3582,16 @@ irqreturn_t smblite_usb_source_change_irq_handler(int irq, void *data)
 	int rc = 0;
 	u8 stat;
 
+	/* Ignore APSD interrupts that might have triggered during boot. */
+	if (!smblite_lib_is_apsd_enabled(chg))
+		return IRQ_HANDLED;
+
 	rc = smblite_lib_read(chg, APSD_STATUS_REG(chg->base), &stat);
 	if (rc < 0) {
 		smblite_lib_err(chg, "Couldn't read APSD_STATUS rc=%d\n", rc);
 		return IRQ_HANDLED;
 	}
-	smblite_lib_dbg(chg, PR_INTERRUPT, "APSD_STATUS = 0x%02x\n", stat);
+	smblite_lib_dbg(chg, PR_ALWAYS, "APSD_STATUS = 0x%02x\n", stat);
 
 	if ((chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB)
 		&& (stat & APSD_DTC_STATUS_DONE_BIT)

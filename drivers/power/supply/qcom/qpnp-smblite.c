@@ -185,8 +185,36 @@ static ssize_t weak_chg_icl_ua_store(struct device *dev, struct device_attribute
 }
 static DEVICE_ATTR_RW(weak_chg_icl_ua);
 
+static ssize_t apsd_en_show(struct device *dev, struct device_attribute
+				*attr, char *buf)
+{
+	struct smblite *chip = dev_get_drvdata(dev);
+	struct smb_charger *chg = &chip->chg;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			smblite_lib_is_apsd_enabled(chg));
+}
+
+static ssize_t apsd_en_store(struct device *dev, struct device_attribute
+			*attr, const char *buf, size_t count)
+{
+	struct smblite *chip = dev_get_drvdata(dev);
+	struct smb_charger *chg = &chip->chg;
+	bool enabled;
+	int ret;
+
+	ret = kstrtobool(buf, &enabled);
+	if (ret < 0)
+		return ret;
+
+	ret = smblite_lib_enable_apsd(chg, enabled);
+	return (ret == 0) ? count : ret;
+}
+static DEVICE_ATTR_RW(apsd_en);
+
 static struct attribute *smblite_attrs[] = {
 	&dev_attr_weak_chg_icl_ua.attr,
+	&dev_attr_apsd_en.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(smblite);
