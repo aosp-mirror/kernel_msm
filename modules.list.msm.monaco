@@ -38,6 +38,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 qcom-reboot-reason.ko
 pmic-pon-log.ko
+rproc_qcom_common.ko
 qrtr.ko
 qcom_aoss.ko
 msm_qmp.ko
@@ -77,3 +78,7 @@ phy-msm-snps-hs.ko
 dwc3-msm.ko
 qcom-reboot-reason.ko
 qcom_cpu_vendor_hooks.ko
+sdhci-msm-scaling.ko
+qcom_logbuf_vh.ko
+msm_rtb.ko
+minidump.ko

@@ -44,7 +44,7 @@ qcom_glink_mem_entry_init(struct device *dev, void *va, dma_addr_t dma, size_t l
 
 	return mem;
 }
-EXPORT_SYMBOL(qcom_glink_mem_entry_init);
+EXPORT_SYMBOL_GPL(qcom_glink_mem_entry_init);
 
 void qcom_glink_mem_entry_free(struct qcom_glink_mem_entry *mem)
 {
@@ -62,7 +62,7 @@ void qcom_glink_mem_entry_free(struct qcom_glink_mem_entry *mem)
 
 	kfree(mem);
 }
-EXPORT_SYMBOL(qcom_glink_mem_entry_free);
+EXPORT_SYMBOL_GPL(qcom_glink_mem_entry_free);
 
 void *qcom_glink_prepare_da_for_cpu(u64 da, size_t len)
 {
@@ -92,4 +92,4 @@ void *qcom_glink_prepare_da_for_cpu(u64 da, size_t len)
 
 	return ptr;
 }
-EXPORT_SYMBOL(qcom_glink_prepare_da_for_cpu);
+EXPORT_SYMBOL_GPL(qcom_glink_prepare_da_for_cpu);
