@@ -120,6 +120,8 @@
 
 static int qbg_debug_mask;
 
+static time64_t last_udata_update;
+
 enum qbg_esr_fcc_reduction {
 	ESR_FCC_150MA = 0x6,
 };
@@ -612,6 +614,7 @@ static void process_udata_work(struct work_struct *work)
 		qbg_dbg(chip, QBG_DEBUG_STATUS, "udata update: udata_updated=>%s\n",
 			chip->udata_updated ? "Yes" : "No");
 	}
+	last_udata_update = ktime_get_boottime_seconds();
 }
 
 static int qbg_decode_fifo_data(struct fifo_data fifo, unsigned int *vbat1,
@@ -2737,6 +2740,26 @@ exit:
 	return 0;
 }
 
+/*
+ * We expect a userland service to regularly query this. If, when the userland
+ * service queries, the elapsed time since last data update is more than one
+ * hour, a critical error will be logged.
+ */
+static ssize_t qbg_last_update_elapsed_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buff)
+{
+	time64_t elapsed = ktime_get_boottime_seconds() - last_udata_update;
+
+	if (elapsed > 3600) {
+		/* If there is no update for more than one hour, log a critical error */
+		pr_crit_once("qbg driver have not updated for %lld seconds", elapsed);
+	}
+	return scnprintf(buff, PAGE_SIZE, "%lld\n", elapsed);
+}
+
+static DEVICE_ATTR_RO(qbg_last_update_elapsed);
+
 static int qti_qbg_probe(struct platform_device *pdev)
 {
 	struct qti_qbg *chip;
@@ -2891,6 +2914,13 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	rc = device_create_file(chip->qbg_device, &dev_attr_qbg_last_update_elapsed);
+	if (rc) {
+		dev_err(&pdev->dev, "Failed create qbg_last_update_elapsed sysfs, rc=%d\n", rc);
+	}
+
+	last_udata_update = ktime_get_boottime_seconds();
+
 	qbg_init_vbatt_empty_threshold(chip);
 
 	rc = qbg_register_interrupts(chip);
@@ -2913,6 +2943,7 @@ static int qti_qbg_remove(struct platform_device *pdev)
 
 	if (chip->rtc)
 		rtc_class_close(chip->rtc);
+	device_remove_file(chip->qbg_device, &dev_attr_qbg_last_update_elapsed);
 	cancel_work_sync(&chip->status_change_work);
 	cancel_work_sync(&chip->udata_work);
 	cancel_delayed_work_sync(&chip->soc_update_work);
