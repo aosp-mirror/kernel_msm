@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("//msm-kernel/arch/arm64/boot/dts/vendor:qcom/platform_map.bzl", _get_dtb_list = "get_dtb_list", _get_dtbo_list = "get_dtbo_list")
+load("//private/msm-google/arch/arm64/boot/dts/vendor:qcom/platform_map.bzl", _get_dtb_list = "get_dtb_list", _get_dtbo_list = "get_dtbo_list")
 
 def define_top_level_rules():
     for skippable in ["abl", "dtc", "abi"]:
