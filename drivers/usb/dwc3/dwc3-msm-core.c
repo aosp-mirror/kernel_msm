@@ -3175,6 +3175,41 @@ static void mdwc3_update_u1u2_value(struct dwc3 *dwc)
 		dwc->dis_u2_entry_quirk ? "disabled" : "enabled");
 }
 
+static void dwc3_handle_connect_event(struct dwc3 *dwc)
+{
+	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+	u32 reg;
+
+	if ((dwc->speed != DWC3_DSTS_SUPERSPEED) &&
+			(dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS)) {
+		reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUSB3PIPECTL(0));
+		reg |= DWC3_GUSB3PIPECTL_SUSPHY;
+		dwc3_msm_write_reg(mdwc->base, DWC3_GUSB3PIPECTL(0), reg);
+	}
+
+	/*
+	 * SW WA for CV9 RESET DEVICE TEST(TD 9.23) compliance failure.
+	 * Visit eUSB2 phy driver for more details.
+	 */
+	WARN_ON(mdwc->hs_phy->flags & PHY_HOST_MODE);
+	if (mdwc->use_eusb2_phy &&
+			(dwc->gadget->speed >= USB_SPEED_SUPER)) {
+		usb_phy_notify_connect(mdwc->hs_phy, dwc->gadget->speed);
+		udelay(20);
+		/* Perform usb2 phy soft reset as given workaround */
+		mdwc3_usb2_phy_soft_reset(mdwc);
+	}
+
+	/*
+	 * Add power event if the dbm indicates coming out of L1 by
+	 * interrupt
+	 */
+	if (!mdwc->dbm_is_1p4)
+		dwc3_msm_write_reg_field(mdwc->base,
+				PWR_EVNT_IRQ_MASK_REG,
+				PWR_EVNT_LPM_OUT_L1_MASK, 1);
+}
+
 void dwc3_msm_notify_event(struct dwc3 *dwc,
 		enum dwc3_notify_event event, unsigned int value)
 {
@@ -3206,28 +3241,7 @@ void dwc3_msm_notify_event(struct dwc3 *dwc,
 	case DWC3_CONTROLLER_CONNDONE_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_CONNDONE_EVENT received\n");
 
-		/*
-		 * SW WA for CV9 RESET DEVICE TEST(TD 9.23) compliance failure.
-		 * Visit eUSB2 phy driver for more details.
-		 */
-		WARN_ON(mdwc->hs_phy->flags & PHY_HOST_MODE);
-		if (mdwc->use_eusb2_phy &&
-				(dwc->gadget->speed >= USB_SPEED_SUPER)) {
-			usb_phy_notify_connect(mdwc->hs_phy, dwc->gadget->speed);
-			udelay(20);
-			/* Perform usb2 phy soft reset as given workaround */
-			mdwc3_usb2_phy_soft_reset(mdwc);
-		}
-
-		/*
-		 * Add power event if the dbm indicates coming out of L1 by
-		 * interrupt
-		 */
-		if (!mdwc->dbm_is_1p4)
-			dwc3_msm_write_reg_field(mdwc->base,
-					PWR_EVNT_IRQ_MASK_REG,
-					PWR_EVNT_LPM_OUT_L1_MASK, 1);
-
+		dwc3_handle_connect_event(dwc);
 		atomic_set(&mdwc->in_lpm, 0);
 		mdwc3_update_u1u2_value(dwc);
 		set_bit(CONN_DONE, &mdwc->inputs);
@@ -3343,6 +3357,16 @@ void dwc3_msm_notify_event(struct dwc3 *dwc,
 		break;
 	case DWC3_CONTROLLER_NOTIFY_CLEAR_DB:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_NOTIFY_CLEAR_DB\n");
+
+		/*
+		 * Clear the susphy bit here to ensure it is not set during
+		 * the course of controller initialisation process.
+		 */
+		reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUSB3PIPECTL(0));
+		reg &= ~(DWC3_GUSB3PIPECTL_SUSPHY);
+		dwc3_msm_write_reg(mdwc->base, DWC3_GUSB3PIPECTL(0), reg);
+		udelay(1000);
+
 		if (mdwc->gsi_reg) {
 			dwc3_msm_write_reg_field(mdwc->base,
 				GSI_GENERAL_CFG_REG(mdwc->gsi_reg),
@@ -6734,6 +6758,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		 */
 		if (dwc->dr_mode == USB_DR_MODE_OTG)
 			flush_work(&dwc->drd_work);
+
 		dwc3_msm_notify_event(dwc, DWC3_GSI_EVT_BUF_SETUP, 0);
 
 		dwc3_override_vbus_status(mdwc, true);
