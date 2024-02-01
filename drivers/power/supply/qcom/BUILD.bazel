@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+load(
+    "//build/kernel/kleaf:kernel.bzl",
+    "kernel_module",
+)
+
+filegroup(
+    name = "qcom_battery_modules.kconfig",
+    srcs = [
+        "Kconfig",
+    ],
+    visibility = [
+        "//private/devices/google:__subpackages__",
+        "//private/google-modules/soc/msm:__pkg__",
+    ],
+)
+
+filegroup(
+    name = "qcom_battery_headers",
+    srcs = glob([
+        "*.h",
+    ]),
+    visibility = [
+        "//private/google-modules/bms:__pkg__",
+        "//private/google-modules/soc/msm/drivers/power/supply/google:__pkg__",
+    ],
+)
+
+kernel_module(
+    name = "qcom_battery_modules",
+    srcs = glob([
+        "**/*.c",
+        "**/*.h",
+    ]) + [
+        "//private/google-modules/bms/misc:headers",
+    ],
+    outs = [
+        "qpnp-smblite-main.ko",
+        "qti-qbg-main.ko",
+    ],
+    kernel_build = "//private/google-modules/soc/msm:msm_kernel_build",
+    visibility = [
+        "//private/devices/google:__subpackages__",
+        "//private/google-modules:__subpackages__",
+        "//private/google-modules/soc/msm/drivers/power/supply/google:__pkg__",
+    ],
+    deps = [
+        "//private/google-modules/bms/misc:bms-misc",
+    ],
+)
