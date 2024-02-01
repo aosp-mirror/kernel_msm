@@ -1049,11 +1049,14 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_munmap_64(unmap32,
 							unmap));
-		if (err)
+		if (err) {
+			kfree(unmap);
 			return err;
+		}
 
 		VERIFY(err, 0 == (err = fastrpc_internal_munmap(fl,
 							unmap)));
+		kfree(unmap);
 		return err;
 	}
 	case COMPAT_FASTRPC_IOCTL_INIT:
@@ -1070,10 +1073,12 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		VERIFY(err, 0 == compat_get_fastrpc_ioctl_init(init32,
 							init, cmd));
-		if (err)
+		if (err) {
+			kfree(init);
 			return err;
+		}
 		VERIFY(err, 0 == (err = fastrpc_init_process(fl, init)));
-
+		kfree(init);
 		return err;
 
 	}
@@ -1090,11 +1095,14 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return -EFAULT;
 		err = get_user(u, info32);
 		memcpy(info, &u, sizeof(u));
-		if (err)
+		if (err) {
+			kfree(info);
 			return err;
+		}
 		VERIFY(err, 0 == (err = fastrpc_get_info(fl, info)));
 		memcpy(&u, info, sizeof(*info));
 		err |= put_user(u, info32);
+		kfree(info);
 		return err;
 	}
 	case FASTRPC_IOCTL_SETMODE:
