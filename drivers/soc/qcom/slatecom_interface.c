@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(msg) "slatecom_dev:" msg
 
@@ -1095,6 +1095,12 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
 		if (ret < 0)
 			pr_err("MSM RTC Disable cmd failed\n");
+		break;
+	case 'c':
+		opcode = GMI_MGR_FORCE_CRASH;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("AON force crash cmd failed\n");
 		break;
 
 	default:

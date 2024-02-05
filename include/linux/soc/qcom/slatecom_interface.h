@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef SLATECOM_INTERFACE_H
 #define SLATECOM_INTERFACE_H
@@ -198,6 +198,8 @@ enum WMSlateCtrlChnlOpcode {
 	GMI_MGR_ENABLE_PMIC_RTC = 93,		/* Enable PMIC RTC */
 
 	GMI_MGR_DISABLE_PMIC_RTC = 94,		/* Disable PMIC RTC */
+
+	GMI_MGR_FORCE_CRASH = 95,		/* Force Crash of AON */
 };
 
 /*
