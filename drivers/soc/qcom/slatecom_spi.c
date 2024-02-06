@@ -827,10 +827,10 @@ static int slatecom_resume_l(void *handle)
 	ret = slatecom_reg_write_cmd(cntx,
 	SLATE_CMND_REG, 1, &cmnd_reg, false);
 	if (ret < 0)
-		pr_err("SLATE_HEALTH_CHECK write command failed\n");
+		SLATECOM_ERR("SLATE_HEALTH_CHECK write cmd failed\n");
 	ret = wait_for_completion_timeout(&slate_resume_wait,
 	msecs_to_jiffies(SLATE_RESUME_IRQ_TIMEOUT));
-	pr_debug("slate health check ret = %d\n", ret);
+	SLATECOM_INFO("slate health check ret:%d\n", ret);
 
 	if (atomic_read(&ok_to_sleep) == 0)
 		goto complete;
