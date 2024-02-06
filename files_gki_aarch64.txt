@@ -1458,6 +1458,7 @@ drivers/power/supply/power_supply.h
 drivers/power/supply/power_supply_core.c
 drivers/power/supply/power_supply_leds.c
 drivers/power/supply/power_supply_sysfs.c
+drivers/powercap/idle_inject.c
 drivers/powercap/powercap_sys.c
 drivers/pps/kapi.c
 drivers/pps/kc.h
@@ -1553,6 +1554,7 @@ drivers/staging/android/debug_kinfo.c
 drivers/staging/android/debug_kinfo.h
 drivers/staging/android/uapi/ashmem.h
 drivers/thermal/cpufreq_cooling.c
+drivers/thermal/cpuidle_cooling.c
 drivers/thermal/devfreq_cooling.c
 drivers/thermal/gov_power_allocator.c
 drivers/thermal/gov_step_wise.c
@@ -2522,7 +2524,6 @@ include/keys/system_keyring.h
 include/keys/trusted-type.h
 include/keys/user-type.h
 include/kunit/assert.h
-include/kunit/test-bug.h
 include/kunit/test.h
 include/kunit/try-catch.h
 include/kvm/arm_arch_timer.h
@@ -2864,6 +2865,7 @@ include/linux/i3c/master.h
 include/linux/i8042.h
 include/linux/icmp.h
 include/linux/icmpv6.h
+include/linux/idle_inject.h
 include/linux/idr.h
 include/linux/ieee80211.h
 include/linux/ieee802154.h
@@ -4095,6 +4097,7 @@ include/trace/hooks/cpuidle.h
 include/trace/hooks/cpuidle_psci.h
 include/trace/hooks/creds.h
 include/trace/hooks/debug.h
+include/trace/hooks/delayacct.h
 include/trace/hooks/dmabuf.h
 include/trace/hooks/drm_atomic.h
 include/trace/hooks/drm_framebuffer.h
@@ -4728,6 +4731,7 @@ kernel/configs.c
 kernel/cpu.c
 kernel/cpu_pm.c
 kernel/cred.c
+kernel/delayacct.c
 kernel/dma/coherent.c
 kernel/dma/contiguous.c
 kernel/dma/debug.h
@@ -5066,14 +5070,6 @@ lib/kobject.c
 lib/kobject_uevent.c
 lib/kstrtox.c
 lib/kstrtox.h
-lib/kunit/assert.c
-lib/kunit/debugfs.h
-lib/kunit/executor.c
-lib/kunit/string-stream.c
-lib/kunit/string-stream.h
-lib/kunit/test.c
-lib/kunit/try-catch-impl.h
-lib/kunit/try-catch.c
 lib/libcrc32c.c
 lib/linear_ranges.c
 lib/list_debug.c
