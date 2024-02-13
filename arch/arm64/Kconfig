@@ -628,7 +628,6 @@ config ARM64_WORKAROUND_REPEAT_TLBI
 
 config ARM64_ERRATUM_2441007
 	bool "Cortex-A55: Completion of affected memory accesses might not be guaranteed by completion of a TLBI"
-	default y
 	select ARM64_WORKAROUND_REPEAT_TLBI
 	help
 	  This option adds a workaround for ARM Cortex-A55 erratum #2441007.
@@ -712,9 +711,6 @@ config ARM64_ERRATUM_1508412
 	  to prevent a speculative PAR_EL1 read.
 
 	  If unsure, say Y.
-
-config ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE
-	bool
 
 config ARM64_ERRATUM_2658417
 	bool "Cortex-A510: 2658417: remove BF16 support due to incorrect result"
@@ -839,7 +835,6 @@ config ARM64_ERRATUM_2224489
 
 config ARM64_ERRATUM_2441009
 	bool "Cortex-A510: Completion of affected memory accesses might not be guaranteed by completion of a TLBI"
-	default y
 	select ARM64_WORKAROUND_REPEAT_TLBI
 	help
 	  This option adds a workaround for ARM Cortex-A510 erratum #2441009.
@@ -870,6 +865,9 @@ config ARM64_ERRATUM_2457168
 	  is the same to firmware disabling affected counters.
 
 	  If unsure, say Y.
+
+config ARM64_WORKAROUND_TRBE_OVERWRITE_FILL_MODE
+	bool
 
 config CAVIUM_ERRATUM_22375
 	bool "Cavium erratum 22375, 24313"
