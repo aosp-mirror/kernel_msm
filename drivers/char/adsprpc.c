@@ -1004,14 +1004,13 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 		map->refs--;
 		if (!map->refs && !map->is_persistent && !map->ctx_refs)
 			hlist_del_init(&map->hn);
-		spin_unlock_irqrestore(&me->hlock, irq_flags);
 		if (map->refs > 0) {
 			ADSPRPC_WARN(
 				"multiple references for remote heap size %zu va 0x%lx ref count is %d\n",
 				map->size, map->va, map->refs);
+			spin_unlock_irqrestore(&me->hlock, irq_flags);
 			return;
 		}
-		spin_lock_irqsave(&me->hlock, irq_flags);
 		if (map->is_persistent && map->in_use)
 			map->in_use = false;
 		spin_unlock_irqrestore(&me->hlock, irq_flags);
@@ -2831,9 +2830,9 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 				ctx->overps[i]->mstart)) == map->size) ||
 				ctx->overps[i]->do_cmo) {
 					dma_buf_begin_cpu_access(map->buf,
-						DMA_TO_DEVICE);
-					dma_buf_end_cpu_access(map->buf,
 						DMA_FROM_DEVICE);
+					dma_buf_end_cpu_access(map->buf,
+						DMA_TO_DEVICE);
 					ADSPRPC_DEBUG(
 						"sc 0x%x pv 0x%llx, mend 0x%llx mstart 0x%llx, len %zu size %zu\n",
 						sc, rpra[over].buf.pv,
@@ -2867,10 +2866,10 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 					}
 					up_read(&current->mm->mmap_lock);
 					dma_buf_begin_cpu_access_partial(
-						map->buf, DMA_TO_DEVICE, offset,
+						map->buf, DMA_FROM_DEVICE, offset,
 						inv_len);
 					dma_buf_end_cpu_access_partial(map->buf,
-						DMA_FROM_DEVICE, offset,
+						DMA_TO_DEVICE, offset,
 						inv_len);
 					ADSPRPC_DEBUG(
 						"sc 0x%x vm_start 0x%llx pv 0x%llx, offset 0x%llx, mend 0x%llx mstart 0x%llx, len %zu size %zu\n",

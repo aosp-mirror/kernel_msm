@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,9 +35,9 @@ static const struct cqhci_crypto_alg_entry {
 };
 
 static inline struct cqhci_host *
-cqhci_host_from_ksm(struct blk_keyslot_manager *ksm)
+cqhci_host_from_crypto_profile(struct blk_crypto_profile *profile)
 {
-	struct mmc_host *mmc = container_of(ksm, struct mmc_host, ksm);
+	struct mmc_host *mmc = container_of(profile, struct mmc_host, crypto_profile);
 
 	return mmc->cqe_private;
 }
@@ -50,11 +50,11 @@ static void get_mmio_data(struct ice_mmio_data *data, struct cqhci_host *host)
 #endif
 }
 
-static int cqhci_crypto_qti_keyslot_program(struct blk_keyslot_manager *ksm,
+static int cqhci_crypto_qti_keyslot_program(struct blk_crypto_profile *profile,
 					    const struct blk_crypto_key *key,
 					    unsigned int slot)
 {
-	struct cqhci_host *cq_host = cqhci_host_from_ksm(ksm);
+	struct cqhci_host *cq_host = cqhci_host_from_crypto_profile(profile);
 	int err = 0;
 	u8 data_unit_mask = -1;
 	struct ice_mmio_data mmio_data;
@@ -95,12 +95,12 @@ static int cqhci_crypto_qti_keyslot_program(struct blk_keyslot_manager *ksm,
 	return err;
 }
 
-static int cqhci_crypto_qti_keyslot_evict(struct blk_keyslot_manager *ksm,
+static int cqhci_crypto_qti_keyslot_evict(struct blk_crypto_profile *profile,
 					  const struct blk_crypto_key *key,
 					  unsigned int slot)
 {
 	int err = 0;
-	struct cqhci_host *host = cqhci_host_from_ksm(ksm);
+	struct cqhci_host *host = cqhci_host_from_crypto_profile(profile);
 	struct ice_mmio_data mmio_data;
 
 	get_mmio_data(&mmio_data, host);
@@ -112,24 +112,24 @@ static int cqhci_crypto_qti_keyslot_evict(struct blk_keyslot_manager *ksm,
 	return err;
 }
 
-static int cqhci_crypto_qti_derive_raw_secret(struct blk_keyslot_manager *ksm,
-		const u8 *wrapped_key, unsigned int wrapped_key_size,
-		u8 *secret, unsigned int secret_size)
+static int cqhci_crypto_qti_derive_sw_secret(struct blk_crypto_profile *profile,
+		const u8 *eph_key, size_t eph_key_size,
+		u8 *sw_secret)
 {
 	int err = 0;
 
-	err = crypto_qti_derive_raw_secret(wrapped_key, wrapped_key_size,
-					  secret, secret_size);
+	err = crypto_qti_derive_raw_secret(eph_key, eph_key_size,
+					  sw_secret, RAW_SECRET_SIZE);
 	if (err)
 		pr_err("%s: failed with error %d\n", __func__, err);
 
 	return err;
 }
 
-static const struct blk_ksm_ll_ops cqhci_crypto_qti_ksm_ops = {
+static const struct blk_crypto_ll_ops cqhci_crypto_qti_ll_ops = {
 	.keyslot_program	= cqhci_crypto_qti_keyslot_program,
 	.keyslot_evict		= cqhci_crypto_qti_keyslot_evict,
-	.derive_raw_secret	= cqhci_crypto_qti_derive_raw_secret
+	.derive_sw_secret	= cqhci_crypto_qti_derive_sw_secret
 };
 
 static enum blk_crypto_mode_num
@@ -163,7 +163,7 @@ int cqhci_qti_crypto_init(struct cqhci_host *cq_host)
 {
 	struct mmc_host *mmc = cq_host->mmc;
 	struct device *dev = mmc_dev(mmc);
-	struct blk_keyslot_manager *ksm = &mmc->ksm;
+	struct blk_crypto_profile *profile = &mmc->crypto_profile;
 	unsigned int num_keyslots;
 	unsigned int cap_idx;
 	enum blk_crypto_mode_num blk_mode_num;
@@ -194,17 +194,17 @@ int cqhci_qti_crypto_init(struct cqhci_host *cq_host)
 	 */
 	num_keyslots = cq_host->crypto_capabilities.config_count + 1;
 
-	err = devm_blk_ksm_init(dev, ksm, num_keyslots);
+	err = devm_blk_crypto_profile_init(dev, profile, num_keyslots);
 	if (err)
 		goto out;
 
-	ksm->ksm_ll_ops = cqhci_crypto_qti_ksm_ops;
-	ksm->dev = dev;
+	profile->ll_ops = cqhci_crypto_qti_ll_ops;
+	profile->dev = dev;
 
 	/* Unfortunately, CQHCI crypto only supports 32 DUN bits. */
-	ksm->max_dun_bytes_supported = 4;
+	profile->max_dun_bytes_supported = 4;
 
-	ksm->features = BLK_CRYPTO_FEATURE_WRAPPED_KEYS;
+	profile->key_types_supported = BLK_CRYPTO_KEY_TYPE_HW_WRAPPED;
 
 	/*
 	 * Cache all the crypto capabilities and advertise the supported crypto
@@ -220,13 +220,13 @@ int cqhci_qti_crypto_init(struct cqhci_host *cq_host)
 					cq_host->crypto_cap_array[cap_idx]);
 		if (blk_mode_num == BLK_ENCRYPTION_MODE_INVALID)
 			continue;
-		ksm->crypto_modes_supported[blk_mode_num] |=
+		profile->modes_supported[blk_mode_num] |=
 			cq_host->crypto_cap_array[cap_idx].sdus_mask * 512;
 	}
 
 	/* Clear all the keyslots so that we start in a known state. */
 	for (slot = 0; slot < num_keyslots; slot++)
-		ksm->ksm_ll_ops.keyslot_evict(ksm, NULL, slot);
+		profile->ll_ops.keyslot_evict(profile, NULL, slot);
 
 	/* CQHCI crypto requires the use of 128-bit task descriptors. */
 	cq_host->caps |= CQHCI_TASK_DESC_SZ_128;

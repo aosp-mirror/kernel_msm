@@ -154,3 +154,23 @@ config QTI_THERMAL_MINIDUMP
 	   be saved to the minidump in real time. When the system crashes,
 	   the saved temperature data will help analyze the reason for the
 	   system crash.
+
+config QTI_BCL_PMIC5
+	tristate "BCL driver for BCL peripherals in PMIC5"
+	depends on SPMI && THERMAL
+	help
+	   This driver provides routines to configure and monitor the BCL
+	   PMIC peripheral. This driver registers the battery current and
+	   voltage sensors with the thermal core framework and can take
+	   threshold input and notify the thermal core when the threshold is
+	   reached.
+
+config QTI_BCL_SOC_DRIVER
+	tristate "QTI Battery state of charge sensor driver"
+	depends on THERMAL && POWER_SUPPLY
+	help
+	   This driver registers battery state of charge as a sensor with
+	   thermal framework. This sensor can monitor for state of charge
+	   thresholds and notify the thermal framework when the thresholds
+	   are reached and cleared. This will help to monitor and apply any
+	   mitigation when state of charge goes below a certain threshold.
