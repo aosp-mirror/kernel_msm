@@ -1879,7 +1879,7 @@ void incfs_kill_sb(struct super_block *sb)
 	struct mount_info *mi = sb->s_fs_info;
 
 	pr_debug("incfs: unmount\n");
-	generic_shutdown_super(sb);
+	kill_anon_super(sb);
 	incfs_free_mount_info(mi);
 }
 
