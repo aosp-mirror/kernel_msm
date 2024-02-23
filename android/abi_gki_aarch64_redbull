@@ -1417,7 +1417,6 @@
   generic_file_splice_read
   generic_fillattr
   generic_read_dir
-  generic_shutdown_super
   get_zeroed_page
   iget5_locked
   ihold
@@ -1429,6 +1428,7 @@
   kernel_read
   kernel_write
   kern_path
+  kill_anon_super
   kobject_add
   kobject_init
   kobj_sysfs_ops
@@ -1607,7 +1607,6 @@
   idr_for_each
   idr_replace
   init_uts_ns
-  irq_work_queue
   iterate_fd
   kern_addr_valid
   kernfs_create_link
@@ -2772,8 +2771,10 @@
   device_wakeup_enable
   devm_regulator_register_notifier
   generic_file_mmap
+  generic_shutdown_super
   idr_alloc_u32
   inet6_destroy_sock
+  irq_work_queue
   qdisc_reset
   simple_getattr
   soc_find_component
