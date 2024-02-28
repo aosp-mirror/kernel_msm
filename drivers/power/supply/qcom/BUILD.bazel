@@ -17,6 +17,17 @@ filegroup(
 )
 
 filegroup(
+    name = "qcom_battery_modules.makefile",
+    srcs = [
+        "Makefile",
+    ],
+    visibility = [
+        "//private/devices/google:__subpackages__",
+        "//private/google-modules/soc/msm:__pkg__",
+    ],
+)
+
+filegroup(
     name = "qcom_battery_headers",
     srcs = glob([
         "*.h",
