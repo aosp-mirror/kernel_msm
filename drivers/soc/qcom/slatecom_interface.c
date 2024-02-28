@@ -613,6 +613,11 @@ static int send_slate_boot_status(enum boot_status event)
 	char *event_buf;
 	unsigned int event_buf_size;
 
+	if (event == SLATE_UPDATE_START)
+		set_slate_bt_state(false);
+	else if (event == SLATE_UPDATE_DONE)
+		set_slate_bt_state(true);
+
 	event_buf_size = sizeof(enum boot_status);
 
 	event_buf = kmemdup((char *)&event, event_buf_size, GFP_KERNEL);
