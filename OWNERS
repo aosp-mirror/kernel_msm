@@ -1,3 +1,5 @@
 file:/OWNERS_core
 per-file modules*monaco=set noparent
 per-file modules*monaco=file:/OWNERS_pixelwatchbsp
+per-file monaco.bzl=file:/OWNERS_pixelwatchbsp
+
