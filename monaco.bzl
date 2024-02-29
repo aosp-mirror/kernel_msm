@@ -140,6 +140,7 @@ monaco_in_tree_modules = [
     "drivers/soc/qcom/soc_sleep_stats.ko",
     "drivers/soc/qcom/socinfo.ko",
     "drivers/soc/qcom/sps/sps_drv.ko",
+    "drivers/soc/qcom/subsystem_sleep_stats.ko",
     "drivers/soc/qcom/sysmon_subsystem_stats.ko",
     "drivers/soc/qcom/usb_bam.ko",
     "drivers/spi/spi-geni-qcom.ko",
