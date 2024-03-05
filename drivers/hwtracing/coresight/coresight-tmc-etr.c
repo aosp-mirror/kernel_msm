@@ -49,7 +49,8 @@ struct etr_perf_buffer {
 };
 
 /* Convert the perf index to an offset within the ETR buffer */
-#define PERF_IDX2OFF(idx, buf)	((idx) % ((buf)->nr_pages << PAGE_SHIFT))
+#define PERF_IDX2OFF(idx, buf)		\
+		((idx) % ((unsigned long)(buf)->nr_pages << PAGE_SHIFT))
 
 /* Lower limit for ETR hardware buffer */
 #define TMC_ETR_PERF_MIN_BUF_SIZE	SZ_1M
@@ -1076,17 +1077,19 @@ static void tmc_sync_etr_buf(struct tmc_drvdata *drvdata)
 	etr_buf->ops->sync(etr_buf, rrp, rwp);
 }
 
-static int  __tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
+static int __tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 {
 	u32 axictl, sts;
 	struct etr_buf *etr_buf = drvdata->etr_buf;
-	int rc;
+	int rc = 0;
 
 	CS_UNLOCK(drvdata->base);
 
 	/* Wait for TMCSReady bit to be set */
 	rc = tmc_wait_for_tmcready(drvdata);
 	if (rc) {
+		dev_err(&drvdata->csdev->dev,
+			"Failed to enable : TMC not ready\n");
 		CS_LOCK(drvdata->base);
 		return rc;
 	}
@@ -1138,7 +1141,7 @@ static int  __tmc_etr_enable_hw(struct tmc_drvdata *drvdata)
 	tmc_enable_hw(drvdata);
 
 	CS_LOCK(drvdata->base);
-	return 0;
+	return rc;
 }
 
 static int tmc_etr_enable_hw(struct tmc_drvdata *drvdata,
@@ -1165,13 +1168,15 @@ static int tmc_etr_enable_hw(struct tmc_drvdata *drvdata,
 	if (rc)
 		return rc;
 	rc = coresight_claim_device(drvdata->csdev);
-	if (rc)
-		return rc;
-
-	drvdata->etr_buf = etr_buf;
-	rc = __tmc_etr_enable_hw(drvdata);
-	if (rc)
-		coresight_disclaim_device(drvdata->csdev);
+	if (!rc) {
+		drvdata->etr_buf = etr_buf;
+		rc = __tmc_etr_enable_hw(drvdata);
+		if (rc) {
+			drvdata->etr_buf = NULL;
+			coresight_disclaim_device(drvdata->csdev);
+			tmc_etr_disable_catu(drvdata);
+		}
+	}
 
 	return rc;
 }
@@ -1404,7 +1409,7 @@ alloc_etr_buf(struct tmc_drvdata *drvdata, struct perf_event *event,
 	 * than the size requested via sysfs.
 	 */
 	if ((nr_pages << PAGE_SHIFT) > drvdata->size) {
-		etr_buf = tmc_alloc_etr_buf(drvdata, (nr_pages << PAGE_SHIFT),
+		etr_buf = tmc_alloc_etr_buf(drvdata, ((ssize_t)nr_pages << PAGE_SHIFT),
 					    0, node, NULL);
 		if (!IS_ERR(etr_buf))
 			goto done;
