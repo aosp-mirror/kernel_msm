@@ -14,6 +14,7 @@
 #include <linux/irqdomain.h>
 #include <linux/irqchip/arm-gic-v3.h>
 #include <trace/hooks/cpuidle_psci.h>
+#include <trace/hooks/gic.h>
 #include <trace/hooks/gic_v3.h>
 #include <linux/notifier.h>
 #include <linux/suspend.h>
@@ -68,8 +69,8 @@ static void gic_resume_ds(void *data, struct gic_chip_data *gic_data)
 	void __iomem *rdist_base = gic_data_rdist_sgi_base();
 
 	pr_info("Re-initializing gic in hibernation restore\n");
-	gic_dist_init();
-	gic_cpu_init();
+	gic_v3_dist_init();
+	gic_v3_cpu_init();
 	writel_relaxed(gic_data_ds.enabled_sgis, rdist_base + GICD_ISENABLER);
 	writel_relaxed(gic_data_ds.pending_sgis, rdist_base + GICD_ISPENDR);
 	/* Restore edge and level triggers for PPIs from GICR_ICFGR1 */
@@ -77,13 +78,13 @@ static void gic_resume_ds(void *data, struct gic_chip_data *gic_data)
 	/* Restore edge and level triggers */
 	for (i = 2; i < GIC_LINE_NR / 16; i++)
 		writel_relaxed(gic_data_ds.irq_edg_lvl[i], base + GICD_ICFGR + i * 4);
-	gic_dist_wait_for_rwp();
+	gic_v3_dist_wait_for_rwp();
 	/* Activate and enable interrupts from backup */
 	for (i = 0; i * 32 < GIC_LINE_NR; i++) {
 		writel_relaxed(gic_data_ds.active_irqs[i], base + GICD_ISPENDR + i * 4);
 		writel_relaxed(gic_data_ds.enabled_irqs[i], base + GICD_ISENABLER + i * 4);
 	}
-	gic_dist_wait_for_rwp();
+	gic_v3_dist_wait_for_rwp();
 }
 
 static void msm_show_resume_irqs(void *data, struct gic_chip_data *gic_data)
@@ -176,7 +177,7 @@ static int __init msm_show_resume_irq_init(void)
 	register_trace_android_vh_gic_resume(msm_show_resume_irqs, NULL);
 
 	register_pm_notifier(&gic_notif_block);
-	return register_trace_android_vh_gic_suspend(gic_suspend_ds, NULL);
+	return register_trace_android_vh_gic_v3_suspend(gic_suspend_ds, NULL);
 }
 
 #if IS_MODULE(CONFIG_QCOM_SHOW_RESUME_IRQ)
