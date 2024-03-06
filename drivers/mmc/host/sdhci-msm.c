@@ -94,6 +94,9 @@
 #define FINE_TUNE_MODE_EN	BIT(27)
 #define BIAS_OK_SIGNAL		BIT(29)
 
+#define DLL_CONFIG_3_LOW_FREQ_VAL	0x08
+#define DLL_CONFIG_3_HIGH_FREQ_VAL	0x10
+
 #define CORE_VENDOR_SPEC_POR_VAL 0xa9c
 #define CORE_CLK_PWRSAVE	BIT(1)
 #define CORE_VNDR_SPEC_ADMA_ERR_SIZE_EN	BIT(7)
@@ -294,8 +297,6 @@ struct msm_bus_vectors {
 	u64 ib;
 };
 
-static struct mmc_host *wifi_mmc_host;
-
 struct msm_bus_path {
 	unsigned int num_paths;
 	struct msm_bus_vectors *vec;
@@ -319,6 +320,7 @@ enum dll_init_context {
 };
 
 static struct sdhci_msm_host *sdhci_slot[2];
+static struct mmc_host *wifi_mmc_host;
 
 static int sdhci_msm_update_qos_constraints(struct qos_cpu_group *qcg,
 					enum constraint type);
@@ -795,6 +797,8 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 				| CORE_LOW_FREQ_MODE), host->ioaddr +
 				msm_offset->core_dll_config_2);
 		}
+		/* wait for 5us before enabling DLL clock */
+		udelay(5);
 	}
 
 	/*
@@ -806,6 +810,28 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 			msm_offset->core_dll_config) |
 			(msm_host->dll_hsr->dll_config & 0xffff)),
 			host->ioaddr + msm_offset->core_dll_config);
+	}
+
+	/*
+	 * Configure DLL user control register to enable DLL status.
+	 * This setting is applicable to SDCC v5.1 onwards only.
+	 */
+	if (msm_host->uses_tassadar_dll) {
+		u32 config;
+		config = DLL_USR_CTL_POR_VAL | FINE_TUNE_MODE_EN |
+			ENABLE_DLL_LOCK_STATUS | BIAS_OK_SIGNAL;
+		writel_relaxed(config, host->ioaddr +
+				msm_offset->core_dll_usr_ctl);
+
+		config = readl_relaxed(host->ioaddr +
+				msm_offset->core_dll_config_3);
+		config &= ~0xFF;
+		if (msm_host->clk_rate < 150000000)
+			config |= DLL_CONFIG_3_LOW_FREQ_VAL;
+		else
+			config |= DLL_CONFIG_3_HIGH_FREQ_VAL;
+		writel_relaxed(config, host->ioaddr +
+			msm_offset->core_dll_config_3);
 	}
 
 	/* Step 11 - Wait for 52us */
@@ -2960,6 +2986,7 @@ sdhci_msm_ice_resume(struct sdhci_msm_host *msm_host)
 
 void sdhci_msm_ice_disable(struct sdhci_msm_host *msm_host)
 {
+	return;
 }
 #endif /* !CONFIG_MMC_CRYPTO */
 
@@ -3958,6 +3985,7 @@ static const struct sdhci_msm_variant_info sdm845_sdhci_var = {
 static const struct of_device_id sdhci_msm_dt_match[] = {
 	{.compatible = "qcom,sdhci-msm-v4", .data = &sdhci_msm_mci_var},
 	{.compatible = "qcom,sdhci-msm-v5", .data = &sdhci_msm_v5_var},
+	{.compatible = "qcom,sdm670-sdhci", .data = &sdm845_sdhci_var},
 	{.compatible = "qcom,sdm845-sdhci", .data = &sdm845_sdhci_var},
 	{},
 };
@@ -3994,6 +4022,12 @@ static int sdhci_msm_gcc_reset(struct device *dev, struct sdhci_host *host)
 
 	return ret;
 }
+static void sdhci_msm_hwkm_program_keys(struct sdhci_host *host)
+{
+	struct mmc_host *mmc = (host->mmc);
+	if (mmc->caps2 & MMC_CAP2_CRYPTO)
+		blk_crypto_reprogram_all_keys(&mmc->crypto_profile);
+}
 
 static void sdhci_msm_hw_reset(struct sdhci_host *host)
 {
@@ -4024,6 +4058,10 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	if (host->mmc->card && !pm_suspend_via_firmware())
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
+	if (pm_suspend_via_firmware()) {
+		sdhci_msm_hwkm_program_keys(host);
+	}
+	return;
 }
 
 static const struct sdhci_ops sdhci_msm_ops = {
@@ -5367,6 +5405,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		register_trace_android_rvh_mmc_cache_card_properties(mmc_cache_card, NULL);
 		register_trace_android_rvh_partial_init(partial_init, NULL);
 	}
+
 	return 0;
 
 pm_runtime_disable:
@@ -5557,6 +5596,7 @@ static struct platform_driver sdhci_msm_driver = {
 		   .pm = &sdhci_msm_pm_ops,
 	},
 };
+
 
 struct mmc_host *msm_wifi_mmc_host_get(void)
 {
