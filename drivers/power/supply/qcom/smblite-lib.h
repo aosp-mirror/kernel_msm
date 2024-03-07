@@ -414,8 +414,6 @@ struct smb_charger {
 	bool			flash_active;
 	u32			irq_status;
 	bool			is_fg_remote;
-
-	u32			hvdcp_num_pulse_max;
 };
 
 int smblite_lib_read(struct smb_charger *chg, u16 addr, u8 *val);

@@ -402,14 +402,6 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 		}
 	}
 
-	rc = of_property_read_u32(node, "google,hvdcp-num-pulse-max",
-				&chg->hvdcp_num_pulse_max);
-	if (rc < 0)
-		chg->hvdcp_num_pulse_max = 0;
-
-	if (chg->hvdcp_num_pulse_max > PM5100_MAX_HVDCP3_PULSES)
-		chg->hvdcp_num_pulse_max = PM5100_MAX_HVDCP3_PULSES;
-
 	chg->hvdcp3_detect_en = of_property_read_bool(node,
 						"google,hvdcp3-detect-en");
 	chg->hvdcp3_negotiation_en
@@ -606,10 +598,8 @@ static int smblite_usb_get_prop(struct power_supply *psy,
 		val->intval = get_effective_result_locked(chg->usb_icl_votable);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		val->intval = 5000000;
-		if (chg->hvdcp3_detected)
-			val->intval += (chg->hvdcp_num_pulse_max *
-					HVDCP3_STEP_SIZE_UV);
+		val->intval = (chg->hvdcp3_detected) ?
+					PM5100_HVDCP3_MAX_VOLTAGE_UV : 5000000;
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		/* USB uses this to set SDP current */
@@ -1292,7 +1282,9 @@ static int smblite_init_hw(struct smblite *chip)
 		return rc;
 	}
 
-	/* Optionally enable HVDCP detection only for PM5100 targets */
+	/* HVDCP detection only for PM5100 targets based on value of hvdcp3
+         * detection enable status
+         */
 	if (chg->subtype == PM5100)
 		smblite_lib_hvdcp_detect_enable(chg, chg->hvdcp3_detect_en);
 

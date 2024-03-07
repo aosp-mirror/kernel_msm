@@ -1575,13 +1575,11 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 
 	prev_vbus = pval.intval;
 
-	smblite_lib_err(chg, "HVDCP voltage increase: %u pulses\n",
-			chg->hvdcp_num_pulse_max);
 	/*
-	 * Increase voltage by pulsing data lines. 200mV per pulse.
-	 * ( e.g. : 1V / 200mV = 5 pulses ).
+	 * Statically increase voltage till 6V.
+	 * ( i.e : 1V / 200mV = 5 pulses ).
 	 */
-	while (cnt++ < chg->hvdcp_num_pulse_max) {
+	while (cnt++ < PM5100_MAX_HVDCP3_PULSES) {
 		smblite_lib_dp_pulse(chg);
 		/* wait for 100ms for vbus to settle. */
 		msleep(100);
