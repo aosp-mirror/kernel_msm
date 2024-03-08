@@ -2986,7 +2986,6 @@ sdhci_msm_ice_resume(struct sdhci_msm_host *msm_host)
 
 void sdhci_msm_ice_disable(struct sdhci_msm_host *msm_host)
 {
-	return;
 }
 #endif /* !CONFIG_MMC_CRYPTO */
 
@@ -3985,7 +3984,6 @@ static const struct sdhci_msm_variant_info sdm845_sdhci_var = {
 static const struct of_device_id sdhci_msm_dt_match[] = {
 	{.compatible = "qcom,sdhci-msm-v4", .data = &sdhci_msm_mci_var},
 	{.compatible = "qcom,sdhci-msm-v5", .data = &sdhci_msm_v5_var},
-	{.compatible = "qcom,sdm670-sdhci", .data = &sdm845_sdhci_var},
 	{.compatible = "qcom,sdm845-sdhci", .data = &sdm845_sdhci_var},
 	{},
 };
@@ -4022,12 +4020,6 @@ static int sdhci_msm_gcc_reset(struct device *dev, struct sdhci_host *host)
 
 	return ret;
 }
-static void sdhci_msm_hwkm_program_keys(struct sdhci_host *host)
-{
-	struct mmc_host *mmc = (host->mmc);
-	if (mmc->caps2 & MMC_CAP2_CRYPTO)
-		blk_crypto_reprogram_all_keys(&mmc->crypto_profile);
-}
 
 static void sdhci_msm_hw_reset(struct sdhci_host *host)
 {
@@ -4058,10 +4050,6 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	if (host->mmc->card && !pm_suspend_via_firmware())
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
-	if (pm_suspend_via_firmware()) {
-		sdhci_msm_hwkm_program_keys(host);
-	}
-	return;
 }
 
 static const struct sdhci_ops sdhci_msm_ops = {
@@ -5405,7 +5393,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		register_trace_android_rvh_mmc_cache_card_properties(mmc_cache_card, NULL);
 		register_trace_android_rvh_partial_init(partial_init, NULL);
 	}
-
 	return 0;
 
 pm_runtime_disable:
@@ -5596,7 +5583,6 @@ static struct platform_driver sdhci_msm_driver = {
 		   .pm = &sdhci_msm_pm_ops,
 	},
 };
-
 
 struct mmc_host *msm_wifi_mmc_host_get(void)
 {
