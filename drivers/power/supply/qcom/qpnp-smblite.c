@@ -1283,8 +1283,8 @@ static int smblite_init_hw(struct smblite *chip)
 	}
 
 	/* HVDCP detection only for PM5100 targets based on value of hvdcp3
-         * detection enable status
-         */
+	 * detection enable status
+	*/
 	if (chg->subtype == PM5100)
 		smblite_lib_hvdcp_detect_enable(chg, chg->hvdcp3_detect_en);
 
