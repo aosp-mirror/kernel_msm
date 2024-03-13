@@ -4,11 +4,22 @@
 #define pr_fmt(fmt) "smblite-shim:%s: " fmt, __func__
 
 #include <linux/jiffies.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/pmic-voter.h>
 #include <linux/power_supply.h>
 #include <linux/workqueue.h>
 #include "smblite-shim.h"
+
+struct icl_check_data {
+	struct gvotable_election *fake_psy_online_votable;
+	int icl_min;
+};
+
+struct vote_match_data {
+	const char *reason;
+	bool matches;
+};
 
 static struct power_supply_desc usb_psy_desc;
 
@@ -91,6 +102,80 @@ static ssize_t sdp_icl_req_ignored_show(struct device *dev,
 
 static const DEVICE_ATTR_RW(sdp_icl_req_ignored);
 
+static int vote_reason_match(void *data, const char *reason, void *vote)
+{
+	struct vote_match_data *match_data = (struct vote_match_data *)data;
+	match_data->matches =
+		strncmp(match_data->reason, reason,
+			GVOTABLE_MAX_REASON_LEN) == 0;
+
+	/* Return -1 to stop processing the rest of the reasons */
+	return match_data->matches ? -1 : 0;
+}
+
+static int real_usb_icl_vote_cb(void *data, const char *reason, void *vote)
+{
+	struct icl_check_data *icl_check_data = (struct icl_check_data *)data;
+	struct vote_match_data match_data = {
+		.reason = reason,
+		.matches = false
+	};
+	int icl = GVOTABLE_PTR_TO_INT(vote);
+
+	gvotable_election_for_each(icl_check_data->fake_psy_online_votable,
+				vote_reason_match, &match_data);
+
+	/* Vote reason is not participating in requesting faking PSY online,
+	 * probably legitimate
+	 */
+	if (!match_data.matches) {
+		icl_check_data->icl_min = min(icl_check_data->icl_min, icl);
+	}
+
+	return 0;
+}
+
+/*
+ * "real ICL" here means the USB ICL without vote reasons that are also active
+ * for the fake online status votable. Those vote reasons would have also set
+ * an ICL vote for 0, hence their request to fake the PSY online status.
+ */
+static int get_real_icl(struct smblite_shim *shim)
+{
+	int ret;
+	struct smb_charger *chg = shim->chg;
+	union power_supply_propval present;
+	const struct power_supply_desc *real_usb_desc = chg->usb_psy->desc;
+	struct gvotable_election *icl_votable;
+	int icl;
+	struct icl_check_data icl_check_data = {
+		.fake_psy_online_votable = shim->fake_psy_online_votable,
+		.icl_min = __INT_MAX__
+	};
+
+	icl_votable = gvotable_election_get_handle("USB_ICL");
+
+	ret = real_usb_desc->get_property(chg->usb_psy,
+					POWER_SUPPLY_PROP_PRESENT, &present);
+
+	if ((ret != 0) || !present.intval || !icl_votable) {
+		return 0;
+	}
+
+	icl = gvotable_get_current_int_vote(icl_votable);
+
+	/* If there are no current votes for 0 ICL, the PSY would end up
+	 * reporting as online anyway
+	 */
+	if (icl > 0)
+		return icl;
+
+	gvotable_election_for_each(icl_votable, real_usb_icl_vote_cb,
+				&icl_check_data);
+
+	return icl_check_data.icl_min;
+}
+
 static int smblite_shim_usb_get_prop(struct power_supply *psy,
 				enum power_supply_property psp,
 				union power_supply_propval *val)
@@ -98,7 +183,43 @@ static int smblite_shim_usb_get_prop(struct power_supply *psy,
 	struct smblite_shim *shim = power_supply_get_drvdata(psy);
 	struct smb_charger *chg = shim->chg;
 	const struct power_supply_desc *real_usb_desc = chg->usb_psy->desc;
+	bool online_vote;
+	int real_icl;
 
+	online_vote =
+		gvotable_get_current_int_vote(shim->fake_psy_online_votable);
+
+	if (online_vote)
+		real_icl = get_real_icl(shim);
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		/* We'll actually only fake the online property if there was no
+		 * real reason for the ICL to be 0. If a real vote reason set
+		 * 0 ICL, then the PSY should already be reporting offline and
+		 * we'll leave things as-is.
+		 */
+		if (online_vote && real_icl > 0) {
+			val->intval = true;
+			return 0;
+		}
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		if (online_vote) {
+			val->intval = real_icl;
+			return 0;
+		}
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = gvotable_get_current_int_vote(shim->vmax_votable);
+		if (val->intval > 0) {
+			return 0;
+		}
+		break;
+	default:
+		break;
+	}
 	return real_usb_desc->get_property(chg->usb_psy, psp, val);
 }
 
@@ -143,6 +264,16 @@ static void smblite_shim_external_power_changed(struct power_supply *psy)
 	power_supply_changed(psy);
 }
 
+static int vote_cb_notify_psy_changed(struct gvotable_election *el,
+				const char *reason,
+				void *vote)
+{
+	struct smblite_shim *shim =
+		(struct smblite_shim *)gvotable_get_data(el);
+	power_supply_changed(shim->psy);
+	return 0;
+}
+
 struct smblite_shim *smblite_shim_init(struct smb_charger *chg)
 {
 	struct smblite_shim *shim;
@@ -153,10 +284,25 @@ struct smblite_shim *smblite_shim_init(struct smb_charger *chg)
 	if (!shim)
 		return NULL;
 
+	mutex_init(&shim->lock);
 	shim->chg = chg;
 
 	shim->sdp_icl_req_ignored =
 		of_property_read_bool(node, "google,sdp-icl-req-ignored");
+
+	shim->fake_psy_online_votable =
+		gvotable_create_bool_election("SHIM_FAKE_OLN",
+					vote_cb_notify_psy_changed,
+					shim);
+	shim->vmax_votable =
+		gvotable_create_int_election("SHIM_VMAX",
+					gvotable_comparator_uint_min,
+					vote_cb_notify_psy_changed,
+					shim);
+
+	BLOCKING_INIT_NOTIFIER_HEAD(&shim->hvdcp_req_nh);
+	BLOCKING_INIT_NOTIFIER_HEAD(&shim->usbin_plugin_nh);
+	BLOCKING_INIT_NOTIFIER_HEAD(&shim->boost_nh);
 
 	return shim;
 }
@@ -215,3 +361,64 @@ int smblite_shim_update_sw_icl_max(struct smblite_shim *shim, int type)
 
 	return -ENOSYS;
 }
+
+void smblite_shim_notify_hvdcp_req(struct smblite_shim *shim)
+{
+	blocking_notifier_call_chain(&shim->hvdcp_req_nh, 0, shim);
+}
+
+void smblite_shim_notify_plugin(struct smblite_shim *shim,
+				enum smblite_shim_plug_sts plugged)
+{
+	blocking_notifier_call_chain(&shim->usbin_plugin_nh, plugged, shim);
+}
+
+void smblite_shim_notify_boost_sw(struct smblite_shim *shim,
+				enum smblite_shim_boost_sts boost)
+{
+	blocking_notifier_call_chain(&shim->boost_nh, boost, shim);
+}
+
+int smblite_shim_hvdcp_req_register_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&shim->hvdcp_req_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_hvdcp_req_register_notifier);
+
+int smblite_shim_hvdcp_req_unregister_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&shim->hvdcp_req_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_hvdcp_req_unregister_notifier);
+
+int smblite_shim_plugin_register_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&shim->usbin_plugin_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_plugin_register_notifier);
+
+int smblite_shim_plugin_unregister_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&shim->usbin_plugin_nh, nb);
+
+}
+EXPORT_SYMBOL_GPL(smblite_shim_plugin_unregister_notifier);
+
+int smblite_shim_boost_register_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&shim->boost_nh, nb);
+}
+EXPORT_SYMBOL_GPL(smblite_shim_boost_register_notifier);
+
+int smblite_shim_boost_unregister_notifier(struct smblite_shim *shim,
+					struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&shim->boost_nh, nb);
+
+}
+EXPORT_SYMBOL_GPL(smblite_shim_boost_unregister_notifier);
