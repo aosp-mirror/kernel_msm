@@ -609,11 +609,6 @@ static void process_udata_work(struct work_struct *work)
 		(chip->batt_soc != INT_MIN) ? chip->batt_soc : -EINVAL,
 		(chip->sys_soc != INT_MIN) ? chip->sys_soc : -EINVAL,
 		chip->soc, chip->esr, chip->ocv_uv);
-	if (!chip->udata_updated) {
-		chip->udata_updated = true;
-		qbg_dbg(chip, QBG_DEBUG_STATUS, "udata update: udata_updated=>%s\n",
-			chip->udata_updated ? "Yes" : "No");
-	}
 	last_udata_update = ktime_get_boottime_seconds();
 }
 
@@ -1485,19 +1480,10 @@ static int qbg_get_battery_capacity(struct qti_qbg *chip, int *soc)
 		return 0;
 	}
 
-	if (chip->battery_missing) {
+	if (chip->battery_missing || !chip->profile_loaded) {
 		*soc = BATT_MISSING_SOC;
 		return 0;
 	}
-
-	if (!chip->profile_loaded || !chip->udata_updated) {
-		pr_warn("data not ready for battery capacity,"
-			"profile loaded:%s, udata updated:%s.\n",
-			chip->profile_loaded ? "yes" : "no",
-			chip->udata_updated ? "Yes" : "No");
-		return -EAGAIN;
-	}
-
 
 	*soc = chip->soc;
 
@@ -2824,7 +2810,6 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	chip->tte = INT_MIN;
 	chip->soh = INT_MIN;
 	chip->tbat = INT_MIN;
-	chip->udata_updated = false;
 
 	rc = qbg_parse_dt(chip);
 	if (rc < 0) {
