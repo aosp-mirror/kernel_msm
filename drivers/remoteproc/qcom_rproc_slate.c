@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)    "%s: " fmt, __func__
@@ -106,6 +106,7 @@ struct pil_mdt {
  * @app_status: status of tz app loading
  * @is_ready: Is slate chip up
  * @err_ready: The error ready signal
+ * @shutdown_done: The shutdown done signal
  * @region_start: DMA handle for loading FW
  * @region_end: DMA address indicating end of DMA buffer
  * @region: CPU address for DMA buffer
@@ -144,6 +145,7 @@ struct qcom_slate {
 	int app_status;
 	bool is_ready;
 	struct completion err_ready;
+	struct completion shutdown_done;
 
 	phys_addr_t region_start;
 	phys_addr_t region_end;
@@ -333,8 +335,9 @@ static irqreturn_t slate_status_change(int irq, void *dev_id)
 			"SLATE got unexpected reset: irq state changed 1->0\n");
 			/* skip dump collection and return with shutdown completion signal */
 			if (is_slate_unload_only()) {
-				pr_err("%s, Received shutdown_only request.\n");
-				complete(&drvdata->err_ready);
+				dev_info(drvdata->dev,
+					"Received shutdown_only request\n");
+				complete(&drvdata->shutdown_done);
 				return IRQ_HANDLED;
 			}
 		queue_work(drvdata->slate_queue, &drvdata->restart_work);
@@ -530,6 +533,30 @@ static int wait_for_err_ready(struct qcom_slate *slate_data)
 	return 0;
 }
 
+/**
+ * wait_for_shutdown_done() - Called in power_down to wait for shutdown done.
+ * Signal waiting function.
+ * @slate_data: SLATE RPROC private structure.
+ *
+ * Return: 0 on success. Error code on failure.
+ */
+static int wait_for_shutdown_done(struct qcom_slate *slate_data)
+{
+	int ret;
+
+	if ((!slate_data->status_irq))
+		return 0;
+
+	ret = wait_for_completion_timeout(&slate_data->shutdown_done,
+			msecs_to_jiffies(10000));
+	if (!ret) {
+		pr_err("[%s]: shutdown done timed out\n",
+			slate_data->firmware_name);
+		return -ETIMEDOUT;
+	}
+	return 0;
+}
+
 void send_reset_signal(struct qcom_slate *slate_data)
 {
 	struct tzapp_slate_req slate_tz_req;
@@ -575,7 +602,8 @@ static int slate_start(struct rproc *rproc)
 	int ret = 0;
 
 	if (!slate_data) {
-		pr_err("%s Invalid slate pointer !!\n", __func__);
+		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+			__func__);
 		return -EINVAL;
 	}
 
@@ -663,8 +691,7 @@ static void slate_coredump(struct rproc *rproc)
 		}
 	}
 
-	/*
-	 * This check is added here to make slate dump collection
+	/* This check is added here to make slate dump collection
 	 * decision in RTOS/TWM mode exit. Only way for kernel to know slate state
 	 * info(crashed/running)in RTOS/TWM exit is by reading S2A irq line.
 	 * When S2A is pulled LOW, it is interpreted as slate crashed state and
@@ -680,8 +707,6 @@ static void slate_coredump(struct rproc *rproc)
 		/* reset_cmd signals shutdown on slate, lets ack s2a irq for same
 		 * otherwise it will haunt after slate boot up and crash system.
 		 */
-		enable_irq(slate_data->status_irq);
-		slate_data->is_ready = true;
 		if (!gpio_get_value(slate_data->gpios[0])) {
 			pr_info("TWM Exit: Collect Dump, slate is CRASHED..!!\n");
 			/* We are assuming that Slate TZapp has started
@@ -691,6 +716,8 @@ static void slate_coredump(struct rproc *rproc)
 			 */
 			msleep(5000);
 		} else {
+			enable_irq(slate_data->status_irq);
+			slate_data->is_ready = true;
 			pr_info("TWM Exit: Skip dump collection, slate is RUNNING ..!!\n");
 			/* Send RESET CMD to bring slate out of RTOS state */
 			slate_data->cmd_status = 0;
@@ -702,9 +729,12 @@ static void slate_coredump(struct rproc *rproc)
 					__func__);
 				goto rtos_out;
 			}
+			/* reset_cmd signals shutdown on slate, lets ack s2a irq for same
+			 * otherwise it will haunt after slate boot up and crash system.
+			 */
 			/* By this time if S2A is not pulled then wait for it to go LOW */
 			if (gpio_get_value(slate_data->gpios[0])) {
-				ret = wait_for_err_ready(slate_data);
+				ret = wait_for_shutdown_done(slate_data);
 				if (ret) {
 					dev_err(slate_data->dev,
 					"[%s:%d]: Timed out waiting for error ready: %s!\n",
@@ -757,7 +787,7 @@ static void slate_coredump(struct rproc *rproc)
 	slate_tz_req.address_fw = start_addr;
 	slate_tz_req.size_fw = size;
 	ret = slate_tzapp_comm(slate_data, &slate_tz_req);
-	if (ret != 0) {
+	if (ret != 0 || slate_data->cmd_status) {
 		dev_dbg(slate_data->dev,
 			"%s: SLATE RPROC ramdmp collection failed\n",
 			__func__);
@@ -802,7 +832,8 @@ static int slate_prepare(struct rproc *rproc)
 	int ret = 0;
 
 	if (!slate_data) {
-		pr_err("%s Invalid slate pointer !!\n", __func__);
+		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+			__func__);
 		return -EINVAL;
 	}
 	if (slate_data->app_status != RESULT_SUCCESS) {
@@ -974,7 +1005,8 @@ static int slate_load(struct rproc *rproc, const struct firmware *fw)
 	const struct pil_mdt *mdt;
 
 	if (!slate_data) {
-		pr_err("%s Invalid slate pointer !!\n", __func__);
+		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+			__func__);
 		return -EINVAL;
 	}
 
@@ -1030,7 +1062,8 @@ static int slate_stop(struct rproc *rproc)
 	int ret = RESULT_FAILURE;
 
 	if (!slate_data) {
-		pr_err("%s Invalid slate pointer !!\n", __func__);
+		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+			__func__);
 		return -EINVAL;
 	}
 
@@ -1063,7 +1096,7 @@ static int slate_stop(struct rproc *rproc)
 
 	/* wait for slate shutdown completion in exclusive slate shutdown request */
 	if (is_slate_unload_only()) {
-		ret = wait_for_err_ready(slate_data);
+		ret = wait_for_shutdown_done(slate_data);
 		if (ret) {
 			dev_err(slate_data->dev,
 			"[%s:%d]: Timed out waiting for error ready: %s!\n",
@@ -1226,6 +1259,7 @@ static int rproc_slate_driver_probe(struct platform_device *pdev)
 		goto destroy_wq;
 
 	init_completion(&slate->err_ready);
+	init_completion(&slate->shutdown_done);
 	pr_debug("Slate probe is completed\n");
 	return 0;
 

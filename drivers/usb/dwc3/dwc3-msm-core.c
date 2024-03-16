@@ -3177,37 +3177,37 @@ static void mdwc3_update_u1u2_value(struct dwc3 *dwc)
 
 static void dwc3_handle_connect_event(struct dwc3 *dwc)
 {
-        struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
-        u32 reg;
+	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+	u32 reg;
 
-        if ((dwc->speed != DWC3_DSTS_SUPERSPEED) &&
-                        (dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS)) {
-                reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUSB3PIPECTL(0));
-                reg |= DWC3_GUSB3PIPECTL_SUSPHY;
-                dwc3_msm_write_reg(mdwc->base, DWC3_GUSB3PIPECTL(0), reg);
-        }
+	if ((dwc->speed != DWC3_DSTS_SUPERSPEED) &&
+			(dwc->speed != DWC3_DSTS_SUPERSPEED_PLUS)) {
+		reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUSB3PIPECTL(0));
+		reg |= DWC3_GUSB3PIPECTL_SUSPHY;
+		dwc3_msm_write_reg(mdwc->base, DWC3_GUSB3PIPECTL(0), reg);
+	}
 
-        /*
-         * SW WA for CV9 RESET DEVICE TEST(TD 9.23) compliance failure.
-         * Visit eUSB2 phy driver for more details.
-         */
-        WARN_ON(mdwc->hs_phy->flags & PHY_HOST_MODE);
-        if (mdwc->use_eusb2_phy &&
-                        (dwc->gadget->speed >= USB_SPEED_SUPER)) {
-                usb_phy_notify_connect(mdwc->hs_phy, dwc->gadget->speed);
-                udelay(20);
-                /* Perform usb2 phy soft reset as given workaround */
-                mdwc3_usb2_phy_soft_reset(mdwc);
-        }
+	/*
+	 * SW WA for CV9 RESET DEVICE TEST(TD 9.23) compliance failure.
+	 * Visit eUSB2 phy driver for more details.
+	 */
+	WARN_ON(mdwc->hs_phy->flags & PHY_HOST_MODE);
+	if (mdwc->use_eusb2_phy &&
+			(dwc->gadget->speed >= USB_SPEED_SUPER)) {
+		usb_phy_notify_connect(mdwc->hs_phy, dwc->gadget->speed);
+		udelay(20);
+		/* Perform usb2 phy soft reset as given workaround */
+		mdwc3_usb2_phy_soft_reset(mdwc);
+	}
 
-        /*
-         * Add power event if the dbm indicates coming out of L1 by
-         * interrupt
-         */
-        if (!mdwc->dbm_is_1p4)
-                dwc3_msm_write_reg_field(mdwc->base,
-                                PWR_EVNT_IRQ_MASK_REG,
-                                PWR_EVNT_LPM_OUT_L1_MASK, 1);
+	/*
+	 * Add power event if the dbm indicates coming out of L1 by
+	 * interrupt
+	 */
+	if (!mdwc->dbm_is_1p4)
+		dwc3_msm_write_reg_field(mdwc->base,
+				PWR_EVNT_IRQ_MASK_REG,
+				PWR_EVNT_LPM_OUT_L1_MASK, 1);
 }
 
 void dwc3_msm_notify_event(struct dwc3 *dwc,
