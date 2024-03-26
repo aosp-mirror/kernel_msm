@@ -850,6 +850,10 @@ static int smblite_lib_awake_vote_callback(struct votable *votable, void *data,
 static int smblite_lib_chg_disable_vote_callback(struct votable *votable,
 				void *data, int chg_disable, const char *client)
 {
+#ifdef GOOGLE_CHG_DISABLE_IS_NOOP
+	/* Google BMS handles charge control */
+	return 0;
+#else
 	struct smb_charger *chg = data;
 	int rc;
 
@@ -863,6 +867,7 @@ static int smblite_lib_chg_disable_vote_callback(struct votable *votable,
 	}
 
 	return 0;
+#endif
 }
 
 static int smblite_lib_icl_irq_disable_vote_callback(struct votable *votable,
