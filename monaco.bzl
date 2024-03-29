@@ -125,7 +125,6 @@ monaco_in_tree_modules = [
     "drivers/soc/qcom/qmi_helpers.ko",
     "drivers/soc/qcom/qti-pmic-lpm.ko",
     "drivers/soc/qcom/rpm-smd-debug.ko",
-    "drivers/soc/qcom/rq_stats.ko",
     "drivers/soc/qcom/secure_buffer.ko",
     "drivers/soc/qcom/slate_events_bridge.ko",
     "drivers/soc/qcom/slate_events_bridge_rpmsg.ko",
