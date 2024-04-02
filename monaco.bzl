@@ -8,6 +8,7 @@ monaco_in_tree_modules = [
     # keep sorted
     "drivers/base/regmap/qti-regmap-debugfs.ko",
     "drivers/char/frpc-adsprpc.ko",
+    "drivers/char/rdbg.ko",
     "drivers/clk/qcom/clk-dummy.ko",
     "drivers/clk/qcom/clk-qcom.ko",
     "drivers/clk/qcom/clk-smd-rpm.ko",
@@ -114,6 +115,7 @@ monaco_in_tree_modules = [
     "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
     "drivers/soc/qcom/memory_dump_v2.ko",
     "drivers/soc/qcom/minidump.ko",
+    "drivers/soc/qcom/msm_performance.ko",
     "drivers/soc/qcom/panel_event_notifier.ko",
     "drivers/soc/qcom/pdr_interface.ko",
     "drivers/soc/qcom/qcom_aoss.ko",
@@ -125,6 +127,7 @@ monaco_in_tree_modules = [
     "drivers/soc/qcom/qmi_helpers.ko",
     "drivers/soc/qcom/qti-pmic-lpm.ko",
     "drivers/soc/qcom/rpm-smd-debug.ko",
+    "drivers/soc/qcom/rq_stats.ko",
     "drivers/soc/qcom/secure_buffer.ko",
     "drivers/soc/qcom/slate_events_bridge.ko",
     "drivers/soc/qcom/slate_events_bridge_rpmsg.ko",

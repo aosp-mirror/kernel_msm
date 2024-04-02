@@ -1112,7 +1112,6 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 			return err;
 		}
 		VERIFY(err, 0 == (err = fastrpc_init_process(fl, init)));
-
 		kfree(init);
 		return err;
 

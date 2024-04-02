@@ -2830,9 +2830,9 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 				ctx->overps[i]->mstart)) == map->size) ||
 				ctx->overps[i]->do_cmo) {
 					dma_buf_begin_cpu_access(map->buf,
-						DMA_FROM_DEVICE);
-					dma_buf_end_cpu_access(map->buf,
 						DMA_TO_DEVICE);
+					dma_buf_end_cpu_access(map->buf,
+						DMA_FROM_DEVICE);
 					ADSPRPC_DEBUG(
 						"sc 0x%x pv 0x%llx, mend 0x%llx mstart 0x%llx, len %zu size %zu\n",
 						sc, rpra[over].buf.pv,
@@ -2866,10 +2866,10 @@ static void inv_args(struct smq_invoke_ctx *ctx)
 					}
 					up_read(&current->mm->mmap_lock);
 					dma_buf_begin_cpu_access_partial(
-						map->buf, DMA_FROM_DEVICE, offset,
+						map->buf, DMA_TO_DEVICE, offset,
 						inv_len);
 					dma_buf_end_cpu_access_partial(map->buf,
-						DMA_TO_DEVICE, offset,
+						DMA_FROM_DEVICE, offset,
 						inv_len);
 					ADSPRPC_DEBUG(
 						"sc 0x%x vm_start 0x%llx pv 0x%llx, offset 0x%llx, mend 0x%llx mstart 0x%llx, len %zu size %zu\n",
