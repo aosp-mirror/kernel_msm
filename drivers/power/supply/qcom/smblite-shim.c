@@ -136,9 +136,9 @@ static int real_usb_icl_vote_cb(void *data, const char *reason, void *vote)
 }
 
 /*
- * "real ICL" here means the USB ICL without vote reasons that are also active
- * for the fake online status votable. Those vote reasons would have also set
- * an ICL vote for 0, hence their request to fake the PSY online status.
+ * "real ICL" means the USB ICL excluding the active vote reasons for the faked
+ * "online" status votable, as those reasons might have set an ICL in the PMIC
+ * that needs to be masked from upper software stack layers.
  */
 static int get_real_icl(struct smblite_shim *shim)
 {
@@ -147,7 +147,6 @@ static int get_real_icl(struct smblite_shim *shim)
 	union power_supply_propval present;
 	const struct power_supply_desc *real_usb_desc = chg->usb_psy->desc;
 	struct gvotable_election *icl_votable;
-	int icl;
 	struct icl_check_data icl_check_data = {
 		.fake_psy_online_votable = shim->fake_psy_online_votable,
 		.icl_min = __INT_MAX__
@@ -161,14 +160,6 @@ static int get_real_icl(struct smblite_shim *shim)
 	if ((ret != 0) || !present.intval || !icl_votable) {
 		return 0;
 	}
-
-	icl = gvotable_get_current_int_vote(icl_votable);
-
-	/* If there are no current votes for 0 ICL, the PSY would end up
-	 * reporting as online anyway
-	 */
-	if (icl > 0)
-		return icl;
 
 	gvotable_election_for_each(icl_votable, real_usb_icl_vote_cb,
 				&icl_check_data);
