@@ -1065,7 +1065,7 @@ static irqreturn_t qbg_data_full_irq_handler(int irq, void *_chip)
 	int rc;
 	u32 fifo_count = 0;
 
-	qbg_dbg(chip, QBG_DEBUG_IRQ, "DATA FULL IRQ triggered\n");
+	qbg_dbg(chip, QBG_DEBUG_ALWAYS, "DATA FULL IRQ triggered\n");
 
 	/* Disable fast char for PM5100 V1 */
 	if (chip->rev4 != REVISION_V1) {
