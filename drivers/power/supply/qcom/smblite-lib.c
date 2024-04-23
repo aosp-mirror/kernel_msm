@@ -3482,6 +3482,7 @@ void smblite_lib_rerun_apsd(struct smb_charger *chg)
 	if (rc < 0)
 		smblite_lib_err(chg, "Couldn't re-run APSD rc=%d\n", rc);
 }
+EXPORT_SYMBOL_GPL(smblite_lib_rerun_apsd);
 
 int smblite_lib_rerun_apsd_if_required(struct smb_charger *chg)
 {
