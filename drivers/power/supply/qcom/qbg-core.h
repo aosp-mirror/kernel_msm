@@ -152,6 +152,9 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @data_ready:		Flag to indicate QBG data is ready
  * @in_fast_char:	Flag to indicate QBG is in fast char mode
  * @enable_fifo_depth_half	Flag to indicate QBG fifo reduce half
+ * @interrupt_stats_lock	Protects access to interrupt stats
+ * @sdam_interrupt_count	Number of SDAM interrupts received since boot
+ * @last_sdam_interrupt_time	Timestamp in seconds of last SDAM interrupt
  */
 struct qti_qbg {
 	struct device		*dev;
@@ -256,5 +259,8 @@ struct qti_qbg {
 	bool			data_ready;
 	bool			in_fast_char;
 	bool			enable_fifo_depth_half;
+	struct mutex		interrupt_stats_lock;
+	unsigned int		sdam_interrupt_count;
+	time64_t		last_sdam_interrupt_time;
 };
 #endif /* __QBG_CORE_H__ */

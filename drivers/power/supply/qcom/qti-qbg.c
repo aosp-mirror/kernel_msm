@@ -1068,13 +1068,13 @@ static int qbg_handle_fast_char(struct qti_qbg *chip)
 	return rc;
 }
 
-static irqreturn_t qbg_data_full_irq_handler(int irq, void *_chip)
+/* Formerly qbg_data_full_irq_handler, now a common data handler
+ * which can be invoked by various sources, e.g. interrupt or sysfs.
+ */
+static irqreturn_t qbg_handle_data_full(struct qti_qbg *chip)
 {
-	struct qti_qbg *chip = _chip;
 	int rc;
 	u32 fifo_count = 0;
-
-	qbg_dbg(chip, QBG_DEBUG_ALWAYS, "DATA FULL IRQ triggered\n");
 
 	/* Disable fast char for PM5100 V1 */
 	if (chip->rev4 != REVISION_V1) {
@@ -1113,6 +1113,21 @@ static irqreturn_t qbg_data_full_irq_handler(int irq, void *_chip)
 done:
 	mutex_unlock(&chip->fifo_lock);
 	return IRQ_HANDLED;
+}
+
+static irqreturn_t qbg_data_full_irq_handler(int irq, void *_chip)
+{
+	struct qti_qbg *chip = _chip;
+
+	qbg_dbg(chip, QBG_DEBUG_ALWAYS, "DATA FULL IRQ triggered\n");
+
+	/* Record some statistics. */
+	mutex_lock(&chip->interrupt_stats_lock);
+	chip->sdam_interrupt_count++;
+	chip->last_sdam_interrupt_time = ktime_get_boottime_seconds();
+	mutex_unlock(&chip->interrupt_stats_lock);
+
+	return qbg_handle_data_full(chip);
 }
 
 static irqreturn_t qbg_vbatt_empty_irq_handler(int irq, void *_chip)
@@ -2775,6 +2790,69 @@ static ssize_t qbg_last_update_elapsed_show(struct device *dev,
 
 static DEVICE_ATTR_RO(qbg_last_update_elapsed);
 
+/*
+ * Print the number of SDAM data-full interrupts received since boot.
+ */
+static ssize_t sdam_interrupt_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+	unsigned int interrupt_count;
+
+	mutex_lock(&chip->interrupt_stats_lock);
+	interrupt_count = chip->sdam_interrupt_count;
+	mutex_unlock(&chip->interrupt_stats_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", interrupt_count);
+}
+static DEVICE_ATTR_RO(sdam_interrupt_count);
+
+/*
+ * Print the number of seconds since the last SDAM data-full interrupt.
+ */
+static ssize_t sdam_time_since_last_interrupt_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+	time64_t last_interrupt_time;
+	time64_t elapsed_seconds;
+
+	mutex_lock(&chip->interrupt_stats_lock);
+	last_interrupt_time = chip->last_sdam_interrupt_time;
+	mutex_unlock(&chip->interrupt_stats_lock);
+
+	elapsed_seconds = ktime_get_boottime_seconds() - last_interrupt_time;
+
+	return scnprintf(buf, PAGE_SIZE, "%lld\n", elapsed_seconds);
+}
+static DEVICE_ATTR_RO(sdam_time_since_last_interrupt);
+
+/*
+ * Write any value to trigger processing of the qbg-sdam data FIFO.
+ * Note: The FIFO will only be _cleared_ if it is full at this time. Otherwise,
+ * the data will remain in place and will be included in the next call or IRQ.
+ * Note: The PMIC will fill the FIFO every ~32 minutes in LPM, or more
+ * frequently in other modes depending on charging status and system load.
+ */
+static ssize_t sdam_flush_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+	const unsigned int orig_debug_mask = *chip->debug_mask;
+
+	qbg_dbg(chip, QBG_DEBUG_ALWAYS, "Manual QBG-SDAM data flush triggered\n");
+
+	/* Turn on extra logging temporarily. */
+	*chip->debug_mask |= QBG_DEBUG_SDAM;
+
+	qbg_handle_data_full(chip);
+
+	*chip->debug_mask = orig_debug_mask;
+
+	return count;
+}
+static DEVICE_ATTR_WO(sdam_flush);
+
 static int qti_qbg_probe(struct platform_device *pdev)
 {
 	struct qti_qbg *chip;
@@ -2816,6 +2894,7 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	mutex_init(&chip->fifo_lock);
 	mutex_init(&chip->data_lock);
 	mutex_init(&chip->context_lock);
+	mutex_init(&chip->interrupt_stats_lock);
 	dev_set_drvdata(chip->dev, chip);
 	init_waitqueue_head(&chip->qbg_wait_q);
 
@@ -2933,6 +3012,24 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed create qbg_last_update_elapsed sysfs, rc=%d\n", rc);
 	}
 
+	rc = device_create_file(chip->dev, &dev_attr_sdam_interrupt_count);
+	if (rc) {
+		dev_err(&pdev->dev, "Could not create %s node, rc=%d\n",
+			dev_attr_sdam_interrupt_count.attr.name, rc);
+	}
+
+	rc = device_create_file(chip->dev, &dev_attr_sdam_time_since_last_interrupt);
+	if (rc) {
+		dev_err(&pdev->dev, "Could not create %s node, rc=%d\n",
+			dev_attr_sdam_time_since_last_interrupt.attr.name, rc);
+	}
+
+	rc = device_create_file(chip->dev, &dev_attr_sdam_flush);
+	if (rc) {
+		dev_err(&pdev->dev, "Could not create %s node, rc=%d\n",
+			dev_attr_sdam_flush.attr.name, rc);
+	}
+
 	last_udata_update = ktime_get_boottime_seconds();
 
 	qbg_init_vbatt_empty_threshold(chip);
@@ -2958,12 +3055,16 @@ static int qti_qbg_remove(struct platform_device *pdev)
 	if (chip->rtc)
 		rtc_class_close(chip->rtc);
 	device_remove_file(chip->qbg_device, &dev_attr_qbg_last_update_elapsed);
+	device_remove_file(chip->dev, &dev_attr_sdam_time_since_last_interrupt);
+	device_remove_file(chip->dev, &dev_attr_sdam_flush);
+	device_remove_file(chip->dev, &dev_attr_sdam_interrupt_count);
 	cancel_work_sync(&chip->status_change_work);
 	cancel_work_sync(&chip->udata_work);
 	cancel_delayed_work_sync(&chip->soc_update_work);
 	mutex_destroy(&chip->fifo_lock);
 	mutex_destroy(&chip->data_lock);
 	mutex_destroy(&chip->context_lock);
+	mutex_destroy(&chip->interrupt_stats_lock);
 	cdev_del(&chip->qbg_cdev);
 	unregister_chrdev_region(chip->dev_no, 1);
 	class_unregister(&chip->qbg_class);
