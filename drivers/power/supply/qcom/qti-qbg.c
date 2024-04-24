@@ -900,6 +900,15 @@ static int qbg_clear_fifo_data(struct qti_qbg *chip)
 	return 0;
 }
 
+static int enable_data_full_interrupt_on_pmic(struct qti_qbg *chip, bool enable)
+{
+	/* Writing 0x80 while FIFO is full will raise the interrupt */
+	u8 val = (enable ? 0x80 : 0x00);
+	return qbg_sdam_write(chip,
+			QBG_SDAM_BASE(chip, SDAM_CTRL0) + QBG_SDAM_INT_TEST1,
+			&val, 1);
+}
+
 static int qbg_init_sdam(struct qti_qbg *chip)
 {
 	int rc = 0;
@@ -2429,6 +2438,18 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 	if (chip->battery_unknown || is_debug_batt_id(chip))
 		return rc;
 
+	/*
+	 * Turn off data full interrupt from PMIC side. After IRQ handler
+	 * registration, we re-enable the interrupt which guarantees the IRQ
+	 * handler will fire if the FIFO is already full.
+	 */
+	rc = enable_data_full_interrupt_on_pmic(chip, false);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Failed to disable interrupt from PMIC side, rc=%d\n",
+			rc);
+	}
+
 	rc = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
 			qbg_data_full_irq_handler, IRQF_ONESHOT,
 			"qbg-sdam", chip);
@@ -2442,6 +2463,14 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 	if (rc < 0)
 		dev_err(chip->dev, "Failed to set IRQ(qbg-sdam) wake-able, rc=%d\n",
 			rc);
+
+	/* Enable the interrupt, it will get raised if FIFO is already full */
+	rc = enable_data_full_interrupt_on_pmic(chip, true);
+	if (rc < 0) {
+		dev_err(chip->dev,
+			"Failed to enable interrupt from PMIC side, rc=%d\n",
+			rc);
+	}
 
 	/* Register for Vbatt_empty INT only if valid value is defined in DT */
 	if (chip->vbatt_empty_threshold_mv != 0) {
