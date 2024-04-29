@@ -2316,6 +2316,142 @@ static void spi_get_dt_property(struct platform_device *pdev,
 	geni_mas->slave_cross_connected =
 	of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
 }
+
+#define MAX_PERF_LEVEL	6
+#define TOTAL_VOTE_INDEX	3
+#define VOTE_INDEX_PROP_NAME "qcom,vote-index"
+#define GENI_TO_CORE_VOTE_VALUE_PROP_NAME "qcom,geni-to-core-vote-values"
+#define CPU_TO_GENI_VOTE_VALUES_PROP_NAME "qcom,cpu-to-geni-vote-values"
+#define GENI_TO_DDR_VOTE_VALUES_PROP_NAME "qcom,geni-to-ddr-vote-values"
+
+static int _geni_se_common_resources_init(struct platform_device *pdev, struct geni_se *spi_rsc)
+{
+	u32  vote_index_value[TOTAL_VOTE_INDEX] = {0};
+	const __be32 *vote_index_list;
+	const __be32 *geni_to_core_perf_values;
+	const __be32 *cpu_to_geni_perf_values;
+	const __be32 *geni_to_ddr_perf_values;
+	int len, i, no_of_entries;
+	u32 geni_to_core = SPI_CORE2X_VOTE;
+	u32 cpu_to_geni = APPS_PROC_TO_QUP_VOTE;
+	u32 geni_to_ddr = (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH);
+	int ret;
+	struct device_node *wrapper_node = pdev->dev.parent->of_node;
+
+	/*vote index*/
+	vote_index_list = of_get_property(pdev->dev.of_node,
+						   VOTE_INDEX_PROP_NAME,
+						   &len);
+	if (!vote_index_list || len % sizeof(u32)) {
+		dev_err(&pdev->dev, "Property %s not found or invalid\n",
+			VOTE_INDEX_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	no_of_entries = len / sizeof(u32);
+	dev_err(&pdev->dev, "no_of_entries: %d VOTE_INDEX_PROP_NAME: %s\n",
+		no_of_entries, VOTE_INDEX_PROP_NAME);
+	if (no_of_entries != TOTAL_VOTE_INDEX) {
+		dev_err(&pdev->dev, "Invalid Index list Number of entries: %d property: %s\n",
+			no_of_entries, VOTE_INDEX_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	for (i = 0; i < no_of_entries; i++)
+		vote_index_value[i] = be32_to_cpup(vote_index_list + i);
+
+	/*geni to core*/
+	geni_to_core_perf_values = of_get_property(wrapper_node,
+						   GENI_TO_CORE_VOTE_VALUE_PROP_NAME,
+						   &len);
+	if (!geni_to_core_perf_values || len % sizeof(u32)) {
+		dev_err(&pdev->dev, "Property %s not found or invalid\n",
+			GENI_TO_CORE_VOTE_VALUE_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	no_of_entries = len / sizeof(u32);
+	dev_err(&pdev->dev, "no_of_entries: %d Property: %s\n",
+		no_of_entries, GENI_TO_CORE_VOTE_VALUE_PROP_NAME);
+	if (vote_index_value[0] >= no_of_entries) {
+		dev_err(&pdev->dev, "Invalid Index: %d Number of values: %d property: %s\n",
+			vote_index_value[0], no_of_entries, GENI_TO_CORE_VOTE_VALUE_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	for (i = 0; i < no_of_entries; i++) {
+		if (i == vote_index_value[0]) {
+			geni_to_core = be32_to_cpup(geni_to_core_perf_values + i);
+			dev_err(&pdev->dev, "Index %d: geni_to_core value: %u\n", i, geni_to_core);
+		}
+	}
+	/*cpu to geni*/
+	cpu_to_geni_perf_values = of_get_property(wrapper_node,
+						  CPU_TO_GENI_VOTE_VALUES_PROP_NAME,
+						  &len);
+	if (!cpu_to_geni_perf_values || len % sizeof(u32)) {
+		dev_err(&pdev->dev, "Property %s not found or invalid\n",
+			CPU_TO_GENI_VOTE_VALUES_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	no_of_entries = len / sizeof(u32);
+	dev_err(&pdev->dev, "no_of_entries: %d Property: %s\n",
+		no_of_entries, CPU_TO_GENI_VOTE_VALUES_PROP_NAME);
+	if (vote_index_value[1] >= no_of_entries) {
+		dev_err(&pdev->dev, "Invalid Index: %d Number of values: %d property: %s\n",
+			vote_index_value[1], no_of_entries, CPU_TO_GENI_VOTE_VALUES_PROP_NAME);
+		goto default_common_resources_init;
+	}
+	for (i = 0; i < no_of_entries; i++) {
+		if (i == vote_index_value[1]) {
+			cpu_to_geni = be32_to_cpup(cpu_to_geni_perf_values + i);
+			dev_err(&pdev->dev, "Index %d: cpu_to_geni value: %u\n", i, cpu_to_geni);
+		}
+	}
+
+	/*geni to ddr*/
+	geni_to_ddr_perf_values = of_get_property(wrapper_node,
+						  GENI_TO_DDR_VOTE_VALUES_PROP_NAME,
+						  &len);
+	if (!geni_to_ddr_perf_values || len % sizeof(u32)) {
+		dev_err(&pdev->dev, "Property %s not found or invalid\n",
+			GENI_TO_DDR_VOTE_VALUES_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	no_of_entries = len / sizeof(u32);
+	dev_err(&pdev->dev, "no_of_entries: %d Property: %s\n",
+		no_of_entries, GENI_TO_DDR_VOTE_VALUES_PROP_NAME);
+	if (vote_index_value[2] >= no_of_entries) {
+		dev_err(&pdev->dev, "Invalid Index: %d Number of values: %d property: %s\n",
+			vote_index_value[2], no_of_entries, GENI_TO_DDR_VOTE_VALUES_PROP_NAME);
+		goto default_common_resources_init;
+	}
+
+	for (i = 0; i < no_of_entries; i++) {
+		if (i == vote_index_value[2]) {
+			geni_to_ddr = be32_to_cpup(geni_to_ddr_perf_values + i);
+			dev_err(&pdev->dev, "Index %d: geni_to_ddr value: %u\n", i, geni_to_ddr);
+		}
+	}
+
+	dev_err(&pdev->dev, "Voting with geni_to_core: %u cpu_to_geni: %u geni_to_ddr: %u\n",
+		geni_to_core, cpu_to_geni, geni_to_ddr);
+
+	ret = geni_se_common_resources_init(spi_rsc,
+			geni_to_core, cpu_to_geni, geni_to_ddr);
+
+	return ret;
+
+default_common_resources_init:
+	dev_err(&pdev->dev, "Executing Default resource init\n");
+	ret = geni_se_common_resources_init(spi_rsc,
+			SPI_CORE2X_VOTE, APPS_PROC_TO_QUP_VOTE,
+			(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+	return ret;
+
+}
 static int spi_geni_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -2371,9 +2507,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (!geni_mas->is_le_vm) {
 		/* set voting values for path: core, config and DDR */
 		spi_rsc = &geni_mas->spi_rsc;
-		ret = geni_se_common_resources_init(spi_rsc,
-			SPI_CORE2X_VOTE, APPS_PROC_TO_QUP_VOTE,
-			(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+		ret = _geni_se_common_resources_init(pdev, spi_rsc);
 		if (ret) {
 			dev_err(&pdev->dev, "Error geni_se_resources_init\n");
 			goto spi_geni_probe_err;
