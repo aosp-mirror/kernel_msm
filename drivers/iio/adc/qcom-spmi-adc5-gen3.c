@@ -238,6 +238,8 @@ struct adc5_channel_prop {
  * @list: list item, used to add this device to gloal list of ADC_TM devices.
  * @device_list: pointer to list of ADC_TM devices.
  * @tm_handler_work: scheduled work for handling TM threshold violation.
+ * @hs_timeouts: Consecutive timeouts waiting for "HS" and "conv req" regs to settle.
+ * @conv_timeouts: Consecutive ADC conversion (read) timeouts.
  */
 struct adc5_chip {
 	struct regmap			*regmap;
@@ -258,6 +260,8 @@ struct adc5_chip {
 	struct list_head		*device_list;
 	struct work_struct		tm_handler_work;
 	struct minidump_data		*adc_md;
+	unsigned int 			hs_timeouts;
+	unsigned int 			conv_timeouts;
 };
 
 static int adc5_read(struct adc5_chip *adc, unsigned int sdam_index, u16 offset, u8 *data, int len)
@@ -406,6 +410,7 @@ static int adc5_gen3_configure(struct adc5_chip *adc,
 #define ADC5_GEN3_HS_DELAY_MIN_US		100
 #define ADC5_GEN3_HS_DELAY_MAX_US		110
 #define ADC5_GEN3_HS_RETRY_COUNT		150
+#define ADC5_GEN3_HS_MAX_TIMEOUTS		100
 
 static int adc5_gen3_poll_wait_hs(struct adc5_chip *adc,
 				unsigned int sdam_index)
@@ -433,14 +438,19 @@ static int adc5_gen3_poll_wait_hs(struct adc5_chip *adc,
 	}
 
 	if (count == ADC5_GEN3_HS_RETRY_COUNT) {
-		pr_err("Setting HS ready bit timed out, status:%#x\n", status);
+		pr_err("Setting HS ready bit timed out, status:%#x, conv_req:%#x\n",
+			status, conv_req);
+		adc->hs_timeouts++;
+		BUG_ON(adc->hs_timeouts >= ADC5_GEN3_HS_MAX_TIMEOUTS);
 		return -ETIMEDOUT;
 	}
+	adc->hs_timeouts = 0;
 
 	return 0;
 }
 
 #define ADC5_GEN3_CONV_TIMEOUT_MS	501
+#define ADC5_GEN3_MAX_CONV_TIMEOUTS	100
 
 static int adc5_gen3_do_conversion(struct adc5_chip *adc,
 			struct adc5_channel_prop *prop,
@@ -473,8 +483,11 @@ static int adc5_gen3_do_conversion(struct adc5_chip *adc,
 		pr_err("Reading ADC channel %s timed out\n",
 			prop->datasheet_name);
 		ret = -ETIMEDOUT;
+		adc->conv_timeouts++;
+		BUG_ON(adc->conv_timeouts >= ADC5_GEN3_MAX_CONV_TIMEOUTS);
 		goto unlock;
 	}
+	adc->conv_timeouts = 0;
 
 	time_pending_ms = jiffies_to_msecs(rc);
 	pr_debug("ADC channel %s EOC took %u ms\n", prop->datasheet_name,
