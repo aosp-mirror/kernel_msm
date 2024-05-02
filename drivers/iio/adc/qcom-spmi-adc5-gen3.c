@@ -4,6 +4,8 @@
  * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
+
 #include <linux/bitops.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
