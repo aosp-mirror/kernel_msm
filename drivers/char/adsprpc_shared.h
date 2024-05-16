@@ -981,7 +981,8 @@ struct fastrpc_mmap {
 	bool in_use;				/* Indicates if persistent map is in use*/
 	struct timespec64 map_start_time;
 	struct timespec64 map_end_time;
-	bool is_filemap;			/*flag to indicate map used in process init*/
+	bool is_filemap;			/* flag to indicate map used in process init */
+	bool is_dumped;				/* flag to indicate map is dumped during SSR */
 	char *servloc_name;			/* Indicate which daemon mapped this */
 	unsigned int ctx_refs; /* Indicates reference count for context map */
 };
