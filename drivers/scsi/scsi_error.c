@@ -314,7 +314,7 @@ void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
 	 * Ensure that all tasks observe the host state change before the
 	 * host_failed change.
 	 */
-	call_rcu(&scmd->rcu, scsi_eh_inc_host_failed);
+	call_rcu_hurry(&scmd->rcu, scsi_eh_inc_host_failed);
 }
 
 /**
@@ -1128,6 +1128,7 @@ retry:
 
 	scsi_log_send(scmd);
 	scmd->scsi_done = scsi_eh_done;
+	scmd->flags |= SCMD_LAST;
 
 	/*
 	 * Lock sdev->state_mutex to avoid that scsi_device_quiesce() can
@@ -2451,6 +2452,7 @@ scsi_ioctl_reset(struct scsi_device *dev, int __user *arg)
 	scmd->cmnd = scsi_req(rq)->cmd;
 
 	scmd->scsi_done		= scsi_reset_provider_done_command;
+	scmd->flags |= SCMD_LAST;
 	memset(&scmd->sdb, 0, sizeof(scmd->sdb));
 
 	scmd->cmd_len			= 0;

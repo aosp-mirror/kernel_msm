@@ -39,6 +39,9 @@ static_assert(UFFDIO_ZEROPAGE_MODE_MMAP_TRYLOCK == UFFDIO_COPY_MODE_MMAP_TRYLOCK
 extern int sysctl_unprivileged_userfaultfd;
 
 extern vm_fault_t handle_userfault(struct vm_fault *vmf, unsigned long reason);
+#ifdef CONFIG_SPECULATIVE_PAGE_FAULT
+extern bool userfaultfd_using_sigbus(struct vm_area_struct *vma);
+#endif
 
 /*
  * The mode of operation for __mcopy_atomic and its helpers.
@@ -77,7 +80,7 @@ extern int mwriteprotect_range(struct mm_struct *dst_mm,
 static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
 					struct vm_userfaultfd_ctx vm_ctx)
 {
-	return vma->vm_userfaultfd_ctx.ctx == vm_ctx.ctx;
+	return rcu_access_pointer(vma->vm_userfaultfd_ctx.ctx) == vm_ctx.ctx;
 }
 
 /*
@@ -155,6 +158,13 @@ static inline vm_fault_t handle_userfault(struct vm_fault *vmf,
 {
 	return VM_FAULT_SIGBUS;
 }
+
+#ifdef CONFIG_SPECULATIVE_PAGE_FAULT
+static inline bool userfaultfd_using_sigbus(struct vm_area_struct *vma)
+{
+	return false;
+}
+#endif
 
 static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
 					struct vm_userfaultfd_ctx vm_ctx)
