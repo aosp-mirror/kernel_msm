@@ -160,6 +160,43 @@ struct smblite {
 	struct iio_chan_spec	*iio_chan_ids;
 };
 
+struct probe_logged_reg {
+	const char *name;
+	u16 addr;
+};
+
+/* Registers here should use datasheet naming and full address */
+static const struct probe_logged_reg pm5100_probe_logged_regs[] = {
+	{
+		.name = "SCHG_W_USB_APSD_RESULT_STATUS",
+		.addr = 0x0000290B,
+	},
+	{
+		.name = "SCHG_W_USB_USB_ICL_OPTIONS",
+		.addr = 0x00002950,
+	},
+	{
+		.name = "SCHG_W_USB_USB_ICL_OVERRIDE",
+		.addr = 0x00002951,
+	},
+	{
+		.name = "SCHG_W_USB_USB_ICL_CFG",
+		.addr = 0x00002952,
+	},
+	{
+		.name = "SCHG_W_DCDC_ICL_MAX_STATUS",
+		.addr = 0x00002706,
+	},
+	{
+		.name = "SCHG_W_DCDC_ICL_STATUS",
+		.addr = 0x00002709,
+	},
+	{
+		.name = "SCHG_W_DCDC_POWER_PATH_STATUS",
+		.addr = 0x0000270B,
+	}
+};
+
 static int __debug_mask;
 
 static ssize_t weak_chg_icl_ua_show(struct device *dev, struct device_attribute
@@ -220,6 +257,26 @@ static struct attribute *smblite_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(smblite);
+
+static void log_registers(struct smb_charger *chg,
+			const struct probe_logged_reg *regs, size_t num_regs)
+{
+	int i;
+	for (i = 0; i < num_regs; i++) {
+		u8 val;
+		int ret;
+		const struct probe_logged_reg *reg = &regs[i];
+
+		ret = smblite_lib_read(chg, reg->addr, &val);
+		if (ret != 0) {
+			pr_err("Could not read register %s (0x%x): %d\n",
+				reg->name, reg->addr, ret);
+			continue;
+		}
+
+		pr_info("%s (0x%x): 0x%x\n", reg->name, reg->addr, val);
+	}
+}
 
 #define REVISION_V2	0x2
 static int smblite_chg_config_init(struct smblite *chip)
@@ -2231,6 +2288,10 @@ static int smblite_probe(struct platform_device *pdev)
 			pr_err("Couldn't setup chg_config rc=%d\n", rc);
 		return rc;
 	}
+
+	if (chg->subtype == PM5100)
+		log_registers(chg, pm5100_probe_logged_regs,
+			ARRAY_SIZE(pm5100_probe_logged_regs));
 
 	rc = smblite_parse_dt(chip);
 	if (rc < 0) {
