@@ -1480,6 +1480,42 @@ static int smblite_init_hw(struct smblite *chip)
 	return rc;
 }
 
+/*
+ * If HW limit is higher than what the current port supports,
+ * set SW_ICL_MAX_VOTER first.
+ */
+static void smblite_set_sw_voter_if_needed(struct smblite *chip)
+{
+	int max_ua;
+	struct smb_charger *chg = &chip->chg;
+	const struct apsd_result *result = smblite_lib_get_apsd_result(chg);
+
+	switch (result->val) {
+	case POWER_SUPPLY_TYPE_UNKNOWN:
+		max_ua = USBIN_100UA;
+		break;
+	case POWER_SUPPLY_TYPE_USB:
+		max_ua = SDP_CURRENT_UA;
+		break;
+	case QTI_POWER_SUPPLY_TYPE_USB_FLOAT:
+		if (chip->dt.float_option == FLOAT_SDP) {
+			max_ua = SDP_CURRENT_UA;
+			break;
+		}
+	default:
+		max_ua = DCP_CURRENT_UA;
+	}
+
+	if ((chip->dt.usb_icl_ua <= 0) || (max_ua < chip->dt.usb_icl_ua)) {
+		int rc = vote(chip->chg.usb_icl_votable, SW_ICL_MAX_VOTER,
+				true, max_ua);
+		if (rc < 0)
+			dev_err(chg->dev, "Couldn't cap ICL to port rc=%d\n",
+				rc);
+	}
+
+}
+
 static int smblite_init_votables(struct smblite *chip)
 {
 	struct smb_charger *chg = &chip->chg;
@@ -1506,6 +1542,8 @@ static int smblite_init_votables(struct smblite *chip)
 	vote(chg->fv_votable,
 		BATT_PROFILE_VOTER, chg->batt_profile_fv_uv > 0,
 		chg->batt_profile_fv_uv);
+
+	smblite_set_sw_voter_if_needed(chip);
 
 	/* Some h/w limit maximum supported ICL */
 	vote(chg->usb_icl_votable, HW_LIMIT_VOTER,
