@@ -4,6 +4,8 @@
  * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": %s: " fmt, __func__
+
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/device.h>
