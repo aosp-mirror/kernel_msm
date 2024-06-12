@@ -1057,6 +1057,16 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 		return -ENOTTY;
 
 	fl->is_compat = true;
+	if (fl->servloc_name) {
+		err = fastrpc_check_pd_status(fl,
+			AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME);
+		err |= fastrpc_check_pd_status(fl,
+			SENSORS_PDR_ADSP_SERVICE_LOCATION_CLIENT_NAME);
+		err |= fastrpc_check_pd_status(fl,
+			SENSORS_PDR_SLPI_SERVICE_LOCATION_CLIENT_NAME);
+		if (err)
+			goto bail;
+	}
 	switch (cmd) {
 	case COMPAT_FASTRPC_IOCTL_INVOKE:
 	case COMPAT_FASTRPC_IOCTL_INVOKE_FD:
@@ -1174,4 +1184,6 @@ long compat_fastrpc_device_ioctl(struct file *filp, unsigned int cmd,
 	default:
 		return -ENOTTY;
 	}
+bail:
+	return err;
 }

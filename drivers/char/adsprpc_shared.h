@@ -46,6 +46,21 @@
 #define DEVICE_NAME      "adsprpc-smd"
 #define DEVICE_NAME_SECURE "adsprpc-smd-secure"
 
+#define AUDIO_PDR_ADSP_DTSI_PROPERTY_NAME        "qcom,fastrpc-adsp-audio-pdr"
+#define AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME   "audio_pdr_adsprpc"
+#define AUDIO_PDR_ADSP_SERVICE_NAME              "avs/audio"
+#define ADSP_AUDIOPD_NAME                        "msm/adsp/audio_pd"
+
+#define SENSORS_PDR_ADSP_DTSI_PROPERTY_NAME        "qcom,fastrpc-adsp-sensors-pdr"
+#define SENSORS_PDR_ADSP_SERVICE_LOCATION_CLIENT_NAME   "sensors_pdr_adsprpc"
+#define SENSORS_PDR_ADSP_SERVICE_NAME              "tms/servreg"
+#define ADSP_SENSORPD_NAME                       "msm/adsp/sensor_pd"
+
+#define SENSORS_PDR_SLPI_DTSI_PROPERTY_NAME      "qcom,fastrpc-slpi-sensors-pdr"
+#define SENSORS_PDR_SLPI_SERVICE_LOCATION_CLIENT_NAME "sensors_pdr_sdsprpc"
+#define SENSORS_PDR_SLPI_SERVICE_NAME            SENSORS_PDR_ADSP_SERVICE_NAME
+#define SLPI_SENSORPD_NAME                       "msm/slpi/sensor_pd"
+
 /* Pre-defined parameter for print gfa structure*/
 
 #define smq_invoke_ctx_params "pid: %d, tgid: %d, handle: %p, sc: 0x%x, fl: %p, fd: %p, magic: %d\n"
@@ -1196,5 +1211,7 @@ int fastrpc_dspsignal_cancel_wait(struct fastrpc_file *fl,
 
 void fastrpc_rproc_trace_events(const char *name, const char *event,
 				const char *subevent);
+
+int fastrpc_check_pd_status(struct fastrpc_file *fl, char *sloc_name);
 
 #endif
