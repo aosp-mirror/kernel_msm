@@ -1000,6 +1000,8 @@ struct fastrpc_mmap {
 	bool is_dumped;				/* flag to indicate map is dumped during SSR */
 	char *servloc_name;			/* Indicate which daemon mapped this */
 	unsigned int ctx_refs; /* Indicates reference count for context map */
+	/* Map in use for dma handle */
+	unsigned int dma_handle_refs;
 };
 
 enum fastrpc_perfkeys {
