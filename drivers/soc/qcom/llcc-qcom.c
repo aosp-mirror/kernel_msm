@@ -912,202 +912,101 @@ static u32 llcc_trp_cfg_n(int slice_id, unsigned int offset, u32 val)
 	return readval;
 }
 
-static int qcom_llcc_cfg_program(struct platform_device *pdev)
+static int _qcom_llcc_cfg_program(const struct llcc_slice_config *config,
+				  const struct qcom_llcc_config *cfg)
 {
-	int i;
-	u32 attr2_cfg;
+	int ret;
 	u32 attr1_cfg;
 	u32 attr0_cfg;
-	u32 attr2_val;
 	u32 attr1_val;
 	u32 attr0_val;
 	u32 max_cap_cacheline;
+	struct llcc_slice_desc desc;
+
+	attr1_val = config->cache_mode;
+	attr1_val |= config->probe_target_ways << ATTR1_PROBE_TARGET_WAYS_SHIFT;
+	attr1_val |= config->fixed_size << ATTR1_FIXED_SIZE_SHIFT;
+	attr1_val |= config->priority << ATTR1_PRIORITY_SHIFT;
+
+	max_cap_cacheline = MAX_CAP_TO_BYTES(config->max_cap);
+
+	/*
+	 * LLCC instances can vary for each target.
+	 * The SW writes to broadcast register which gets propagated
+	 * to each llcc instance (llcc0,.. llccN).
+	 * Since the size of the memory is divided equally amongst the
+	 * llcc instances, we need to configure the max cap accordingly.
+	 */
+	max_cap_cacheline = max_cap_cacheline / drv_data->num_banks;
+	max_cap_cacheline >>= CACHE_LINE_SIZE_SHIFT;
+	attr1_val |= max_cap_cacheline << ATTR1_MAX_CAP_SHIFT;
+
+	attr1_cfg = LLCC_TRP_ATTR1_CFGn(config->slice_id);
+
+	ret = regmap_write(drv_data->bcast_regmap, attr1_cfg, attr1_val);
+	if (ret)
+		return ret;
+
+	attr0_val = config->res_ways & ATTR0_RES_WAYS_MASK;
+	attr0_val |= config->bonus_ways << ATTR0_BONUS_WAYS_SHIFT;
+
+	attr0_cfg = LLCC_TRP_ATTR0_CFGn(config->slice_id);
+
+	ret = regmap_write(drv_data->bcast_regmap, attr0_cfg, attr0_val);
+	if (ret)
+		return ret;
+
+	if (cfg->need_llcc_cfg) {
+		u32 disable_cap_alloc, retain_pc;
+
+		disable_cap_alloc = config->dis_cap_alloc << config->slice_id;
+		ret = regmap_update_bits(drv_data->bcast_regmap, LLCC_TRP_SCID_DIS_CAP_ALLOC,
+					 BIT(config->slice_id), disable_cap_alloc);
+		if (ret)
+			return ret;
+
+		retain_pc = config->retain_on_pc << config->slice_id;
+		ret = regmap_update_bits(drv_data->bcast_regmap, LLCC_TRP_PCB_ACT,
+					 BIT(config->slice_id), retain_pc);
+		if (ret)
+			return ret;
+	}
+
+	if (drv_data->major_version == 2) {
+		u32 wren;
+
+		wren = config->write_scid_en << config->slice_id;
+		ret = regmap_update_bits(drv_data->bcast_regmap, LLCC_TRP_WRSC_EN,
+					 BIT(config->slice_id), wren);
+		if (ret)
+			return ret;
+	}
+
+	if (config->activate_on_init) {
+		desc.slice_id = config->slice_id;
+		ret = llcc_slice_activate(&desc);
+	}
+
+	return ret;
+}
+
+static int qcom_llcc_cfg_program(struct platform_device *pdev,
+				 const struct qcom_llcc_config *cfg)
+{
+	int i;
 	u32 sz;
-	u32 pcb = 0;
-	u32 cad = 0;
-	u32 wren = 0;
-	u32 wrcaen = 0;
-	u32 algo = 0;
 	int ret = 0;
 	const struct llcc_slice_config *llcc_table;
-	struct llcc_slice_desc *desc;
-	bool cap_based_alloc_and_pwr_collapse =
-		drv_data->cap_based_alloc_and_pwr_collapse;
 
 	sz = drv_data->cfg_size;
 	llcc_table = drv_data->cfg;
 
 	for (i = 0; i < sz; i++) {
-		drv_data->desc[i].slice_id = llcc_table[i].slice_id;
-		drv_data->desc[i].slice_size = llcc_table[i].max_cap;
-		atomic_set(&drv_data->desc[i].refcount, 0);
-	}
-
-	for (i = 0; i < sz; i++) {
-		attr1_cfg = LLCC_TRP_ATTR1_CFGn(llcc_table[i].slice_id);
-		attr0_cfg = LLCC_TRP_ATTR0_CFGn(llcc_table[i].slice_id);
-
-		attr1_val = llcc_table[i].cache_mode;
-		attr1_val |= llcc_table[i].probe_target_ways <<
-				ATTR1_PROBE_TARGET_WAYS_SHIFT;
-		attr1_val |= llcc_table[i].fixed_size <<
-				ATTR1_FIXED_SIZE_SHIFT;
-		attr1_val |= llcc_table[i].priority <<
-				ATTR1_PRIORITY_SHIFT;
-
-		max_cap_cacheline = MAX_CAP_TO_BYTES(llcc_table[i].max_cap);
-
-		/* LLCC instances can vary for each target.
-		 * The SW writes to broadcast register which gets propagated
-		 * to each llcc instance (llcc0,.. llccN).
-		 * Since the size of the memory is divided equally amongst the
-		 * llcc instances, we need to configure the max cap accordingly.
-		 */
-		max_cap_cacheline = max_cap_cacheline / drv_data->num_banks;
-		max_cap_cacheline >>= CACHE_LINE_SIZE_SHIFT;
-		attr1_val |= max_cap_cacheline << ATTR1_MAX_CAP_SHIFT;
-
-		if (drv_data->llcc_ver >= 41) {
-			attr2_cfg = LLCC_TRP_ATTR2_CFGn(llcc_table[i].slice_id);
-			attr0_val = llcc_table[i].res_ways;
-			attr2_val = llcc_table[i].bonus_ways;
-		} else {
-			attr0_val = llcc_table[i].res_ways & ATTR0_RES_WAYS_MASK;
-			attr0_val |= llcc_table[i].bonus_ways << ATTR0_BONUS_WAYS_SHIFT;
-		}
-
-		ret = regmap_write(drv_data->bcast_regmap, attr1_cfg,
-					attr1_val);
+		ret = _qcom_llcc_cfg_program(&llcc_table[i], cfg);
 		if (ret)
 			return ret;
-		ret = regmap_write(drv_data->bcast_regmap, attr0_cfg,
-					attr0_val);
-		if (ret)
-			return ret;
-		if (drv_data->llcc_ver >= 41) {
-			ret = regmap_write(drv_data->bcast_regmap, attr2_cfg,
-					attr2_val);
-			if (ret)
-				return ret;
-		}
-
-		if (drv_data->llcc_ver >= 20) {
-			wren |= llcc_table[i].write_scid_en <<
-						llcc_table[i].slice_id;
-			ret = regmap_write(drv_data->bcast_regmap,
-				LLCC_TRP_WRSC_EN, wren);
-			if (ret)
-				return ret;
-		}
-
-		if (drv_data->llcc_ver >= 21) {
-			wrcaen |= llcc_table[i].write_scid_cacheable_en <<
-						llcc_table[i].slice_id;
-			ret = regmap_write(drv_data->bcast_regmap,
-				LLCC_TRP_WRSC_CACHEABLE_EN, wrcaen);
-			if (ret)
-				return ret;
-		}
-
-		if (cap_based_alloc_and_pwr_collapse) {
-			cad |= llcc_table[i].dis_cap_alloc <<
-				llcc_table[i].slice_id;
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_SCID_DIS_CAP_ALLOC, cad);
-			if (ret)
-				return ret;
-
-			if (drv_data->llcc_ver < 41) {
-				pcb |= llcc_table[i].retain_on_pc <<
-						llcc_table[i].slice_id;
-				ret = regmap_write(drv_data->bcast_regmap,
-							LLCC_TRP_PCB_ACT, pcb);
-				if (ret)
-					return ret;
-			}
-		}
-
-		if (drv_data->llcc_ver >= 41) {
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG1,
-					llcc_table[i].stale_en);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG1, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG2,
-					llcc_table[i].stale_cap_en);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG2, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG3,
-					llcc_table[i].mru_uncap_en);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG3, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG4,
-					llcc_table[i].mru_rollover);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG4, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG5,
-					llcc_table[i].alloc_oneway_en);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG5, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG6,
-					llcc_table[i].ovcap_en);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG6, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG7,
-					llcc_table[i].ovcap_prio);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG7, algo);
-			if (ret)
-				return ret;
-
-			algo = llcc_trp_cfg_n(llcc_table[i].slice_id,
-					LLCC_TRP_ALGO_CFG8,
-					llcc_table[i].vict_prio);
-			ret = regmap_write(drv_data->bcast_regmap,
-					LLCC_TRP_ALGO_CFG8, algo);
-			if (ret)
-				return ret;
-
-		}
-
-		if (llcc_table[i].activate_on_init) {
-			desc = llcc_slice_getd(llcc_table[i].usecase_id);
-			if (PTR_ERR_OR_ZERO(desc)) {
-				dev_err(&pdev->dev,
-					"Failed to get slice=%d\n", llcc_table[i].slice_id);
-				continue;
-			}
-
-			ret = llcc_slice_activate(desc);
-			if (ret)
-				dev_err(&pdev->dev,
-					"Failed to activate slice=%d\n", llcc_table[i].slice_id);
-		}
 	}
+
 	return ret;
 }
 

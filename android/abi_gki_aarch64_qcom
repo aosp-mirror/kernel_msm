@@ -763,6 +763,7 @@
   fwnode_property_present
   fwnode_property_read_string
   fwnode_property_read_u32_array
+  fw_devlink_purge_absent_suppliers
   generic_device_group
   generic_file_llseek
   generic_handle_domain_irq
@@ -875,6 +876,7 @@
   gro_cells_destroy
   gro_cells_init
   gro_cells_receive
+  groups_free
   handle_bad_irq
   handle_edge_irq
   handle_fasteoi_ack_irq
@@ -2110,6 +2112,7 @@
   sock_unregister
   sort
   __spi_alloc_controller
+  spi_add_device
   spi_register_controller
   spi_unregister_controller
   spmi_controller_add
@@ -2522,6 +2525,8 @@
   typec_set_pwr_role
   typec_unregister_partner
   typec_get_orientation
+  typec_partner_set_identity
+  typec_set_vconn_role
   uart_add_one_port
   uart_get_baud_rate
   uart_insert_char
@@ -2714,6 +2719,8 @@
   vm_zone_stat
   vscnprintf
   vsnprintf
+  vsock_addr_init
+  vsock_remove_bound
   vunmap
   vzalloc
   wait_for_completion

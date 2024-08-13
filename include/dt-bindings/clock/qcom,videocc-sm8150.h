@@ -16,12 +16,12 @@
 #define VIDEO_CC_MVSC_CORE_CLK				5
 #define VIDEO_CC_XO_CLK					6
 
-/* VIDEO_CC resets */
-#define VIDEO_CC_INTERFACE_BCR				0
-#define VIDEO_CC_MVS0_BCR				1
-#define VIDEO_CC_MVS1_BCR				2
-#define VIDEO_CC_MVSC_BCR				3
-#define VIDEO_CC_MVSC_CORE_CLK_BCR			4
+/* VIDEO_CC Resets */
+#define VIDEO_CC_MVSC_CORE_CLK_BCR	0
+#define VIDEO_CC_INTERFACE_BCR		1
+#define VIDEO_CC_MVS0_BCR		2
+#define VIDEO_CC_MVS1_BCR		3
+#define VIDEO_CC_MVSC_BCR		4
 
 /* VIDEO_CC GDSCRs */
 #define VENUS_GDSC					0
