@@ -591,6 +591,8 @@ static int chg_update_charger(struct chg_drv *chg_drv, int fv_uv, int cc_max)
 			if (chg_done == 1) {
 				if (soc == chg_drv->charge_stop_level) {
 					chg_drv->is_full = true;
+				} else if (!chg_drv->is_full && (fv_uv < chg_drv->batt_profile_fv_uv)) {
+					pr_info("MSC_RESET: charge full in unexpected soc.\n");
 				} else if (!chg_drv->is_full) {
 					pr_info("MSC_RESET: charge full in unexpected soc. reset chg\n");
 					vote(chg_drv->msc_chg_disable_votable,

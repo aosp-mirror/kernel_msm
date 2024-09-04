@@ -1076,8 +1076,9 @@ static int batt_ttf_estimate(time_t *res, const struct batt_drv *batt_drv)
 		goto done;
 	}
 
-	/* TTF is 0 when UI shows 100% */
-	if (ssoc_get_capacity(&batt_drv->ssoc_state) == SSOC_FULL) {
+	/* TTF is 0 when UI shows 100% or limited charging profile */
+	if (ssoc_get_capacity(&batt_drv->ssoc_state) == SSOC_FULL ||
+	    batt_drv->chg_profile.debug_chg_profile != 0) {
 		estimate = 0;
 		goto done;
 	}
@@ -4640,6 +4641,63 @@ static ssize_t aacr_algo_show(struct device *dev,
 
 static DEVICE_ATTR_RO(aacr_algo);
 
+
+static ssize_t chg_profile_switch_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv = power_supply_get_drvdata(psy);
+	int len;
+
+	len = scnprintf(buf, PAGE_SIZE, "%d\n", batt_drv->chg_profile.debug_chg_profile);
+
+	return len;
+}
+
+static ssize_t chg_profile_switch_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =(struct batt_drv *) power_supply_get_drvdata(psy);
+	struct device_node *node;
+	int val, ret;
+
+	if (!batt_drv->chg_profile.enable_switch_chg_profile)
+		return count;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	if (batt_drv->chg_profile.debug_chg_profile == !!val)
+		return count;
+
+	if (val)
+		node = of_find_node_by_name(batt_drv->device->of_node,
+					    "google_debug_chg_profile");
+	else
+		node = batt_drv->device->of_node;
+
+	if (!node)
+		return count;
+
+	batt_drv->chg_profile.cccm_limits = 0;
+	ret = batt_init_chg_profile(batt_drv, node);
+	if (ret < 0)
+		return ret;
+
+	pr_info("update debug_chg_profile:%d -> %d\n",
+		batt_drv->chg_profile.debug_chg_profile, (int)val);
+
+	batt_drv->chg_profile.debug_chg_profile = val;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(chg_profile_switch);
+
 static struct attribute *batt_attrs[] = {
 	&dev_attr_charge_stats.attr,
 	&dev_attr_charge_stats_actual.attr,
@@ -4664,6 +4722,7 @@ static struct attribute *batt_attrs[] = {
 	&dev_attr_aacr_cycle_grace.attr,
 	&dev_attr_aacr_cycle_max.attr,
 	&dev_attr_aacr_algo.attr,
+	&dev_attr_chg_profile_switch.attr,
 	NULL,
 };
 

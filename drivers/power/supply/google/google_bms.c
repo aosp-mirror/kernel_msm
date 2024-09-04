@@ -359,6 +359,9 @@ int gbms_init_chg_profile_internal(struct gbms_chg_profile *profile,
 				    GBMS_DEFAULT_CHG_LAST_TIER_TERM_CURRENT;
 	}
 
+	profile->enable_switch_chg_profile = of_property_read_bool(node,
+					"google,enable-switch-chg-profile");
+
 	return 0;
 }
 
