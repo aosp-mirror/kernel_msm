@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef ADSPRPC_SHARED_H
 #define ADSPRPC_SHARED_H
@@ -681,9 +681,14 @@ enum fastrpc_buf_type {
 
 /* Types of RPC calls to DSP */
 enum fastrpc_msg_type {
+	/* 64 bit user application invoke message */
 	USER_MSG = 0,
+	/* kernel invoke message with zero pid */
 	KERNEL_MSG_WITH_ZERO_PID,
+	/* kernel invoke message with non zero pid to kill the PD in DSP */
 	KERNEL_MSG_WITH_NONZERO_PID,
+	/* 32 bit user application invoke message */
+	COMPAT_MSG,
 };
 
 #define DSPSIGNAL_TIMEOUT_NONE 0xffffffff
@@ -1093,8 +1098,6 @@ struct fastrpc_file {
 	/* Flag to indicate dynamic process creation status*/
 	enum fastrpc_process_create_state dsp_process_state;
 	bool is_unsigned_pd;
-	/* Flag to indicate 32 bit driver*/
-	bool is_compat;
 	/* Completion objects and state for dspsignals */
 	struct fastrpc_dspsignal *signal_groups[DSPSIGNAL_NUM_SIGNALS / DSPSIGNAL_GROUP_SIZE];
 	spinlock_t dspsignals_lock;
@@ -1133,7 +1136,7 @@ int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 				   struct fastrpc_ioctl_invoke_async *inv);
 
 int fastrpc_internal_invoke2(struct fastrpc_file *fl,
-				struct fastrpc_ioctl_invoke2 *inv2);
+				struct fastrpc_ioctl_invoke2 *inv2, bool is_compat);
 
 int fastrpc_internal_munmap(struct fastrpc_file *fl,
 				   struct fastrpc_ioctl_munmap *ud);
