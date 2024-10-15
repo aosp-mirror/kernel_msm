@@ -29,6 +29,7 @@ struct device_node;
 #define GBMS_CHG_VOLT_NB_LIMITS_MAX 6
 #define GBMS_CHG_ALG_BUF 500
 #define GBMS_AACR_DATA_MAX 10
+#define AGE_CC_TRIGGER_CC 800
 
 struct gbms_chg_profile {
 	const char *owner_name;

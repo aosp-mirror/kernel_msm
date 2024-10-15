@@ -5654,6 +5654,11 @@ static int gbatt_get_property(struct power_supply *psy,
 		} else if (batt_drv->batt_health !=
 			   POWER_SUPPLY_HEALTH_UNKNOWN) {
 			val->intval = batt_drv->batt_health;
+		} else if ((int)batt_drv->batt_pack_info[23] == 3) { //LSN
+			val->intval = POWER_SUPPLY_HEALTH_DEAD;
+		} else if ((int)batt_drv->batt_pack_info[23] == 1 && //ATL
+			   batt_drv->cycle_count > AGE_CC_TRIGGER_CC) {
+			val->intval = POWER_SUPPLY_HEALTH_UNSPEC_FAILURE;
 		} else if (!batt_drv->fg_psy) {
 			val->intval = POWER_SUPPLY_HEALTH_UNKNOWN;
 		} else {
