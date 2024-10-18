@@ -1011,6 +1011,7 @@ static int sm7150_psy_set_property(struct power_supply *psy,
 	u8 val;
 	int ivalue = 0;
 	int rc = 0;
+	int full_volt = 0;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
@@ -1074,6 +1075,9 @@ static int sm7150_psy_set_property(struct power_supply *psy,
 					&val, 1);
 		pr_info("CONSTANT_CHARGE_VOLTAGE_MAX : ivalue=%d, val=%d (%d)\n",
 							ivalue, val, rc);
+		// allow report full to handle recharge when set lower float voltage
+		full_volt = (ivalue / 1000) - 100;
+		bms->chg_term_voltage = full_volt > 3850 ? full_volt : 3850;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_DISABLE:
 		rc = sm7150_charge_disable(bms, pval->intval != 0);

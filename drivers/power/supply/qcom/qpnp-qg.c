@@ -2122,6 +2122,10 @@ static int qg_psy_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_BATT_AGE_LEVEL:
 		rc = qg_setprop_batt_age_level(chip, pval->intval);
 		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		chip->bp.float_volt_uv = pval->intval;
+		pr_info("set float_volt_uv %d\n", chip->bp.float_volt_uv);
+		break;
 	default:
 		break;
 	}
@@ -2357,6 +2361,7 @@ static int qg_property_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_SOH:
 	case POWER_SUPPLY_PROP_FG_RESET:
 	case POWER_SUPPLY_PROP_BATT_AGE_LEVEL:
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 		return 1;
 	default:
 		break;

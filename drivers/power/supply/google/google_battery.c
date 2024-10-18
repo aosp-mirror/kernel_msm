@@ -4664,6 +4664,7 @@ static ssize_t chg_profile_switch_store(struct device *dev,
 {
 	struct power_supply *psy = container_of(dev, struct power_supply, dev);
 	struct batt_drv *batt_drv =(struct batt_drv *) power_supply_get_drvdata(psy);
+	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	struct device_node *node;
 	int val, ret;
 
@@ -4688,6 +4689,12 @@ static ssize_t chg_profile_switch_store(struct device *dev,
 
 	batt_drv->chg_profile.cccm_limits = 0;
 	ret = batt_init_chg_profile(batt_drv, node);
+	if (ret < 0)
+		return ret;
+
+	/* set fg */
+	ret = GPSY_SET_PROP(batt_drv->fg_psy, POWER_SUPPLY_PROP_VOLTAGE_MAX,
+			    profile->volt_limits[profile->volt_nb_limits - 1]);
 	if (ret < 0)
 		return ret;
 
