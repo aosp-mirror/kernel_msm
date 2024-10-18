@@ -4171,6 +4171,9 @@ static ssize_t charge_deadline_store(struct device *dev,
 	long long deadline_s;
 	bool changed;
 
+	if (batt_drv->chg_profile.debug_chg_profile)
+		return count;
+
 	/* API works in seconds */
 	deadline_s = simple_strtoll(buf, NULL, 10);
 
