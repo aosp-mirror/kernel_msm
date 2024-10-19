@@ -4658,25 +4658,14 @@ static ssize_t chg_profile_switch_show(struct device *dev,
 	return len;
 }
 
-static ssize_t chg_profile_switch_store(struct device *dev,
-					 struct device_attribute *attr,
-					 const char *buf, size_t count)
+static int batt_set_chg_profile(struct batt_drv *batt_drv, bool val)
 {
-	struct power_supply *psy = container_of(dev, struct power_supply, dev);
-	struct batt_drv *batt_drv =(struct batt_drv *) power_supply_get_drvdata(psy);
 	const struct gbms_chg_profile *profile = &batt_drv->chg_profile;
 	struct device_node *node;
-	int val, ret;
+	int ret = 0;
 
-	if (!batt_drv->chg_profile.enable_switch_chg_profile)
-		return count;
-
-	ret = kstrtoint(buf, 0, &val);
-	if (ret < 0)
+	if (batt_drv->chg_profile.debug_chg_profile == val)
 		return ret;
-
-	if (batt_drv->chg_profile.debug_chg_profile == !!val)
-		return count;
 
 	if (val)
 		node = of_find_node_by_name(batt_drv->device->of_node,
@@ -4685,7 +4674,7 @@ static ssize_t chg_profile_switch_store(struct device *dev,
 		node = batt_drv->device->of_node;
 
 	if (!node)
-		return count;
+		return ret;
 
 	batt_drv->chg_profile.cccm_limits = 0;
 	ret = batt_init_chg_profile(batt_drv, node);
@@ -4702,6 +4691,28 @@ static ssize_t chg_profile_switch_store(struct device *dev,
 		batt_drv->chg_profile.debug_chg_profile, (int)val);
 
 	batt_drv->chg_profile.debug_chg_profile = val;
+
+	/* reset to rerun charging state machine */
+	batt_reset_chg_drv_state(batt_drv);
+
+	return ret;
+}
+
+static ssize_t chg_profile_switch_store(struct device *dev,
+					 struct device_attribute *attr,
+					 const char *buf, size_t count)
+{
+	struct power_supply *psy = container_of(dev, struct power_supply, dev);
+	struct batt_drv *batt_drv =(struct batt_drv *) power_supply_get_drvdata(psy);
+	int val, ret;
+
+	ret = kstrtoint(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+
+	ret = batt_set_chg_profile(batt_drv, !!val);
+	if (ret != 0)
+		return ret;
 
 	return count;
 }
@@ -5138,6 +5149,28 @@ static int gbatt_save_capacity(struct batt_ssoc_state *ssoc_state)
 	return ret;
 }
 
+static void batt_init_chg_profile_check(struct batt_drv *batt_drv)
+{
+	int ret;
+
+	if (batt_drv->chg_profile.init_chg_profile_check_done)
+		return;
+
+	if (!batt_drv->pack_info_ready)
+		return;
+
+	/* already set */
+	if (batt_drv->chg_profile.debug_chg_profile)
+		return;
+
+	if ((int)batt_drv->batt_pack_info[23] != 3) // LSN
+		return;
+
+	ret = batt_set_chg_profile(batt_drv, true);
+	if (ret == 0)
+		batt_drv->chg_profile.init_chg_profile_check_done = true;
+}
+
 /*
  * poll the battery, run SOC%, dead battery, critical.
  * scheduled from psy_changed and from timer
@@ -5185,6 +5218,8 @@ static void google_battery_work(struct work_struct *work)
 
 	/* batt_lock protect SSOC code etc. */
 	mutex_lock(&batt_drv->batt_lock);
+
+	batt_init_chg_profile_check(batt_drv);
 
 	/* TODO: poll rate should be min between ->batt_update_interval and
 	 * whatever ssoc_work() decides (typically rls->rl_delta_max_time)

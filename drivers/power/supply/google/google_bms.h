@@ -65,6 +65,7 @@ struct gbms_chg_profile {
 
 	bool debug_chg_profile;
 	bool enable_switch_chg_profile;
+	bool init_chg_profile_check_done;
 };
 
 #define WLC_BPP_THRESHOLD_UV	700000
