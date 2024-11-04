@@ -1,7 +1,7 @@
 qcom,4255777_Google_S5_SWD_LSN_3080mAH_PM7150 {
 	/* 4255777_Google_S5_SWD_LSN_3080mAH_PM7150_averaged_MasterSlave_Nov29th2019 */
-	qcom,max-voltage-uv = <4450000>;
-	qcom,fg-cc-cv-threshold-uv = <4440000>;
+	qcom,max-voltage-uv = <3950000>;
+	qcom,fg-cc-cv-threshold-uv = <3950000>;
 	qcom,fastchg-current-ma = <1500>;
 	qcom,batt-id-kohm = <10>;
 	qcom,battery-beta = <3440>;
